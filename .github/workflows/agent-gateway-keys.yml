@@ -1,0 +1,74 @@
+name: Agent gateway keys
+
+# #7073 part 2 (D7073-p2): store the agent model accounts' provider keys on the
+# `agents` AI Gateway, by alias, from this repository's existing Actions
+# secrets: primary Claude (ANTHROPIC_API_KEY), Claude accounts 2 and 3
+# (ANTHROPIC_API_KEY_2, _3), then OpenAI/Codex (OPENAI_API_KEY). The order is
+# the review workflow's (CLAUDE_REVIEW.md §6a).
+#
+# Each key is verified with a free models call first; the primary's must
+# belong to ANTHROPIC_ORGANIZATION_ID. A primary reached by federation alone
+# has no key to store, and the summary names that gap. The key goes into the
+# account's Secrets Store as `agents_<provider>_<alias>`, the gateway's
+# provider config links it, and a second read confirms each alias.
+#
+# SAFE TO RERUN: an existing secret has its value replaced, so a rerun after a
+# key rotation stores the new key. Nothing prints a key, a preview, a token or
+# an organization id.
+#
+# DISPATCH ONLY, FROM MAIN. It changes no Worker setting: the engine stays
+# off (AGENT_ENGINE=off in wrangler.toml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (verify and read only) or apply (store and link)
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+
+permissions: {}
+
+concurrency:
+  group: agent-gateway-keys
+  cancel-in-progress: false
+
+jobs:
+  keys:
+    environment: production-ops
+    name: Verify, store and link the account keys
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # The secrets are scoped to this one step; the script prints none of them.
+      - name: Keys
+        env:
+          MODE: ${{ inputs.mode }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.AGENT_GATEWAY_ADMIN_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AGENT_AI_GATEWAY: agents
+          AGENT_SECRETS_STORE_ID: ${{ vars.AGENT_SECRETS_STORE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY_2: ${{ secrets.ANTHROPIC_API_KEY_2 }}
+          ANTHROPIC_API_KEY_3: ${{ secrets.ANTHROPIC_API_KEY_3 }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_CLAUDE_ALIAS_1: ${{ vars.AGENT_CLAUDE_ALIAS_1 }}
+          AGENT_CLAUDE_ALIAS_2: ${{ vars.AGENT_CLAUDE_ALIAS_2 }}
+          AGENT_CLAUDE_ALIAS_3: ${{ vars.AGENT_CLAUDE_ALIAS_3 }}
+          AGENT_OPENAI_ALIAS: ${{ vars.AGENT_OPENAI_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ "$MODE" = apply ]; then node scripts/agent-gateway-keys.mjs; else node scripts/agent-gateway-keys.mjs --plan; fi

@@ -133,7 +133,8 @@ const PROFILES = {
     // rather than inherited from its parent. Since D704 it mounts no zone:
     // `FounderValidateWorkspace`, which mounted the four `/validate/*` rows, is
     // deleted.
-    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder'],
+    // D6118 (#6118): `grow/partnerships` is mounted by Partnerships' co-marketing part, named outright.
+    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder', 'frontend/src/pages/cycles/PartnershipsCoMarketing.jsx'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
     // 30 → 26 (D704): the four `validate/*` zones are retired; see `excluded`.
     // 26 → 25: the owner removed `raise/liquidity` (2026-10-20), page and all.
@@ -280,6 +281,8 @@ const PROFILES = {
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+      // #4832 (D4832): Sessions' row (PX-05), `Upcoming · Past · Cancelled`.
+      ['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions'],
       // #4826 (D4826 part 2): Thinking is redrawn to the Expertise v2 canvas
       // (EX-11), whose chips are literal radio buttons in the `thinking`
       // section builder — `All · Needs you · With editors · Published` — read

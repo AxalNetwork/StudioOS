@@ -13,6 +13,8 @@ import useOfFundsEadwyn from './use_of_funds_eadwyn';
 import { uofCan, uofCapabilities, uofStanding, type UofCapabilities } from '../services/useOfFunds/capabilities';
 import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean;caps:UofCapabilities}}>();
 r.use('*',async(c,next)=>{
@@ -53,7 +55,8 @@ r.get('/plan',async c=>{
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
   const rows=await c.env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id=? ORDER BY is_base DESC,id').bind(s.projectId).all<any>();
-  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row)))});
+  // D5074 part 6: the scenarios and compare reads carry the caller's map too, so Runway's pages draw from it.
+  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row))),capabilities:c.get('caps')});
 });
 r.get('/scenarios/:id',async c=>c.json(await view(c.env,c.get('uof'),await scenario(c.env,c.get('uof'),idOf(c.req.param('id'))))));
 r.post('/scenarios',async c=>c.json(await saveScenario(c.env,c.get('uof'),null,await body(c)),201));
@@ -83,7 +86,7 @@ r.get('/compare',async c=>{
   const s=c.get('uof');
   const items=await Promise.all(ids.map(async id=>view(c.env,s,await scenario(c.env,s,id))));
   const [today,committed]=await Promise.all([runwayToday(c.env,s,c.get('mercury')),committedRead(c.env,s,c.get('mercury'))]);
-  return c.json({today,committed,scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.'});
+  return c.json({today,committed,scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.',capabilities:c.get('caps')});
 });
 r.get('/milestones',async c=>{
   const s=c.get('uof');const sc=await scenario(c.env,s,c.req.query('scenario_id')==null?await base(c.env,s):idOf(c.req.query('scenario_id')));
@@ -160,7 +163,9 @@ r.post('/snapshot',async c=>{
   let storage:Awaited<ReturnType<typeof assertStorageRoom>>;
   // A full allowance is answered as its own 413 (D1169), not as this router's 503.
   try { storage=await assertStorageRoom(c.env,{projectId:s.projectId},bytes.byteLength,s.user as any); } catch(e) { if (e instanceof Response) return e; throw e; }
-  await c.env.FILES.put(key,bytes,{httpMetadata:{contentType:'application/pdf'},customMetadata:{project_uid:venture.uid,uploaded_by:String(s.user.id)}});
+  // D6651: a filed snapshot is a record, written once under a fresh key.
+  const stored=await putRecord(c.env.FILES,key,bytes,{httpMetadata:{contentType:'application/pdf'},customMetadata:{project_uid:venture.uid,uploaded_by:String(s.user.id)}});
+  if (!stored.ok) return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},409);
   try {
     await c.env.DB.batch([
       c.env.DB.prepare(`INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
@@ -171,7 +176,9 @@ r.post('/snapshot',async c=>{
     ]);
   } catch (e) {
     console.error('[use-of-funds] snapshot not filed:',(e as Error).name);
-    await c.env.FILES.delete(key).catch(()=>{});
+    // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
+    // the one record-erasure path as `unreferenced`.
+    await eraseRecordObjects(c.env.FILES,key,'unreferenced').catch(()=>{});
     return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},500);
   }
   await noteStorageLanded(c.env,storage);

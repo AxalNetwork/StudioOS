@@ -7,7 +7,8 @@
  *
  *   - healthy: Synced with HQ, the revision and when;
  *   - problem: HQ revision against branch revision, the failed attempt's time
- *     and code, and Retry sync (drawn, disabled, with the reason);
+ *     and code, and Retry sync (D6733: wired to `POST …/sync/retry`, disabled
+ *     with its reason when no copy is queued; its answer is shown under the card);
  *   - a failed provisioning offers Reconcile, never a dead-end record;
  *   - the branch line says "last accepted a copy", never "responded";
  *   - an unreadable sync is never drawn as synced.
@@ -25,8 +26,8 @@ import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import {
-  BRANCH_LINE_NOTE, RETRY_SYNC_REASON, SYNC_RETRY_WINDOW_MINUTES, agoText, canReconcile, noticeForSettled,
-  provisioningLine, syncBoard, syncSources,
+  BRANCH_LINE_NOTE, RETRY_SYNC_NOTE, RETRY_SYNC_NOTHING_OWED, SYNC_RETRY_WINDOW_MINUTES, agoText, canReconcile,
+  noticeForSettled, noticeForSyncRetry, noticeForSyncRetryError, provisioningLine, syncBoard, syncSources,
 } from '../src/pages/admin/licenceDeploymentModel.js';
 import { LicenceSyncStrip } from '../src/pages/admin/licences/LicenceSyncStrip.jsx';
 import LicenceDeploymentAttempts, { ProvisioningLine } from '../src/pages/admin/LicenceDeploymentAttempts.jsx';
@@ -48,7 +49,8 @@ const PENDING = {
 // D4805: a row queued with the change, dated 1970 so the next retry picks it up, not yet tried.
 const QUEUED = { ...PENDING, pending: { revision: null, failure_code: null, attempts: 0, last_attempt_at: '1970-01-01T00:00:00.000Z' } };
 
-const strip = (props) => renderToStaticMarkup(h(LicenceSyncStrip, { part: 'strip', deployment: DEPLOYMENT, deploymentAvailable: true, now: NOW, onReread: () => {}, ...props }));
+const strip = (props) => renderToStaticMarkup(h(LicenceSyncStrip, { part: 'strip', deployment: DEPLOYMENT, deploymentAvailable: true, now: NOW, onReread: () => {}, licenceUid: 'lic_fr', ...props }));
+const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const stateOf = (html) => /data-testid="licence-sync-card" data-state="([a-z_]+)"/.exec(html)?.[1];
 
 test('L14: synced with HQ, the revision, and when the branch accepted it', () => {
@@ -81,9 +83,17 @@ test('L15: HQ revision against the branch revision, the failed attempt’s time 
   assert.match(text, /The branch did not answer\. \(attempt 2\)/);
   assert.match(text, /6 min ago · 9 Nov 2026, 11:54 UTC · code unreachable/);
   assert.match(text, /Retry sync/);
-  assert.match(html, /<button type="button" disabled="" data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"/,
-    'Retry sync is drawn, and disabled: no route re-sends a copy on demand');
-  assert.match(text, new RegExp(`${RETRY_SYNC_REASON.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} The next try is not before 9 Nov 2026, 12:54 UTC\\.`));
+  // D6733: a copy is owed, so Retry sync can be pressed; it says what it does and when HQ tries by itself.
+  assert.match(html, /<button type="button" data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"/,
+    'Retry sync is enabled while a copy is owed');
+  assert.match(text, new RegExp(`${escapeRe(RETRY_SYNC_NOTE)} The next try is not before 9 Nov 2026, 12:54 UTC\\.`));
+  assert.match(strip({ sync: PENDING, licenceUid: undefined }), /<button type="button" disabled="" data-testid="licence-sync-retry"/,
+    'with no licence to name, there is nothing to post, so it stays disabled');
+  assert.match(strip({ sync: PENDING, licenceUid: undefined, onRetry: () => {} }),
+    /<button type="button" data-testid="licence-sync-retry"/, 'legacy ledger callbacks remain live');
+  assert.match(strip({ sync: PENDING, busy: true }),
+    /<button type="button" disabled="" data-testid="licence-sync-retry"/, 'a busy ledger does not send a second action');
+
   assert.match(html, /data-testid="licence-sync-reread"/, 'Read again re-reads the licence');
 });
 
@@ -128,6 +138,10 @@ test('the other states: out of sync, not recorded, no branch deployed', () => {
   assert.equal(syncBoard({ ...SYNCED, branch_revision: null }, NOW).state, 'out_of_sync', 'a branch that never accepted a copy is not synced');
   assert.equal(syncBoard({ ...SYNCED, hq_revision: null, branch_revision: null }, NOW).state, 'not_recorded');
   assert.match(renderedText(strip({ sync: { ...SYNCED, branch_revision: 141 } })), /HQ revision 143 · branch revision 141 · no copy is queued/);
+  // D6733: no copy queued means the route would answer nothing_pending, so the button says so and cannot be pressed.
+  const behindHtml = strip({ sync: { ...SYNCED, branch_revision: 141 } });
+  assert.match(behindHtml, /<button type="button" disabled="" data-testid="licence-sync-retry"/);
+  assert.ok(renderedText(behindHtml).includes(RETRY_SYNC_NOTHING_OWED));
   const none = strip({ sync: SYNCED, deployment: null });
   assert.equal(stateOf(none), 'none');
   assert.match(renderedText(none), /No branch deployed/);
@@ -153,12 +167,31 @@ test('the branch line keeps “last accepted a copy” and never says “respond
   assert.ok(renderedText(strip({ sync: SYNCED })).includes(BRANCH_LINE_NOTE));
 });
 
-test('the retry window is the Worker’s own, and no route retries a sync on demand yet', () => {
+test('the retry window is the Worker’s own, and Retry sync posts to the route that serves it (D6733)', () => {
   const push = read('cloudflare-worker/src/services/licencePush.ts');
   assert.equal(Number(/LICENCE_PUSH_RETRY_WINDOW_MINUTES = (\d+);/.exec(push)?.[1]), SYNC_RETRY_WINDOW_MINUTES);
-  // Retry sync is disabled because nothing serves it. When a route lands, wire the button and this fails.
-  const routes = ['admin_deployments.ts', 'admin_licences.ts', 'admin_licences_lifecycle.ts'].map((f) => read(`cloudflare-worker/src/routes/${f}`)).join('\n');
-  assert.doesNotMatch(routes, /r\.post\('\/(licences\/)?:uid\/(sync|push)/);
+  // D5924 drew Retry sync disabled because nothing served it; D6733's route serves it now.
+  const route = read('cloudflare-worker/src/routes/admin_licence_sync_retry.ts');
+  assert.match(route, /r\.post\('\/:uid\/sync\/retry'/);
+  assert.match(route, /path: '\/api\/admin\/licences', router: r, before: \[adminLicences\]/);
+  assert.match(route, /pushLicenceToBranch\(c\.env, licence\.id, at\)/, 'the cron’s own push, dated the attempt it claimed');
+  assert.match(read('frontend/src/lib/api/licenceSync.js'), /request\(`\/admin\/licences\/\$\{enc\(uid\)\}\/sync\/retry`, \{ method: 'POST' \}\)/);
+});
+
+test('D6733: Retry sync’s answer: accepted, the failure code’s sentence, or nothing owed', () => {
+  assert.deepEqual(noticeForSyncRetry({ ok: true, pushed: { ok: true, revision: 144 } }),
+    { outcome: 'committed', message: 'Sent. The branch accepted revision 144.' });
+  const failed = noticeForSyncRetry({
+    ok: true, pushed: { ok: false, revision: 144, failure_code: 'unreachable', reason: 'The branch did not accept the licence: socket hang up' },
+    sync: { ...PENDING, pending: { revision: 144, failure_code: 'unreachable', attempts: 3, last_attempt_at: '2026-11-09T12:00:00.000Z' } },
+  });
+  assert.equal(failed.outcome, 'refused');
+  assert.equal(failed.message, 'Sent, and not accepted: The branch did not answer. (code unreachable) The attempt is recorded. HQ tries again by itself not before 9 Nov 2026, 13:00 UTC.');
+  assert.doesNotMatch(failed.message, /socket/, 'never the error’s own text');
+  assert.equal(noticeForSyncRetry({ ok: true, pushed: { ok: false, no_deployment: true } }).outcome, 'committed');
+  assert.deepEqual(noticeForSyncRetryError(Object.assign(new Error('x'), { status: 409, code: 'nothing_pending' })),
+    { outcome: 'refused', message: 'No copy is owed to the branch, so nothing was sent.' });
+  assert.equal(noticeForSyncRetryError(Object.assign(new Error('A sync attempt started.'), { status: 409, code: 'retry_in_flight' })).outcome, 'pending');
 });
 
 const FAILED = {
@@ -216,6 +249,8 @@ async function mount(handle) {
   return {
     calls, has: (id) => Boolean(byId(id)), text: () => text(container),
     async click(id) { await act(async () => { await props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
+    // D4819 part 21: a press that opens the consequence sheet resolves only when the sheet is answered.
+    async press(id) { await act(async () => { props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
     async clickText(label) {
       const n = walk(container).find((x) => x.tagName === 'BUTTON' && text(x).includes(label));
       assert.ok(n, `a ${label} button`);
@@ -234,7 +269,11 @@ test('mounted: Reconcile on a failed deployment asks the Worker, dispatches noth
   try {
     assert.ok(v.has('deploy-provisioning'));
     assert.ok(v.has('deploy-retry-form'), 'Retry stays beside it');
-    await v.click('deploy-reconcile');
+    await v.press('deploy-reconcile');
+    assert.ok(v.has('licence-consequence-sheet'), 'Reconcile asks in the consequence sheet first (D4819 part 21)');
+    assert.deepEqual(v.calls.filter(([m]) => m === 'POST'), [], 'nothing is sent before the sheet is confirmed');
+    assert.match(v.text(), /Reconcile never starts a run/);
+    await v.press('licence-consequence-confirm');
     assert.deepEqual(v.calls.filter(([m]) => m === 'POST'), [['POST', '/admin/licences/lic_fr/deploy/reconcile']], 'Reconcile is the read-only check; no retry is sent');
     assert.match(v.text(), /Reconciled\. Attempt 1 is recorded as failed \(run_failed\), and nothing was sent\. Retry starts attempt 2\./);
   } finally { await v.close(); }
@@ -255,4 +294,70 @@ test('mounted: an unreadable deployment is Unreadable with Try again, and Try ag
     assert.equal(v.calls.filter(([, p]) => p === '/admin/licences/lic_fr/deployment').length, 2);
     assert.ok(v.has('deploy-provisioning'), 'the record is drawn once it reads');
   } finally { await v.close(); }
+});
+
+// ── D6733: Retry sync mounted on fake Worker answers ─────────────────────────
+
+async function mountStrip(sync, handle) {
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const calls = [];
+  let rereads = 0;
+  globalThis.fetch = async (u, options = {}) => {
+    const p = new URL(String(u), 'http://x').pathname.replace(/^\/api/, '');
+    calls.push([options.method || 'GET', p]);
+    return handle(p, options);
+  };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
+  const rootNode = createRoot(container);
+  await act(async () => rootNode.render(h(LicenceSyncStrip, {
+    part: 'strip', sync, deployment: DEPLOYMENT, deploymentAvailable: true, now: NOW, licenceUid: 'lic_fr',
+    onReread: async () => { rereads += 1; },
+  })));
+  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setImmediate(r)); });
+  const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
+  const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  return {
+    calls, rereads: () => rereads, text: () => text(container), byId, props,
+    async click(id) { await act(async () => { await props(byId(id)).onClick?.({ preventDefault() {} }); }); await flush(); },
+    async close() { await act(async () => rootNode.unmount()); globalThis.fetch = previous; restore(); },
+  };
+}
+
+test('mounted: Retry sync posts the re-send, shows the branch accepting it, and reads the licence again', async () => {
+  const v = await mountStrip(PENDING, (p, options) => {
+    if (p === '/admin/licences/lic_fr/sync/retry' && options.method === 'POST') {
+      return response({ ok: true, pushed: { ok: true, code: 'fr', revision: 144, branch_revision: 144 }, sync: { ...SYNCED, hq_revision: 144, branch_revision: 144 } });
+    }
+    return response({ error: 'not_found' }, 404);
+  });
+  try {
+    assert.equal(v.props(v.byId('licence-sync-retry')).disabled, false, 'Retry sync can be pressed while a copy is owed');
+    await v.click('licence-sync-retry');
+    assert.deepEqual(v.calls, [['POST', '/admin/licences/lic_fr/sync/retry']], 'one re-send, and nothing else');
+    assert.match(v.text(), /Sent\. The branch accepted revision 144\./);
+    assert.equal(v.props(v.byId('licence-sync-retry-outcome'))['data-outcome'], 'committed');
+    assert.equal(v.rereads(), 1, 'the licence is read again, so the card shows where the branch now stands');
+  } finally { await v.close(); }
+});
+
+test('mounted: a retry the branch does not accept shows the failure code’s sentence; nothing owed says so', async () => {
+  const failed = await mountStrip(PENDING, () => response({
+    ok: true, pushed: { ok: false, code: 'fr', revision: 144, failure_code: 'refused', reason: 'raw provider text' },
+    sync: { ...PENDING, pending: { revision: 144, failure_code: 'refused', attempts: 3, last_attempt_at: '2026-11-09T12:00:00.000Z' } },
+  }));
+  try {
+    await failed.click('licence-sync-retry');
+    assert.match(failed.text(), /Sent, and not accepted: The branch refused the copy\. \(code refused\) The attempt is recorded\./);
+    assert.doesNotMatch(failed.text(), /raw provider text/);
+    assert.equal(failed.rereads(), 1);
+  } finally { await failed.close(); }
+  const none = await mountStrip(PENDING, () => response({ error: 'nothing_pending', message: 'No copy is owed to the branch, so nothing was sent.', detail: 'No copy is owed to the branch, so nothing was sent.' }, 409));
+  try {
+    await none.click('licence-sync-retry');
+    assert.match(none.text(), /No copy is owed to the branch, so nothing was sent\./);
+    assert.equal(none.props(none.byId('licence-sync-retry-outcome'))['data-outcome'], 'refused');
+  } finally { await none.close(); }
 });

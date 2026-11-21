@@ -175,6 +175,7 @@ registerProvider({
     const credentials = await decryptCredentials(c.env, row.uid, row.credentials_enc);
     if (typeof credentials?.access_token === 'string') await revoke(c.env, credentials.access_token, isId(row.external_account_id) ? row.external_account_id : 'me');
     // D5859: once Facebook has revoked the grant, the facts this connection fed, their ledger rows and its Page links go.
+    // D5860: proposals leave with this connection's figures and Page links.
     await purgeFacebookConnection(c.env, Number(row.id));
   },
   async action(c, user, row, name, body) {

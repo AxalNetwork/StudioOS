@@ -14,19 +14,25 @@ import { useInvestorSources } from '../src/pages/investor/useInvestorSources.js'
 const deferred = () => { let resolve; let reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 
 function setup(props = {}) {
-  const calls = { portfolio: [], events: [], fund: [], notices: [], trust: [], booklet: [] };
+  // D6129 (#6129): the inbox count, founder updates and the deal flow (Thesis fit's first read) joined them.
+  const calls = { portfolio: [], events: [], fund: [], notices: [], trust: [], booklet: [], inbox: [], updates: [], deals: [] };
   const read = (key) => (...args) => { const d = { ...deferred(), args }; calls[key].push(d); return d.promise; };
   const client = {
     positionsAnalytics: read('portfolio'),
     listCalendarEvents: read('events'),
     fundsLpPortal: read('fund'),
     trustMe: read('trust'),
+    notificationsUnreadCount: read('inbox'),
+    portfolioUpdatesLatest: read('updates'),
   };
   const noticesClient = { mine: read('notices') };
   const bookletClient = { mine: read('booklet') };
+  const flowClient = { flow: read('deals') };
+  const fitCalls = [];
+  const fitClient = { fit: (ids) => { fitCalls.push(ids); return Promise.resolve({ items: [] }); } };
   const seen = { current: null };
-  const Probe = (p) => { seen.current = useInvestorSources({ client, noticesClient, bookletClient, ...p }); return null; };
-  return { calls, seen, mount: () => mountForm(h(Probe, props)) };
+  const Probe = (p) => { seen.current = useInvestorSources({ client, noticesClient, bookletClient, flowClient, fitClient, ...p }); return null; };
+  return { calls, fitCalls, seen, mount: () => mountForm(h(Probe, props)) };
 }
 const settle = async (m) => { await m.flush(); await m.flush(); };
 const act2 = async (m, fn) => { await act(async () => { fn(); }); await settle(m); };
@@ -116,4 +122,20 @@ test('fund and booklet settle independently and only the failed notice is retrie
   await act2(m, () => t.seen.current.retryFailed());
   for (const [key, calls] of Object.entries(t.calls)) assert.equal(calls.length, key === 'notices' ? 2 : 1);
   await m.unmount();
+});
+
+test('D6129: Thesis fit reads the flow, then the fit of its first six live deals only; a passed deal is not asked', async () => {
+  const t = setup();
+  const m = await t.mount(); await settle(m);
+  const items = [{ deal_id: 1, stage: 'passed' }, ...[2, 3, 4, 5, 6, 7, 8].map((id) => ({ deal_id: id, stage: 'screening' }))];
+  await act2(m, () => t.calls.deals[0].resolve({ items }));
+  assert.deepEqual(t.fitCalls, [[2, 3, 4, 5, 6, 7]]);
+  assert.deepEqual(t.seen.current.records.deals, { flow: { items }, fit: { items: [] } });
+  await m.unmount();
+  const none = setup();
+  const m2 = await none.mount(); await settle(m2);
+  await act2(m2, () => none.calls.deals[0].resolve({ items: [{ deal_id: 1, stage: 'passed' }] }));
+  assert.deepEqual(none.fitCalls, [], 'no live deal: the fit read is not asked');
+  assert.deepEqual(none.seen.current.records.deals.fit, { items: [] });
+  await m2.unmount();
 });

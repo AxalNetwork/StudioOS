@@ -9,8 +9,10 @@ import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
-import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, collectedLine, fundZoneHref, lpCommitmentText } from './investorFundLandingModel';
+import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, PERFORMANCE_UNREADABLE, collectedLine, fundZoneHref, lpCommitmentText, performanceFigures } from './investorFundLandingModel';
+import { fundPerformanceApi } from '../../lib/api/fundPerformance.js';
 import FundOverviewPanel from './FundOverviewParts';
+import { CreateFundCard } from './FundTermsForm';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
@@ -48,11 +50,34 @@ const unread = (value) => value === UNAVAILABLE;
 // D5129 (#5129): the shared Unavailable treatment, with this page's claim.
 const Unreadable = ({ what }) => <SharedUnreadable what={what} claim="This is not a claim that none exist." />;
 
+// #6248: NAV, RVPI, TVPI and IRR from the performance read, each its value or Not recorded with
+// the Worker's reason; a failed read says it failed and claims nothing.
+function Performance({ perf }) {
+  const view = performanceFigures(perf);
+  return (
+    <div className="i6-performance" data-testid="fund-performance-figures" data-state={view.state}>
+      {view.state === 'unreadable'
+        ? <div data-testid="text-fund-performance-unreadable"><SharedUnreadable what="Fund performance" claim={PERFORMANCE_UNREADABLE} /></div>
+        : (
+          <dl className="i6-summary-stats">
+            {view.figures.map((f) => (
+              <div key={f.key} data-testid={`fund-performance-${f.key}`}>
+                <dt>{f.label}</dt>
+                <dd>{view.state === 'loading' ? <span className="i6-muted">Reading…</span> : f.value ?? <Unrecorded reason={f.reason} reasonVisible>{NOT_RECORDED}</Unrecorded>}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      {view.asOf || view.basis ? <p className="i6-footnote">{view.asOf ? `As of ${view.asOf}. ` : ''}{view.basis || ''}</p> : null}
+    </div>
+  );
+}
+
 function FundDetail({ fund }) {
-  const [detail, setDetail] = useState({ lps: null, calls: null, periods: null });
+  const [detail, setDetail] = useState({ lps: null, calls: null, periods: null, perf: null });
   const load = useCallback(() => {
     if (!fund?.id) return;
-    setDetail({ lps: null, calls: null, periods: null });
+    setDetail({ lps: null, calls: null, periods: null, perf: null });
     const settle = (p) => p.then((value) => value, () => UNAVAILABLE);
     Promise.all([
       settle(api.fundsLpsList(fund.id).then((r) => r?.items || [])
@@ -66,7 +91,9 @@ function FundDetail({ fund }) {
         return r.filter((call) => String(call.fund_id) === String(fund.id));
       })),
       settle(api.fundsReportPeriods(fund.id).then((r) => r?.items || r?.periods || [])),
-    ]).then(([lps, calls, periods]) => setDetail({ lps, calls, periods }));
+      // #6248: the same read the performance page draws (D627, D6246 admits the GP of record).
+      settle(fundPerformanceApi.read(fund.id).then((r) => { if (!r || typeof r !== 'object') throw new Error('unreadable'); return r; })),
+    ]).then(([lps, calls, periods, perf]) => setDetail({ lps, calls, periods, perf: unread(perf) ? 'unreadable' : perf }));
   }, [fund?.id]);
   useEffect(() => { load(); }, [load]);
 
@@ -88,9 +115,9 @@ function FundDetail({ fund }) {
           <div><dt>Collected</dt><dd data-testid="text-fund-collected">{collected.value ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</dd></div>
           <div><dt>Deployed</dt><dd>{fmtCents(fund.deployed_cents)}</dd></div>
           <div><dt>DPI</dt><dd>{fmtMultiple(fund.dpi) || <Unrecorded />}</dd></div>
-          <div><dt>RVPI · on NAV</dt><dd><Unrecorded /></dd></div>
         </dl>
-        <p>Every recorded amount originates in this fund’s operating record. NAV, RVPI, TVPI, IRR, and expense accruals are unavailable until the underlying records exist.</p>
+        <Performance perf={detail.perf} />
+        <p>Every recorded amount originates in this fund’s operating record. Expense accruals are not recorded on Axal.</p>
         {/* #6245: NAV and the multiples are read on Fund performance, from recorded marks and cash flows. */}
         <Link to="/funds/performance" className="i6-perf-link" data-testid="link-fund-performance">Open fund performance <ArrowUpRight size={12} /></Link>
       </section>
@@ -135,9 +162,11 @@ function FundDetail({ fund }) {
   );
 }
 
-function EmptyFundDetail() {
+function EmptyFundDetail({ onCreated }) {
   return (
     <>
+      {/* #6235 (FV1b): the GP of record creates their own fund here. */}
+      <CreateFundCard onCreated={onCreated} />
       <section className="i6-summary i6-summary-empty">
         <div>
           <div className="i6-kicker">No fund record selected</div>
@@ -192,7 +221,7 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
     : error
       ? <div className="i6-error"><CircleAlert size={16} />{error}<button onClick={refresh} type="button">Retry</button></div>
       : items.length === 0
-        ? <EmptyFundDetail />
+        ? <EmptyFundDetail onCreated={(fund) => { setFundId(fund.id); refresh(); }} />
         : (
           <>
             <div className="i6-fund-switcher">
@@ -245,7 +274,7 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
         coverageNote="Open a detailed workspace to review the underlying LP record, notice or issued period."
         unavailable={[[
           'Drafting and modelling',
-          'Unavailable values stay unavailable. Nothing on this page proposes a letter, a pack or a projected figure.',
+          'A figure that is not recorded says why. Nothing on this page proposes a letter, a pack or a projected figure.',
         ]]}
         action={(
           <button type="button" onClick={refresh} disabled={loading} data-testid="button-refresh-fund-landing">

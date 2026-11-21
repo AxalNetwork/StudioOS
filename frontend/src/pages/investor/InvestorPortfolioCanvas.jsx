@@ -16,10 +16,14 @@
  * basis and as-of, through `exportView`.
  * D6207 (#6207) reverses one D4817 departure: under the hero NAV, the change
  * since the last completed quarter-end, from one extra quarter-end read.
+ *
+ * D6867 (#6867, canvas D6217 PF-13a): the Statement action opens the
+ * statement sheet over the Overview (no route of its own).
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpRight, FileText, RefreshCw, Search } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuthSync';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
@@ -29,6 +33,7 @@ import { titleCase } from '../../lib/absence';
 import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
+import StatementSheet from '../portfolio/StatementSheet';
 import {
   AttentionItem, HealthStatus, ObligationStatus, PerformanceSummary, Skeleton, SourceFailure, SummaryTile,
 } from '../portfolio/PortfolioParts';
@@ -117,9 +122,10 @@ function ReportingCard({ summary, onRetry }) {
   else if (summary.total === 0) figures = <p className="pf-note" data-testid="portfolio-reporting-empty">No company is in the reporting population{summary.period ? ` for ${summary.period}` : ''}.</p>;
   else {
     figures = (
-      <div className="pf-tiles" data-testid="portfolio-reporting-figures">
+      <div className="pf-tiles pf-tiles-4" data-testid="portfolio-reporting-figures">
         <SummaryTile label="Received" value={`${summary.received} of ${summary.total}`} />
         <SummaryTile label={summary.inProgress ? 'Outstanding' : 'Not received'} value={String(summary.outstanding)} tone={summary.outstanding && !summary.inProgress ? 'late' : null} />
+        <SummaryTile label="Overdue" value={summary.overdue == null ? NOT_RECORDED : String(summary.overdue)} tone={summary.overdue ? 'late' : null} note={summary.overdue == null ? 'No due dates in the reporting read' : 'Past the due date'} />
         <SummaryTile label="Period" value={summary.period || NOT_RECORDED} note={summary.period ? (summary.inProgress ? 'In progress' : 'Complete') : null} />
       </div>
     );
@@ -285,6 +291,8 @@ export default function InvestorPortfolioCanvas() {
   const navChange = quarterEnd ? <NavChangeLine key={quarterEnd} date={quarterEnd} analytics={reads.analytics} /> : null;
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
   const positionCount = reads.positions.state === 'ok' ? reads.positions.value.items.length : null;
+  const { user } = useAuth() || {};
+  const [statement, setStatement] = useState(false);
 
   return (
     <PortfolioFrame
@@ -296,6 +304,7 @@ export default function InvestorPortfolioCanvas() {
         <ZoneHeaderTools role="investor">
           <PortfolioExport choices={[{ key: 'companies', label: 'Export', zone: 'overview', plan: exportPlan }]} testid="button-export-portfolio-overview" />
           <Link to={ACCOUNT_LINK.to} className="pf-btn is-quiet" data-testid="link-account-portfolio">{ACCOUNT_LINK.label}</Link>
+          <button type="button" className="pf-btn" onClick={() => setStatement(true)} data-testid="button-open-statement"><FileText size={14} aria-hidden="true" /> Statement</button>
           <button type="button" className="pf-icon-button" onClick={reload} data-testid="button-refresh-investor-portfolio" aria-label="Refresh Portfolio"><RefreshCw size={15} aria-hidden="true" /></button>
         </ZoneHeaderTools>
       )}
@@ -346,6 +355,16 @@ export default function InvestorPortfolioCanvas() {
       />
       <AlsoIn role="investor" row="Portfolio" />
       <p className="pf-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</p>
+      {statement ? (
+        <StatementSheet
+          positions={reads.positions}
+          compliance={reads.compliance}
+          investor={user?.name || null}
+          from="Overview"
+          onClose={() => setStatement(false)}
+          onRetry={retry}
+        />
+      ) : null}
     </PortfolioFrame>
   );
 }

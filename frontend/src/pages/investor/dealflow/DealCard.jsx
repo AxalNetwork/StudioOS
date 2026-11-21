@@ -14,6 +14,8 @@ import { AskCell, DaysCell, FitCell, OwnerCell, ScopeCell, ScorecardCell, Ventur
 import { SCOPE_LABEL, STAGE_WORD, enteredWord, moveTargets, scopeCell } from './flowModel';
 import { MAX_COMPARE } from './dealFlowModel';
 import { PLACE_UNRECORDED, STALE_TITLE, cardStates, familiesOf } from './dealCardModel';
+// D6145 (#6145): "Assign to me" beside Move to…, where the card is in the flow and someone else (or no one) owns it.
+import { AssignToMe } from './OwnerControls';
 
 const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
 const TARGET = 'max-sm:min-h-[44px]';
@@ -105,6 +107,7 @@ export function DealCard({ row, cards, picked, onPick, onMove, busy, draggable =
             {moveTargets(row.stage).map((s) => <option key={s} value={s}>{STAGE_WORD[s]}</option>)}
           </select>
         </label>
+        <AssignToMe row={row} testId={`dealflow-card-${row.id}-assign`} />
         <label className={`flex items-center gap-1 text-[12px] ${TARGET}`}>
           <input type="checkbox" checked={ticked} disabled={!ticked && picked.length >= MAX_COMPARE} onChange={() => onPick(row.id)} aria-label={`Compare ${row.name}`} data-testid={`dealflow-tick-${row.id}`} />Compare
         </label>

@@ -914,8 +914,11 @@ test('14: form-options lists The venture then the open hypotheses, and each evid
   assert.equal(r.body.evidence.bar, DECISION_EVIDENCE_BAR);
   assert.deepEqual(r.body.evidence.options, [
     // D4586: each option names its source; with no `ref_id` the link is its own source.
-    { value: 'evidence-7', label: 'Pilot invoice · H1 · Measured', meta: '12 Oct', hypothesis_id: h1, source: 'hypothesis_evidence:evidence-7' },
-    { value: 'pain-3-9', label: 'Interview · H1 · Strength not recorded', meta: null, hypothesis_id: null, source: 'interview:pain-3-9' },
+    // D6862 (#6862): and its direction, strength and kind, for Record a decision's E-numbered table.
+    { value: 'evidence-7', label: 'Pilot invoice · H1 · Measured', meta: '12 Oct', hypothesis_id: h1, source: 'hypothesis_evidence:evidence-7',
+      direction: 'supports', strength: 'measured', kind: 'hypothesis_evidence' },
+    { value: 'pain-3-9', label: 'Interview · H1 · Strength not recorded', meta: null, hypothesis_id: null, source: 'interview:pain-3-9',
+      direction: 'contradicts', strength: null, kind: 'interview' },
   ]);
   // D757 §2.6 (#1925): with no decision yet, every interview item is preselected; the others never are.
   assert.deepEqual(r.body.evidence.suggested_evidence, ['pain-3-9']);

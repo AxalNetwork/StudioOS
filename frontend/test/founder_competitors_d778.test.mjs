@@ -1,7 +1,7 @@
 /**
- * D778 part 9 (#2103) — Research · Companies' five presses name their option on
- * the run: `analyse:competitors`, `analyse:again`, `analyse:sources`,
- * `extract:candidate` and `extract:site`. Each keeps the mounted rail's page,
+ * D778 part 9 (#2103) — Research · Companies' model presses name their option on
+ * the run: `analyse:competitors`, `analyse:again`, `extract:candidate` and
+ * `extract:site`. Refresh sources runs no model (D7176) and names none (D7652). Each keeps the mounted rail's page,
  * and the advisor's board sends its own keys (D773). A run answers only the
  * analysis, or the company, it was pressed on: opening another one drops it.
  *
@@ -33,6 +33,11 @@ const ONE_RERUN = analysis('a-one', 'Freight', {
   candidates: [{ id: 'a-one-c9', name: 'Rerun Rival', url: 'https://rerun.example', category: 'direct', origin: 'discovered', scores: {}, details: {} }],
 });
 const TWO = analysis('a-two', 'Payroll');
+// D7176: on the analysis page a rerun answers a proposal to review, not the analysis.
+const PROPOSAL = {
+  proposal_id: 'p-one', base_version: 1, output: {}, kept: {},
+  candidates: { add: [{ id: 'a-one-c9', name: 'Rerun Rival', category: 'direct', origin: 'discovered' }], remove: [] },
+};
 
 /** Stub the competitors client: reads answer at once; the five runs wait until the test answers them. */
 function stubApi() {
@@ -78,8 +83,8 @@ const candidatePage = () => mount(React.createElement(Harness, {
   path: '/research/companies/:analysisId/:candidateId', element: React.createElement(CompanyCandidate), to: '/research/companies/a-two/a-two-c1',
 }), '/research/companies/a-one/a-one-c1');
 
-test('Re-run and Refresh sources on an analysis send their own option, keeping the mounted rail\'s page', async () => {
-  // Mutations checked: either press without headers; the wrong key on either.
+test('Re-run on an analysis sends its own option, keeping the mounted rail\'s page; Refresh sources sends none', async () => {
+  // Mutations checked: Re-run without headers; the wrong key on it; Refresh sources sending an option.
   // The page mounts its own rail, so its page is always the mounted one.
   {
     const net = stubApi();
@@ -87,15 +92,18 @@ test('Re-run and Refresh sources on an analysis send their own option, keeping t
     const mounted = railPageHeaders()['X-Rail-Page'];
     assert.ok(mounted, 'the page mounts a rail');
     try {
-      await m.press('Re-run');
-      await act(async () => { net.pending.shift().ok(ONE_RERUN); }); await m.settle();
+      await m.press('Rerun discovery');
+      await act(async () => { net.pending.shift().ok(PROPOSAL); }); await m.settle();
+      assert.ok(m.text().includes('Review the rerun'), 'the proposal opens the review');
+      await m.press('Cancel · keep my draft');
       await m.press('Refresh sources');
       await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
       const [rerun, refresh] = ['rerun', 'refresh'].map((n) => net.calls.find((c) => c[0] === n));
       assert.equal(rerun[1], 'a-one');
       assert.equal(rerun[3]['X-Rail-Option'], enc('analyse:again'));
-      assert.equal(refresh[2]['X-Rail-Option'], enc('analyse:sources'));
-      for (const h of [rerun[3], refresh[2]]) assert.equal(h['X-Rail-Page'], mounted, 'the mounted page holds the Manual switch');
+      assert.equal(rerun[3]['X-Rail-Page'], mounted, 'the mounted page holds the Manual switch');
+      // D7652: Refresh sources runs no model (D7176), so it sends no rail headers.
+      assert.deepEqual(refresh, ['refresh', 'a-one']);
     } finally { await m.unmount(); net.restore(); }
   }
 });
@@ -106,15 +114,16 @@ test('a run answers only the analysis it was pressed on: opening another one dro
   const net = stubApi();
   const m = await analysisPage();
   try {
-    await m.press('Re-run');
-    assert.ok(m.text().includes('Running…'));
+    await m.press('Rerun discovery');
+    assert.ok(m.text().includes('Running discovery…'));
     await m.press('Open the other one');
     assert.ok(m.text().includes('Payroll Rival'), 'the opened analysis is drawn');
-    await act(async () => { net.pending.shift().ok(ONE_RERUN); }); await m.settle();
+    await act(async () => { net.pending.shift().ok(PROPOSAL); }); await m.settle();
     assert.ok(m.text().includes('Payroll Rival'), 'the opened analysis stays');
     assert.ok(!m.text().includes('Rerun Rival'), 'the dropped run is not drawn');
-    assert.ok(!m.text().includes('Running…'), 'and the page is pressable again');
-    await m.press('Re-run');
+    assert.ok(!m.text().includes('Review the rerun'), 'the dropped proposal opens no review');
+    assert.ok(!m.text().includes('Running discovery…'), 'and the page is pressable again');
+    await m.press('Rerun discovery');
     assert.equal(net.calls.filter((c) => c[0] === 'rerun').at(-1)[1], 'a-two');
   } finally { await m.unmount(); net.restore(); }
 });
@@ -137,12 +146,12 @@ test('Crawl site sends `extract:site`, and answers only the company it was press
 });
 
 test('the Companies workspace sends each press\'s option, the advisor\'s keys on the advisor\'s board', async () => {
-  // Mutations checked: Analyze, Re-run, Refresh or Add without headers; Add
-  // sending the analysis's option.
+  // Mutations checked: Analyze, Re-run or Add without headers; Add sending the
+  // analysis's option; Refresh sending one (D7652).
   // The board's page comes from the shell's page map for the viewer's profile.
   for (const [profile, keys] of [
-    ['Founder', { analyze: 'analyse:competitors', rerun: 'analyse:again', refresh: 'analyse:sources' }],
-    ['Advisor', { analyze: 'analyze:competitors', rerun: 'rerun:analysis', refresh: 'refresh:sources' }],
+    ['Founder', { analyze: 'analyse:competitors', rerun: 'analyse:again' }],
+    ['Advisor', { analyze: 'analyze:competitors', rerun: 'rerun:analysis' }],
   ]) {
     const page = `${profile} · Research · Companies`;
     const token = setRailPage(page);
@@ -153,15 +162,15 @@ test('the Companies workspace sends each press\'s option, the advisor\'s keys on
       React.createElement(CompetitorAnalysis, { linkToDossier: false })), '/research/companies?tab=analyses');
     try {
       await act(async () => { m.props(m.nodes().find((n) => n.tagName === 'INPUT' && /sales enablement/.test(String(m.props(n)?.placeholder || '')))).onChange({ target: { value: 'Freight' } }); });
-      await m.press('Analyze competitors');
+      await m.press('Run competitor analysis'); // D7175: the canvas's label
       assert.equal(net.calls.find((c) => c[0] === 'analyze')[2]['X-Rail-Option'], enc(keys.analyze), page);
       await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
       await m.press('Re-run');
       assert.equal(net.calls.find((c) => c[0] === 'rerun')[3]['X-Rail-Option'], enc(keys.rerun), page);
       await act(async () => { net.pending.shift().ok(ONE_RERUN); }); await m.settle();
       await m.press('Refresh sources');
-      assert.equal(net.calls.find((c) => c[0] === 'refresh')[2]['X-Rail-Option'], enc(keys.refresh), page);
-      assert.equal(net.calls.find((c) => c[0] === 'refresh')[2]['X-Rail-Page'], railPageHeaders()['X-Rail-Page'], 'the mounted page holds the Manual switch');
+      // D7652: Refresh sources runs no model (D7176), so it sends no rail headers.
+      assert.deepEqual(net.calls.find((c) => c[0] === 'refresh'), ['refresh', 'a-one'], page);
       await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
       // Add, with a site to crawl: the one press whose option both boards share.
       await m.press('Add competitor');
@@ -186,7 +195,7 @@ test('in the workspace, a run answers only the analysis it was pressed on: openi
   const m = await mount(React.createElement(CompetitorAnalysis, { linkToDossier: false }), '/research/companies?tab=analyses');
   try {
     await act(async () => { m.props(m.nodes().find((n) => n.tagName === 'INPUT' && /sales enablement/.test(String(m.props(n)?.placeholder || '')))).onChange({ target: { value: 'Freight' } }); });
-    await m.press('Analyze competitors');
+    await m.press('Run competitor analysis'); // D7175: the canvas's label
     await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
     await m.press('Re-run');
     const saved = m.nodes().find((n) => n.tagName === 'BUTTON' && textOf(n).includes('Payroll'));
@@ -201,7 +210,7 @@ test('in the workspace, a run answers only the analysis it was pressed on: openi
   } finally { await m.unmount(); net.restore(); api.listProjects = origProjects; }
 });
 
-test('the five API methods send the press\'s headers on the request itself', async () => {
+test('the four model-running API methods send the press\'s headers on the request itself', async () => {
   // Mutation checked: drop `headers` from any method → its request carries no option.
   const restore = installDocument();
   const realFetch = globalThis.fetch;
@@ -211,10 +220,9 @@ test('the five API methods send the press\'s headers on the request itself', asy
     const h = (o) => ({ 'X-Rail-Option': enc(o) });
     await api.competitors.analyze({ market: 'x' }, h('analyse:competitors'));
     await api.competitors.rerun('a', {}, h('analyse:again'));
-    await api.competitors.refresh('a', h('analyse:sources'));
     await api.competitors.addCandidate('a', { name: 'x' }, h('extract:candidate'));
     await api.competitors.crawlCandidate('a', 'c', h('extract:site'));
     const option = (s) => (s.headers instanceof Headers ? s.headers.get('X-Rail-Option') : s.headers['X-Rail-Option']);
-    assert.deepEqual(seen.map(option), ['analyse:competitors', 'analyse:again', 'analyse:sources', 'extract:candidate', 'extract:site'].map(enc));
+    assert.deepEqual(seen.map(option), ['analyse:competitors', 'analyse:again', 'extract:candidate', 'extract:site'].map(enc));
   } finally { globalThis.fetch = realFetch; restore(); }
 });

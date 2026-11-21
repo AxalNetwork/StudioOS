@@ -6,7 +6,7 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/learning_exam_server_draft_5356.test.mjs
  */
-import test from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -22,6 +22,12 @@ const Q1 = { uid: 'q1', prompt: 'Who leads?', kind: 'single', options: ['Founder
 const Q2 = { uid: 'q2', prompt: 'Which are terms?', kind: 'multiple', options: ['Valuation', 'Weather', 'Pro rata'], position: 1 };
 const EXAM = { uid: 'x1', title: 'Term sheets', question_count: 2, pass_mark_percent: 70, time_limit_minutes: null, status: 'published' };
 const USER = { id: 9001, role: 'founder', name: 'Synthetic Learner', email: 'learner@example.test' };
+// The page reads the device's draft with the real clock (useLearningDraft -> loadDraft, 30-day expiry), so the clock is
+// pinned to the instant the page is given as `now`: the device copy seeded at 10:07Z must not expire on 2026-12-10.
+// Only Date is pinned; the timers the save hold and `flush` wait on stay real.
+const NOW = Date.parse('2026-11-10T10:10:00Z');
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+afterEach(() => mock.timers.reset());
 const attemptOf = (draft = null) => ({ uid: 'a1', started_at: '2026-11-10T10:00:00.000Z', deadline: null, questions: [Q1, Q2], draft });
 
 test('indexes become keys for this attempt\'s questions only; a resume opens with the newer copy', () => {
@@ -54,7 +60,7 @@ async function mount({ attempt = attemptOf(), save, seedDevice = null } = {}) {
   if (seedDevice) saveDraft(localStorage, draftKey({ userId: USER.id, kind: 'exam', uid: EXAM.uid, attempt: attempt.uid }), seedDevice.value, seedDevice.at);
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(h(MemoryRouter, null, h(AuthProvider, null, h(ExamFlow, { status: 'ready', exam: EXAM, attempts: [], attempt, now: Date.parse('2026-11-10T10:10:00Z'), onSubmit() {}, saveDraft: save })))));
+  await act(async () => root.render(h(MemoryRouter, null, h(AuthProvider, null, h(ExamFlow, { status: 'ready', exam: EXAM, attempts: [], attempt, now: NOW, onSubmit() {}, saveDraft: save })))));
   const flush = async (ms = 0) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };

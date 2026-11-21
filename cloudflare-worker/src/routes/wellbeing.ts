@@ -63,6 +63,7 @@ import { clampLimit } from '../util/pagination';
 import { bindingKey } from '../util/schemaBootstrap';
 import expertReviews, { expertReviewResult } from './wellbeing_expert_review';
 import { auditExpert, expertDecision, reviewTarget } from '../services/wellbeing/expertReview';
+import { consentedTopics, loadPreferences, usableTopics, wantedCategories } from '../services/wellbeing/recommend';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -489,7 +490,7 @@ type DailyRow = {
 // only consumer of free_text is the authoring founder (no admin/aggregate
 // path reads it), so paraphrasing-on-display would be a no-op — we keep the
 // invariant by never exposing free_text via /aggregate or any other endpoint.
-async function serializeDaily(env: Env, row: DailyRow & {
+export async function serializeDaily(env: Env, row: DailyRow & {
   mood_plain?: number | null; stress_plain?: number | null;
   sleep_plain?: number | null; energy_plain?: number | null;
   focus_plain?: number | null; social_plain?: number | null;
@@ -617,7 +618,25 @@ wellbeing.get('/aggregate', async (c) => {
         ).bind(cutoff).all<any>();
       } else { throw e; }
     }
-    const rows = res.results || [];
+    // D7118 — reflections saved by cadence (day, week, month) join the same
+    // pulse under the same cohort floor. Each is read as one more row: its
+    // decrypted scores in the `*_plain` slots, in memory only. The cohort is
+    // every distinct member across both stores, so a member in both counts
+    // once and a group under the floor stays suppressed whichever store it
+    // sits in. Only the scores are read; text and topics never.
+    const reflectionRows = await c.env.DB.prepare(
+      `SELECT user_id, scores_enc FROM wellbeing_reflections
+        WHERE scores_enc IS NOT NULL AND datetime(updated_at) >= datetime(?)`,
+    ).bind(cutoff).all<{ user_id: number; scores_enc: string }>();
+    const fromReflections: any[] = [];
+    for (const r of reflectionRows.results || []) {
+      let scores: Record<string, unknown> = {};
+      try { scores = JSON.parse((await decryptString(c.env, r.scores_enc)) || '{}') || {}; } catch { scores = {}; }
+      const row: any = { user_id: r.user_id };
+      for (const k of ['mood', 'stress', 'sleep', 'energy', 'focus', 'social']) row[`${k}_plain`] = scores[k] ?? null;
+      fromReflections.push(row);
+    }
+    const rows = [...(res.results || []), ...fromReflections];
     const distinct = new Set(rows.map((r: any) => r.user_id));
     const cohort = distinct.size;
 
@@ -1200,8 +1219,24 @@ wellbeing.get('/experts', async (c) => {
     });
 
     // Build prefs from query string (FE may pass JSON arrays via repeated keys).
-    const prefsCategories = c.req.queries('want_category') || [];
-    const prefsLanguages = (c.req.queries('want_language') || ['en']).map((x) => x.toLowerCase());
+    let prefsCategories = c.req.queries('want_category') || [];
+    let prefsLanguages = (c.req.queries('want_language') || ['en']).map((x) => x.toLowerCase());
+    // D7119 — `personalise=1`: rank by the member's own choices, read here,
+    // and by the topics on their reflections only when they allowed it. The
+    // client then sends no history of its own. With consent off, no
+    // reflection or check-in is read (`consentedTopics` returns first).
+    let personalised: { interests: string[]; topics_used: string[]; topic_consent: boolean } | null = null;
+    if (c.req.query('personalise') === '1') {
+      const mine = await loadPreferences(c.env, user.id);
+      const topics = await consentedTopics(c.env, user.id, mine);
+      prefsCategories = wantedCategories(mine, topics);
+      if (mine.languages.length) prefsLanguages = mine.languages;
+      personalised = {
+        interests: mine.support_types,
+        topics_used: usableTopics(topics, mine.support_types).used,
+        topic_consent: mine.topic_consent,
+      };
+    }
     const prefsSectors = c.req.queries('want_sector') || [];
     const prefsModalities = c.req.queries('want_modality') || [];
     const prefs: MatchPrefs = {
@@ -1246,6 +1281,7 @@ wellbeing.get('/experts', async (c) => {
       total_active: experts.length,
       filtered_count: filtered.length,
       view_budget: viewBudget,
+      personalised,
     });
   } catch (e: any) {
     return unreadable(c, 'experts_unreadable', 'The expert directory could not be read. This is not a claim that no expert is listed.', e);

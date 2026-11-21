@@ -153,7 +153,7 @@ test('the module read query, the count, the pages, the cells and the links a rea
   assert.equal(safeHref('/validate/x'), '/validate/x');
   for (const bad of ['//evil.test', 'https://evil.test', 'javascript:alert(1)', 'validate', null]) assert.equal(safeHref(bad), null, String(bad));
   assert.deepEqual(cycleTabs('build', [{ slug: 'founding-team', name: 'Founding team' }], 'founding-team').map((t) => [t.name, t.href, t.active]),
-    [['Overview', '/build', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Tools history is its second tab (#1597)');
+    [['Overview', '/build', false], ['Plan', '/build/plan', false], ['Progress', '/build/plan/progress', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Plan and Progress lead (D6029), then its Tools history (#1597)');
 });
 
 test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
@@ -420,7 +420,9 @@ test('EVERY MODULE RENDERS FROM THE SHARED READ: all 26 module pages, with their
       assert.ok(t.includes(`What ${name} shows.`) && t.includes(`${name} · at a glance`) && !t.includes(`Next: Next step for ${name}.`), name);
       assert.ok(t.includes(`${name} one`) && t.includes(`${name} two`), `${name} lists its records`);
       const currentLabel = cycle === 'grow' ? ({ 'product-improvement': 'Customers', distribution: 'Distribution', 'revenue-and-traction': 'Focus', 'team-expansion': 'Talent', 'partner-network': 'Partnerships', 'market-expansion': 'Markets', 'durable-company-building': 'Company' }[c.slug] || name) : name;
-      assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
+      // D6029 (BD23): Build's desktop module switcher is the sidebar, so its page marks the module in the picker.
+      if (cycle === 'build') assert.match(out, new RegExp(`<option value="${c.slug}" selected="">`), `${name} is the picked module`);
+      else assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
       n += 1;
     }
   }
@@ -472,6 +474,12 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
   assert.match(text(draw({ kind: 'rows', items: [{ label: 'Mismatches', value: null }] })), /Mismatches Not recorded/);
   assert.match(text(draw({ kind: 'big', value: '57%', label: 'need-to-have' })), /57% need-to-have/);
   assert.match(draw({ kind: 'line', values: [1, 2, 3], target: 5, mark: 1, mark_label: 'ship' }), /stroke-dasharray="5 4"[\s\S]*ship/);
+  // D6025 (#6025): Prototype / MVP's burn-up by ISO week, as the Worker writes it: the labels are drawn as given,
+  // in order, a dot for each real point and none for the Ship slot, the mark at the Ship slot.
+  const weekly = draw({ kind: 'line', values: [1, 2, null, 3], target: 4, labels: ['W45', 'W46', 'Ship', 'W48'].map((label, at) => ({ at, label })), mark: 2, mark_label: 'Ship 2026-11-20' });
+  assert.match(text(weekly), /Ship 2026-11-20 W45 W46 Ship W48 $/);
+  assert.equal((weekly.match(/<circle/g) || []).length, 3);
+  assert.match(weekly, /<line x1="350" y1="8" x2="350"/, 'the Ship mark at the third of four slots');
   assert.match(draw({ kind: 'stack', rows: [{ label: 'A', parts: [1, 1] }], tones: ['v1', 'v2'], legend: [{ label: 'Strong', tone: 'v1' }] }), /fill-axal-violet[\s\S]*Strong/);
   assert.equal((draw({ kind: 'dots', values: [true, false, true] }).match(/title="Held"/g) || []).length, 2);
   assert.equal((draw({ kind: 'heat', rows: [{ label: 'M1', cells: [1, null, 0.5] }] }).match(/<rect/g) || []).length, 2, 'a missing cell is not drawn');

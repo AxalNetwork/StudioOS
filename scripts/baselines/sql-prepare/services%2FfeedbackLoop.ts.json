@@ -1,0 +1,4 @@
+{
+  "companies.map(() => '?').join(', ') @ services/feedbackLoop.ts": 1,
+  "uids.map(() => '?').join(', ') @ services/feedbackLoop.ts": 1
+}

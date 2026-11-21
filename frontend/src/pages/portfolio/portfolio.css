@@ -21,6 +21,8 @@
 .pf-btn:hover,.pf-btn:focus-visible{border-color:var(--pf-vi);color:var(--pf-vt)}
 .pf-btn.is-primary{background:var(--pf-vi);border-color:var(--pf-vi);color:#fff}
 .pf-btn.is-primary:hover,.pf-btn.is-primary:focus-visible{color:#fff;filter:brightness(1.08)}
+/* D4818: white on the dark violet (#a78bfa) is 2.7:1; dark ink on it is 7:1, as writeFlow.css's primary. */
+.dark .pf-btn.is-primary,.dark .pf-btn.is-primary:hover,.dark .pf-btn.is-primary:focus-visible{color:#0f0e17}
 .pf-btn.is-quiet{border-color:transparent;background:transparent;color:var(--pf-vt);padding:0 4px}
 .pf-link-button{border:0;background:none;padding:0;color:var(--pf-vt);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
 .pf-card{background:var(--pf-card);border:1px solid var(--pf-hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -56,6 +58,7 @@
 .pf-metric b{font:700 17px var(--font-mono);letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:break-word}
 .pf-metric b .pf-unavailable,.pf-metric b .pf-unreadable,.pf-metric b .pf-not-recorded{font-family:var(--font-app);font-size:14px}
 .pf-metric em{font-style:normal;font-size:11px;color:var(--pf-mu);line-height:1.4}
+.pf-metric>.pf-chip{align-self:flex-start}
 .pf-basis{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 14px;font:500 11px var(--font-mono);color:var(--pf-mu);padding:8px 20px;border-top:1px solid var(--pf-hair);background:var(--pf-raised)}
 .pf-basis a{color:var(--pf-vt);font-weight:700}
 /* attention */
@@ -163,6 +166,9 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
 .pf-counts>.pf-metric:last-child{border-right:0}
 .pf-toolbar{padding:0 14px}
 .pf-mark-open{font:600 11.5px var(--font-mono)}
+/* D4818: the mark date and Request… sit side by side in one cell; each is a 24px target at every width (WCAG 2.5.8), 44px on a phone. */
+.pf-mark-open,.pf-request-link{min-height:24px;min-width:24px;display:inline-flex;align-items:center}
+.pf-request-link{margin-left:6px}
 .pf-table tr.pf-total th,.pf-table tr.pf-total td{background:var(--pf-raised);font-weight:800;border-bottom:0}
 .pf-table tr.pf-total td.pf-total-note{font-weight:500;font-size:11.5px;color:var(--pf-mu);white-space:normal}
 .pf-register thead th,.pf-register tbody th,.pf-register td{padding-left:6px;padding-right:6px}
@@ -257,3 +263,29 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:0}
   .pf-obligations td[data-label="Due"]{max-width:none}
 }
+/* D6909 part 2 (PRM20–PRM23): Request a mark's steps, facts, evidence and the request list */
+.pf-steps{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0 0 10px;padding:0;font-size:11.5px;font-weight:700}
+.pf-steps li{padding:3px 9px;border-radius:999px;border:1px solid var(--pf-hair2,#d3d0dc);color:var(--pf-mu,#5f5a6b)}
+.pf-steps li.is-done{color:var(--pf-pos,#047857);border-color:var(--pf-posE,#a7f3d0)}
+.pf-steps li.is-current{color:var(--pf-vt,#6d28d9);border-color:var(--pf-vi,#7c3aed);background:var(--pf-lav,#f3effe)}
+.pf-facts{display:grid;gap:6px;margin:8px 0}
+.pf-facts>div{display:grid;grid-template-columns:minmax(120px,38%) 1fr;gap:8px;font-size:12.5px}
+.pf-facts dt{color:var(--pf-mu,#5f5a6b);font-weight:600}
+.pf-facts dd{margin:0;overflow-wrap:anywhere}
+.pf-request-form{display:flex;flex-direction:column;gap:6px}
+.pf-request-form textarea,.pf-request-form select,.pf-evidence input[type=url]{width:100%;min-height:36px;border:1px solid var(--pf-hair2,#d3d0dc);border-radius:8px;padding:6px 8px;background:var(--pf-card,#fff);color:var(--pf-ink,#18181b);font:inherit}
+.pf-evidence{border:1px dashed var(--pf-hair2,#d3d0dc);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.pf-evidence legend{font-size:12px;font-weight:700;padding:0 4px}
+.pf-radio{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;min-height:32px}
+.pf-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pf-ok{color:var(--pf-pos,#047857);font-weight:700;margin:6px 0}
+.pf-request-list{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.pf-request-item{border:1px solid var(--pf-hair,#e7e5ee);border-radius:8px;padding:8px 10px;font-size:12.5px}
+@media (max-width:640px){
+  .pf-actions .pf-btn,.pf-radio{min-height:44px}
+}
+/* D6204: an obligation past its due date, by the Worker's date. */
+.pf-late-text{color:var(--pf-neg);font-weight:700;display:block}
+
+/* D6909 part 4: Eadwyn's drafts on a mark request (PRM20, PRM22). */
+.pf-draft{display:flex;flex-direction:column;gap:6px;border:1px solid var(--pf-lavE);background:var(--pf-lav);border-radius:9px;padding:10px 12px;margin:8px 0}

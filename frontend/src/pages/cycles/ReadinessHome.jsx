@@ -6,6 +6,7 @@ import { isPlainClick, safeHref } from './cycleModel';
 import { HistoryCard, KitTile, PmfPart, usePmfHistory } from './PmfPart';
 import { kitView, pmfView } from './pmfModel';
 import { MAX_PRIORITIES, areasOf, priorities, summaryLine } from './readinessModel';
+import { ShareReadinessButton } from './evidence/ShareReadiness';
 
 /**
  * D6049 (#6049, Raise v2 RA-16) — Fundraising readiness owns its page, in one
@@ -200,7 +201,7 @@ function Fold({ title, sub, testid, children }) {
 
 export default function ReadinessHome({
   card = null, records = null, recordsStatus = 'ready', recordsMessage = '', add = null, rowHref = null,
-  onRetry = null, onRetryRecords = null, search = '', part = undefined, projectId = null, reload = null,
+  onRetry = null, onRetryRecords = null, search = '', part = undefined, projectId = null, reload = null, role = null,
 }) {
   const areas = useMemo(() => areasOf(records, recordsStatus), [records, recordsStatus]);
   const list = useMemo(() => (areas.state === 'ready' ? priorities(areas.rows) : []), [areas]);
@@ -210,6 +211,8 @@ export default function ReadinessHome({
   const history = usePmfHistory(projectId, pmfReadable ? part?.id ?? 'none' : null);
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="readiness-home">
+      {/* D6897 (RA-30): the snapshot as a dated link, offered to founders; the Worker lets only the venture's founders make one. */}
+      {projectId && role === 'founder' ? <div className="flex justify-end"><ShareReadinessButton projectId={projectId} /></div> : null}
       <Priorities areas={areas} list={list} />
       <AreasTable areas={areas} add={add} rowHref={rowHref} message={recordsMessage} onRetry={onRetryRecords || onRetry} />
       <PmfPart part={part} projectId={projectId} reload={reload} history={history} />

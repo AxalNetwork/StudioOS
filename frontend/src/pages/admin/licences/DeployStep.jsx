@@ -7,6 +7,7 @@
  * the branch sync, and a registry that could not be read is Unreadable with
  * Try again.
  */
+import { useConsequenceSheet } from '../LicenceConsequenceSheet';
 import React, { useCallback, useEffect, useState } from 'react';
 import DeployVersion from '../../../components/DeployVersion';
 import { Check, Globe } from 'lucide-react';
@@ -43,6 +44,8 @@ export function DeployStep({ licence }) {
   const [busy, setBusy] = useState(false);
   // D4706 — how the last Deploy ended, in the shared outcome vocabulary.
   const [notice, setNotice] = useState(null);
+  // D4819 part 21 (#5928): Deploy asks in the one consequence sheet (L17) first.
+  const [sheet, ask] = useConsequenceSheet();
 
   const load = useCallback(() => {
     api.deployments()
@@ -65,6 +68,7 @@ export function DeployStep({ licence }) {
   const codeOk = BRANCH_CODE_RE.test(code);
 
   async function deploy() {
+    if (!await ask('deploy', licence)) return;
     setBusy(true); setNotice({ outcome: 'pending', message: 'Asking GitHub for the provisioning run…' });
     try {
       const r = await api.licenceDeploy(licence.uid, {
@@ -179,6 +183,7 @@ export function DeployStep({ licence }) {
 
   return (
     <div data-testid="licence-deploy-step" className="space-y-4">
+      {sheet}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-gray-600 dark:text-gray-400">
           <span className="block">Branch code</span>

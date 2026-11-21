@@ -175,7 +175,7 @@ test('every evidence kind: written by addEvidence, read back by evidenceFor with
   // The Experiments list: interview support is the status's population; the other links are counted by kind beside it.
   const list = await get(env, `/api/cycles/validate/modules/experiments?project=${P}`);
   assert.equal(list.status, 200, list.text.slice(0, 300));
-  assert.ok(list.body.records.cols.includes('Interview support'));
+  assert.ok(list.body.records.cols.includes('Relationships')); // D6016: the support column is V7's Relationships
   const row = list.body.records.rows.find((r: any) => r.id === H);
   assert.equal(row.interview_support, row.evidence);
   assert.deepEqual(row.linked_evidence, { interview: 1, signal: 2, metric: 2, experiment: 1 });

@@ -206,8 +206,11 @@ test('the artboard\'s heading, stats and ledger columns are on the page', () => 
   const src = read(PAGE);
   assert.match(art, /h1:'Capital calls'/);
   assert.ok(src.includes('title="Capital calls"'), 'D1424: the heading is drawn by ZoneHeader');
+  // D6238 (#6238): the artboard's sub named a schedule builder and letters
+  // this page does not have. The intro names only what it holds; it is
+  // pinned in fund_calls_6238.test.mjs.
   assert.match(art, /sub:'Schedule builder, letters, wire tracking and delinquency\.'/);
-  assert.ok(src.includes('Schedule builder, letters, wire tracking and delinquency.'));
+  assert.ok(!src.includes('Schedule builder, letters, wire tracking and delinquency.'), 'the intro names what the page does not hold');
   // The four stat tiles, by the canvas's own labels.
   const adds = [...art.matchAll(/\{ label:'([^']+)', value:/g)].map((m) => m[1]);
   assert.deepEqual(adds.slice(0, 3), ['Called to date', 'Collected', 'Outstanding']);
@@ -237,8 +240,8 @@ test('every filter and op the artboard draws is live or states why not', () => {
   assert.deepEqual(a.map((x) => x.label), ops);
   assert.equal(a.find((x) => x.label === 'New call').kind, 'handler');
   assert.equal(a.find((x) => x.label === 'Export wires').kind, 'export');
-  // The one op left unbuilt says so. Since D553 a reminder for one line is
-  // drafted on its row, and the rail says that nothing on the page sends it.
-  assert.ok(a.find((x) => x.label === 'Send reminders').unbuilt);
+  // D6238: Send reminders is wired (the chase); the rail still says that
+  // nothing on the page sends a reminder.
+  assert.equal(a.find((x) => x.label === 'Send reminders').kind, 'handler');
   assert.match(read(PAGE), /\['Reminder delivery', 'Eadwyn drafts a reminder for one LP’s line, and nothing here sends it/);
 });

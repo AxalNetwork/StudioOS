@@ -1,7 +1,8 @@
 /**
  * D4817 part 1 (#5311, PF-01): the pure model the Portfolio v2 frame and its
  * boards share. No React, no fetch, no clock: every date it compares against
- * comes from a Worker answer (`kpi-compliance`'s `as_of`), never from the
+ * comes from a Worker answer (the positions read's `today`, D6226, or
+ * `kpi-compliance`'s `as_of`), never from the
  * browser, so the same reads always draw the same page.
  *
  * A read is one of three things, and the model never folds them together:
@@ -255,7 +256,10 @@ export function reportingFor(position, compliance) {
   if (!row) return { state: 'Not recorded', period, reason: 'This company is not in the reporting population.' };
   const last = row.last_reported_at || null;
   if (row.reported) return { state: 'Received', period, last };
-  return { state: c.period_in_progress ? 'Due' : 'Not received', period, last, days: isNum(row.days_since_report) ? Number(row.days_since_report) : null };
+  // D6204: past its due day by the Worker's date, the obligation is Overdue, with the days.
+  const due = dueOf(row);
+  if (due.state === 'overdue') return { state: 'Overdue', period, last, overdueDays: due.days, due: due.date, reason: `${due.text} · due ${due.date}` };
+  return { state: c.period_in_progress ? 'Due' : 'Not received', period, last, days: isNum(row.days_since_report) ? Number(row.days_since_report) : null, due: due.date || null };
 }
 
 /** The Reporting summary card. */
@@ -282,6 +286,8 @@ export function reportingSummaryOf(compliance, updates) {
     total,
     received,
     outstanding: total - received,
+    // D6204: the Worker's overdue set; null when the read carries none (an older Worker or no due read).
+    overdue: c.due_read === 'ok' && isNum(c.overdue_count) ? Number(c.overdue_count) : null,
     submissions,
     updatesState: updates.state,
   };
@@ -360,7 +366,10 @@ export function evidenceFor(position, { health, compliance, updates }, reference
   }
 
   const r = reportingFor(position, compliance);
-  if (r.state === 'Not received') {
+  if (r.state === 'Overdue') {
+    // D6204: past the due day by the Worker's date, the line says by how much.
+    lines.push({ label: 'Report', text: `${r.period || 'Last period'} overdue by ${r.overdueDays} ${r.overdueDays === 1 ? 'day' : 'days'} · due ${day(r.due)} · ${r.last ? `last reported ${day(r.last)}` : 'never reported'}`, weight: 3 });
+  } else if (r.state === 'Not received') {
     lines.push({ label: 'Report', text: `${r.period || 'Last period'} not received · ${r.last ? `last reported ${day(r.last)}` : 'never reported'}`, weight: 2 });
   }
 
@@ -696,15 +705,26 @@ export function basisLabel(basis) {
 
 /**
  * The date a mark's age is measured against: the book's own as-of date when
- * one is chosen, else the Worker's `as_of` on the reporting read. Never the
- * browser clock. Null when neither is known, and the page says so.
+ * one is chosen, else the positions read's own `today` (the Worker's UTC
+ * date, D6226), else the Worker's `as_of` on the reporting read when the
+ * positions read carries no `today`. Never the browser clock. Null when none
+ * is known, and the page says so.
  */
-export function markReference(asOf, compliance) {
+export function markReference(asOf, compliance, positions) {
   if (asOf) return { date: asOf, state: 'ok', source: 'as_of' };
+  const own = workerToday(positions);
+  if (own) return { date: own, state: 'ok', source: 'positions' };
   if (compliance.state === 'loading') return { date: null, state: 'loading' };
   if (compliance.state !== 'ok') return { date: null, state: 'unreadable' };
   const d = compliance.value.as_of || null;
   return d ? { date: d, state: 'ok', source: 'worker' } : { date: null, state: 'not_recorded' };
+}
+
+/** The Worker's own UTC date on a positions read (`today`, D6226), or null when it carries none. */
+export function workerToday(read) {
+  if (!read || read.state !== 'ok' || !read.value || Array.isArray(read.value)) return null;
+  const d = read.value.today;
+  return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
 /** A mark older than two quarters at `reference`; null when either date is missing. */
@@ -1148,8 +1168,32 @@ export function periodCovers(cadence, period, stored) {
   return Boolean(m) && `${m[1]}-Q${Math.floor((Number(m[2]) - 1) / 3) + 1}` === due;
 }
 
-/** Why an obligation shows no due date: the cadence read records none, so no overdue days are counted. */
-export const NO_DUE_DATE = 'The reporting cadence records no due date for this period, so no days overdue are counted.';
+/** Why an obligation shows no due date when the reporting read carries none for it (D6204). */
+export const NO_DUE_DATE = 'The reporting read gives no due date for this period, so no days overdue are counted.';
+
+/**
+ * #6204 (D6204): one obligation's due day, from the Worker's own `due_date`, `days_overdue` and
+ * `overdue` on the kpi-compliance row (per book, else 30 days after the period ends). The page
+ * never works out lateness itself:
+ *
+ *   reported   it reported; the due day is shown as it was
+ *   overdue    'Overdue by N days', with the due day
+ *   due        'Due <day>', not yet past it
+ *   none       Not recorded, with the Worker's reason (or NO_DUE_DATE)
+ */
+export function dueOf(row) {
+  const date = day(row?.due_date);
+  if (!date) return { state: 'none', text: NOT_RECORDED, reason: String(row?.due_reason || '').trim() || NO_DUE_DATE };
+  const basis = row.due_basis === 'reporting_duty'
+    ? `${row.due_days} days after the period ends, from the reporting duty`
+    : row.due_basis === 'firm_default' ? `${row.due_days} days after the period ends, the firm default` : null;
+  if (row.reported === true) return { state: 'reported', text: `Due ${date}`, date, basis };
+  if (row.overdue === true && isNum(row.days_overdue) && Number(row.days_overdue) > 0) {
+    const n = Number(row.days_overdue);
+    return { state: 'overdue', text: `Overdue by ${n} ${n === 1 ? 'day' : 'days'}`, date, days: n, basis };
+  }
+  return { state: 'due', text: `Due ${date}`, date, basis };
+}
 
 const blank = (v) => v === undefined || v === null || String(v).trim() === '';
 const keyWords = (key) => titleCase(key) || NOT_RECORDED;
@@ -1175,7 +1219,7 @@ export function missingFor(reporting, update, compliance, updates) {
   if (reporting.state === 'loading' || updates.state === 'loading') return { state: 'loading' };
   if (reporting.state === 'Unreadable') return { state: 'unreadable', text: UNREADABLE };
   const period = periodName(reporting.period);
-  if (reporting.state === 'Not received' || reporting.state === 'Due') {
+  if (reporting.state === 'Not received' || reporting.state === 'Due' || reporting.state === 'Overdue') {
     return { state: 'missing', text: `The ${period || 'period'} update` };
   }
   if (reporting.state !== 'Received') return { state: 'not_measured', text: NOT_RECORDED };
@@ -1207,12 +1251,47 @@ export function lastChaseOf(projectId, chases) {
 }
 
 /**
+ * D7650 (#7650): why the Worker did not chase a company, in words. The codes are
+ * `POST /portfolio/chase`'s `skips[].reason`; an unknown code is said as such,
+ * never read as chased.
+ */
+export function chaseSkipText(skip) {
+  const reason = skip?.reason;
+  if (reason === 'no_obligation') return 'no reporting obligation in your book';
+  if (reason === 'not_due') return skip.due_date && day(skip.due_date) ? `not due until ${day(skip.due_date)}` : 'not due yet';
+  if (reason === 'already_reported') return skip.period ? `already reported for ${periodName(skip.period) || skip.period}` : 'already reported for this period';
+  if (reason === 'unreadable') return 'its reporting obligation could not be read';
+  return 'skipped by the Worker';
+}
+
+/**
+ * D7650 (#7650): what a chase did, from the Worker's answer. A company counts as
+ * chased only when it is in `chased`; each skipped one is named with its reason.
+ * `nameOf(projectId)` gives the company's name. Returns the note the page shows.
+ */
+export function chaseOutcomeOf(result, nameOf = () => null) {
+  const chased = Array.isArray(result?.chased) ? result.chased : [];
+  const fresh = chased.filter((c) => !c.already).length;
+  const already = chased.filter((c) => c.already).length;
+  const skips = Array.isArray(result?.skips) ? result.skips : [];
+  const listed = new Set(skips.map((s) => Number(s.project_id)));
+  // A skipped id the Worker gave no reason for is still not chased.
+  const bare = (Array.isArray(result?.skipped) ? result.skipped : []).filter((id) => !listed.has(Number(id))).map((id) => ({ project_id: id }));
+  const skipped = [...skips, ...bare].map((s) => ({
+    project_id: Number(s.project_id),
+    name: nameOf(Number(s.project_id)) || `Company ${s.project_id}`,
+    reason: s.reason || null,
+    text: chaseSkipText(s),
+  }));
+  return { chased: fresh, already, skipped };
+}
+
+/**
  * PF-04's obligations inbox: one row per company in the reporting population
  * (`kpi-compliance`'s companies, the caller's book) for the period the Worker
  * measured, companies that have not reported first. A name the reporting read
- * does not carry comes from the positions read. No row carries a due date:
- * the cadence read records none (`NO_DUE_DATE`), so no overdue days are
- * computed.
+ * does not carry comes from the positions read. Each row's due day and
+ * lateness are the Worker's (`dueOf`, D6204).
  */
 export function obligationRowsOf(reads) {
   const { compliance, updates, positions, chases } = reads;
@@ -1233,6 +1312,9 @@ export function obligationRowsOf(reads) {
       period: periodName(reporting.period),
       reporting,
       reported: co.reported === true,
+      // D6204: the Worker's overdue set, never one worked out here.
+      overdue: co.reported !== true && co.overdue === true,
+      due: dueOf(co),
       received: day(co.last_reported_at),
       update,
       missing: missingFor(reporting, update, compliance, updates),
@@ -1246,6 +1328,9 @@ export function obligationRowsOf(reads) {
     cadence: c.cadence || null,
     inProgress: c.period_in_progress === true,
     until: day(c.period_until),
+    overdueCount: rows.filter((r) => r.overdue).length,
+    dueDefaultDays: isNum(c.due_default_days) ? Number(c.due_default_days) : null,
+    dueRead: c.due_read === 'unreadable' ? 'unreadable' : c.due_read === 'ok' ? 'ok' : 'absent',
   };
 }
 

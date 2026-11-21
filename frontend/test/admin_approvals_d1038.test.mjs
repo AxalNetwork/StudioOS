@@ -29,9 +29,7 @@ import {
   oldestLine, pitchRows, tabOf, attributionTotals,
   answerPairs, credentialsText, decisionCopy, doneLine, profileChart, publishUrlOk, reasonReady, refusalLine, tabPath, testerActions, testerHistory, testerRows,
 } from '../src/pages/admin/approvals/approvalsModel.js';
-import { filterTesters, readAllTesters } from '../src/pages/admin/approvals/TesterBoard.jsx';
-import { readAllExperts } from '../src/pages/admin/approvals/ExpertBoard.jsx';
-import { oldestApproved } from '../src/pages/admin/approvals/PitchBoard.jsx';
+import { expertPage, expertSummary, filterTesters, pitchSummary, testerPage, testerSummary } from './_approvalBoardPages_5876.mjs';
 import {
   assigneeOf, assignChoices, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef, hasNextPage,
   hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, summaryStrip, weeklyTile, itemOfPath, itemPath, itemView, laneAgeChart,
@@ -69,7 +67,6 @@ const GLANCE = {
     no_queue: [],
   },
 };
-const ALL_READ = { ...GLANCE, approvals: { ...GLANCE.approvals, lanes: GLANCE.approvals.lanes.map((l) => (l.key === 'lp' ? { ...l, count: 3, oldest_age_hours: 12 } : l)) } };
 const ready = (payload) => ({ status: 'ready', hq: glancesFromStudioGlance(payload, null).hq });
 
 // D1045: HQ's inbox read (D1040, D1132) as the Worker answers it: three items,
@@ -378,7 +375,6 @@ function stub({ glance = () => json(GLANCE), queue = (s) => json({ items: [] }),
   };
   return { seen, restore() { globalThis.fetch = original; } };
 }
-const reads = (s) => [...new Set(s.seen.filter((p) => !p.startsWith('/api/ai') && !p.startsWith('/api/rail')).map((p) => p.split('?')[0]))].sort();
 
 // D1045: the page with every read it makes, focus kept (so focus return reads), POSTs recorded.
 const PART7 = {
@@ -719,7 +715,6 @@ async function board(url, route) {
 }
 const gets = (v, prefix) => v.seen.filter((p) => p.startsWith(`GET ${prefix}`));
 
-const TOTALS = { applied: 2, active: 1, paused: 0, declined: 0, removed: 0, total: 3 };
 const member = (id, name, role, verified = true) => ({ id, name, email: `${name.split(' ')[0].toLowerCase()}@example.com`, role, email_verified: verified, kyc_status: 'approved' });
 const TESTERS = [
   { id: 1, user_id: 11, status: 'applied', applied_at: '2026-10-17 09:00:00', availability: '3 hours a week', consent_email_at: '2026-10-17 09:00:00', consent_version: 'v2', answers: [{ question: 'What do you want to test?', answer: 'B2B tools for small funds.' }], member: member(11, 'Gus Demo', 'investor') },
@@ -727,8 +722,8 @@ const TESTERS = [
   { id: 2, user_id: 12, status: 'active', applied_at: '2026-07-01 09:00:00', decided_at: '2026-08-14 10:00:00', decided_by_name: 'Admin B', answers: [], programmes: { applied: 1, picked: 1 }, member: member(12, 'Eva Demo', 'advisor') },
 ];
 const testerRoute = (over = {}) => async (path, q, method, body) => {
-  if (path === '/api/admin/product-testers' && q.get('in_programme') === 'yes') return json({ rows: [], matching: 1, totals: TOTALS, page: 1, page_size: 1 });
-  if (path === '/api/admin/product-testers') return json({ rows: TESTERS, matching: 3, totals: TOTALS, page: 1, page_size: 100 });
+  if (path === '/api/admin/product-testers/summary') return json(testerSummary(TESTERS));
+  if (path === '/api/admin/product-testers') return json(testerPage(TESTERS, q));
   const m = /^\/api\/admin\/product-testers\/(\d+)(?:\/(\w+))?$/.exec(path);
   if (m && method === 'POST') return over.decide ? over.decide(m[2], body) : json({ ok: true, places_ended: m[2] === 'remove' ? 2 : 0 });
   if (m) {
@@ -799,19 +794,6 @@ test('every decision says what changes, who is told and what is recorded; reason
   assert.match(refusalLine(new Error('Network down')), /outcome could not be confirmed/i, 'no status never claims that a possibly committed write changed nothing');
 });
 
-test('the boards read every page: testers to a thousand, experts to a thousand, and say when they stopped (D1046)', async () => {
-  let calls = 0;
-  const one = await readAllTesters({ testers: async () => { calls += 1; return { rows: [{ id: calls }], matching: 2, totals: TOTALS }; } });
-  assert.deepEqual([one.rows.length, one.complete, calls], [2, true, 2]);
-  calls = 0;
-  const cut = await readAllTesters({ testers: async () => { calls += 1; return { rows: [{ id: calls }], matching: 5000, totals: TOTALS }; } });
-  assert.deepEqual([cut.rows.length, cut.complete, calls], [10, false, 10]);
-  const ex = await readAllExperts({ experts: async ({ offset }) => ({ items: offset < 400 ? Array.from({ length: 200 }, (_, i) => ({ uid: `${offset}-${i}` })) : [{ uid: 'last' }], total: 401 }) });
-  assert.deepEqual([ex.items.length, ex.total], [401, 401]);
-  assert.equal(oldestApproved({ items: [{ reviewed_at: '2026-10-10 09:00:00' }], total: 1 }, Date.parse('2026-10-21T09:00:00Z')), '11 d 0 h');
-  assert.equal(oldestApproved({ items: [{ reviewed_at: '2026-10-10 09:00:00' }], total: 30 }), null, 'not every approval is on the page');
-});
-
 test('mounted, Product testers (APR4): five tabs with counts, the facts, intake paused, three tiles, the chart, the table; nothing is a 0 for a gap', async () => {
   const v = await board('/admin/approvals/product-testers', testerRoute());
   try {
@@ -830,9 +812,11 @@ test('mounted, Product testers (APR4): five tabs with counts, the facts, intake 
     assert.doesNotMatch(v.of('tester-1'), /! Email not verified|! No email consent/, 'nothing stops Gus');
     assert.match(v.of('tester-3'), /Ben Sample.*! Email not verified\s*! No email consent/s);
     assert.ok(!v.has('tester-2'), 'an active tester is not on Waiting');
-    assert.ok(gets(v, '/api/admin/product-testers?').some((p) => p.includes('in_programme=yes')), 'the in-program tile is the Worker\'s count');
+    assert.equal(gets(v, '/api/admin/product-testers/summary').length, 1);
+    assert.equal(gets(v, '/api/admin/product-testers?').length, 1);
+    assert.match(gets(v, '/api/admin/product-testers?')[0], /status=applied.*page_size=25/);
   } finally { await v.unmount(); }
-  const failed = await board('/admin/approvals/product-testers/active', async (path) => (path === '/api/admin/product-testers' ? json({ code: 'product_testers_unreadable' }, 503) : null));
+  const failed = await board('/admin/approvals/product-testers/active', async (path) => (path.startsWith('/api/admin/product-testers') ? json({ code: 'product_testers_unreadable' }, 503) : null));
   try {
     assert.match(failed.of('testers-failed'), /could not be read\. That is not the same as having none\./);
     assert.match(failed.of('testers-tab-active'), /Active\s*—/);
@@ -922,6 +906,10 @@ const PITCHES = {
   published: [{ uid: 'p3', title: 'Seed pricing', asset_type: 'webinar', partner_company: 'Partner A', attribution_30d: { visit: 188, signup: 4, lead: 2, conversion: 1 } }],
 };
 const pitchRoute = (over = {}) => async (path, q, method, body) => {
+  if (path === '/api/comarketing/admin/queue/summary') {
+    return over.failSummary ? json({ code: 'queue_summary_unreadable' }, 503)
+      : json(pitchSummary(PITCHES, { visit: 412, signup: 9 }));
+  }
   if (path === '/api/comarketing/admin/queue') {
     const st = q.get('status');
     if (over.failState === st) return json({ code: 'queue_unreadable' }, 503);
@@ -938,13 +926,14 @@ const pitchRoute = (over = {}) => async (path, q, method, body) => {
   return null;
 };
 
-test('mounted, Co-marketing (APR6): five states read alone and paged, the tiles over 30 days, a failed state a dash; the pitch opens over the board', async () => {
-  const v = await board('/admin/approvals/co-marketing', pitchRoute({ failState: 'withdrawn' }));
+test('mounted, Co-marketing (APR6): one active page and a summary, the tiles over 30 days; the pitch opens over the board', async () => {
+  const v = await board('/admin/approvals/co-marketing', pitchRoute());
   try {
-    assert.equal(gets(v, '/api/comarketing/admin/queue').length, 5);
-    assert.ok(gets(v, '/api/comarketing/admin/queue').every((p) => /limit=25/.test(p) && /offset=0/.test(p)), 'part 5\'s pages');
+    assert.equal(gets(v, '/api/comarketing/admin/queue/summary').length, 1);
+    assert.equal(gets(v, '/api/comarketing/admin/queue?').length, 1);
+    assert.match(gets(v, '/api/comarketing/admin/queue?')[0], /status=proposed&limit=25&offset=0/);
     assert.match(v.of('pitches-tab-proposed'), /Proposed\s*1/);
-    assert.match(v.of('pitches-tab-withdrawn'), /Withdrawn\s*—/, 'a failed state is a dash, never 0');
+    assert.match(v.of('pitches-tab-withdrawn'), /Withdrawn\s*0/);
     assert.match(v.of('pitches-tile-visits'), /Visits from published pitches, 30 days\s*412/);
     assert.match(v.of('pitches-tile-signups'), /Sign-ups\s*9\s*from published pitches, 30 days/);
     // D4814 part 3: the four-cell summary's fourth cell, and the canvas's Pitch · Partner · Format columns.
@@ -992,7 +981,10 @@ const EXPERTS = [
   { uid: 'e4', name: 'Expert D', decision_state: 'verified', verified: true, hidden: true, review_version: 5, credentials: { files: [] } },
 ];
 const expertRoute = (over = {}) => async (path, q, method, body) => {
-  if (path === '/api/wellbeing/admin/experts') return over.list ? over.list(q) : json({ items: EXPERTS, total: EXPERTS.length, limit: 200, offset: 0 });
+  if (path === '/api/wellbeing/admin/experts/summary') {
+    return over.failSummary ? json({ code: 'expert_review_unreadable' }, 503) : json(expertSummary(EXPERTS));
+  }
+  if (path === '/api/wellbeing/admin/experts') return over.list ? over.list(q) : json(expertPage(EXPERTS, q));
   const r = /^\/api\/wellbeing\/admin\/experts\/([^/]+)\/(review|verify|hide|decline)$/.exec(path);
   if (r && method === 'POST') return json({ ok: true });
   if (r) { const e = EXPERTS.find((x) => x.uid === r[1]); return e ? json({ expert: e, history: [] }) : json({ code: 'expert_not_found' }, 404); }
@@ -1001,10 +993,12 @@ const expertRoute = (over = {}) => async (path, q, method, body) => {
   return null;
 };
 
-test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the credentials column; a short read draws no counts', async () => {
+test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the credentials column; an unreadable summary leaves the page available', async () => {
   let v = await board('/admin/approvals/wellbeing-experts', expertRoute());
   try {
-    assert.ok(gets(v, '/api/wellbeing/admin/experts').some((p) => /state=all/.test(p) && /limit=200/.test(p)));
+    assert.equal(gets(v, '/api/wellbeing/admin/experts/summary').length, 1);
+    assert.equal(gets(v, '/api/wellbeing/admin/experts?').length, 1);
+    assert.match(gets(v, '/api/wellbeing/admin/experts?')[0], /board_tab=verify&limit=25&offset=0/);
     assert.match(v.of('experts-tab-verify'), /Needs verification\s*2/);
     assert.match(v.of('experts-tab-declined'), /Declined\s*1/);
     assert.match(v.of('experts-tab-hidden'), /Hidden\s*1/);
@@ -1015,11 +1009,16 @@ test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the
   } finally { await v.unmount(); }
   v = await board('/admin/approvals/wellbeing-experts/declined', expertRoute());
   try { assert.match(v.of('expert-e3'), /Expert C.*! None given/s); } finally { await v.unmount(); }
-  v = await board('/admin/approvals/wellbeing-experts', expertRoute({ list: (q) => json({ items: q.get('offset') === '0' ? EXPERTS.slice(0, 1) : [], total: 80 }) }));
+  v = await board('/admin/approvals/wellbeing-experts', expertRoute({ failSummary: true, list: (q) => json({ items: q.get('offset') === '0' ? EXPERTS.slice(0, 1) : EXPERTS.slice(1, 2), total: 80 }) }));
   try {
     assert.match(v.of('experts-tab-verify'), /Needs verification\s*—/);
     assert.match(v.of('experts-strip-waiting'), /Needs verification\s*Could not be read/);
-    assert.match(v.of('experts-partial'), /first 1 of 80/);
+    assert.match(v.of('experts-pager'), /1–25 of 80/);
+    assert.ok(v.has('expert-e1'));
+    await v.click('experts-pager-next');
+    assert.equal(gets(v, '/api/wellbeing/admin/experts/summary').length, 1);
+    assert.match(gets(v, '/api/wellbeing/admin/experts?').at(-1), /offset=25/);
+    assert.ok(v.has('expert-e2'));
   } finally { await v.unmount(); }
 });
 

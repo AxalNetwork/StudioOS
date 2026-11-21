@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth, useTabletWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction, pickOwnerAction, queryFromSearch } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -950,6 +950,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
           // D1466 (RO00): Raise's header Ask, beside Build your deck.
           ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
+          // D6897 part 4 (#6897, RA-31): a cycle's own header controls beside the action (Raise: Share outside Axal).
+          more={projectId ? def?.overviewMore?.({ projectId, role: user?.role ?? null }) ?? null : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
@@ -958,13 +960,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     );
   } else {
     const read = module?.records;
-    const rankable = cycle === 'grow' && slug === 'partner-network' && projectId && !narrativeAdmin && Array.isArray(read?.rows) && read.rows.length > 0;
+    const isPartnerNetwork = cycle === 'grow' && slug === 'partner-network';
+    const rankable = isPartnerNetwork && projectId && !narrativeAdmin && Array.isArray(read?.rows) && read.rows.length > 0;
     const ranked = rankable && partnerRank ? applyRank(read.rows, (row) => row.id, partnerRank) : null;
     const recs = ranked ? { ...read, rows: ranked.list } : read;
     // D703 step 6: below 1024px the module is a pushed page with the same props.
     const ModulePage = phone ? PhoneModulePage : CycleModulePage;
     // D6031 (#6031, BD8): a module's own line above its table and its own phone rows, from its cycle's def.
     const above = moduleStatus === 'ready' && projectId && !narrativeAdmin ? fnOf(def.aboveRecords, slug) : null;
+    const aboveRecords = above?.(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q });
     const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
@@ -1020,6 +1024,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
           ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
             () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
+          // D6790 (GR-23): an obligation with no owner offers Pick owner: the same Edit, focused on the owner listbox.
+          ...pickOwnerAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
+            () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'owner_user_id' } })),
         }) : !narrativeAdmin && !edit && projectId && defRowAction ? (row) => defRowAction(row, defCtx) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
@@ -1030,9 +1037,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} home={uofOwnsHome ? uofHome : null} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} home={capRelOwnsHome ? capRelHome : null} works={capRelWorks} action={action} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
-        aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
-          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
-          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q }) : null}
+        aboveRecords={rankable ? <>
+          {aboveRecords}
+          <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
+            ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
+        </> : aboveRecords}
+        {...(phone && isPartnerNetwork ? { showAboveRecordsWhenEmpty: true } : {})}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}

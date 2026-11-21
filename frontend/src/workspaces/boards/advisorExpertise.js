@@ -1,4 +1,10 @@
 import { count, day, moneyCents, summary, title, top } from './format.js';
+import { lazy } from 'react';
+import { ADVISOR_LICENCE_REQUIRED, LICENCE_SENTENCES } from '../../pages/advisor/expertise/licenceRefusal.js';
+
+// D7516 (#7516, EX-01, EX-03, EX-04b): the Next step, the four-dimension strip and the admin preview lead the
+// board. Loaded on its own (it reads Profile's field list), so the shell every first visit fetches stays as it was.
+const ExpertiseOverview = lazy(() => import('../../pages/advisor/expertise/ExpertiseOverview.jsx'));
 
 /** A list's full-set total from its page facts (#4689), or null when the answer carries none. */
 const pageTotal = (page) => (Number.isInteger(page?.total) ? page.total : null);
@@ -32,6 +38,13 @@ const pageTotal = (page) => (Number.isInteger(page?.total) ? page.total : null);
  */
 export default function advisorExpertiseBoard(role, api) {
   return {
+    // D4828 (#4828, EX-14): each section's loading, failed and refused states are
+    // #5129's shared ones, and its rows are rows, not a sideways table, on a phone.
+    states: 'platform',
+    // D7516: drawn above the sections from these same sources; for an admin previewing the role it replaces them.
+    lead: ExpertiseOverview,
+    // #5363: the licence refusal reads as Refused with the zones' own sentence, no Try again.
+    refusals: { [ADVISOR_LICENCE_REQUIRED]: LICENCE_SENTENCES.expertise },
     sources: {
       profile: () => api.getMyAdvisor(),
       services: () => api.listMyAdvisorServices(),

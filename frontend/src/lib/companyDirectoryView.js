@@ -151,9 +151,12 @@ export function withoutFilter(f, key) {
 /**
  * The list's state from one read: 'loading' until it answers, 'unreadable'
  * when it fails (never zero companies), 'empty' when nothing matches, else 'ready'.
+ * D7179 (RCD05): a later read that still holds the last rows is 'updating',
+ * and a refusal (401, 403) is 'refused', not a failed read.
  */
 export function listState({ loading, error, data }) {
-  if (loading) return 'loading';
+  if (loading) return data?.items?.length ? 'updating' : 'loading';
+  if (error && (error.status === 401 || error.status === 403)) return 'refused';
   if (error || !data) return 'unreadable';
   return (data.items || []).length ? 'ready' : 'empty';
 }
@@ -210,22 +213,34 @@ export function relatedSignals(sectorSignals = [], countrySignals = []) {
 /** The Companies list, filtered to one sector label. */
 export const sectorLabelHref = (sectorLabel) => `/research/companies?sector_label=${encodeURIComponent(sectorLabel)}`;
 
-/** The competitor-analysis form, prefilled with this company. */
+/**
+ * The competitor-analysis form with this company as its subject (D7175,
+ * board RS-13 A1). It carries the uid, which the form reads the directory
+ * record by, and the name, which the subject card shows while that read is
+ * pending or if it fails. It never carries the website as a known
+ * competitor. A company with no uid falls back to the market prefill.
+ */
 export const analysisHref = (company) => {
-  const p = new URLSearchParams({ tab: 'analyses', market: company?.name || '' });
-  if (company?.website) p.set('website', company.website);
+  const p = new URLSearchParams({ tab: 'analyses' });
+  if (company?.uid) {
+    p.set('company', company.uid);
+    if (company.name) p.set('name', company.name);
+  } else {
+    p.set('market', company?.name || '');
+  }
   return `/research/companies?${p.toString()}`;
 };
 
 /**
  * Where `/build/competitors` sends a founder, advisor or admin: the Saved
- * analyses tab, keeping `market` and `website` so the form is prefilled. It
+ * analyses tab, keeping `market`, `website`, and the subject's `company` and
+ * `name` (D7175), so the form is prefilled. It
  * used to send them to the bare directory, and the prefill was lost.
  */
 export function buildCompetitorsRedirect(search) {
   const from = new URLSearchParams(search || '');
   const to = new URLSearchParams({ tab: 'analyses' });
-  for (const k of ['market', 'website']) {
+  for (const k of ['market', 'website', 'company', 'name']) {
     const v = from.get(k);
     if (v) to.set(k, v);
   }

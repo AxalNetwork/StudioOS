@@ -4,18 +4,25 @@
  * may read, "Not saved" until Save as my note), and the deal's activity
  * without other investors' names (the Worker withholds them, D1152).
  *
+ * D6164 PART 3 (#6164, DE27, the owner's answer A): the notes are no longer
+ * a tab. An investor's Activity tab (`InvestorActivity`) has one row of
+ * chips, the activity's own and "Firm notes", and Firm notes draws the notes
+ * block below unchanged. The choice is in the address (`?show=notes`).
+ *
  * WHO WRITES. Every member of your firm reads the notes; only a note's
  * author edits or deletes it (`author_user_id`, D1150). A new note is saved
  * from the form; an edit and a delete each open an in-page dialog that says
  * what changes. Nothing is ever a browser pop-up.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { dealContextApi } from '../../lib/api/dealContext';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
-import { ACTIVITY_FILTERS, EADWYN_DRAFT, EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, activityEmpty, activityShown, draftSourceRows, noteError } from './dealFrameModel';
+import { ACTIVITY_FILTERS, EADWYN_DRAFT, EADWYN_DRAFT_WAITS, EMPTY, FIRM_NOTES_LINE, INVESTOR_ACTIVITY_CHIPS, NOTE_MAX, NOTE_TAGS, activityChoice, activityEmpty, activityShown, draftSourceRows, noteError } from './dealFrameModel';
+import { SHOW_NOTES } from '../dealPageModel';
 import { fillsApi } from '../../lib/api/fills.js';
 import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { refusalView } from '../../lib/fillSheet.js';
@@ -314,11 +321,15 @@ function Notes({ dealId, userId, evidenceNote }) {
   );
 }
 
-/** The deal's activity: All or Mine. Other investors are never named (the Worker's rule, D1152). */
-export function DealActivity({ dealId, mineFilter = false }) {
+/**
+ * The deal's activity: All or Mine. Other investors are never named (the Worker's rule, D1152).
+ * D6164 part 3: given `filter`, the chips are the page's (`InvestorActivity`) and this draws that filter's rows.
+ */
+export function DealActivity({ dealId, mineFilter = false, filter: chosen = null }) {
   const [events, setEvents] = useState(null);
   const [failed, setFailed] = useState(false);
-  const [filter, setFilter] = useState('all');
+  const [own, setFilter] = useState('all');
+  const filter = chosen ?? own;
   const load = () => {
     setFailed(false);
     api.dealActivity(dealId).then(setEvents).catch((e) => { reportError('DealActivity', e); setFailed(true); });
@@ -331,11 +342,11 @@ export function DealActivity({ dealId, mineFilter = false }) {
     <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-activity">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className={H3}>Activity on this deal</h3>
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Show">
+        {chosen == null && <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Show">
           {chips.map(([key, t]) => (
             <button key={key} type="button" role="radio" aria-checked={filter === key} className={TAG(filter === key)} onClick={() => setFilter(key)} data-testid={`deal-activity-${key}`}>{t}</button>
           ))}
-        </div>
+        </div>}
       </div>
       {failed && <Unreadable what="The activity" claim="That is not a claim that nothing happened." onRetry={load} />}
       {!failed && events == null && <p className={`m-0 ${SUB}`}>Reading…</p>}
@@ -351,12 +362,42 @@ export function DealActivity({ dealId, mineFilter = false }) {
   );
 }
 
-/** DL14: the notes on the left, the activity beside them. */
+/** DL14's notes block: the new note, Eadwyn's draft and your firm's notes. D6164 part 3: Activity's Firm notes. */
 export default function DealNotes({ dealId, userId, evidenceNote = null }) {
   return (
-    <div className="grid gap-3.5 lg:grid-cols-3" data-testid="deal-notes-tab">
-      <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2"><Notes dealId={dealId} userId={userId} evidenceNote={evidenceNote} /></div>
-      <div className="min-w-0"><DealActivity dealId={dealId} mineFilter /></div>
+    <div className="flex min-w-0 flex-col gap-3.5" data-testid="deal-firm-notes">
+      <p className={`m-0 ${SUB}`} data-testid="deal-firm-notes-line">{FIRM_NOTES_LINE}</p>
+      <Notes dealId={dealId} userId={userId} evidenceNote={evidenceNote} />
+    </div>
+  );
+}
+
+const CHIP = (on) => `${TAG(on)} min-h-[44px] sm:min-h-[28px]`;
+
+/**
+ * D6164 part 3 (DE27, the owner's answer A): an investor's Activity. One row of chips, the activity's
+ * own (All, Mine, Deal, Documents, Diligence) and Firm notes; the choice is the address's `?show=`, so
+ * `/notes` lands here with Firm notes on and a refresh keeps it. A chip replaces the address rather than
+ * adding a step, as a filter is not a page. Evidence's prefilled note (D6164) links to `?show=notes`.
+ */
+export function InvestorActivity({ dealId, userId, evidenceNote = null }) {
+  const [params, setParams] = useSearchParams();
+  const show = activityChoice(params.get('show'));
+  const pick = (key) => setParams((was) => {
+    const next = new URLSearchParams(was);
+    if (key === 'all') next.delete('show'); else next.set('show', key);
+    return next;
+  }, { replace: true });
+  return (
+    <div className="flex min-w-0 flex-col gap-3.5" data-testid="deal-activity-tab" data-show={show}>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Show" data-testid="deal-activity-show">
+        {INVESTOR_ACTIVITY_CHIPS.map(([key, t]) => (
+          <button key={key} type="button" role="radio" aria-checked={show === key} className={CHIP(show === key)} onClick={() => pick(key)} data-testid={`deal-activity-${key}`}>{t}</button>
+        ))}
+      </div>
+      {show === SHOW_NOTES
+        ? <DealNotes dealId={dealId} userId={userId} evidenceNote={evidenceNote} />
+        : <DealActivity dealId={dealId} mineFilter filter={show} />}
     </div>
   );
 }

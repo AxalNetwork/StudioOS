@@ -28,7 +28,7 @@ const BANDS = [
 /** The ZoneDraft element a page renders, its string props read from the source. */
 function bandProps(file, surface) {
   const src = read(file);
-  const m = new RegExp(`<ZoneDraft\\s+surface="${surface.replace('/', '\\/')}"([\\s\\S]*?)\\/>`).exec(src);
+  const m = [...src.matchAll(/<ZoneDraft\s+surface="([^"]*)"([\s\S]*?)\/>/g)].find((x) => x[1] === surface)?.slice(1);
   assert.ok(m, `${file} mounts no ZoneDraft for ${surface}`);
   const props = { surface };
   for (const [, k, v] of m[1].matchAll(/(\w+)="([^"]*)"/g)) props[k] = v;

@@ -3,8 +3,8 @@
 // access (PG11) and AI-native Venture (PG13). This file is the routed page at
 // each of their addresses and tab sub-paths (`guard(['admin'])` in App.jsx);
 // its default export is one `AdminBoardFrame` named "Programs", and the page
-// the address names sits in `ProgramBody` inside it. AI-native Venture is one
-// page, with no tab strip.
+// the address names sits in `ProgramBody` inside it. AI-native Venture was one
+// page with no tab strip until D5895 moved it into the generic shell.
 //
 // D963 (#2796, part 10) completes Referral partners (Overview, How it runs,
 // Queue, Activity, and its dialogs), Investor cohort access (Overview and
@@ -20,10 +20,10 @@ import AdminBoardFrame from '../AdminBoardFrame';
 import ActivityTab from './ActivityTab';
 import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
-import { InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
+import { AiNativeTabs, InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
 import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } from './InfluencerPages';
 import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
-import { LearningOverview, LearningPeople } from './LearningPages';
+import { LearningOverview, LearningParticipation, LearningPeople } from './LearningPages';
 import { PerksOverview, PerksParticipation, PerksQueue } from './PerksPages';
 import { Availability, Modules, OnRegistry, Participation, Settings } from './ProgramShellSections';
 import { shellModules } from './genericProgramModel';
@@ -35,7 +35,7 @@ import { SUB, Tile } from './parts';
 import { STATUS_WORD } from './catalogueModel';
 import { totalOf } from './programPagesModel';
 import { useLearningReads, usePerksReads } from './useProgramReads';
-import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RUNNING_YET, isReady, routeFor } from './programsModel';
+import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RECORDED, NOT_RUNNING_YET, READING, isReady, routeFor } from './programsModel';
 
 /**
  * D5313 (#5313): Perks runs in the generic program shell (PG03a), the first of the nine built-in programs to move.
@@ -69,17 +69,32 @@ function Perks({ tab, superAdmin }) {
   );
 }
 
+/**
+ * D5887 (#5887): Learning runs in the generic program shell (PG03a), the second of the nine to move, as D5313 moved
+ * Perks. Overview is its tiles, charts and programs table above the shell's Capability modules; Playbook is How it
+ * runs (D962); Availability & grants and Settings are the shell's sections, Participation is Learning's own
+ * enrolments; the Learners module is People, at `/people` as MODULE_PATHS has it; History is the Activity read. Every
+ * address it had keeps its path. The registry read is the frame's, so a failed one marks only the sections that need it.
+ */
 function Learning({ tab, superAdmin }) {
   const [programUid, setProgramUid] = useState(null);
   const [learnerOffset, setLearnerOffset] = useState(0);
   const reads = useLearningReads(tab, programUid, learnerOffset);
   const detail = useProgramDetail('learning');
   return (
-    <ProgramFrame detail={detail} program="learning" superAdmin={superAdmin} tabs={<LearningTabs />}>
-      {tab === 'overview' ? <LearningOverview reads={reads} superAdmin={superAdmin} /> : null}
+    <ProgramFrame detail={detail} program="learning" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<LearningTabs />}>
+      {tab === 'overview' ? (
+        <>
+          <LearningOverview reads={reads} superAdmin={superAdmin} />
+          <Modules modules={shellModules('learning', detail.read)} />
+        </>
+      ) : null}
       {tab === 'how' ? <PlaybookEditor program="learning" superAdmin={superAdmin} detail={detail} testId="programs-learning-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <LearningParticipation reads={reads} superAdmin={superAdmin} /> : null}
       {tab === 'people' ? <LearningPeople reads={reads} programUid={programUid} onPick={(uid) => { setProgramUid(uid); setLearnerOffset(0); }} offset={learnerOffset} onPage={setLearnerOffset} /> : null}
       {tab === 'activity' ? <ActivityTab program="learning" testId="programs-learning-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="learning" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
     </ProgramFrame>
   );
 }
@@ -140,7 +155,7 @@ function InvestorCohorts({ tab, superAdmin }) {
   const detail = useProgramDetail('investor-cohorts');
   const desk = useDesk();
   const reads = useInvestorReads(desk.tick);
-  const status = registryStatus(detail);
+  const status = registryStatus(detail) || (detail.read.status === 'loading' ? READING : detail.read.status === 'error' ? 'Unavailable' : NOT_RECORDED);
   const open = { reload: desk.reload, dialog: desk.setDialog, banner: BANNER };
   const d = desk.dialog;
   return (
@@ -207,17 +222,38 @@ const AI_TILES = ['Founders', 'Cohorts', 'Applications', 'Studios offered'].map(
  * an Admin reads what HQ published, with the lock and "Set by HQ", and an
  * unset section reads "Not set"; a Super Admin edits the draft and publishes
  * it. Offer to studios waits for #2376 and part 3, so it is not drawn.
+ *
+ * D5895 (#5895): it runs in the generic program shell (PG03a), D5313's pattern. Overview keeps what the address
+ * showed (the tiles, the playbook and, for an Admin, the foot line, with their test ids) and adds Capability
+ * modules; Playbook is the same editor on its own; Availability & grants and Settings are the shell's sections inside
+ * `OnRegistry`; Participation is the shell's "Not recorded", because no store records who took part; History is the
+ * activity read. No module tab: the registry seeds none for it.
  */
-function AiNativeVenture({ superAdmin }) {
+function AiNativeVenture({ tab, superAdmin }) {
   const detail = useProgramDetail('ai-native-venture');
-  return (
-    <ProgramFrame detail={detail} program="ai-native-venture" superAdmin={superAdmin} status={registryStatus(detail)}>
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="programs-ai-native-tiles">
-        {AI_TILES.map((t) => <Tile key={t.key} t={t} />)}
-      </div>
+  const playbook = (
+    <>
       <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{superAdmin ? 'How it runs · draft' : 'How it runs'}</h2>
       <PlaybookEditor program="ai-native-venture" superAdmin={superAdmin} detail={detail} testId="programs-ai-native-how" />
       {superAdmin ? null : <p className={`m-0 ${SUB}`} data-testid="programs-ai-native-foot">{AI_NATIVE_FOOT}</p>}
+    </>
+  );
+  return (
+    <ProgramFrame detail={detail} program="ai-native-venture" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<AiNativeTabs />}>
+      {tab === 'overview' ? (
+        <>
+          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="programs-ai-native-tiles">
+            {AI_TILES.map((t) => <Tile key={t.key} t={t} />)}
+          </div>
+          {playbook}
+          <Modules modules={shellModules('ai-native-venture', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'how' ? playbook : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <Participation /> : null}
+      {tab === 'activity' ? <ActivityTab program="ai-native-venture" testId="programs-ai-native-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="ai-native-venture" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
     </ProgramFrame>
   );
 }
@@ -230,7 +266,7 @@ function ProgramBody() {
   if (program === 'learning') return <Learning tab={tab} superAdmin={superAdmin} />;
   if (program === 'referral-partners') return <ReferralPartners tab={tab} superAdmin={superAdmin} />;
   if (program === 'investor-cohorts') return <InvestorCohorts tab={tab} superAdmin={superAdmin} />;
-  if (program === 'ai-native-venture') return <AiNativeVenture superAdmin={superAdmin} />;
+  if (program === 'ai-native-venture') return <AiNativeVenture tab={tab} superAdmin={superAdmin} />;
   if (program === INFLUENCER_KEY) return <Influencers tab={tab} superAdmin={superAdmin} />;
   return null;
 }

@@ -439,6 +439,9 @@ export function holderView(record, holderId, { grants = null, plan = null, filin
       key: g.id,
       terms: `Start ${day(g.start_date)} · cliff ${num(g.cliff_months) == null ? NOT_RECORDED : `${g.cliff_months} months`} · total ${num(g.total_months) == null ? NOT_RECORDED : `${g.total_months} months`}`,
       vested: `Vested ${shares(g.vested_shares)} of ${shares(g.total_shares)}`,
+      // D6086: unvested, and where Vested comes from when StudioOS worked it out from the dates.
+      unvested: `Unvested ${shares(g.unvested_shares)}`,
+      basis: g.vested_basis === 'schedule' ? `Worked out from the schedule on ${day(g.vested_as_of)}` : null,
       pct: num(g.vested_shares) != null && num(g.total_shares) ? (g.vested_shares / g.total_shares) * 100 : null,
     })),
     election: !person ? null : filing === undefined && filings == null ? { status: 'unreadable' }

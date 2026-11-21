@@ -76,7 +76,8 @@ test('#4830 the Practice board leads with the setup state; BucketBoard hands the
   const board = readFileSync(new URL('../src/workspaces/boards/advisorPractice.js', import.meta.url), 'utf8');
   assert.match(board, /lead: PracticeSetup,/);
   const bb = readFileSync(new URL('../src/workspaces/BucketBoard.jsx', import.meta.url), 'utf8');
-  assert.match(bb, /\{Lead \? <Lead fallback=\{grid\} \/> : grid\}/);
+  // D7516: the lead also gets the board's source states, inside a Suspense that shows the sections meanwhile.
+  assert.match(bb, /\{Lead \? <Suspense fallback=\{grid\}><Lead fallback=\{grid\} sources=\{byKey\} \/><\/Suspense> : grid\}/);
 });
 
 // ── The lead, mounted: takes over, or shows the board ───────────────────

@@ -96,11 +96,16 @@ const COMPLIANCE = {
   period_complete: true, period_in_progress: false, population: { basis: 'companies_held_in_book', period: '2026-Q3' },
   kpi_set: KPI_SET,
   companies: [
-    { project_id: 2, project_uid: 'pelican', name: 'Pelican Pay', reported: true, last_reported_at: '2026-10-28', days_since_report: 13 },
-    { project_id: 1, project_uid: 'northwind', name: 'Northwind Labs', reported: false, last_reported_at: '2026-06-28', days_since_report: 135 },
-    { project_id: 3, project_uid: 'fjord', name: 'Fjord Data', reported: false, last_reported_at: null, days_since_report: null },
+    // D6204: the Worker's due day per company — the firm default (30), or a duty's own term (Fjord: 45).
+    { project_id: 2, project_uid: 'pelican', name: 'Pelican Pay', reported: true, last_reported_at: '2026-10-28', days_since_report: 13,
+      due_date: '2026-10-30', due_days: 30, due_basis: 'firm_default', due_reason: null, days_overdue: null, overdue: false },
+    { project_id: 1, project_uid: 'northwind', name: 'Northwind Labs', reported: false, last_reported_at: '2026-06-28', days_since_report: 135,
+      due_date: '2026-10-30', due_days: 30, due_basis: 'firm_default', due_reason: null, days_overdue: 11, overdue: true },
+    { project_id: 3, project_uid: 'fjord', name: 'Fjord Data', reported: false, last_reported_at: null, days_since_report: null,
+      due_date: '2026-11-14', due_days: 45, due_basis: 'reporting_duty', due_reason: null, days_overdue: null, overdue: false },
   ],
   reported_count: 1, total_count: 3,
+  overdue_count: 1, overdue_project_ids: [1], due_default_days: 30, due_read: 'ok',
 };
 const PELICAN_UPDATE = {
   id: 22, uid: 'u2', project_id: 2, project: { uid: 'pelican', name: 'Pelican Pay' }, period: '2026-Q3', title: 'Q3 update',
@@ -144,7 +149,7 @@ const down = () => json({ detail: 'D1_SECRET_INTERNAL_DETAIL' }, 500);
 
 /* -------------------------------------------------------------- mounted */
 
-test('1. populated: one obligation per company, its period, no due date recorded, last received, state as icon and word, missing, last chase', async () => {
+test('1. populated: one obligation per company, its period, its due date or days overdue (D6204), last received, state as icon and word, missing, last chase', async () => {
   const view = await mount(worker());
   try {
     assert.equal(document.title, 'Reports · Portfolio · Axal VC');
@@ -153,21 +158,21 @@ test('1. populated: one obligation per company, its period, no due date recorded
       assert.ok(view.hrefs().includes(to), `the local nav lost ${to}`);
     }
     const north = view.text('row-investor-update-1');
-    assert.match(north, /Northwind Labs.*Q3 2026.*No due date recorded.*28 Jun 2026.*Not received.*The Q3 2026 update.*2 Nov 2026.*2 chases.*Report detail.*Chase/);
-    assert.match(view.text('row-investor-update-2'), /Pelican Pay.*Q3 2026.*No due date recorded.*28 Oct 2026.*Q3 update · Mrr \$184,000 · Headcount 12 · Runway Months Not recorded.*Received.*Runway.*Not chased.*Report detail/);
-    assert.match(view.text('row-investor-update-3'), /Fjord Data.*Never reported.*Not received.*Not chased/);
+    assert.match(north, /Northwind Labs.*Q3 2026.*Overdue by 11 days Due 30 Oct 2026.*28 Jun 2026.*Overdue by 11 days.*The Q3 2026 update.*2 Nov 2026.*2 chases.*Report detail.*Chase/);
+    assert.match(view.text('row-investor-update-2'), /Pelican Pay.*Q3 2026.*Due 30 Oct 2026.*28 Oct 2026.*Q3 update · Mrr \$184,000 · Headcount 12 · Runway Months Not recorded.*Received.*Runway.*Not chased.*Report detail/);
+    assert.match(view.text('row-investor-update-3'), /Fjord Data.*Due 14 Nov 2026.*Never reported.*Not received.*Not chased/, 'not yet past its own due day');
     assert.ok(!view.has('button-chase-2'), 'a company that reported is not chased');
     // State is an icon and a word, never colour alone.
     const state = view.node('status-obligation-1');
     const chip = state.childNodes[0];
-    assert.equal(view.prop(chip, 'data-state'), 'Not received');
+    assert.equal(view.prop(chip, 'data-state'), 'Overdue');
     assert.ok([...chip.childNodes].some((n) => String(n.tagName).toLowerCase() === 'svg'), 'the state has an icon');
     // Who has not reported reads first.
     const text = view.text();
     assert.ok(text.indexOf('Fjord Data') < text.indexOf('Northwind Labs') && text.indexOf('Northwind Labs') < text.indexOf('Pelican Pay'), 'unreported first, then by name');
-    // No due date is recorded, so no overdue days are computed.
-    assert.doesNotMatch(text, /\d+ days? overdue|overdue · \d|135 days|\b13 days/);
-    assert.match(view.text('reports-tiles'), /Received 1 of 3 for Q3 2026.*Not received 2.*Due date Not recorded/);
+    // D6204: lateness is the Worker's days_overdue, never days since the last report.
+    assert.doesNotMatch(text, /135 days|\b13 days/);
+    assert.match(view.text('reports-tiles'), /Received 1 of 3 for Q3 2026.*Not received 2.*Due date 1 overdue The reporting duty's own days after the period ends, else 30/);
     assert.ok(view.hrefs().includes('/portfolio/companies/northwind'), 'the company name is a link');
     // The signed-document duties keep their own section and their own due dates.
     assert.match(view.text('portfolio-reports'), /Pelican Pay.*14 Nov 2026/);
@@ -238,7 +243,7 @@ test('4. Unreadable: each failed source labels its own cells with a Retry for th
     assert.equal(view.reads('/api/positions/kpi-compliance'), before.c + 1, 'Retry reads the reporting source again');
     assert.equal(view.reads('/api/portfolio-updates/latest'), before.u, 'and no other source');
     assert.equal(view.reads('/api/portfolio/chases'), before.ch, 'and no other source');
-    assert.match(view.text('row-investor-update-1'), /Northwind Labs.*Not received/);
+    assert.match(view.text('row-investor-update-1'), /Northwind Labs.*Overdue by 11 days/);
   } finally { await view.close(); }
 
   let chasesUp = false;
@@ -264,7 +269,8 @@ test('4. Unreadable: each failed source labels its own cells with a Retry for th
 });
 
 test('5. the two addendum actions stay on the company Reports (rebuilt by part 9); the chase is today’s', async () => {
-  const view = await mount(worker());
+  // D7650: the Worker's answer names what it chased; a company counts as asked only when it is in `chased`.
+  const view = await mount(worker({ 'POST /api/portfolio/chase': () => json({ chased: [{ project_id: 1, uid: 'ch1', already: false }], skipped: [], skips: [] }) }));
   try {
     assert.doesNotMatch(view.text(), /Ask for this report|Waive this period/, 'PF-04 draws neither action: they live on the company Reports');
     assert.ok(view.hrefs().includes('/portfolio/companies/pelican/reports'), 'the signed-duty row still opens the company Reports');
@@ -276,7 +282,7 @@ test('5. the two addendum actions stay on the company Reports (rebuilt by part 9
     assert.deepEqual(posts(), [{ project_ids: [1] }]);
     assert.match(view.text('status-chase-note'), /Northwind Labs has been asked\. The founder is notified and the chase is logged\./);
     await view.clickText('Chase all overdue');
-    assert.deepEqual(posts()[1], { project_ids: [3, 1] }, 'the page’s own unreported set');
+    assert.deepEqual(posts()[1], { project_ids: [1] }, 'the Worker’s overdue set (D6204): Fjord is unreported but not yet due');
   } finally { await view.close(); }
 
   const period = { uid: 'pm9', duty_uid: 'd1', label: '2026-09', due_on: '2026-10-30', state: 'late', days_late: 6, asked: false };

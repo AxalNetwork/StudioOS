@@ -6,11 +6,12 @@ import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
-  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationNeedsSetup, keepThroughSetup,
-  loginRedirectFor, markPendingNextRedirected, pendingNextRedirected,
+  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
+  keepThroughSetup, loginRedirectFor, markPendingNextRedirected, markRestoredArrival, pendingNextRedirected,
 } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
+import { SidebarSubpagesProvider } from './ui/SidebarNav'; // D6029: from the sidebar's own module (App.jsx imports are frozen, D5615)
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
@@ -21,7 +22,7 @@ import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
-import { resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
+import { researchRoleFor, resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
 import { multiLicenceSet } from './lib/multiLicencePages.js';
 import { buildLicenceSidebar, isLicence } from './lib/licenceSidebar';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
@@ -494,6 +495,13 @@ const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPer
 // GROW_BOUNDARY_ROLES in pages/founder/GrowBoundary.jsx (a test compares them).
 const GrowBoundary = lazy(() => import('./pages/founder/GrowBoundary'));
 const GROW_BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
+// D7178 (#7044, RCL09): an account with no held Founder or Advisor licence reads why Companies is closed to it, where
+// it was sent to /studio in silence. Kept in step with COMPANIES_BOUNDARY_ROLES in pages/research/CompaniesAccess.jsx
+// (a test compares them); loaded through GrowBoundary's module, which re-exports it.
+const CompaniesBoundary = lazy(() => import('./pages/founder/GrowBoundary').then((m) => ({ default: m.CompaniesBoundary })));
+const COMPANIES_BOUNDARY_ROLES = new Set(['investor', 'partner', 'exploring']);
+// D7178 (RCL04B): "Your account is ready · Continue to Companies", between required setup and the kept destination.
+const DestinationReady = lazy(() => import('./pages/founder/GrowBoundary').then((m) => ({ default: m.DestinationReady })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -506,7 +514,6 @@ const RoundCallIndex = lazy(() => import('./pages/founder/RoundCallPage').then(m
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
-const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -1632,6 +1639,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             {/* D768 (#2092): every rail below reads its page key from the route (lib/railPages.js). */}
+            {/* D6029 (#6029): which sidebar rows list their own pages now, so Build's header drops its desktop module tabs only then. */}
+            <SidebarSubpagesProvider groups={sidebarGroups} open={sidebarOpen && isDesktop} collapsed={effectiveCollapsed}>
             <RailPageProvider role={shellRole}>
             <RailStripSlot.Provider value={railStrip}>
               <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
@@ -1639,6 +1648,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
+            </SidebarSubpagesProvider>
             {!onboardingCanvas && !pitchFocused && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
@@ -1730,9 +1740,15 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const exemptFromSetup = atPendingNext && !deferPendingToSetup;
   const afterSetup = user && onboardingLoaded && onboardingComplete ? destinationAfterSetup() : null;
   const afterSetupDue = !!(afterSetup && location.pathname !== afterSetup.split(/[?#]/)[0]);
+  // D7178 (#7044, RCL04B): an area with a ready screen (Companies) waits on "Continue to …" instead of opening at
+  // once. The kept path is cleared from storage after commit, so the screen holds it in state until it is used.
+  const [readyFor, setReadyFor] = useState(null);
+  const navigate = useNavigate();
+  const readyArea = afterSetupDue ? destinationArea(afterSetup) : null;
   useEffect(() => {
     if (afterSetup) clearDestinationAfterSetup();
-  }, [afterSetup]);
+    if (afterSetupDue && readyArea?.ready) setReadyFor(afterSetup);
+  }, [afterSetup, afterSetupDue, readyArea?.ready]);
   // Called by each setup gate just before it redirects. Idempotent: the same
   // safe path written twice by StrictMode's two renders.
   const keepForAfterSetup = () => keepThroughSetup(`${location.pathname}${location.search}${location.hash}`);
@@ -1997,6 +2013,19 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to={myWizard} replace />;
   }
 
+  // D7178: the ready screen, until "Continue to Companies" (or home) is chosen.
+  const readyPath = readyFor || (afterSetupDue && readyArea?.ready ? afterSetup : null);
+  if (readyPath) {
+    return (
+      <DestinationReady
+        area={destinationArea(readyPath)}
+        home={ROLE_DEFAULT_PATH[(realUser || user)?.role] || '/studio'}
+        onContinue={() => { markRestoredArrival(readyPath); setReadyFor(null); navigate(readyPath, { replace: true }); }}
+        onHome={() => setReadyFor(null)}
+      />
+    );
+  }
+
   // #4579: setup is done; return to the destination it was started for, once.
   if (afterSetupDue) {
     return <Navigate to={afterSetup} replace />;
@@ -2075,6 +2104,8 @@ const ROUTE_BOUNDARIES = [
   { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
   // #4579: an account without the Founder licence reads why Grow is closed to it, and how to open it.
   { under: /^\/grow(\/|$)/, roles: GROW_BOUNDARY_ROLES, Panel: GrowBoundary },
+  // D7178 (#7044): the held licences decide (D4473); an admin's "View as Investor" sees this too (the owner's answer A).
+  { under: /^\/research\/companies(\/|$)/, roles: COMPANIES_BOUNDARY_ROLES, Panel: CompaniesBoundary },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -2096,7 +2127,7 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     // A pending handoff still wins: the boundary is drawn only when nothing is on its way.
     const previewing = !isImpersonating && (realUser || user)?.role === 'admin';
     const boundary = !pendingTarget && ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole) && !(b.notPreview && previewing));
-    if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} />;
+    if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} held={held} />;
     // D940: retain the canonical policy, including preview and impersonation exceptions.
     if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
       if (/^\/admin\/programs\/spinout-lab(\/|$)/.test(pathname)) return <LabOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
@@ -2516,12 +2547,14 @@ function AppInner() {
   // RoleGuard doesn't redirect them while they're previewing another role.
   // D1070: who meets VB20a's card on the plan's two addresses.
   const planNotFounder = ['investor', 'advisor', 'exploring'].includes(user?.role) && user?.spinout_lab_active !== 1;
-  const labRoles = (roles) => {
+  // D7178 (#7044, the owner's answer A): `{ preview: false }` leaves the previewed role out, so an admin using
+  // "View as Investor" on Companies sees the boundary that member would see instead of being admitted by viewMode.
+  const labRoles = (roles, { preview = true } = {}) => {
     const result = [...roles];
     if (user && user.spinout_lab_active === 1 && !result.includes(user.role)) {
       result.push(user.role);
     }
-    if (user?.role === 'admin' && !isImpersonating && viewMode && !result.includes(viewMode)) {
+    if (preview && user?.role === 'admin' && !isImpersonating && viewMode && !result.includes(viewMode)) {
       result.push(viewMode);
     }
     return result;
@@ -2553,10 +2586,15 @@ function AppInner() {
   // the read inside the temporal dead zone of a `const` in the same function
   // body — a ReferenceError on every render of AppInner, so a blank app. The
   // build does not catch it because it is a runtime error, not a compile one.
-  const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
-  // Same rule as researchRole, and the same reason it lives below
+  //
+  // D7178 (#7044): one held-licence rule (`researchRoleFor`, lib/researchAccess.js). Admin and no role still read
+  // as the founder; a page the role browsed as is not admitted to reads in the first held licence's shell that is,
+  // so an Investor who also holds Founder gets the Companies zone, its page and its actions, not "Nothing serves
+  // this zone yet". The zone list, `canOpenResearch` and `canAddToResearch` all read this role.
+  const researchRole = researchRoleFor({ effectiveRole, heldLicences, pathname: location.pathname, labActive: user?.spinout_lab_active === 1 });
+  // The rule researchRole had before D7178, and the same reason it lives below
   // effectiveRole rather than above it.
-  const networkRole = researchRole;
+  const networkRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
   // #6265: a Research zone the founder shell does not list (diligence, benchmarking, client prep)
   // sends an admin who is not previewing back to `/research`. It cannot be done by leaving `admin`
   // out of `labRoles([...])`, because labRoles adds `viewMode`, which is 'admin' for that admin.
@@ -2572,6 +2610,13 @@ function AppInner() {
     user?.role === 'investor' && effectiveRole === 'investor'
       ? investorWorkspace('deals', <Component embedded />)
       : <Component />
+  );
+  // D6160 (#6160): an investor's round calls list is a page of Deals, drawn in
+  // InvestorDealsRoutes' shell; a founder's `?project_id` list keeps RoundCallIndex.
+  const investorRoundCallList = () => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? <InvestorDealsRoutes />
+      : <RoundCallIndex />
   );
   const trustCenter = user
     ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
@@ -2958,10 +3003,10 @@ function AppInner() {
       {/* D533/D546 (#1080) — Geographies, guarded like /research/markets. */}
       <Route path="/research/geographies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/geographies/:code" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GeographyProfile role={researchRole} />)} />
-      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />
-      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
-      <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <CompanyProfile role={researchRole} />)} />
+      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <CompanyAnalysis role={researchRole} />)} />
+      <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <CompanyCandidate role={researchRole} />)} />
       <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/funds/catalog/:id" element={guard(labRoles(['admin', 'founder']), <FundCatalogProfile role={researchRole} />)} />
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
@@ -3369,8 +3414,9 @@ function AppInner() {
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
       {/* #2333 — one publications list: /articles carries the briefs the
-          /insights index listed; each brief keeps its share link below. */}
-      <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
+          /insights index listed; each brief keeps its share link below.
+          #6999: /insights lands on the list itself, not on a Briefs shelf that may be hidden. */}
+      <Route path="/insights" element={<Navigate to="/articles" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       {/* D1244 (#2385) — the list's tabs and the case's tabs are addresses; the
@@ -3682,7 +3728,7 @@ function AppInner() {
           redirects' `mode=workspace` is kept only so old links stay stable. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', founderEditor(<FounderTeamPage />)))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
-      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCall(RoundCallIndex))} />
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCallList())} />
       <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], investorRoundCall(RoundCallPage))} />
       {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
           the shell's guard on purpose: the assistant's OAuth flow lands here,
@@ -3711,9 +3757,14 @@ function AppInner() {
       <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
       <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
+      <Route path="/grow/team-expansion" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/talent" />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
-      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
+      {/* D6118 (#6118, GR-09): one Partnerships page. It is the partner-network module (partners by stage,
+          revenue and terms, Rank by fit, the Mercury proposal) with co-marketing as one of its parts. The
+          module's own address forwards here; its records, /new and /co-marketing keep their addresses. */}
+      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="partner-network" />)} />
+      <Route path="/grow/partner-network" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/partnerships" />)} />
       {/* D1194 (#3128): Investor match is Capital relationships › Match; /grow/capital-match goes straight there too. */}
       {/* #2343: one brand page. Grow's read of pages and leads moved into the
           builder (`BrandPagesSection`); the old address forwards there. */}

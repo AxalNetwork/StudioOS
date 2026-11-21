@@ -87,16 +87,17 @@ test('the transient state between demote and detach is rendered, not inferred', 
 });
 
 test('appointing asks for a reason of ten characters, after the consequence, and sends it', () => {
-  const MODEL = codeOnly(read('frontend/src/pages/admin/licenceAccessModel.js'));
-  const askAt = MODEL.indexOf('export function addAdminAsk(');
+  // D4819 part 21 (#5928): the reason is asked in the one consequence sheet.
+  const MODEL = codeOnly(read('frontend/src/pages/admin/licenceConsequenceModel.js'));
+  const askAt = MODEL.indexOf("case 'addAdmin':");
   assert.ok(askAt > 0);
-  assert.match(MODEL.slice(askAt, askAt + 1400), /min: 10,/,
+  assert.match(MODEL.slice(askAt, askAt + 1600), /reason: \{ min: 10,/,
     'the ten-character reason is server-side only, so the form posts a request it knows will fail');
   const at = CODE.indexOf('api.licenceAdminAdd(licence.uid');
   assert.ok(at > 0);
-  assert.match(CODE.slice(Math.max(0, at - 300), at), /const reason = await ask\(addAdminAsk\(/,
+  assert.match(CODE.slice(Math.max(0, at - 400), at), /const out = await ask\('addAdmin', licence,/,
     'the appointment is sent without asking');
-  assert.match(CODE.slice(at, at + 200), /reason: reason\.trim\(\)/,
+  assert.match(CODE.slice(at, at + 200), /reason: out\.reason/,
     'the reason is collected and not sent');
 });
 

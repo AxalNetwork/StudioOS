@@ -15,3 +15,4 @@ Part 2a of #2401. The sign-in, refresh and revoke are `integrations/tiktokOAuth.
 - **Never 0, never a KPI.** A missing count is `null` with its reason. A scope the member did not grant says so. Nothing here writes `project_metrics` or `custom_kpi_values`.
 - **Counts only in logs.** No figure, title, token or open_id.
 - **A new feed is an entry in `integrations/tiktokFeeds.ts`.** The registry and the connector page follow it.
+- **The daily sync is `daily.ts` (D5867), and it calls `grow.ts`'s `syncTikTok`.** It never has its own landing. The cron in `index.ts` runs it hourly at :41. A connection already synced today is skipped. It reads only an active connection that a founder already linked to a venture, and only while that venture's company is switched on.

@@ -26,6 +26,7 @@
  */
 import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
+import { cleanVesting, HolderError, type HolderVesting } from './capTableWrites';
 
 export const ISSUANCE_KINDS = ['founding', 'priced', 'safe', 'note', 'grant', 'exercise', 'transfer', 'conversion', 'cancellation', 'correction'] as const;
 export type IssuanceKind = typeof ISSUANCE_KINDS[number];
@@ -194,9 +195,11 @@ const REASONS: Record<string, string> = {
 };
 const unavailable = (reason: string) => ({ available: false, reason, sentence: REASONS[reason] });
 
-function issuanceOut(r: IssuanceRow, classes: Map<number, ClassRow>, related: Map<number, string>) {
+function issuanceOut(r: IssuanceRow, classes: Map<number, ClassRow>, related: Map<number, string>, terms?: Map<number, HolderVesting>) {
   const linked = r.safe_issuance_uid != null;
   return {
+    // D6086: a grant's schedule, as it carries it (proposed, recorded or void). Only a read that looked carries the key.
+    ...(terms && r.kind === 'grant' ? { vesting: terms.get(r.id) ?? null } : {}),
     uid: r.uid, kind: r.kind, status: r.status, source: r.source, origin: r.origin, origin_ref: r.origin_ref,
     holder: { holder_id: r.holder_id, name: r.holder_row_name ?? r.holder_name },
     from_holder: r.from_holder_id != null || r.from_holder_name != null ? { holder_id: r.from_holder_id, name: r.from_holder_row_name ?? r.from_holder_name } : null,
@@ -312,7 +315,8 @@ export async function readRecord(env: Env, projectId: number, opts: RecordReadOp
     };
   }
 
-  const out = rows.map((r) => issuanceOut(r, byId, related));
+  const terms = await termsOf(env, projectId, rows);
+  const out = rows.map((r) => issuanceOut(r, byId, related, terms));
   if (opts.closeUids !== false) await withCloseUids(env, projectId, out);
   return {
     project_id: projectId,
@@ -703,6 +707,103 @@ async function checkBalance(env: Env, projectId: number, f: Fields, excludeId: n
   }
 }
 
+// ───────────────────────────────────────────────────────────── a grant's vesting (D6086)
+
+/**
+ * D6086 (#6086): a grant carries one vesting schedule (owner question 1 of
+ * D6088, read as A). The body's `vesting` is `{ start_date, total_months,
+ * cliff_months }`, checked by `cleanVesting` (the validator Add holder's
+ * founders use) plus a real calendar day and at most `VESTING_MONTHS_MAX`.
+ *
+ *   - The schedule an issuance carries is `cap_table_issuance_vesting`, written
+ *     in the issuance's batch: a co-founder's proposal keeps it until the
+ *     owner's Accept, which may change or clear it.
+ *   - The plan's row (`cap_table_vesting`, the table the equity plan reads) is
+ *     written only when the grant is recorded, tied to it by `issuance_id`,
+ *     and deleted when the grant is voided.
+ *   - While Carta is the venture's record a schedule is refused: Carta's plan
+ *     is read only here (D1020 §4).
+ */
+export const VESTING_MONTHS_MAX = 600;
+
+const BAD_VESTING = () => new RecordError(400, 'bad_vesting',
+  `A vesting schedule needs a start date, its length in months (1 to ${VESTING_MONTHS_MAX}) and a cliff no longer than the length.`, { field: 'vesting' });
+
+/** The body's schedule: undefined when absent, null when cleared, else checked. */
+function vestingOf(body: Record<string, unknown>, kind: string | null): HolderVesting | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(body, 'vesting')) return undefined;
+  if (body.vesting == null) return null;
+  if (kind !== 'grant') throw new RecordError(400, 'bad_vesting', 'Only an option grant carries a vesting schedule.', { field: 'vesting' });
+  let v: HolderVesting | null;
+  try { v = cleanVesting(body.vesting); } catch (e) { if (e instanceof HolderError) throw BAD_VESTING(); throw e; }
+  if (!v || v.total_months > VESTING_MONTHS_MAX) throw BAD_VESTING();
+  try { day(v.start_date, 'vesting'); } catch { throw BAD_VESTING(); }
+  return v;
+}
+
+/** Whether Carta is this venture's record: its plan rows, or an issuance recorded from it. */
+async function cartaHoldsRecord(env: Env, projectId: number): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT (EXISTS (SELECT 1 FROM cap_table_vesting WHERE project_id = ? AND source = 'connector_carta')
+          OR EXISTS (SELECT 1 FROM cap_table_option_pools WHERE project_id = ? AND source = 'connector_carta')
+          OR EXISTS (SELECT 1 FROM cap_table_issuances WHERE project_id = ? AND status = 'recorded' AND source = 'connector_carta')) AS carta`,
+  ).bind(projectId, projectId, projectId).first<{ carta: number }>();
+  return Number(row?.carta) === 1;
+}
+const CARTA_IS_RECORD = () => new RecordError(409, 'carta_is_record',
+  'Carta is this venture’s record, so vesting is kept there. Record the schedule in Carta; the next sync brings it here.', { field: 'vesting' });
+
+/** The schedules the grants among `rows` carry, by issuance id. No grant, no read. */
+async function termsOf(env: Env, projectId: number, rows: Array<Pick<IssuanceRow, 'id' | 'kind'>>): Promise<Map<number, HolderVesting>> {
+  const ids = rows.filter((r) => r.kind === 'grant').map((r) => r.id);
+  if (!ids.length) return new Map();
+  const found = (await env.DB.prepare(
+    `SELECT issuance_id, start_date, total_months, cliff_months FROM cap_table_issuance_vesting
+      WHERE project_id = ? AND issuance_id IN (SELECT value FROM json_each(?))`,
+  ).bind(projectId, JSON.stringify(ids)).all<{ issuance_id: number; start_date: string; total_months: number; cliff_months: number }>()).results || [];
+  return new Map(found.map((t) => [Number(t.issuance_id), { start_date: t.start_date, total_months: Number(t.total_months), cliff_months: Number(t.cliff_months) }]));
+}
+
+/** Write (or replace: one row per issuance) the schedule a grant in `status` carries. */
+function termsStmt(env: Env, projectId: number, uid: string, v: HolderVesting, status: 'proposed' | 'recorded') {
+  return env.DB.prepare(
+    `INSERT OR REPLACE INTO cap_table_issuance_vesting (issuance_id, project_id, start_date, total_months, cliff_months)
+     SELECT id, project_id, ?, ?, ? FROM cap_table_issuances WHERE project_id = ? AND uid = ? AND kind = 'grant' AND status = ?`,
+  ).bind(v.start_date, v.total_months, v.cliff_months, projectId, uid, status);
+}
+
+/** Clear a proposal's schedule (its Accept said `vesting: null`, or it is no longer a grant). */
+function clearTermsStmt(env: Env, projectId: number, uid: string) {
+  return env.DB.prepare(
+    `DELETE FROM cap_table_issuance_vesting WHERE project_id = ?
+       AND issuance_id = (SELECT id FROM cap_table_issuances WHERE project_id = ? AND uid = ? AND status = 'proposed')`,
+  ).bind(projectId, projectId, uid);
+}
+
+/**
+ * The plan's row for a recorded grant with a schedule, on the holder's account
+ * (as Add holder writes a founder's), else the venture owner's, else the
+ * recorder's. One row per grant; nothing when the grant has no schedule.
+ */
+function planRowStmt(env: Env, projectId: number, uid: string, actorId: number) {
+  return env.DB.prepare(
+    `INSERT OR IGNORE INTO cap_table_vesting (user_id, project_id, holder_id, start_date, cliff_months, total_months, total_shares, source, issuance_id)
+     SELECT COALESCE((SELECT h.user_id FROM cap_table_holders h WHERE h.id = i.holder_id AND h.project_id = i.project_id),
+                     (SELECT u.id FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = i.project_id ORDER BY u.id LIMIT 1), ?),
+            i.project_id, i.holder_id, t.start_date, t.cliff_months, t.total_months, i.shares, 'manual', i.id
+       FROM cap_table_issuances i JOIN cap_table_issuance_vesting t ON t.issuance_id = i.id
+      WHERE i.project_id = ? AND i.uid = ? AND i.kind = 'grant' AND i.status = 'recorded'`,
+  ).bind(actorId, projectId, uid);
+}
+
+/** A voided grant's plan row goes with it; its schedule stays on the struck-through row. */
+function dropPlanRowStmt(env: Env, projectId: number, uid: string) {
+  return env.DB.prepare(
+    `DELETE FROM cap_table_vesting WHERE project_id = ?
+       AND issuance_id = (SELECT id FROM cap_table_issuances WHERE project_id = ? AND uid = ? AND status = 'void')`,
+  ).bind(projectId, projectId, uid);
+}
+
 // ───────────────────────────────────────────────────────────── the writes
 
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
@@ -746,7 +847,7 @@ async function answerRow(env: Env, projectId: number, uid: string) {
     const r = await env.DB.prepare('SELECT uid FROM cap_table_issuances WHERE id = ?').bind(row.related_issuance_id).first<{ uid: string }>();
     if (r) related.set(row.related_issuance_id, r.uid);
   }
-  return issuanceOut(row!, new Map(classes.map((c) => [c.id, c])), related);
+  return issuanceOut(row!, new Map(classes.map((c) => [c.id, c])), related, await termsOf(env, projectId, row ? [row] : []));
 }
 
 /** POST /record/:projectId/proposals — anyone who may write proposes; nothing counts until it is accepted. */
@@ -756,11 +857,14 @@ export async function propose(env: Env, projectId: number, actor: RecordActor, b
   if (f.holder_id == null && f.holder_name == null) throw new RecordError(400, 'incomplete', 'Say who holds it.', { missing: ['holder'] });
   checkShape(f);
   if (actor.role === 'admin' && !f.correction_reason) throw new RecordError(400, 'reason_required', 'An admin’s change to a founder’s record carries a reason the founder reads.');
+  const vesting = vestingOf(body, f.kind);
+  if (vesting && await cartaHoldsRecord(env, projectId)) throw CARTA_IS_RECORD();
   const uid = newUid();
   try {
     await env.DB.batch([
       insertStmt(env, projectId, uid, f, { status: 'proposed', origin: actor.role, originRef: null, actorId: actor.id, currency: await currencyFor(env, projectId, f) }),
       auditStmt(env, projectId, actor, 'captable.proposal.created', uid, { kind: f.kind, origin: actor.role, reason: f.correction_reason }),
+      ...(vesting ? [termsStmt(env, projectId, uid, vesting, 'proposed')] : []),
     ]);
   } catch (e) {
     if (isUniqueViolation(e)) throw ALREADY();
@@ -774,11 +878,14 @@ export async function recordIssuance(env: Env, projectId: number, actor: RecordA
   const f = await readFields(env, projectId, body, { ...EMPTY, source: 'typed' });
   await checkComplete(env, projectId, f, actor);
   await checkBalance(env, projectId, f, null);
+  const vesting = vestingOf(body, f.kind);
+  if (vesting && await cartaHoldsRecord(env, projectId)) throw CARTA_IS_RECORD();
   const uid = newUid();
   try {
     await env.DB.batch([
       insertStmt(env, projectId, uid, f, { status: 'recorded', origin: actor.role, originRef: null, actorId: actor.id, currency: await currencyFor(env, projectId, f) }),
       auditStmt(env, projectId, actor, 'captable.issuance.recorded', uid, { kind: f.kind, origin: actor.role, reason: f.correction_reason }),
+      ...(vesting ? [termsStmt(env, projectId, uid, vesting, 'recorded'), planRowStmt(env, projectId, uid, actor.id)] : []),
     ]);
   } catch (e) {
     if (isUniqueViolation(e)) throw ALREADY();
@@ -898,7 +1005,14 @@ export async function acceptProposal(env: Env, projectId: number, actor: RecordA
   if (row.origin === 'close' && !(await signatureOf(env, projectId, f)).signed) throw NOT_SIGNED();
   await checkBalance(env, projectId, f, row.id);
   const currency = f.amount_cents != null ? row.currency ?? (await currencyOf(env, projectId)).code : null;
-  const [upd] = await env.DB.batch([
+  // D6086: the proposal's schedule travels to the Accept; the body may change it, or clear it with `vesting: null`.
+  const asked = vestingOf(body, f.kind);
+  const carried = row.kind === 'grant' ? (await termsOf(env, projectId, [row])).get(row.id) ?? null : null;
+  const vesting = f.kind !== 'grant' ? null : asked === undefined ? carried : asked;
+  if (vesting && await cartaHoldsRecord(env, projectId)) throw CARTA_IS_RECORD();
+  const terms = asked ? [termsStmt(env, projectId, uid, asked, 'proposed')] : carried && !vesting ? [clearTermsStmt(env, projectId, uid)] : [];
+  const out = await env.DB.batch([
+    ...terms,
     env.DB.prepare(
       `UPDATE cap_table_issuances SET kind = ?, holder_id = ?, holder_name = ?, class_id = ?, from_holder_id = ?, from_holder_name = ?,
          from_class_id = ?, related_issuance_id = ?, shares = ?, amount_cents = ?, currency = ?, price_per_share_micros = ?, issued_on = ?,
@@ -909,7 +1023,9 @@ export async function acceptProposal(env: Env, projectId: number, actor: RecordA
       f.shares, f.amount_cents, currency, f.price_per_share_micros, f.issued_on, f.cap_cents, f.discount_bps, f.basis, f.mfn, f.interest_bps,
       f.maturity_on, f.safe_issuance_uid, f.document_ref, f.source, f.note, f.correction_reason, actor.id, projectId, uid),
     auditStmt(env, projectId, actor, 'captable.proposal.accepted', uid, { kind: f.kind, origin: row.origin, reason: f.correction_reason }, true),
+    ...(vesting ? [planRowStmt(env, projectId, uid, actor.id)] : []),
   ]);
+  const upd = out[terms.length];
   if (!upd.meta?.changes) throw NOT_PROPOSED();
   return answerRow(env, projectId, uid);
 }
@@ -943,6 +1059,7 @@ export async function voidIssuance(env: Env, projectId: number, actor: RecordAct
         WHERE project_id = ? AND uid = ? AND status = 'recorded'`,
     ).bind(reason, actor.id, projectId, uid),
     auditStmt(env, projectId, actor, 'captable.issuance.voided', uid, { kind: row.kind, reason, by: actor.role }, true),
+    ...(row.kind === 'grant' ? [dropPlanRowStmt(env, projectId, uid)] : []),
   ]);
   if (!upd.meta?.changes) throw new RecordError(409, 'not_recorded', 'Only a recorded issuance is voided.');
   return answerRow(env, projectId, uid);

@@ -241,7 +241,8 @@ export function rankSignals(
     const { score, breakdown } = computeRankScore(s, companies);
     return {
       ...s,
-      confidence_score: computeConfidence(s),
+      // D7173: an evidence read that failed leaves confidence unknown, never 0.
+      confidence_score: s.evidence_state === 'unavailable' ? null : computeConfidence(s),
       freshness_score: computeFreshness(s),
       rank_score: score,
       rank_breakdown: breakdown,
@@ -250,7 +251,7 @@ export function rankSignals(
 
   scored.sort((a, b) => {
     if (b.rank_score !== a.rank_score) return b.rank_score - a.rank_score;
-    if (mode === 'advisor') return b.confidence_score - a.confidence_score;
+    if (mode === 'advisor') return (b.confidence_score ?? -1) - (a.confidence_score ?? -1);
     return b.rank_breakdown.practicality - a.rank_breakdown.practicality;
   });
   return scored;

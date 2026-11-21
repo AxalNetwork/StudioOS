@@ -92,7 +92,7 @@ export const FAMILY_OG_KEYS = ['event', 'profile', 'private'];
 const ROUTES = [
   {
     path: '/',
-    title: 'From idea to funded company',
+    title: 'StudioOS, the founder workspace', // #6988 (X6): the page title's words
     // D1379: says what the app does, for Google's OAuth verification as much as for a link preview.
     description:
       'Axal VC is a venture studio platform: founders validate an idea with customer interviews, form the company and raise, with partners and investors in one network.',
@@ -118,7 +118,7 @@ const ROUTES = [
     path: '/for-founders',
     title: 'For Founders',
     description:
-      'Everything you need to go from idea to funded — a startup workspace, pitch deck builder, venture-readiness scoring, and warm investor intros on the Axal VC network.',
+      'A founder workspace for customer interviews, your pitch deck and venture scoring.',
     key: 'product-founders',
     type: 'website',
     section: 'product',
@@ -166,7 +166,7 @@ const ROUTES = [
     path: '/influencers',
     title: 'Influencers',
     description:
-      'Earn recurring revenue by bringing people to Axal VC. Share your own handle; when someone subscribes through it, you earn part of every invoice.',
+      'Share your own handle. When someone subscribes through it, you earn a share of their subscription for a set period.',
     type: 'website',
     section: 'company',
   },
@@ -269,6 +269,28 @@ const ROUTES = [
     type: 'website',
     section: 'content',
     prefix: true,
+  },
+  // D6966 (#6966): the public Programs index. Prefix, so a /programs/<key> page that has no entry
+  // of its own previews as the index; each program's own page is prerendered from its map entry
+  // (`frontend/src/pages/programs/catalog/`, read by scripts/lib/programCatalog.mjs), so adding a
+  // program adds no row here.
+  {
+    path: '/programs',
+    title: 'Programs',
+    description: 'What Axal VC runs, who each programme is for and how to take part, each with a presentation and a PDF.',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    // D7121 (#7121): the public Wellness presentation. Its words are the page's purpose sentence; it names no
+    // expert, member or entry. `/wellbeing`, the private workspace, has no entry and is never the shared link.
+    path: '/programs/wellness',
+    title: 'Wellness · Programs',
+    description:
+      'A private place in your Axal VC account to check in with yourself each week, find qualified support and book a 1:1 session on your own terms.',
+    type: 'website',
+    section: 'content',
   },
   {
     path: '/circles',
@@ -559,6 +581,6 @@ export function ogTagsFor(pathname, overrides = {}) {
     card: 'summary_large_image',
     imageAlt: title,
     /** D4582: the route's robots directive, or null when it has none (indexable by default). */
-    robots: entry?.robots || null,
+    robots: overrides.robots || entry?.robots || null,
   };
 }

@@ -221,7 +221,7 @@ test('a write keeps every row read so far, and a failed re-read keeps them and s
     await click(f, 'advisor-service-state-1');
     await f.flush();
     assert.ok(f.by('advisor-service-edit-3'), 'still there after the write');
-    assert.match(textOf(f.by('advisor-services-note')), /is now inactive/);
+    assert.match(textOf(f.by('advisor-service-undo')), /published on your public profile/);
     failReads = true;
     await click(f, 'advisor-service-state-2');
     await f.flush();
@@ -299,11 +299,11 @@ test('asking for consent keeps the form and its answer on screen while the claim
     assert.deepEqual(calls, ['list', 'ask 5', 'list'], 'the ask, then one re-read');
     // While the re-read is in flight: the claim, the form and its answer are all still drawn.
     assert.ok(f.by('advisor-proof-ask-5'), 'the form is still open while the list re-reads');
-    assert.match(textOf(f.by('advisor-proof-ask-note-5')), /Request recorded/);
+    assert.match(textOf(f.by('advisor-proof-ask-note-5')), /Request created/);
     await act(async () => { reread.resolve(); });
     await f.flush();
     assert.ok(f.by('advisor-proof-ask-5'), 'and after');
-    assert.match(textOf(f.by('advisor-proof-ask-note-5')), /Request recorded/);
+    assert.match(textOf(f.by('advisor-proof-ask-note-5')), /Request created/);
     assert.match(f.text(), /Sam Example/, 'the pending ask is drawn on the claim');
     await escape(f, 'advisor-proof-ask-5');
     assert.ok(!f.by('advisor-proof-ask-5'));

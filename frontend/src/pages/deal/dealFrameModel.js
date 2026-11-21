@@ -239,6 +239,105 @@ export function whatsNewOf(read) {
   return { state: 'ready', since: r.since ? String(r.since).slice(0, 10) : null, rows, unavailable: (r.unavailable || []).map((u) => u.reason) };
 }
 
+/**
+ * D4815 part 41 (#5904, board DE04): What's new as a dated list, newest first. The read is built from
+ * records (a deal's status, documents, firm notes, commitments, diligence answers, the investor's own
+ * progress facts), never from the audit log, so every row it returns is a material change; none is
+ * filtered out here. The sentences are `CHANGE_WORDS` (#6170 names the rest).
+ */
+export function whatsNewList(w) {
+  if (!w || w.state !== 'ready') return [];
+  return [...w.rows].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+/* ------------------------------------------------------------------ *
+ * D4815 part 41 (#5904): the Overview's scorecard summary and investment case (DE04)
+ * ------------------------------------------------------------------ */
+
+const BAND_RANK = { Strong: 3, Fair: 2, Weak: 1 };
+const CONF_RANK = { high: 3, medium: 2, low: 1 };
+const CONF_WORD = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' };
+const RISK_BAND = { Strong: 'Low risk', Fair: 'Medium risk', Weak: 'High risk' };
+
+/** "Changed" needs a change since the viewer's last visit, which no read carries yet (#6173). */
+export const SCORE_CHANGE_NOT_RECORDED = 'Not recorded yet: the scorecard read carries no change since your last visit.';
+
+const scopeLine = (s) => ({
+  key: s.key, label: s.label, band: s.key === 'risk' ? (RISK_BAND[s.band] || s.band) : s.band,
+  confidence: CONF_WORD[s.confidence] || 'Confidence not recorded',
+});
+
+/**
+ * Strongest, Needs attention and Changed from one deal's strip (`stripOf`): bands and confidence only,
+ * the investor read's words (D5900), never an overall score and never a number the read did not send.
+ * Strongest is the highest band, then the higher confidence, then scope order. Needs attention is the
+ * lowest band, then the higher confidence (the surer weakness), then scope order, and only when it is
+ * a lower band than Strongest: with every scored scope in one band, none stands apart.
+ */
+export function scoreSummary(strip) {
+  if (!strip || strip.state === 'loading') return { state: 'loading' };
+  if (strip.state !== 'open') return { state: strip.state };
+  const scored = (strip.scopes || []).map((s, i) => ({ s, i })).filter(({ s }) => s.state === 'scored' && BAND_RANK[s.band]);
+  const changed = { state: 'not_recorded', line: SCORE_CHANGE_NOT_RECORDED };
+  if (!scored.length) return { state: 'open', strongest: null, attention: null, line: 'No scope is scored yet, so none is strongest or needs attention.', changed };
+  const conf = (s) => CONF_RANK[s.confidence] || 0;
+  const best = [...scored].sort((a, b) => BAND_RANK[b.s.band] - BAND_RANK[a.s.band] || conf(b.s) - conf(a.s) || a.i - b.i)[0].s;
+  const worst = [...scored].sort((a, b) => BAND_RANK[a.s.band] - BAND_RANK[b.s.band] || conf(b.s) - conf(a.s) || a.i - b.i)[0].s;
+  const apart = BAND_RANK[worst.band] < BAND_RANK[best.band];
+  return {
+    state: 'open', strongest: scopeLine(best), attention: apart ? scopeLine(worst) : null,
+    line: apart ? null : `No scope stands apart: every scored scope is ${best.band}.`, changed,
+  };
+}
+
+/** The scopes the scorecard has not enough recorded for: DE04's "Missing" line, from the same strip. */
+export function missingEvidence(strip) {
+  if (!strip || strip.state === 'loading') return { state: 'loading' };
+  if (strip.state === 'unreadable') return { state: 'unreadable' };
+  if (strip.state !== 'open') return { state: 'closed', line: 'The scorecard is not open to you, so what is missing is not read here.' };
+  const labels = (strip.scopes || []).filter((s) => s.state === 'not_enough').map((s) => s.label);
+  return labels.length ? { state: 'some', labels, line: `Missing: ${labels.join(', ')} (not enough recorded).` } : { state: 'none', line: 'No scope is short of evidence.' };
+}
+
+const CRITERION = { sector: 'Sector', stage: 'Stage', region: 'Market region', ticket: 'Ticket' };
+
+/**
+ * Thesis fit (`GET /api/deals/fit`, D1239) for this deal: the investor's own comparison, with the
+ * criteria it matched and the ones outside the thesis as its reasons. A criterion not set or not
+ * recorded is not a reason. Never a fit the read did not compute.
+ */
+export function thesisFitOf(read, dealId) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status === 'unreadable') return { state: 'unreadable' };
+  const f = (read.data?.items || []).find((x) => String(x?.deal_id) === String(dealId));
+  if (!f || f.state === 'unavailable') return { state: 'unavailable', line: 'Fit shows on deals you are invited to or have committed on.' };
+  if (f.state === 'unreadable') return { state: 'unreadable', line: f.reason || null };
+  if (f.state === 'not_set') return { state: 'not_set', line: 'Set your thesis to see how this deal fits it.' };
+  if (f.score == null) return { state: 'not_enough', line: 'Not enough of the venture is recorded to compare with your thesis.' };
+  const crit = Array.isArray(f.criteria) ? f.criteria : [];
+  const reasons = crit.filter((c) => c && (c.state === 'match' || c.state === 'outside') && CRITERION[c.key])
+    .map((c) => `${CRITERION[c.key]} ${c.state === 'match' ? 'matches your thesis' : 'is outside your thesis'}`);
+  return { state: 'scored', line: `Fit to my thesis ${f.score}${f.confidence_label ? ` (${f.confidence_label})` : ''}`, reasons };
+}
+
+/** Questions and risks the viewer's firm wrote down (notes tagged Question or Risk, DL14), newest first. */
+export const CASE_TAGS = ['Question', 'Risk'];
+export function caseNotes(reads) {
+  const all = CASE_TAGS.map((t) => reads?.[t]);
+  if (all.some((r) => !r || r.status === 'loading')) return { state: 'loading' };
+  if (all.some((r) => r.status === 'unreadable')) return { state: 'unreadable' };
+  const rows = CASE_TAGS.flatMap((tag) => (reads[tag].data?.items || []).filter((n) => n && String(n.body ?? '').trim()).map((n) => {
+    const first = String(n.body).trim().split('\n')[0].trim();
+    return { uid: n.uid ?? `${tag}-${n.id}`, tag, text: first.length > 140 ? `${first.slice(0, 139)}…` : first, at: n.updated_at || n.created_at || '' };
+  }));
+  rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const total = CASE_TAGS.reduce((n, t) => n + (Number(reads[t].data?.total) || 0), 0);
+  return { state: rows.length ? 'some' : 'none', rows, more: Math.max(total - rows.length, 0) };
+}
+
+/** Your position's Route (DE04 "Direct"): the commitments read carries no route. */
+export const ROUTE_NOT_RECORDED = 'The commitments read carries no route.';
+
 /** How a failed deal read is drawn: not on the deal (DL22a), gone, or unreadable (DL20b). */
 export function readFailure(err) {
   const s = Number(err?.status);
@@ -286,6 +385,21 @@ export const ACTIVITY_FILTERS = [
   ['all', 'All'], ['mine', 'Mine'], ['deal', 'Deal'], ['documents', 'Documents'], ['diligence', 'Diligence'],
 ];
 
+/**
+ * D6164 part 3 (DE27, the owner's answer A): an investor's Activity chips, the activity's own and then
+ * Firm notes, whose key is the address's `?show=notes`. Staff and a founder keep `ACTIVITY_FILTERS`.
+ */
+export const INVESTOR_ACTIVITY_CHIPS = [...ACTIVITY_FILTERS, ['notes', 'Firm notes']];
+
+/** The chip an address's `?show=` names; anything else is All. */
+export function activityChoice(word) {
+  const key = String(word ?? '');
+  return INVESTOR_ACTIVITY_CHIPS.some(([k]) => k === key) ? key : 'all';
+}
+
+/** Who reads the firm's notes (DE27): never another firm, never the founder. */
+export const FIRM_NOTES_LINE = 'Only your firm sees these notes. No other firm and not the founder.';
+
 /** The rows one chip shows. */
 export function activityShown(events, filter) {
   const rows = Array.isArray(events) ? events : [];
@@ -301,7 +415,7 @@ export function activityShown(events, filter) {
 export function activityEmpty(filter) {
   if (filter === 'mine') return 'None of your own activity on this deal is recorded.';
   if (filter === 'deal') return 'No deal activity you can read is recorded.';
-  if (filter === 'documents') return 'No document activity you can read is recorded. Documents show once you hold the venture’s NDA.';
+  if (filter === 'documents') return 'No document activity you can read is recorded. Catalogue documents require the venture’s NDA; data room files and deck versions require their own grants. NDA signatures show only to their parties and the venture’s founder or an admin.';
   if (filter === 'diligence') return 'No diligence activity you can read is recorded. A case shows to its own owner and reviewers.';
   return EMPTY.activity;
 }

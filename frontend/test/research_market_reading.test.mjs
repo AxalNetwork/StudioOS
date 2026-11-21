@@ -21,7 +21,9 @@ const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
 
 test('a catalog price is a line of its own, and a missing one is not zero', () => {
-  assert.equal(catalogLine(4_500_000), 'Catalog lists $45,000');
+  assert.equal(catalogLine(4_500_000), 'Catalog price $45,000.00');
+  // D7174: to the cent, never rounded.
+  assert.equal(catalogLine(12_050), 'Catalog price $120.50');
   assert.equal(catalogLine(null), null);
   assert.equal(catalogLine(undefined), null);
 });
@@ -73,12 +75,13 @@ test('the reading page is a route for the same licences as the list', () => {
   assert.match(app, /path="\/research\/markets\/:uid"/);
   assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'partner', 'investor', 'advisor'\]\), <MarketReading/);
   assert.match(api, /marketReadingGet: \(uid\) => request\(`\/research\/market-readings\/\$\{encodeURIComponent\(uid\)\}`\)/);
-  assert.match(list, /\.filter\(\(r\) => r\.uid\)/);
+  // D7174: a service line never read keeps its row, unlinked (D7039 RMP-01).
+  assert.match(list, /No reading yet/);
   assert.match(list, /\/research\/markets\/\$\{encodeURIComponent\(r\.uid\)\}/);
 });
 
 test('the page states the limits and does not stamp fixture data as SAMPLE', () => {
-  assert.match(page, /A save writes a new run date\. It does not edit the old one\./);
+  assert.match(page, /A save writes a new reading with a new run date; the one you opened is unchanged\./);
   assert.match(page, /High is below low\. Nothing is saved until the range reads forward\./);
   assert.match(page, /The count has no names behind it/);
   assert.match(page, /The proposal is not named on the quote/);

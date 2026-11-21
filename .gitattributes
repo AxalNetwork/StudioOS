@@ -83,27 +83,6 @@
 # ---- Fonts ------------------------------------------------------------------
 *.woff2  filter=lfs diff=lfs merge=lfs -text
 
-# ---- The build stamp -------------------------------------------------------
-# `docs/.build-source` is one line: a SHA-256 of `frontend/src` that the build
-# writes last (D103). Because it is a tracked file whose single line changes
-# whenever the source does, ANY two branches that touch `frontend/src` conflict
-# on it — always, by construction. That happened five times in one day.
-#
-# `union` is a BUILT-IN driver, which is the whole reason it is the one used: a
-# custom driver needs repo-local `git config merge.<name>.driver`, and this repo
-# has no postinstall, no prepare and no hooks path to install one — and the
-# check that actually goes red runs against GitHub's own server-side merge,
-# where no local config exists at all.
-#
-# The merged result is two hashes and is meaningless. That is fine and is the
-# point: the correct value is a pure function of the merged source, so it can
-# only ever come from re-running `npm run build`. What this buys is that the
-# rebuild is prompted by a CI message instead of a conflict marker.
-# `scripts/check-docs-fresh.mjs` refuses a two-line stamp under `--strict`
-# rather than falling through to the timestamp proxy, so the union merge cannot
-# pass unnoticed. See D113.
-docs/.build-source merge=union
-
 # ---- Line endings ----------------------------------------------------------
 * text=auto eol=lf
 *.sh text eol=lf
@@ -164,6 +143,14 @@ design/incoming/**        linguist-generated=true
 # keeps BOTH versions of a line two branches rewrote differently, so
 # scripts/check-folder-docs.mjs refuses a README where that happened (rule 4,
 # scripts/lib/readmeUnion.mjs): pick one version and delete the other.
+#
+# Union works ONLY in a local `git merge`. GitHub's server-side merge — the PR
+# page's mergeability and the merge queue — does not apply `merge=union` (nor
+# any custom driver), so two PRs appending at one spot still conflict there (#6465:
+# #6359, #5821 and #5806 were dirty on GitHub only on READMEs that merged
+# cleanly locally). The cure is a README that takes no per-file rows:
+# `<!-- index: generated -->` or `<!-- index: none -->`, checked by
+# scripts/check-folder-docs.mjs (rule 6).
 README.md merge=union
 
 # ---- The route map: no union (D4102, D4103) ---------------------------------

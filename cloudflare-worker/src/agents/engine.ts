@@ -9,11 +9,17 @@
  *   the scope paused (`agent_scope_settings.engine_paused`)       403 scope_paused
  *   the agent not active in this scope                            409 agent_not_live
  *   the task not this agent's, not ready, or with no option       409 not_ready
- *   the agent already has a live run (single flight)              409 agent_busy
- *   the scope already runs `max_parallel_runs`                     409 scope_busy
- *   the scope already has 5 proposals waiting                     409 queue_full
+ *   every lane of the agent holds a live run (single flight)      409 agent_busy
+ *   a sub-agent lane the agent's monthly cap does not cover       409 lane_budget
+ *   the scope already runs its parallel limit                     409 scope_busy
+ *   the scope already has its review backlog of proposals waiting 409 queue_full
  * The insert itself is the last check: the single-flight index refuses a
- * second live run of one agent even if two objects raced (409 agent_busy).
+ * second live run of one agent and lane even if two objects raced (409
+ * agent_busy).
+ *
+ * D7074 (#7074): the three limits are a scope's capacity (`capacity.ts`). A
+ * scope that set nothing has one lane per agent, 2 runs at once and a backlog
+ * of 5, the numbers these checks always had; more needs HQ's ceilings.
  *
  * Bound SQL only. Codes in logs, never a prompt, an output or a name. A cost
  * that cannot be read is `{ available: false }`, never 0.
@@ -24,9 +30,13 @@ import { PLATFORM_PAUSED_MESSAGE, platformPaused } from '../services/agents/aiPo
 import { notify } from '../services/notify';
 import { chargedFor } from '../services/agents/agentRun';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
-import { logEvent, type AgentRow, type Spend } from '../services/agents/teams';
+import { logEvent, monthSpend, type AgentRow, type Spend } from '../services/agents/teams';
 import {
-  DAILY_LIMIT, OPEN_PROPOSALS_MAX, engineMode, haltedAll, scopeName,
+  NO_CEILINGS, backlogLimit, capacityCeilings, capacityOf, freeLane, laneBudget, laneLimit, needsCeilings, parallelLimit,
+  type Capacity, type Ceilings,
+} from './capacity';
+import {
+  DAILY_LIMIT, engineMode, haltedAll, scopeName,
   type Admission, type Refusal, type ScopeRef, type Trigger,
 } from './runtime';
 
@@ -46,6 +56,8 @@ export type RunRow = {
   id: number; uid: string; agent_id: number; task_id: number; attempt: number; status: string; step: RunStep | null;
   steps_json: string; workflow_instance_id: string | null; admitted_company_id: number | null; usage_log_id: number | null;
   proposal_uid: string | null; refusal: string | null; created_at: string; started_at: string | null; ended_at: string | null; updated_at: string;
+  /** D7074: 0 is the agent, 1 and up its sub-agents. Absent on a row read before the migration. */
+  lane?: number;
 };
 export type StepEntry = { name: RunStep; status: 'done' | 'refused' | 'failed' | 'waiting' | 'halted'; at: string; summary: string };
 
@@ -61,33 +73,64 @@ const scopeBinds = (s: ScopeRef): [string, number, number] => [s.kind, s.kind ==
 
 // ── Settings ────────────────────────────────────────────────────────────────
 
-export type ScopeSettings = { engine_paused: boolean; max_parallel_runs: number };
+/** D7074: `engine_paused` and `max_parallel_runs` as before, with the scope's capacity beside them. */
+export type ScopeSettings = { engine_paused: boolean } & Capacity;
+export type ScopeSettingsWrite = { paused?: boolean } & Partial<Capacity>;
 
-/** A missing row is the defaults: not paused, 2 at once. */
+/** A missing row is the defaults: not paused, 2 at once, one lane, the constants. */
 export async function scopeSettings(env: Env, s: ScopeRef): Promise<ScopeSettings> {
+  // `*`: a database before D7074's migration has no capacity columns, and reads as the defaults.
   const row = await env.DB.prepare(
-    `SELECT engine_paused, max_parallel_runs FROM agent_scope_settings
+    `SELECT * FROM agent_scope_settings
       WHERE scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
-  ).bind(...scopeBinds(s)).first<{ engine_paused: number; max_parallel_runs: number }>();
-  return { engine_paused: !!row?.engine_paused, max_parallel_runs: row ? Number(row.max_parallel_runs) : 2 };
+  ).bind(...scopeBinds(s)).first<Record<string, unknown>>();
+  return { engine_paused: !!row?.engine_paused, ...capacityOf(row) };
 }
 
-export async function putScopeSettings(env: Env, s: ScopeRef, w: { paused?: boolean; max_parallel_runs?: number }, by: number | null): Promise<ScopeSettings> {
+export async function putScopeSettings(env: Env, s: ScopeRef, w: ScopeSettingsWrite, by: number | null): Promise<ScopeSettings> {
   const cur = await scopeSettings(env, s);
   const paused = w.paused ?? cur.engine_paused;
   const max = w.max_parallel_runs ?? cur.max_parallel_runs;
   const [kind, companyId, projectId] = scopeBinds(s);
-  const upd = await env.DB.prepare(
-    `UPDATE agent_scope_settings SET engine_paused = ?, max_parallel_runs = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
-  ).bind(paused ? 1 : 0, max, by, kind, companyId, projectId).run();
+  // D7074: a write that names no capacity field is the statement it always was, so it also runs before the migration.
+  const capacity = (['capacity_mode', 'elastic_max_runs', 'lanes_per_agent', 'review_backlog_max', 'daily_runs_per_agent'] as const).some((k) => k in w);
+  const next = { ...cur, ...w };
+  const upd = capacity
+    ? await env.DB.prepare(
+      `UPDATE agent_scope_settings SET engine_paused = ?, max_parallel_runs = ?, capacity_mode = ?, elastic_max_runs = ?, lanes_per_agent = ?,
+              review_backlog_max = ?, daily_runs_per_agent = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
+    ).bind(paused ? 1 : 0, max, next.capacity_mode, next.elastic_max_runs, next.lanes_per_agent, next.review_backlog_max, next.daily_runs_per_agent,
+      by, kind, companyId, projectId).run()
+    : await env.DB.prepare(
+      `UPDATE agent_scope_settings SET engine_paused = ?, max_parallel_runs = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
+    ).bind(paused ? 1 : 0, max, by, kind, companyId, projectId).run();
   if (!upd.meta?.changes) {
-    await env.DB.prepare(
-      `INSERT INTO agent_scope_settings (scope_kind, company_id, project_id, engine_paused, max_parallel_runs, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).bind(kind, companyId || null, projectId || null, paused ? 1 : 0, max, by).run();
+    if (capacity) {
+      await env.DB.prepare(
+        `INSERT INTO agent_scope_settings (scope_kind, company_id, project_id, engine_paused, max_parallel_runs, capacity_mode, elastic_max_runs,
+                                           lanes_per_agent, review_backlog_max, daily_runs_per_agent, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(kind, companyId || null, projectId || null, paused ? 1 : 0, max, next.capacity_mode, next.elastic_max_runs, next.lanes_per_agent,
+        next.review_backlog_max, next.daily_runs_per_agent, by).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO agent_scope_settings (scope_kind, company_id, project_id, engine_paused, max_parallel_runs, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).bind(kind, companyId || null, projectId || null, paused ? 1 : 0, max, by).run();
+    }
   }
   return scopeSettings(env, s);
+}
+
+/** D7074: HQ's ceilings for a scope's capacity. A scope on the defaults reads none: nothing is offered to it that it did not have. */
+export const ceilingsFor = async (env: Env, c: Capacity): Promise<Ceilings> => (needsCeilings(c) ? capacityCeilings(env) : NO_CEILINGS);
+
+/** D7074: how many live runs one agent of this scope may hold (itself and its sub-agents). */
+export async function laneLimitIn(env: Env, s: ScopeRef): Promise<number> {
+  const settings = await scopeSettings(env, s);
+  return laneLimit(settings, await ceilingsFor(env, settings));
 }
 
 // ── Admission ───────────────────────────────────────────────────────────────
@@ -165,13 +208,27 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
     const { computeConfigured } = await import('../services/agents/computeBridge');
     if (!computeConfigured(env) || computeRequest.status !== 'ready' || computeRequest.requested_by_user_id !== a.sponsor_user_id) return no(409, 'compute_not_ready', 'The compute inputs and approved host must be ready before starting this task.');
   }
-  const live = await env.DB.prepare("SELECT 1 AS ok FROM agent_task_runs WHERE agent_id = ? AND status IN ('admitted', 'running')").bind(a.id).first<{ ok: number }>();
-  if (live) return no(409, 'agent_busy', 'This agent is already working on a task.');
-  if (await countInScope(env, s, LIVE_STATUSES) >= settings.max_parallel_runs) {
-    return no(409, 'scope_busy', `This team runs at most ${settings.max_parallel_runs} agents at once. Try again when one finishes.`);
+  // D7074: the agent's lanes. One lane (the default, and all there is until HQ offers sub-agents) is the old single flight.
+  const ceilings = await ceilingsFor(env, settings);
+  const lanes = laneLimit(settings, ceilings);
+  const held = ((await env.DB.prepare("SELECT lane FROM agent_task_runs WHERE agent_id = ? AND status IN ('admitted', 'running')").bind(a.id)
+    .all<{ lane: number | null }>()).results ?? []).map((r) => Number(r.lane ?? 0));
+  const lane = held.length >= lanes ? null : freeLane(held, lanes);
+  if (lane == null) {
+    return no(409, 'agent_busy', lanes > 1 ? `This agent and its ${lanes - 1} sub-agents are all working. Try again when one finishes.` : 'This agent is already working on a task.');
   }
-  if (await countInScope(env, s, ['waiting_decision']) >= OPEN_PROPOSALS_MAX) {
-    return no(409, 'queue_full', `${OPEN_PROPOSALS_MAX} proposals are waiting for a decision. Decide one first.`);
+  if (held.length) {
+    // A sub-agent shares its agent's monthly cap: it starts only when the cap covers it beside the runs already live.
+    const room = laneBudget({ cap_microusd: a.monthly_cap_microusd, spent: await monthSpend(env, a.id), live: held.length, per_run_microusd: ceilings.per_run_microusd });
+    if (!room.ok) return no(409, 'lane_budget', 'This agent\'s monthly cap does not cover another sub-agent right now. It starts when a run finishes or the cap is raised.');
+  }
+  const parallel = parallelLimit(settings, ceilings);
+  if (await countInScope(env, s, LIVE_STATUSES) >= parallel) {
+    return no(409, 'scope_busy', `This team runs at most ${parallel} agents at once. Try again when one finishes.`);
+  }
+  const backlog = backlogLimit(settings);
+  if (await countInScope(env, s, ['waiting_decision']) >= backlog) {
+    return no(409, 'queue_full', `${backlog} proposals are waiting for a decision. Decide one first.`);
   }
   let admittedCompany: number | null = null;
   if (s.kind === 'project') {
@@ -181,12 +238,22 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
   const attempt = Number((await env.DB.prepare('SELECT MAX(attempt) AS n FROM agent_task_runs WHERE task_id = ?').bind(task.id).first<{ n: number | null }>())?.n ?? 0) + 1;
   const uid = t.runUid ?? crypto.randomUUID();
   try {
-    const insertRun = env.DB.prepare(
-      `INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id)
+    // Lane 0 keeps the statement it always was (it also runs before D7074's migration); a sub-agent's names its lane.
+    // Both are written out in full: no fragment is interpolated into a statement's text.
+    const gateBinds = [computeRequest?.uid ?? null, task.id, computeRequest?.uid ?? null, task.id, a.sponsor_user_id] as const;
+    const insertRun = lane === 0
+      ? env.DB.prepare(
+        `INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id)
        SELECT ?, ?, ?, ?, 'admitted', ?, ?
        WHERE (? IS NULL AND NOT EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?))
          OR EXISTS(SELECT 1 FROM agent_compute_requests WHERE uid = ? AND task_id = ? AND status = 'ready' AND requested_by_user_id = ?)`,
-    ).bind(uid, a.id, task.id, attempt, uid, admittedCompany, computeRequest?.uid ?? null, task.id, computeRequest?.uid ?? null, task.id, a.sponsor_user_id);
+      ).bind(uid, a.id, task.id, attempt, uid, admittedCompany, ...gateBinds)
+      : env.DB.prepare(
+        `INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id, lane)
+       SELECT ?, ?, ?, ?, 'admitted', ?, ?, ?
+       WHERE (? IS NULL AND NOT EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?))
+         OR EXISTS(SELECT 1 FROM agent_compute_requests WHERE uid = ? AND task_id = ? AND status = 'ready' AND requested_by_user_id = ?)`,
+      ).bind(uid, a.id, task.id, attempt, uid, admittedCompany, lane, ...gateBinds);
     const inserted = computeRequest ? (await env.DB.batch([insertRun,
       env.DB.prepare('INSERT INTO agent_compute_run_requests (run_uid, request_uid) SELECT ?, ? WHERE EXISTS(SELECT 1 FROM agent_task_runs WHERE uid = ?)').bind(uid, computeRequest.uid, uid),
     ]))[0] : await insertRun.run();
@@ -290,7 +357,8 @@ export async function runsToday(env: Env, agentId: number, exceptId: number, now
   return Number(row?.n ?? 0);
 }
 
-export const dailyLimitReached = (n: number) => n >= DAILY_LIMIT;
+/** D7074: `limit` is the scope's own daily runs per agent (`dailyLimit`); absent, the platform's 20. */
+export const dailyLimitReached = (n: number, limit: number = DAILY_LIMIT) => n >= limit;
 
 // ── The answer ──────────────────────────────────────────────────────────────
 

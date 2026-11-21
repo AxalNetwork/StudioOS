@@ -287,6 +287,8 @@ export function daysOverdue(dueDate: unknown, today: string): number | null {
 
 /** A line's state, from its status, receipts and due date. */
 export function lineState(line: { status: string; owed_cents: number; received_cents: number; receipt_count: number; due_date?: string | null }, today: string) {
+  // D6238: a withdrawn call's line owes nothing and is never overdue.
+  if (line.status === 'withdrawn') return { state: 'withdrawn', days_overdue: null, receipt_recorded: null };
   if (line.status === 'paid') {
     return { state: 'paid', days_overdue: null, receipt_recorded: Number(line.receipt_count) > 0 };
   }
@@ -300,18 +302,24 @@ export const CALLS_LIMIT = 200;
 export const LINES_LIMIT = 2000;
 export const ENTRIES_LIMIT = 500;
 
-/** Every call on a fund with its lines, and the fund's call totals. */
-export async function readFundCalls(env: Env, fundId: number, today: string) {
+/**
+ * Every call on a fund with its lines, and the fund's call totals.
+ *
+ * `only.callId` narrows the read to that one call (D6238's call page); the
+ * fund totals are then that call's.
+ */
+export async function readFundCalls(env: Env, fundId: number, today: string, only: { callId?: number | null } = {}) {
+  const callId = only.callId ?? null;
   const headers = (await env.DB.prepare(
     `SELECT fc.*, COALESCE(ru.name, rlp.name) AS residual_lp_name, ib.name AS issued_by_name
        FROM fund_capital_calls fc
        LEFT JOIN limited_partners rlp ON rlp.id = fc.residual_lp_id
        LEFT JOIN users ru ON ru.id = rlp.user_id
        LEFT JOIN users ib ON ib.id = fc.issued_by
-      WHERE fc.fund_id = ?
+      WHERE fc.fund_id = ? AND (? IS NULL OR fc.id = ?)
       ORDER BY fc.call_number DESC
       LIMIT ?`,
-  ).bind(fundId, CALLS_LIMIT + 1).all<any>()).results || [];
+  ).bind(fundId, callId, callId, CALLS_LIMIT + 1).all<any>()).results || [];
   const rawLines = (await env.DB.prepare(
     `SELECT cc.id, cc.fund_call_id, cc.limited_partner_id, cc.status, cc.due_date, cc.paid_date, cc.created_at,
             ${OWED_CENTS_SQL} AS owed_cents,
@@ -325,10 +333,10 @@ export async function readFundCalls(env: Env, fundId: number, today: string) {
        FROM capital_calls cc
        JOIN limited_partners lp ON lp.id = cc.limited_partner_id
        LEFT JOIN users u ON u.id = lp.user_id
-      WHERE lp.fund_id = ?
+      WHERE lp.fund_id = ? AND (? IS NULL OR cc.fund_call_id = ?)
       ORDER BY cc.created_at DESC, cc.id DESC
       LIMIT ?`,
-  ).bind(fundId, LINES_LIMIT + 1).all<any>()).results || [];
+  ).bind(fundId, callId, callId, LINES_LIMIT + 1).all<any>()).results || [];
   const committed = await env.DB.prepare(
     `SELECT COALESCE(SUM(CAST(ROUND(lp.commitment_amount * 100) AS INTEGER)), 0) AS cents, COUNT(*) AS lps
        FROM limited_partners lp WHERE lp.fund_id = ? AND ${BILLED}`,
@@ -350,7 +358,7 @@ export async function readFundCalls(env: Env, fundId: number, today: string) {
       commitment_cents: l.commitment_cents == null ? null : Number(l.commitment_cents),
       owed_cents: owed,
       received_cents: received,
-      outstanding_cents: l.status === 'paid' ? 0 : Math.max(0, owed - received),
+      outstanding_cents: l.status === 'paid' || l.status === 'withdrawn' ? 0 : Math.max(0, owed - received),
       receipt_count: Number(l.receipt_count),
       due_date: l.due_date ?? null,
       paid_date: l.paid_date ?? null,
@@ -386,6 +394,11 @@ export async function readFundCalls(env: Env, fundId: number, today: string) {
       line_count: Number(h.line_count),
       received_cents: sum(own, 'received_cents'),
       outstanding_cents: sum(own, 'outstanding_cents'),
+      receipt_count: sum(own, 'receipt_count'),
+      // D6238: the lines that still owe part or all of their share.
+      lines_behind: own.filter((l) => l.outstanding_cents > 0).length,
+      // Withdrawn when every line is: the withdrawal writes them all in one batch.
+      withdrawn: own.length > 0 && own.every((l) => l.state === 'withdrawn'),
       lines: own,
     };
   });
@@ -474,4 +487,228 @@ export async function readFundLedger(env: Env, fundId: number, lpId: number | nu
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)) || (b.kind === 'receipt' ? 1 : 0) - (a.kind === 'receipt' ? 1 : 0));
 
   return { entries, truncated };
+}
+
+// ---------------------------------------------------------- D6238: one call
+
+/**
+ * A call's corrections and its withdrawal (migration 202611152336), oldest
+ * first, with the name of who recorded each. `callId` narrows it to one call.
+ */
+export async function readCallAmendments(env: Env, fundId: number, callId: number | null = null) {
+  return (await env.DB.prepare(
+    `SELECT a.id, a.fund_call_id, a.kind, a.old_value, a.new_value, a.reason, a.lines_json,
+            a.recorded_by, a.created_at, u.name AS recorded_by_name
+       FROM fund_capital_call_amendments a
+       LEFT JOIN users u ON u.id = a.recorded_by
+      WHERE a.fund_id = ? AND (? IS NULL OR a.fund_call_id = ?)
+      ORDER BY a.id`,
+  ).bind(fundId, callId, callId).all<any>()).results || [];
+}
+
+/**
+ * The calls as corrected. The sealed header keeps what was issued
+ * (`issued_purpose`, `issued_due_date`); `purpose` and `due_date` are the
+ * latest correction of each, else the header's. A withdrawn call names who
+ * withdrew it and when, and each of its lines the share it was issued with,
+ * because the withdrawal set the line's own amount to zero.
+ */
+export function applyAmendments<T extends { id: number; purpose: string | null; due_date: string | null; withdrawn?: boolean; lines?: any[] }>(
+  calls: T[], rows: any[],
+) {
+  return calls.map((call) => {
+    const own = rows.filter((r) => Number(r.fund_call_id) === Number(call.id));
+    const latest = (kind: string) => [...own].reverse().find((r) => r.kind === kind);
+    const purpose = latest('purpose');
+    const due = latest('due_date');
+    const w = own.find((r) => r.kind === 'withdrawn');
+    let issued: Map<number, number> | null = null;
+    if (w?.lines_json) {
+      try {
+        issued = new Map((JSON.parse(w.lines_json) as Array<{ line_id: number; owed_cents: number }>)
+          .map((l) => [Number(l.line_id), Number(l.owed_cents)]));
+      } catch { issued = null; }
+    }
+    return {
+      ...call,
+      issued_purpose: call.purpose,
+      issued_due_date: call.due_date,
+      purpose: purpose ? purpose.new_value : call.purpose,
+      due_date: due ? due.new_value : call.due_date,
+      withdrawn: Boolean(call.withdrawn || w),
+      withdrawal: w ? { at: w.created_at, by: Number(w.recorded_by), by_name: w.recorded_by_name ?? null, reason: w.reason ?? null } : null,
+      amendments: own.map((r) => ({
+        id: r.id, kind: r.kind, old_value: r.old_value ?? null, new_value: r.new_value ?? null, reason: r.reason ?? null,
+        at: r.created_at, by: Number(r.recorded_by), by_name: r.recorded_by_name ?? null,
+      })),
+      lines: issued && call.lines
+        ? call.lines.map((l: any) => ({ ...l, issued_owed_cents: issued!.get(Number(l.id)) ?? null }))
+        : call.lines,
+    };
+  });
+}
+
+type Settled<T> = { status: 'ready'; rows: T[] } | { status: 'unreadable'; rows: null };
+async function settle<T>(run: () => Promise<T[]>): Promise<Settled<T>> {
+  try { return { status: 'ready', rows: await run() }; } catch { return { status: 'unreadable', rows: null }; }
+}
+
+/**
+ * One call on a fund: its header as corrected, its lines, the receipts
+ * recorded against them and the comms logged on them. Null when the call is
+ * not on this fund. The receipts and the comms are read apart from the call,
+ * so one failing reads Unreadable while the rest shows.
+ */
+export async function readFundCall(env: Env, fundId: number, callId: number, today: string) {
+  const ledger = await readFundCalls(env, fundId, today, { callId });
+  const raw = ledger.calls[0];
+  if (!raw || Number(raw.id) !== callId) return null;
+  const [call] = applyAmendments([raw], await readCallAmendments(env, fundId, callId));
+  const receipts = await settle(async () => (await env.DB.prepare(
+    `SELECT r.id, r.capital_call_id, r.limited_partner_id, r.amount_cents, r.received_on, r.reference,
+            r.source, r.created_at, COALESCE(u.name, lp.name) AS lp_name, rb.name AS recorded_by_name
+       FROM capital_call_receipts r
+       JOIN capital_calls cc ON cc.id = r.capital_call_id
+       JOIN limited_partners lp ON lp.id = r.limited_partner_id
+       LEFT JOIN users u ON u.id = lp.user_id
+       LEFT JOIN users rb ON rb.id = r.recorded_by
+      WHERE r.fund_id = ? AND cc.fund_call_id = ?
+      ORDER BY r.created_at DESC, r.id DESC
+      LIMIT ?`,
+  ).bind(fundId, callId, ENTRIES_LIMIT).all<any>()).results || []);
+  const comms = await settle(async () => (await env.DB.prepare(
+    `SELECT c.id, c.lp_id, c.kind, c.subject, c.sent_at, c.capital_call_id, c.created_at,
+            COALESCE(u.name, lp.name) AS lp_name, lb.name AS logged_by_name
+       FROM fund_lp_communications c
+       JOIN capital_calls cc ON cc.id = c.capital_call_id
+       JOIN limited_partners lp ON lp.id = c.lp_id AND lp.fund_id = c.fund_id
+       LEFT JOIN users u ON u.id = lp.user_id
+       LEFT JOIN users lb ON lb.id = c.logged_by
+      WHERE c.fund_id = ? AND cc.fund_call_id = ?
+      ORDER BY c.sent_at DESC, c.id DESC
+      LIMIT ?`,
+  ).bind(fundId, callId, ENTRIES_LIMIT).all<any>()).results || []);
+  return { call, truncated: ledger.truncated, receipts, comms };
+}
+
+/** Why a correction or a withdrawal did not happen, or what it wrote. */
+export type AmendOutcome =
+  | { kind: 'recorded'; amendment: any }
+  | { kind: 'not_found' }
+  | { kind: 'withdrawn' }
+  | { kind: 'no_change' }
+  | { kind: 'before_issue'; issuedOn: string }
+  | { kind: 'has_receipts' }
+  | { kind: 'carries_fee' };
+
+async function callHeader(env: Env, fundId: number, callId: number) {
+  return env.DB.prepare(
+    `SELECT fc.id, fc.fund_id, fc.purpose, fc.due_date, fc.created_at,
+            NOT NOT EXISTS (SELECT 1 FROM fund_capital_call_amendments w WHERE w.fund_call_id = fc.id AND w.kind = 'withdrawn') AS withdrawn
+       FROM fund_capital_calls fc WHERE fc.id = ? AND fc.fund_id = ?`,
+  ).bind(callId, fundId).first<any>();
+}
+
+/**
+ * Correct a call's due date or purpose. One amendment row (who, when, from,
+ * to, why); a due date also moves onto every line of the call in the same
+ * batch. A withdrawn call is not corrected.
+ */
+export async function correctFundCall(env: Env, input: {
+  fundId: number; callId: number; field: 'due_date' | 'purpose'; value: string; reason: string | null; recordedBy: number;
+}): Promise<AmendOutcome> {
+  const header = await callHeader(env, input.fundId, input.callId);
+  if (!header) return { kind: 'not_found' };
+  if (Number(header.withdrawn)) return { kind: 'withdrawn' };
+  const latest = await env.DB.prepare(
+    `SELECT new_value FROM fund_capital_call_amendments WHERE fund_call_id = ? AND kind = ? ORDER BY id DESC LIMIT 1`,
+  ).bind(input.callId, input.field).first<{ new_value: string | null }>();
+  const current = latest ? latest.new_value : (header[input.field] ?? null);
+  if (current === input.value) return { kind: 'no_change' };
+  const issuedOn = String(header.created_at ?? '').slice(0, 10);
+  if (input.field === 'due_date' && issuedOn && input.value < issuedOn) return { kind: 'before_issue', issuedOn };
+
+  const uid = crypto.randomUUID();
+  const writes = [env.DB.prepare(
+    `INSERT INTO fund_capital_call_amendments (uid, fund_call_id, fund_id, kind, old_value, new_value, reason, recorded_by)
+     SELECT ?, fc.id, fc.fund_id, ?, ?, ?, ?, ?
+       FROM fund_capital_calls fc
+      WHERE fc.id = ? AND fc.fund_id = ? AND NOT EXISTS (SELECT 1 FROM fund_capital_call_amendments w WHERE w.fund_call_id = fc.id AND w.kind = 'withdrawn')`,
+  ).bind(uid, input.field, current, input.value, input.reason, input.recordedBy, input.callId, input.fundId)];
+  if (input.field === 'due_date') {
+    writes.push(env.DB.prepare(
+      `UPDATE capital_calls SET due_date = ?
+        WHERE fund_call_id = ? AND status <> 'withdrawn'
+          AND EXISTS (SELECT 1 FROM fund_capital_call_amendments WHERE uid = ?)`,
+    ).bind(input.value, input.callId, uid));
+  }
+  const results = await env.DB.batch<any>(writes);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) return { kind: 'withdrawn' };
+  const amendment = await env.DB.prepare(`SELECT * FROM fund_capital_call_amendments WHERE uid = ?`).bind(uid).first<any>();
+  return { kind: 'recorded', amendment };
+}
+
+/**
+ * Withdraw a call that nothing has been paid against.
+ *
+ * THE RULE, checked when read and again inside the write: no line has a
+ * receipt or is paid, and no management-fee line is linked to one (D709
+ * links a fee line to a call line and the link cannot be undone). Then one
+ * amendment row keeps each line's share as issued, and every line is set to
+ * `withdrawn` with a zero amount, in one batch: no reader that sums what is
+ * owed or called counts a withdrawn line, and no receipt can land on one,
+ * because a receipt must fit what the line still owes.
+ */
+export async function withdrawFundCall(env: Env, input: {
+  fundId: number; callId: number; reason: string | null; recordedBy: number;
+}): Promise<AmendOutcome> {
+  const header = await callHeader(env, input.fundId, input.callId);
+  if (!header) return { kind: 'not_found' };
+  if (Number(header.withdrawn)) return { kind: 'withdrawn' };
+  const lines = (await env.DB.prepare(
+    `SELECT cc.id, cc.limited_partner_id, cc.status, ${OWED_CENTS_SQL} AS owed_cents,
+            (SELECT COUNT(*) FROM capital_call_receipts r WHERE r.capital_call_id = cc.id) AS receipts,
+            (SELECT COUNT(*) FROM fund_fee_lines f WHERE f.capital_call_line_id = cc.id) AS fee_lines
+       FROM capital_calls cc WHERE cc.fund_call_id = ? ORDER BY cc.id`,
+  ).bind(input.callId).all<any>()).results || [];
+  if (lines.some((l: any) => Number(l.receipts) > 0 || l.status === 'paid')) return { kind: 'has_receipts' };
+  if (lines.some((l: any) => Number(l.fee_lines) > 0)) return { kind: 'carries_fee' };
+
+  const uid = crypto.randomUUID();
+  const snapshot = JSON.stringify(lines.map((l: any) => ({
+    line_id: Number(l.id), lp_id: Number(l.limited_partner_id), owed_cents: Number(l.owed_cents),
+  })));
+  let results: any[];
+  try {
+    results = await env.DB.batch<any>([
+      env.DB.prepare(
+        `INSERT INTO fund_capital_call_amendments (uid, fund_call_id, fund_id, kind, reason, lines_json, recorded_by)
+         SELECT ?, fc.id, fc.fund_id, 'withdrawn', ?, ?, ?
+           FROM fund_capital_calls fc
+          WHERE fc.id = ? AND fc.fund_id = ? AND NOT EXISTS (SELECT 1 FROM fund_capital_call_amendments w WHERE w.fund_call_id = fc.id AND w.kind = 'withdrawn')
+            AND NOT EXISTS (SELECT 1 FROM capital_call_receipts r JOIN capital_calls cc ON cc.id = r.capital_call_id
+                             WHERE cc.fund_call_id = fc.id)
+            AND NOT EXISTS (SELECT 1 FROM capital_calls cc WHERE cc.fund_call_id = fc.id AND cc.status = 'paid')
+            AND NOT EXISTS (SELECT 1 FROM fund_fee_lines f JOIN capital_calls cc ON cc.id = f.capital_call_line_id
+                             WHERE cc.fund_call_id = fc.id)`,
+      ).bind(uid, input.reason, snapshot, input.recordedBy, input.callId, input.fundId),
+      env.DB.prepare(
+        `UPDATE capital_calls SET status = 'withdrawn', amount = 0, amount_cents = 0
+          WHERE fund_call_id = ? AND EXISTS (SELECT 1 FROM fund_capital_call_amendments WHERE uid = ?)`,
+      ).bind(input.callId, uid),
+    ]);
+  } catch (e) {
+    // The partial unique index: another withdrawal landed first.
+    if (/UNIQUE/i.test(String((e as Error)?.message ?? ''))) return { kind: 'withdrawn' };
+    throw e;
+  }
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    // Something changed between the read and the write: say what, from a fresh read.
+    const again = await callHeader(env, input.fundId, input.callId);
+    if (!again) return { kind: 'not_found' };
+    if (Number(again.withdrawn)) return { kind: 'withdrawn' };
+    return { kind: 'has_receipts' };
+  }
+  const amendment = await env.DB.prepare(`SELECT * FROM fund_capital_call_amendments WHERE uid = ?`).bind(uid).first<any>();
+  return { kind: 'recorded', amendment };
 }

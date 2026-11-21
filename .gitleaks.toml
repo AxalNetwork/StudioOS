@@ -1,7 +1,7 @@
 # Gitleaks config for AxalNetwork/StudioOS.
 # Inherits the upstream default ruleset (covers AWS, GCP, Stripe, JWT,
-# private keys, generic high-entropy, etc.) and layers project-specific
-# allowlists on top.
+# private keys, generic high-entropy, etc.) and adds project-specific
+# credential detection and narrowly scoped allowlists.
 #
 # Only ALLOWLIST things that are demonstrably non-secret:
 #   - example values in .env.example / .env.sample
@@ -15,6 +15,18 @@
 
 [extend]
 useDefault = true
+
+# D7899: apiKeys.ts mints this complete member API bearer. The public
+# axk_<key_id> prefix and the documented placeholder carry no secret and do
+# not match. Match the complete token even outside an assignment, without
+# depending on a generic keyword or entropy heuristic. Delimiters prevent
+# matching a valid-looking substring of a longer identifier.
+[[rules]]
+id = "axal-member-api-key"
+description = "Axal member API bearer"
+regex = '''(?:^|[^A-Za-z0-9_-])(axk_[a-z0-9]{12}_[A-Za-z0-9_-]{43})(?:$|[^A-Za-z0-9_-])'''
+secretGroup = 1
+keywords = ["axk_"]
 
 [allowlist]
 description = "Project-wide allowlist for known false positives"
@@ -52,34 +64,23 @@ regexes = [
   # in-memory capability fixture, whose fetch stub forbids external calls.
   # Anchors preserve detection for prefixed/suffixed values and other seeds.
   '''^synthetic-caprel-capabilities-5074-$''',
+  # D6473-p2: the review loop's numbered Claude accounts are named, never held, in code
+  # (`secret: 'ANTHROPIC_API_KEY_2'`). Anchored to the exact names, so a value is still caught.
+  '''^ANTHROPIC_API_KEY_[23]$''',
   # D4570-p6 (#4570): the Stripe key in the money authz suite is a fixture;
   # every Stripe call in that suite goes to an in-test fake. Pinned as the
   # literal, as D1135 is, rather than rewriting the PR branch's history.
   '''\bsk_test_d4570_fixture\b''',
+  # D7127 (#7127): the D1 backup upload test's synthetic Cloudflare token id,
+  # '0123456789abcdef'.repeat(2): sequential hex, because the script under test
+  # accepts only a 32-hex id. Anchored to the exact literal; pinned rather than
+  # rewriting the PR branch's history, as D1135 and D4570-p6 are.
+  '''^0123456789abcdef$''',
 
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
-  # Known synthetic test JWTs (signed with the literal "test" key).
-  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''',
   # Bundler-emitted Symbol.keyFor reference — false positive on generic-api-key.
   '''(?i)Symbol2?\.keyFor''',
-  # Application-level identifier names that gitleaks' generic-api-key
-  # regex flags as `<word>_key = "..."` patterns. None of these are
-  # secrets — they are DB column names, JS variable names, or contract
-  # field labels:
-  #   - obligation_key  → `legal_obligations.obligation_key` D1 column
-  #   - REPROMPT_KEY    → localStorage key constant in MarketIntelPage
-  #   - fileKey         → R2 object key local variable in admin_contracts
-  #   - file_key        → contracts/documents.file_key D1 column
-  #   - entity_key      → cap-table entity identifier
-  '''\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b''',
-  # Snake-case versioned enum values used throughout the trust-score and
-  # contract-template subsystems (`investor_nda_v1`, `mentor_disclaimer_v1`,
-  # `kyc_v1`, `investor_signals_reprompt_dismissed_v1`, …). The `_vN`
-  # suffix is the project-wide enum-version convention and is NOT used
-  # for any real credential. NB: real secrets are random hex/base64 with
-  # high entropy and never end in `_v\d+`.
-  '''\b[a-z][a-z0-9_]*_v\d+\b''',
   # Literal property assignment from a row reference — `ref.row.<col>` is
   # a TypeScript object-property access, not a value. Gitleaks' generic
   # heuristic treats the right-hand side of `let foo = ref.row.bar` as a
@@ -208,4 +209,19 @@ commits = [
   # rejects any `JWT_SECRET = "..."` line in `.replit` so this stops
   # recurring.
   "11e262ebc153a3540e80fd5c39a56ae479fccbad",  # historical: JWT_SECRET re-leaked in .replit (MI analysis task)
+]
+
+# D7899: extend, rather than replace, the upstream generic-api-key rule.
+# These false positives are application field names and versioned enum
+# values, such as investor_nda_v1 and mentor_disclaimer_v1. A random secret
+# can contain the same words or end in _vN, so these exemptions belong only
+# to the generic heuristic, never to Axal bearer, JWT or provider rules.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Application field names and versioned enum values"
+regexTarget = "secret"
+regexes = [
+  '''\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b''',
+  '''\b[a-z][a-z0-9_]*_v\d+\b''',
 ]

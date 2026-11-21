@@ -52,6 +52,7 @@ function allSources(dir = resolve(process.cwd(), 'frontend/src'), out = [], ext 
 }
 import { GUIDE_PLACEMENT } from '../src/pages/docs/guidePlacement.js';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from '../src/pages/docs/sections/index.js';
+import { broaderTerms } from '../src/pages/docs/v2/helpV2.js';
 import { createDocsFuse } from '../src/lib/docs/search.js';
 import {
   parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity,
@@ -292,19 +293,18 @@ test('the category grid is built from the manifest, not a hand-kept list', () =>
   assert.ok(visible.length >= 10, `expected the full corpus, got ${visible.length} sections`);
 });
 
-test('every suggested search actually finds something', () => {
-  // A chip that returns nothing is a dead end dressed as a suggestion, and a
-  // copy edit three files away is all it takes to make one. Run each through
-  // the real index rather than trusting the label.
-  const m = LAYOUT.match(/const SUGGESTED_SEARCHES = \[([^\]]+)\]/);
-  assert.ok(m, 'SUGGESTED_SEARCHES must exist and be a literal array');
-  const chips = m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
-  assert.ok(chips.length >= 3, `expected several suggestions, got ${chips.length}`);
+test('every broader term offered after nothing is found actually finds something', () => {
+  // D6861 (HC4): Help Center v2 draws no suggestion chips under the title; the
+  // shortcuts moved to "nothing found", as broader terms. A term that returns
+  // nothing is a dead end dressed as a suggestion, so each is run through the
+  // real index, and the page offers only the ones that find a guide.
+  assert.ok(!/const SUGGESTED_SEARCHES/.test(LAYOUT), 'the canvas draws no suggestion chips under the title');
   const fuse = createDocsFuse('founder');
-  for (const chip of chips) {
-    const hits = fuse.search(chip, { limit: 5 });
-    assert.ok(hits.length > 0, `the suggested search “${chip}” returns no article`);
-  }
+  const terms = broaderTerms('export cap table invoices zzzqqq', fuse);
+  assert.ok(terms.length >= 1, 'a query with real words offers at least one');
+  assert.ok(!terms.includes('zzzqqq'), 'a word that finds nothing is never offered');
+  for (const t of terms) assert.ok(fuse.search(t, { limit: 1 }).length > 0, `the broader term “${t}” returns no guide`);
+  assert.match(LAYOUT_CODE, /broaderTerms\(query, fuse\)/, 'the page takes its terms from the same rule');
 });
 
 // ---------------------------------------------------------------------------

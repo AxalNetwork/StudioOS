@@ -34,6 +34,8 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p: string) => readFileSync(resolve(HERE, '..', p), 'utf8');
 const MIGRATION = '247_project_market_assumptions';
+// D7704 (#7704): the four columns formula version 2 reads, added by their own migration.
+const VERSIONS_MIGRATION = '202611191932_7704_market_sizing_versions';
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -76,6 +78,14 @@ function tableFromMigration(): string {
   return `${src.slice(at, end)}\n);`;
 }
 
+/** The `ADD COLUMN` statements migration 202611191932 runs on this table, read from the file. */
+function addedColumnsFromMigration(): string[] {
+  const src = readFileSync(resolve(HERE, `../sql/migrations/${VERSIONS_MIGRATION}.sql`), 'utf8');
+  const stmts = src.split('\n').filter((l) => l.startsWith('ALTER TABLE project_market_assumptions ADD COLUMN '));
+  assert.equal(stmts.length, 4, `${VERSIONS_MIGRATION} no longer adds the four sizing columns`);
+  return stmts;
+}
+
 const P = 8100;
 function freshDb() {
   const db = new DatabaseSync(':memory:', {
@@ -83,6 +93,7 @@ function freshDb() {
     enableDoubleQuotedStringLiterals: true,
   });
   db.exec(tableFromMigration());
+  for (const st of addedColumnsFromMigration()) db.exec(st);
   return db;
 }
 const env = (db: InstanceType<typeof DatabaseSync>) => ({ DB: makeD1(db) }) as any;
@@ -193,13 +204,15 @@ test('the keys the store accepts are the keys it tells a caller about', async ()
   );
   // Every column the map names exists in the migration, spelled the same way.
   const migration = read(`sql/migrations/${MIGRATION}.sql`);
+  const added = addedColumnsFromMigration().join('\n');
   for (const column of Object.values(ASSUMPTION_COLUMNS)) {
+    if (added.includes(`ADD COLUMN ${column} TEXT`)) continue;
     // `\n    x TEXT` rather than a multiline-anchored regex built from `column`:
     // the DDL's four-space indent is the anchor either way, and Semgrep's
     // `detect-non-literal-regexp` is right about compiling a pattern from a
     // variable. The trailing ` TEXT` keeps a prefix column from matching.
     assert.ok(migration.includes(`\n    ${column} TEXT`),
-      `${column} is in the column map and not in migration 247`);
+      `${column} is in the column map and not in migration 247 or ${VERSIONS_MIGRATION}`);
   }
   assert.match(migration, /^    seg_filter_json TEXT,$/m);
   // And a round trip proves the spelling, not just the grep.

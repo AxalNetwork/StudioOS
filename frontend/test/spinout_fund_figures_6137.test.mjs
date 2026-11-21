@@ -86,22 +86,31 @@ test('a committed LP\'s read draws its own figures', () => {
   assert.equal(usdM(0), '$0M');
 });
 
-test('the program figures fall back with their caption, as before', () => {
-  assert.equal(programFigures({ program: { available: true, graduates: 4, on_time_pct: null, alumni_raised: null } }).onTime, '—');
-  assert.equal(programFigures(null).live, false);
+test('#5513: the program figures come from the read only; there is no fixed track record', () => {
+  const some = programFigures({ program: { available: true, graduates: 4, on_time_pct: null, alumni_raised: null } });
+  assert.deepEqual([some.live, some.graduates, some.onTime, some.alumni], [true, '4', NOT_RECORDED, NOT_RECORDED]);
+  const none = programFigures({ program: { available: false } });
+  assert.deepEqual([none.live, none.graduates, none.onTime, none.alumni], [false, NOT_RECORDED, NOT_RECORDED, NOT_RECORDED]);
+  const failed = programFigures(null);
+  assert.deepEqual([failed.live, failed.graduates, failed.onTime, failed.alumni], [false, UNREADABLE, UNREADABLE, UNREADABLE]);
+  // The owner took 37 graduates, 86% on time and $8.6M raised down (2026-11-17): no source records them.
+  assert.ok(![none, failed].some((p) => /\b37\b|86%|8\.6M/.test(`${p.graduates} ${p.onTime} ${p.alumni}`)));
 });
 
 test('the workspace draws every fund figure from the read, none from the design model', () => {
+  const sections = ['FundOverviewSection', 'FundReportsSection', 'FundOnboardingSection']
+    .map((name) => readFileSync(new URL(`../src/pages/investor/fund/${name}.jsx`, import.meta.url), 'utf8')).join('\n');
+  const completeWorkspace = workspace + sections;
   assert.match(workspace, /const F = fundFigures\(live\);/);
-  assert.doesNotMatch(workspace, /\bfundModel\b|allocationCandidates|FUND\.(committed|softCircled|lpCount|target|hardCap|medianTicketK|status|firstClose|minCloseM|reservePolicy)/,
+  assert.doesNotMatch(completeWorkspace, /\bfundModel\b|allocationCandidates|FUND\.(committed|softCircled|lpCount|target|hardCap|medianTicketK|status|firstClose|minCloseM|reservePolicy)/,
     'no raise, portfolio, target or close figure from lib/spinoutFundModel.js');
-  assert.doesNotMatch(workspace, /see lib\/spinoutFundModel\.js<|Operator-maintained portfolio model/, 'the model is not cited to readers');
+  assert.doesNotMatch(completeWorkspace, /see lib\/spinoutFundModel\.js<|Operator-maintained portfolio model/, 'the model is not cited to readers');
   // The underwriting block and the raise figures are drawn only from an LP's read.
-  assert.match(workspace, /\{F\.portfolio \? \(\s*<div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="underwriting-kpis">/);
-  assert.match(workspace, /\{F\.raise \? \(/);
+  assert.match(completeWorkspace, /\{F\.portfolio \? \(\s*<div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="underwriting-kpis">/);
+  assert.match(completeWorkspace, /\{F\.raise \? \(/);
   // The Cohort 4 list is not a record, and #6138 removed the allocation
   // section altogether: no sliders and no company from the list on the page.
-  assert.doesNotMatch(workspace, /Allocation preference for|Cohort 4 allocation window|COHORT_4/);
+  assert.doesNotMatch(completeWorkspace, /Allocation preference for|Cohort 4 allocation window|COHORT_4/);
   // The brief prints the page's read.
   assert.match(workspace, /exportFundBriefPdf\(\{[\s\S]{0,400}metrics: live,/);
 });

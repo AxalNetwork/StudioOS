@@ -395,7 +395,7 @@ test('mounted: New work product takes a summary and a file for v1, and a refused
     return base([PLAIN])(c);
   });
   try {
-    await m.pressId('new-work-product');
+    await m.pressId('action-delivery-new-work-product');
     assert.match(m.text(), /Summary · optional/);
     assert.match(m.text(), /Or a file/);
     const title = m.walk(document.body).find((n) => n.tagName === 'INPUT' && m.props(n)?.placeholder === 'Q2 advisory review');

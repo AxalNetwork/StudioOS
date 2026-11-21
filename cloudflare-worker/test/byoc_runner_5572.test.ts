@@ -1,4 +1,5 @@
 /** D5572 (#5572): fail-closed contract tests for the disabled outbound-only runner protocol; synthetic identities, keys generated at runtime, injected clock, no cluster or network. */
+import { containmentFixture } from './_containment_fixture_5567.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -272,7 +273,8 @@ test('a runner missing any enforcement feature is refused untrusted work; D5567 
     authorize: async () => ({ allowed: true, revision: 1, approved: false }),
     image: async digest => ({ digest, signature_verified: true, provenance_verified: true, sbom_verified: true, scan_passed: true, revoked: false }),
     provider: async () => evidence, object: async () => null, encryptionKey: async () => null, audit: async () => {} }));
-  value(await (await security(real.byocProviderEvidence(base(FULL), at, POLICY.conformance_max_age_ms))).eligibility(spec));
+  denied(await (await security(real.byocProviderEvidence(base(FULL), at, POLICY.conformance_max_age_ms))).eligibility(spec), 'containment_unsupported');
+  value(await (await security(real.byocProviderEvidence(base(FULL), at, POLICY.conformance_max_age_ms, { ...containmentFixture(at), provider: 'byoc' }))).eligibility(spec));
   denied(await (await security(real.byocProviderEvidence(base({ ...FULL, features: FULL.features.filter(x => x !== 'deny_container_runtime_socket') }), at, POLICY.conformance_max_age_ms))).eligibility(spec), 'provider_security_denied');
   denied(await (await security(real.byocProviderEvidence(base({ ...FULL, runtime_class: 'runc' }), at, POLICY.conformance_max_age_ms))).eligibility(spec), 'hostile_workload_denied');
 });

@@ -1,7 +1,7 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
 import { dealMoney } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -15,7 +15,7 @@ import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../compo
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
-import { tabHref, tabOf } from './dealPageModel';
+import { forwardOf, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
 import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';
@@ -27,9 +27,9 @@ import {
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { usePhoneWidth } from '../ui';
 import DealOverview from './deal/DealOverview';
-import DealNotes, { DealActivity } from './deal/DealNotes';
+import { DealActivity, InvestorActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
-import { commitAction, commitRefusal, myCommitment } from './deal/dealWorkModel';
+import { ROUTES, ROUTE_NONE, ROUTE_NOTE, commitAction, commitRefusal, myCommitment, routePreferenceWord } from './deal/dealWorkModel';
 import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
 import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
 import { DealMarket, DealTeam, DealTraction } from './deal/DealInsightTabs';
@@ -67,6 +67,8 @@ export default function DealRoomPage() {
   // D1155 (DL15–DL17): the founder's, an Admin's and an Operating Partner's views.
   const isPartner = role === 'partner';
   const tab = tabOf(tabParam, role);
+  // D6164 part 3: an address whose content moved opens where it now sits (`/notes` → Activity, Firm notes on).
+  const forward = forwardOf(tabParam, role, dealId);
   const evidenceNote = isInvestor ? location.state?.evidenceNote : null;
   // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
   const blocked = blockedRole(role);
@@ -141,6 +143,7 @@ export default function DealRoomPage() {
   const tabRow = (id) => <DealTabs dealId={id} role={role} tab={tab} />;
 
   if (blocked) return <NoPermission kind={blocked} />;
+  if (forward) return <Navigate to={forward} replace state={location.state} />;
   // D4633: nothing, an action least of all, is drawn for a deal the address no longer names.
   if (loading || (deal && String(deal.id) !== String(dealId))) return <DealLoading tabs={tabRow(dealId)} />;
   if (error || !deal) {
@@ -154,13 +157,13 @@ export default function DealRoomPage() {
   if (deal.plan_limited) return <DealFreePlan deal={deal} onRetry={loadDeal} />;
   const track = isInvestor ? trackOf(stage) : null;
   // D6191: Commit only when it can succeed; Change amount on a Pending one; nothing on a Confirmed one.
-  const headerCommit = isInvestor && deal ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
+  const headerCommit = isInvestor ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
 
   const head = headerOf(deal);
   const next = track && (track.state === 'ready' || track.state === 'none') ? track.next : null;
 
   return (
-    <div className="flex flex-col gap-4 pb-20 md:pb-0">
+    <div className="flex flex-col gap-4 pb-24 lg:pb-0">
       {/* DE04: Back to Deals, then the header with one h1. */}
       <button type="button" onClick={() => navigate(back.path)} className="inline-flex min-h-[44px] w-fit items-center gap-1 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink md:min-h-0 dark:text-gray-400 dark:hover:text-gray-200" data-testid="deal-crumb">
         <ArrowLeft size={14} /> {back.label}
@@ -208,15 +211,16 @@ export default function DealRoomPage() {
 
       {tabRow(deal.id)}
 
-      {tab === 'overview' && isInvestor && <YourPosition position={viewerCommitment(mine, { userId: user?.id, dealId: deal.id, firmId }, deal.currency || 'USD')} dealId={deal.id} onRetry={loadMine} />}
       {tab === 'overview' && (
         <>
-          <DealOverview deal={deal} investor={isInvestor} />
+          {/* D4815 part 41 (#5904): Your position sits in the Overview's grid, beside the investment case (DE04). */}
+          <DealOverview deal={deal} investor={isInvestor}
+            position={isInvestor ? <YourPosition position={viewerCommitment(mine, { userId: user?.id, dealId: deal.id, firmId }, deal.currency || 'USD')} dealId={deal.id} onRetry={loadMine} /> : null} />
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
-      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
+      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. D6168: `?scope=` opens a scope's drawer. */}
+      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} addressed />}
       {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
       {tab === 'evidence' && <EvidenceSummary key={deal.id} dealId={deal.id} company={deal.project_name || null} role={role} ndaHref={isInvestor ? tabHref(deal.id, 'documents') : null} />}
       {tab === 'team' && <DealTeam deal={deal} />}
@@ -231,9 +235,9 @@ export default function DealRoomPage() {
       {tab === 'commitment' && !isInvestor && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
       {tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId={deal.id} currency={deal.currency} viewer={viewerOf(role, user, deal)} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
-      {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
-      {tab === 'notes' && <DealNotes key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
-      {tab === 'activity' && <DealActivity dealId={deal.id} />}
+      {/* D6164 part 3 (DE27): an investor's Activity, with their firm's notes as its Firm notes filter. */}
+      {tab === 'activity' && isInvestor && <InvestorActivity key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
+      {tab === 'activity' && !isInvestor && <DealActivity dealId={deal.id} />}
       {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
@@ -325,6 +329,8 @@ export function CommitModal({ deal, onClose, onDone, user = null, current = null
   const changing = !!current;
   const [amount, setAmount] = useState(changing && current.amount != null ? String(current.amount) : (deal.minimum_check || ''));
   const [notes, setNotes] = useState(changing && current.notes != null ? String(current.notes) : '');
+  // D6195: how the investor would like to invest, a preference only. '' is none recorded (never Direct).
+  const [pref, setPref] = useState(changing && routePreferenceWord(current.route_preference) ? current.route_preference : '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   // D752 (#1891): an optional last step for an investor on HQ, once the commitment is recorded.
@@ -335,7 +341,7 @@ export function CommitModal({ deal, onClose, onDone, user = null, current = null
     if (deal.minimum_check && amt < deal.minimum_check) { setErr(`Minimum check is ${fmtMoney(deal.minimum_check, deal.currency)}.`); return; }
     setSaving(true); setErr('');
     try {
-      await api.createCommitment(deal.id, { amount: amt, notes: notes || null });
+      await api.createCommitment(deal.id, { amount: amt, notes: notes || null, route_preference: pref || null });
       if (showsProof(user)) setRecorded(true);
       else onDone();
     } catch (e) { setErr(commitRefusal(e, deal)); reportError('CommitModal', e); }
@@ -378,6 +384,18 @@ export function CommitModal({ deal, onClose, onDone, user = null, current = null
               <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className={input} placeholder="50000" data-testid="commit-amount" />
               {deal.minimum_check ? <div className="text-xs text-gray-400 mt-1">Minimum check: {fmtMoney(deal.minimum_check, deal.currency)}</div> : null}
             </div>
+            <fieldset data-testid="commit-route-preference">
+              <legend className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">How you would like to invest (optional)</legend>
+              <div className="flex flex-col gap-1.5">
+                {[...ROUTES.map((r) => ({ key: r.key, title: r.title })), { key: '', title: ROUTE_NONE }].map((r) => (
+                  <label key={r.key || 'none'} className="flex min-h-[24px] cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+                    <input type="radio" name="commit-route-preference" value={r.key} checked={pref === r.key} onChange={() => setPref(r.key)} data-testid={`commit-route-${r.key || 'none'}`} />
+                    {r.title}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{ROUTE_NOTE}</p>
+            </fieldset>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Notes (optional)</label>
               <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} className={input} data-testid="commit-notes" />

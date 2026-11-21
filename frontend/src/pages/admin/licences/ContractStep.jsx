@@ -10,6 +10,8 @@
  * Try again. The draft's controls below (instantiate, complete the entity,
  * send for signature) are unchanged.
  */
+import { useConsequenceSheet } from '../LicenceConsequenceSheet';
+import LicenceOutcomeCard, { useLicenceWrite } from '../LicenceOutcomeCard';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -179,8 +181,12 @@ export function ContractStep({ licence, onSaved }) {
   const [slug, setSlug] = useState('');
   const { data, setData, load } = useLicenceContract(licence.uid, (d) => setSlug((s) => s || d.templates?.[0]?.slug || ''));
   const [busy, setBusy] = useState(false);
-  const [sendBusy, setSendBusy] = useState(false);
   const [err, setErr] = useState(null);
+
+  // D4819 part 21 (#5928): Send for signature asks in the one consequence sheet (L17) and reports in the L18 card.
+  const [sheet, ask] = useConsequenceSheet();
+  const write = useLicenceWrite({ onSettled: () => { load(); onSaved?.(); }, tag: 'licence_contract' });
+  const sendBusy = write.busy;
 
   async function instantiate() {
     setBusy(true); setErr(null);
@@ -204,19 +210,15 @@ export function ContractStep({ licence, onSaved }) {
 
   async function sendForSignature() {
     if (!current?.uid) return;
-    setSendBusy(true); setErr(null);
-    try {
-      await api.licenceContractSend(licence.uid, current.uid);
-      load();
-      onSaved?.();
-    } catch (e) {
-      reportError('licence_contract_send_failed', e);
-      setErr(e?.message || 'Could not send for signature.');
-    } finally { setSendBusy(false); }
+    setErr(null);
+    const out = await ask('sendAgreement', licence, { target: { label: current.template_title ? `${current.template_title} (template v${current.template_version})` : null } });
+    if (out) await write.run('sendAgreement', () => api.licenceContractSend(licence.uid, current.uid));
   }
 
   return (
     <div data-testid="licence-contract-step" className="space-y-4">
+      {sheet}
+      <LicenceOutcomeCard outcome={write.outcome} busy={write.busy} onReread={load} onDismiss={write.clear} testId="licence-contract-outcome" />
       {/* D5051 (L33): the first of the Agreement section's three blocks. */}
       <span className="block text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">1 · Territory licence agreement</span>
       {!data.contracts_available ? unreadable(data.contracts_reason || 'The licence’s agreements could not be read.') : (

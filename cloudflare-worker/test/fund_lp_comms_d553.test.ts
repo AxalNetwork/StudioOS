@@ -50,6 +50,8 @@ function builtFromMigrations(): DatabaseSync {
     }
   }
   db.exec(SQL_387);
+  // D6238 (#6238): the reminder reads the call's purpose as last corrected.
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611152336_6238_capital_call_amendments.sql'), 'utf8'));
   return db;
 }
 

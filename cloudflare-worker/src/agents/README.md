@@ -17,6 +17,7 @@ to switch runtimes.
 | `sdkRuntime.ts` | The `sdk` runtime: `ScopeAgent extends Agent` (the only import of the `agents` package), reached over RPC through `AGENT_SCOPE_SDK`. An evaluation; `AGENT_RUNTIME` stays `do`. |
 | `doRuntime.ts` | The `do` runtime: `ScopeCore` (admission one at a time, duty timers on alarms, rebuild, erase) over a storage interface, the `AgentScope` Durable Object that wraps it with a hibernatable status socket, and the runtime over the binding. |
 | `engine.ts` | The D1 side: a scope's settings, `admitInScope` (every admission check, then the run row), a run's timeline, a task's status and board column, pauses and who is told. |
+| `capacity.ts` | D7074 (#7074): how much a scope's agents may do at once. Sub-agent lanes (one live run per agent and lane, a lane admitted only when the agent's cap covers it), `fixed` or `elastic` scope capacity, the review backlog and daily limit as settings, and HQ's ceilings (unset = not offered). Pure rules plus one read of the policy row. |
 | `loop.ts` | The loop's steps as plain functions (`load`, `context`, `run`, `propose`, `after`), `runTaskLoop` over a step interface, and `deliverDecision`. |
 | `taskWorkflow.ts` | `AgentTaskWorkflow`: the Workflow class, a binding around `loop.ts` and nothing else. |
 | `agentQueue.ts` | The agent queue's producer and consumers, and `dispatchQueue`, the `queue()` handler's routing (the agent branch before the `dlq` test). |

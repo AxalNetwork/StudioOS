@@ -39,6 +39,7 @@ const ROLE: Record<number, string> = { 1: 'admin', 2: 'investor', 3: 'investor',
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'reference_checks', 'user_company_links', 'company_profiles']) db.exec(ddl(t));
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
   db.exec(readFileSync(new URL('../sql/migrations/202611152241_6735_reference_check_firm.sql', import.meta.url), 'utf8'));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, `User ${id}`, `u${id}@example.test`);
@@ -81,7 +82,6 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
   try { json = JSON.parse(text); } catch { /* not JSON */ }
   return { status: res.status, body: json, text };
 }
-const count = (db: DatabaseSync) => (db.prepare('SELECT COUNT(*) AS n FROM reference_checks').get() as any).n;
 
 
 test('internal deal fields are staff-only and zip is retired', async () => {
@@ -138,7 +138,7 @@ test('syndicate roster: creator/member/admin only; no member emails',async()=>{
       const r=await call(db,who,'GET','@/api/networkfx/syndicates/1');
       const allowed=[ADMIN,INV_INVITED,INV_COMMITTED].includes(who);
       assert.equal(r.status,allowed?200:403,r.text);
-      if(allowed) {assert.equal(r.body.members.length,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
+      if(allowed) {assert.equal(r.body.members.length,who===INV_INVITED?1:0);assert.equal(r.body.member_count,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
     }
   } finally {db.close();}
 });

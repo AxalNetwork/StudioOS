@@ -215,6 +215,9 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
 When main is green again, let PRs revalidate as they merge through the queue.
 Do not press "Update branch" on every PR at once.
 
+Fetch and merge your own branch before you push to it: the landing bot may have
+added a merge commit from main (#6474).
+
 While `[alert] the Actions queue is backed up` is open, the same backpressure
 applies to everything that is not a fix for a PR's own failure:
 
@@ -226,7 +229,17 @@ applies to everything that is not a fix for a PR's own failure:
 The alert clears only once the queue is well below its thresholds, so wait for
 it to close.
 
-- While `[alert] merge queue stalled` is open, do not add new entries to the merge queue (D5604).
+- While `[alert] merge queue stalled` is open, add no new entries to the merge
+  queue and do not re-queue a PR the queue ejected (D5604, D7125). It opens
+  when one setup step fails twice, or when one test or guard fails in
+  candidates of two different queue chains; it then names the PR the failure
+  starts at (remove it, do not re-queue it) or says it fails on the base. The
+  one exception is the single repair linked on the alert, which the owner
+  moves to the front of the queue.
+- An open `[alert] future-clock tests failing` is a main repair due before its break date
+  (D7124): main still passes, but those tests fail on main once that date comes.
+  Session 1 files the slot task from the run summary, which names each failing test,
+  its file and part, and the reproduce command; the issue itself carries no test names (D5663).
 
 ### CHANGELOG.md is Session 1's
 
@@ -255,8 +268,11 @@ twice within a few lines (D1279). So:
   decision or issue it belongs to. The list is generated from it and never
   committed; `node scripts/check-folder-docs.mjs --write` shows it locally, and
   `--clean` empties it before you stage the README (#4104).
-- Elsewhere, add one row per new file or folder, at the end of its table. Never
-  rewrite another feature's row or paragraph in a task PR.
+- Elsewhere, add one row per new file or folder, at the end of its table,
+  unless the README carries `<!-- index: generated -->` or `<!-- index: none -->`
+  (`documentation/architecture/decisions/README.md` does): such a README takes
+  no row, and the check fails one (#6465). Never rewrite another feature's row
+  or paragraph in a task PR.
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
 

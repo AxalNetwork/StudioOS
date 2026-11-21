@@ -118,6 +118,8 @@ export interface CommitLine {
   on: string | null;
   via: string | null;
   why_not_counted: string | null;
+  /** D7513: a typed line recorded from a call's response keeps that call (`raise_prospects.round_call_uid`); null when it was not. */
+  call?: { uid: string; name: string } | null;
 }
 
 export interface CommitInvestor {
@@ -195,6 +197,20 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
     return pid != null ? { key: `prospect:${pid}`, prospectId: pid } : { key: `investor:${userId}`, prospectId: null };
   };
 
+  // D7513 (RAC22C): the call a typed line was recorded from (D6863's Record a commitment). Read apart from the
+  // prospects, so a failed read leaves every line without a call and says so (`call_links`), never "from no call".
+  let callLinks: Map<number, { uid: string; name: string }> | null = null;
+  try {
+    const links = await env.DB.prepare(
+      `SELECT p.id AS prospect_id, rc.uid, rc.name FROM raise_prospects p
+         JOIN round_calls rc ON rc.uid = p.round_call_uid AND rc.project_id = p.project_id
+        WHERE p.project_id = ? AND p.round_call_uid IS NOT NULL ORDER BY p.id LIMIT ?`,
+    ).bind(projectId, ROW_CAP).all<{ prospect_id: number; uid: string; name: string }>();
+    callLinks = new Map((links.results || []).map((l) => [Number(l.prospect_id), { uid: String(l.uid), name: String(l.name) }]));
+  } catch (e) {
+    console.warn('[capRelReads] call links unreadable:', (e as Error)?.name || 'error');
+  }
+
   // Typed: every prospect at Committed, with its own status.
   for (const p of people) {
     if (p.stage !== 'committed') continue;
@@ -203,6 +219,7 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
       key: `typed:${p.id}`, source: 'typed', status,
       cents: p.amount_cents != null ? Number(p.amount_cents) : dollarsToCents(p.amount, currencyOf(p.currency, 'USD')),
       currency: currencyOf(p.currency, 'USD'), on: p.updated_at ? String(p.updated_at).slice(0, 10) : null, via: null,
+      ...(callLinks ? { call: callLinks.get(Number(p.id)) ?? null } : {}),
     }));
   }
 
@@ -309,6 +326,7 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
     },
     investors: out,
     sources,
+    call_links: callLinks ? 'ok' : 'unreadable',
     words: { status: STATUS_WORDS, source: SOURCE_WORDS },
     basis: 'Received, Signed, Wired, Confirmed and Pending count. Indicated, Soft and Status not recorded are listed and not counted. Each investor counts once, by their strongest line.',
   };

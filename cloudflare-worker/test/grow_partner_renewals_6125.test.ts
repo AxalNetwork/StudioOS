@@ -157,7 +157,7 @@ test('D6125: Needs your attention lists a signed partner renewing within 30 days
   r = await growAttention(x(), true);
   const many = r.items.find((i) => i.key === 'partner_renewal')!;
   assert.equal(many.why, '2 signed partners renew within 30 days; Northwind Resale first, in 12 days.');
-  assert.equal(many.href, `/grow/partner-network?project_id=${A}`);
+  assert.equal(many.href, `/grow/partnerships?project_id=${A}`); // D6118: one Partnerships page; a record keeps its address
   assert.equal((await growAttention(x(), false)).items.length, 0, 'read-only viewers get no action');
   db.exec('DROP TABLE partner_revenue; DROP TABLE growth_partner_deals; DROP TABLE growth_partners');
   r = await growAttention(x(), true);

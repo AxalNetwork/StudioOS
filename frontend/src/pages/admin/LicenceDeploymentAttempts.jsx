@@ -4,6 +4,7 @@
  * attempt, and a status check that reads what GitHub did instead of offering
  * a second dispatch. It re-checks by itself while an attempt is open.
  */
+import { useConsequenceSheet } from './LicenceConsequenceSheet';
 import React, { useCallback, useEffect, useState } from 'react';
 import { adminDeploymentAttemptsApi } from '../../lib/api/adminDeploymentAttempts';
 import { outcomeFromError, outcomeOfError } from '../../lib/mutationOutcome';
@@ -120,6 +121,10 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
   const [doJur, setDoJur] = useState('none');
 
   useEffect(() => { if (outerNotice) setNotice(outerNotice); }, [outerNotice]);
+  // D4819 part 21 (#5928): Retry and Reconcile, when the operator presses them, ask in the one consequence sheet
+  // (L17) first. Their outcomes stay D4706's notice, which already says pending, done, refused or unknown, and
+  // follows the provisioning run as it settles. The quiet re-check while an attempt is open asks nothing.
+  const [sheet, ask] = useConsequenceSheet();
 
   const load = useCallback(() => adminDeploymentAttemptsApi.deployment(licence.uid)
     .then((r) => { setView(r?.deployment || null); setReadErr(null); })
@@ -154,6 +159,7 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
   }, [actions.poll, check]);
 
   async function retry() {
+    if (!await ask('retryDeploy', licence, { target: { attempt_no: view?.current_attempt } })) return;
     setBusy(true); setNotice({ outcome: 'pending', message: `Asking for attempt ${view.current_attempt + 1}…` });
     try {
       const r = await adminDeploymentAttemptsApi.retry(licence.uid, view.current_attempt, {
@@ -192,7 +198,8 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
           The branch answers, but HQ is not linked to it yet: HQ reaches it once the linking pull request merges and HQ redeploys.
         </p>
       )}
-      <ProvisioningLine view={view} busy={busy} onReconcile={() => check()} />
+      {sheet}
+      <ProvisioningLine view={view} busy={busy} onReconcile={async () => { if (await ask('reconcileDeploy', licence)) check(); }} />
       {canReconcile(view) && !actions.canCheck && (
         <p data-testid="deploy-reconcile-note" className="text-xs text-gray-500 dark:text-gray-400">
           Reconcile reads this deployment&apos;s record again and sends nothing.{actions.canRetry ? ' Retry below starts a new attempt.' : ''}

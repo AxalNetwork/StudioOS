@@ -38,7 +38,7 @@ export type FilingResult =
   | { ok: false; status: 400 | 404 | 409; error: string };
 
 // D1415 Part 3 (#3855): what the filing copies onto the company.
-const ORDER_FACTS = 'SELECT id, project_id, company_name, jurisdiction_id, registered_agent_name, registered_agent_address FROM incorporations WHERE id = ?';
+const ORDER_FACTS = 'SELECT id, project_id, subject_company_id, company_name, jurisdiction_id, registered_agent_name, registered_agent_address FROM incorporations WHERE id = ?';
 
 type OrderRow = { id: number; project_id: number; status: string; paid_at: string | null };
 

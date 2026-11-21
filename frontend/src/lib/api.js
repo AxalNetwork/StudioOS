@@ -6,6 +6,7 @@ import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
 import { rememberLabVenture } from './labVenture.js';
 import { readAllPages } from './pagedRead.js';
+import { sessionEndedRedirectFor } from './pendingNext.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -148,6 +149,8 @@ export function isPublicPath(pathname) {
     // Printable Program Brief — public brochure page; /spinout-lab/apply
     // is intentionally NOT listed (auth-only, a 401 there should bounce).
     || currentPath === '/spinout-lab/brief'
+    // D7121 (#7121): the public Wellness presentation; /wellbeing itself stays auth-only.
+    || currentPath === '/programs/wellness'
     // Audience product pages (For Founders / Investors & LPs / Service
     // Partners / Advisors) — public marketing surfaces. A background
     // settings/me 401 for an anonymous visitor must not bounce them to
@@ -219,6 +222,10 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/share/captable/')
     // D6864 (#6864): an evidence pack a founder shared outside Axal; no sign-in by design.
     || currentPath.startsWith('/share/evidence/')
+    // D6897 (#6897): a readiness snapshot a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/readiness/')
+    // D6897 part 4 (#6897): a Raise status page a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/status/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads
     // window.location. /account/email/* is the live pair; /settings/email/*
@@ -226,6 +233,9 @@ export function isPublicPath(pathname) {
     // 401 bounce to /login is exactly what breaks an email-change flow.
     || currentPath.startsWith('/account/email/')
     || currentPath.startsWith('/settings/email/')
+    // D6966 (#6966): the public Programs index and each program's presentation address.
+    || currentPath === '/programs'
+    || currentPath.startsWith('/programs/')
     // Task #5 — Public event surface (no auth)
     || currentPath === '/events'
     || currentPath.startsWith('/events/')
@@ -664,7 +674,9 @@ export async function request(path, options = {}) {
           // even though we're about to leave the page; this is what makes a
           // silent "session expired → /login" redirect debuggable in prod.
           reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
-          window.location.href = '/login';
+          // D7178 (#7044, RCL04B): an area that keeps its destination (Companies, Grow, Learning) goes to
+          // `/login?next=<this page>&ended=1`, through the route guard's own sanitiser; every other page to `/login`.
+          window.location.href = sessionEndedRedirectFor(window.location);
         }
         throw new Error('Session expired');
       }
@@ -1162,6 +1174,7 @@ export const api = {
     set('limit', params.limit);
     set('tz', params.tz);
     set('budget_max', params.budget_max);
+    set('personalise', params.personalise ? 1 : null);
     (params.want_categories || []).forEach((v) => q.append('want_category', v));
     (params.want_languages || []).forEach((v) => q.append('want_language', v));
     (params.want_sectors || []).forEach((v) => q.append('want_sector', v));
@@ -5464,6 +5477,8 @@ export const api = {
     // grant answers (`project_name` null where the call or deal behind it did
     // not name the venture); `requests: null` with `requests_unreadable` when
     // they could not be read, never an empty list.
+    // D6266: each room also carries `deals`: the permitted deals on its company
+    // (`{ id, stage, name }`), and `deal_stage_note` only when there are none.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one
@@ -5918,11 +5933,11 @@ export const spinoutLab = {
   cohort: () => request('/spinout-lab/cohort'),
   // Public — real hero stats (companies built, total raised by graduates).
   stats: () => request('/spinout-lab/stats'),
-  // Public — the six live values the Programme Brief prints, and only those
-  // (D141). The brief's tracks, tools, gates and jurisdictions are the
-  // programme's own description and come from `lib/spinoutBrief.js` and
-  // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
-  // invented so a page could look dynamic.
+  // Public — the cohort's live values (D141): the Spin-Out Lab presentation's
+  // availability panel reads them (D6966). Everything else the presentation
+  // says is the programme's own description, in
+  // `pages/programs/content/spinout-lab.js`; a route serving that too would be a
+  // store invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
   // D383 — the caller's own application lifecycle. No id in any path: each
   // acts on the signed-in account's draft or latest application only.

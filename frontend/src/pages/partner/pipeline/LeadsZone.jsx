@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { readAllLeadPages } from '../../../lib/pagedRead';
-import PartialRead from './PartialRead';
+import PartialRead, { PipelineReadStatus } from './PartialRead';
 import RankByFit from '../../../ui/RankByFit';
 import Lightbox from '../../../ui/Lightbox';
 import { applyRank } from '../../../lib/rankByFit';
@@ -20,6 +20,9 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import OpportunitySheet from './OpportunitySheet';
+import LeadProposalDraft from './LeadProposalDraft';
+import PipelineSetupStatus from './PipelineSetupStatus';
 
 /**
  * Pipeline · Leads — `/pipeline/leads`.
@@ -151,7 +154,7 @@ export function PassDialog({ row, busy, note, onPass, onClose }) {
  * an excluded lead is not tinted red either. It is not a bad lead; it is not a
  * lead, and the row says which rule said so in the firm's own words.
  */
-function LeadCard({ row, onPass }) {
+function LeadCard({ row, onPass, onDraft }) {
   const [why, setWhy] = useState(false);
   const fit = fitLine(row);
   const reasons = leadReasons(row);
@@ -252,10 +255,12 @@ function LeadCard({ row, onPass }) {
         </span>
         {row.need && <span className="text-[12px] text-axal-faint">{row.need}</span>}
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-          {/* #2338 — "Accept · bid on it" linked to `/needs/<uid>`, a route
-              that never existed, and the owner removed bidding from Leads. The
-              canvas's Draft proposal waits on the owner (D4838), so Pass is the
-              one action. */}
+          {/* #2338 removed bidding from Leads. D4838 part 10 (#5936, owner answer A): the canvas's
+              Draft proposal opens the opportunity sheet with this lead's saved draft. A draft is
+              not a bid and is never sent from here; the lead stays a lead. */}
+          <button type="button" className={`${buttonClass} ${CARD_ACTION}`} onClick={() => onDraft(row)} data-testid="lead-draft-proposal">
+            Draft proposal
+          </button>
           <button type="button" className={`${ghostButtonClass} ${CARD_ACTION}`} onClick={() => onPass(row)}>
             Pass
           </button>
@@ -271,6 +276,7 @@ export default function PartnerLeadsZone() {
   );
   const [view, setView] = useState('all');
   const [passing, setPassing] = useState(null);
+  const [drafting, setDrafting] = useState(null);
   // #3938 (IN10): Rank by fit orders the open leads against the firm's own audience fit, as a view.
   const [rank, setRank] = useState(null);
 
@@ -321,10 +327,11 @@ export default function PartnerLeadsZone() {
         actions={rowActions}
       />
       <ZoneBody
+        what="Leads"
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={load}
-        notice={unlinked ? <NoPartnerProfile /> : null}
+        notice={<>{unlinked ? <NoPartnerProfile /> : !state.loading && !state.error ? <PipelineSetupStatus leads={state.data} /> : null}<PipelineReadStatus state={state} onRetry={load} /></>}
         isEmpty={unlinked || (items.length === 0 && passed.length === 0)}
         empty={(
           <NothingYet
@@ -367,7 +374,7 @@ export default function PartnerLeadsZone() {
 
           <div className="space-y-3">
             {visible.map((row) => (
-              <LeadCard key={row.need_id} row={row} onPass={setPassing} />
+              <LeadCard key={row.need_id} row={row} onPass={setPassing} onDraft={setDrafting} />
             ))}
             {items.length > 0 && visible.length === 0 && (
               <p className="text-[12px] text-axal-muted" data-testid="lead-view-empty">
@@ -388,8 +395,19 @@ export default function PartnerLeadsZone() {
             />
           )}
 
+          {drafting && (
+            <OpportunitySheet
+              opportunity={{ needId: drafting?.need_id }} title={drafting?.who || drafting?.title}
+              onClose={() => setDrafting(null)}
+              editors={{ Overview: <LeadProposalDraft needId={drafting?.need_id} leadName={drafting?.who || drafting?.title} /> }}
+            />
+          )}
+
+          {/* D4838 part 10: this band keeps to its own unscoped drafts; a lead's own Eadwyn draft
+              lives in that lead's sheet (scope = its need id). */}
           <ZoneDraft
             surface="pipeline/leads"
+            scoped
             railOption="draft:proposal"
             label="Proposal · drafted on accept"
             accept="Open the draft"

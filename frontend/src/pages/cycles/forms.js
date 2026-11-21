@@ -24,7 +24,7 @@ import { newVersionLine } from '../raise/narrative/narrativeModel.js';
 import { CHANNEL_KINDS, channelOptions } from './distribution/channelsModel.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
-import { currencyCode, plainAmount } from '../../lib/money.js';
+import { currencyCode, plainAmount, parseMinor, toMajorString } from '../../lib/money.js';
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -367,6 +367,12 @@ const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Comp
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
 const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
+// D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
+const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
+/** D6790: the owner listbox's choices — No one yet, then the company team. */
+export function obligationOwnerOptions(read) {
+  return { owner_user_id: { opts: [{ value: NONE, label: 'No one yet' }, ...growChips(read?.owners)] } };
+}
 const obligation = {
   key: 'obligation', cta: 'Add obligation', button: 'Add obligation',
   title: 'Add obligation',
@@ -377,11 +383,12 @@ const obligation = {
     { kind: 'CH', name: 'kind', k: 'Kind', opts: OBLIGATION_KIND, def: 0, required: true },
     // The route refuses an obligation without a date (#1696).
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date', ph: '12 Dec', required: true },
-    { kind: 'T', name: 'owner_name', k: 'Owner', ph: 'Name', max: 120 },
+    ownerField,
     { kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 2 },
     remindField,
   ],
-  toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v) }),
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'durable-company-building').then(obligationOwnerOptions),
+  toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_user_id: str(v.owner_user_id), repeats: v.repeats || null, remind_days: remindDays(v) }),
   submit: (w, projectId, v) => w.grow.obligation(projectId, obligation.toBody(v)),
 };
 
@@ -1118,7 +1125,9 @@ const editMarket = {
 
 const OBLIGATION_STATE = opts([['upcoming', 'Upcoming'], ['scheduled', 'Scheduled'], ['draft', 'Draft'], ['done', 'Done'], ['not_set_up', 'Not set up']]);
 // #4046: the title is carried too, now that the Edit draws it (and Ask fills it when blank).
-const OBLIGATION_CARRIED = ['title', 'status', 'owner_name', 'due_at'];
+const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
+/** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
+const KEEP_TYPED_OWNER = '__typed';
 // #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
 const REMIND_PRESETS = [30, 14, 7, 1, 0];
 const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
@@ -1132,7 +1141,9 @@ const editObligation = {
     obligation.fields[0],
     withChips(obligation.fields[1], [['tax', 'Tax'], ['other', 'Other']]),
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date' },
-    obligation.fields[3],
+    // D6790: the row's own owner stays a choice when the team list does not carry it (a typed name, or someone who left).
+    { ...bare(ownerField), keep: (c) => (c.owner_user_id === KEEP_TYPED_OWNER ? { value: KEEP_TYPED_OWNER, label: `${asText(c.owner_name)} (typed, not on the team)` }
+      : asText(c.owner_user_id) ? { value: c.owner_user_id, label: asText(c.owner) || 'The picked owner' } : null) },
     bare(obligation.fields[4]),
     { ...remindField, opts: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n), checked: false })) },
     // Overdue and Snoozed are states the record reads, so its Edit can open on them.
@@ -1143,12 +1154,23 @@ const editObligation = {
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const has = (k) => Object.hasOwn(e, k);
-    return { title: asText(e.title), status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at),
+    // D6790: the record's Owner fact names who is shown (the picked member, else the typed name), when the row does not.
+    const shown = asText(e.owner) || asText((row?.record?.facts ?? []).find((f) => f?.label === 'Owner')?.value);
+    const picked = e.owner_user_id != null && e.owner_user_id !== '';
+    const typed = asText(e.owner_name) || (picked ? '' : shown);
+    const ownerId = picked ? asText(e.owner_user_id) : typed ? KEEP_TYPED_OWNER : '';
+    // `owner` and `owner_name` label the kept chip (`keep`); they are not fields, so they are never sent.
+    return { title: asText(e.title), status: asText(e.status), owner_user_id: ownerId, owner: shown, owner_name: typed, due_at: dateText(e.due_at),
       ...(has('kind') ? { kind: asText(e.kind) } : {}), ...(has('repeats') ? { repeats: asText(e.repeats) } : {}),
       ...(has('remind_days') ? { remind: (Array.isArray(e.remind_days) ? e.remind_days : []).map(String) } : {}) };
   },
-  toBody: (v, was) => sentChanged(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
-    was, OBLIGATION_CARRIED, { remind_days: 'remind' }),
+  toBody: (v, was) => {
+    const body = sentChanged(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_user_id: str(v.owner_user_id), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
+      was, OBLIGATION_CARRIED, { remind_days: 'remind' });
+    if (v.owner_user_id === KEEP_TYPED_OWNER) delete body.owner_user_id;
+    return body;
+  },
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'durable-company-building').then(obligationOwnerOptions),
   submit: (w, projectId, id, v, was) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v, was)),
 };
 
@@ -1450,16 +1472,18 @@ const SINCE = 'since';
 const segmentFields = [
   { kind: 'T', name: 'name', k: 'Segment', ph: 'Segment name', required: true, max: 120 },
   { kind: 'T', name: 'who_they_are', k: 'Who they are', ph: 'Role at company type, size, where', max: 1000 },
+  { kind: 'T', name: 'context', k: 'Context', ph: 'When and where the need arises', max: 1000 },
   { kind: 'T', name: 'job_to_be_done', k: 'Job to be done', ph: 'What they are trying to get done', max: 1000 },
   { kind: 'CH', name: 'urgency', k: 'Urgency', opts: URGENCY, def: 2 },
   { kind: 'T', name: 'value_promised', k: 'Value promised', ph: 'What changes for them', max: 1000 },
+  { kind: 'T', name: 'value_source', k: 'Source for the value', ph: 'The evidence behind the promised value', max: 1000 },
   { kind: 'CH', name: 'score_against', k: 'Score against', opts: [{ value: 'all', label: 'All interviews' }, { value: SINCE, label: 'Interviews since a date' }], def: 0 },
   // The second chip reveals its date (decision 2).
   { kind: 'T', name: 'score_since', k: 'Interviews since', input: 'date', required: true, when: { name: 'score_against', value: SINCE } },
 ];
 const segmentBody = (v) => ({
-  name: str(v.name), who_they_are: str(v.who_they_are), job_to_be_done: str(v.job_to_be_done),
-  urgency: v.urgency || null, value_promised: str(v.value_promised),
+  name: str(v.name), who_they_are: str(v.who_they_are), context: str(v.context), job_to_be_done: str(v.job_to_be_done),
+  urgency: v.urgency || null, value_promised: str(v.value_promised), value_source: str(v.value_source),
   score_since: v.score_against === SINCE ? str(v.score_since) : null,
 });
 const segment = {
@@ -1522,21 +1546,43 @@ const competitor = {
 const SIGNAL_KIND = [
   { value: 'need_to_have', label: 'Need-to-have mention' }, { value: 'waitlist', label: 'Waitlist sign-up' },
   { value: 'pre_sale', label: 'Pre-sale' }, { value: 'loi', label: 'Letter of intent' },
+  { value: 'would_pay', label: 'Would pay' },
 ];
 /** The kinds the route takes an amount for (`writeDemandSignal`). */
-export const AMOUNT_KINDS = ['pre_sale', 'loi'];
+export const AMOUNT_KINDS = ['pre_sale', 'loi', 'would_pay'];
 const SIGNAL_STATUS = [{ value: 'confirmed', label: 'Confirmed' }, { value: 'to_confirm', label: 'To confirm' }];
 const signalFields = [
   { kind: 'CH', name: 'kind', k: 'Kind', opts: SIGNAL_KIND, def: 2, required: true },
   { kind: 'T', name: 'who', k: 'Who', ph: 'Customer, lead or interviewee', max: 200 },
-  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '$1,200 · pre-sales and letters of intent only', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'currency', k: 'Currency', ph: 'EUR', def: 'usd', max: 3, when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'CH', name: 'period', k: 'Period', opts: [{ value: '', label: 'Not recorded' }, { value: 'once', label: 'Once' }, { value: 'month', label: 'Monthly' }, { value: 'year', label: 'Yearly' }], def: '', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'signal_date', k: 'Date', input: 'date', ph: '12 Oct' },
   { kind: 'CH', name: 'status', k: 'Status', opts: SIGNAL_STATUS, def: 0, note: 'To confirm: said, not yet in writing.' },
 ];
+// Unknown historical codes retain an explicit minor-unit count.
+const signalAmount = (v) => {
+  const code = String(str(v.currency) || 'usd').toUpperCase();
+  const text = String(v.amount || '').trim();
+  if (!currencyCode(code) && /^[A-Z]{3}$/.test(code)) {
+    const count = /^(\d+)\s+minor units?$/i.exec(text);
+    const minor = count ? Number(count[1]) : Number.NaN;
+    if (Number.isSafeInteger(minor) && minor > 0) return { ok: true, minor };
+    return { ok: false, message: 'For this currency, enter a positive count such as 4321 minor units.' };
+  }
+  const typed = code === 'USD' ? text.replace(/^\$/, '') : text;
+  return parseMinor(typed, code);
+};
 // A hidden Amount is not submitted, so a kind that takes none sends null.
 const signalBody = (v) => {
-  const amount = AMOUNT_KINDS.includes(v.kind) ? toCents(v.amount) : null;
-  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : 'usd', signal_date: str(v.signal_date), status: v.status || null };
+  const amount = AMOUNT_KINDS.includes(v.kind) && str(v.amount) ? signalAmount(v).minor ?? Number.NaN : null;
+  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : String(str(v.currency) || 'usd').toLowerCase(), period: amount == null ? null : str(v.period), signal_date: str(v.signal_date), status: v.status || null };
+};
+const signalCheck = (v) => {
+  if (!AMOUNT_KINDS.includes(v.kind) || !str(v.amount)) return {};
+  const parsed = signalAmount(v);
+  if (!parsed.ok) return { amount: parsed.message };
+  return parsed.minor > 0 ? { amount: null } : { amount: 'Enter an amount greater than zero, or leave it empty.' };
 };
 const signal = {
   key: 'signal', cta: 'Record signal', button: 'Record signal',
@@ -1544,6 +1590,7 @@ const signal = {
   sub: 'Evidence that someone wants this, with its date.',
   foot: 'Waitlist sign-ups count toward the bar you set.',
   fields: signalFields,
+  check: signalCheck,
   toBody: signalBody,
   submit: (w, projectId, v) => w.validate.signal(projectId, signal.toBody(v)),
 };
@@ -1702,7 +1749,7 @@ const editSegment = {
   fields: segmentFields,
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'job_to_be_done', 'urgency', 'value_promised', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;
@@ -1733,20 +1780,27 @@ const editSignal = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-signal', title: 'Edit signal', sub: signal.sub,
   fields: signalFields,
+  check: signalCheck,
   // Only a `signal-` record is the founder's own (a `revenue-` or `waitlist-` one is not).
   idOf: recordId(/^signal-[1-9]\d*$/),
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'who', 'signal_date', 'status'])(row);
+    for (const key of ['currency', 'period']) if (Object.hasOwn(e, key)) v[key] = e[key] ?? '';
     if (v.signal_date) v.signal_date = dateText(v.signal_date);
     // The record's Edit gives no amount as '', which is no amount, not 0.
-    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : String(Number(e.amount_cents) / 100);
+    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : toMajorString(e.amount_cents, String(e.currency || 'usd').toUpperCase()) ?? `${e.amount_cents} minor units`;
     return v;
   },
   // An amount is sent when its box was shown, and cleared when the kind takes none.
   toBody: (v) => {
-    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount', currency: 'amount' });
-    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null });
+    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount' });
+    if (!Object.hasOwn(v, 'amount')) {
+      delete body.currency;
+      if (Object.hasOwn(v, 'period')) body.period = str(v.period);
+    }
+    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null, period: null });
+    if (Object.hasOwn(v, 'amount') && !str(v.amount)) Object.assign(body, { amount_cents: null, currency: null, period: null });
     return body;
   },
   submit: (w, projectId, id, v) => w.validate.signalUpdate(projectId, id, editSignal.toBody(v)),
@@ -2276,5 +2330,6 @@ export function validate(form, values) {
     const kept = typeof f.keep === 'function' ? f.keep(values || {}) : null;
     if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text) && String(kept?.value ?? '') !== text) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
   }
-  return { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  const checked = { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  return Object.fromEntries(Object.entries(checked).filter(([, message]) => message));
 }

@@ -384,7 +384,8 @@ function cleanName(v: unknown): string {
   return s;
 }
 
-function cleanVesting(v: unknown): HolderVesting | null {
+/** The one vesting validator: Add holder's founders (D691) and, from D6086, a grant on the record (`capTableRecord.ts`). */
+export function cleanVesting(v: unknown): HolderVesting | null {
   if (v == null) return null;
   const o = v as Record<string, unknown>;
   const start = typeof o.start_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.start_date) ? o.start_date : null;

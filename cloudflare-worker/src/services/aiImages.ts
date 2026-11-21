@@ -36,7 +36,41 @@ export const REAL_PERSON_MESSAGE = 'Eadwyn does not draw real people. Upload a p
 
 const FACE = /\b(faces?|facial|portraits?|headshots?|selfies?|mugshots?|likeness(?:es)?|close-?ups? of (?:a|the) (?:man|woman|person|face)|of (?:me|myself|us)|our (?:team|founders?|ceo|cto|staff|employees)|the (?:founders?|co-?founders?|ceo|cto)|co-?founders?)\b/i;
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const WORD_CHAR = /[A-Za-z0-9_]/;
+const LETTER = /\p{L}/u;
+/** One UTF-16 unit each, compared without case exactly as a non-unicode `i` regex does. */
+const canon = (ch: string) => {
+  const up = ch.toUpperCase();
+  // ECMAScript Canonicalize without the u flag: one unit to one unit, and never a non-ASCII unit onto ASCII.
+  return up.length !== 1 || (ch.charCodeAt(0) >= 128 && up.charCodeAt(0) < 128) ? ch : up;
+};
+const sameUnit = (a: string, b: string) => canon(a) === canon(b);
+/** Every index where `needle` sits in `hay`, case-insensitively unit by unit when `anyCase`. */
+function* indexesOf(hay: string, needle: string, anyCase: boolean): Generator<number> {
+  if (!needle) return;
+  for (let i = 0; i + needle.length <= hay.length; i += 1) {
+    let k = 0;
+    while (k < needle.length && (anyCase ? sameUnit(hay[i + k], needle[k]) : hay[i + k] === needle[k])) k += 1;
+    if (k === needle.length) yield i;
+  }
+}
+/** `\b` at `at`: a word character on exactly one side (ASCII word characters, as a non-unicode regex reads them). */
+const boundary = (s: string, at: number) => WORD_CHAR.test(s[at - 1] ?? '') !== WORD_CHAR.test(s[at] ?? '');
+/** The name as a whole word in any case: what `\bname\b` with the `i` flag matched, without building that pattern. */
+function wholeWord(text: string, name: string): boolean {
+  for (const i of indexesOf(text, name, true)) if (boundary(text, i) && boundary(text, i + name.length)) return true;
+  return false;
+}
+/** The surname, as written, with no letter (any script) touching either end. */
+function standalone(text: string, last: string): boolean {
+  for (const i of indexesOf(text, last, false)) {
+    const before = [...text.slice(Math.max(0, i - 2), i)].pop() ?? '';
+    const next = text.codePointAt(i + last.length);
+    const after = next === undefined ? '' : String.fromCodePoint(next);
+    if (!LETTER.test(before) && !LETTER.test(after)) return true;
+  }
+  return false;
+}
 
 /**
  * Why a description asks for a real person, or null. A full name matches in
@@ -46,10 +80,10 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function personIn(description: string, names: readonly string[]): 'face' | 'name' | null {
   if (FACE.test(description)) return 'face';
   for (const name of names) {
-    if (new RegExp(`\\b${escape(name)}\\b`, 'i').test(description)) return 'name';
+    if (wholeWord(description, name)) return 'name';
     const parts = name.split(/\s+/).filter((p) => p.length >= 3 && /^\p{Lu}/u.test(p));
     const last = parts.length > 1 ? parts[parts.length - 1] : null;
-    if (last && new RegExp(`(^|[^\\p{L}])${escape(last)}(?![\\p{L}])`, 'u').test(description)) return 'name';
+    if (last && standalone(description, last)) return 'name';
   }
   return null;
 }
