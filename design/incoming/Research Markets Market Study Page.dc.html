@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Market Study · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.st-bh{display:flex;gap:14px;align-items:flex-start}
+.st-bh h1{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.st-bh p{font-size:13px;color:var(--mu);margin-top:4px;max-width:1060px;line-height:1.55}
+.st-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:2px}
+.st-sec{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+.st-sh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.st-note{font-size:12px;color:var(--mu)}
+.st-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.st-sep{width:1px;height:20px;background:var(--hair2);margin:0 6px}
+.st-gray{filter:grayscale(1)}
+/* chips */
+.st-c{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu);vertical-align:middle}
+.st-c svg{flex:none}
+.st-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-na{color:var(--mu);background:transparent;border-color:transparent;padding-left:2px}
+.st-un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed;border-width:1.5px}
+.st-un svg{color:var(--neg)}
+.st-rf{color:var(--ink);background:var(--raised);border-color:var(--ink);border-width:1px}
+.st-stale{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.st-part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-pv{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dashed;border-width:1.5px;font-style:italic}
+.st-nc{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-l-ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.st-l-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-l-mu{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.st-l-fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.st-retry{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--vt);background:transparent;border:0;padding:2px 4px;border-radius:6px;vertical-align:middle}
+.st-unin{display:inline-flex;align-items:center;gap:4px;color:var(--neg);font-weight:800}
+.st-nrin{color:var(--mu);font-style:italic;font-weight:600}
+.st-nain{color:var(--mu)}
+.st-why{display:block;font-size:12px;color:var(--mu);line-height:1.45}
+.st-route{font:700 12px var(--sg)}
+.st-zero{color:var(--ink)!important;font-weight:800}
+.st-cellnr{color:var(--mu)}
+.st-stack{font:800 20px var(--mo);letter-spacing:-.02em}
+.st-eng{display:inline-flex;font:700 11px var(--mo);color:var(--vt);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px}
+.st-spec{font:500 11px var(--mo)}
+/* tiles */
+.st-tiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.st-t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.st-tw{display:flex;flex-direction:column;gap:6px;min-width:0}
+.st-cap2{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.st-tile{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;min-height:150px;align-items:flex-start}
+.st-tl{font-size:12px;color:var(--mu);font-weight:600}
+.st-tv{font:800 26px var(--mo);letter-spacing:-.03em;line-height:1.1;color:var(--ink)}
+.st-ts{display:flex;flex-direction:column;gap:5px;align-items:flex-start;font-size:12px}
+.st-tna{opacity:1}
+.st-big-nr{color:var(--mu);font-weight:500}
+.st-big-un{display:inline-grid;place-items:center;width:30px;height:30px;border:1.5px dashed var(--hair2);border-radius:8px;font:800 18px var(--sg);color:var(--neg)}
+.st-big-rf{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--ink);border-radius:8px;font:700 18px var(--sg);color:var(--ink);background:var(--raised)}
+.st-provv{color:var(--mu);font-style:italic}
+.st-wh{font:700 15px var(--sg);color:var(--mu);font-style:italic}
+.st-withheld{border-style:dashed}
+.st-mini{min-height:120px}
+.st-sk{display:inline-block;height:12px;border-radius:5px;background:var(--skel)}
+/* prose */
+.st-prose{font-size:14px;line-height:1.7;padding:6px 0;border-bottom:1px solid var(--hair)}
+.st-prose:last-child{border-bottom:0}
+/* tables */
+.st-tb{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.45}
+.st-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1.5px solid var(--ink)}
+.st-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.st-tb .n{text-align:right;font-family:var(--mo)}
+.st-tb code,.st-dict code,.st-sec code,.st-bh code,.st-rules code,.st-opt code,.st-foot2 code{font:500 11px var(--mo);background:var(--raised);border:1px solid var(--hair);padding:0 4px;border-radius:4px}
+.st-dict{background:var(--card);border-radius:12px;overflow:hidden}
+.st-dict td:first-child{font-weight:800;white-space:nowrap}
+.st-dict td:first-child small{display:block;font:600 10px var(--mo);color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+.st-dict td:nth-child(4){font:700 13px var(--mo);color:var(--mu);white-space:nowrap}
+.st-modrow td{background:var(--raised)}
+.st-in th{border-bottom:1px solid var(--hair2)}
+.st-none-ex{font-size:12px;color:var(--mu)}
+.st-foot2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12px;color:var(--mu);line-height:1.5}
+.st-foot2 b{color:var(--ink)}
+/* lists */
+.st-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair)}
+.st-list li:first-child{border-top:0}
+.st-list li>span:first-child{display:flex;flex-direction:column}
+.st-list small{font-size:12px;color:var(--mu)}
+.st-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.st-lb{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:190px}
+.st-lbh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-lbh b{font-size:14px}
+.st-cnt{font:700 11px var(--mo);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.st-none{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:9px;background:var(--raised);font-size:13px}
+.st-unbox,.st-rfbox{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+.st-unbox{border:1.5px dashed var(--hair2);background:var(--card)}
+.st-unbox svg{color:var(--neg);margin-top:3px}
+.st-unbox div,.st-rfbox div{display:flex;flex-direction:column;gap:3px;flex:1}
+.st-unbox span,.st-rfbox span{color:var(--mu)}
+.st-rfbox{border:1px solid var(--ink);background:var(--raised)}
+.st-rfbox svg{margin-top:3px}
+.st-pb{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;background:var(--amBg);border:1px solid var(--amE);color:var(--ink);font-size:12.5px;line-height:1.45}
+.st-pb svg{color:var(--amT);flex:none}
+.st-pb>span{flex:1}
+.st-skl>div{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.st-skl>div:first-child{border-top:0}
+/* charts */
+.st-ch{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.st-chh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-chh b{font-size:14px}
+.st-ch svg{font-family:var(--sg)}
+.st-rule{font:700 13px var(--sg);padding:12px 14px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 9px 9px 0}
+/* composite */
+.st-comp{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.st-ch2{display:flex;justify-content:space-between;align-items:flex-end}
+.st-ch2 h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.st-comp .st-tile{background:var(--raised)}
+.st-rules{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;list-style:disc!important;padding-left:18px!important}
+.st-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:500 11.5px var(--mo);color:var(--mu)}
+/* phone */
+.st-pt{display:flex;justify-content:space-between;padding:12px 18px 8px;font:700 12px var(--sg);border-bottom:1px solid var(--hair);background:var(--card)}
+.st-plist{background:var(--card);border:1px solid var(--hair);border-radius:12px}
+.st-plist>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px;border-top:1px solid var(--hair)}
+.st-plist>div:first-child{border-top:0}
+.st-plist span{font-size:12.5px}
+/* do / don't */
+.st-dd{display:flex;flex-direction:column;gap:8px}
+.st-ddt{font:800 14px var(--sg)}
+.st-ddp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-dn,.st-do{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px}
+.st-dn{border:1.5px solid var(--negE);background:var(--negBg)}
+.st-do{border:1.5px solid var(--posE);background:var(--posBg)}
+.st-ddl{display:inline-flex;align-items:center;gap:5px;font:800 11px var(--mo);text-transform:uppercase;letter-spacing:.05em}
+.st-dn .st-ddl{color:var(--neg)}
+.st-do .st-ddl{color:var(--pos)}
+/* options */
+.st-opt{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.st-opt p{font-size:12.5px;line-height:1.55;color:var(--mu)}
+.st-opt b{font-size:15px}
+.st-on{border:2px solid var(--vi)}
+.st-ol{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt)}
+.st-code{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:0;color:var(--ink)}
+.st-whyi{font-size:12px;color:var(--mu)}
+.st-ch svg text{font-family:'Space Grotesk',system-ui,sans-serif}
+.st-ch svg text[font-family]{font-family:'Roboto Mono',ui-monospace,monospace}
+.st-plist~.st-lb{min-height:0}
+/* RST · Research Markets · Market Study (#7703 pass 2) · extends Research v2 RS-02, RS-07, RS-09, RS-10 D */
+.rst-eng{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.04em;color:var(--vt);border:1.5px dashed #a78bfa;border-radius:6px;padding:1px 7px;background:transparent;white-space:nowrap;vertical-align:middle}
+.rst-flag{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.04em;color:#92400e;border:1.5px dashed #f59e0b;border-radius:6px;padding:1px 7px;background:#fffbeb;white-space:nowrap;vertical-align:middle}
+.rst-ann{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--mo);color:var(--vt);border:1px dashed var(--lavE);border-radius:6px;padding:2px 7px;background:var(--card)}
+.rst-addr{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;font:600 11px var(--mo);color:var(--mu)}
+.rst-addr code{font:600 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.rst-wrap{display:grid;grid-template-columns:196px minmax(0,1fr);gap:18px;align-items:start}
+.rst-nav{display:flex;flex-direction:column;gap:2px;border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:8px}
+.rst-nav h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:4px 8px 6px}
+.rst-nav a{display:flex;flex-direction:column;gap:1px;min-height:36px;justify-content:center;padding:4px 9px;border-radius:8px;font:600 12.5px var(--sg);color:var(--ink)!important;line-height:1.3}
+.rst-nav a small{font:500 10.5px var(--mo);color:var(--mu)}
+.rst-nav a[aria-current=page]{background:var(--lav);color:var(--vt)!important;font-weight:800;box-shadow:inset 3px 0 0 var(--vi)}
+.rst-nav a.off{color:var(--mu)!important}
+.rst-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.rst-h2{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.rst-h2 h2{font-size:19px;font-weight:800;letter-spacing:-.015em;line-height:1.2}
+.rst-h2 p{font-size:12.5px;color:var(--mu);margin-top:3px;max-width:560px;line-height:1.5}
+.rst-ro{display:grid;grid-template-columns:120px minmax(0,1fr);gap:6px 12px;font-size:12.5px;line-height:1.45;margin:0}
+.rst-ro dt{font-weight:700;color:var(--mu)}
+.rst-ro dd{margin:0;color:var(--ink)}
+.rst-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rst-f>span:first-child{font:700 12px var(--sg);color:var(--ink)}
+.rst-f>span:first-child em{font-style:normal;font-weight:500;color:var(--mu)}
+.rst-in{display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 11px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);color:var(--ink);font:500 13px var(--sg);line-height:1.4}
+.rst-in.ta{min-height:58px;align-items:flex-start}
+.rst-in.ph2{color:var(--mu)}
+.rst-in.err{border-color:var(--neg);box-shadow:0 0 0 1px var(--neg)}
+.rst-in .u{margin-left:auto;font:600 11.5px var(--mo);color:var(--mu)}
+.rst-f .why{font-size:11.5px;color:var(--mu);line-height:1.4}
+.rst-f .bad{font-size:11.5px;color:var(--neg);font-weight:700}
+.rst-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.rst-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rst-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.rst-seg{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.rst-seg.bh{border-color:var(--vi);box-shadow:inset 3px 0 0 var(--vi)}
+.rst-seg .r1{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.rst-seg .r1 b{font-size:14px}
+.rst-seg dl{display:grid;grid-template-columns:130px minmax(0,1fr) 130px minmax(0,1fr);gap:5px 10px;font-size:12px;line-height:1.4;margin:0}
+.rst-seg dt{color:var(--mu);font-weight:700}
+.rst-seg dd{margin:0}
+.rst-bh{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--sg);color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:999px;padding:1px 8px}
+.rst-arch{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--sg);color:var(--mu);border:1px solid var(--hair2);border-radius:999px;padding:1px 8px}
+.rst-offer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:9px 12px;border:1.5px dashed var(--lavE);border-radius:10px;background:var(--lav);font-size:12.5px}
+.rst-offer b{color:var(--ink)}
+.rst-orig{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5}
+.rst-orig .l{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rst-tb{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.rst-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);background:var(--raised);vertical-align:bottom}
+.rst-tb td{padding:10px 10px;border-bottom:1px solid var(--hair);vertical-align:top;color:var(--ink);line-height:1.4}
+.rst-tb td small{display:block;font-size:11px;color:var(--mu);margin-top:2px;line-height:1.35}
+.rst-tb tr.on td{background:var(--lav)}
+.rst-tb .m,.rst-m{font-family:var(--mo);font-weight:600}
+.rst-tb .n{text-align:right}
+.rst-dr{display:inline-grid;place-items:center;width:22px;height:30px;border-radius:6px;border:1px solid var(--hair2);color:var(--mu);font:700 12px var(--mo);background:var(--card)}
+.rst-cnt{display:inline-flex;gap:6px;font:600 11.5px var(--mo);white-space:nowrap}
+.rst-cnt .s{color:var(--pos)}
+.rst-cnt .c{color:var(--neg)}
+.rst-qs{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--sg);padding:1px 8px 1px 6px;border-radius:999px;border:1px solid var(--hair2);white-space:nowrap}
+.rst-qs.op{color:var(--ink);background:var(--card)}
+.rst-qs.an{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.rst-qs.sa{color:var(--mu);background:transparent;border-style:dotted;border-width:1.5px}
+.rst-tp{display:inline-flex;align-items:center;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair);border-radius:5px;padding:1px 6px;background:var(--raised);white-space:nowrap}
+.rst-lk{display:flex;flex-direction:column;gap:6px;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card)}
+.rst-lk.sup{border-left:3px solid var(--pos)}
+.rst-lk.con{border-left:3px solid var(--neg)}
+.rst-lk.ctx{border-left:3px solid var(--hair2)}
+.rst-lk .r1{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rst-lk p{font-size:12.5px;line-height:1.5}
+.rst-lk .note{font-size:12px;color:var(--mu);line-height:1.45}
+.rst-lk .note b{color:var(--ink)}
+.rst-dir{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border-radius:5px;white-space:nowrap}
+.rst-dir.sup{color:var(--pos);background:var(--posBg);border:1px solid var(--posE)}
+.rst-dir.con{color:var(--neg);background:var(--negBg);border:1px solid var(--negE)}
+.rst-dir.ctx{color:var(--mu);background:var(--raised);border:1px solid var(--hair2)}
+.rst-gone{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--sg);color:var(--mu);border:1.5px dotted var(--hair2);border-radius:6px;padding:1px 7px}
+.rst-colh{display:flex;align-items:center;gap:8px;font:800 13px var(--sg)}
+.rst-k{display:inline-flex;align-items:center;gap:5px;font:700 10.5px var(--sg);padding:1px 8px 1px 6px;border-radius:6px;white-space:nowrap;border:1px solid var(--hair2);background:var(--card);color:var(--ink)}
+.rst-k i{font-style:normal;font:700 10px var(--mo)}
+.rst-k.k1{border-style:solid}
+.rst-k.k2{border-style:solid;border-width:1.5px;border-color:var(--ink)}
+.rst-k.k3{border-style:double;border-width:3px;padding:0 7px 0 5px}
+.rst-k.k4{border-style:dashed;border-width:1.5px;font-style:italic}
+.rst-k.k5{border-style:dotted;border-width:1.5px;color:var(--mu)}
+.rst-tps{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.rst-tps>div{display:grid;grid-template-columns:170px 190px minmax(0,1fr);gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.rst-tps>div:first-child{border-top:0}
+.rst-tps small{color:var(--mu);font-size:11.5px;line-height:1.4}
+.rst-ts{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--sg);padding:1px 8px 1px 6px;border-radius:999px;border:1px solid var(--hair2);white-space:nowrap;justify-self:start}
+.rst-ts.nr{color:var(--mu);border-style:dotted;border-width:1.5px}
+.rst-ts.ip{color:var(--ink);background:var(--raised)}
+.rst-ts.ad{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.rst-ts.ce{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.rst-cov{display:flex;gap:12px;align-items:center;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px}
+.rst-cov b{font:800 15px var(--mo)}
+.rst-out{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.rst-out label{display:flex;gap:8px;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;font:700 12.5px var(--sg);background:var(--card)}
+.rst-out label i{width:14px;height:14px;border-radius:999px;border:1.5px solid var(--hair2);flex:none}
+.rst-out label.on{border:2px solid var(--vi);background:var(--lav)}
+.rst-out label.on i{border:4px solid var(--vi)}
+.rst-pick{display:flex;gap:8px;align-items:center;padding:7px 10px;border:1px solid var(--hair);border-radius:9px;font-size:12px;background:var(--card)}
+.rst-pick .bx{width:16px;height:16px;border:1.5px solid var(--hair2);border-radius:4px;flex:none;display:grid;place-items:center;font:800 10px var(--sg);color:#fff}
+.rst-pick.on .bx{background:var(--vi);border-color:var(--vi)}
+.rst-pick.off{opacity:.55;border-style:dashed}
+.rst-hist{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.rst-hist>div{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.rst-hist>div:first-child{border-top:0}
+.rst-hist .r1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rst-oc{display:inline-flex;align-items:center;gap:5px;font:800 11.5px var(--sg);padding:1px 9px;border-radius:6px;border:1.5px solid var(--ink);color:var(--ink)}
+.rst-scrim{position:absolute;inset:0;background:var(--dim)}
+.rst-sheet{position:absolute;top:0;right:0;bottom:0;width:560px;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.rst-sheet .sh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.rst-sheet .sh h2{font-size:18px;font-weight:800;letter-spacing:-.01em}
+.rst-sheet .sb{padding:16px 22px;display:flex;flex-direction:column;gap:14px;flex:1;overflow:hidden}
+.rst-sheet .sf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.rst-sheet .sf .raw{margin-right:auto}
+.rst-obs{display:grid;grid-template-columns:minmax(0,1.4fr) 130px 120px 96px 110px minmax(0,1fr);gap:10px;align-items:start;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.4}
+.rst-obs.h{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);background:var(--raised);border-top:0}
+.rst-obs small{display:block;color:var(--mu);font-size:11px}
+.rst-ref{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:12.5px;line-height:1.45}
+.rst-ref .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.rst-ref .r1 b{font-size:13px}
+.rst-ref small{color:var(--mu);font-size:11.5px}
+.rst-grp{display:flex;flex-direction:column;gap:8px}
+.rst-grp>h3{display:flex;align-items:center;gap:8px;font:800 13px var(--sg)}
+.rst-grp>h3 span.c{font:600 11px var(--mo);color:var(--mu)}
+.rst-newer{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--sg);color:var(--amT);border:1px solid var(--amE);background:var(--amBg);border-radius:6px;padding:1px 7px}
+.rst-caveat{font-size:11.5px;color:var(--amT);font-weight:700}
+.rst-blk{display:flex;flex-direction:column;gap:10px;border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px}
+.rst-blk>h3{display:flex;justify-content:space-between;align-items:center;gap:10px;font:800 14px var(--sg);flex-wrap:wrap}
+.rst-blk>h3 small{font:600 11px var(--mo);color:var(--mu)}
+.rst-sub{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rst-ln{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.rst-ln:first-of-type{border-top:0}
+.rst-ln>span:last-child{text-align:right}
+.rst-dem{display:grid;grid-template-columns:150px 88px 64px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.4}
+.rst-dem.h{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);border-top:0;padding-top:0}
+.rst-dem small{display:block;color:var(--mu);font-size:11px}
+.rst-stg{display:inline-flex;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:5px;border:1px solid var(--hair2);color:var(--mu);white-space:nowrap}
+.rst-stg.in{border-style:dotted;border-width:1.5px}
+.rst-stg.it{border-style:dashed;border-width:1.5px;color:var(--ink)}
+.rst-stg.pay{border-color:var(--ink);color:var(--ink);background:var(--raised)}
+.rst-quote{border-left:3px solid var(--hair2);padding:4px 10px;font-size:12.5px;font-style:italic;line-height:1.5}
+.rst-exp{display:flex;flex-direction:column;gap:3px;padding:8px 10px;border:1px solid var(--hair);border-radius:9px;font-size:12px;line-height:1.45}
+.rst-exp .r1{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rst-esk{display:inline-flex;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair);border-radius:5px;padding:0 6px}
+.rst-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px;border:1.5px solid var(--amE);border-radius:10px;background:var(--amBg)}
+.rst-pair>div{display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:1.45}
+.rst-ch{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rst-ch>div{padding:10px 12px;display:flex;flex-direction:column;gap:3px;font-size:12.5px;line-height:1.45}
+.rst-ch>div+div{border-left:1px solid var(--hair);background:var(--raised)}
+.rst-ch .v{font:800 17px var(--mo)}
+.rst-sc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.rst-sc>div{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.4}
+.rst-sc .v{font:800 18px var(--mo)}
+.rst-sc .v small{font-size:12px;color:var(--mu);font-weight:600}
+.rst-ea{border:1.5px dashed var(--lavE);border-radius:12px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rst-never{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.rst-never>div{display:flex;gap:8px;align-items:center;padding:9px 11px;border:1px solid var(--hair);border-radius:9px;background:var(--card);font-size:12.5px}
+.rst-never>div i{font-style:normal;color:var(--neg);font-weight:800}
+.rst-emp{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:14px;border:1px solid var(--hair);border-radius:12px;background:var(--card);min-height:150px}
+.rst-emp .w{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rst-emp b{font-size:13.5px}
+.rst-emp p{font-size:12px;color:var(--mu);line-height:1.5}
+.rst-emp .btn{margin-top:auto}
+.rst-grid{display:grid;gap:8px}
+.rst-grid .gh{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding:4px 2px}
+.rst-grid .rh{font:800 12px var(--sg);padding:8px 2px;line-height:1.3}
+.rst-grid .rh small{display:block;font:500 10.5px var(--mo);color:var(--mu)}
+.rst-cell{border:1px solid var(--hair);border-radius:9px;background:var(--card);padding:8px 9px;display:flex;flex-direction:column;gap:5px;font-size:11.5px;line-height:1.4;min-height:84px}
+.rst-cell p{color:var(--mu)}
+.rst-sk{display:block;height:10px;border-radius:5px;background:var(--skel)}
+.rst-step{display:grid;grid-template-columns:34px minmax(0,1fr) 230px;gap:12px;align-items:start;padding:12px 14px;border-top:1px solid var(--hair)}
+.rst-step:first-child{border-top:0}
+.rst-step i{display:grid;place-items:center;width:28px;height:28px;border-radius:999px;background:#7c3aed;color:#fff;font:800 12px var(--mo);font-style:normal}
+.rst-step b{font-size:13.5px}
+.rst-step p{font-size:12.5px;color:var(--mu);line-height:1.5;margin:2px 0 0}
+.rst-step a.fr{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border:1px solid var(--lavE);border-radius:9px;background:var(--lav);font:700 12px var(--sg);color:var(--vt)!important}
+.rst-step a.fr small{font:500 10.5px var(--mo);color:var(--mu)}
+.rst-tab{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--ink);color:var(--card);font:800 10.5px var(--mo);margin-right:4px;vertical-align:1px}
+.rst-ring{outline:2px solid #7c3aed;outline-offset:2px}
+.rst-lic{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.rst-lic .btn[aria-disabled=true]{border-style:dashed}
+.rst-tip{font-size:11.5px;color:var(--ink);background:var(--raised);border:1px solid var(--hair2);border-radius:8px;padding:6px 9px;line-height:1.4}
+.rst-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rst-pc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rst-pc .ln{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;line-height:1.4}
+.rst-pc .ln>span:first-child{color:var(--mu)}
+.rst-ptabs{display:flex;gap:2px;overflow:hidden;border-bottom:1px solid var(--hair);flex:none}
+.rst-ptabs a{flex:none;display:inline-flex;align-items:center;min-height:44px;padding:0 11px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.rst-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.rst-psheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--hair);box-shadow:0 -16px 40px rgba(0,0,0,.18);padding:10px 16px 20px;display:flex;flex-direction:column;gap:10px}
+.rst-psheet .grab2{width:40px;height:4px;border-radius:999px;background:var(--hair2);align-self:center}
+.rst-pscrim{position:absolute;inset:0;background:var(--dim)}
+.rst-prow{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:0 4px;border-top:1px solid var(--hair);font-size:13.5px}
+.rst-prow:first-of-type{border-top:0}
+.rst-prow small{font:500 11px var(--mo);color:var(--mu)}
+.rst-live{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--ink);border:1px solid var(--hair2);border-radius:7px;padding:3px 8px;background:var(--raised)}
+.rst-ok{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:10px;background:var(--posBg);border:1px solid var(--posE);font-size:12.5px;color:var(--ink)}
+.rst-err{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-radius:10px;background:var(--negBg);border:1px solid var(--negE);font-size:12.5px;color:var(--ink);line-height:1.45}
+.rst-err>div{flex:1}
+.rst-ro2{opacity:.75}
+.rst-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--mu)}
+.rst-exp>.rst-dir,.rst-exp>.rst-gone{align-self:flex-start}
+.rst-dem{grid-template-columns:160px 190px 0 minmax(0,1fr)}
+.rst-cell>.st-c,.rst-cell>.st-retry,.rst-ref>.st-c,.rst-emp>.st-c,.cd>.st-c,.rst-nrw>.st-c,.rst-ch>div>.st-c,.rst-blk>.st-c,.rst-pc>.st-c,.rst-ch .rst-nrw{align-self:flex-start}
+.rst-ln .rst-nrw{align-items:flex-end}
+.sd .selb{color:var(--ink)}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "RST01", "options": ["RST00", "RST01", "RST15A", "RST01B", "RST01C", "RST01D", "RST02", "RST15B", "RST02B", "RST02C", "RST02D", "RST03", "RST15C", "RST03B", "RST03C", "RST04", "RST15D", "RST05", "RST15E", "RST05B", "RST06", "RST15F", "RST06B", "RST06C", "RST07", "RST15G", "RST07B", "RST08", "RST15H", "RST08B", "RST08C", "RST08D", "RST09", "RST15I", "RST09B", "RST10", "RST15J", "RST11", "RST12", "RST13", "RST17", "RST16", "RST18", "RST14A", "RST14B", "RST14C", "RST14D", "RST14E", "RST14F", "RST14G", "RST14H", "RST14I", "RST14J", "RST14K", "RST14L", "RST14M", "RST14N", "RST15K", "RST15L", "RST15M"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RST01';
+    const dark = B.indexOf('RST15') === 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const ENG = (n) => '<span class="rst-eng" title="Needs backend work">◇ #' + n + '</span>';
+    const FL = (t) => '<span class="rst-flag" title="Owner decision">⚑ ' + t + '</span>';
+    const ANN = (t) => '<span class="rst-ann">' + t + '</span>';
+    const ADDR = (p, owner) => '<span class="rst-addr"><code>' + p + '</code>' + (owner ? FL('Q1 · new address, owner decision') : '') + '</span>';
+
+    /* ---------- Platform States (D5129), after st.js ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      rf: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      stale: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      part: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.4a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/>'),
+      prov: SV('<path d="M6 1.2L10.8 6 6 10.8 1.2 6z" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      tri: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      lock: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.4a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/>'),
+      ring: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      dot: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.6 1.6"/>'),
+      up: SV('<path d="M6 1.5l4.5 8h-9z" fill="currentColor"/>'),
+      dn: SV('<path d="M6 10.5l4.5-8h-9z" fill="currentColor"/>'),
+      ctx: SV('<circle cx="6" cy="6" r="2.6" fill="currentColor"/>')
+    };
+    const K = { nr: ['st-nr', 'nr', 'Not recorded'], na: ['st-na', '', 'Not applicable'], un: ['st-un', 'un', 'Unavailable'], rf: ['st-rf', 'rf', 'Refused'], stale: ['st-stale', 'stale', 'Stale'], part: ['st-part', 'part', 'Partial'], prov: ['st-pv', 'prov', 'Provisional'] };
+    const chip = (k, label) => { const x = K[k]; return '<span class="st-c ' + x[0] + '">' + (x[1] ? G[x[1]] : '') + (label || x[2]) + '</span>'; };
+    const NONE = (t) => '<span class="st-c" style="background:transparent">' + G.ring + (t || 'None') + '</span>';
+    const retry = (s) => '<button type="button" class="st-retry">' + G.re + (s || 'Try again') + '</button>';
+    const NRw = (why) => '<span class="rst-nrw" style="display:inline-flex;flex-direction:column;gap:2px">' + chip('nr') + (why ? '<span class="st-why">' + why + '</span>' : '') + '</span>';
+    const unbox = (h, d) => '<div class="st-unbox" role="alert">' + G.un + '<div><b>' + h + '</b><span>' + d + '</span></div>' + retry() + '</div>';
+    const rfbox = (h, d, a) => '<div class="st-rfbox">' + G.rf + '<div><b>' + h + '</b><span>' + d + '</span>' + (a ? '<a href="#" class="st-route">' + a + '</a>' : '') + '</div></div>';
+    const pban = (h, d) => '<div class="st-pb" role="status">' + G.part + '<span><b>' + h + '</b> ' + d + '</span>' + retry() + '</div>';
+    const sk = (w) => '<span class="rst-sk" style="width:' + w + '"></span>';
+
+    /* ---------- vocabulary of the study ---------- */
+    const QS = { o: ['op', G.ring, 'Open'], a: ['an', G.ok, 'Answered'], s: ['sa', G.dot, 'Set aside'] };
+    const qs = (k) => '<span class="rst-qs ' + QS[k][0] + '">' + QS[k][1] + QS[k][2] + '</span>';
+    const DIR = { sup: [G.up, 'Supports'], con: [G.dn, 'Contradicts'], ctx: [G.ctx, 'Context'] };
+    const dir = (k) => '<span class="rst-dir ' + k + '">' + DIR[k][0] + DIR[k][1] + '</span>';
+    const KF = { k1: ['▦', 'Companies Axal lists'], k2: ['◉', 'Eligible customers'], k3: ['¤', 'Observed spending or revenue'], k4: ['ƒ', 'Modelled'], k5: ['≈', 'Activity proxy'] };
+    const kf = (k) => '<span class="rst-k ' + k + '"><i aria-hidden="true">' + KF[k][0] + '</i>' + KF[k][1] + '</span>';
+    const TS = { nr: [G.dot, 'Nothing recorded'], ip: [G.half, 'In progress'], ad: [G.ok, 'Addressed'], ce: [G.tri, 'Contradicting evidence'] };
+    const ts = (k) => '<span class="rst-ts ' + k + '">' + TS[k][0] + TS[k][1] + '</span>';
+    const FK = (k) => k === 'src' ? '<span class="fk src">Source fact</span>' : k === 'ai' ? '<span class="fk ea2">Eadwyn interpretation</span>' : '<span class="fk hu">Your conclusion</span>';
+    const stg = (k) => '<span class="rst-stg ' + k + '">' + ({ in: 'Interest', it: 'Intent', pay: 'Payment' })[k] + '</span>';
+    const marked = '<span class="raw">Marked by you</span>';
+
+    /* ---------- sample data · fictional · one set on every board ---------- */
+    const TITLE = '[Scheduling software for independent dental practices in Germany]';
+    const VEN = '[Northwind Labs]';
+    const FOUNDER = '[Maya Ruiz]';
+    const MATE = '[Tom Becker]';
+    const SRC_A = '[Source A: Statistics Office Sample]';
+    const SRC_B = '[Source B: Open Registry Sample]';
+    const MKT = '[Dental practice software]';
+    const OV = {
+      q: '[Is scheduling software for independent dental practices in Germany a market Northwind Labs should enter in 2027?]',
+      obj: '[Decide by March 2027 whether to build a German booking and recall product for practices with one to five dentists.]',
+      scope: '[Independent dental practices in Germany · booking, reminders and recall · 2026 to 2028]',
+      exc: '[Dental chains with more than five sites · hospital clinics · full practice-management suites]'
+    };
+    // questions: topic, text, status, for, against, answer
+    const QN = [
+      ['Customer definition', '[Who decides on scheduling software in a practice with one or two dentists?]', 'a', 3, 0, '[The owner decides and signs; front-desk staff use the tool every day.]'],
+      ['Demand', '[Do solo practices pay today to reduce no-shows?]', 'a', 3, 1, '[Some do. Most handle no-shows by phone and would switch for fewer empty chairs.]'],
+      ['Size', '[How many independent practices in Germany fit the beachhead segment?]', 'o', 1, 0, ''],
+      ['Pricing', '[Would a solo practice pay EUR 49 a month for booking and reminders?]', 'o', 1, 1, ''],
+      ['Risks', '[Do German data-protection rules limit SMS appointment reminders?]', 'o', 0, 0, '']
+    ];
+    const OPENQ = QN.filter(q => q[2] === 'o');
+    const SEGS = [
+      { n: '[Independent practices, 1–2 dentists]', bh: true, buyer: '[Practice owner]', user: '[Front-desk staff]', bud: '[Practice owner]', unit: '[One practice]', cnt: 'Enterprise (legal unit)', ind: '[NACE Rev. 2 · 86.23 Dental practice activities]', band: '[0–9 persons employed]', ctry: 'Germany', exc: '[Practices inside a hospital or clinic group]', val: '[Solo dental practices]', note: '[Interviews recruited through two dental associations in Bavaria]', lim: '[No practice in the eastern Länder interviewed yet]' },
+      { n: '[Group practices, 3–5 dentists]', bh: false, buyer: '[Managing partner]', user: '[Practice manager]', bud: '[Managing partner]', unit: '[One practice]', cnt: 'Enterprise (legal unit)', ind: '[NACE Rev. 2 · 86.23]', band: '[10–49 persons employed]', ctry: 'Germany', exc: '[Chains with more than five sites]', val: null, note: '', lim: '' }
+    ];
+
+    /* ---------- shell (Research v2, rs.js; shell rule #3704) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const RNAV = ['Overview', 'My Research', 'Markets', 'Companies', 'Funds', 'Library', 'Ask'];
+    const rnav = (cur) => '<nav aria-label="Research" style="display:flex;flex-direction:column;gap:2px;margin:2px 0 0 18px;border-left:1px solid var(--hair);padding-left:6px">' + J(RNAV.map(t => '<a href="#" style="min-height:30px;font-size:12.5px;font-weight:' + (t === cur ? '800' : '600') + ';color:' + (t === cur ? 'var(--vt)' : 'var(--mu)') + ';display:flex;align-items:center;padding:0 10px;border-radius:8px' + (t === cur ? ';background:var(--lav)' : '') + '"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%" aria-label="Company or project: ' + VEN + '"><span>' + VEN + '</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Research' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Research' ? rnav(cur) : ''))) + '</nav></aside>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">MR</button></div></div>';
+    const openQ = (o) => o.qs === 'un' ? '<section><h4>Open questions</h4>' + chip('un') + ' ' + retry() + '</section>'
+      : o.qs === 'nr' ? '<section><h4>Open questions</h4>' + NRw('No study yet, so no question is stored') + '</section>'
+      : '<section><h4>Open questions · ' + OPENQ.length + ' ' + ENG(7720) + '</h4><ul>' + J(OPENQ.map(q => '<li><span class="rst-tp">' + q[0] + '</span> ' + q[1] + '</li>')) + '</ul></section>';
+    const ctxRail = (o) => { o = o || {}; return '<aside class="rail" aria-label="Research context"><div class="rh"><b style="font-size:13.5px">Research context</b><button type="button" class="ib" aria-label="Collapse research context" aria-expanded="true">›</button></div><div class="rb">'
+      + '<section><h4>Active project</h4><a href="#" style="font-weight:800;font-size:13px;color:var(--ink)">' + TITLE + '</a><div class="raw" style="margin-top:4px">In progress · saved 19 Nov 2026 10:42</div></section>'
+      + '<section><h4>Evidence coverage</h4><div style="font-size:12.5px"><b class="mo">7 of 9</b> sources answerable in Ask</div><div class="raw" style="margin-top:4px">Coverage of sources, not completeness of the study</div></section>'
+      + openQ(o)
+      + '<section><h4>Saved findings · 6</h4><ul><li><span class="fk src">Source</span> 3 · <span class="fk ea2">Eadwyn</span> 1 · <span class="fk hu">Yours</span> 2</li></ul></section>'
+      + '<section><h4>Suggested follow-ups</h4><div class="prm"><button type="button">Which findings have no source?</button></div><p class="raw" style="margin-top:4px">Suggestions never run on their own.</p></section>'
+      + '</div></aside>'; };
+    const railS = '<aside class="sp" aria-label="Research context"><button type="button" class="e" aria-label="Open research context" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Context</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="rsh' + (o.rail === false ? '' : ' wr') + '" style="position:relative;min-height:' + (o.h || 900) + 'px">' + side(o.cur || 'My Research') + '<div class="mn">' + top + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail === false ? railS : ctxRail(o)) + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box">' + inner + '</div>';
+
+    /* ---------- project bar and tabs (RS-02 as built, plus Study) ---------- */
+    const pbar = (o) => { o = o || {}; return '<div class="crumb"><a href="#">Research</a>/<a href="#">My Research</a>/<b>' + TITLE + '</b></div><div class="pbar2"><div><h1 style="font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2;max-width:760px">' + TITLE + '</h1><div class="meta">' + (o.arch ? '<span class="rst-arch">' + G.lock + 'Archived · read-only</span>' : '<span class="stt pd">' + G.half + 'In progress</span>') + '<span>Saved 19 Nov 2026 10:42</span><span>9 sources</span></div></div><div style="display:flex;gap:8px">' + (o.arch ? '<button type="button" class="btn">Restore</button>' : '<button type="button" class="btn">Archive…</button>') + '</div></div>'; };
+    const TABS = [['Overview', ''], ['Evidence', '9'], ['Findings', '6'], ['Comparisons', '1'], ['Brief', 'v2'], ['Study', '']];
+    const ptabs = (cur) => '<nav class="ptab" aria-label="Project">' + J(TABS.map(t => '<a href="#"' + (t[0] === cur ? ' aria-current="page"' : '') + '>' + t[0] + (t[1] ? '<span>' + t[1] + '</span>' : '') + (t[0] === 'Study' ? ' ' + ENG(7719) : '') + '</a>')) + '</nav>';
+    const SECS = [['scope', 'Scope and questions', 1], ['customers', 'Customers and demand', 1], ['size', 'Size and scenarios', 0], ['competition', 'Competition and pricing', 0], ['entry', 'Entry strategy and risks', 1], ['evidence', 'Evidence and findings', 1], ['report', 'Report and monitoring', 0]];
+    const snav = (cur, o) => { o = o || {}; return '<nav class="rst-nav" aria-label="Study sections"><h3>Study sections</h3>' + J(SECS.map((s, i) => '<a href="#"' + (s[0] === cur ? ' aria-current="page"' : '') + (s[2] ? '' : ' class="off"') + '><span>' + (i + 1) + ' · ' + s[1] + '</span>' + (s[2] ? (o.nov && ['customers', 'entry'].indexOf(s[0]) >= 0 ? '<small>Needs a linked venture</small>' : '') : '<small>Not built yet</small>') + '</a>')) + '</nav>'; };
+    const study = (cur, body, o) => { o = o || {}; return pbar(o) + ptabs('Study') + '<div class="rst-wrap">' + snav(cur, o) + '<div class="rst-col">' + (o.addr === false ? '' : ADDR('/research/projects/:uid/study' + (cur ? '/' + cur : ''), true)) + body + '</div></div>'; };
+    const sech = (t, p, act, tags) => '<div class="rst-h2"><div><h2>' + t + ' ' + (tags || '') + '</h2>' + (p ? '<p>' + p + '</p>' : '') + '</div>' + (act ? '<div style="display:flex;gap:8px;align-items:center">' + act + '</div>' : '') + '</div>';
+    const fld = (l, v, o) => { o = o || {}; return '<label class="rst-f"><span>' + l + (o.opt ? ' <em>optional</em>' : '') + '</span><span class="rst-in' + (o.ta ? ' ta' : '') + (o.ph ? ' ph2' : '') + (o.err ? ' err' : '') + '">' + v + (o.u ? '<span class="u">' + o.u + '</span>' : '') + '</span>' + (o.why ? '<span class="why">' + o.why + '</span>' : '') + (o.err ? '<span class="bad">' + o.err + '</span>' : '') + '</label>'; };
+
+    /* ---------- RST-01 frame ---------- */
+    const ovRO = (edit) => '<section class="cd"><div class="ch"><h2>From Overview <span class="raw" style="font-weight:500">read-only here</span></h2>' + (edit === false ? '' : '<a class="btn bsm" href="#">Edit on Overview</a>') + '</div><dl class="rst-ro"><dt>Question</dt><dd>' + OV.q + '</dd><dt>Objective</dt><dd>' + OV.obj + '</dd><dt>Scope</dt><dd>' + OV.scope + '</dd><dt>Excluded</dt><dd>' + OV.exc + '</dd></dl></section>';
+    const frameHome = () => study('', sech('Study', 'One market, defined once. Open the sections in any order; each saves on its own.', '', '') + ovRO()
+      + '<section class="cd"><div class="ch"><h2>Sections</h2><span class="raw">7 sections · 4 built in this release</span></div><div class="rst-tps">' + J(SECS.map((s, i) => '<div><b>' + (i + 1) + ' · ' + s[1] + '</b>' + (s[2] ? '<span class="raw">' + ['5 questions · 2 segments', '7 interviews · 6 demand kinds', '', '', '2 channels · readiness', '4 references attached', ''][i] + '</span>' : chip('na', 'Not built yet')) + '<small>' + ADDR('/study/' + s[0]) + '</small></div>')) + '</div></section>', { addr: true });
+    const frameNone = () => study('', sech('Study', '', '') + '<section class="cd" style="align-items:flex-start;gap:10px;padding:22px 24px">' + NONE() + '<h2 style="font-size:17px;font-weight:800">This project has no study</h2><p style="font-size:13px;color:var(--mu);max-width:560px;line-height:1.55">Every project made before studies existed reads None here. A study adds a product, segments, questions with evidence for and against, and a decision. Nothing is saved until you save Scope.</p><button type="button" class="btn p">Start a study</button></section>' + ovRO(), {});
+    const frameNoVen = () => study('customers', sech('Customers and demand', '') + '<section class="cd" style="gap:10px">' + NONE('No venture linked') + '<p style="font-size:13px;line-height:1.55;max-width:600px">Customers and demand reads interviews, problems, experiments and demand records from a venture in Validate. This study has no venture linked, so there is nothing to read. Size and scenarios and Entry strategy and risks are empty for the same reason.</p><a class="btn" href="#" style="align-self:flex-start">Link a venture on Scope</a></section>', { nov: true });
+    const frameArch = () => study('scope', '<div class="nt"><span class="ic" aria-hidden="true" style="background:var(--mu)">i</span><div><b>Archived: read-only.</b><div>Restore the project to edit its study. Nothing here can be saved, added or removed.</div></div></div>' + sech('Scope and questions', '') + ovRO(false) + '<section class="cd rst-ro2"><div class="ch"><h2>Product</h2></div><dl class="rst-ro"><dt>Product</dt><dd>[Online booking and recall reminders for dental practices]</dd><dt>Decision</dt><dd>[Enter Germany with a paid pilot in Q2 2027, or not]</dd><dt>Horizon</dt><dd class="rst-m">24 months</dd></dl></section>', { arch: true });
+
+    /* ---------- RST-02 New research ---------- */
+    const npForm = (withMkt, o) => { o = o || {}; return '<section class="cd" style="gap:12px;max-width:760px"><h2 style="font-size:15px;font-weight:800">New research</h2>'
+      + fld('What would you like to investigate?', withMkt ? OV.q : '<span>' + MKT.replace(']', '') + ']</span>', { ta: true, why: 'required' })
+      + fld('Title', withMkt ? TITLE : 'The question is used if you leave it empty', { opt: true, ph: !withMkt })
+      + fld('Objective', withMkt ? OV.obj : '', { opt: true, ta: true, ph: true }) + '<div class="rst-g2">' + fld('Scope', withMkt ? OV.scope : '', { opt: true, ph: true }) + fld('Exclusions', withMkt ? OV.exc : '', { opt: true, ph: true }) + '</div>'
+      + (withMkt ? '<div class="rst-orig"><span class="l">Started from ' + ENG(7719) + '</span><span>Market <b>' + MKT + '</b> · tracked sector <b>[none]</b> · Markets filters: companies based in <b>[Germany]</b> · freshness <b>[last 30 days]</b> · source <b>[names this market]</b></span><span class="raw">These filters say where listed companies are based. Customer geography is chosen on Scope.</span></div>' : '')
+      + (o.err ? '<div class="rst-err" role="alert">' + G.un + '<div><b>Nothing was created.</b> The project and its study could not be saved together. What you typed is kept. ' + retry('Create again') + '</div></div>' : '')
+      + '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">' + (withMkt ? 'Create project and study' : 'Create') + '</button></div>'
+      + (withMkt ? '<p class="raw">Saves the project and its study together (' + ENG(7719) + ' <code>POST /api/research/projects/with-study</code>). Today the market arrives only as the question text (<code>?new=1&amp;question=</code>).</p>' : '<p class="raw">As built: <code>/research/projects?new=1</code>, <code>POST /api/research/projects</code>. No study is created.</p>') + '</section>'; };
+    const myRHead = () => '<div class="crumb"><a href="#">Research</a>/<b>My Research</b></div><header class="ph1"><div><h1>My Research</h1><p>Each project keeps one question together with its evidence and your Ask history.</p></div></header>';
+    const licRow = () => '<div class="rst-g3">'
+      + '<div class="rst-lic"><span class="eye">Founder · admin</span><div class="ph1" style="align-items:center"><b style="font-size:16px">Markets</b><div class="acts"><button type="button" class="btn">Export view</button><button type="button" class="btn">New market research</button></div></div><span class="raw">A header action, not the violet primary. Opens New research with the market named. As built: <code>founderZoneActions.js</code>.</span></div>'
+      + '<div class="rst-lic"><span class="eye">Advisor · operating partner</span><div class="ph1" style="align-items:center"><b style="font-size:16px">Markets</b><div class="acts"><button type="button" class="btn">Export view</button><button type="button" class="btn" aria-disabled="true" aria-describedby="tipA">New market research</button></div></div><span class="rst-tip" id="tipA" role="tooltip">Research projects open for the founder licence only; this licence has none to start.</span><span class="raw">As built: <code>advisorZoneActions.js</code>, <code>partnerZoneActions.js</code>.</span></div>'
+      + '<div class="rst-lic"><span class="eye">Investor</span><div class="ph1" style="align-items:center"><b style="font-size:16px">Markets</b><div class="acts"><button type="button" class="btn">Export view</button><button type="button" class="btn">Edit thesis</button></div></div><span class="raw">Not offered: the investor’s header carries Edit thesis instead.</span></div></div>';
+
+    /* ---------- RST-03 Scope ---------- */
+    const segCard = (s, o) => { o = o || {}; return '<article class="rst-seg' + (s.bh ? ' bh' : '') + '"><div class="r1"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="rst-dr" aria-label="Reorder ' + s.n + '">⋮⋮</button><b>' + s.n + '</b>' + (s.bh ? '<span class="rst-bh">★ Beachhead</span>' : '<button type="button" class="btn t bsm">Mark as beachhead</button>') + '</div><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Archive</button></div></div>'
+      + '<dl><dt>Buyer</dt><dd>' + s.buyer + '</dd><dt>User</dt><dd>' + s.user + '</dd><dt>Budget holder</dt><dd>' + s.bud + '</dd><dt>Purchasing unit</dt><dd>' + s.unit + '</dd><dt>What is counted</dt><dd>' + s.cnt + '</dd><dt>Size band</dt><dd>' + s.band + '</dd><dt>Industry</dt><dd style="grid-column:span 3">' + s.ind + '</dd><dt>Customer countries</dt><dd>' + (o.noCtry ? NONE('None chosen') : s.ctry) + '</dd><dt>Exclusions</dt><dd>' + s.exc + '</dd><dt>Validate segment</dt><dd style="grid-column:span 3">' + (s.val ? s.val + ' <a href="#" class="btn t bsm">Change</a>' : '<button type="button" class="btn bsm">Link a Validate segment</button>') + '</dd>'
+      + (s.note ? '<dt>Sample note</dt><dd style="grid-column:span 3">' + s.note + '</dd><dt>Sample limits</dt><dd style="grid-column:span 3">' + s.lim + '</dd>' : '') + '</dl></article>'; };
+    const scope = (o) => { o = o || {}; return sech('Scope and questions · Scope', 'The definition is yours. Eadwyn proposes nothing on Scope.', '<button type="button" class="btn p">Save scope</button>', ENG(7719))
+      + (o.conflict ? '<div class="rst-err" role="alert">' + G.tri + '<div><b>Someone saved this scope first</b> (another tab, 10:44). Your edits are kept below and nothing was overwritten.</div><button type="button" class="btn bsm">Reload and keep my edits</button></div>' : '')
+      + ovRO()
+      + '<section class="cd"><div class="ch"><h2>Product and decision</h2></div><div class="rst-g2">' + fld('Product', '[Online booking and recall reminders for dental practices]') + fld('Business model', '[Monthly subscription per practice]') + '</div>' + fld('Product boundary', '[Booking, reminders and waitlist. No billing and no clinical records.]', { ta: true }) + '<div class="rst-g2">' + fld('The decision to be made', '[Enter Germany with a paid pilot in Q2 2027, or not]') + fld('Horizon', '<span class="rst-m">24</span>', { u: 'months' }) + '</div></section>'
+      + '<section class="cd"><div class="ch"><h2>Segments · 2</h2><button type="button" class="btn bsm">Add a segment</button></div>'
+      + (o.offer === false ? '' : '<div class="rst-offer"><span>You started from Markets with <b>companies based in [Germany]</b>.</span><b>Use [Germany] as customer geography?</b><button type="button" class="btn bsm">Use Germany</button><button type="button" class="btn t bsm">No</button>' + FL('Q5 · option A') + '</div>')
+      + segCard(SEGS[0], { noCtry: o.offer !== false }) + segCard(SEGS[1]) + '<p class="raw">Archived segments: 1 · <a href="#" class="btn t bsm">Show archived</a> (restore from there; a segment is never deleted)</p></section>'
+      + '<section class="cd"><div class="ch"><h2>Linked venture</h2></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>' + VEN + '</b><span class="raw">the venture open in the company switcher · no second picker</span></div><div class="rst-orig"><span class="l">Started from · read-only</span><span>Market <b>' + MKT + '</b> · tracked sector <b>[none]</b></span><span><b>Markets filters: where listed companies are based</b> · [Germany] · [last 30 days] · [names this market]</span></div></section>'; };
+    const venStates = () => crop('<span class="eye">Linked venture · the three cases</span><div class="rst-g3">'
+      + '<section class="cd"><b>Linked</b><p style="font-size:12.5px"><b>' + VEN + '</b></p><span class="raw">read from the study (' + ENG(7719) + ')</span></section>'
+      + '<section class="cd">' + NONE() + '<p style="font-size:12.5px">No venture linked.</p><button type="button" class="btn bsm" style="align-self:flex-start">Link this study to ' + VEN + '</button><span class="raw">' + VEN + ' is the venture open in the company switcher</span></section>'
+      + '<section class="cd">' + chip('rf', 'Cannot read') + '<p style="font-size:12.5px">A venture is linked that you can no longer read.</p><span class="raw">No name is shown. The venture’s founder can add you to the venture.</span></section></div>', 1100);
+
+    /* ---------- RST-04 questions ---------- */
+    const qList = (o) => { o = o || {}; return sech('Scope and questions · Questions', 'Statuses are as you marked them. A project has one owner, so there is no owner column.', '<button type="button" class="btn p">Add question</button>', ENG(7720))
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="rst-tb"><colgroup><col style="width:42px"><col style="width:132px"><col><col style="width:104px"><col style="width:112px"><col style="width:96px"></colgroup><thead><tr><th scope="col"><span style="position:absolute;left:-9999px">Order</span></th><th scope="col">Topic</th><th scope="col">Question</th><th scope="col">Status</th><th scope="col">Evidence</th><th scope="col"><span style="position:absolute;left:-9999px">Actions</span></th></tr></thead><tbody>'
+      + J(QN.map((q, i) => '<tr' + (o.on === i ? ' class="on"' : '') + '><td><button type="button" class="rst-dr' + (o.ring === i ? ' rst-ring' : '') + '" aria-label="Move question ' + (i + 1) + ', use arrow keys">⋮⋮</button></td><td><span class="rst-tp">' + q[0] + '</span></td><td><a href="#" style="color:var(--ink);font-weight:700">' + q[1] + '</a>' + (q[5] ? '<small><b style="color:var(--ink)">Answer:</b> ' + q[5] + '</small>' : '') + '</td><td>' + qs(q[2]) + '</td><td><span class="rst-cnt"><span class="s">[' + q[3] + '] for</span>·<span class="c">[' + q[4] + '] against</span></span></td><td><button type="button" class="btn bsm">Edit</button></td></tr>'))
+      + '</tbody></table></section><p class="raw">An answered question keeps its “against” count. Reorder by dragging the handle or by focusing it and pressing ↑ ↓. Remove sits in Edit.</p>'; };
+
+    /* ---------- RST-05 one question ---------- */
+    const lk = (k, kind, text, note, o) => { o = o || {}; return '<article class="rst-lk ' + k + '"><div class="r1">' + dir(k) + (o.gone ? '<span class="rst-gone">' + G.nr + 'Finding removed</span>' : kind) + marked + '</div>' + (o.gone ? '' : '<p>' + text + '</p>') + '<div class="note"><b>Your note:</b> ' + note + '</div></article>'; };
+    const oneQ = () => '<div class="crumb" style="margin-top:-4px"><a href="#">Questions</a>/<b>Pricing</b></div>' + sech(QN[3][1], '', '<button type="button" class="btn p">Add evidence</button><button type="button" class="btn">Edit</button>', ENG(7720))
+      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="rst-tp">Pricing</span>' + qs('o') + '<span class="rst-cnt"><span class="s">[1] for</span>·<span class="c">[1] against</span></span><span class="raw">· [2] context</span></div>'
+      + '<div class="rst-g2"><div style="display:flex;flex-direction:column;gap:8px"><div class="rst-colh">' + G.up + 'Supporting · 1</div>' + lk('sup', FK('src'), '[Practice-software vendors in the sample price scheduling add-ons per practice per month.] <a href="#" class="cite">3</a>', '[A per-practice monthly price is the norm buyers know.]') + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px"><div class="rst-colh">' + G.dn + 'Contradicting · 1</div>' + lk('con', FK('hu'), '[Price sensitivity is higher than the landing-page test assumed.]', '[Sign-up at EUR 49 was well under the target.]') + '</div></div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px"><div class="rst-colh">' + G.ctx + 'Context · 2</div><div class="rst-g2">' + lk('ctx', kf('k3') + ' ' + ENG(7721), '[Net turnover of enterprises in 86.23, Germany, 2023] · EUR [14.6] bn <span class="rst-caveat">revenue of the enterprises in this activity, not customer spending</span>', '[Shows practices have revenue to spend; says nothing about software budgets.]') + lk('ctx', '', '', '[Older pricing note from the first interview round.]', { gone: true }) + '</div></div>'
+      + '<section class="cd"><div class="rst-g2">' + fld('Gap · in your words', '[No price observed yet for a German scheduling product. Competitor prices come in Competition and pricing.]', { ta: true }) + fld('Next validation action', '[Offer a paid pilot at EUR 49 a month to 5 practices in December.]', { ta: true }) + '</div>' + fld('Answer', 'Not answered yet', { ta: true, ph: true, why: 'Set the status to Answered when you write one. Contradicting evidence stays shown after you answer.' }) + '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Set aside</button><button type="button" class="btn">Save</button></div></section>'
+      + '<p class="raw">Eadwyn: an Ask answer saved to the project arrives in Findings as an interpretation; only an accepted or edited one can be picked here (RST-11).</p>';
+    const pickEv = () => crop('<div class="rst-h2"><div><h2 style="font-size:16px">Add evidence · Pricing</h2><p>Pick a finding or an attached reference, then its direction and your note.</p></div></div>'
+      + '<span class="eye">Findings</span>' + '<div class="rst-pick on"><span class="bx">✓</span>' + FK('src') + '<span>[Vendors in the sample price add-ons per practice per month.]</span></div><div class="rst-pick"><span class="bx"></span>' + FK('ai') + '<span>[Solo practices buy software through their dental association.] · accepted</span></div><div class="rst-pick off" aria-disabled="true"><span class="bx"></span>' + FK('ai') + '<span>[Practices will pay for any reminder tool.] · discarded, cannot be picked</span></div>'
+      + '<span class="eye">Attached references</span><div class="rst-pick"><span class="bx"></span>' + kf('k2') + '<span>[Enterprises · 86.23 · Germany · 2023] · [41,200]</span></div>'
+      + '<span class="eye">Direction</span><div class="seg" role="radiogroup" aria-label="Direction"><button type="button" role="radio" aria-checked="true">Supports</button><button type="button" role="radio" aria-checked="false">Contradicts</button><button type="button" role="radio" aria-checked="false">Context</button></div>' + fld('Your note', '[A per-practice monthly price is the norm buyers know.]', { ta: true }) + '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Link evidence</button></div>', 620);
+
+    /* ---------- RST-06 counts ---------- */
+    const ovCounts = (o) => { o = o || {}; return pbar() + ptabs('Overview') + '<div class="g"><section class="cd" style="grid-column:span 7"><div class="ch"><h2>Objective</h2><button type="button" class="btn bsm">Edit</button></div><p style="font-size:13.5px;line-height:1.55">' + OV.obj + '</p><dl class="rst-ro"><dt>Question</dt><dd>' + OV.q + '</dd><dt>Scope</dt><dd>' + OV.scope + '</dd><dt>Excluded</dt><dd>' + OV.exc + '</dd></dl></section>'
+      + '<section class="cd" style="grid-column:span 5"><h2 style="font-size:14px;font-weight:800">Progress</h2><div><b style="font-size:22px;font-weight:800">7 <span style="font-size:14px;color:var(--mu)">of 9</span></b><p class="raw">evidence sources answerable in Ask · as built</p></div><div style="border-top:1px solid var(--hair);padding-top:10px"><b style="font-size:13px">Key questions answered ' + ENG(7720) + '</b><div style="font:800 22px var(--mo);margin-top:4px">2 <span style="font-size:14px;color:var(--mu)">of 5</span></div><p class="raw">answered as you marked them · 3 open · 0 set aside · 1 open with contradicting evidence</p><span class="raw">Today on main this line reads Not recorded: “Key questions are not stored yet”.</span></div></section></div>'; };
+    const cntStates = () => crop('<span class="eye">Key questions answered · states, never a guessed 0</span><div class="rst-g4">'
+      + '<section class="cd"><span class="eye">Value</span><div style="font:800 22px var(--mo)">2 <span style="font-size:14px;color:var(--mu)">of 5</span></div><span class="raw">answered as you marked them</span></section>'
+      + '<section class="cd"><span class="eye">No study</span>' + NRw('This project has no study, so no question is stored.') + '<button type="button" class="btn bsm" style="align-self:flex-start">Start a study</button></section>'
+      + '<section class="cd"><span class="eye">Study, no question</span>' + NONE('None') + '<span class="raw">No question yet · 0 recorded</span><button type="button" class="btn bsm" style="align-self:flex-start">Add question</button></section>'
+      + '<section class="cd"><span class="eye">Failed read</span>' + chip('un') + '<span class="raw">The counts could not be read. Evidence coverage still shows.</span>' + retry() + '</section></div>', 1100);
+    const myCard = () => crop('<div style="display:flex;gap:8px;align-items:center">' + ENG('no issue') + '<span class="raw">proposed · built by no issue yet</span>' + FL('Q7 · option A') + '</div><article class="pc" style="max-width:420px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h3>' + TITLE + '</h3><span class="stt pd">' + G.half + 'In progress</span></div><div class="m"><span>9 sources</span><span>7 answerable</span></div><div class="prog" role="img" aria-label="2 of 5 questions answered"><i style="width:40%"></i></div><span class="raw">2 of 5 questions answered</span><div class="f"><span class="raw">Updated 19 Nov 2026</span><a class="btn t bsm" href="#">Continue →</a></div></article><p class="raw" style="max-width:420px">The project list read returns no question count today and #7730 leaves the bar out. With no study or a failed count, the card shows no bar, never an empty one.</p>', 480);
+
+    /* ---------- RST-07 completeness and decision ---------- */
+    const TOP = [['Customer definition', 'ad', '[2] references · [0] open questions · [0] contradicting', ''], ['Demand', 'ce', '[3] references · [0] open questions · [1] contradicting', ''], ['Size', 'ip', '[2] references · [1] open question · [0] contradicting', ''], ['Competition', 'nr', '[0] references · [0] questions', 'Alternatives and prices are not available yet (pass 3 · ◇ #7723, #7724)'], ['Pricing', 'ce', '[2] references · [1] open question · [1] contradicting', 'Price observations are not available yet (◇ #7723)'], ['Channels', 'ip', '[1] reference · [0] questions', ''], ['Risks', 'ip', '[0] references · [1] open question · [0] contradicting', '']];
+    const compl = () => '<section class="cd"><div class="ch"><h2>Completeness ' + ENG(7726) + '</h2><span class="raw">No score, no percentage</span></div><div class="rst-tps">' + J(TOP.map(t => '<div><b>' + t[0] + '</b>' + ts(t[1]) + '<small>' + t[2] + (t[3] ? '<br>' + t[3] : '') + '</small></div>')) + '</div></section>';
+    const covApart = () => '<div class="rst-cov"><span class="eye" style="flex:none">Evidence coverage · a different thing</span><b>7 of 9</b><span>sources answerable in Ask</span><span class="raw" style="margin-left:auto">says nothing about completeness</span></div>';
+    const decHist = () => '<section class="cd"><div class="ch"><h2>Decisions · 1 ' + ENG(7720) + '</h2><button type="button" class="btn p">Record a decision</button></div><div class="rst-hist"><div><div class="r1"><span class="rst-oc">Test further</span><span class="raw">' + FOUNDER + ' · 18 Nov 2026 10:15 · latest</span></div><p><b>Rationale.</b> [Interviews show demand, but the EUR 49 price test contradicts it. Run a paid pilot before deciding.]</p><p><b>Could reverse it.</b> [Practices accept EUR 49 a month without a discount.]</p><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="raw">Evidence:</span>' + dir('sup') + '<span style="font-size:12px">Demand question · [3] for</span>' + dir('con') + '<span style="font-size:12px">' + FK('hu') + ' [Price sensitivity is higher…]</span></div></div></div><p class="raw">A new decision is a new entry. Nothing here is edited or deleted. Eadwyn never writes or proposes the decision.</p></section>';
+    const decSheet = () => '<div class="rst-scrim"></div><div class="rst-sheet" role="dialog" aria-modal="true" aria-labelledby="rd"><div class="sh"><div><h2 id="rd">Record a decision</h2><p class="raw" style="margin-top:4px">Adds a new entry · earlier decisions stay as they are</p></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="sb">'
+      + '<span class="rst-f"><span>Outcome</span></span><div class="rst-out" role="radiogroup" aria-label="Outcome"><label class="on"><i aria-hidden="true"></i>Enter</label><label><i aria-hidden="true"></i>Do not enter</label><label><i aria-hidden="true"></i>Test further</label></div>'
+      + fld('Rationale', '[The paid pilot converted 4 of 5 practices at EUR 49.]', { ta: true }) + fld('Assumptions that could reverse it', '[Pilot practices renew after three months.]', { ta: true })
+      + '<span class="rst-f"><span>Evidence for this decision</span></span><div class="rst-pick on"><span class="bx">✓</span>' + dir('sup') + '<span>Demand question · [3] for · [1] against</span></div><div class="rst-pick on"><span class="bx">✓</span>' + dir('con') + FK('hu') + '<span>[Price sensitivity is higher…]</span></div><div class="rst-pick"><span class="bx"></span>' + kf('k2') + '<span>[Enterprises · 86.23 · Germany · 2023]</span></div>'
+      + '</div><div class="sf"><span class="raw">Saved as ' + FOUNDER + ', now</span><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Record decision</button></div></div>';
+
+    /* ---------- RST-08 evidence ---------- */
+    const OBS = [
+      ['[Enterprises]', '[41,200] enterprises', 'Enterprise (legal unit)', 'Germany', '2023', 'Estimate', SRC_A, 'k2', true],
+      ['[Persons employed]', '[196,500] persons', 'Person', 'Germany', '2023', 'Estimate', SRC_A, 'k5', false],
+      ['[Net turnover]', 'EUR [14.6] bn', 'Enterprise turnover', 'Germany', '2023', 'Estimate', SRC_A, 'k3', true],
+      ['[Registered practices]', '[44,900] establishments', 'Establishment', 'Germany', '2025', 'Unspecified', SRC_B, 'k2', false]
+    ];
+    const obsRow = (r) => '<div class="rst-obs"><div><a href="#" style="font-weight:700;color:var(--ink)">' + r[0] + ' · 86.23</a><small>opens the inspector (RMO-01)</small></div><div class="rst-m">' + r[1] + (r[7] === 'k3' ? '<small class="rst-caveat" style="font-family:var(--sg)">revenue of the enterprises in this activity, not customer spending</small>' : '') + '</div><div>' + r[2] + '</div><div>' + r[3] + '<small>period ' + r[4] + '</small></div><div>' + (r[5] === 'Estimate' ? '<span class="st-c">' + r[5] + '</span> ' + ENG(7717) : '<span class="st-c">' + r[5] + '</span>') + '</div><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start"><span style="font-size:12px">' + r[6] + '</span>' + (r[8] ? '<span class="st-c st-l-ok">' + G.ok + 'Attached</span>' : '<button type="button" class="btn bsm">Attach to this study</button>') + '</div></div>';
+    const findObs = (o) => { o = o || {}; return sech('Evidence and findings · Find an observation', 'Published figures for the study’s customer countries, industry codes and a period. Each says what it counts and when it was measured.', '', ENG(7716))
+      + '<div class="tools">' + fld('Customer countries', 'Germany') + fld('Industry codes', '[NACE 86.23]') + fld('Period', '[2023]') + '<button type="button" class="btn" style="align-self:flex-end">Find</button></div>'
+      + (o.un ? unbox('The observation search could not be read.', 'Your attached references below still show. Nothing here is a claim that no figure exists.') : '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="rst-obs h"><div>Metric</div><div>Value</div><div>What it counts</div><div>Geography</div><div>Status</div><div>Source</div></div>' + J(OBS.map(obsRow)) + '</section>'
+      + '<div class="nt"><span class="ic" aria-hidden="true" style="background:var(--mu)">i</span><div><b>Nothing held for size band [0–9 persons employed] in 2023.</b><div>Missing: the period. ' + SRC_A + ' publishes this band for 2021 only. No placeholder number is shown.</div></div></div>'); };
+    const attachSheet = () => '<div class="rst-scrim"></div><div class="rst-sheet" role="dialog" aria-modal="true" aria-labelledby="as"><div class="sh"><div><h2 id="as">Attach to this study</h2><p class="raw" style="margin-top:4px">[Enterprises · 86.23 · Germany · 2023] · [41,200] · ' + SRC_A + '</p></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="sb">'
+      + '<div style="display:flex;gap:6px;align-items:center">' + kf('k2') + '<span class="raw">kind of figure, from what the observation counts</span></div>' + fld('Topic', 'Size ▾') + fld('Segment', SEGS[0].n + ' ▾') + fld('Note', '[Upper bound: includes practices with more than two dentists.]', { ta: true }) + fld('Quality rationale', '[National statistics office sample; enterprise counts, not establishments.]', { ta: true }) + '<p class="raw">Pins this edition. If a later value arrives the study says “A newer version exists” and changes nothing by itself.</p>'
+      + '</div><div class="sf"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Attach</button></div></div>';
+    const refCard = (b, sm, o) => { o = o || {}; return '<div class="rst-ref"><div class="r1"><div><b>' + b + '</b><div><small>' + sm + '</small></div></div><button type="button" class="btn bsm">Remove</button></div>' + (o.newer ? '<span class="rst-newer" style="align-self:flex-start">' + G.re + o.newer + '</span>' : '') + (o.cav ? '<span class="rst-caveat">' + o.cav + '</span>' : '') + (o.note ? '<span style="font-size:12px"><b>Note:</b> ' + o.note + '</span>' : '') + '</div>'; };
+    const attached = () => sech('Evidence and findings · Attached references', 'Five kinds of figure, each with its word. A modelled figure is never shown as an observation.', '<button type="button" class="btn p">Find an observation</button>', ENG(7721))
+      + '<div class="rst-g2">'
+      + '<div class="rst-grp"><h3>' + kf('k1') + '<span class="c">1</span></h3>' + refCard('Directory market ' + MKT, '[12] companies listed · as read 19 Nov 2026 · topic Competition', { note: '[Vendors, not customers.]' }) + '</div>'
+      + '<div class="rst-grp"><h3>' + kf('k2') + '<span class="c">1</span></h3>' + refCard('[Enterprises · 86.23 · Germany · 2023] · [41,200]', 'Period measured 2023 · retrieved 12 Nov 2026 · ' + SRC_A + ' · topic Size · ' + SEGS[0].n, { note: '[Upper bound: includes practices with more than two dentists.]' }) + '</div>'
+      + '<div class="rst-grp"><h3>' + kf('k3') + '<span class="c">1</span></h3>' + refCard('[Net turnover · 86.23 · Germany · 2023] · EUR [14.6] bn', 'Period measured 2023 · retrieved 12 Nov 2026 · ' + SRC_A + ' · topic Pricing', { cav: 'Revenue of the enterprises in this activity, not customer spending' }) + '</div>'
+      + '<div class="rst-grp"><h3>' + kf('k4') + '<span class="c">1</span></h3>' + refCard('Sizing version [3] · Total market, Serviceable, Obtainable', 'Saved 16 Nov 2026 by ' + FOUNDER + ' · ' + chip('prov') + ' · topic Size', { newer: 'A newer version exists: version [4]' }) + '</div>'
+      + '<div class="rst-grp"><h3>' + kf('k5') + '<span class="c">0</span></h3><div class="st-none"><span>None attached</span></div><span class="raw">No first kind of reference carries an activity proxy yet, so this group is drawn empty.</span></div>'
+      + '<div class="rst-grp"><h3>Mark for a question</h3><div class="rst-pick"><span class="bx"></span><span>' + kf('k2') + ' [41,200] → <b>Size</b> question</span></div><div class="seg" role="radiogroup" aria-label="Direction"><button type="button" role="radio" aria-checked="true">Supports</button><button type="button" role="radio" aria-checked="false">Contradicts</button><button type="button" role="radio" aria-checked="false">Context</button></div><span class="raw">Contradicting evidence sits beside supporting evidence on the question (RST-05).</span></div>'
+      + '</div><div class="nt"><span class="ic" aria-hidden="true" style="background:var(--mu)">i</span><div><b>The Evidence and Findings tabs stay as built.</b><div><a href="#">Open Evidence</a> (9 sources, index state, In Ask) · <a href="#">Open Findings</a> (6 findings with citations). Eadwyn writes interpretations only, accepted, edited or discarded in Findings.</div></div></div>';
+    const refStates = () => crop('<span class="eye">Reference states · none shows a field of the record</span><div class="rst-g4">'
+      + '<div class="rst-ref">' + chip('rf') + '<b>Saved market figure</b><small>The kind only. You can no longer read this record.</small><button type="button" class="btn bsm" style="align-self:flex-start">Remove</button></div>'
+      + '<div class="rst-ref"><span class="rst-gone">' + G.nr + 'No longer available</span><b>Directory market</b><small>Attached 2 Nov 2026</small><button type="button" class="btn bsm" style="align-self:flex-start">Remove</button></div>'
+      + '<div class="rst-ref">' + chip('un') + '<b>Observation</b><small>This reference could not be read. The other references still show.</small>' + retry() + '</div>'
+      + '<div class="rst-ref">' + chip('na', 'Not available yet') + '<b>Comparable-price reading</b><small>This kind cannot be attached yet.</small>' + ENG(7721) + '</div></div>', 1100);
+
+    /* ---------- RST-09 customers and demand ---------- */
+    const DEM = [
+      ['Waitlist', 'in', '[23]', 'one count', 'No date or status: the waitlist keeps a count only'],
+      ['Need-to-have', 'in', '[3]', 'Counted · 1 To confirm not counted', 'latest 14 Nov 2026'],
+      ['Would pay', 'it', '[2]', 'Confirmed · 1 To confirm not counted', 'EUR [45] a month × 2 · USD [50] a month × 1 (To confirm) · not committed'],
+      ['Letter of intent', 'it', '[1]', 'Confirmed', 'EUR [540] a year · 12 Nov 2026'],
+      ['Pre-sale', 'pay', '[0]', 'recorded', 'A measured 0: Validate holds pre-sales and none was recorded'],
+      ['Deposits and pilots', 'pay', '[1]', 'from the revenue ledger', 'EUR [150] received 3 Nov 2026 · proof level [Bank statement]']
+    ];
+    const demTbl = () => '<div class="rst-dem h"><span>Kind and stage ' + FL('Q6 · option A') + '</span><span>Count</span><span></span><span>Status, amounts by currency, date</span></div>' + J(DEM.map(d => '<div class="rst-dem"><span><b>' + d[0] + '</b><br>' + stg(d[1]) + '</span><span class="rst-m">' + d[2] + '<small style="font-family:var(--sg)">' + d[3] + '</small></span><span></span><span>' + d[4] + '</span></div>'))
+      + '<div class="rst-dem"><span><b>Unpaid trial</b></span><span>' + chip('nr') + '</span><span></span><span class="st-why">No store holds unpaid trials.</span></div><div class="rst-dem"><span><b>Repeat use</b></span><span>' + chip('nr') + '</span><span></span><span class="st-why">Retention is venture-wide in Grow and is not a study reference.</span></div>';
+    const custDemand = (o) => { o = o || {}; return sech('Customers and demand', 'Read from ' + VEN + ' in Validate. Nothing here is summed across kinds or currencies.', '<a class="btn" href="#">Open in Validate</a>', ENG(7722))
+      + '<div class="chips" role="tablist" aria-label="Study segment"><button type="button" role="tab" aria-checked="true">' + SEGS[0].n + ' ★</button><button type="button" role="tab" aria-checked="false">' + SEGS[1].n + '</button><button type="button" role="tab" aria-checked="false">No segment recorded</button></div>'
+      + (o.partial ? pban('Validate could not be read.', 'The study’s own segments and sample notes still show. No interview or demand count is drawn.') : '')
+      + '<div class="rst-blk"><h3>What people said <small>linked Validate segment ' + SEGS[0].val + '</small></h3>'
+      + (o.partial ? unbox('Interviews, problems and experiments could not be read.', 'This is not a claim that there are none.') : '<div class="rst-sc"><div><span class="raw">Interviews held</span><span class="v">7</span><span class="raw">2 Oct – 6 Nov 2026</span></div><div><span class="raw">Stage</span><span style="font-size:12.5px">[Problem] 5 · [Solution] 2</span></div><div><span class="raw">Fit with the ideal customer profile</span><span style="font-size:12.5px">[Strong] 5 · [Partial] 2</span></div><div><span class="raw">Quotes</span><span style="font-size:12.5px">1 interview agreed to be quoted</span></div></div>'
+      + '<span class="rst-sub">Problems reported</span><div class="rst-ln"><span>[No-shows cost chair time]</span><span class="rst-m">6 interviews</span></div><div class="rst-ln"><span>[Phone booking ties up the front desk]</span><span class="rst-m">4 interviews</span></div><div class="rst-ln"><span>[Recall letters still go by post]</span><span class="rst-m">2 interviews</span></div>'
+      + '<div class="rst-quote">“[We lose two appointments a day to no-shows.]” <span class="raw" style="font-style:normal">· consented quote · 14 Oct 2026</span></div>')
+      + '</div><div class="rst-blk"><h3>What was measured</h3>'
+      + (o.partial ? '<p class="raw">Not drawn while Validate is Unavailable.</p>' : '<span class="rst-sub">Hypotheses and experiments · no pass or fail is stored</span><div class="rst-g3"><div class="rst-exp"><b>[H1] [Solo practices will pay to cut no-shows]</b><div class="r1"><span>[Landing page at EUR 49 a month]</span><span class="rst-esk">Done</span></div><span class="raw">Target [5% sign-up] · result [1.2% sign-up]</span>' + dir('con') + '<span class="raw">Measured</span></div>'
+      + '<div class="rst-exp"><b>[H2] [The owner signs, staff choose]</b><div class="r1"><span>[Ask 5 practices who signs]</span><span class="rst-esk">Done</span></div><span class="raw">Target [4 of 5] · result [5 of 5]</span>' + dir('sup') + '<span class="raw">Pattern</span></div>'
+      + '<div class="rst-exp"><b>[H3] [Associations refer members]</b><div class="r1"><span>[Newsletter offer]</span><span class="rst-esk">Planned</span></div><span class="raw">Target [10 sign-ups]</span><span class="rst-gone">' + G.nr + 'Direction not recorded</span></div></div>'
+      + '<div class="rst-pair" role="group" aria-label="Contradiction kept together"><div><b>' + G.up + ' [5] positive interviews</b><span>said no-shows cost them money</span></div><div><b>' + G.dn + ' [H1] experiment · Contradicts · Measured</b><span>sign-up at EUR 49 was under target</span></div></div>'
+      + '<span class="rst-sub">Demand records · No segment recorded (only an interview carries a segment)</span>' + demTbl())
+      + '</div><div class="rst-blk"><h3>Sample note and limits <small>yours, edited here</small></h3><div class="rst-g2">' + fld('Sample note', SEGS[0].note, { ta: true }) + fld('Sample limits', SEGS[0].lim, { ta: true }) + '</div></div>'; };
+
+    /* ---------- RST-10 entry strategy ---------- */
+    const entry = () => sech('Entry strategy and risks', 'Channels, capacity and readiness as recorded in Grow and in the attached sizing version. Spend has no currency in Grow and is read as US dollars.', '<a class="btn" href="#">Open in Grow</a>', ENG(7722))
+      + '<div class="rst-blk"><h3>Referenced channels <small>2 · spend read as US dollars</small></h3>'
+      + '<b style="font-size:13px">[Dental association newsletter]</b><div class="rst-ch"><div><span class="rst-sub">Assumed then · pinned when attached</span><span class="v">USD [180]</span><span class="raw">CAC in [2026-09] · USD [1,800] spend · [10] customers</span></div><div><span class="rst-sub">Measured now</span><span class="v">USD [240]</span><span class="raw">CAC in [2026-11] · USD [1,920] spend · [8] customers</span></div></div>'
+      + '<b style="font-size:13px">[Search ads]</b><div class="rst-ch"><div><span class="rst-sub">Assumed then</span><span class="v">USD [310]</span><span class="raw">CAC in [2026-09] · USD [3,100] spend · [10] customers</span></div><div><span class="rst-sub">Measured now</span>' + NRw('Grow: no customer is attributed to this channel in [2026-11], so CAC cannot be computed.') + '</div></div></div>'
+      + '<div class="rst-g2"><div class="rst-blk"><h3>Capacity <small>from sizing version [3] ' + chip('prov') + '</small></h3><div class="rst-ln"><span>Sales capacity</span><span class="rst-m">[20] deals a month</span></div><div class="rst-ln"><span>Sales cycle</span><span class="rst-m">[45] days</span></div><div class="rst-ln"><span>Horizon</span><span class="rst-m">[24] months</span></div><div class="rst-ln"><span>Retention</span><span class="rst-m">[88]% a year</span></div></div>'
+      + '<div class="rst-blk"><h3>Payback per channel <small>payback on revenue, not margin</small></h3><div class="rst-ln"><span>[Dental association newsletter]</span><span><b class="rst-m">[4.4] months</b><br><span class="raw">CAC USD [240] ([2026-11]) · revenue per account USD [648] a year (version [3])</span></span></div><div class="rst-ln"><span>[Search ads]</span><span>' + NRw('CAC for [2026-11] is missing') + '</span></div><span class="raw">Only a figure the Worker returns; both inputs named, one currency.</span></div></div>'
+      + '<div class="rst-g2"><div class="rst-blk"><h3>Readiness of Germany <small>Recorded in Grow</small></h3><div class="rst-ln"><span>Demand</span><span><b class="rst-m">7</b> of 10 · <span class="raw">[Validate interviews, Nov 2026]</span></span></div><div class="rst-ln"><span>Regulation</span><span><b class="rst-m">5</b> of 10 · <span class="raw">[Data-protection review notes]</span></span></div><div class="rst-ln"><span>Partners</span><span>' + chip('nr') + '</span></div><div class="rst-ln"><span>Cost</span><span><b class="rst-m">6</b> of 10 · <span class="raw">[Agency quote]</span></span></div><span class="raw">No total: Grow gives one only when all four parts are scored.</span></div>'
+      + '<div class="rst-blk"><h3>Referenced price</h3>' + NRw('Prices arrive with Competition and pricing (pass 3, ◇ #7723).') + '<h3 style="margin-top:6px">Open questions · Risks</h3><div class="rst-ln"><span>' + QN[4][1] + '</span><span>' + qs('o') + '</span></div><span class="raw">From the question list (RST-04).</span></div></div>';
+
+    /* ---------- RST-11 Eadwyn ---------- */
+    const eadwyn = () => crop('<span class="eye">What Eadwyn proposes in a study</span><div class="rst-g2"><div style="display:flex;flex-direction:column;gap:10px"><b>A · An Ask answer saved to the project</b><article class="fd ea2"><div class="kk">' + FK('ai') + '<span class="stt pd">' + G.ring + 'Proposal</span></div><p>[Solo practices appear to buy software through their dental association more than directly.] <a href="#" class="cite">2</a> <a href="#" class="cite">3</a></p><div style="display:flex;gap:6px"><button type="button" class="btn p bsm">Accept</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Discard</button></div></article><p class="raw">It arrives in Findings, dashed. Only an accepted or edited interpretation can be linked to a question. A discarded one cannot be picked.</p></div>'
+      + '<div style="display:flex;flex-direction:column;gap:10px"><b>B · What Eadwyn never does in a study</b><div class="rst-never" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + J(['Write the scope', 'Write a question’s answer', 'Write or propose the decision', 'Write a market size', 'Write a price', 'Write a quote', 'Write a verdict', 'Write report text'].map(t => '<div><i aria-hidden="true">✕</i>' + t + '</div>')) + '</div></div></div>', 1100);
+
+    /* ---------- RST-12 empty states ---------- */
+    const EMP = [['Study tab', 'No study', 'This project has no study.', 'Start a study'], ['Scope', 'No segment', 'Add who you sell to: buyer, user and what is counted.', 'Add a segment'], ['Questions', 'No question', 'Questions hold the evidence for and against.', 'Add question'], ['Completeness', 'No decision', 'No decision recorded.', 'Record a decision'], ['Find an observation', 'Nothing held', 'No observation is held for Germany and [86.23] in [2024]. Missing: the period.', ''], ['Attached references', 'No reference', 'No reference attached.', 'Find an observation'], ['Customers and demand', 'No venture', 'No venture linked, so there is nothing to read.', 'Link a venture on Scope'], ['Customers and demand', 'Nothing in Validate', VEN + ' has no Validate segment, interview or demand record yet.', 'Open in Validate'], ['Entry strategy and risks', 'Nothing from Grow', 'No channel or readiness record is referenced.', 'Open in Grow']];
+    const empties = () => crop('<span class="eye">Empty states · one per screen, each with the one action that fills it</span><div class="rst-g3">' + J(EMP.map(e => '<div class="rst-emp"><span class="w">' + e[0] + '</span>' + NONE(e[1]) + '<p>' + e[2] + '</p>' + (e[3] ? '<button type="button" class="btn bsm">' + e[3] + '</button>' : '<span class="raw" style="margin-top:auto">No action: names what is missing</span>') + '</div>')) + '</div>', 1100);
+
+    /* ---------- RST-13 states grid ---------- */
+    const STR = [
+      ['RST-01', 'Study frame', 'Section list and bar', 'No study: None, Start a study', 'Study read failed. Other tabs still open', 'Not your project: reads as not found', 'Archived: read-only'],
+      ['RST-02', 'New research', 'Form kept', 'Sector [none] reads None', 'Create failed: nothing created, typed text kept', 'Advisor, partner: disabled with reason', 'Creating… one button busy'],
+      ['RST-03', 'Scope', 'Field rows', 'Each empty field: Not recorded', 'Save failed, edits kept', 'Venture you cannot read: no name shown', 'Someone saved first: Reload and keep my edits'],
+      ['RST-04', 'Questions', 'Five row skeletons', 'Counts with no study: Not recorded', 'Questions could not be read', 'Not your project: reads as not found', 'Reorder saving… row keeps place'],
+      ['RST-05', 'One question', 'Two columns', 'Answer: Not answered yet', 'Links could not be read', 'Not your project: reads as not found', 'Link saving…'],
+      ['RST-06', 'Counts', 'Number skeleton', 'No study: Not recorded', 'Counts failed. Overview still shows coverage', '—', '—'],
+      ['RST-07', 'Completeness, decision', 'Seven rows', 'No decision recorded', 'Completeness failed: no topic state drawn', '—', 'Recording… sheet stays open'],
+      ['RST-08', 'Evidence', 'Result rows', 'Published: Not recorded', 'Search failed. Attached references still show', 'A reference: kind only', 'Attaching…'],
+      ['RST-09', 'Customers and demand', 'Blocks', 'Unpaid trial, Repeat use', 'Validate read: Partial banner, own segments show', 'The venture’s founder can add you to the venture', 'Note saving…'],
+      ['RST-10', 'Entry strategy', 'Blocks', 'Unscored part, payback input', 'Grow read failed. Sizing lines still show', 'The venture’s founder can add you to the venture', '—']
+    ];
+    const cell = (k, t) => '<div class="rst-cell">' + (k === 'ld' ? sk('70%') + sk('90%') + sk('50%') + '<p>' + t + '</p>' : k === 'nr' ? chip('nr') + '<p>' + t + '</p>' : k === 'un' ? chip('un') + '<p>' + t + '</p>' + retry() : k === 'rf' ? (t === '—' ? chip('na') + '<p>Does not apply: the study is the owner’s only</p>' : chip('rf') + '<p>' + t + '</p>') : (t === '—' ? chip('na') + '<p>Nothing is saved here</p>' : '<span class="st-c">' + G.re + 'Saving</span><p>' + t + '</p>')) + '</div>';
+    const statesGrid = () => crop('<span class="eye">RST-01 to RST-10 against Loading, Not recorded, Unavailable, Refused and saving · Unavailable names what still works</span><div class="rst-grid" style="grid-template-columns:150px repeat(5,minmax(0,1fr))"><span></span>' + J(['Loading', 'Not recorded', 'Unavailable', 'Refused', 'Saving, conflict, archived'].map(h => '<span class="gh">' + h + '</span>')) + J(STR.map(r => '<span class="rh">' + r[1] + '<small>' + r[0] + '</small></span>' + cell('ld', r[2]) + cell('nr', r[3]) + cell('un', r[4]) + cell('rf', r[5]) + cell('sv', r[6]))) + '</div>'
+      + '<div class="rst-g3"><div class="rst-err" role="alert">' + G.un + '<div><b>Save failed.</b> Your edits are kept. Nothing was saved. ' + retry('Save again') + '</div></div><div class="rst-err" role="alert">' + G.tri + '<div><b>Someone else saved first.</b> Nothing was overwritten. <button type="button" class="btn bsm">Reload and keep my edits</button></div></div><div class="nt"><span class="ic" aria-hidden="true" style="background:var(--mu)">' + G.lock + '</span><div><b>Archived: read-only.</b><div>Restore the project to edit its study.</div></div></div></div>', 1400);
+
+    /* ---------- phone 390 ---------- */
+    const phone = (title, body, extra) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative;overflow:hidden"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px;max-width:250px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + title + '</b><button type="button" class="pi" aria-label="Open research context">◫</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (extra || '') + '</div></div>';
+    const ptabsM = (cur) => '<nav class="rst-ptabs" aria-label="Project">' + J(TABS.map(t => '<a href="#"' + (t[0] === cur ? ' aria-current="page"' : '') + '>' + t[0] + '</a>')) + '</nav>';
+    const pHead = (sec) => '<div class="crumb">My Research / Study</div><b style="font-size:16px;line-height:1.3">' + TITLE + '</b>' + ptabsM('Study') + '<button type="button" class="btn" style="min-height:44px;justify-content:space-between" aria-haspopup="dialog"><span>' + sec + '</span><span aria-hidden="true">▾</span></button>';
+    const psheet = (inner, lab) => '<div class="rst-pscrim"></div><div class="rst-psheet" role="dialog" aria-modal="true" aria-label="' + lab + '"><span class="grab2" aria-hidden="true"></span>' + inner + '</div>';
+    const pqcard = (q) => '<div class="rst-pc"><div class="r1"><span class="rst-tp">' + q[0] + '</span>' + qs(q[2]) + '</div><b style="font-size:13.5px;line-height:1.35">' + q[1] + '</b><div class="r1"><span class="rst-cnt"><span class="s">[' + q[3] + '] for</span>·<span class="c">[' + q[4] + '] against</span></span><button type="button" class="pi" aria-label="Move question">⋮⋮</button></div></div>';
+    const pRef = (k, b, s) => '<div class="rst-pc">' + kf(k) + '<b style="font-size:13px">' + b + '</b><span class="raw">' + s + '</span><button type="button" class="btn" style="min-height:44px">Remove</button></div>';
+    const MOB = {
+      RST14A: () => phone('Study', pHead('3 · Size and scenarios'), psheet('<b style="font-size:16px">Study sections</b>' + J(SECS.map((s, i) => '<a href="#" class="rst-prow"' + (i === 0 ? ' aria-current="page" style="font-weight:800;color:var(--vt)"' : ' style="color:var(--ink)"') + '><span>' + (i + 1) + ' · ' + s[1] + '</span><small>' + (s[2] ? '' : 'Not built yet') + '</small></a>')) + '<p class="raw">The six tabs scroll sideways; Study is the last.</p>', 'Study sections')),
+      RST14B: () => phone('New research', '<b style="font-size:18px">New research</b>' + fld('What would you like to investigate?', OV.q, { ta: true }) + fld('Title', TITLE, { opt: true }) + '<div class="rst-orig"><span class="l">Started from ' + ENG(7719) + '</span><span>Market <b>' + MKT + '</b> · sector [none]</span><span>Companies based in [Germany] · [last 30 days] · [names this market]</span><span class="raw">These filters say where listed companies are based. Customer geography is chosen on Scope.</span></div><button type="button" class="btn p" style="min-height:48px">Create project and study</button>'),
+      RST14C: () => phone('Scope', pHead('1 · Scope and questions') + '<div class="rst-offer" style="font-size:12.5px"><b>Use [Germany] as customer geography?</b><button type="button" class="btn" style="min-height:44px">Use Germany</button><button type="button" class="btn t" style="min-height:44px">No</button></div>' + fld('Product', '[Online booking and recall reminders]') + fld('The decision to be made', '[Enter Germany with a paid pilot in Q2 2027, or not]', { ta: true }) + fld('Horizon', '<span class="rst-m">24</span>', { u: 'months' }) + '<button type="button" class="btn p" style="min-height:48px">Save scope</button>'),
+      RST14D: () => phone('Segment', '<div class="rst-pc" style="border-color:var(--vi)"><div class="r1"><b style="font-size:14px">' + SEGS[0].n + '</b><span class="rst-bh">★ Beachhead</span></div>' + J([['Buyer', SEGS[0].buyer], ['User', SEGS[0].user], ['Budget holder', SEGS[0].bud], ['Purchasing unit', SEGS[0].unit], ['What is counted', SEGS[0].cnt], ['Industry', '[86.23]'], ['Size band', SEGS[0].band], ['Customer countries', 'Germany'], ['Validate segment', SEGS[0].val]].map(r => '<div class="ln"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>')) + '<div class="ln"><span>Sample note</span><span>' + SEGS[0].note + '</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn" style="min-height:44px">Edit</button><button type="button" class="btn" style="min-height:44px">Archive</button></div></div>'),
+      RST14E: () => phone('Questions', pHead('1 · Scope and questions') + '<button type="button" class="btn p" style="min-height:48px">Add question</button>' + J(QN.slice(0, 4).map(pqcard))),
+      RST14F: () => phone('Pricing question', '<span class="rst-tp" style="align-self:flex-start">Pricing</span><b style="font-size:15px;line-height:1.35">' + QN[3][1] + '</b><div style="display:flex;gap:6px">' + qs('o') + '<span class="rst-cnt"><span class="s">[1] for</span>·<span class="c">[1] against</span></span></div><div class="rst-colh">' + G.up + 'Supporting · 1</div>' + lk('sup', FK('src'), '[Vendors price add-ons per practice per month.]', '[The norm buyers know.]') + '<div class="rst-colh">' + G.dn + 'Contradicting · 1</div>' + lk('con', FK('hu'), '[Price sensitivity is higher than the test assumed.]', '[Sign-up under target.]') + '<div class="rst-colh">' + G.ctx + 'Context · 2</div>' + lk('ctx', '', '', '[Older pricing note.]', { gone: true }) + '<button type="button" class="btn p" style="min-height:48px">Add evidence</button>'),
+      RST14G: () => phone('Overview', '<b style="font-size:16px">' + TITLE + '</b>' + ptabsM('Overview') + '<section class="cd"><span class="raw">Evidence coverage</span><b style="font:800 20px var(--mo)">7 of 9</b><span class="raw">sources answerable in Ask</span></section><section class="cd"><span class="raw">Key questions answered ' + ENG(7720) + '</span><b style="font:800 20px var(--mo)">2 of 5</b><span class="raw">answered as you marked them</span></section>', psheet('<b style="font-size:15px">Research context</b><span class="eye">Open questions · 3</span>' + J(OPENQ.map(q => '<div class="rst-prow"><span style="font-size:12.5px;line-height:1.35">' + q[1] + '</span></div>')) + '<span class="eye">Evidence coverage</span><span style="font-size:12.5px"><b>7 of 9</b> sources answerable in Ask</span>', 'Research context')),
+      RST14H: () => phone('Completeness', pHead('Study home · Completeness') + J(TOP.map(t => '<div class="rst-pc" style="gap:4px"><div class="r1"><b>' + t[0] + '</b>' + ts(t[1]) + '</div><span class="raw">' + t[2] + '</span></div>')) + '<span class="raw">No score, no percentage. Evidence coverage is on Overview.</span>'),
+      RST14I: () => phone('Completeness', '<b>Decisions · 1</b><div class="rst-pc"><span class="rst-oc" style="align-self:flex-start">Test further</span><span class="raw">' + FOUNDER + ' · 18 Nov 2026</span></div>', psheet('<b style="font-size:16px">Record a decision</b><div style="display:flex;flex-direction:column;gap:6px" role="radiogroup" aria-label="Outcome"><label class="rst-pick on" style="min-height:44px"><span class="bx">✓</span>Enter</label><label class="rst-pick" style="min-height:44px"><span class="bx"></span>Do not enter</label><label class="rst-pick" style="min-height:44px"><span class="bx"></span>Test further</label></div>' + fld('Rationale', '[The paid pilot converted 4 of 5 practices.]', { ta: true }) + fld('Assumptions that could reverse it', '[Pilot practices renew.]', { ta: true }) + '<button type="button" class="btn" style="min-height:44px">Evidence · 2 chosen ▾</button><button type="button" class="btn p" style="min-height:48px">Record decision</button>', 'Record a decision')),
+      RST14J: () => phone('Find an observation', '<div class="crumb">Study / Evidence and findings</div><button type="button" class="btn" style="min-height:44px">Germany · [86.23] · [2023] ▾</button>' + J(OBS.slice(0, 3).map(r => '<div class="rst-pc">' + kf(r[7]) + '<b>' + r[0] + ' · 86.23</b><div class="ln"><span>Value</span><span class="rst-m">' + r[1] + '</span></div><div class="ln"><span>Counts</span><span>' + r[2] + '</span></div><div class="ln"><span>Period measured</span><span>' + r[4] + '</span></div><div class="ln"><span>Status</span><span>' + r[5] + '</span></div>' + (r[8] ? '<span class="st-c st-l-ok" style="align-self:flex-start">' + G.ok + 'Attached</span>' : '<button type="button" class="btn" style="min-height:44px">Attach to this study</button>') + '</div>'))),
+      RST14K: () => phone('Attached references', '<div class="crumb">Study / Evidence and findings</div><button type="button" class="btn p" style="min-height:48px">Find an observation</button>' + pRef('k2', '[Enterprises · 86.23 · Germany · 2023] · [41,200]', 'Period 2023 · retrieved 12 Nov 2026 · ' + SRC_A) + pRef('k3', '[Net turnover] · EUR [14.6] bn', 'Revenue of the enterprises in this activity, not customer spending') + '<div class="rst-pc">' + kf('k4') + '<b>Sizing version [3]</b><span class="rst-newer" style="align-self:flex-start">A newer version exists: [4]</span></div><div class="rst-pc">' + kf('k5') + '<span class="raw">None attached</span></div>'),
+      RST14L: () => phone('Customers and demand', '<div class="crumb">Study / Customers and demand</div><button type="button" class="btn" style="min-height:44px;justify-content:space-between"><span>' + SEGS[0].n + '</span><span>▾</span></button><div class="rst-pc"><span class="rst-sub">What people said</span><div class="ln"><span>Interviews held</span><span class="rst-m">7</span></div><div class="ln"><span>Fit with the ideal customer profile</span><span>[Strong] 5 · [Partial] 2</span></div><div class="ln"><span>[No-shows cost chair time]</span><span>6 interviews</span></div></div><div class="rst-pair" style="grid-template-columns:1fr"><div><b>' + G.up + ' [5] positive interviews</b></div><div><b>' + G.dn + ' [H1] Contradicts · Measured</b></div></div><div class="rst-pc"><span class="rst-sub">What was measured</span>' + J(DEM.slice(1, 5).map(d => '<div class="ln"><span>' + d[0] + ' ' + stg(d[1]) + '</span><span class="rst-m">' + d[2] + '</span></div>')) + '<div class="ln"><span>Unpaid trial</span><span>' + chip('nr') + '</span></div></div><a class="btn" href="#" style="min-height:44px">Open in Validate</a>'),
+      RST14M: () => phone('Entry strategy', '<div class="crumb">Study / Entry strategy and risks</div><div class="rst-pc"><b>[Dental association newsletter]</b><div class="ln"><span>Assumed then</span><span class="rst-m">USD [180] · [2026-09]</span></div><div class="ln"><span>Measured now</span><span class="rst-m">USD [240] · [2026-11]</span></div><div class="ln"><span>Payback</span><span class="rst-m">[4.4] months</span></div><span class="raw">payback on revenue, not margin · spend read as US dollars</span></div><div class="rst-pc"><b>[Search ads]</b><div class="ln"><span>Measured now</span><span>' + chip('nr') + '</span></div><span class="raw">No customer attributed in [2026-11]</span></div><div class="rst-pc"><b>Readiness of Germany · Recorded in Grow</b><div class="ln"><span>Demand</span><span>7 of 10</span></div><div class="ln"><span>Regulation</span><span>5 of 10</span></div><div class="ln"><span>Partners</span><span>' + chip('nr') + '</span></div><div class="ln"><span>Cost</span><span>6 of 10</span></div></div><a class="btn" href="#" style="min-height:44px">Open in Grow</a>'),
+      RST14N: () => phone('States', '<div class="rst-emp" style="min-height:0">' + NONE('No question') + '<p>Questions hold the evidence for and against.</p><button type="button" class="btn" style="min-height:44px">Add question</button></div>' + unbox('Validate could not be read.', 'Your segments and sample notes still show.') + rfbox('This part is not yours to read.', 'The venture’s founder can add you to the venture.')),
+      RST15K: () => MOB.RST14C(),
+      RST15L: () => MOB.RST14F(),
+      RST15M: () => MOB.RST14L()
+    };
+
+    /* ---------- docs ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const T = 'recorded today';
+    const DOCS = {
+      RST00: () => dk('<h1>RST-00 · What the market study answers, its seven sections, and where each value is read</h1><p>Pass 2 of #7703. Continues Research v2 (D3701): the project workspace RS-02, the reviewed brief RS-09 and the context rail RS-07 A and RS-10 D. A study adds one tab, Study, to the five that are built (⚑ Q1, option A). Checked against main <code>58ee9d1b73</code>. Sample people, companies, sources and figures are fictional. ◇ marks backend work with the issue that builds it; ⚑ marks an owner question, drawn as option A.</p>'
+        + '<h2>The ten-step journey</h2>' + tbl(['Step', 'Where', 'Pass'], [['1 · Define the market', 'Markets → New research (RST-02) → Scope (RST-03)', '2'], ['2 · Find customer-count and spending evidence', 'Evidence and findings (RST-08)', '2'], ['3 · Inspect a source', 'The inspector RMO-01, mounted unchanged', '1 A'], ['4 · Build three scenarios', 'Size and scenarios', '3'], ['5 · Compare alternatives and prices', 'Competition and pricing', '3'], ['6 · Attach interviews and an experiment', 'Customers and demand (RST-09)', '2'], ['7 · Tie channels and capacity to the plan', 'Entry strategy and risks (RST-10)', '2'], ['8 · Record a contradiction, an open question and a decision', 'Questions RST-04, RST-05; decision RST-07', '2'], ['9 · A teammate reviews', 'Reviewer pages (held for Q4, Q10, Q11)', '3'], ['10 · Export, then see what needs review', 'Report and monitoring', '3']])
+        + '<h2>The seven sections</h2><p>Scope and questions · Customers and demand · Size and scenarios · Competition and pricing · Entry strategy and risks · Evidence and findings · Report and monitoring. Addresses <code>/research/projects/:uid/study</code> and <code>/research/projects/:uid/study/:section</code> (new address, owner decision, Q1). Size, Competition and Report read “Not built yet” until pass 3 ships.</p>'
+        + '<h2>Every value and where it is read</h2>' + tbl(['Value', 'Read from', 'Status'], [
+          ['Project title, status, saved date, source count', '<code>GET /api/research/projects/:uid</code> · <code>research_projects</code>', T],
+          ['Question, objective, scope, exclusions (edited on Overview)', 'same · <code>research_projects.question</code>, <code>.objective</code>, <code>.scope</code>, <code>.exclusions</code>', T],
+          ['Sources answerable in Ask (n of m)', 'same, <code>evidence[].in_ask</code>', T],
+          ['Findings by kind with citations', '<code>GET /api/research/projects/:uid/findings</code>', T],
+          ['New research form', '<code>/research/projects?new=1&amp;question=</code>, <code>POST /api/research/projects</code>', T],
+          ['Market, tracked sector, Markets filters', '<code>GET /api/research/markets</code>; filters live in the address only', T + ' (filters stored nowhere)'],
+          ['Study: product, boundary, model, decision to be made, horizon, venture, origin; segments', '<code>GET</code>/<code>PUT /api/research/projects/:uid/study</code>, <code>POST …/with-study</code>', ENG(7719)],
+          ['Questions, evidence links, counts, decisions', '<code>research_study_questions</code>, <code>_links</code>, <code>_decisions</code>', ENG(7720) + ' (a link naming a reference: ' + ENG(7721) + ')'],
+          ['Completeness by topic', '<code>GET …/study/completeness</code>', ENG(7726)],
+          ['Attached references and the five kinds of figure', '<code>/api/research/projects/:uid/study/refs</code>', ENG(7721) + ' with ' + ENG(7716)],
+          ['Observation search and fields', '<code>GET /api/research/observations</code>', ENG(7716) + '; enterprise counts ' + ENG(7717) + '; published date ' + ENG(7709)],
+          ['Interviews, problems, hypotheses, experiments, demand records, channels, readiness, payback', 'study reads of Validate and Grow tables (the study never calls their routes)', ENG(7722)],
+          ['Progress bar on a My Research card', 'none: the list read returns no question count', ENG('no issue') + ' ' + FL('Q7')],
+          ['Unpaid trial, repeat use per segment', 'no store', 'Not recorded, with the reason']])),
+      RST16: () => dk('<h1>RST-16 · Main task path · clickable</h1><p>One founder, ' + FOUNDER + ' of ' + VEN + ', from a market to a recorded decision. Each step opens the frame named on the right; in the canvas the frame label is the link. Focus lands on the heading of each new view.</p><div style="border:1px solid #ececf1;border-radius:12px;background:#fff">' + J([
+          ['Start from a market', 'Markets › ' + MKT + ' › New market research. The form carries “Started from”.', 'RST02', 'RST-02 · /research/projects?new=1'],
+          ['Define the scope and one segment', 'Save scope with ' + SEGS[0].n + ' as beachhead; accept “Use [Germany] as customer geography?”.', 'RST03', 'RST-03 · /study/scope'],
+          ['Add three questions', 'Customer definition, Demand, Pricing.', 'RST04', 'RST-04 · /study/scope'],
+          ['Find and attach a customer-count observation', '[Enterprises · 86.23 · Germany · 2023] · [41,200], topic Size.', 'RST08', 'RST-08 · /study/evidence'],
+          ['Inspect its source', 'The inspector RMO-01: three dates, ' + SRC_A + '; Close returns to the row.', 'RST08', 'RMO-01 (pass 1 A)'],
+          ['Attach interviews and an experiment', '7 interviews and [H1] read from Validate for the beachhead.', 'RST09', 'RST-09 · /study/customers'],
+          ['Tie a channel to the entry plan', '[Dental association newsletter]: assumed USD [180], measured USD [240].', 'RST10', 'RST-10 · /study/entry'],
+          ['Record a contradiction', '[Price sensitivity is higher…] linked as Contradicts on the Pricing question.', 'RST05', 'RST-05 · /study/scope'],
+          ['Leave one question open', 'Pricing stays Open with its gap and next validation action.', 'RST05', 'RST-05'],
+          ['Record a decision', 'Test further, with rationale, what could reverse it, and two pieces of evidence.', 'RST07B', 'RST-07 B · sheet']
+        ].map((s, i) => '<div class="rst-step"><i>' + (i + 1) + '</i><div><b>' + s[0] + '</b><p>' + s[1] + '</p></div><a class="fr" href="#' + s[2] + '">Open frame ' + s[2] + '<small>' + s[3] + '</small></a></div>')) + '</div>'),
+      RST18: () => dk('<h1>RST-18 · Handoff</h1><p>Checked on main <code>58ee9d1b73</code> (Thu 19 Nov 2026): <code>cloudflare-worker/src/routes/research_projects.ts</code> (project read, owner-only, a project that is not yours is 404 not found; archived projects refuse writes with 409), <code>research_project_findings.ts</code> (three kinds; interpretations accepted, edited or discarded), <code>frontend/src/pages/research/ResearchProject.jsx</code> and <code>researchProjects.js</code> (five tabs; Overview’s “Key questions answered” reads Not recorded), <code>MyResearch.jsx</code> (New research form; no progress bar), <code>MarketHeaderOps.jsx</code> and <code>marketDirectoryExport.js</code> (New market research opens <code>?new=1&amp;question=</code> with the market named as text), <code>founderZoneActions.js</code>, <code>advisorZoneActions.js</code>, <code>partnerZoneActions.js</code> (founder: handler; advisor and partner: drawn disabled with the reason). No <code>research_stud*</code> table or <code>/study</code> route exists.</p>'
+        + tbl(['Board', 'Recorded today or ◇', 'Builder'], [
+          ['RST-01 Study frame', 'Project bar, five tabs, Overview texts: today. Study tab, sections, no-study None: ' + ENG(7719) + ' · address ' + FL('Q1'), '#7729'],
+          ['RST-02 New research carries the market', 'Form and header action by licence: today. Started from, create together: ' + ENG(7719), '#7729'],
+          ['RST-03 Scope', 'Overview texts: today. Product, segments, venture link, origin: ' + ENG(7719) + ' · ' + FL('Q5'), '#7729'],
+          ['RST-04 Question list', ENG(7720), '#7730'],
+          ['RST-05 One question', ENG(7720) + '; a link to a reference ' + ENG(7721), '#7730'],
+          ['RST-06 Counts', ENG(7720) + '; D: ' + ENG('no issue') + ' ' + FL('Q7') + ', not built by #7730', '#7730 (not D)'],
+          ['RST-07 Completeness and decision', ENG(7726) + ', ' + ENG(7720), '#7730'],
+          ['RST-08 Evidence and findings', ENG(7716) + ', ' + ENG(7717) + ', ' + ENG(7721) + '; Evidence and Findings tabs today', '#7731'],
+          ['RST-09 Customers and demand', ENG(7722) + ' · ' + FL('Q6'), '#7732'],
+          ['RST-10 Entry strategy and risks', ENG(7722), '#7732'],
+          ['RST-11 Eadwyn', 'A: interpretations today (Findings); linking ' + ENG(7720), '#7731 (A)'],
+          ['RST-12 to RST-15, RST-17', 'Each builder builds its own frames on these boards', 'all four']])
+        + '<h2>Owner questions in this pass</h2>' + tbl(['Question', 'Drawn'], [['Q1 · where the sections live', 'A: one new tab Study, <code>/research/projects/:uid/study</code> and <code>/study/:section</code>; RST-01 is drawn, not built until answered'], ['Q5 · a country filter as customer geography', 'A: customer countries stay empty; Scope offers “Use [Germany] as customer geography?”'], ['Q6 · stage words on demand kinds', 'A: Interest · Intent · Payment; Unpaid trial and Repeat use Not recorded'], ['Q7 · progress bar on a My Research card', 'A: drawn, ◇ and “proposed”, built by no issue']])
+        + '<h2>Frontend only</h2><p>The section list and phone section sheet; the read-only Overview texts with “Edit on Overview”; the header action’s placement by licence (already built); stage words (Q6) on records the Worker returns; keeping contradicting evidence beside supporting evidence; the Partial banner when Validate or Grow fails; focus and live-region wording (RST-17). Mounting the inspector RMO-01 unchanged (built by #7718).</p>'
+        + '<h2>Not drawn here</h2><p>Size and scenarios, Competition and pricing, Report and monitoring: pass 3 (RST-20 onward). A market’s own page with direct observations, attaching a market to an existing study, assisted search for candidate figures: each needs its own brief after #7737.</p>')
+    };
+
+    /* ---------- RST-17 keyboard ---------- */
+    const kb = () => crop('<span class="eye">RST-17 · Keyboard and accessibility · tab order, live regions, focus return</span><div class="rst-g2"><section class="cd"><b>Tab order</b><ol style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45;padding-left:0;list-style:none">' + J(['Project tabs (arrow keys move within; Study is the sixth)', 'Study sections list (one stop, ↑ ↓ to move, Enter opens)', 'Scope: Save scope, then fields top to bottom', 'Segment card: reorder handle, Mark as beachhead, Edit, Archive', '“Use [Germany] as customer geography?”: Use Germany, No', 'Question list: reorder handle (Space lifts, ↑ ↓ moves, Space drops), question link, Edit', 'One question: Add evidence, each link, Gap, Next action, Answer, Save', 'Context rail toggle (last)'].map((t, i) => '<li><span class="rst-tab">' + (i + 1) + '</span>' + t + '</li>')) + '</ol></section>'
+      + '<section class="cd"><b>Live-region wording (polite)</b>' + J(['Scope saved.', 'Question added: [Do German data-protection rules…]. 5 questions.', 'Question moved to position 2 of 5.', 'Reference attached to the study: [Enterprises · 86.23 · Germany · 2023].', 'Decision recorded: Test further.', 'Evidence linked as Contradicts.'].map(t => '<span class="rst-live">◌ ' + t + '</span>')) + '<b style="margin-top:6px">Alerts (assertive)</b>' + J(['Save failed. Your edits are kept.', 'Someone else saved this scope first. Nothing was overwritten.', 'Validate could not be read. Your segments still show.'].map(t => '<span class="rst-live" style="border-color:var(--negE)">! ' + t + '</span>')) + '</section></div>'
+      + '<div class="rst-g3"><section class="cd"><b>Focus return</b><p style="font-size:12.5px;line-height:1.5">Closing Record a decision, Attach to this study, Add evidence or the inspector returns focus to the button or row that opened it. Escape closes a sheet; focus stays inside an open sheet.</p></section><section class="cd"><b>Reading order</b><p style="font-size:12.5px;line-height:1.5">On one question, Supporting is read before Contradicting, then Context; each link reads its direction word first (“Contradicts, Your conclusion, …”). Counts read “1 for, 1 against”.</p></section><section class="cd"><b>Never colour alone</b><p style="font-size:12.5px;line-height:1.5">Directions, topic states, question statuses, the five kinds of figure and Platform States each carry a word and a glyph. Targets are 44px on phone; the reorder handle has a visible 2px violet ring.</p></section></div>'
+      + '<div class="cd" style="gap:8px"><b>Focused handle on the question list</b>' + '<table class="rst-tb" style="max-width:760px"><tbody><tr><td style="width:42px"><button type="button" class="rst-dr rst-ring" aria-label="Move question 3, use arrow keys">⋮⋮</button></td><td style="width:130px"><span class="rst-tp">Size</span></td><td>' + QN[2][1] + '</td><td style="width:100px">' + qs('o') + '</td></tr></tbody></table></div>', 1300);
+
+    let html;
+    if (B === 'RST00') html = DOCS.RST00();
+    else if (B === 'RST01' || B === 'RST15A') html = page(frameHome(), { h: 1080 });
+    else if (B === 'RST01B') html = page(frameNone(), { h: 900, qs: 'nr' });
+    else if (B === 'RST01C') html = page(frameNoVen(), { h: 900 });
+    else if (B === 'RST01D') html = page(frameArch(), { h: 900 });
+    else if (B === 'RST02' || B === 'RST15B') html = page(myRHead() + npForm(true), { h: 1000, rail: false });
+    else if (B === 'RST02B') html = crop(npForm(false), 800);
+    else if (B === 'RST02C') html = crop('<span class="eye">Markets header · New market research by licence</span>' + licRow(), 1300);
+    else if (B === 'RST02D') html = crop(npForm(true, { err: true }), 800);
+    else if (B === 'RST03' || B === 'RST15C') html = page(study('scope', scope()), { h: 1880 });
+    else if (B === 'RST03B') html = page(study('scope', scope({ conflict: true, offer: false })), { h: 1880 });
+    else if (B === 'RST03C') html = venStates();
+    else if (B === 'RST04' || B === 'RST15D') html = page(study('scope', qList()), { h: 900 });
+    else if (B === 'RST05' || B === 'RST15E') html = page(study('scope', oneQ()), { h: 1250, rail: false });
+    else if (B === 'RST05B') html = pickEv();
+    else if (B === 'RST06' || B === 'RST15F') html = page(ovCounts(), { h: 900 });
+    else if (B === 'RST06B') html = cntStates();
+    else if (B === 'RST06C') html = myCard();
+    else if (B === 'RST07' || B === 'RST15G') html = page(study('', compl() + covApart() + decHist()), { h: 1150, rail: false });
+    else if (B === 'RST07B') html = page(study('', compl() + covApart() + decHist()), { h: 1150, rail: false, overlay: decSheet() });
+    else if (B === 'RST08' || B === 'RST15H') html = page(study('evidence', findObs()), { h: 900, rail: false });
+    else if (B === 'RST08B') html = page(study('evidence', attached()), { h: 1180, rail: false });
+    else if (B === 'RST08C') html = page(study('evidence', findObs()), { h: 900, rail: false, overlay: attachSheet() });
+    else if (B === 'RST08D') html = refStates();
+    else if (B === 'RST09' || B === 'RST15I') html = page(study('customers', custDemand()), { h: 1780, rail: false });
+    else if (B === 'RST09B') html = page(study('customers', custDemand({ partial: true })), { h: 1000, rail: false });
+    else if (B === 'RST10' || B === 'RST15J') html = page(study('entry', entry()), { h: 1200, rail: false });
+    else if (B === 'RST11') html = eadwyn();
+    else if (B === 'RST12') html = empties();
+    else if (B === 'RST13') html = statesGrid();
+    else if (B === 'RST17') html = kb();
+    else if (B === 'RST16') html = DOCS.RST16();
+    else if (B === 'RST18') html = DOCS.RST18();
+    else if (MOB[B]) html = MOB[B]();
+    else html = DOCS.RST00();
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

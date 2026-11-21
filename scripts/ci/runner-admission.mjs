@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 const REPOSITORY = 'AxalNetwork/StudioOS';
 const CI_PATH = '.github/workflows/ci.yml';
 const EXECUTOR_PATH = '.github/workflows/runner-executor.yml';
-const DISPATCH_PATH = '.github/workflows/runner-dispatch.yml';
 const SHA = /^[a-f0-9]{40}$/;
 const ID = /^[1-9][0-9]*$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -19,7 +18,12 @@ export const EXECUTION_BUDGETS=Object.freeze({
  hosted:Object.freeze({startMs:10*60000,executionMs:40*60000,jobMinutes:45,testMinutes:41}),
  'linux-x64':Object.freeze({startMs:90000,executionMs:25*60000,jobMinutes:35,testMinutes:26}),
  'macos-arm64':Object.freeze({startMs:90000,executionMs:25*60000,jobMinutes:35,testMinutes:26}),
+ // D7907: provisional until the bounded canary measures a full shard on this runner; must equal the coordinator's included budgets.
+ 'github-8':Object.freeze({startMs:3*60000,executionMs:28*60000,jobMinutes:38,testMinutes:29}),
 });
+export const PROFILES=Object.freeze(['hosted','github-8','linux-x64','macos-arm64']);
+/** D7907: the one reviewed included-compute target (group 6). Never derived from a request, receipt or workflow input. */
+export const INCLUDED_TARGET=Object.freeze({group:'StudioOS Included Compute',groupId:6,labels:Object.freeze(['studioos-bench-linux-8'])});
 
 class Denied extends Error {}
 const requireThat = (condition,reason)=>{if(!condition)throw new Denied(reason);};
@@ -42,7 +46,7 @@ function validateReceipt(envelope,request,context,now,phase){
  requireThat(sameId(receipt.generation,request.generation),'receipt_generation_mismatch');
  requireThat(sameId(receipt.childRunId,context.childRunId)&&sameId(receipt.childAttempt,context.childAttempt),'receipt_child_mismatch');
  requireThat(SHA.test(receipt.sourceSha)&&SHA.test(receipt.executorSha)&&receipt.executorSha===context.executorSha,'receipt_source_or_executor_invalid');
- requireThat(['hosted','linux-x64','macos-arm64'].includes(receipt.profile)&&receipt.profile===request.profile,'receipt_profile_mismatch');
+ requireThat(PROFILES.includes(receipt.profile)&&receipt.profile===request.profile,'receipt_profile_mismatch');
  requireThat(SHARD.test(receipt.logicalShard)&&receipt.logicalShard===request.shard,'receipt_shard_mismatch');
  requireThat(['push','merge_group'].includes(receipt.event),'receipt_original_event_invalid');
  requireThat(receipt.event==='push'?receipt.queueBaseSha===null:SHA.test(receipt.queueBaseSha),'receipt_original_base_invalid');
@@ -57,10 +61,16 @@ function validateReceipt(envelope,request,context,now,phase){
 
 /** Resolved values come from #7885's trusted catalog adapter, never workflow inputs or receipt-supplied runs-on. */
 export function executionTarget(profile){
- requireThat(profile&&['hosted','linux-x64','macos-arm64'].includes(profile.id),'unknown_profile');
+ requireThat(profile&&PROFILES.includes(profile.id),'unknown_profile');
  requireThat(/^22\.[0-9]+\.[0-9]+$/.test(profile.nodeVersion??'')&&/^3\.11\.[0-9]+$/.test(profile.pythonVersion??''),'profile_runtime_not_pinned');
  if(profile.id==='hosted'){
   requireThat(profile.target==='ubuntu-latest'&&profile.platform==='linux'&&profile.arch==='x64','invalid_hosted_target');return 'ubuntu-latest';
+ }
+ if(profile.id==='github-8'){
+  requireThat(profile.platform==='linux'&&profile.arch==='x64','profile_platform_mismatch');
+  requireThat(profile.approvedGroupId===INCLUDED_TARGET.groupId&&profile.target?.group===INCLUDED_TARGET.group&&JSON.stringify(profile.target.labels)===JSON.stringify(INCLUDED_TARGET.labels),'invalid_included_target');
+  requireThat(Array.isArray(profile.eligibleShards)&&profile.eligibleShards.length>0&&profile.eligibleShards.every(shard=>SHARD.test(shard)),'invalid_profile_shards');
+  return{group:INCLUDED_TARGET.group,labels:[...INCLUDED_TARGET.labels]};
  }
  const linux=profile.id==='linux-x64',labels=['self-hosted',linux?'Linux':'macOS',linux?'X64':'ARM64','studioos-worker-v1'];
  requireThat(profile.platform===(linux?'linux':'darwin')&&profile.arch===(linux?'x64':'arm64'),'profile_platform_mismatch');
@@ -186,7 +196,7 @@ export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,ver
  const denied={allowed:false,reason:'admission_not_completed'};
  try{
   requireThat(phase==='start'||phase==='execute','invalid_admission_phase');
-  requireThat(REQUEST.test(request?.requestId??'')&&ID.test(String(request?.generation??''))&&SHARD.test(request?.shard??'')&&['hosted','linux-x64','macos-arm64'].includes(request?.profile),'invalid_request');
+  requireThat(REQUEST.test(request?.requestId??'')&&ID.test(String(request?.generation??''))&&SHARD.test(request?.shard??'')&&PROFILES.includes(request?.profile),'invalid_request');
   requireThat(context&&SHA.test(context.executorSha??'')&&ID.test(String(context.childRunId??''))&&ID.test(String(context.childAttempt??'')),'invalid_executor_context');
   requireThat(typeof readReceipt==='function','receipt_authority_unconfigured');
   requireThat(typeof api==='function','github_api_unavailable');
@@ -208,10 +218,20 @@ export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,ver
   parentIdentity(parent,input,repoId);parentIdentity(await get(`${runPath}/attempts/${receipt.parentAttempt}`),input,repoId);
   // V1 dispatches this trusted definition directly; no same-branch wrapper or candidate workflow is admitted.
   const child=await get(`${prefix}/actions/runs/${context.childRunId}`);
-  requireThat(sameId(child?.id,context.childRunId)&&sameId(child.run_attempt,context.childAttempt)&&child.event==='workflow_dispatch'&&child.path===(context.childWorkflowPath??EXECUTOR_PATH)&&[EXECUTOR_PATH,DISPATCH_PATH].includes(child.path)&&child.head_branch==='main'&&child.head_sha===(context.childWorkflowSha??context.executorSha)&&child.status==='in_progress'&&child.conclusion==null&&sameRepo(child.repository,REPOSITORY,repoId)&&sameRepo(child.head_repository,REPOSITORY,repoId),'child_workflow_identity_mismatch');
+  requireThat(sameId(child?.id,context.childRunId)&&sameId(child.run_attempt,context.childAttempt)&&child.event==='workflow_dispatch'&&child.path===(context.childWorkflowPath??EXECUTOR_PATH)&&child.path===EXECUTOR_PATH&&child.head_branch==='main'&&child.head_sha===(context.childWorkflowSha??context.executorSha)&&child.status==='in_progress'&&child.conclusion==null&&sameRepo(child.repository,REPOSITORY,repoId)&&sameRepo(child.head_repository,REPOSITORY,repoId),'child_workflow_identity_mismatch');
+  if(context.targetPickupRequired===true){
+   // Pickup is the target job's independently observed start, not admission completion.
+   const page=await get(`${prefix}/actions/runs/${context.childRunId}/jobs?per_page=100`);
+   requireThat(Array.isArray(page?.jobs)&&Number.isSafeInteger(page.total_count)&&page.total_count===page.jobs.length&&page.total_count<=100,'target_pickup_not_verified');
+   const jobs=page.jobs.filter(job=>job.name==='Admitted Worker shard');
+   requireThat(jobs.length===1,'target_pickup_not_verified');
+   const job=jobs[0],started=Date.parse(job.started_at);
+   requireThat(sameId(job.run_id,context.childRunId)&&sameId(job.run_attempt,context.childAttempt)&&job.head_sha===child.head_sha
+     &&job.status==='in_progress'&&Number.isFinite(started)&&started<=now()&&started<=receipt.startDeadline,'target_pickup_not_verified');
+  }
   const workflow=await get(`${prefix}/actions/workflows/runner-executor.yml`);
   requireThat(workflow?.path===EXECUTOR_PATH&&workflow.state==='active','executor_workflow_unavailable');
-  const childWorkflow=child.path===EXECUTOR_PATH?workflow:await get(`${prefix}/actions/workflows/runner-dispatch.yml`);
+  const childWorkflow=workflow;
   requireThat(childWorkflow?.path===child.path&&childWorkflow.state==='active'&&sameId(child.workflow_id,childWorkflow.id),'child_workflow_definition_mismatch');
   const main=await get(`${prefix}/git/ref/heads/main`);
   requireThat(main?.ref==='refs/heads/main'&&main.object?.type==='commit'&&SHA.test(main.object.sha??''),'trusted_main_ref_unavailable');
@@ -243,7 +263,8 @@ export function githubReadApi(token, fetcher = globalThis.fetch) {
 /** Stage-one CLI deliberately has no coordinator credential or guessed trust endpoint. #7887 must supply the reviewed transport. */
 export async function main(env=process.env,dependencies={}){
  const result=await admitRunnerJob({requestId:env.REQUEST_ID,generation:env.LEASE_GENERATION,shard:env.PART,profile:env.PROFILE},{
-  context:{repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??EXECUTOR_PATH,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT},
+  context:{repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??EXECUTOR_PATH,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT,targetPickupRequired:true},
+  phase:'execute',
   api:githubReadApi(env.GH_TOKEN),signal:AbortSignal.timeout(60000),...dependencies,
  });
  const values={allowed:String(result.allowed),reason:result.reason};
@@ -252,4 +273,10 @@ export async function main(env=process.env,dependencies={}){
  console.log(JSON.stringify({allowed:result.allowed,reason:result.reason}));return result.allowed?0:1;
 }
 
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url)process.exitCode=await main();
+if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
+ // Imported lazily: the isolation module imports this one. Only linux-x64 has an implementation; others still refuse.
+ const { isolationFor }=await import('./runners/executor-isolation.mjs');
+ let isolation=null;try{isolation=isolationFor(process.env.PROFILE);}catch{isolation=null;}
+ const { trustedAuthority }=await import('./executor-authority.mjs');
+ process.exitCode=await main(process.env,{...await trustedAuthority(process.env),...(isolation?{verifyIsolation:isolation.admissionIsolation}:{})});
+}
