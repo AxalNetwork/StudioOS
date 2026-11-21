@@ -11,7 +11,7 @@ import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eligible, LABELS, renderSticky, stickyComment, verdictFor } from './rules.mjs';
-import { classify, consent, decide, groupRunFor, KIND } from './ejection-rules.mjs';
+import { classify, consent, decide, evidenceState, groupRunFor, keeperMergedSince, KIND, RETRY_CUTOVER, STRANDED_DAYS } from './ejection-rules.mjs';
 import { client, readBreakers } from './keeper.mjs';
 import { createGitHubReader } from './feeder-github.mjs';
 
@@ -23,7 +23,7 @@ const Q = `query($owner:String!,$name:String!){repository(owner:$owner,name:$nam
     __typename
     ... on AddedToMergeQueueEvent{createdAt actor{login __typename}}
     ... on RemovedFromMergeQueueEvent{createdAt actor{login __typename} reason beforeCommit{oid}}
-    ... on LabeledEvent{createdAt label{name}}}}}}}}`;
+    ... on LabeledEvent{createdAt actor{login __typename} label{name}}}}}}}}`;
 
 const actor = (a) => (a ? { login: a.login, type: a.__typename } : null);
 
@@ -41,18 +41,32 @@ export function normalise(nodes) {
       added: items.filter((i) => i.__typename === 'AddedToMergeQueueEvent').map((i) => ({ at: i.createdAt, actor: actor(i.actor) })),
       removed: items.filter((i) => i.__typename === 'RemovedFromMergeQueueEvent').map((i) => ({ at: i.createdAt, actor: actor(i.actor), reason: i.reason, before: i.beforeCommit?.oid ?? null })),
       ejectedLabelAt: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.ejected).map((i) => i.createdAt).sort().pop() ?? null,
+      ejectedLabels: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.ejected).map((i) => ({ at: i.createdAt, actor: actor(i.actor) }))
+        .sort((a, b) => (a.at < b.at ? -1 : 1)),
     };
   });
 }
 
-/** Open PRs whose newest queue event is a removal this handler has not labelled yet. */
-export function candidates(prs) {
-  return prs.filter((p) => {
-    if (p.state !== 'open' || p.inMergeQueue !== false) return false;
+/**
+ * Open PRs whose newest queue event is a removal not yet handed back. An \`ejected\` label at or after the removal is
+ * a hand-back, with one exception (#6476 S1): a label the App itself wrote before RETRY_CUTOVER, when it labelled
+ * even the retryable cases, on a removal under STRANDED_DAYS old, is \`stranded\` and gets a fresh, bounded look. A
+ * label a person added is never second-guessed, and neither is an \`ejected\` label on a PR's other removals.
+ */
+export function candidates(prs, { botLogin, now = Date.now() } = {}) {
+  return prs.flatMap((p) => {
+    if (p.state !== 'open' || p.inMergeQueue !== false) return [];
     const lastRemoved = p.removed.map((e) => e.at).sort().pop();
     const lastAdded = p.added.map((e) => e.at).sort().pop();
-    if (!lastRemoved || (lastAdded && lastAdded > lastRemoved)) return false;
-    return !(p.ejectedLabelAt && p.ejectedLabelAt >= lastRemoved);
+    if (!lastRemoved || (lastAdded && lastAdded > lastRemoved)) return [];
+    const after = (p.ejectedLabels || (p.ejectedLabelAt ? [{ at: p.ejectedLabelAt, actor: null }] : [])).filter((l) => l.at >= lastRemoved);
+    if (!after.length) return [{ ...p, stranded: false }];
+    const newest = after[after.length - 1];
+    const byApp = Boolean(botLogin) && newest.actor?.login === botLogin;
+    const old = Date.parse(newest.at) < Date.parse(RETRY_CUTOVER);
+    const fresh = now - Date.parse(lastRemoved) < STRANDED_DAYS * 24 * 60 * 60 * 1000;
+    const stillLabelled = (p.labels || []).includes(LABELS.ejected);
+    return byApp && old && fresh && stillLabelled ? [{ ...p, stranded: true }] : [];
   });
 }
 
@@ -69,6 +83,14 @@ const out = (k, v) => {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${oneLine(v)}\n`);
 };
 const say = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${oneLine(s)}\n`); };
+
+/** The sticky comment's second line: restored, waiting (and until when), or handed back. */
+export function stickyLine(d) {
+  if (d.action === 'requeue') return 'Restored to the merge queue on the same head.';
+  if (d.action === 'keeper') return 'Waiting: the branch keeper is asked to merge main; this handler looks again.';
+  if (d.action === 'wait') return `Waiting, not labelled: ${d.reasons.join('; ')}. Looked at again each sweep until ${d.retryUntil}; then handed back.`;
+  return `Not restored: ${d.reasons.join('; ') || d.action}.`;
+}
 
 async function ciRuns(gh, query) {
   return (await gh.get(`actions/workflows/ci.yml/runs?${query}&per_page=50`)).workflow_runs || [];
@@ -89,7 +111,7 @@ export async function sweep(env, {
   const botLogin = env.LANDING_BOT_LOGIN;
   const prs = normalise((await gh.graph(Q, {})).pullRequests.nodes);
   const dispatchPr = env.EJECTION_PR ? Number(env.EJECTION_PR) : null;
-  let todo = candidates(prs);
+  let todo = candidates(prs, { botLogin, now });
   if (dispatchPr) todo = todo.filter((p) => p.number === dispatchPr);
   const brk = await readBreakers(gh, env);
   let openAlertTitles = null;
@@ -110,33 +132,39 @@ export async function sweep(env, {
       main, failedTests: [], flaky: [], infra: q ? verdictFor({ jobs: q.jobs, main }) === 'infra_failure' : false,
       mainRed: main?.conclusion !== 'success', record: null,
     });
-    const files = (await gh.get(`pulls/${pr.number}/files?per_page=100`)).map((f) => ({ path: f.filename, previousPath: f.previous_filename }));
+    let files = null;
+    try { files = (await gh.get(`pulls/${pr.number}/files?per_page=100`)).map((f) => ({ path: f.filename, previousPath: f.previous_filename })); } catch { /* eligible() waits on an unread diff */ }
     const commits = await gh.get(`pulls/${pr.number}/commits?per_page=100`);
     let ev;
-    try { ev = await evidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
+    try { ev = await evidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, required: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
     const fresh = await gh.get(`pulls/${pr.number}`);
     const d = decide({
-      klass: k.class, stillConflicting: fresh.mergeable === false, consent: consent({ ...pr, commits }, { botLogin }),
-      checksGreenOnHead: ev.ok === true, checksDetail: ev.detail,
+      klass: k.class, stillConflicting: fresh.mergeable === false, keeperMerged: keeperMergedSince(commits, removal.at, botLogin),
+      removedAt: removal.at, consent: consent({ ...pr, commits }, { botLogin }),
+      checks: evidenceState(ev, pr.head.sha), checksDetail: ev.detail,
       headUnchangedSinceChecks: fresh.head?.sha === pr.head.sha && ev.headSha === pr.head.sha,
       eligible: eligible(pr, { env, event: env.GITHUB_EVENT_NAME, dispatchPr, repo: env.GITHUB_REPOSITORY, files, kind: KIND, breakers: brk }),
       breakers: brk, openAlertTitles, requeues, pr: pr.number, now, env, queueRuns,
     });
     const minutes = Math.round((now - Date.parse(removal.at)) / 60_000);
-    const line = `#${pr.number}: ${k.class} (${k.why}); ${d.action}${d.reasons.length ? ` — ${d.reasons.join('; ')}` : ''}; ${minutes} min after the ejection; auto-merge ${pr.autoMerge ? 'still set' : 'not set'}`;
+    const line = `#${pr.number}: ${k.class} (${k.why}); ${d.action}${pr.stranded ? ' (stranded label, second look)' : ''}${d.reasons.length ? ` — ${d.reasons.join('; ')}` : ''}; ${minutes} min after the ejection; auto-merge ${pr.autoMerge ? 'still set' : 'not set'}`;
     say(`- ${line}`);
     if (!app) continue;
     if (d.action === 'requeue') {
       await app.graph('mutation($id:ID!,$oid:GitObjectID!){enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}', { id: pr.id, oid: pr.head.sha })
         .catch(() => { throw new Error(`enqueue of #${pr.number} failed`); });
+      // Only the App's own stranded label comes off, and only after the entry is back.
+      if (pr.stranded) await app.del(`issues/${pr.number}/labels/${encodeURIComponent(LABELS.ejected)}`).catch(() => {});
     } else if (d.action === 'keeper') keeper.push(pr.number);
-    else {
-      await app.post(`issues/${pr.number}/labels`, { labels: [LABELS.ejected] });
+    else if (d.action !== 'wait') {
+      if (!pr.labels.includes(LABELS.ejected)) await app.post(`issues/${pr.number}/labels`, { labels: [LABELS.ejected] });
       if (d.action === 'repair') repair.push(pr.number);
     }
     const comments = await gh.get(`issues/${pr.number}/comments?per_page=100`);
     const mine = stickyComment(comments, botLogin);
-    const body = renderSticky([`Queue ejection: **${k.class}**. ${k.why}.`, d.action === 'requeue' ? 'Restored to the merge queue on the same head.' : `Not restored: ${d.reasons.join('; ') || d.action}.`]);
+    const body = renderSticky([`Queue ejection: **${k.class}**. ${k.why}.`, stickyLine(d)]);
+    // A repeated sweep with the same outcome writes nothing.
+    if (mine && mine.body === body) continue;
     if (mine) await app.patch(`issues/comments/${mine.id}`, { body });
     else await app.post(`issues/${pr.number}/comments`, { body });
   }

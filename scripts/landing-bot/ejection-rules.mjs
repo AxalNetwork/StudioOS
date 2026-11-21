@@ -7,7 +7,19 @@ export const REQUEUE_CLASSES = Object.freeze(['conflict', 'cascade', 'flake', 'i
 export const CLASSES = Object.freeze(['conflict', 'cascade', 'flake', 'infrastructure', 'timeout', 'own-failure', 'incompatible', 'manual', 'unknown']);
 export const MAX_REQUEUES_PER_DAY = 2;
 export const STALLED_ALERT = '[alert] merge queue stalled';
+/**
+ * #6476 S1 (2026-11-21): how long a removal stays open to another look while only a retryable condition holds
+ * (checks pending on the repaired head, evidence unreadable, a breaker or budget that resets). Past it the entry is
+ * handed back to the owner with \`ejected\`.
+ */
+export const RECOVERY_WINDOW_HOURS = 24;
+/** The keeper is asked only in the first two sweeps after a conflict ejection; after that its own schedule runs. */
+export const KEEPER_DISPATCH_MINUTES = 20;
+/** Bot \`ejected\` labels written before this handler could wait (the stranded case) get one bounded second look. */
+export const RETRY_CUTOVER = '2026-11-21T00:00:00Z';
+export const STRANDED_DAYS = 7;
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 const time = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? t : null; };
 const login = (a) => (typeof a === 'string' ? a : a?.login) ?? null;
 
@@ -100,45 +112,101 @@ export function classify(e) {
 }
 
 /**
- * What to do. Re-queue only when everything holds; otherwise label (and for some classes dispatch).
- * @param c { klass, stillConflicting, consent, checksGreenOnHead, headUnchangedSinceChecks, eligible: { ok, reasons }, breakers: { open, reasons },
+ * The current head's check evidence as one of four states. Only \`green\` admits; \`failed\` hands back; \`pending\`
+ * and \`unknown\` wait. A thrown or partial read is unknown, never success.
+ * @param ev the feeder reader's readHeadEvidence result { ok, headSha, required: { missing, pending, failing } | null }
+ */
+export function evidenceState(ev, expectedSha) {
+  if (!ev || typeof ev !== 'object') return 'unknown';
+  if (expectedSha && ev.headSha && ev.headSha !== expectedSha) return 'changed';
+  if (ev.ok === true && ev.headSha && (!expectedSha || ev.headSha === expectedSha)) return 'green';
+  const req = ev.required;
+  if (!req || typeof req !== 'object') return 'unknown';
+  if (Array.isArray(req.failing) && req.failing.length) return 'failed';
+  if ((Array.isArray(req.pending) && req.pending.length) || (Array.isArray(req.missing) && req.missing.length)) return 'pending';
+  return 'unknown';
+}
+
+/** Whether the App's no-model keeper merge landed on the branch after this removal. */
+export function keeperMergedSince(commits, removedAt, botLogin) {
+  const at = time(removedAt);
+  if (at === null || !botLogin) return false;
+  return (commits || []).some((c) => keepsConsent(c, botLogin) && /^Landing-Bot-Kind:\s*keeper\s*$/m.test(String(c?.commit?.message ?? ''))
+    && (time(c?.commit?.committer?.date) ?? -Infinity) > at);
+}
+
+/**
+ * eligible()'s reasons that clear on their own (a read that failed, a breaker, the mode). Every other reason is the
+ * owner's: bot:off, a repair/ branch, a fork, a closed PR, a .gitattributes change.
+ */
+export const RETRYABLE_ELIGIBILITY = Object.freeze([/could not be read/, /a breaker is open/, /does not allow this trigger/]);
+const retryableEligibility = (r) => RETRYABLE_ELIGIBILITY.some((re) => re.test(String(r)));
+
+/**
+ * What to do. Re-queue only when everything holds. A condition that clears on its own (\`retry\`) waits, unlabelled,
+ * for the next sweep inside RECOVERY_WINDOW_HOURS; one that needs the owner (\`owner\`) labels \`ejected\` at once.
+ * @param c { klass, stillConflicting, keeperMerged, removedAt, consent, checks: 'green'|'pending'|'failed'|'unknown'|'changed'
+ *            (or the older checksGreenOnHead boolean), headUnchangedSinceChecks, eligible: { ok, reasons }, breakers: { open, reasons },
  *            openAlertTitles, requeues: [{ pr, at }] (bot re-queues), pr, now, env, queueRuns: [{ conclusion }] (last 20) }
+ * @returns { action: 'requeue'|'keeper'|'repair'|'label'|'wait', label?, reasons, retryUntil? }
  */
 export function decide(c) {
-  const reasons = [];
-  const label = () => ({ action: 'label', label: LABELS.ejected, reasons });
-  // A conflict goes to the branch keeper first; once its merge has cleared it, the entry may be restored.
-  if (c.klass === 'conflict' && c.stillConflicting !== false) return { action: 'keeper', reasons: ['GitHub reported a conflict: the branch keeper merges main, then this handler looks again'] };
+  const owner = [];
+  const retry = [];
+  const removedAt = time(c.removedAt);
+  const deadline = removedAt === null ? null : removedAt + RECOVERY_WINDOW_HOURS * HOUR;
+  const label = (reasons) => ({ action: 'label', label: LABELS.ejected, reasons });
+  const waitOrHandBack = () => {
+    if (deadline === null) return label([...retry, 'the removal time could not be read, so it is not retried']);
+    if (c.now >= deadline) return label([...retry, `still not restorable ${RECOVERY_WINDOW_HOURS} hours after the ejection: the owner re-queues it`]);
+    return { action: 'wait', reasons: retry, retryUntil: new Date(deadline).toISOString() };
+  };
+  if (c.klass === 'conflict' && c.stillConflicting !== false) {
+    // The keeper's no-model merge did not clear it: a person resolves it. Never re-dispatched, never re-queued.
+    if (c.keeperMerged) return label(['the branch keeper merged main and GitHub still reports a conflict: a person resolves it']);
+    if (removedAt !== null && c.now - removedAt < KEEPER_DISPATCH_MINUTES * 60_000) {
+      return { action: 'keeper', reasons: ['GitHub reported a conflict: the branch keeper merges main, then this handler looks again'] };
+    }
+    retry.push('still conflicting: waiting for the branch keeper\'s scheduled merge of main');
+    return waitOrHandBack();
+  }
   if (c.klass === 'own-failure') return { action: 'repair', label: LABELS.ejected, reasons: ['its own failure: never re-queued; red-PR repair (#5622) is asked when it exists'] };
-  if (c.klass === 'incompatible') return { action: 'label', label: LABELS.ejected, reasons: ['red only in its merge group: compare it with the entry ahead before it re-enters'] };
-  if (!REQUEUE_CLASSES.includes(c.klass)) { reasons.push(`class ${c.klass} is never re-queued`); return label(); }
-  if (!c.consent?.valid) reasons.push(c.consent?.reason ?? 'no consent');
-  if (!c.checksGreenOnHead) reasons.push(`not every required check is green on the current head${c.checksDetail ? ` (${c.checksDetail})` : ''}`);
-  if (!c.headUnchangedSinceChecks) reasons.push('the head changed since the checks went green');
-  if (!c.eligible?.ok) reasons.push(...(c.eligible?.reasons ?? ['not eligible']));
-  if (!c.breakers || c.breakers.open) reasons.push(...(c.breakers?.reasons ?? ['breakers could not be read']));
-  if (!Array.isArray(c.openAlertTitles)) reasons.push('open alerts could not be read');
-  else if (c.openAlertTitles.includes(STALLED_ALERT)) reasons.push(`${STALLED_ALERT} is open`);
+  if (c.klass === 'incompatible') return label(['red only in its merge group: compare it with the entry ahead before it re-enters']);
+  if (!REQUEUE_CLASSES.includes(c.klass)) return label([`class ${c.klass} is never re-queued`]);
+
+  if (!c.consent?.valid) owner.push(c.consent?.reason ?? 'no consent');
+  const checks = c.checks ?? (c.checksGreenOnHead === true ? 'green' : 'unknown');
+  const detail = c.checksDetail ? ` (${c.checksDetail})` : '';
+  if (checks === 'failed') owner.push(`a required check failed on the current head${detail}`);
+  else if (checks === 'pending') retry.push(`required checks are still running on the current head${detail}`);
+  else if (checks === 'changed') retry.push('the head moved while its checks were read: the new head is read on the next sweep');
+  else if (checks !== 'green') retry.push(`the current head's check evidence could not be confirmed${detail}`);
+  if (checks === 'green' && !c.headUnchangedSinceChecks) retry.push('the head changed since the checks went green');
+  for (const r of (c.eligible?.ok ? [] : (c.eligible?.reasons ?? ['not eligible']))) (retryableEligibility(r) ? retry : owner).push(r);
+  if (!c.breakers || c.breakers.open) retry.push(...(c.breakers?.reasons ?? ['breakers could not be read']));
+  if (!Array.isArray(c.openAlertTitles)) retry.push('open alerts could not be read');
+  else if (c.openAlertTitles.includes(STALLED_ALERT)) retry.push(`${STALLED_ALERT} is open`);
   const since = c.now - DAY;
   const all = Array.isArray(c.requeues) ? c.requeues : null;
-  if (!all) reasons.push('today\'s re-queues could not be read');
+  if (!all) retry.push('today\'s re-queues could not be read');
   else {
     const mine = all.filter((r) => r.pr === c.pr && (time(r.at) ?? c.now) >= since).length;
-    if (mine >= MAX_REQUEUES_PER_DAY) reasons.push(`${mine} re-queues of this PR in 24 hours, the most is ${MAX_REQUEUES_PER_DAY}`);
+    if (mine >= MAX_REQUEUES_PER_DAY) retry.push(`${mine} re-queues of this PR in 24 hours, the most is ${MAX_REQUEUES_PER_DAY}`);
     const day = new Date(c.now);
     const midnight = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
     const repoToday = all.filter((r) => (time(r.at) ?? c.now) >= midnight).length;
     const cap = count(c.env?.LANDING_BOT_DAILY_REQUEUES);
-    if (repoToday >= cap) reasons.push(`LANDING_BOT_DAILY_REQUEUES: ${repoToday} of ${cap} used today`);
+    if (repoToday >= cap) retry.push(`LANDING_BOT_DAILY_REQUEUES: ${repoToday} of ${cap} used today`);
   }
   const share = Number(c.env?.LANDING_BOT_QUEUE_FAIL_BREAKER);
   const runs = Array.isArray(c.queueRuns) ? c.queueRuns.slice(0, 20) : null;
-  if (!Number.isFinite(share) || share <= 0 || share > 1) reasons.push('LANDING_BOT_QUEUE_FAIL_BREAKER is not set to a share between 0 and 1');
-  else if (!runs || runs.length < 20) reasons.push('the last 20 queue runs could not be read');
+  if (!Number.isFinite(share) || share <= 0 || share > 1) retry.push('LANDING_BOT_QUEUE_FAIL_BREAKER is not set to a share between 0 and 1');
+  else if (!runs || runs.length < 20) retry.push('the last 20 queue runs could not be read');
   else {
     const failed = runs.filter((r) => r.conclusion !== 'success').length / runs.length;
-    if (failed >= share) reasons.push(`${Math.round(failed * 100)}% of the last 20 queue runs failed, at or above the ${share} breaker`);
+    if (failed >= share) retry.push(`${Math.round(failed * 100)}% of the last 20 queue runs failed, at or above the ${share} breaker`);
   }
-  if (reasons.length) return label();
+  if (owner.length) return label([...owner, ...retry]);
+  if (retry.length) return waitOrHandBack();
   return { action: 'requeue', reasons: [] };
 }

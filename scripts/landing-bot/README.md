@@ -159,7 +159,21 @@ ejection, then:
   - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
   - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
 
-Otherwise it labels `ejected` with the reasons. One sticky comment says which.
+Otherwise it either waits or hands back (#6476 S1, D6476-p4):
+- **Waits, unlabelled,** when only a condition that clears on its own holds: required checks still running on the
+  current head (a keeper merge always starts new ones), evidence that could not be read, the head moving between
+  reads, a breaker or `[alert] merge queue stalled`, or a daily budget that resets. Each sweep looks again and
+  re-reads the head's full-suite and required-check evidence, consent, budgets and breakers; the same removal is
+  restored once it all holds. Past 24 hours after the ejection it is handed back instead.
+- **Hands back with `ejected`** when the owner must act: no consent (a person removed it, or a commit other than a
+  no-model merge of main), a failed required check, `bot:off`, a `repair/` branch, a `.gitattributes` change, or a
+  class that is never re-queued.
+- **A conflict** asks the keeper only in the first 20 minutes after the ejection; after that the keeper's own
+  15-minute schedule runs. If the keeper's merge landed and GitHub still reports a conflict, it hands back.
+
+One sticky comment says which, and a sweep whose outcome has not changed writes nothing. `ejected` labels the App
+wrote before 2026-11-21, when it labelled the waiting cases too, get one fresh look on removals under 7 days old;
+on a restore the App removes only its own label. A label a person added is never second-guessed.
 ## The serial refresh
 
 `.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green
