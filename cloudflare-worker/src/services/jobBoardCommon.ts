@@ -229,7 +229,7 @@ export function publicCompensation(row: any): { min_cents: number | null; max_ce
  * populated by a LEFT JOIN on users so a since-registered applicant surfaces
  * their platform account.
  */
-export function shapeJobApplication(row: any) {
+export function shapeJobApplication(row: any, { includeStage = false } = {}) {
   if (!row) return null;
   // A matching platform account is surfaced via the applicants LEFT JOIN on
   // users (by email), so `member` appears as soon as the applicant registers —
@@ -249,6 +249,9 @@ export function shapeJobApplication(row: any) {
     has_resume: !!row.resume_key,
     resume_name: row.resume_name ?? null,
     status: row.status,
+    // Legacy rows acquired the applied default at migration. Only an explicit
+    // Grow stage write supersedes the job board's status.
+    ...(includeStage ? { stage: row.stage_changed_at && typeof row.stage === 'string' ? row.stage : null } : {}),
     created_at: row.created_at,
     member: memberId
       ? {
