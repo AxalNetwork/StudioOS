@@ -47,6 +47,8 @@ export const LABELS = Object.freeze({
   needsSession: 'needs-session',
   mainRepair: 'main-repair',
   resolved: 'bot:resolved',
+  // #6476 owner addition: the keeper's own hand-back. `conflict` is only the PR-list indicator now (D6476-p5).
+  keeperTried: 'bot:keeper-tried',
 });
 export const REPAIR_BRANCH_PREFIX = 'repair/';
 export const STICKY_MARKER = '<!-- landing-bot -->';
