@@ -195,7 +195,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
-import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PATTERN_OPTION, PROPOSAL_PAGE, acceptProposal, feedbackPattern, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PATTERN_OPTION, PROPOSAL_PAGE, acceptProposal, feedbackPattern, acceptProposals, activityRead, draftMessage, overviewRead, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
@@ -580,6 +580,13 @@ function capRelTabFailed(c: any, e: unknown, what: string): Response {
   console.error('[cycle_raise] capital-relationships failed:', what, (e as Error)?.name || 'error');
   return c.json({ state: 'unreadable', detail: 'That could not be done just now. Try again.' }, 500);
 }
+
+// D6079: the same work capability and staff/support refusal as the other capital tabs.
+cycleRaise.get('/capital-relationships/overview', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try { return c.json(await overviewRead(c.env, s.projectId, c.req.query('part'))); } catch (e) { return capRelTabFailed(c, e, 'overview'); }
+});
 
 cycleRaise.get('/capital-relationships/activity', async (c) => {
   const s = await scope(c);
