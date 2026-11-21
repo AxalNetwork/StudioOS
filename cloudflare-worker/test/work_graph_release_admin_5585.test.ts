@@ -70,11 +70,10 @@ function fresh(): W {
   u.run(MEMBER, 'founder', 'Member', 'member@example.test');
   u.run(LAZY, 'admin', 'Lazy', 'lazy@axal.example');
   db.exec(`INSERT INTO super_admins (user_id) VALUES (${SUPER}), (${LAZY})`);
-  const s = db.prepare("INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at) VALUES (?, ?, ?, datetime('now'), ?)");
-  s.run(`s-${SUPER}`, SUPER, 'totp', new Date().toISOString().replace('T', ' ').slice(0, 19));
-  s.run(`s-${ADMIN}`, ADMIN, 'totp', new Date().toISOString().replace('T', ' ').slice(0, 19));
-  s.run(`s-${MEMBER}`, MEMBER, 'totp', new Date().toISOString().replace('T', ' ').slice(0, 19));
-  s.run(`s-${LAZY}`, LAZY, 'magic_link', null);
+  // TOTP sessions stepped up now (SQLite's clock, as requireStepUp reads it), and one magic-link session with none.
+  const s = db.prepare("INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at) VALUES (?, ?, 'totp', datetime('now'), datetime('now'))");
+  for (const id of [SUPER, ADMIN, MEMBER]) s.run(`s-${id}`, id);
+  db.prepare("INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at) VALUES (?, ?, 'magic_link', datetime('now'), NULL)").run(`s-${LAZY}`, LAZY);
   return { env: { DB: d1Over(db) } as any, db } as W;
 }
 
