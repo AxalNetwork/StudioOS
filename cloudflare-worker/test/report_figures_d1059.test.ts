@@ -148,11 +148,13 @@ const READY = [{ key: 'revenue', include: false, reason: 'Shared at the board me
  * The registry
  * ------------------------------------------------------------------ */
 
-test('REPORT_FIGURES: one key per figure, Share an update’s five and the KPI rules mapped onto it, every module a Grow module', () => {
+test('REPORT_FIGURES: one key per figure, shared update metrics and KPI rules mapped onto it, every module a Grow module', () => {
   const names = REPORT_FIGURES.flatMap((f) => [f.key, ...f.aliases]);
   assert.equal(new Set(names).size, names.length, 'a key or alias is used twice');
   for (const k of METRIC_KEYS) assert.ok(figureFor(k), `Share an update's ${k} has no report figure`);
   assert.equal(figureFor('burn')!.key, 'net_burn');
+  assert.equal(figureFor('arr')!.unit, 'usd');
+  assert.deepEqual([figureFor('net_retention')!.key, figureFor('nrr_pct')!.key, figureFor('net_retention')!.unit], ['net_retention', 'net_retention', 'pct']);
   assert.equal(figureFor('runway_months')!.key, 'runway');
   // Migration 168's seed rows: every KPI key maps, and the required ones by cadence are KPI_RULES_REQUIRED.
   const seeds = [...read('cloudflare-worker/sql/migrations/168_portfolio_marks_distributions.sql')
@@ -209,6 +211,25 @@ test('assembleReport: each figure from its store, with its source and date; noth
     for (const k of ['revenue', 'gross_margin', 'net_retention']) assert.equal(v(k).value, null, `${k} is not recorded, never 0`);
     assert.match(v('gross_margin').reason, /no Grow store records gross margin/);
     assert.equal(figures.filter((f) => f.team_only).map((f) => f.key).sort().join(), 'net_burn,runway');
+    // D6104: no ledger movement for the burn's month, so burn multiple is Not recorded and says why.
+    assert.equal(v('burn_multiple').value, null);
+    assert.match(v('burn_multiple').reason, /no movements for 2026-09/);
+  } finally { db.close(); }
+});
+
+test('D6104: ARR falls back to 12 × MRR, computed; burn multiple is net burn ÷ the month\'s net new ARR, team only from Mercury', async () => {
+  const db = freshDb();
+  try {
+    db.exec(`UPDATE project_metrics SET arr = NULL WHERE project_id = 7;
+      INSERT INTO revenue_entries (uid, project_id, customer, amount_cents, revenue_type, received_on, source, verification) VALUES
+        ('d6104-a1', 7, 'Synthetic A', 100000, 'recurring', '2026-08-15', 'stripe', 'verified'),
+        ('d6104-a2', 7, 'Synthetic A', 100000, 'recurring', '2026-09-15', 'stripe', 'verified'),
+        ('d6104-b2', 7, 'Synthetic B', 200000, 'recurring', '2026-09-20', 'stripe', 'verified');`);
+    const { figures } = await assembleReport(makeEnv(db), 7, { start: Q.start, end: Q.end }, TODAY);
+    const v = (k: string) => fig(figures, k);
+    assert.deepEqual([v('arr').value, v('arr').source.computed, v('arr').as_of], [144000, true, '2026-09-30'], '12 × the period\'s MRR');
+    // Net new MRR in September: Synthetic B, $2,000 → net new ARR $24,000; Mercury burn $25,000 → 1.04.
+    assert.deepEqual([v('burn_multiple').value, v('burn_multiple').unit, v('burn_multiple').source.computed, v('burn_multiple').team_only], [1.04, 'multiple', true, true]);
   } finally { db.close(); }
 });
 

@@ -38,7 +38,7 @@ const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/sche
 const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
 const TODAY = new Date().toISOString().slice(0, 10);
 const ago = (n: number) => daysBefore(TODAY, n);
-const FOUNDER = 10, OTHER = 20;
+const FOUNDER = 10, OTHER = 20, GUS = 21;
 const P = 1;
 
 function fixture() {
@@ -64,6 +64,8 @@ function fixture() {
   db.exec(sqlOf('460_validate_record_stores.sql'));
   // D693 (#1704): Verdict, the seventh module, over migration 464's decisions.
   db.exec(sqlOf('464_verdict_decisions.sql'));
+  // D6011 (#6011): the market card reads each figure's source from `market_figures`.
+  db.exec(sqlOf('202611150130_6011_market_figures.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -278,7 +280,18 @@ test('D661: the page lists Raise\'s modules as the Worker does', () => {
 });
 
 test('D661: Raise\'s real read passes through the page untouched, and its seeded cards draw', async () => {
-  for (const db of [raiseFixture(), raiseSeeded()]) {
+  const seededDb = raiseSeeded();
+  const lockedRead = await raiseCall(seededDb, `/overview?project=${P}`);
+  assert.equal(lockedRead.status, 200, JSON.stringify(lockedRead.body));
+  const lockedCard = adaptOverview('raise', lockedRead.body).cards.find((c: any) => c.slug === 'cap-table');
+  assert.equal(lockedCard.state, 'ok', 'the Worker still returns the seeded Cap table data');
+  assert.deepEqual(cardView(lockedCard), {
+    state: 'locked',
+    plan: { locked: true, tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' },
+  });
+
+  seededDb.prepare("UPDATE users SET subscription_tier = 'studio', subscription_status = 'active' WHERE id = ?").run(FOUNDER);
+  for (const db of [raiseFixture(), seededDb]) {
     const r = await raiseCall(db, `/overview?project=${P}`);
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const o = adaptOverview('raise', r.body);
@@ -290,7 +303,7 @@ test('D661: Raise\'s real read passes through the page untouched, and its seeded
     }
     for (const f of o.figures) if (f.state === 'ok') assert.notEqual(figureValue(f), null, `${f.key} has a value the page cannot write`);
   }
-  const seeded = adaptOverview('raise', (await raiseCall(raiseSeeded(), `/overview?project=${P}`)).body);
+  const seeded = adaptOverview('raise', (await raiseCall(seededDb, `/overview?project=${P}`)).body);
   for (const slug of ['cap-table', 'use-of-funds', 'capital-relationships']) {
     const c = seeded.cards.find((x: any) => x.slug === slug);
     assert.equal(c.state, 'ok', `${slug} should be ok when seeded`);
@@ -365,6 +378,8 @@ import { GROW_MODULES } from '../src/services/growCycle.ts';
 import { recomputeRevenueMovements } from '../src/services/revenueMovements.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { CARDS as GROW_CARDS, RECORDS as GROW_RECORDS } from '../../frontend/src/pages/cycles/adapters/grow.js';
+import { ROLES } from '../src/services/posthog/metrics.ts';
+import { ROLE_CHIPS } from '../../frontend/src/pages/cycles/fromPosthogModel.js';
 
 const MIG = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const migFile = (p: string) => readFileSync(resolve(MIG, readdirSync(MIG).find((f) => f.startsWith(`${p}_`))!), 'utf8');
@@ -390,10 +405,18 @@ async function growFixture() {
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(migDdl('125')); db.exec(migFile('437'));
   db.exec(migFile('443'));
+  db.exec(migFile('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(migFile('462'));
+  db.exec(migFile('202611161128_6865')); // D6865: the feedback's contact link and origin
   db.exec(sqlOf('202611041912_growth_channel_details.sql'));
   db.exec(migFile('507'));
+  // D6107: PostHog's link and tracked metrics, so the Visit stage reads its real store (no link here: not connected).
+  db.exec(tableFromBaseline(BASELINE, 'integrations'));
+  db.exec(migFile('657')); db.exec(migFile('755')); db.exec(sqlOf('202611151917_6107_posthog_visits_role.sql'));
   db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(FOUNDER, 'founder', 1001, 'Fay', 'fay@example.test');
+  // D6790: an obligation's owner is picked from the company team, so Fay and Gus are on company 70's.
+  db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(GUS, 'founder', null, 'Gus', 'gus@example.test');
+  db.exec(`INSERT INTO user_company_links (company_id, user_id) VALUES (70, ${FOUNDER}), (70, ${GUS})`);
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 1001, 70)`).run(GP);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;
   await ensureProjectMetricsSchema(env);
@@ -517,7 +540,7 @@ test('D661: Grow\'s real read, seeded in every module: all seven cards are ok an
   const cac = card('distribution').series[0];
   assert.equal(cac.unit, 'usd');
   assert.deepEqual(cac.items.map((i: any) => [i.label, i.value]), [['LinkedIn', 600], ['Search ads', 300]], 'CAC = spend / customers, in dollars');
-  assert.deepEqual(card('distribution').series[2].items, [{ label: 'Visit', value: 'Not recorded: no page-visit store yet' }], 'visits are not recorded, and say why');
+  assert.deepEqual(card('distribution').series[2].items, [{ label: 'Visit', value: 'Not recorded: PostHog is not connected for this venture' }], 'visits are not recorded, and say why (D6107)');
   assert.deepEqual(card('distribution').series[1].steps.map((s: any) => s.label), ['Sign-up', 'Paying']);
   const mrr = card('revenue-and-traction').series[0];
   assert.equal(mrr.rows.length, 3, 'three movement months');
@@ -536,8 +559,102 @@ test('D661: Grow\'s real read, seeded in every module: all seven cards are ok an
   assert.equal(figureValue(o.figures.find((x: any) => x.key === 'mrr')), '$3,840', 'MRR is in dollars on the snapshot, written as such');
 });
 
+// ── D6107 (#6107): Distribution's Visit stage from a tracked PostHog `visits` metric, team only ──
+
+async function growCallAs(f: { env: any }, who: number, role: string, path: string) {
+  const token = await new SignJWT({ user_id: who, role }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await growApp.fetch(new Request(`http://t/api/cycles/grow${path}`, { headers: { Authorization: `Bearer ${token}` } }),
+      f.env, { waitUntil() {}, passThroughOnException() {} } as any);
+    return { status: res.status, body: await res.json().catch(() => null) as any };
+  } finally { [console.warn, console.error] = saved; }
+}
+
+/** The Visit stage as the Worker sends it, and the Distribution card as the page draws it. */
+async function visitOf(f: { env: any }, who = FOUNDER, role = 'founder') {
+  const r = await growCallAs(f, who, role, `/modules/distribution?project=${GP}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const card = adaptModule('grow', 'distribution', r.body).card;
+  return { raw: r.body.card.series.funnel[0], card, view: cardView(card) };
+}
+
+test('D6107: the Visit stage says which PostHog connection to make, reads a tracked visits metric with its source and date, and is Unreadable when the read fails', async () => {
+  const f = await growSeeded();
+  const PH = 40;
+  // 1. No PostHog connection.
+  let v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, reason: 'Not recorded: PostHog is not connected for this venture' });
+  // 2. Connected and linked, no metric tracked as Visits (a Sessions one is not visits).
+  f.db.prepare("INSERT INTO integrations (id, uid, user_id, provider_key, status, auth_type) VALUES (?, 'int-ph', ?, 'posthog', 'active', 'oauth_mcp')").run(PH, FOUNDER);
+  f.db.prepare("INSERT INTO posthog_project_links (uid, integration_id, project_id, posthog_project_id, linked_by) VALUES ('l1', ?, ?, '9', ?)").run(PH, GP, FOUNDER);
+  const track = f.db.prepare(`INSERT INTO posthog_tracked_metrics (uid, integration_id, project_id, insight_short_id, insight_name, role, module, unit, created_by)
+                              VALUES (?, ${PH}, ${GP}, ?, ?, ?, 'revenue_and_traction', 'count', ${FOUNDER})`);
+  track.run('a'.repeat(32), 'Ins1', 'Weekly sessions', 'sessions');
+  f.db.prepare("INSERT INTO posthog_metric_facts (integration_id, project_id, module, kind, fact_key, period, value, as_of) VALUES (?, ?, 'revenue_and_traction', 'metric', ?, ?, 900, ?)")
+    .run(PH, GP, `metric:${'a'.repeat(32)}`, dayFrom(-1), dayFrom(-1));
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, reason: 'Not recorded: no PostHog metric is tracked as Visits' });
+  // 3. Tracked as Visits, nothing synced yet.
+  const VUID = 'b'.repeat(32);
+  track.run(VUID, 'Ins2', 'Site visits', 'visits');
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, reason: 'Not recorded: the Visits metric has no PostHog figure yet' });
+  assert.deepEqual(v.card.series.at(-1).items, [{ label: 'Visit', value: 'Not recorded: the Visits metric has no PostHog figure yet' }]);
+  // 4. Synced: the latest figure, its source and date; listed apart, never a bar the sign-ups are a share of.
+  const fact = f.db.prepare("INSERT INTO posthog_metric_facts (integration_id, project_id, module, kind, fact_key, period, value, as_of) VALUES (?, ?, 'revenue_and_traction', 'metric', ?, ?, ?, ?)");
+  fact.run(PH, GP, `metric:${VUID}`, dayFrom(-9), 1100, dayFrom(-9));
+  fact.run(PH, GP, `metric:${VUID}`, dayFrom(-2), 1240, dayFrom(-2));
+  // A second Visits metric read less recently: the stage shows the latest read, never a sum.
+  track.run('c'.repeat(32), 'Ins3', 'Landing visits', 'visits');
+  fact.run(PH, GP, `metric:${'c'.repeat(32)}`, dayFrom(-5), 500, dayFrom(-5));
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: 1240, apart: true, source: 'From PostHog · Site visits', as_of: dayFrom(-2) });
+  assert.equal(v.view.state, 'ok');
+  assert.deepEqual(v.card.series.map((s: any) => s.kind), ['hbar', 'funnel', 'rows']);
+  assert.deepEqual(v.card.series[1].steps.map((s: any) => [s.label, s.value]), [['Sign-up', 3], ['Paying', 26]], 'the funnel starts at sign-ups: visits are never its first bar');
+  assert.deepEqual(v.card.series[2].items, [{ label: 'Visit', value: `1,240 · From PostHog · Site visits, as of ${dayFrom(-2)}` }]);
+  // The connection gone: the stored figure is not shown.
+  f.db.prepare("UPDATE integrations SET status = 'revoked' WHERE id = ?").run(PH);
+  assert.deepEqual((await visitOf(f)).raw, { stage: 'Visit', value: null, reason: 'Not recorded: PostHog is not connected for this venture' });
+  f.db.prepare("UPDATE integrations SET status = 'active' WHERE id = ?").run(PH);
+  // 5. Team only (Q3 = A): an admin who may read the venture sees no PostHog figure.
+  f.db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(OTHER, 'admin', null, 'Ada', 'ada@example.test');
+  const admin = await visitOf(f, OTHER, 'admin');
+  assert.deepEqual(admin.raw, { stage: 'Visit', value: null, reason: 'Not recorded: PostHog figures are for the venture\'s team only' });
+  assert.ok(!JSON.stringify(admin.card).includes('1,240') && !JSON.stringify(admin.card).includes('Site visits'), 'no visits figure reaches a non-team viewer');
+  // 6. A failed read is Unreadable, never Not recorded, and the rest of the card still loads.
+  f.db.exec('DROP TABLE posthog_metric_facts');
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, state: 'unreadable', reason: 'Unreadable: PostHog figures could not be read' });
+  assert.equal(v.view.state, 'ok', 'the channels and funnel still draw');
+  assert.deepEqual(v.card.series.at(-1).items, [{ label: 'Visit', value: 'Unreadable: PostHog figures could not be read' }]);
+});
+
+test('D6107: the migration widens the role CHECK to visits and keeps every tracked metric', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec(migFile('755'));
+  db.prepare("INSERT INTO posthog_tracked_metrics (id, uid, integration_id, project_id, insight_short_id, insight_name, role, module, unit, created_by, created_at) VALUES (7, 'u7', 1, 2, 'Ins', 'Weekly sessions', 'sessions', 'revenue_and_traction', 'count', 3, '2026-11-01 10:00:00')").run();
+  const insert = (uid: string, role: string, insight = uid) => db.prepare(`INSERT INTO posthog_tracked_metrics (uid, integration_id, project_id, insight_short_id, role, module, created_by) VALUES (?, 1, 2, ?, ?, 'revenue_and_traction', 3)`).run(uid, insight, role);
+  assert.throws(() => insert('v0', 'visits'), /CHECK constraint failed/, '755 alone refuses visits');
+  db.exec(sqlOf('202611151917_6107_posthog_visits_role.sql'));
+  assert.deepEqual({ ...(db.prepare('SELECT * FROM posthog_tracked_metrics WHERE id = 7').get() as any) },
+    { id: 7, uid: 'u7', integration_id: 1, project_id: 2, insight_short_id: 'Ins', insight_name: 'Weekly sessions', role: 'sessions', module: 'revenue_and_traction', unit: 'count', created_by: 3, created_at: '2026-11-01 10:00:00' });
+  insert('v1', 'visits');
+  assert.throws(() => insert('v2', 'pageviews'), /CHECK constraint failed/, 'only the listed roles');
+  assert.throws(() => insert('v1', 'visits', 'another-insight'), /UNIQUE constraint failed: posthog_tracked_metrics\.uid/, 'the uid stays unique');
+  assert.throws(() => insert('v3', 'visits', 'v1'), /UNIQUE constraint failed/, 'one row per venture, insight and module');
+  assert.ok((db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_posthog_tracked_project'").get()), 'the index is recreated');
+  assert.ok(!db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'posthog_tracked_metrics_new'").get());
+  assert.deepEqual([...ROLES], ['active_users', 'new_users', 'activation', 'retention', 'conversion', 'sessions', 'visits', 'other'], 'the Worker\'s list is the CHECK\'s');
+  assert.deepEqual(ROLE_CHIPS.map(([k]: [string, string]) => k), [...ROLES], 'the page offers every role, Visits among them');
+});
+
 test('D661: every Grow table has a value source for each column, and its filter and sorts name real fields', async () => {
   const f = await growSeeded();
+  f.db.exec(tableFromBaseline(BASELINE, 'metric_targets'));
+  f.db.prepare("INSERT INTO metric_targets (project_id, metric_key, target_value, direction) VALUES (?, 'mrr', 4000, 'up')").run(GP);
   for (const m of GROW_MODULES) {
     const r = await growCall(f, 'GET', `/modules/${m.slug}?project=${GP}`);
     assert.equal(r.status, 200, `${m.slug}: ${JSON.stringify(r.body)}`);
@@ -571,7 +688,7 @@ test('D661: every Grow table has a value source for each column, and its filter 
   assert.deepEqual(await rowBy('product-improvement', (c) => c.feedback === 'Onboarding is long'),
     { Feedback: 'Onboarding is long', Source: 'Team', Theme: 'Onboarding', 'Roadmap item': 'Short onboarding', Status: { text: 'Shipped', tone: 'ok' } });
   assert.deepEqual(await rowBy('revenue-and-traction', (c) => c.kpi === 'MRR'),
-    { KPI: 'MRR', Value: '$3,840', 'Change · 30 d': '▲ $440', Source: 'stripe', 'As of': dayFrom(-1) });
+    { KPI: 'MRR', Value: '$3,840', 'Change · 30 d': '▲ $440', Source: 'stripe', 'As of': dayFrom(-1), Target: { text: '$4,000.00', href: `/grow/focus?project_id=${GP}`, separateLink: true }, 'Vs target': 'Below target' });
   assert.deepEqual(await rowBy('team-expansion', (c) => c.team === 'Engineering'),
     { Role: { text: 'Engineer', href: '/jobs/5/manage' }, Team: 'Engineering', Applicants: 3, 'In interview': 1, 'Target start': '2027-01' });
   assert.deepEqual(await rowBy('partner-network', (c) => c.partner === 'Northwind'),
@@ -582,7 +699,7 @@ test('D661: every Grow table has a value source for each column, and its filter 
   assert.deepEqual((await rowBy('market-expansion', (c) => c.market === 'France')).Readiness,
     { text: 'Not recorded: Regulation, Partners, Cost to enter not scored', tone: 'muted' });
   assert.deepEqual(await rowBy('durable-company-building', (c) => c.obligation === 'Annual filing'),
-    { Obligation: 'Annual filing', Kind: 'Compliance', Due: dayFrom(40), Owner: { text: 'No owner', tone: 'warn' }, State: { text: 'Upcoming', tone: 'v3' } });
+    { Obligation: 'Annual filing', Kind: 'Compliance', Due: dayFrom(40), Owner: { text: 'No owner named', tone: 'warn' }, State: { text: 'Upcoming', tone: 'v3' }, Repeats: 'Once' });
   const durable = adaptModule('grow', 'durable-company-building', (await growCall(f, 'GET', `/modules/durable-company-building?project=${GP}`)).body);
   assert.ok(Array.isArray(durable.parts?.checklist) && durable.parts.checklist.some((i: any) => i.key === 'key_person_cover' && i.done), 'the checklist part comes through');
 });
@@ -780,7 +897,8 @@ const SAMPLES: Record<string, Record<string, Record<string, unknown>>> = {
     'team-expansion': { title: 'Founding engineer', team: 'Engineering', type: 'fractional', target_start: dayFrom(60), band: '90,000–120,000', equity: '0.5', post_to: [] },
     'partner-network': { name: 'Initech', type: 'agency', stage: 'terms', terms_kind: 'rev_share', amount: '20%' },
     'market-expansion': { name: 'Portugal', state: 'considering', parts: ['demand'], demand_score: '7', demand_source: 'Waitlist by country' },
-    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20), owner_name: 'Fay' },
+    // D6790: the owner listbox's team comes from form-options, which this harness does not load, so the Add names no one; its Edit picks Gus.
+    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20) },
   },
 };
 // Build's canvas forms (D695 #1656 PR 3b) need #1792's stores, so their bodies,
@@ -822,7 +940,7 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   const portugal = await growRow('market-expansion', (r) => r.name === 'Portugal');
   assert.deepEqual([portugal.demand_score, portugal.demand_source, portugal.regulation_score, portugal.readiness], [7, 'Waitlist by country', null, null], 'an unscored part stays null, never 0');
   const annual = await growRow('durable-company-building', (r) => r.title === 'Annual report');
-  assert.deepEqual([annual.kind, annual.owner_name, annual.status, String(annual.due_at).slice(0, 10)], ['compliance', 'Fay', 'upcoming', dayFrom(20)]);
+  assert.deepEqual([annual.kind, annual.owner, annual.status, String(annual.due_at).slice(0, 10)], ['compliance', null, 'upcoming', dayFrom(20)]);
   // The checklist tick, and its undo.
   await w.grow.checklist(GP, 'board_cadence', true);
   let parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
@@ -900,7 +1018,7 @@ const EDITED: Record<string, Record<string, string>> = {
   'team-expansion': { team: 'Product' },
   'partner-network': { stage: 'signed', type: 'reseller', terms: 'Net 30' },
   'market-expansion': { decision: 'enter', regulation_score: '5', regulation_source: 'Counsel memo' },
-  'durable-company-building': { status: 'done', owner_name: 'Gus', due_at: dayFrom(5) },
+  'durable-company-building': { status: 'done', owner_user_id: String(GUS), due_at: dayFrom(5) },
 };
 
 test('D661: every Grow Edit form starts from its row, and the change reads back with nothing else moved', async () => {
@@ -941,7 +1059,7 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
   assert.deepEqual([mk.decision, mk.demand_score, mk.demand_source, mk.regulation_score, mk.regulation_source, mk.partners_score],
     ['enter', 7, 'Waitlist by country', 5, 'Counsel memo', null], 'a scored part keeps its score; an unscored one stays null');
   const ob = await raw('durable-company-building');
-  assert.deepEqual([ob.title, ob.status, ob.owner_name, String(ob.due_at).slice(0, 10)], ['Annual report', 'done', 'Gus', dayFrom(5)]);
+  assert.deepEqual([ob.title, ob.status, ob.owner, String(ob.due_at).slice(0, 10)], ['Annual report', 'done', 'Gus', dayFrom(5)]);
 });
 
 // Build's Edits (D695 #1656 PR 3b) open from their records; `cycle_forms_d695.test.ts` runs them.

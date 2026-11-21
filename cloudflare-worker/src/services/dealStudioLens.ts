@@ -1,4 +1,5 @@
 import { holdsLicence } from './accountLicences';
+import { hiddenDealIds, withoutHidden } from './dealPreparation';
 /**
  * D1242 (#3255, part 6 of #2423) — the Studio lens on Deal flow: every round
  * on the platform for studio staff, with who leads it, how many investors are
@@ -112,7 +113,9 @@ export async function readStudioLens(env: Env, user: { id?: unknown; role?: unkn
       ORDER BY d.created_at DESC, d.id DESC`,
   ).bind(NOT_RAISING, INTAKE_LINE).all<any>();
   const me = Number(user?.id);
-  const rows = (res.results || []).map((r) => {
+  // D5454: a deal whose preparation is not released is no round on the lens (staff see withdrawn ones).
+  const hidden = await hiddenDealIds(env, 'transactional');
+  const rows = withoutHidden(res.results || [], hidden, (r: any) => r.id).map((r) => {
     const by = notRaisingBy(r);
     return {
       id: Number(r.id),

@@ -5,8 +5,12 @@ name: GitHub alerts
 #   main-red      every 15 min: the latest finished CI run on a push to main
 #                 failed, so every PR that merges main fails
 #   queue         the Actions queue backed up, so CI results arrive hours late
+#   queue-stalled every 15 min: one failure (test, guard, or job and step) in
+#                 merge-queue candidates of two queue chains (D5604, D7125)
 #   future-clock  nightly: the suites with the clock 7 days ahead, which finds a
-#                 date-bound test (D5052, D5039) before its date breaks main
+#                 date-bound test (D5052, D5039) before its date breaks main;
+#                 the report job writes the failing names to its own log and
+#                 step summary, and the alert gets the break date (D7124)
 # The reviewer's alert (no model called) is a job in claude-review.yml, where
 # its outcome is known. main-red polls instead of using `workflow_run`, which
 # WF-4 (frontend/test/workflow_security_4571.test.mjs) keeps out of the repo.
@@ -18,6 +22,7 @@ name: GitHub alerts
 
 on:
   schedule:
+    - cron: '2-57/5 * * * *' # reconcile workflow failures; offset from the existing quarter-hour checks
     - cron: '*/15 * * * *' # main red
     - cron: '7 * * * *'    # queue, hourly
     - cron: '23 2 * * *'   # future clock, nightly
@@ -26,16 +31,74 @@ on:
       check:
         description: 'Which check to run now'
         type: choice
-        options: [main-red, queue, queue-stalled, future-clock]
+        options: [main-red, queue, queue-stalled, future-clock, workflow-failures, file-backup]
         default: queue
+      attempts:
+        description: 'Verified completion hint batch: JSON array of up to 20 [run_id, attempt] pairs'
+        type: string
+      run_id:
+        description: 'Workflow failure replay: exact GitHub run ID (leave blank for reconciliation)'
+        type: string
+      run_attempt:
+        description: 'Workflow failure replay: exact GitHub run attempt'
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: github-alerts-${{ github.event_name }}-${{ github.event.schedule || github.event.inputs.check || 'run' }}
+  group: github-alerts-${{ github.event_name }}-${{ (github.event.inputs.attempts || github.event.inputs.run_id) && github.run_id || github.event.schedule || github.event.inputs.check || 'run' }}
   cancel-in-progress: false
 
 jobs:
+  workflow-failures:
+    name: Report workflow failures to Issues
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '2-57/5 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.check == 'workflow-failures'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: github-health-main-red
+      queue: max
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: refs/heads/main
+          sparse-checkout: |
+            scripts
+            engineering-notifications
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Restore the last reconciled creation window and unfinished runs
+        if: inputs.run_id == '' && inputs.attempts == ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/workflow-failure-state.json
+          key: workflow-failure-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: workflow-failure-state-v1-
+      - name: Report verified failures
+        run: node scripts/workflow-failure-reconcile.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ATTEMPTS: ${{ inputs.attempts }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          CURSOR_FILE: ${{ runner.temp }}/workflow-failure-state.json
+      - name: Save the completed reconciliation checkpoint
+        if: success() && inputs.run_id == '' && inputs.attempts == ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/workflow-failure-state.json
+          key: workflow-failure-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
   queue-stalled:
     name: Merge queue stalled
     if: >-
@@ -46,9 +109,13 @@ jobs:
     concurrency:
       group: github-alerts-queue-stalled
       cancel-in-progress: false
+    # D7125: checks to read each failed queue job's ci-failure-id annotations;
+    # pull-requests to list open PRs that change a failing test (possible repairs).
     permissions:
       contents: read
       actions: read
+      checks: read
+      pull-requests: read
       issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -72,7 +139,7 @@ jobs:
     timeout-minutes: 5
     concurrency:
       group: github-health-main-red
-      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       actions: read
@@ -120,6 +187,7 @@ jobs:
           SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
           QUEUE_ALERT_QUEUED: ${{ vars.QUEUE_ALERT_QUEUED }}
           QUEUE_ALERT_OLDEST_MIN: ${{ vars.QUEUE_ALERT_OLDEST_MIN }}
+          QUEUE_ALERT_IGNORE_BEFORE: ${{ vars.QUEUE_ALERT_IGNORE_BEFORE }}
 
   future-clock-plan:
     name: suite plan
@@ -145,19 +213,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          artifact=''
-          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
-            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
-          fi
-          if [ -n "$artifact" ]; then
-            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
-              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
-            fi
-          fi
-          if [ ! -f test-timings.json ]; then
-            echo "::notice::No main timings artifact available; using equal weights."
-          fi
+        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
         run: |
@@ -206,7 +262,7 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci
       - name: Install age and libfaketime
         run: sudo apt-get update -qq && sudo apt-get install -y -qq age faketime
       - name: Build the SPA
@@ -235,7 +291,8 @@ jobs:
           name: future-clock-${{ matrix.part }}
           path: ${{ runner.temp }}/future-clock/
           if-no-files-found: error
-          retention-days: 3
+          # D7124: the evidence outlives the 7-day fuse it warns about.
+          retention-days: 14
 
   future-clock:
     name: future clock (report)
@@ -273,3 +330,43 @@ jobs:
           FUTURE_CLOCK_DAYS: '7'
           FUTURE_CLOCK_DIR: ${{ runner.temp }}/fc
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  file-backup:
+    name: File recovery heartbeat
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      vars.FILE_RECOVERY_ENABLED == 'true' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '7 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.check == 'file-backup'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-file-backup
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Read only the file heartbeat metadata
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_RECOVERY_HEALTH_ACCESS_KEY_ID: ${{ secrets.FILE_RECOVERY_HEALTH_ACCESS_KEY_ID }}
+          FILE_RECOVERY_HEALTH_SECRET_ACCESS_KEY: ${{ secrets.FILE_RECOVERY_HEALTH_SECRET_ACCESS_KEY }}
+        run: python3 scripts/file-recovery-independent.py read-heartbeat --out "$RUNNER_TEMP/file-recovery-heartbeat.json"
+      - name: Reconcile one file backup health episode
+        if: always()
+        run: node scripts/github-alerts.mjs file-backup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          FILE_RECOVERY_ENABLED: ${{ vars.FILE_RECOVERY_ENABLED }}
+          FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_SECOND_COPY_ENABLED }}
+          FILE_RECOVERY_HEARTBEAT_FILE: ${{ runner.temp }}/file-recovery-heartbeat.json

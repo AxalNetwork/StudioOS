@@ -1,4 +1,5 @@
 /** D4557 part 2: the privileged Worker broker, scoped R2 manifests and existing Workflow handoff; no second scheduler. */
+import { containmentEvidenceSchema } from './workspaceContainment';
 import type { Env, User } from '../../types';
 import { engineMode, haltedAll } from '../../agents/runtime';
 import { runByUid, type RunRow } from '../../agents/engine';
@@ -12,6 +13,8 @@ import { moduleOf } from './catalogue';
 import type { TaskRow } from './tasks';
 import { proposeRail } from '../railProposals';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
+import { putRecordOrThrow } from '../recordStore';
+import { eraseRecordObjects } from '../recordErasure';
 
 type ComputeEnv = Env & { AGENT_COMPUTE_HOST?: Fetcher; AGENT_COMPUTE_POLICY_JSON?: string };
 export type ComputePolicy = { template: Pick<WorkspaceSpec, 'image_digest' | 'repo_id' | 'base_sha' | 'cpu' | 'allowed_regions' | 'max_cost_microusd'>;
@@ -41,6 +44,8 @@ export function computePolicy(env: ComputeEnv): ComputePolicy | null {
       || policy.template.allowed_regions[0] !== 'global'
       || !['python', 'document_convert', 'spreadsheet'].every(workload => Number.isSafeInteger(policy.job_cost_ceiling_microusd?.[workload as Workload])
         && policy.job_cost_ceiling_microusd[workload as Workload] > 0)) return null;
+    const containment = containmentEvidenceSchema.safeParse(policy.provider.containment);
+    if (!containment.success || containment.data.source !== 'owner_registry' || containment.data.provider !== 'cloudflare') return null;
     return policy;
   } catch { return null; }
 }
@@ -102,13 +107,15 @@ export async function uploadComputeInput(env: ComputeEnv, user: User, requestUid
   const ticket = await assertStorageRoom(env, { userId: user.id }, bytes.length, user);
   if (['unreadable', 'no_owner'].includes(ticket.passed)) throw computeFailure('compute_storage_unreadable', 503);
   const key = `agent-compute/${task.scope_kind}/${task.scope_kind === 'project' ? task.project_id : task.company_id}/pending-${request.uid}/${objectUid}`;
-  await files(env).put(key, bytes, { customMetadata: { owner_user_id: String(user.id), request_uid: request.uid, sha256 } });
+  // D6651: a compute input is a record, written once under a fresh key.
+  await putRecordOrThrow(files(env), key, bytes, { customMetadata: { owner_user_id: String(user.id), request_uid: request.uid, sha256 } });
   const saved = await env.DB.prepare(`INSERT INTO agent_compute_objects
     (uid, request_uid, owner_user_id, kind, name, r2_key, size_bytes, sha256, expires_at)
     SELECT ?, ?, ?, 'input', ?, ?, ?, ?, ? WHERE EXISTS(SELECT 1 FROM agent_compute_requests WHERE uid = ? AND status = 'draft')
     ON CONFLICT DO NOTHING`).bind(objectUid, request.uid, user.id, name, key, bytes.length, sha256,
     sqlTime(Date.now() + computePolicy(env)!.artifact_ttl_s * 1000), request.uid).run();
-  if (!Number(saved.meta?.changes)) { await files(env).delete(key); throw computeFailure('compute_upload_conflict'); }
+  // D4557 keeps no compute bytes without their row; the object this call just created goes through the one erasure path.
+  if (!Number(saved.meta?.changes)) { await eraseRecordObjects(files(env), key, 'unreferenced'); throw computeFailure('compute_upload_conflict'); }
   await noteStorageLanded(env, ticket);
   return { uid: objectUid };
 }
@@ -199,7 +206,20 @@ export async function authorizeCompute(env: ComputeEnv, jobUid: string, raw: unk
       && (scope.kind === 'company' ? scope.id : scope.company_id) === admission.spec.company_id
       && await canRead(env, scope, user) && !await haltedAll(env) && !['off', 'paused'].includes(await engineMode(env));
   }
-  return { allowed, revision: 1, approved: false };
+  if (!allowed) return { allowed, revision: 1, approved: false };
+  // D5567 part 3: the sponsor's authorization revision, raised by D1 triggers whenever any of their access is taken
+  // away (migration 202611161330). A grant or registration from before the change no longer matches. Unreadable: refuse.
+  const revision = await authorizationRevision(env, admission.sponsor.member_id);
+  return revision === null ? { allowed: false, revision: 1, approved: false } : { allowed, revision, approved: false };
+}
+
+/** A member's authorization revision: 1 until their access first changes, then one more each time. Null when unreadable. */
+export async function authorizationRevision(env: Env, memberId: number): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare('SELECT revision FROM agent_authz_revisions WHERE member_id = ?').bind(memberId).first<{ revision: number }>();
+    if (!row) return 1;
+    return Number.isSafeInteger(row.revision) && row.revision >= 2 ? row.revision : null;
+  } catch { return null; }
 }
 
 export async function computeInternal(env: ComputeEnv, action: string, jobUid: string, raw: unknown): Promise<unknown> {
@@ -250,7 +270,8 @@ export async function computeInternal(env: ComputeEnv, action: string, jobUid: s
       const ticket = await assertStorageRoom(env, { userId: admission.sponsor.member_id }, bytes.length, { id: admission.sponsor.member_id });
       if (['unreadable', 'no_owner'].includes(ticket.passed)) throw computeFailure('compute_storage_unreadable', 503);
       const key = artifactPrefix(job) + objectUid;
-      await files(env).put(key, bytes, { customMetadata: { owner_user_id: String(admission.sponsor.member_id), job_uid: job.uid, sha256: artifact.sha256 } }); keys.push(key);
+      // D6651: a compute result is a record, written once under a fresh key.
+      await putRecordOrThrow(files(env), key, bytes, { customMetadata: { owner_user_id: String(admission.sponsor.member_id), job_uid: job.uid, sha256: artifact.sha256 } }); keys.push(key);
       const added = await env.DB.prepare(`INSERT INTO agent_compute_objects (uid, request_uid, job_uid, owner_user_id, kind, name, r2_key, size_bytes, sha256, expires_at)
         SELECT ?, ?, ?, ?, 'output', ?, ?, ?, ?, ? WHERE EXISTS(SELECT 1 FROM agent_compute_jobs j JOIN agent_compute_executions e ON e.job_uid = j.uid
           WHERE j.uid = ? AND j.status = 'running' AND e.generation = ?) ON CONFLICT DO NOTHING`)
@@ -263,7 +284,9 @@ export async function computeInternal(env: ComputeEnv, action: string, jobUid: s
     const recorded = await recordResult(env, job, { ...result, output_bytes: result.artifacts.reduce((n, value) => n + value.bytes, 0), artifacts: keys }, new Date(), meta.generation);
     if (!recorded.ok) throw computeFailure(recorded.code);
   } catch (error) {
-    for (const key of keys) { await files(env).delete(key); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE r2_key = ?').bind(key).run(); }
+    // D4557: a cancelled, revoked or losing completion retains no output bytes. Each key here was created by this call
+    // (putRecordOrThrow refuses an existing key), so D6651's one erasure path removes it as unreferenced.
+    for (const key of keys) { await eraseRecordObjects(files(env), key, 'unreferenced'); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE r2_key = ?').bind(key).run(); }
     throw error;
   }
   if (env.AGENT_TASK) {
@@ -310,7 +333,8 @@ export async function computeProposal(env: ComputeEnv, run: RunRow, agent: Agent
 export async function sweepComputeObjects(env: Env) {
   const rows = (await env.DB.prepare("SELECT uid, r2_key FROM agent_compute_objects WHERE datetime(expires_at) <= datetime('now') ORDER BY expires_at LIMIT 32")
     .all<Pick<ObjectRow, 'uid' | 'r2_key'>>()).results ?? [];
-  for (const row of rows) { await files(env).delete(row.r2_key); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(row.uid).run(); }
+  // D6651: the retention sweep goes through the one record-erasure path.
+  for (const row of rows) { await eraseRecordObjects(files(env), row.r2_key, 'retention_expired'); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(row.uid).run(); }
 }
 
 /** R2 cleanup precedes metadata cascades so erasure never strands unaddressable private objects. */
@@ -344,7 +368,8 @@ export async function eraseComputeData(env: ComputeEnv, where: { userId: number 
       const objects = (await env.DB.prepare('SELECT uid, r2_key FROM agent_compute_objects WHERE request_uid = ? LIMIT 32').bind(request.uid)
         .all<Pick<ObjectRow, 'uid' | 'r2_key'>>()).results ?? [];
       if (!objects.length) break;
-      for (const object of objects) { await files(env).delete(object.r2_key); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(object.uid).run(); }
+      // D6651: erasure goes through the one record-erasure path.
+      for (const object of objects) { await eraseRecordObjects(files(env), object.r2_key, 'erasure_request'); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(object.uid).run(); }
     }
     await env.DB.prepare('DELETE FROM agent_compute_requests WHERE uid = ?').bind(request.uid).run();
   }

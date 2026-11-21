@@ -3,48 +3,13 @@
  * Task #168 — does `/magic/start` still reach its INSERT, and does the mail
  * actually get sent?
  *
- * WHAT THIS COVERS, AND THE THIRD VERDICT IS THE ONE THAT WAS MISSING.
- * `check-magic-link-live.mjs` is still the only probe that reads a mailbox,
- * follows the link and asserts a sign-in; it needs a Gmail OAuth app and until
- * one exists it exits NOT CONFIGURED. This probe needs no mailbox at all, and
- * it turns out to see much more than "a row was written":
+ * The manual GitHub Actions check measures start latency, HTTP 202, a fresh token
+ * row and a send log marked sent. The scheduled Worker check has its own
+ * observer (check-magic-link-canary.mjs) and correlates both exact row IDs.
+ * The mailbox probe checks inbox arrival and session creation.
  *
- *   1. `start_latency`     — `/magic/start` answered under budget. The symptom.
- *   2. `endpoint_accepted` — it answered **202**, i.e. it took the request. See
- *      the paragraph below: this one was added after thirty-nine runs failed
- *      without ever saying the endpoint had refused them.
- *   3. `token_row_written` — a `magic_link_tokens` row appeared. That is exactly
- *      where the outage died: D74's diagnosis found four rows, newest
- *      2026-08-03, and the failing attempt wrote NONE, proving the request never
- *      reached the INSERT that `/magic/start` performs before anything else.
- *   4. `mail_send_recorded` — **the mail was handed to Gmail and accepted.**
- *
- * WHY THE SECOND ONE EXISTS, AND IT IS A CORRECTION (D173). Runs #1-#39 of this
- * workflow all failed, and the ones that actually ran reported
- * `token_row_written: ✗ … which is exactly how the outage presented` — pointing
- * at D74's bug. It was not that. The line above it read `/magic/start returned
- * 403`, the endpoint had answered in 166ms (`start_latency` PASSED), and the
- * request was simply refused at the door. Two verdicts were reported as findings
- * about the sign-in flow when nothing about the flow had been exercised at all.
- * Now a refusal is its own verdict and the two downstream ones report NOT
- * CHECKED, on the same "cannot" vs "did not" rule the exit codes below follow.
- *
- * WHY THE THIRD ONE EXISTS. The first version of this probe asserted 1 and 2 and
- * then printed "NOT CHECKED HERE: delivery", on the belief that the `waitUntil`
- * send leaves no trace in D1. It does. `routes/auth.ts` imports
- * `send as sendEmail` from `services/email/send.ts`, and that function inserts an
- * `email_send_log` row (`status='queued'`) BEFORE it enqueues; the queue consumer
- * (`queueWorker.ts`, case `email_send`) calls `deliverNow`, which marks the row
- * `sent` only when the Gmail API accepted the message, and `failed` with a
- * `last_error` otherwise. So the precise failure D74 introduced — token row
- * committed, 202 in 200ms, mail never sent — is visible here, and without it a
- * green run could mean a completely broken login.
- *
- * WHAT IT STILL CANNOT SEE, stated up front because the temptation is to
- * overclaim: ARRIVAL. Gmail accepting a message is not the message landing in an
- * inbox — a bounce, a spam file or a wrong address all follow acceptance — and
- * nothing here follows the link or asserts a session. Those two things are the
- * mailbox probe's own territory, and it remains what closes #168.
+ * The route commits its token and awaits enqueue. The consumer records provider
+ * acceptance in D1. A missing or unchanged log leaves delivery unverified.
  *
  * WHY THE SEND BUDGET IS THREE MINUTES. Measured, not guessed. The four real
  * `auth_magic_link` rows in production went from `enqueued_at` to `sent_at` in
@@ -67,7 +32,7 @@
  *                           writes its row before it ever looks the account up,
  *                           so this need not be a registered user — but it IS
  *                           sent a real email, so it must be an inbox you own.
- *   CLOUDFLARE_API_TOKEN    already a repository secret (D1 scope)
+ *   CLOUDFLARE_API_TOKEN    production-ops environment secret (D1 access)
  *   CLOUDFLARE_ACCOUNT_ID   already a repository secret
  *   MAGIC_PROBE_HOST        default https://axal.vc
  *   MAGIC_START_BUDGET_MS   default 5000
@@ -77,20 +42,21 @@
  *   MAGIC_D1_NAME           default studioos-db
  *
  * EXIT CODES, and the third is the one that earns its keep:
- *   0  all three verdicts passed
+ *   0  all four verdicts passed
  *   1  ran, and something is wrong with the flow
  *   2  COULD NOT RUN — config missing, or D1 refused the read. Never reported
  *      as "no row was written" or "no mail was sent", because those read as a
  *      broken sign-in when the truth is a missing permission. Same distinction
  *      as D78.
  */
+import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { probeOutcome } from './lib/probeOutcome.mjs';
 
 const HOST = (process.env.MAGIC_PROBE_HOST || 'https://axal.vc').replace(/\/+$/, '');
-const START_BUDGET_MS = Number(process.env.MAGIC_START_BUDGET_MS || 5000);
-const ROW_BUDGET_MS = Number(process.env.MAGIC_ROW_BUDGET_MS || 15_000);
-const SEND_BUDGET_MS = Number(process.env.MAGIC_SEND_BUDGET_MS || 180_000);
+export const START_BUDGET_MS = Number(process.env.MAGIC_START_BUDGET_MS || 5000);
+export const ROW_BUDGET_MS = Number(process.env.MAGIC_ROW_BUDGET_MS || 15_000);
+export const SEND_BUDGET_MS = Number(process.env.MAGIC_SEND_BUDGET_MS || 180_000);
 const POLL_MS = Number(process.env.MAGIC_POLL_MS || 2000);
 const FETCH_TIMEOUT_MS = Number(process.env.MAGIC_FETCH_TIMEOUT_MS || 30_000);
 const D1_NAME = process.env.MAGIC_D1_NAME || 'studioos-db';
@@ -196,8 +162,8 @@ export function describeRefusal({ status, headers, body }) {
  * The send half of the report, derived from the log row this run caused.
  *
  * Four outcomes, kept apart because each sends a reader to different code:
- *   no row      the `waitUntil` errand never reached `send()`'s own INSERT
- *   queued      enqueued and never delivered — the silent `waitUntil` failure
+ *   no row      no send log was observed for this request
+ *   queued      no provider acceptance was recorded within budget
  *   failed/dlq  the Gmail call was attempted and refused; `last_error` names it
  *   sent        Gmail accepted the message
  */
@@ -211,13 +177,13 @@ export function sendVerdict({ row, sendMs, sendBudgetMs }) {
   if (row === null || row === undefined) {
     return {
       ok: false,
-      detail: `no email_send_log row for this address under ${TEMPLATE_KEY} — the send errand never reached its own INSERT, so no mail was ever queued`,
+      detail: `no email_send_log row for this address under ${TEMPLATE_KEY} within the observation budget; provider acceptance is unverified`,
     };
   }
   if (row.status === 'queued') {
     return {
       ok: false,
-      detail: `still queued after ${sendBudgetMs}ms — the row was written and never delivered. This is the silent waitUntil failure: the token row exists and /magic/start answered, but no mail was sent`,
+      detail: `still queued after ${sendBudgetMs}ms — provider acceptance was not recorded within budget`,
     };
   }
   const why = redactError(row.lastError);
@@ -383,29 +349,35 @@ const cfHeaders = () => ({
   'Content-Type': 'application/json',
 });
 
-/** Resolve the database by NAME. A uuid pasted into a repo rots. */
-async function databaseId(accountId) {
-  const url = `${CF_API}/accounts/${encodeURIComponent(accountId)}/d1/database?name=${encodeURIComponent(D1_NAME)}`;
-  const res = await fetch(url, { signal: timeout(), headers: cfHeaders() });
+async function readD1(url, options = {}) {
+  let res;
+  try {
+    res = await fetch(url, { ...options, signal: timeout(), headers: cfHeaders() });
+  } catch {
+    return { ok: false, cannotRun: true, why: 'D1 read failed before an HTTP response arrived' };
+  }
   const body = await res.json().catch(() => null);
-  const env = readEnvelope({ status: res.status, body });
+  return readEnvelope({ status: res.status, body });
+}
+
+/** Resolve the database by NAME. A uuid pasted into a repo rots. */
+export async function databaseId(accountId) {
+  const url = `${CF_API}/accounts/${encodeURIComponent(accountId)}/d1/database?name=${encodeURIComponent(D1_NAME)}`;
+  const env = await readD1(url);
   if (!env.ok) return env;
-  const match = (env.result || []).find((d) => d?.name === D1_NAME);
+  if (!Array.isArray(env.result)) return { ok: false, cannotRun: true, why: 'D1 returned an unreadable database list' };
+  const match = env.result.find((d) => d?.name === D1_NAME);
   if (!match?.uuid) {
     return { ok: false, cannotRun: true, why: `no D1 database named ${D1_NAME} on this account` };
   }
   return { ok: true, uuid: match.uuid };
 }
 
-async function query(accountId, uuid, sql, params) {
-  const res = await fetch(`${CF_API}/accounts/${encodeURIComponent(accountId)}/d1/database/${encodeURIComponent(uuid)}/query`, {
+export async function query(accountId, uuid, sql, params) {
+  return readD1(`${CF_API}/accounts/${encodeURIComponent(accountId)}/d1/database/${encodeURIComponent(uuid)}/query`, {
     method: 'POST',
-    signal: timeout(),
-    headers: cfHeaders(),
     body: JSON.stringify({ sql, params }),
   });
-  const body = await res.json().catch(() => null);
-  return readEnvelope({ status: res.status, body });
 }
 
 async function maxTokenId(accountId, uuid, address) {
@@ -442,6 +414,16 @@ async function sendLogRow(accountId, uuid, address, sinceId) {
   return { ok: true, row };
 }
 
+// Only publish locally defined outcome names, verdict keys, and the observed 202.
+function stepOutput(name, value) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+}
+
+function reportOutcome(outcome) {
+  console.log(`  outcome: ${outcome}`);
+  stepOutput('outcome', outcome);
+}
+
 /**
  * Print the verdict block.
  *
@@ -457,7 +439,8 @@ async function sendLogRow(accountId, uuid, address, sinceId) {
 function report({ rows, ok }, { startStatus, refusal }) {
   const refused = rows.some((r) => r.skipped);
   // #4571 R2-09: the one outcome this run is filed under. This probe never says VERIFIED_END_TO_END.
-  console.log(`  outcome: ${insertOutcome({ startStatus, refusal, result: { rows } })}`);
+  reportOutcome(insertOutcome({ startStatus, refusal, result: { rows } }));
+  stepOutput('failed_checks', rows.filter((r) => !r.ok && !r.skipped).map((r) => r.key).join(', '));
   for (const r of rows) {
     console.log(`  ${r.skipped ? '–' : r.ok ? '✓' : '✗'} ${r.key}: ${r.detail}`);
   }
@@ -475,14 +458,14 @@ async function main() {
   const missing = missingConfig();
   if (missing.length) {
     console.error(`check-magic-link-insert: NOT CONFIGURED — missing ${missing.join(', ')}`);
-    console.error('  CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are already repository secrets;');
-    console.error('  MAGIC_PROBE_EMAIL is the one to add. This is not a pass.');
+    console.error('  Set CLOUDFLARE_API_TOKEN in the production-ops environment.');
+    console.error('  Also check CLOUDFLARE_ACCOUNT_ID and MAGIC_PROBE_EMAIL.');
     process.exit(2);
   }
 
-  const address = process.env.MAGIC_PROBE_EMAIL.trim();
+  const address = process.env.MAGIC_PROBE_EMAIL.trim().toLowerCase();
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID.trim();
-  console.log(`check-magic-link-insert: ${HOST} → ${address}`);
+  console.log(`check-magic-link-insert: checking ${HOST} for the configured probe mailbox`);
 
   const db = await databaseId(accountId);
   if (!db.ok) {
@@ -520,7 +503,7 @@ async function main() {
     if (res.status === 429) {
       console.error('check-magic-link-insert: rate-limited (429). magic-start allows 3 per 900s per address.');
       console.error('  This probe and the mailbox probe share that address — widen the schedules, never the limit.');
-      console.log(`  outcome: ${probeOutcome({ startStatus: 429, refusal: null, rows: [], endToEnd: false })}`);
+      reportOutcome(probeOutcome({ startStatus: 429, refusal: null, rows: [], endToEnd: false }));
       process.exit(1);
     }
     if (res.status !== 202) {
@@ -529,6 +512,9 @@ async function main() {
       // status and headers still say plenty — so this never throws upward.
       const body = await res.text().catch(() => '');
       refusal = describeRefusal({ status: res.status, headers: res.headers, body });
+      if (process.env.GITHUB_ACTIONS === 'true' && refusal.origin === 'edge' && refusal.status === 403) {
+        console.log('::notice title=StudioOS auth probe::edge-refused');
+      }
       console.error(`check-magic-link-insert: /magic/start REFUSED — ${refusal.line}`);
       if (refusal.snippet) console.error(`  body: ${refusal.snippet}`);
       console.error(`  ${refusal.reading}`);
@@ -552,6 +538,7 @@ async function main() {
     process.exit(1);
   }
 
+  stepOutput('start_status', 202);
   let rowFound = false;
   let rowMs = NaN;
   const t1 = Date.now();
@@ -568,8 +555,7 @@ async function main() {
     await sleep(POLL_MS);
   }
 
-  // The send is a separate errand kept alive by `waitUntil`, so it lands after
-  // the token row and has its own, much longer, budget.
+  // Provider acceptance happens in the queue consumer and has its own budget.
   let sendRow = null;
   let sendMs = NaN;
   const t2 = Date.now();

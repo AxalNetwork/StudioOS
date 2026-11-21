@@ -2632,6 +2632,200 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 
 Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.
 
+## Landed 2026-11-14 — Validate v2, Build v2, Grow v2, Raise v2, Offers v2, Account v2 and the Network workspace (#4837, #4846, #4861, #4863, #4872, #4955, #4799)
+
+Seven board sets the owner approved on 2026-11-10 and that were never committed, so about twenty build issues waited on them. Six come from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards under the names Claude Design gave them, byte for byte:
+- **`Validate v2 Page.dc.html`**, **`Validate v2 · Boards.dc.html`**: boards V0 to V16 (D4837).
+- **`Build v2 Page.dc.html`**, **`Build v2 · Boards.dc.html`**: boards BD-0 to BD24, revised 2026-11-09 (D4846).
+- **`Grow v2 Page.dc.html`**, **`Grow v2 · Boards.dc.html`**: boards GR-01 to GR-20 (D4861).
+- **`Raise v2 Page.dc.html`**, **`Raise v2 · Boards.dc.html`**: boards RA-01 to RA-26 and RA-A to RA-D, revised 2026-11-09 (D4863).
+- **`Offers v2 Page.dc.html`**, **`Offers v2 · Boards.dc.html`**: boards OF-01 to OF-10 (D4872).
+- **`Account v2 Page.dc.html`**, **`Account v2 · Boards.dc.html`**: boards AC-0 to AC-11 (D4955).
+
+The seventh is a design of its own, kept in a folder because its files import each other by name:
+- **`network-workspace/`**: `Main.dc.html` (NW1) with `NW1-2-Empty`, `NW2-Relationships`, `NW3-Intro-detail`, `NW5-States`, `NW8-Phone`, `NW10-Dark` and `canvas.json`, which holds the board titles (D4799).
+
+Each decision file records the SHA-256 of what was committed. For Build, Grow, Raise, Offers and Account they equal the digests recorded on the issues on 2026-11-13. None is built as a whole yet. Ventures, people and amounts are sample content.
+
 ## Portfolio audited-gap addendum — owner review required (#4817)
 
 - `Portfolio v2 · Addendum.dc.html` — D4817 review-only collection of additional company rights/reporting/KPI, responsive/dark, source-state and route/access handoff specimens, imported from the existing Portfolio Page. The landed PF boards are retained; production implementation waits for owner review and #5311. See D4817 for the audit-gap map and current backend fit.
+
+## Landed 2026-11-14 — Expertise v2 (#4823)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the #4823 brief and approved by the owner on 2026-11-10, as a page plus its boards under the names Claude Design gave them:
+- **`Expertise v2 Page.dc.html`**, **`Expertise v2 · Boards.dc.html`**: boards EX-01 to EX-16 (D4823). Each file is byte-for-byte the approved export: SHA-256 `b0c44c7c…5e01a40` (page) and `a3fed64f…e4bd446d` (boards), the digests recorded on #4823.
+
+Not built yet. People, companies, services and articles are sample content; D4823 lists what is frontend-only and what needs backend work (#5315).
+
+## Landed 2026-11-14 — 49 canvases: Validate, Build, Raise and Grow addenda, the investor surfaces, and Admin and HQ
+
+Forty-nine board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-14 from the issue briefs, each as a page plus its boards under the names Claude Design gave them. Most are addenda to canvases already here and continue their look; where several addenda to one canvas start from the same board number, they are renumbered in landing order, as each decision says.
+
+**Validate**
+- **`Validate v2 Discovery and ICP Page.dc.html`**, **`Validate v2 Discovery and ICP · Boards.dc.html`**: Validate v2 Addendum · Discovery and ICP (#5995, D5995).
+- **`Validate v2 Market and Demand Page.dc.html`**, **`Validate v2 Market and Demand · Boards.dc.html`**: Validate v2 Addendum · Market and Demand (#6009, D6009).
+- **`Validate v2 Verdict Page.dc.html`**, **`Validate v2 Verdict · Boards.dc.html`**: Validate v2 Addendum · Verdict (#6021, D6021).
+
+**Build**
+- **`Build v2 Not Drawn Page.dc.html`**, **`Build v2 Not Drawn · Boards.dc.html`**: Build v2 Addendum · Not Drawn (#6026, D6026).
+- **`Build v2 Roadmap and Team Page.dc.html`**, **`Build v2 Roadmap and Team · Boards.dc.html`**: Build v2 Addendum · Roadmap and Team (#6034, D6034).
+- **`Build v2 Company Creation Page.dc.html`**, **`Build v2 Company Creation · Boards.dc.html`**: Build v2 Addendum · Company Creation (#6035, D6035).
+
+**Raise**
+- **`Raise v2 Calls Follow-through Page.dc.html`**, **`Raise v2 Calls Follow-through · Boards.dc.html`**: Raise v2 Addendum · Calls Follow-through (#6053, D6053).
+- **`Raise v2 Prepare Export and Evidence Page.dc.html`**, **`Raise v2 Prepare Export and Evidence · Boards.dc.html`**: Raise v2 Addendum · Prepare Export and Evidence (#6054, D6054).
+- **`Raise v2 Investor Narrative Page.dc.html`**, **`Raise v2 Investor Narrative · Boards.dc.html`**: Raise v2 Addendum · Investor Narrative (#6067, D6067).
+- **`Raise v2 Data Room Page.dc.html`**, **`Raise v2 Data Room · Boards.dc.html`**: Raise v2 Addendum · Data Room (#6071, D6071).
+- **`Raise v2 Cap Table and Use of Funds Page.dc.html`**, **`Raise v2 Cap Table and Use of Funds · Boards.dc.html`**: Raise v2 Addendum · Cap Table and Use of Funds (#6088, D6088).
+
+**Grow**
+- **`Grow v2 Report Questions Page.dc.html`**, **`Grow v2 Report Questions · Boards.dc.html`**: Grow v2 · Report Questions (#6096, D6096).
+- **`Grow v2 Feedback Page.dc.html`**, **`Grow v2 Feedback · Boards.dc.html`**: Grow v2 · Feedback (#6099, D6099).
+- **`Grow v2 Markets Page.dc.html`**, **`Grow v2 Markets · Boards.dc.html`**: Grow v2 · Markets (#6119, D6119).
+- **`Grow v2 Company Page.dc.html`**, **`Grow v2 Company · Boards.dc.html`**: Grow v2 · Company (#6121, D6121).
+- **`Grow v2 From Facebook Page.dc.html`**, **`Grow v2 From Facebook · Boards.dc.html`**: Grow v2 · From Facebook (#5861, D5861).
+- **`Grow v2 From TikTok Page.dc.html`**, **`Grow v2 From TikTok · Boards.dc.html`**: Grow v2 · From TikTok (#5865, D5865).
+
+**Investor home, fund and settings**
+- **`Investor Studio Home v2 Page.dc.html`**, **`Investor Studio Home v2 · Boards.dc.html`**: Investor Studio Home v2 (#6126, D6126).
+- **`Axal VC Fund v2 and LP Workspace Page.dc.html`**, **`Axal VC Fund v2 and LP Workspace · Boards.dc.html`**: Axal VC Fund v2 and LP Workspace (#6127, D6127).
+- **`Investor Onboarding v2 Page.dc.html`**, **`Investor Onboarding v2 · Boards.dc.html`**: Investor Onboarding v2 (#6128, D6128).
+- **`Investor Fund v2 Page.dc.html`**, **`Investor Fund v2 · Boards.dc.html`**: Investor Fund v2 (#6229, D6229).
+- **`Investor Fund Detail Pages Page.dc.html`**, **`Investor Fund Detail Pages · Boards.dc.html`**: Investor Fund Detail Pages (#6244, D6244).
+- **`Investor Firm Settings Page.dc.html`**, **`Investor Firm Settings · Boards.dc.html`**: Investor Firm Settings (#6286, D6286).
+
+**Investor deals**
+- **`Deals v2 Deal Rooms and Phone Page.dc.html`**, **`Deals v2 Deal Rooms and Phone · Boards.dc.html`**: Deals v2 Addendum · Deal Rooms and Phone (#6141, D6141).
+- **`Deals v2 IC Actions Page.dc.html`**, **`Deals v2 IC Actions · Boards.dc.html`**: Deals v2 Addendum · IC Actions (#6142, D6142).
+- **`Deals v2 IC Decision Record Page.dc.html`**, **`Deals v2 IC Decision Record · Boards.dc.html`**: Deals v2 Addendum · IC Decision Record (#6153, D6153).
+- **`Deals v2 Closing Workspace Page.dc.html`**, **`Deals v2 Closing Workspace · Boards.dc.html`**: Deals v2 Addendum · Closing Workspace (#6158, D6158).
+- **`Deals v2 Round Calls Page.dc.html`**, **`Deals v2 Round Calls · Boards.dc.html`**: Deals v2 Addendum · Round Calls (#6159, D6159).
+- **`Deals v2 Deal Page Evidence Page.dc.html`**, **`Deals v2 Deal Page Evidence · Boards.dc.html`**: Deals v2 Addendum · Deal Page Evidence (#6163, D6163).
+- **`Deals v2 Diligence and Data Room Page.dc.html`**, **`Deals v2 Diligence and Data Room · Boards.dc.html`**: Deals v2 Addendum · Diligence and Data Room (#6176, D6176).
+- **`Deals v2 Terms and Closing Room Page.dc.html`**, **`Deals v2 Terms and Closing Room · Boards.dc.html`**: Deals v2 Addendum · Terms and Closing Room (#6188, D6188).
+
+**Investor portfolio**
+- **`Portfolio v2 Reporting Settings Page.dc.html`**, **`Portfolio v2 Reporting Settings · Boards.dc.html`**: Portfolio v2 Addendum · Reporting Settings (#6213, D6213).
+- **`Portfolio v2 Founder Asks Page.dc.html`**, **`Portfolio v2 Founder Asks · Boards.dc.html`**: Portfolio v2 Addendum · Founder Asks (#6215, D6215).
+- **`Portfolio v2 Shareable Statement Page.dc.html`**, **`Portfolio v2 Shareable Statement · Boards.dc.html`**: Portfolio v2 Addendum · Shareable Statement (#6217, D6217).
+- **`Portfolio v2 Exit Waterfall Page.dc.html`**, **`Portfolio v2 Exit Waterfall · Boards.dc.html`**: Portfolio v2 Addendum · Exit Waterfall (#6220, D6220).
+- **`Portfolio v2 Rights and Request a Mark Page.dc.html`**, **`Portfolio v2 Rights and Request a Mark · Boards.dc.html`**: Portfolio v2 Addendum · Rights and Request a Mark (#6228, D6228).
+
+**Investor network, research and diligence**
+- **`Network v2 Investor Page.dc.html`**, **`Network v2 Investor · Boards.dc.html`**: Network v2 Addendum · Investor (#6256, D6256).
+- **`Investor Research v2 Rooms Page.dc.html`**, **`Investor Research v2 Rooms · Boards.dc.html`**: Investor Research v2 · Rooms (#6268, D6268).
+- **`Investor Research v2 Benchmarking and Library Page.dc.html`**, **`Investor Research v2 Benchmarking and Library · Boards.dc.html`**: Investor Research v2 · Benchmarking and Library (#6273, D6273).
+- **`Investor Research v2 Data Room to Library Page.dc.html`**, **`Investor Research v2 Data Room to Library · Boards.dc.html`**: Investor Research v2 · Data Room to Library (#6283, D6283).
+- **`Eadwyn on a Diligence Case Page.dc.html`**, **`Eadwyn on a Diligence Case · Boards.dc.html`**: Eadwyn on a Diligence Case (#6294, D6294).
+
+**Admin and HQ**
+- **`Approvals v2 Best-Fit Consultation Page.dc.html`**, **`Approvals v2 Best-Fit Consultation · Boards.dc.html`**: Approvals v2 Addendum · Best-Fit Consultation (#5884, D5884).
+- **`Licences v2 New Licence Steps Page.dc.html`**, **`Licences v2 New Licence Steps · Boards.dc.html`**: Licences v2 Addendum · New Licence Steps (#5930, D5930).
+- **`Licences v2 Initial Invoice Page.dc.html`**, **`Licences v2 Initial Invoice · Boards.dc.html`**: Licences v2 Addendum · Initial Invoice (#5955, D5955).
+- **`Pricing Outcome Examples Page.dc.html`**, **`Pricing Outcome Examples · Boards.dc.html`**: Pricing Outcome Examples (#5957, D5957).
+- **`Skill Library v2 Extension Compare Page.dc.html`**, **`Skill Library v2 Extension Compare · Boards.dc.html`**: Skill Library v2 Addendum · Extension Compare (#5963, D5963).
+- **`HQ Advisory Refunds Page.dc.html`**, **`HQ Advisory Refunds · Boards.dc.html`**: HQ Advisory Refunds (#5305, D5305).
+- **`Help Center v2 Page.dc.html`**, **`Help Center v2 · Boards.dc.html`**: Help Center v2 (#4957, D4957).
+- **`WorkGraph PR Conflicts and Reservations Page.dc.html`**, **`WorkGraph PR Conflicts and Reservations · Boards.dc.html`**: WorkGraph · PR Conflicts and Reservations (#5580, D5580-p3).
+
+None is built yet. Ventures, investors, funds, people and amounts are sample content. Owner questions in the briefs are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
+
+## Landed 2026-11-15 — Incorporate in any country: entry points, the founder flow, the HQ formation console and the partner workspace (#6719, #6720, #6721, #6722)
+
+Four board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-15 from the briefs under #6681, each as a page plus its boards under the names Claude Design gave them. They extend `Incorporate Flow Page.dc.html` (D1414) and continue its INC numbering:
+- **`Incorporate Entry Points Page.dc.html`**, **`Incorporate Entry Points · Boards.dc.html`**: INC8 to INC12 (D6719).
+- **`Incorporate Any Country Page.dc.html`**, **`Incorporate Any Country · Boards.dc.html`**: INC13 to INC26 (D6720).
+- **`HQ Formation Console Page.dc.html`**, **`HQ Formation Console · Boards.dc.html`**: HQI-01 to HQI-14 (D6721).
+- **`Formation Partner Workspace Page.dc.html`**, **`Formation Partner Workspace · Boards.dc.html`**: FORM-00 to FORM-10 (D6722). Not scheduled: #6681 question 4 is A, partners are HQ records first.
+
+None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
+
+## Landed 2026-11-16 — Sign in v2 (#6956)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the copy-paste prompt on #6956, as a page plus its boards:
+- **`Sign In v2 Page.dc.html`**, **`Sign In v2 · Boards.dc.html`**: SGN-00 to SGN-14, 40 frames (D6956). The component loads the production artwork from `frontend/public/auth/login-background.webp`. A clickable prototype is linked from #6956.
+
+Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
+
+
+## Landed 2026-11-17 — Program presentations: ten public pages and PDF decks (#6966 to #6975)
+
+Ten board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the briefs under #6965, each as a page plus its boards. The Spin-Out Lab pilot defines the program presentation kit, the admin entry points (PGS07) and the public Programs index (PGS08); the nine others reuse it:
+- **`Program Spin-Out Lab Presentation Page.dc.html`**, **`Program Spin-Out Lab Presentation · Boards.dc.html`** (#6966, D6966).
+- **`Program AI-native Venture Presentation Page.dc.html`**, **`Program AI-native Venture Presentation · Boards.dc.html`** (#6967, D6967).
+- **`Program Mentor Cohort Access Presentation Page.dc.html`**, **`Program Mentor Cohort Access Presentation · Boards.dc.html`** (#6968, D6968).
+- **`Program Investor Cohort Access Presentation Page.dc.html`**, **`Program Investor Cohort Access Presentation · Boards.dc.html`** (#6969, D6969).
+- **`Program Referral Partners Presentation Page.dc.html`**, **`Program Referral Partners Presentation · Boards.dc.html`** (#6970, D6970).
+- **`Program Refer and Earn Presentation Page.dc.html`**, **`Program Refer and Earn Presentation · Boards.dc.html`** (#6971, D6971).
+- **`Program Perks Presentation Page.dc.html`**, **`Program Perks Presentation · Boards.dc.html`** (#6972, D6972).
+- **`Program Learning Presentation Page.dc.html`**, **`Program Learning Presentation · Boards.dc.html`** (#6973, D6973).
+- **`Program Product Testing Presentation Page.dc.html`**, **`Program Product Testing Presentation · Boards.dc.html`** (#6974, D6974).
+- **`Program Influencers Presentation Page.dc.html`**, **`Program Influencers Presentation · Boards.dc.html`** (#6975, D6975).
+
+**One edit, named.** The pages drew the public site's artwork as `./site/<file>`; every such reference now points at `/site/<file>`, served from `frontend/public/site/`, where each file already exists. No other value was edited.
+
+None is built yet: `/programs/*` and `frontend/public/program-briefs/` are new with #6966. Availability labels, dates and edition dates are drawn from what main records or bracketed; open owner questions are marked ⚑ in each decision.
+
+## Landed 2026-11-17 — Wellness: the member home at /wellbeing and the public presentation (#7117, #7121)
+
+Two board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-17 from the #7117 and #7121 briefs and the owner's Wellness direction of the same day, each as a page plus its boards:
+- **`Wellness Member Home Page.dc.html`**, **`Wellness Member Home · Boards.dc.html`**: Wellness · Member Home, Reflections and Bookings, WLM00 to WLMH (D7117).
+- **`Program Wellness Presentation Page.dc.html`**, **`Program Wellness Presentation · Boards.dc.html`**: Program · Wellness Presentation, PGW01 to PGW08, the eleventh in the #6965 series (D7121).
+
+**One edit, named.** Both pages drew the owner's dawn image as `./site/wellness-dawn.webp`; it now points at `/axal-vc-future.png`, the same image already served from `frontend/public/`. The presentation's other `./site/` references now point at `/site/` (`frontend/public/site/`). No other value was edited.
+
+None is built yet. Daily and monthly journals, recommendations and group sessions are drawn as planned (#7118, #7119, #7120). Every provider, session, date and price is sample content; the live provider roster is unverified. Open owner questions are marked ⚑ in each decision.
+## Landed 2026-11-16 — Network: Organizations, Relationships and Introductions (#7051–#7066)
+
+Fourteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Network briefs, each as a page plus its boards. They extend the approved Network workspace (`network-workspace/`, #4799) and the investor addendum (`Network v2 Investor Page.dc.html`, #6256), and keep their shell, four links, Person Sheet and state words. Section labels carry the NW board ids the briefs ask for; frame keys carry each canvas's prefix.
+
+Organizations:
+- **`Network Organizations Founder Page.dc.html`**, **`Network Organizations Founder · Boards.dc.html`**: 20 frames, keys NOF01 to NOFH (D7051).
+- **`Network Organizations Partner Page.dc.html`**, **`Network Organizations Partner · Boards.dc.html`**: 25 frames, keys NOP1 to NOPH (D7052).
+- **`Network Organizations Advisor Page.dc.html`**, **`Network Organizations Advisor · Boards.dc.html`**: 20 frames, keys NOA4 to NOAH (D7053).
+- **`Network Organizations Investor Page.dc.html`**, **`Network Organizations Investor · Boards.dc.html`**: 17 frames, keys NOI4 to NOIH (D7054).
+
+Relationships (#7050):
+- **`Network Relationships Investor and Partner Page.dc.html`**, **`Network Relationships Investor and Partner · Boards.dc.html`**: 34 frames, keys NRI1 to NRIH (D7056).
+- **`Network Relationships HQ and Advisor Page.dc.html`**, **`Network Relationships HQ and Advisor · Boards.dc.html`**: 27 frames, keys NRH11_1 to NRHH (D7057).
+- **`Network Relationships Founder Add Person Page.dc.html`**, **`Network Relationships Founder Add Person · Boards.dc.html`**: 20 frames, keys NRF01 to NRFH (D7058).
+- **`Network Relationships Founder Follow-ups Page.dc.html`**, **`Network Relationships Founder Follow-ups · Boards.dc.html`**: 25 frames, keys NRU01 to NRUH (D7059).
+- **`Network Relationships Team Warm Paths Page.dc.html`**, **`Network Relationships Team Warm Paths · Boards.dc.html`**: 19 frames, keys NRT01 to NRTH (D7060).
+- **`Network Relationships Startup Leads Page.dc.html`**, **`Network Relationships Startup Leads · Boards.dc.html`**: 22 frames, keys NRL1 to NRLH (D7061).
+
+Introductions (#7062):
+- **`Network Introductions Workspace and Inbox Page.dc.html`**, **`Network Introductions Workspace and Inbox · Boards.dc.html`**: 22 frames, keys NID01 to NIDH (D7063).
+- **`Network Introductions Curated Match Consent Page.dc.html`**, **`Network Introductions Curated Match Consent · Boards.dc.html`**: 19 frames, keys NIC01 to NICH (D7064).
+- **`Network Introductions Quarterly Ask Page.dc.html`**, **`Network Introductions Quarterly Ask · Boards.dc.html`**: 26 frames, keys NIQ01 to NIQH (D7065).
+- **`Network Introductions Teammate Decision Page.dc.html`**, **`Network Introductions Teammate Decision · Boards.dc.html`**: 29 frames, keys NIT01 to NITH (D7066).
+
+None is built yet. People, companies, credits and dates are sample content. Owner questions on each issue are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
+## Landed 2026-11-16 — Research v2: Companies, Markets and Funds (#7031–#7046)
+
+Fifteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Research briefs, each as a page plus its boards. They extend Research v2 (`Research v2 Page.dc.html`) and the Platform States vocabulary (D5129).
+
+Companies (RS-13 to RS-18):
+- **`Research Companies Analysis Setup and Results Page.dc.html`**, **`Research Companies Analysis Setup and Results · Boards.dc.html`**: RCA00 to RCA13, 25 frames (D7041).
+- **`Research Companies Saved Analyses and Export Page.dc.html`**, **`Research Companies Saved Analyses and Export · Boards.dc.html`**: RCS01 to RCS10, 24 frames (D7042).
+- **`Research Companies Comparisons Page.dc.html`**, **`Research Companies Comparisons · Boards.dc.html`**: RCC00 to RCC09, 24 frames (D7043).
+- **`Research Companies Sign-in and Licence Access Page.dc.html`**, **`Research Companies Sign-in and Licence Access · Boards.dc.html`**: RCL00 to RCL17, 32 frames (D7044).
+- **`Research Companies Directory Search Page.dc.html`**, **`Research Companies Directory Search · Boards.dc.html`**: RCD00 to RCD08, 24 frames (D7045).
+- **`Research Companies Profiles Peers and Evidence Page.dc.html`**, **`Research Companies Profiles Peers and Evidence · Boards.dc.html`**: RCP01B to RCPH, 21 frames (D7046).
+
+Markets:
+- **`Research Markets Directory and Investor View Page.dc.html`**, **`Research Markets Directory and Investor View · Boards.dc.html`**: RMD00 to RMD14, 29 frames (D7036).
+- **`Research Markets Listed Search and CSV Exports Page.dc.html`**, **`Research Markets Listed Search and CSV Exports · Boards.dc.html`**: RMLJ to RMLH, 20 frames (D7037).
+- **`Research Markets Ranked Signals and Evidence Page.dc.html`**, **`Research Markets Ranked Signals and Evidence · Boards.dc.html`**: RMS01 to RMS08B, 18 frames (D7038).
+- **`Research Markets Comparable Prices Page.dc.html`**, **`Research Markets Comparable Prices · Boards.dc.html`**: RMP00 to RMPH, 28 frames (D7039).
+
+Funds (FND-D, FND-P, FND-S, FND-Q and FND-G on the canvas):
+- **`Research Funds Directory and Discovery Page.dc.html`**, **`Research Funds Directory and Discovery · Boards.dc.html`**: RFD00 to RFD07, 22 frames (D7031).
+- **`Research Funds Fund Profile and Comparison Page.dc.html`**, **`Research Funds Fund Profile and Comparison · Boards.dc.html`**: RFP00 to RFPH, 25 frames (D7032).
+- **`Research Funds My Funds and Dossier Page.dc.html`**, **`Research Funds My Funds and Dossier · Boards.dc.html`**: RFM00 to RFM09, 26 frames (D7033).
+- **`Research Funds Quarterly Reports Page.dc.html`**, **`Research Funds Quarterly Reports · Boards.dc.html`**: RFQ00 to RFQ11, 25 frames (D7034).
+- **`Research Funds Google Sheets Sync Page.dc.html`**, **`Research Funds Google Sheets Sync · Boards.dc.html`**: RFG00 to RFG10, 26 frames (D7035).
+
+The two sign-in canvases (D7044, D7031) load the production artwork from `frontend/public/auth/login-background.webp`, and D7044 also loads `frontend/public/site/ead-map.webp`, so no second copy is committed.
+
+None is built yet. Companies, funds, markets, people and amounts are sample content; the Funds boards cite the committed fund lists only with their publisher and date. Owner questions on each issue are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.

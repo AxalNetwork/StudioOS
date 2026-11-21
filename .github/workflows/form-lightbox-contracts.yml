@@ -2,6 +2,7 @@ name: Form lightbox contracts
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'frontend/src/pages/cycles/FormLightbox.jsx'
@@ -19,8 +20,10 @@ concurrency:
 jobs:
   contracts:
     name: D695 form and page contracts
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    # D5612: keep this job to form contracts, guards and a real SPA build.
+    # D5612: keep this job to form contracts (#6461: the guards and SPA build are ci.yml's).
     # ci.yml's required test:drift (full suite) runs every test in shards.
     # Repeating the unsharded suite here exceeded 90 minutes after contracts passed.
     timeout-minutes: 20
@@ -38,10 +41,7 @@ jobs:
         run: node scripts/build-generated.mjs
       - name: Form, page, modal and mutation contracts
         run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/add_lightbox_d695.test.mjs frontend/test/lightbox_d685.test.mjs
-      - name: Folder, decision and dark-mode guards
-        run: |
-          node scripts/check-folder-docs.mjs
-          node scripts/check-decision-ids.mjs
-          node scripts/check-dark-mode.mjs
-      - name: Build root SPA
-        run: npm run build
+      # #6461: the folder, decision and dark-mode guards and the root SPA build
+      # were dropped here: `ci.yml`'s suite (rest) runs `test:guards` (which
+      # includes check-folder-docs and check-decision-ids) and check-dark-mode,
+      # and every suite part runs `npm run build`, on every pull request.

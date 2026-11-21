@@ -22,6 +22,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
@@ -264,7 +265,8 @@ test('the honesty pair is imported, not declared again', () => {
     'the page declares its own copy of a shared component');
   // And the two pages that had local copies now import them too.
   for (const p of ['frontend/src/pages/hq/HqHomePage.jsx', 'frontend/src/pages/hq/SecurityPage.jsx']) {
-    const s = codeOnly(raw(p));
+    // D4708 part 3: SecurityPage.jsx was split into security/; its entry reads the shell and the parts.
+    const s = codeOnly(p.endsWith('/SecurityPage.jsx') ? securityRaw() : raw(p));
     assert.doesNotMatch(s, /function Unreadable\(/, `${p} still declares its own Unreadable`);
     assert.match(s, /Unreadable/, `${p} no longer renders an Unreadable at all`);
     assert.match(s, /claim="/, `${p} does not pass the clause that differs between them`);

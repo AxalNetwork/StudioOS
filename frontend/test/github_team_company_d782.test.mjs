@@ -17,6 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { installDocument } from './_contracts_dom.mjs';
 import FoundingTeamFromCode from '../src/pages/cycles/FoundingTeamFromCode.jsx';
 import CompanyFromCode from '../src/pages/cycles/CompanyFromCode.jsx';
+import { partElement } from './_buildParts.mjs'; // #5507: this provider's line only; the full list is build_parts_contract_5507's
 import { buildsText, companyView, licenceText, ownerText, teamView } from '../src/pages/cycles/teamFromCode.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
@@ -167,10 +168,13 @@ test('the four calls go to the Worker\'s routes, and both modules mount their pa
     ['/cycles/build/company-creation/proposals/9/accept?project=101', 'POST', null],
     ['/cycles/build/company-creation/proposals/10/dismiss?project=101', 'POST', null],
   ]);
-  // D1311: Build's parts live in buildParts.jsx, one line per connector.
-  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
-  assert.match(route, /\['github', \(data, ctx\) => <FoundingTeamFromCode part=\{data\?\.parts\?\.github\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
-  assert.match(route, /\['github', \(data, ctx\) => <CompanyFromCode part=\{data\?\.parts\?\.github\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector; read through its export (#5507).
+  const ctx = { projectId: 7, reload: () => {} }; const github = { state: 'ok' };
+  for (const [slug, Part] of [['founding-team', FoundingTeamFromCode], ['company-creation', CompanyFromCode]]) {
+    const el = partElement(slug, 'github', { parts: { github } }, ctx);
+    assert.equal(el.type, Part, slug);
+    assert.deepEqual(el.props, { part: github, projectId: 7, reload: ctx.reload }, slug);
+  }
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/cycle_build.ts', import.meta.url), 'utf8');
   assert.ok(worker.includes("app.post('/founding-team/github-logins'"));
   assert.ok(worker.includes("app.delete('/founding-team/github-logins/:login'"));

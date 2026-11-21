@@ -1,3 +1,4 @@
+import { liveFiles } from '../services/dataRoomTrash';
 import { heldLicences } from '../services/accountLicences';
 import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 /**
@@ -39,6 +40,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
+import { COMPANY_INSTRUCTION, FOUNDING_INSTRUCTION, companyMaterial, foundingMaterial } from '../services/buildRecordDrafts';
 import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
@@ -49,12 +51,19 @@ import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
-import { fundOverlapNote } from '../services/researchFundRead';
+import { fundAllocationNote, fundOverlapNote } from '../services/researchFundRead';
+import { MyFundsQueryError, catalogueHolder, fundIdentity, listMyFunds, parseMyFundsQuery, publicRecordFor } from '../services/researchMyFunds';
+import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
-import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
-import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { CompanyQueryError, EVIDENCE_PARTS, getCompany, getCompanyPart, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
+import { admitsCompanies, refuseCompanies } from '../services/researchCompaniesAccess';
+import { DirectoryQueryError, citeSource, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { SOURCE_WITHDRAWN_MESSAGE, withdrawnSourceOf } from '../services/researchFundProfile';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
+import { PORTFOLIO_NOTE_INSTRUCTION, portfolioNoteMaterial } from '../services/portfolioNotes';
+import { STATEMENT_COVER_INSTRUCTION, statementCoverMaterial, statementDate } from '../services/statementCoverNote';
+import positionsRoutes from './positions';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
 // below decides what is expiring, and it has to agree with what the zone shows
@@ -71,19 +80,28 @@ import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner
 import {
   googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
   makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
-  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink, upsertSheetLink,
-  parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
-  SUGGESTED_SHEET_URL,
+  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink,
+  parseSpreadsheetRef, fundsAppBase, SUGGESTED_SHEET_URL,
+  SheetSyncError, readSyncFields, readResolutions, readIdempotencyKey,
+  listWorkbookTabs, saveSheetDestination, checkLinkedTab, latestRuns, openImportRun,
+  previewExport, previewImport, exportFundsToSheet, importFundsFromSheet, reconcileImportRun,
 } from '../services/fundSheets';
-import { refuse } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
+import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
+import { reconcileRoomRefs, roomFileStillThere } from '../services/roomLibrary';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
+import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { ventureNdaStatus, type VentureNdaStatus } from '../services/dealAccess';
+import { investorRoomRequests, type InvestorRoomRequest } from '../services/dataRoomRequests';
 import { suffixAmount } from '../../../frontend/src/lib/money.js';
+import { putRecordOrThrow } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -109,7 +127,10 @@ const EXT_BY_MIME: Record<string, string> = {
   'text/markdown': 'md',
   'text/csv': 'csv',
 };
-const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal']);
+// D6282: `diligence` is the investor's own kind (a memo, a data-room extract,
+// a reference call note). There is deliberately no `benchmark` kind: a
+// benchmark is a row in Benchmarking with its own source and sample size.
+const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal', 'diligence']);
 
 /**
  * THE FLOOR BELOW WHICH ASK REFUSES TO ANSWER.
@@ -161,7 +182,31 @@ interface DocRow {
  * which is true, and is a sharper version of the artboard's own point that index
  * state is Ask's reach. D37 is untouched.
  */
-const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | null = null) => ({
+/**
+ * D6869: a Library row that is a data-room reference carries its room: the room's name and uid, when it was added,
+ * and, once its grant no longer reaches the file, when and why (`revoked`, `expired`, `nda_lapsed`, `removed`,
+ * `moved`, `library_off`). It is read only, and it is never downloaded from here: the room's own download, with its
+ * log and its NDA gate, is the one path to its bytes.
+ */
+type RoomRef = { project_uid: string | null; project_name: string | null; added_at: string; lost_at: string | null; lost_reason: string | null };
+const roomDto = (ref: RoomRef | null | undefined) => (ref ? {
+  project_uid: ref.project_uid, project_name: ref.project_name, added_at: ref.added_at, lost_at: ref.lost_at, lost_reason: ref.lost_reason,
+} : null);
+async function roomRefsOf(env: Env, userId: number): Promise<Map<number, RoomRef>> {
+  const rows = await env.DB.prepare(
+    `SELECT r.document_id, r.added_at, r.lost_at, r.lost_reason, p.uid AS project_uid, p.name AS project_name
+       FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.owner_user_id = ?`,
+  ).bind(userId).all<any>().catch(() => ({ results: [] as any[] }));
+  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), x as RoomRef]));
+}
+async function roomRefOfDoc(env: Env, documentId: number): Promise<RoomRef & { project_id: number; file_id: number } | null> {
+  return env.DB.prepare(
+    `SELECT r.project_id, r.file_id, r.added_at, r.lost_at, r.lost_reason, p.uid AS project_uid, p.name AS project_name
+       FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.document_id = ?`,
+  ).bind(documentId).first<any>().catch(() => null);
+}
+
+const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | null = null, room: RoomRef | null = null) => ({
   uid: r.uid,
   title: r.title,
   kind: r.kind,
@@ -181,7 +226,9 @@ const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | 
   // route's — a shared document's uid is not in the caller's own set, so every
   // write path 404s on it already — and a second copy of it in the client would
   // be the place the two disagree.
-  read_only: source === 'client',
+  read_only: source === 'client' || Boolean(room),
+  // D6869: where a data-room reference came from, and whether its grant still reaches it.
+  room: roomDto(room),
   // What Ask can actually reach. An own document is answerable when it is
   // indexed; a shared one never is, because it is indexed somewhere else.
   // D4605: a partly indexed document answers from the passages it has.
@@ -281,6 +328,9 @@ async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row
 
 research.get('/documents', async (c) => {
   const user = await requireAuth(c);
+  // D6869: lapse any data-room reference whose grant no longer reaches its file before the list is read.
+  await reconcileRoomRefs(c.env, user.id).catch(() => 0);
+  const refs = await roomRefsOf(c.env, user.id);
   const rows = await c.env.DB.prepare(
     `SELECT * FROM research_documents WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
   ).bind(user.id).all<DocRow>();
@@ -329,7 +379,7 @@ research.get('/documents', async (c) => {
   ).bind(user.id).all<DocRow & { project_name: string | null }>();
 
   const items = [
-    ...(rows.results || []).map((r) => dto(r, 'own')),
+    ...(rows.results || []).map((r) => dto(r, 'own', null, refs.get(Number(r.id)) ?? null)),
     ...(shared.results || []).map((r) => dto(r, 'client', r.project_name ? `From ${r.project_name}` : 'From client')),
   ];
   return c.json({
@@ -362,6 +412,8 @@ research.get('/documents', async (c) => {
     // means: this is provenance (migration 222), NOT `kind = 'client'`, which
     // is what a document is about.
     from_clients: items.filter((i) => i.source === 'client').length,
+    // D6869 (RS-14): the From data rooms source, live and lapsed alike.
+    from_rooms: items.filter((i) => i.room).length,
     score_floor: SCORE_FLOOR,
   });
 });
@@ -387,6 +439,8 @@ research.post('/documents/:uid/reindex', async (c) => {
   // Already queued. Re-queuing would put a second job behind the first for the
   // same file, and the page would report "reading" either way.
   if (doc.index_state === 'pending') return c.json({ detail: 'already_queued' }, 409);
+  // D6869: a lapsed data-room reference is not indexed again; its grant no longer reaches the file.
+  if ((await roomRefOfDoc(c.env, doc.id))?.lost_at) return c.json({ detail: 'source_no_longer_available', message: 'Your access no longer reaches this file, so it cannot be read again.' }, 409);
   await c.env.DB.prepare(
     `UPDATE research_documents
         SET index_state = 'pending', index_note = NULL, updated_at = datetime('now')
@@ -448,7 +502,8 @@ research.post('/documents', async (c) => {
   const storage = await assertStorageRoom(c.env, { userId: user.id }, file.size, user);
 
   try {
-    await c.env.FILES.put(r2Key, await file.arrayBuffer(), {
+    // D6651: a research original is a record, written once.
+    await putRecordOrThrow(c.env.FILES, r2Key, await file.arrayBuffer(), {
       httpMetadata: { contentType: mime },
       customMetadata: { owner_user_id: String(user.id), doc_uid: uid, filename: file.name || 'document' },
     });
@@ -483,6 +538,8 @@ research.patch('/documents/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await ownDoc(c.env, user.id, c.req.param('uid'));
   if (!row) return c.json({ detail: 'not_found' }, 404);
+  // D6869: a data-room reference is read only; its name is the room's.
+  if (await roomRefOfDoc(c.env, row.id)) return c.json({ detail: 'room_reference_read_only', message: 'This file is the room’s. You can remove it from your Library; you cannot edit it.' }, 409);
   const body = await c.req.json().catch(() => null);
   if (!body || !['title', 'kind', 'source_year'].some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
     return c.json({ detail: 'metadata_required' }, 400);
@@ -514,6 +571,11 @@ research.get('/documents/:uid/download', async (c) => {
   const readable = await readableDoc(c.env, user.id, c.req.param('uid'));
   if (!readable) return c.json({ detail: 'Not found' }, 404);
   const row = readable.row;
+  // D6869: a data-room reference is opened in the room, through its own download, log and NDA gate; never from here.
+  const room = readable.source === 'own' ? await roomRefOfDoc(c.env, row.id) : null;
+  if (room) {
+    return c.json({ detail: 'open_in_room', message: 'Open this file in the data room it came from.', project_uid: room.lost_at ? null : room.project_uid }, 409);
+  }
   // The shipped, audited path: one-time HMAC token, TTL clamped to 300s, jti
   // consumed in KV, every hit written to activity_logs by routes/files.ts.
   // Deliberately NOT an S3 presigned URL — wrangler.toml says why for this
@@ -558,12 +620,27 @@ research.delete('/documents/:uid', async (c) => {
   // guard because there is nothing to reach.
   if (!row) return c.json({ detail: 'Not found' }, 404);
 
+  // D6869: removing a data-room reference never deletes the room's file. Its index entries and the row go, and
+  // the room's activity records the Remove while the room still has the file.
+  const room = await roomRefOfDoc(c.env, row.id);
+  if (room) {
+    await deleteChunkedEntity(c.env, 'research_doc', row.id, row.chunk_count);
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM research_room_refs WHERE document_id = ?').bind(row.id),
+      c.env.DB.prepare('DELETE FROM research_documents WHERE id = ?').bind(row.id),
+    ]);
+    const still = await roomFileStillThere(c.env, Number(room.file_id), Number(room.project_id));
+    await logAccess(c.env, Number(room.project_id), user.id, 'library_remove', still ? Number(room.file_id) : null);
+    return c.json({ ok: true });
+  }
+
   // VECTORS FIRST, and the order is the point: if the row went first, its
   // `chunk_count` would be gone and the chunk ids could never be named again,
   // leaving the document's text answerable after the document was deleted.
   await deleteChunkedEntity(c.env, 'research_doc', row.id, row.chunk_count);
   if (c.env.FILES) {
-    try { await c.env.FILES.delete(row.r2_key); } catch (e) {
+    // D6651: the owner removing their document goes through the one record-erasure path.
+    try { await eraseRecordObjects(c.env.FILES, row.r2_key, 'owner_removed'); } catch (e) {
       console.warn('[research] R2 delete failed:', (e as Error).message);
     }
   }
@@ -603,6 +680,8 @@ research.delete('/documents/:uid', async (c) => {
 interface AskSessionRow {
   id: number; uid: string; owner_user_id: number;
   last_asked_at: string | null; created_at: string;
+  /** D6272: set by Clear history, NULL again on Restore. Missing before the migration. */
+  cleared_at?: string | null;
 }
 
 interface AskAnswerRow {
@@ -688,7 +767,10 @@ async function scopeTotals(env: Env, userId: number, scope: string, sessionId: n
   } else if (scope === 'discarded') {
     row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1`).bind(userId).first<Row>();
   } else if (scope === 'all') {
-    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ?`).bind(userId).first<Row>();
+    // D6272: All is the history that is not cleared; Cleared is the rest.
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)`).bind(userId, userId).first<Row>();
+  } else if (scope === 'cleared') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)`).bind(userId, userId).first<Row>();
   } else if (sessionId != null) {
     row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ?`).bind(sessionId, userId).first<Row>();
   } else {
@@ -758,10 +840,12 @@ async function askSession(c: { env: Env }, userId: number, uid: string) {
 async function resolveAskSession(c: { env: Env }, userId: number, wanted: string) {
   if (wanted) {
     const named = await askSession(c, userId, wanted);
-    if (named) return named;
+    // D6272: a cleared thread is not appended to. A question sent from a
+    // session that was cleared in another tab starts in the newest open one.
+    if (named && !named.cleared_at) return named;
   }
   const latest = await c.env.DB.prepare(
-    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
   ).bind(userId).first<AskSessionRow>();
   if (latest) return latest;
   const uid = newUid();
@@ -831,7 +915,7 @@ research.get('/ask/sessions', async (c) => {
     session = await askSession(c, user.id, wanted);
   } else {
     session = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
     ).bind(user.id).first<AskSessionRow>();
   }
 
@@ -870,7 +954,7 @@ research.get('/ask/sessions', async (c) => {
    * appears after submission" is then true of the first page by construction,
    * rather than true only while the history is short.
    */
-  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded'].includes(scope)) ? 'asc' : 'desc';
+  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded', 'cleared'].includes(scope)) ? 'asc' : 'desc';
   const limit = listLimit(c.req.query('limit'));
   // `decodeCursor` refuses a malformed cursor by THROWING a Response, which
   // `index.ts` turns into that response. This handler answers it itself rather
@@ -902,13 +986,23 @@ research.get('/ask/sessions', async (c) => {
         `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 AND id < ? ORDER BY id DESC LIMIT ?`
       ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (scope === 'all') {
+    // D6272: everything except the sessions Clear history hid.
     rows = from == null
       ? await c.env.DB.prepare(
-        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT ?`
-      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, limit + 1).all<AskAnswerRow>()
       : await c.env.DB.prepare(
-        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
-      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'cleared') {
+    // D6272: `Show cleared` — the answers of the sessions Clear history hid.
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (session) {
     rows = from == null
       ? await c.env.DB.prepare(
@@ -989,6 +1083,39 @@ research.patch('/ask/answers/:uid', async (c) => {
 });
 
 /**
+ * D6272 — CLEAR HISTORY HIDES; RESTORE BRINGS IT BACK.
+ *
+ * The owner's answer on #6274 (question 4, B). Clearing stamps `cleared_at` on
+ * every one of the caller's sessions not already cleared; nothing is deleted,
+ * so a cited answer stays traceable and `scope=cleared` reads the hidden
+ * history back. The next question starts a fresh thread, because every
+ * "latest session" read skips a cleared one. Saved and Archived are the
+ * reader's own dispositions and stay where they are.
+ *
+ * Owner-scoped like every write here: the statement names the caller, so no
+ * id from the request reaches it. The counts are the only thing logged.
+ */
+research.post('/ask/history/clear', async (c) => {
+  const user = await requireAuth(c);
+  const r = await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET cleared_at = datetime('now') WHERE owner_user_id = ? AND cleared_at IS NULL`
+  ).bind(user.id).run();
+  const cleared = Number(r?.meta?.changes ?? 0);
+  await logAdminAction(c.env, user.id, user.email, 'research_ask_history_cleared', { sessions: cleared });
+  return c.json({ cleared });
+});
+
+research.post('/ask/history/restore', async (c) => {
+  const user = await requireAuth(c);
+  const r = await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET cleared_at = NULL WHERE owner_user_id = ? AND cleared_at IS NOT NULL`
+  ).bind(user.id).run();
+  const restored = Number(r?.meta?.changes ?? 0);
+  await logAdminAction(c.env, user.id, user.email, 'research_ask_history_restored', { sessions: restored });
+  return c.json({ restored });
+});
+
+/**
  * D4605 — one passage Ask may answer from: the hit, its document, and the text
  * the model reads (the whole chunk, or the preview of a vector written before
  * the chunk was stored whole).
@@ -1066,6 +1193,8 @@ export function citationOf(p: EligiblePassage, documentUid: string) {
 
 research.post('/ask', async (c) => {
   const user = await requireAuth(c);
+  // D6869: a data-room reference whose grant no longer reaches its file is unindexed before Ask searches.
+  await reconcileRoomRefs(c.env, user.id).catch(() => 0);
   const body = await c.req.json().catch(() => ({} as any));
   const question = String(body?.question || '').trim().slice(0, 1000);
   if (!question) return c.json({ detail: 'question_required' }, 400);
@@ -1363,9 +1492,71 @@ async function founderProject(
   return ids.length === 1 ? ids[0] : null;
 }
 
+/**
+ * D6212 (#6212): the quarter-end material for the Portfolio notes, scoped as every
+ * read in `routes/positions.ts` is (the same `investorProjectIds` predicate the
+ * Positions draft uses). An empty accessible set is an empty draft, never an
+ * unscoped one: the CSV predicate reads NULL as "all rows".
+ */
+async function portfolioNoteGather(c: any, userId: number, quarters: number): Promise<string[]> {
+  const me = (await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+    .bind(userId).first()) as { id: number; role: string | null } | null;
+  const role = String(me?.role || '');
+  if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some((licence: string) => licence === 'partner' || licence === 'investor')) return [];
+  const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+  if (ids != null && ids.length === 0) return [];
+  const csv = ids == null ? null : ids.join(',');
+  // The same CSV predicate every positions read uses, written out in each query so no SQL is interpolated.
+  const [positions, distributions, marks] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.invested_amount, x.position_date, x.created_at, p.name AS project_name
+         FROM portfolio_positions x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all(),
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.amount, x.distribution_date, p.name AS project_name
+         FROM portfolio_distributions x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all().catch(() => ({ results: [] })),
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.as_of_date, x.fmv, x.basis, x.event, p.name AS project_name
+         FROM portfolio_marks x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all(),
+  ]);
+  return portfolioNoteMaterial({
+    positions: (positions.results || []) as any[],
+    distributions: (distributions.results || []) as any[],
+    marks: (marks.results || []) as any[],
+    today: todayIso(),
+    quarters,
+  });
+}
+
+/**
+ * D6888 (#6888): one of the statement sheet's own reads, called in-process with
+ * the caller's own headers, as `admin_insights_export.ts` calls its page's read:
+ * the same session, the same position scope (`positionScope`, the active
+ * company header included) and the same arithmetic, so the cover note's material
+ * can only carry what the statement prints. A refused or failed read is null.
+ */
+async function statementRead(c: any, path: string): Promise<any | null> {
+  let ctx: any;
+  try { ctx = c.executionCtx; } catch { /* no execution context outside a live request */ }
+  const res = await positionsRoutes.request(path, { headers: c.req.raw.headers }, c.env, ctx);
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * D6888: false for a surface whose canvas says nothing is kept. The run's text
+   * goes back to the member and is not stored: no `research_zone_drafts` row, so
+   * there is nothing to list, accept or discard on the Worker.
+   */
+  keep?: false;
   /**
    * What Accept writes BESIDES stamping the draft, for a surface whose canvas
    * says Accept writes somewhere ("Accept writes the note"). It runs before
@@ -1397,7 +1588,7 @@ const DRAFT_SURFACES: Record<string, {
             `SELECT id FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
           ).bind(scope, userId).first<{ id: number }>()
         : await c.env.DB.prepare(
-            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
           ).bind(userId).first<{ id: number }>();
       if (!session) return [];
       const rows = await c.env.DB.prepare(
@@ -1510,31 +1701,6 @@ const DRAFT_SURFACES: Record<string, {
         ...theirs,
         ...(ours.results || []).map((r) => `${r.section} (ours${r.open ? ', open' : ''}): ${r.body}`),
       ];
-    },
-  },
-
-  'research/market': {
-    // The artboard: "on six comparables — a thin base, which the reading states
-    // rather than smoothing", and "points to the two stale readings as the ones
-    // to re-run". Both halves are instructions, because a model summarising
-    // ranges will otherwise average them and drop the sample size.
-    instruction: [
-      'Summarise what these comparable readings say about the firm’s own service lines.',
-      'Carry each range’s comparable count and run date into any statement about it; never average ranges together.',
-      'Name the readings that are stale as the ones to re-run before a proposal cites them.',
-    ].join(' '),
-    gather: async (c, userId) => {
-      const rows = await c.env.DB.prepare(
-        `SELECT metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope
-           FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 40`
-      ).bind(userId).all<{
-        metric: string; range_low_cents: number; range_high_cents: number;
-        comparable_count: number; ran_at: string; scope: string | null;
-      }>();
-      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
-      return (rows.results || []).map((r) =>
-        `${r.metric}${r.scope ? ` (${r.scope})` : ''}: ${money(r.range_low_cents)} – ${money(r.range_high_cents)}`
-        + `, from ${r.comparable_count} comparable${r.comparable_count === 1 ? '' : 's'}, run ${r.ran_at}`);
     },
   },
 
@@ -1966,10 +2132,15 @@ const DRAFT_SURFACES: Record<string, {
       'Check the client’s stated budget against the firm’s stated floor and say plainly whether it clears it. Where either number is absent, say which is missing rather than estimating it.',
       'Never invent a capability, a rate or a timeline. A lead the firm’s rules exclude is not a lead to draft for — say so and stop.',
     ].join(' '),
-    gather: async (c, userId) => {
+    gather: async (c, userId, scope) => {
       const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
         .bind(userId).first<{ partner_id: number | null }>();
       if (!me?.partner_id) return [];
+      // D4838 part 10 (#5936): the opportunity sheet's Draft proposal names ONE lead by its need id
+      // as `scope`. A scope that was sent must resolve to one of this firm's open leads or draft
+      // nothing — never fall through to the whole list. No scope is the Leads page's band, as before.
+      const leadId = scope === '' ? 0 : Number(scope);
+      if (scope !== '' && !(Number.isInteger(leadId) && leadId > 0)) return [];
       // The open leads, plus the two things a shape recommendation needs: what
       // this firm sells and what it says it will not take.
       const [leads, offerings, rules] = await Promise.all([
@@ -1979,10 +2150,11 @@ const DRAFT_SURFACES: Record<string, {
              FROM founder_needs n
              LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
+              AND (? = 0 OR n.id = ?)
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
             ORDER BY n.created_at DESC LIMIT 25`
-        ).bind(me.partner_id, me.partner_id).all<any>(),
+        ).bind(leadId, leadId, me.partner_id, me.partner_id).all<any>(),
         // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
         // twice in one string. The table keys on `owner_user_id REFERENCES
         // users(id)` and has never had a `partner_id`, so `o.partner_id` was
@@ -2018,6 +2190,8 @@ const DRAFT_SURFACES: Record<string, {
         `FIRM BUDGET FLOOR: ${floor ? `$${Math.round(Number(floor.floor_cents) / 100).toLocaleString('en-US')}` : 'NOT STATED — do not estimate one'}`,
         `FIRM EXCLUSIONS: ${(rules.results || []).filter((r: any) => r.kind !== 'budget_floor' && r.kind !== 'best_fit').map((r: any) => r.value).join('; ') || 'none stated'}`,
       ];
+      // A named lead that is not one of this firm's open leads drafts nothing (409 nothing_to_draft).
+      if (leadId && !(leads.results || []).length) return [];
       return context.concat((leads.results || []).map((l: any) =>
         `LEAD — ${l.client || 'client not recorded'}: ${l.title}; `
         + `${l.description || 'no description given'}; `
@@ -2648,6 +2822,40 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  // D6212 (#6212): Performance's and the Overview's note on what moved. Both read
+  // the same quarter-end series `/api/positions/analytics?as_of=` computes, built in
+  // `services/portfolioNotes.ts`; Performance reads eight quarter-ends, the
+  // Overview the last two. A book with nothing recorded gathers [] and the route
+  // answers `nothing_to_draft` before any model is called.
+  'portfolio/performance': {
+    instruction: PORTFOLIO_NOTE_INSTRUCTION,
+    gather: async (c, userId) => portfolioNoteGather(c, userId, 8),
+  },
+  'portfolio/overview': {
+    instruction: PORTFOLIO_NOTE_INSTRUCTION,
+    gather: async (c, userId) => portfolioNoteGather(c, userId, 2),
+  },
+  // D6888 (#6888): Eadwyn's covering-note proposal in the statement sheet (D6217
+  // PF-13a, PF-13h). `scope_key` is the statement's quarter-end. The material is
+  // the sheet's own two reads for that date, page 1 (`/analytics?as_of=`) and
+  // page 2 (`/?as_of=`), formatted by `services/statementCoverNote.ts`. A date
+  // that is not a completed quarter-end, a failed read or a date with no book
+  // gathers [] and the route answers `nothing_to_draft` before any model call.
+  // Nothing is kept: the investor copies, edits or discards it in the sheet.
+  'portfolio/statement': {
+    instruction: STATEMENT_COVER_INSTRUCTION,
+    keep: false,
+    gather: async (c, _userId, scope) => {
+      const asOf = statementDate(scope, todayIso());
+      if (!asOf) return [];
+      const [analytics, positions] = await Promise.all([
+        statementRead(c, `/analytics?as_of=${asOf}`),
+        statementRead(c, `/?as_of=${asOf}`),
+      ]);
+      return statementCoverMaterial(asOf, analytics, positions);
+    },
+  },
+
   'portfolio/updates': {
     // IP2's band: "Proposal · parse N updates ... arriving as editable
     // proposals. Where a figure is ambiguous the extractor flags rather than
@@ -2796,13 +3004,14 @@ const DRAFT_SURFACES: Record<string, {
              FROM portfolio_support_entries s
              LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
             WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+              AND s.ask_uid IS NULL
             ORDER BY s.created_at DESC LIMIT 60`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
         c.env.DB.prepare(
           `SELECT DISTINCT pp.project_id, pr.name AS project_name
              FROM portfolio_positions pp
              LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
-             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id
+             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id AND s.ask_uid IS NULL
             WHERE s.id IS NULL
               AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
@@ -3154,6 +3363,36 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'build/founding': {
+    // D6042 (#6042): Founding team's band. A check of the split and the
+    // vesting the cap table records for the founders, and a list of what it
+    // does not record. The failure it prevents is the helpful one: a model
+    // asked about vesting supplies "the usual four years with a one-year
+    // cliff", and asked about a split that does not reach 100% it rounds it
+    // off. Neither is in the record, so the material spells each gap as NOT
+    // RECORDED and carries the total it computed (`buildRecordDrafts.ts`).
+    instruction: FOUNDING_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      return foundingMaterial(c, pid);
+    },
+  },
+
+  'build/company': {
+    // D6042 (#6042): Company creation's band. A summary of the open filings,
+    // what is due next and where formation stands, from the formation order,
+    // the formation steps and the entity's open obligations — the stores the
+    // module's own table combines. No filing rule, fee or deadline the record
+    // does not carry: the day counts are computed in the material and given.
+    instruction: COMPANY_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      return companyMaterial(c, pid);
+    },
+  },
+
   'raise/capital': {
     // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
     // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
@@ -3263,13 +3502,13 @@ const DRAFT_SURFACES: Record<string, {
       if (pid == null) return [];
       const folders = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
-                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id${await liveFiles(c.env.DB, 'x')}) AS files
            FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
       ).bind(pid).all<{ name: string; visibility: string; files: number }>();
       const files = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
                 (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id AND l.action = 'download') AS viewers
-           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+           FROM data_room_files f WHERE f.project_id = ?${await liveFiles(c.env.DB, 'f')} ORDER BY f.name LIMIT 120`
       ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
       const grants = await c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
@@ -3570,6 +3809,8 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'build/this-week': 'Founder · Build · Operating systems',
   'build/retro': 'Founder · Build · Operating systems',
   'build/kpi': 'Founder · Build · Operating systems',
+  'build/founding': 'Founder · Build · Founding team',
+  'build/company': 'Founder · Build · Company creation',
   'raise/data-room': 'Founder · Raise · Fundraising readiness',
   'raise/legal': 'Founder · Raise · Fundraising readiness',
   'raise/narrative-fix': 'Founder · Raise · Investor narrative',
@@ -3681,6 +3922,10 @@ research.post('/drafts', async (c) => {
   if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
   const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
   if (!text) return c.json({ detail: 'draft_unfaithful' }, 503);
+  // D6888: a surface that keeps nothing hands the text back and writes no row.
+  if (spec.keep === false) {
+    return c.json({ item: { uid: null, surface, scope_key: scope || null, body: text, kept: false, accepted: false } });
+  }
 
   const uid = newUid();
   await c.env.DB.prepare(
@@ -3770,6 +4015,8 @@ interface FundRow {
   stage_fit: string | null; path: string | null; status: string;
   pass_reason: string | null; thesis: string | null; note: string | null;
   source_url: string | null; catalogue_uid?: string | null; created_at: string; updated_at: string;
+  // D7168: when the member kept the row as their own record; the intended allocation, USD cents.
+  own_record_at?: string | null; intended_allocation_cents?: number | null;
 }
 
 const fundDto = (r: FundRow) => ({
@@ -3790,6 +4037,12 @@ const fundDto = (r: FundRow) => ({
   source_url: r.source_url,
   // D4613: the fund-directory row this came from; null for a hand-written fund.
   catalogue_uid: r.catalogue_uid ?? null,
+  // D7168: linked (a catalogue uid), own (kept as the member's own record) or
+  // legacy (saved before catalogue links, waiting for a choice).
+  identity: fundIdentity(r),
+  own_record_at: r.own_record_at ?? null,
+  // D7168: what the founder intends to raise from this fund, USD cents; null is Not recorded.
+  intended_allocation_cents: r.intended_allocation_cents ?? null,
   created_at: r.created_at,
   // The dossier's "Last updated" tile. Every write to the row stamps it —
   // PATCH, and a brief accepted into the note.
@@ -3825,10 +4078,15 @@ async function activeRaiseTargetCents(c: any, user: { id: number }): Promise<num
 
 research.get('/funds', async (c) => {
   const user = await requireAuth(c);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
-  ).bind(user.id).all<FundRow>();
-  const items = (rows.results || []).map(fundDto);
+  // D7168: searched and paged on the server (services/researchMyFunds.ts).
+  // It was the newest 500 by created_at, and every count was over those 500.
+  let query;
+  try {
+    query = parseMyFundsQuery((k) => c.req.query(k));
+  } catch (e) {
+    if (e instanceof MyFundsQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
+    throw e;
+  }
 
   // The cheque-overlap figure the canvas asks for needs the size of the round
   // being raised, and that lives on the project rather than here. When no
@@ -3843,26 +4101,50 @@ research.get('/funds', async (c) => {
   // measure against different asks. `company_switcher.test.mjs` caught it
   // reading unscoped before this comment existed.
   const askCents = await activeRaiseTargetCents(c, user);
-  const overlaps = askCents === null ? null : items.filter((f) => {
-    if (f.cheque_min_cents === null && f.cheque_max_cents === null) return false;
-    const lo = f.cheque_min_cents ?? 0;
-    const hi = f.cheque_max_cents ?? Number.MAX_SAFE_INTEGER;
-    return askCents >= lo && askCents <= hi;
-  }).length;
+  let page;
+  try {
+    page = await listMyFunds<FundRow>(c.env, user.id, query, askCents);
+  } catch (e) {
+    // A failed read says so; it is never an empty list.
+    return refuse(c, 503, { code: 'funds_unreadable', message: 'Your saved funds could not be read. This is not an empty list.', raw: e });
+  }
+  const items = page.rows.map(fundDto);
+  const k = page.counts;
 
   return c.json({
     items,
-    researched_count: items.length,
-    right_stage_count: items.filter((f) => f.stage_fit === 'right').length,
-    warm_path_count: items.filter((f) => f.path === 'warm').length,
-    passed_count: items.filter((f) => f.status === 'passed').length,
+    // The page: `total` is how many saved funds match the search and filters.
+    total: page.total,
+    limit: query.limit,
+    offset: query.offset,
+    q: query.q,
+    sort: query.sort,
+    filter: query.filter || 'all',
+    identity: query.identity || 'all',
+    // Every count below is over all saved funds, whatever the page, search or filter.
+    counts_scope: 'all_saved',
+    saved_count: k.saved,
+    researched_count: k.saved,
+    right_stage_count: k.right_stage,
+    warm_path_count: k.warm_path,
+    passed_count: k.passed,
     // A pass with no reason is indistinguishable from a fund nobody reached,
     // which is the whole thing recording a pass is meant to prevent.
-    passed_without_reason: items.filter((f) => f.status === 'passed' && !f.pass_reason).length,
-    cheque_overlap_count: overlaps,
+    passed_without_reason: k.passed_without_reason,
+    linked_count: k.linked,
+    own_count: k.own,
+    legacy_count: k.legacy,
+    cheque_overlap_count: k.round_inside,
     cheque_overlap_note: askCents === null
       ? 'No raise target is recorded on the active company\'s project, so there is no ask to compare a cheque range against. The count is absent rather than zero.'
       : null,
+    raise_target_cents: askCents,
+    // D7168: the allocation test. Both figures are USD cents, so they compare;
+    // a fund with no allocation set is not counted either way.
+    allocation_count: k.allocation_inside,
+    allocation_set_count: k.allocation_set,
+    allocation_currency: 'USD',
+    catalogue_links: page.catalogue_links,
   });
 });
 
@@ -3893,7 +4175,8 @@ const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
 };
 
 research.get('/company-directory', async (c) => {
-  await requireAuth(c);
+  // D7178: a held Founder or Advisor licence, an active Lab, or an admin; anyone else is refused (403).
+  if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
   const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
   const sectorLabel = sectorKey.replace(/-/g, ' ');
   const sectorTerms = sectorKey ? [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean) : [];
@@ -3916,11 +4199,18 @@ research.get('/company-directory', async (c) => {
 
 // One company (D534): identity, each metric with its source and as-of date,
 // the migration-370 evidence keyed on company_id = id, and same-sector peers.
+// D7180: `?part=<collection>` reads one evidence collection on its own, so its
+// Retry does not re-read the company.
 research.get('/company-directory/:uid', async (c) => {
-  await requireAuth(c);
+  // D7178: the directory's rule, checked before the record is read, so a refusal never says whether it exists.
+  if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
+  const part = c.req.query('part');
+  if (part != null && !EVIDENCE_PARTS.includes(part)) {
+    return c.json({ detail: `part must be one of ${EVIDENCE_PARTS.join(', ')}`, field: 'part' }, 400);
+  }
   let company;
   try {
-    company = await getCompany(c.env, c.req.param('uid'));
+    company = part != null ? await getCompanyPart(c.env, c.req.param('uid'), part) : await getCompany(c.env, c.req.param('uid'));
   } catch {
     return c.json({ detail: 'Unreadable', reason: 'The company could not be read' }, 503);
   }
@@ -3931,7 +4221,10 @@ research.get('/company-directory/:uid', async (c) => {
 // Public fund catalog (D535). Spreadsheet observations are reported fund-size
 // snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
 // Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
-const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+// D7166 (#7166): the source names the lists served, from the answer itself, so a
+// list taken down for its terms (D597) is never named as a source.
+const fundDirectorySource = (sources: Array<{ name: string }>) =>
+  sources.length ? `Public fund lists (${sources.map((s) => s.name).join('; ')})` : 'Public fund lists';
 const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
 
 research.get('/fund-directory', async (c) => {
@@ -3945,7 +4238,7 @@ research.get('/fund-directory', async (c) => {
   }
   try {
     const page = await listDirectory(c.env, query);
-    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+    return c.json({ ...page, source: fundDirectorySource(page.sources), source_boundary: FUND_DIRECTORY_BOUNDARY });
   } catch {
     // A failed read says so; it is never an empty directory.
     return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);
@@ -3963,7 +4256,8 @@ research.get('/fund-directory/:uid', async (c) => {
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   // D597: a fund of a list taken down for its terms says so, and why — never its fields.
   if (fund.removed) {
-    return c.json({ detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
+    // D7167: `error` names the refusal, so a page that re-reads before Save, Add or Compare can tell it from a 404.
+    return c.json({ error: 'source_withdrawn', detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
   }
   return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
 });
@@ -4003,6 +4297,14 @@ research.post('/funds', async (c) => {
   if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
     return c.json({ detail: 'catalogue_uid_invalid' }, 400);
   }
+  // D7167: a directory fund whose list was withdrawn is refused by name. A
+  // failed check does not block the save: the fund's facts are gated on read.
+  if (catalogueUid !== null) {
+    const gone = await withdrawnSourceOf(c.env, catalogueUid).catch(() => null);
+    if (gone) {
+      return c.json({ error: 'source_withdrawn', detail: 'source_withdrawn', message: SOURCE_WITHDRAWN_MESSAGE, removed: citeSource(gone.source_name, gone.published_url, gone) }, 410);
+    }
+  }
   const uid = newUid();
   const now = nowIso();
   // D4613: INSERT OR IGNORE against the partial unique index on (owner,
@@ -4012,15 +4314,20 @@ research.post('/funds', async (c) => {
   const write = await c.env.DB.prepare(
     `INSERT OR IGNORE INTO research_funds
        (uid, owner_user_id, project_id, name, cheque_min_cents, cheque_max_cents,
-        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, own_record_at,
+        intended_allocation_cents, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, user.id, clampInt(body.project_id), name,
     clampInt(body.cheque_min_cents), clampInt(body.cheque_max_cents),
     oneOf(body.stage_fit, FUND_STAGE_FIT), oneOf(body.path, FUND_PATH),
     oneOf(body.status, FUND_STATUS) || 'researching',
     clampText(body.pass_reason, 1000), clampText(body.thesis, 2000),
-    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid, now, now,
+    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid,
+    // D7168: a fund typed in by hand is the member's own record from the
+    // start; only rows saved before this are legacy entries.
+    catalogueUid === null ? now : null,
+    allocationOf(body.intended_allocation_cents), now, now,
   ).run();
   const created = Number(write.meta?.changes ?? 1) > 0;
   const row = created
@@ -4038,9 +4345,25 @@ research.post('/funds', async (c) => {
 // Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
 // SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
 // Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
-// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
-// the sheet's data rows.
+// "sheet" is never captured as a uid. `pull` is Export (Axal → the tab) and
+// `push` is Import (the tab → Axal); import never deletes. D7170: each has a
+// preview that writes nothing, a run record with an idempotency key, and an
+// import whose identifiers are not confirmed is reconciled before another.
 // ---------------------------------------------------------------------------
+
+/**
+ * One answer for every sheet failure: a precondition refusal keeps its own
+ * status and code; anything Google or the Worker threw is a 502 with our
+ * sentence, and the provider text travels only on `upstream`.
+ */
+function sheetRefusal(c: any, e: unknown, fallback: { code: string; message: string }) {
+  if (e instanceof SheetSyncError) {
+    return refuse(c, e.status, { code: e.code, message: e.sentence, extra: e.extra });
+  }
+  return refuse(c, 502, { ...fallback, raw: e, audience: 'owner' });
+}
+
+const SHEETS_UNCONFIGURED = { code: 'sheets_unconfigured', message: 'Google Sheets is not configured on this server yet.' };
 
 research.get('/funds/sheet/status', async (c) => {
   const user = await requireSuperAdmin(c);
@@ -4048,6 +4371,11 @@ research.get('/funds/sheet/status', async (c) => {
   const missing = preflightSheetsOAuthSecrets(c.env);
   const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
   const link = await loadSheetLink(c.env, user.id);
+  // The tab is checked by gid on every status read, so a deleted tab blocks
+  // both directions on the card before anyone opens a review.
+  const tab = configured && tok && link ? await checkLinkedTab(c.env, user.id, link) : null;
+  const runs = await latestRuns(c.env, user.id);
+  const open = await openImportRun(c.env, user.id);
   return c.json({
     configured,
     missing: configured ? [] : missing,
@@ -4055,10 +4383,15 @@ research.get('/funds/sheet/status', async (c) => {
     google_email: tok?.google_email || null,
     spreadsheet_id: link?.spreadsheet_id || null,
     sheet_gid: link ? Number(link.sheet_gid) : null,
-    sheet_title: link?.sheet_title || null,
+    sheet_title: tab?.title || link?.sheet_title || null,
+    workbook_title: tab?.workbook_title || null,
+    tab_state: tab?.state || null,
+    tab_checked_at: tab?.checked_at || null,
     last_pulled_at: link?.last_pulled_at || null,
     last_pushed_at: link?.last_pushed_at || null,
     last_error: link?.last_error || null,
+    last_runs: runs,
+    open_run: open,
     suggested_url: SUGGESTED_SHEET_URL,
   });
 });
@@ -4138,54 +4471,121 @@ research.post('/funds/sheet/disconnect', async (c) => {
   return c.json({ ok: true });
 });
 
+research.get('/funds/sheet/tabs', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const raw = String(c.req.query('url') || '').trim();
+  let spreadsheetId: string | undefined;
+  if (raw) {
+    const parsed = parseSpreadsheetRef(raw);
+    if ('error' in parsed) return refuse(c, 400, { code: 'spreadsheet_url_invalid', message: parsed.error });
+    spreadsheetId = parsed.spreadsheet_id;
+  }
+  try {
+    return c.json(await listWorkbookTabs(c.env, user, spreadsheetId));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the workbook. Check that the connected Google account can open it and try again.' });
+  }
+});
+
 research.patch('/funds/sheet/link', async (c) => {
   const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
   const body = await c.req.json<any>().catch(() => ({}));
   const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
   const parsed = parseSpreadsheetRef(raw);
-  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
-  const existing = await loadSheetLink(c.env, user.id);
-  const gid = parsed.sheet_gid != null
-    ? parsed.sheet_gid
-    : (body.sheet_gid != null && Number.isFinite(Number(body.sheet_gid))
-      ? Math.trunc(Number(body.sheet_gid))
-      : (existing ? Number(existing.sheet_gid) : 0));
-  const link = await upsertSheetLink(c.env, user, parsed.spreadsheet_id, gid);
-  return c.json({
-    spreadsheet_id: link.spreadsheet_id,
-    sheet_gid: Number(link.sheet_gid),
-  });
+  if ('error' in parsed) return refuse(c, 400, { code: 'spreadsheet_url_invalid', message: parsed.error });
+  // The tab is an explicit choice. A gid in the pasted URL is not one, and
+  // neither is being the first tab: no gid and no new tab is `tab_required`.
+  const gid = body.sheet_gid != null && body.sheet_gid !== '' && Number.isFinite(Number(body.sheet_gid))
+    ? Math.trunc(Number(body.sheet_gid))
+    : null;
+  const createTab = typeof body.create_tab === 'string' && body.create_tab.trim() ? body.create_tab.trim() : null;
+  try {
+    const link = await saveSheetDestination(c.env, user, { spreadsheetId: parsed.spreadsheet_id, sheetGid: gid, createTab });
+    return c.json({
+      spreadsheet_id: link.spreadsheet_id,
+      sheet_gid: Number(link.sheet_gid),
+      sheet_title: link.sheet_title,
+    });
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the workbook. Check that the connected Google account can open it and try again.' });
+  }
 });
 
+research.post('/funds/sheet/export/preview', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await previewExport(c.env, user, readSyncFields(body.fields)));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the tab. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+research.post('/funds/sheet/import/preview', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await previewImport(c.env, user, readSyncFields(body.fields), readResolutions(body.resolutions)));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the tab. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+// Export Axal funds to Sheets. Answers the run; a run Google refused before
+// any write is `failed` in the body, not a 502, because it was recorded.
 research.post('/funds/sheet/pull', async (c) => {
   const user = await requireSuperAdmin(c);
-  if (!googleSheetsOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
-  }
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
   try {
-    return c.json(await pullFundsToSheet(c.env, user));
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return refuse(c, 502, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.', raw: msg, audience: 'owner' });
+    const key = readIdempotencyKey(body.idempotency_key);
+    return c.json(await exportFundsToSheet(c.env, user, { fields: readSyncFields(body.fields), idempotencyKey: key }));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.' });
   }
 });
 
+// Import from Sheets. Never deletes. A run whose identifiers did not reach
+// the sheet answers 200 with status `uncertain`, not a 502 a retry would
+// repeat; the next import is refused with `reconcile_required` until then.
 research.post('/funds/sheet/push', async (c) => {
   const user = await requireSuperAdmin(c);
-  if (!googleSheetsOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
-  }
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
   try {
-    return c.json(await pushFundsFromSheet(c.env, user));
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return refuse(c, 502, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.', raw: msg, audience: 'owner' });
+    const key = readIdempotencyKey(body.idempotency_key);
+    return c.json(await importFundsFromSheet(c.env, user, {
+      fields: readSyncFields(body.fields),
+      resolutions: readResolutions(body.resolutions),
+      idempotencyKey: key,
+    }));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.' });
   }
 });
+
+research.post('/funds/sheet/runs/:runUid/reconcile', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json({ run: await reconcileImportRun(c.env, user, c.req.param('runUid'), { write: body.write === true }) });
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+/** D7168: an intended allocation in USD cents; null (blank) stays Not recorded, and a negative is no allocation. */
+function allocationOf(v: unknown): number | null {
+  const n = clampInt(v);
+  return n === null || n < 0 ? null : n;
+}
+
+const FUND_CHANGED = 'This fund changed since you opened it. Compare both versions before choosing what to keep.';
 
 research.patch('/funds/:uid', async (c) => {
   const user = await requireAuth(c);
@@ -4196,6 +4596,57 @@ research.patch('/funds/:uid', async (c) => {
   if (!existing) return c.json({ detail: 'Not found' }, 404);
   const b = await c.req.json<any>().catch(() => ({}));
   const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+
+  // D7168 conflict detection: a write that names the `updated_at` it read is
+  // refused when the row has changed since, with the stored row, so the page
+  // can compare both versions. A write that names none behaves as before.
+  const expected = has('expected_updated_at') && b.expected_updated_at != null ? String(b.expected_updated_at) : null;
+  if (expected !== null && expected !== existing.updated_at) {
+    return refuse(c, 409, { code: 'fund_changed', message: FUND_CHANGED, extra: { item: fundDto(existing) } });
+  }
+
+  if (has('intended_allocation_cents') && b.intended_allocation_cents !== null && b.intended_allocation_cents !== ''
+      && (clampInt(b.intended_allocation_cents) === null || clampInt(b.intended_allocation_cents)! < 0)) {
+    return refuse(c, 400, { code: 'allocation_invalid', message: 'An intended allocation is a whole number of US cents, 0 or more, or blank.' });
+  }
+
+  // D7168: link a row that has no catalogue uid (a legacy entry, or your own
+  // record) to one catalogue vehicle. Never on a row already linked, never to
+  // a vehicle another of your rows holds, and only to a vehicle the catalogue
+  // holds. The rest of the row is untouched.
+  let catalogueUid = existing.catalogue_uid ?? null;
+  if (has('catalogue_uid') && b.catalogue_uid != null && b.catalogue_uid !== '' && String(b.catalogue_uid) !== catalogueUid) {
+    const wanted = String(b.catalogue_uid);
+    if (!CATALOGUE_UID_RE.test(wanted)) return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+    if (catalogueUid) {
+      return refuse(c, 409, { code: 'fund_already_linked', message: 'This entry is already linked to a catalogue vehicle. Nothing changed.' });
+    }
+    const holder = await catalogueHolder(c.env, user.id, wanted, uid);
+    if (holder) {
+      return refuse(c, 409, {
+        code: 'catalogue_uid_taken',
+        message: 'That vehicle is already linked to another of your entries. One catalogue vehicle has one entry. Nothing changed here.',
+        extra: { holder },
+      });
+    }
+    let vehicle;
+    try {
+      vehicle = await getFund(c.env, wanted);
+    } catch (e) {
+      return refuse(c, 503, { code: 'catalogue_unreadable', message: 'The catalogue could not be read, so nothing was linked. Try again.', raw: e });
+    }
+    if (!vehicle) return refuse(c, 404, { code: 'catalogue_vehicle_not_found', message: 'The catalogue does not hold that vehicle. Nothing was linked.' });
+    if ('removed' in vehicle && vehicle.removed) {
+      return refuse(c, 410, { code: 'catalogue_vehicle_withdrawn', message: 'That vehicle’s list was taken down for its terms, so it cannot be linked.' });
+    }
+    catalogueUid = wanted;
+  }
+  // D7168 "Keep as my own record": a row with no catalogue link stops being
+  // offered a match (D7033 Q2, drawn as A).
+  const ownRecordAt = !catalogueUid && !existing.own_record_at && b.own_record === true
+    ? nowIso()
+    : (existing.own_record_at ?? null);
+
   const next = {
     name: has('name') ? (clampText(b.name, 200) || existing.name) : existing.name,
     cheque_min_cents: has('cheque_min_cents') ? clampInt(b.cheque_min_cents) : existing.cheque_min_cents,
@@ -4207,21 +4658,51 @@ research.patch('/funds/:uid', async (c) => {
     thesis: has('thesis') ? clampText(b.thesis, 2000) : existing.thesis,
     note: has('note') ? clampText(b.note, 2000) : existing.note,
     source_url: has('source_url') ? clampText(b.source_url, 500) : existing.source_url,
+    intended_allocation_cents: has('intended_allocation_cents')
+      ? allocationOf(b.intended_allocation_cents)
+      : (existing.intended_allocation_cents ?? null),
   };
-  await c.env.DB.prepare(
-    `UPDATE research_funds
-        SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
-            status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?, updated_at = ?
-      WHERE uid = ? AND owner_user_id = ?`
-  ).bind(
-    next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
-    next.status, next.pass_reason, next.thesis, next.note, next.source_url, nowIso(),
-    uid, user.id,
-  ).run();
+  // A new stamp always differs from the one read, so a second writer in the
+  // same millisecond still sees a change.
+  let stamp = nowIso();
+  if (stamp === existing.updated_at) stamp = new Date(Date.parse(stamp) + 1).toISOString();
+  let write;
+  try {
+    // `updated_at = ?` makes the check and the write one statement: a write
+    // that lands between the read above and this one is still a conflict.
+    write = await c.env.DB.prepare(
+      `UPDATE research_funds
+          SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
+              status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?,
+              catalogue_uid = ?, own_record_at = ?, intended_allocation_cents = ?, updated_at = ?
+        WHERE uid = ? AND owner_user_id = ? AND updated_at = ?`
+    ).bind(
+      next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
+      next.status, next.pass_reason, next.thesis, next.note, next.source_url,
+      catalogueUid, ownRecordAt, next.intended_allocation_cents, stamp,
+      uid, user.id, existing.updated_at,
+    ).run();
+  } catch (e) {
+    // The unique index on (owner, catalogue_uid): another link landed first.
+    if (/UNIQUE/i.test(String((e as Error)?.message || e))) {
+      const holder = catalogueUid ? await catalogueHolder(c.env, user.id, catalogueUid, uid) : null;
+      return refuse(c, 409, {
+        code: 'catalogue_uid_taken',
+        message: 'That vehicle is already linked to another of your entries. One catalogue vehicle has one entry. Nothing changed here.',
+        raw: e, extra: { holder },
+      });
+    }
+    throw e;
+  }
   const row = await c.env.DB.prepare(
     `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, user.id).first<FundRow>();
-  return c.json(fundDto(row as FundRow));
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  if (!Number(write.meta?.changes ?? 1)) {
+    // Changed between the read and the write.
+    return refuse(c, 409, { code: 'fund_changed', message: FUND_CHANGED, extra: { item: fundDto(row) } });
+  }
+  return c.json(fundDto(row));
 });
 
 research.delete('/funds/:uid', async (c) => {
@@ -4262,45 +4743,47 @@ research.post('/funds/:uid/reports', async (c) => {
   ).bind(fundUid, user.id).first();
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   const body = await c.req.json<any>().catch(() => ({}));
-  const period = String(body.period || '').trim();
-  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
-  const sourceUrl = clampText(body.source_url, 500);
-  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
-  const uid = newUid();
-  const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_fund_reports
-       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
-        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
-        report_url, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
-       report_date = excluded.report_date,
-       fund_size_cents = excluded.fund_size_cents,
-       nav_cents = excluded.nav_cents,
-       quarterly_return_bps = excluded.quarterly_return_bps,
-       net_irr_bps = excluded.net_irr_bps,
-       tvpi_bps = excluded.tvpi_bps,
-       source_url = excluded.source_url,
-       report_url = excluded.report_url,
-       notes = excluded.notes,
-       updated_at = excluded.updated_at`
-  ).bind(
-    uid, fundUid, user.id, period, clampText(body.report_date, 30),
-    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
-    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
-    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
-    clampText(body.notes, 2000), now, now,
-  ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
-            quarterly_return_bps, net_irr_bps, tvpi_bps,
-            source_url, report_url, notes, created_at, updated_at
-       FROM research_fund_reports
-      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
-  ).bind(fundUid, user.id, period).first();
-  return c.json(row, 201);
+  // D7169: create-only. A saved period answers `period_exists` with its row,
+  // so the page opens it instead of overwriting it.
+  const out = await createReport(c.env.DB as any, user.id, fundUid, body, newUid(), nowIso());
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'period_exists') {
+    return c.json(refusalBody({
+      code: 'period_exists',
+      message: `${out.report.period} already has a report. Open it to change it.`,
+      extra: { report_uid: out.report.uid, report: out.report },
+    }), 409);
+  }
+  return c.json(out.report, 201);
 });
+
+// D7169: partial update. A field absent from the body keeps its value, null
+// clears it; the row's `updated_at` travels as If-Match.
+research.patch('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const out = await patchReport(c.env.DB as any, user.id, fundUid, c.req.param('reportUid'), body, readIfMatch(c.req.header('If-Match')));
+  if (out.kind === 'not_found') return c.json({ detail: 'Not found' }, 404);
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'revision_required') {
+    return c.json(refusalBody({ code: 'revision_required', message: 'Send the report\'s updated_at as If-Match so a newer save is not overwritten.' }), 428);
+  }
+  if (out.kind === 'report_changed') {
+    return c.json(refusalBody({
+      code: 'report_changed',
+      message: `${out.report.period} changed after you opened it. Review both versions before saving.`,
+      extra: { report: out.report },
+    }), 409);
+  }
+  return c.json({ ...out.report, changed: out.changed });
+});
+
+const reportFieldRefusal = (c: any, errors: FieldError[]) => c.json(refusalBody({
+  code: 'invalid_report_field',
+  message: fieldErrorSentence(errors),
+  extra: { field: errors[0].field, errors },
+}), 400);
 
 research.delete('/funds/:uid/reports/:reportUid', async (c) => {
   const user = await requireAuth(c);
@@ -4326,11 +4809,18 @@ research.get('/funds/:uid', async (c) => {
     `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
   ).bind(c.req.param('uid'), user.id).first<FundRow>();
   if (!row) return c.json({ detail: 'Not found' }, 404);
-  const askCents = await activeRaiseTargetCents(c, user);
+  const [askCents, publicRecord] = await Promise.all([
+    activeRaiseTargetCents(c, user),
+    // D7168: the linked catalogue row, read-only and apart from the private
+    // fields above it; Unavailable or the directory's 410 never hide the dossier.
+    publicRecordFor(c.env, row.catalogue_uid),
+  ]);
   return c.json({
     ...fundDto(row),
     raise_target_cents: askCents,
     overlap_note: fundOverlapNote(row, askCents),
+    allocation_test: fundAllocationNote(row),
+    public_record: publicRecord,
   });
 });
 
@@ -4392,29 +4882,6 @@ async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, bri
 // ---------------------------------------------------------------------------
 // Benchmarks (migration 217)
 // ---------------------------------------------------------------------------
-
-interface BenchRow {
-  id: number; uid: string; owner_user_id: number; metric: string;
-  our_value: string | null; peer_value: string | null; peer_source: string | null;
-  peer_sample_size: number | null; peer_as_of: string | null; reading: string | null;
-  created_at: string; updated_at: string;
-}
-
-const benchDto = (r: BenchRow) => ({
-  uid: r.uid,
-  metric: r.metric,
-  our_value: r.our_value,
-  peer_value: r.peer_value,
-  peer_source: r.peer_source,
-  peer_sample_size: r.peer_sample_size,
-  peer_as_of: r.peer_as_of,
-  reading: r.reading,
-  // Derived, not stored: a row is only a COMPARISON when the peer figure has
-  // its base. Without it the row is a metric being tracked, which is a
-  // different and lesser claim, and the zone renders the two differently.
-  is_comparison: Boolean(r.peer_value && r.peer_source && r.peer_sample_size),
-  created_at: r.created_at,
-});
 
 research.get('/benchmarks', async (c) => {
   const user = await requireAuth(c);
@@ -4508,58 +4975,11 @@ research.delete('/benchmarks/:uid', async (c) => {
 // A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
 // banner reads the comparison in front of it.
 
-const BENCH_THIN_AT = 10;
-const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
-const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
-  + 'without its base is arithmetic wearing a metric’s clothes.';
-
-interface ConstituentRow {
-  id: number; uid: string; benchmark_id: number; owner_user_id: number;
-  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
-}
-
-const constituentDto = (r: ConstituentRow) => ({
-  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
-});
-
-/** The caller's benchmark by uid, or null. */
-async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
-  const row = await env.DB.prepare(
-    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, userId).first<BenchRow>();
-  return row || null;
-}
-
-/** The detail read: the row, its constituents, and what the page says about them. */
-async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
-  const cons = await env.DB.prepare(
-    `SELECT * FROM research_benchmark_constituents
-      WHERE benchmark_id = ? AND owner_user_id = ?
-      ORDER BY position ASC, id ASC`
-  ).bind(row.id, userId).all<ConstituentRow>();
-  const constituents = (cons.results || []).map(constituentDto);
-  const item = { ...benchDto(row), updated_at: row.updated_at };
-  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
-  return {
-    item,
-    constituents,
-    // Only a comparison has a sample to be thin, or a count to disagree with.
-    thin: n !== null && n < BENCH_THIN_AT,
-    sample_note: n !== null && n < BENCH_THIN_AT
-      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
-      : null,
-    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
-    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
-      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
-      : null,
-  };
-}
-
 research.get('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
   if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
-  return c.json(await benchmarkDetail(c.env, user.id, row));
+  return c.json(await benchmarkDetail(c, user, row));
 });
 
 research.patch('/benchmarks/:uid', async (c) => {
@@ -4596,17 +5016,24 @@ research.patch('/benchmarks/:uid', async (c) => {
       }, 409);
     }
   }
+  // D6278: a figure typed by hand is no longer the fund's recorded one, so an
+  // edit that changes "Ours" drops the link to where it was copied from.
+  const handEdited = has('our_value') && next.our_value !== row.our_value;
   await c.env.DB.prepare(
     `UPDATE research_benchmarks
         SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
-            peer_as_of = ?, reading = ?, updated_at = ?
+            peer_as_of = ?, reading = ?, updated_at = ?,
+            fund_id = CASE WHEN ? THEN NULL ELSE fund_id END,
+            our_value_metric = CASE WHEN ? THEN NULL ELSE our_value_metric END,
+            our_value_as_of = CASE WHEN ? THEN NULL ELSE our_value_as_of END
       WHERE id = ? AND owner_user_id = ?`
   ).bind(
     next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
-    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+    next.peer_as_of, next.reading, nowIso(), handEdited ? 1 : 0, handEdited ? 1 : 0, handEdited ? 1 : 0,
+    row.id, user.id,
   ).run();
   const fresh = await ownedBenchmark(c.env, user.id, row.uid);
-  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+  return c.json(await benchmarkDetail(c, user, fresh as BenchRow));
 });
 
 research.post('/benchmarks/:uid/constituents', async (c) => {
@@ -4633,7 +5060,7 @@ research.post('/benchmarks/:uid/constituents', async (c) => {
     newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
     last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
   ).run();
-  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+  return c.json(await benchmarkDetail(c, user, row), 201);
 });
 
 research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
@@ -4646,7 +5073,7 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
   if (!res.meta?.changes) {
     return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
   }
-  return c.json(await benchmarkDetail(c.env, user.id, row));
+  return c.json(await benchmarkDetail(c, user, row));
 });
 
 // ---------------------------------------------------------------------------
@@ -4667,6 +5094,38 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
 // and that became the IC condition on the deal. What is absent from a room is
 // diligence information too." So the response returns both numbers and never
 // the ratio alone.
+
+/**
+ * D6266 (#6266): the deals on a room's company that this investor may open.
+ * `deals.project_id` and `data_room_grants.project_id` are the key between a
+ * room and a deal; which of those deals the caller may see is the deal page's
+ * own rule (`investorHasDealRelationship`: invited to it, or committed on it),
+ * reused rather than copied. A deal the caller cannot open is never named or
+ * counted. The stage is the deal's own `status`, the word the deal page shows.
+ */
+export const NO_ROOM_DEAL = 'No deal you are invited to is recorded for this company.';
+export const ROOM_DEAL_UNREADABLE = 'Unreadable: the deals on this company could not be read. That is not a claim that there are none.';
+/** `null` when the read failed: the room still opens, and says Unreadable rather than "no deal". */
+async function roomDeals(env: Env, userId: number, projectId: number) {
+  try { return await roomDealsOf(env, userId, projectId); } catch { return null; }
+}
+async function roomDealsOf(env: Env, userId: number, projectId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT d.id, d.status, p.name FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE d.project_id = ? ORDER BY d.created_at DESC, d.id DESC LIMIT 20`
+  ).bind(projectId).all<{ id: number; status: string; name: string | null }>();
+  const out: { id: number; stage: string; name: string | null }[] = [];
+  for (const r of rows.results || []) {
+    if (await investorHasDealRelationship(env, userId, Number(r.id))) out.push({ id: Number(r.id), stage: r.status, name: r.name ?? null });
+  }
+  return out;
+}
+
+/** #6267: `{ status: none | out_for_signature | on_file, valid_until }` — the deal page's NDA status, no NDA as `none`. */
+const NDA_NONE = { status: 'none', valid_until: null } as const;
+function ndaView(nda: VentureNdaStatus | null) {
+  return nda ?? NDA_NONE;
+}
 
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
@@ -4705,14 +5164,30 @@ research.get('/diligence', async (c) => {
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
+  const dealsByProject = new Map<number, Awaited<ReturnType<typeof roomDeals>>>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!dealsByProject.has(pid)) dealsByProject.set(pid, await roomDeals(c.env, user.id, pid));
+  }
+
+  // #6267: where each room's NDA stands (none, out for signature, on file until a date), from the
+  // deal page's own status read (`ventureNdaStatus`), once per venture.
+  const ndaStatusByProject = new Map<number, ReturnType<typeof ndaView>>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!ndaStatusByProject.has(pid)) ndaStatusByProject.set(pid, ndaView(await ventureNdaStatus(c.env, pid, user.id)));
+  }
+
   const items = (rows.results || []).map((r: any) => {
     const nda = ndaByProject.get(Number(r.project_id)) === true;
+    const deals = dealsByProject.get(Number(r.project_id)) ?? null;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
       project_uid: r.project_uid,
       project_name: r.project_name,
       nda_signed: nda,
+      nda: ndaStatusByProject.get(Number(r.project_id)) ?? NDA_NONE,
       // Two numbers, never one ratio: what is absent from a room is diligence
       // information too, and a percentage hides which rooms are thin.
       file_open: open,
@@ -4721,22 +5196,24 @@ research.get('/diligence', async (c) => {
       last_opened_at: r.last_opened_at ?? null,
       expires_at: r.expires_at ?? null,
       created_at: r.created_at,
+      deals,
+      ...(deals === null ? { deal_stage_note: ROOM_DEAL_UNREADABLE } : deals.length ? {} : { deal_stage_note: NO_ROOM_DEAL }),
     };
   });
 
+  // #6267: the caller's own requests that no live grant answers. A failed read is
+  // `requests: null` with `requests_unreadable`, never an empty list.
+  let requests: InvestorRoomRequest[] | null = null;
+  try { requests = await investorRoomRequests(c.env, user.id); } catch (e) { console.error('[research] diligence requests unreadable', e); }
+
   return c.json({
     items,
+    requests,
+    requests_unreadable: requests === null,
     granted_count: items.length,
     // Rooms where the founder staged less than everything they hold. Not a
     // complaint — it is the signal the zone exists to surface.
     partial_count: items.filter((r) => r.withheld_behind_nda > 0).length,
-    // Deal stage is on the canvas and is NOT joined here. A grant is between a
-    // founder and an investor; a deal is a separate record that may or may not
-    // exist for the same company, and joining them on a name rather than a key
-    // would attach a stage to the wrong room. Stated rather than guessed.
-    deal_stage: null,
-    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
-      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
   });
 });
 
@@ -4823,7 +5300,7 @@ async function roomMaterial(env: Env, userId: number, grantUid: string): Promise
   const pid = room.grant.project_id;
   const files = await env.DB.prepare(
     `SELECT name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — only what the tier and expiry admit is described, or
   // counted. D1103 — and only what the grant's folders hold.
@@ -4853,7 +5330,7 @@ research.get('/diligence/:grantUid', async (c) => {
 
   const tiered = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(c.env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — a file the tier or its expiry hides is neither listed nor
   // counted. D1103 — nor is one outside the grant's folders.
@@ -4918,12 +5395,14 @@ research.get('/diligence/:grantUid', async (c) => {
     };
   });
 
+  const roomDealRows = await roomDeals(c.env, user.id, pid);
   await logAccess(c.env, pid, user.id, 'open_room', null);
 
   return c.json({
     grant: { uid: room.grant.uid, created_at: room.grant.created_at, expires_at: room.grant.expires_at ?? null },
     project: { uid: room.project.uid, name: room.project.name },
     nda_signed: room.nda,
+    nda: ndaView(await ventureNdaStatus(c.env, pid, user.id)),
     file_total: allFiles.length,
     file_open: openFiles.length,
     // A count, never the names — the data room's own rule.
@@ -4934,10 +5413,9 @@ research.get('/diligence/:grantUid', async (c) => {
     files: openFiles,
     activity: yourActivity,
     download_note: DOWNLOAD_NOTE,
-    // Same reason as the list: no key joins a grant to a deal.
-    deal_stage: null,
-    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
-      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+    // D6266: the room's company's deals this investor may open, as the list returns them.
+    deals: roomDealRows,
+    ...(roomDealRows === null ? { deal_stage_note: ROOM_DEAL_UNREADABLE } : roomDealRows.length ? {} : { deal_stage_note: NO_ROOM_DEAL }),
   });
 });
 
@@ -4949,7 +5427,7 @@ research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
 
   const found = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE uid = ? AND project_id = ?`
+       FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`
   ).bind(c.req.param('fileUid'), pid).first<any>();
   const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
   // D691 decision 6 — a file the tier or its expiry hides reads as not in the room.

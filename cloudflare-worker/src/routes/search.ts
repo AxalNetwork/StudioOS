@@ -20,6 +20,8 @@ import { requireAuth, requireAdmin } from '../auth';
 // below. Importing it again is how the two lists would quietly re-converge.
 import { searchSemantic, type EntityType, type SearchHit } from '../services/vectorize';
 import { keepFindable } from '../services/investorFindable';
+import { hiddenDealIds } from '../services/dealPreparation';
+import { isDealStaff } from '../services/dealAccess';
 import { Jobs } from '../models/jobs';
 
 const search = new Hono<{ Bindings: Env }>();
@@ -149,6 +151,12 @@ search.get('/', async (c) => {
   }
   // #3734: stale Academy vectors must not leak through the all-types admin path.
   hits = hits.filter(h => allowed.includes(h.type)).map(scrubSnippet);
+  // D5454 — a stale vector for a deal the caller's deal list leaves out (an unreleased or unknown preparation; for
+  // anyone but deal staff, a withdrawn or archived release too) is dropped before it can name the venture.
+  if (hits.some(h => h.type === 'deal')) {
+    const hidden = await hiddenDealIds(c.env, isDealStaff(user) ? 'transactional' : 'discovery');
+    hits = hits.filter(h => h.type !== 'deal' || !hidden.has(Number(h.entity_id)));
+  }
   // D702 — an investor does not get a project hit for a venture whose founder
   // chose "through introductions only" unless they have an introduction to it.
   hits = await keepFindable(c.env, user, hits, (h) => (h.type === 'project' ? h.entity_id : null));

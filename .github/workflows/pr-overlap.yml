@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
+    environment: production-ops
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -37,6 +38,13 @@ jobs:
           stamp="$(date -u +%Y%m%dT%H%MZ)"
           echo "PR_OVERLAP_STAMP=$stamp" >> "$GITHUB_ENV"
           node scripts/pr-overlap.mjs "--snapshot=$RUNNER_TEMP/pr-overlap/pr-overlap-$stamp.json"
+      - name: Update the owner's landing list
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        # D6469: edits one sticky issue body in place; never labels, merges or queues.
+        run: node scripts/landing-list.mjs --sticky
       - name: Upload the advisory baseline snapshot
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -45,3 +53,18 @@ jobs:
           path: ${{ runner.temp }}/pr-overlap/
           retention-days: 30
           if-no-files-found: warn
+      - name: Post the snapshot to the WorkGraph store
+        if: ${{ !cancelled() }}
+        env:
+          WORKGRAPH_INGEST_TOKEN: ${{ secrets.WORKGRAPH_INGEST_TOKEN }}
+        # D5580 part 4: the HQ WorkGraph page reads the latest snapshot from the Worker.
+        # Advice only: a failed post never fails the report; the artifact above keeps the snapshot.
+        run: |
+          f="$RUNNER_TEMP/pr-overlap/pr-overlap-$PR_OVERLAP_STAMP.json"
+          if [ -z "$WORKGRAPH_INGEST_TOKEN" ]; then echo "::notice::WORKGRAPH_INGEST_TOKEN is not set; the snapshot is not posted."; exit 0; fi
+          if [ ! -s "$f" ]; then echo "::warning::No snapshot was written; nothing to post."; exit 0; fi
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 -X POST \
+            -H "Authorization: Bearer $WORKGRAPH_INGEST_TOKEN" -H 'Content-Type: application/json' \
+            --data-binary "@$f" https://axal.vc/api/admin/workgraph/snapshots)" || code=000
+          echo "The WorkGraph ingest answered $code."
+          if [ "$code" != 200 ]; then echo "::warning::The WorkGraph ingest answered $code; the snapshot is in the artifact."; fi

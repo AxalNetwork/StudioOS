@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ Advisory Refunds · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Revenue · Billing exceptions · #5305 · continues Revenue v2 (RV16 to RV21)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Advisory refunds due — list what is owed back and mark one refunded, with who, when and why</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">HQ › Revenue › Billing exceptions (/admin/revenue), Super Admin only. A charge that landed on a cancelled or missed advisor booking is owed back. The operator refunds it in Stripe, outside the platform, then marks the row refunded here with a reason. Marking records a fact: it moves no money and calls no provider. The resolve action runs Scope → Review → Step-up → Result, and its failure ends say nothing was changed. These boards continue Revenue v2 (D5039) as RV16 to RV21, keyed HAR16 to HAR21, with the handoff as HAR22. Open count is As of now; dates are UTC; currencies are never added together. Zero, Not recorded and Unavailable each have their own word and shape. No backend work is required: the Worker routes are on main.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 10:36 UTC · checked against main 6d7712c6d1 · booking uids, payment ids, amounts, Operator A and Operator B, Acme Ventures, Kite Systems, Lumen Robotics and Fjord Data are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="7">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ Advisory Refunds Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RV16', 'Billing exceptions with advisory refunds due · desktop 1440', 'The RV08 section gains a third tile, Advisory refunds due · As of now · 3 open, and a block under the exceptions table: three open rows (EUR, GBP, one with no amount or Stripe payment), newest recorded first, each with Mark refunded…. The Resolved list is collapsed and says how many rows it holds. Needs attention gains one line. Also the row selected with Eadwyn drafting the reason from the row’s values, with blanks for the refund id and date, and the Resolved list opened with the full reason on focus.', [F('HAR16', false, 1260), F('HAR16B', 'Eadwyn drafts the reason · the operator fills the blanks', 1100), C('HAR16R', 'Resolved list opened · reason in full on focus', 1300, 580)]],
+      ['RV17', 'Mark refunded · sheet', 'Scope (the row and “Marking this moves no money. Make the refund in Stripe first.”), Review (the reason, 12 to 500 characters, with the Eadwyn draft chip, and the inline 400 error), Step-up (the authenticator code, as RV09d) and Result (who and when, kept in the audit log, no money moved, and the advisor’s money report now counts it as refunded). Then the failure ends: 409 already resolved and 404 gone, each with Refresh the list; 503 keeps the reason and offers Try again; a session without an authenticator cannot pass step-up.', [C('HAR17A', 'a · Scope', 720, 520), C('HAR17B', 'b · Review the reason', 720, 420), C('HAR17B2', 'b · Reason too short (400)', 720, 400), C('HAR17C', 'c · Step-up', 720, 360), C('HAR17D', 'd · Result', 720, 430), C('HAR17E', 'Already resolved (409)', 720, 340), C('HAR17F', 'No longer exists (404)', 720, 340), C('HAR17G', 'Not saved (503) · reason kept', 720, 470), C('HAR17H', 'No authenticator session', 720, 360)]],
+      ['RV18', 'Empty', 'No open rows: “No charge on a cancelled or missed booking is owed back.” The tile reads 0 with Zero beside it, unlike Unavailable. No button fills it. The Resolved list still shows when it has rows; the second variant has never had a row.', [F('HAR18', 'Zero open · resolved rows exist', 900), F('HAR18B', 'Never any rows', 900)]],
+      ['RV19', 'States', 'Loading (skeleton rows, the tile reads Loading), Not recorded (no amount or currency, no Stripe payment, no resolved-by name; never blank or €0), Unavailable (the read returned 503; disputes and HQ refunds stay standing), Refused (who sees the block, step-up as a prompt, no authenticator session) and Saving (Marking…).', [C('HAR19A', 'Loading', 1300, 340), C('HAR19B', 'Not recorded · Zero · Unavailable', 1300, 470), F('HAR19C', 'Unavailable · the read failed', 900), C('HAR19D', 'Refused', 1300, 270), C('HAR19E', 'Saving', 720, 380)]],
+      ['RV20', 'Phone 390', 'The tile, open rows as cards with a full-width 44px Mark refunded…, the Resolved list as a disclosure of cards with who, when and reason, and the steps as a bottom sheet with a code field that fits the screen.', [P('HAR20A', 'Open refunds due'), P('HAR20B', 'Resolved, opened'), P('HAR20C', 'Review · reason'), P('HAR20D', 'Step-up'), P('HAR20E', 'Result')]],
+      ['RV21', 'Dark', 'RV16 and the step-up on the dark tokens. Not recorded, Zero and Unavailable keep their words and shapes.', [F('HAR21', false, 1260), C('HAR21B', 'Step-up · dark', 720, 360)]],
+      ['HAR-22', 'Handoff', 'What was checked on main, frontend only (all of it; no backend required), open questions (resolved rows sort by recorded date; a row with no amount adds 0 to the advisor money sum) and accessibility.', [W('HAR22')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

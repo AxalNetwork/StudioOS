@@ -199,3 +199,28 @@ test('capabilities: Teams can create a meeting once Microsoft is connected, and 
   assert.deepEqual([teams.connected, teams.can_create_meeting, teams.can_retrieve_transcript], [true, true, false]);
   assert.ok(teams.notes.some((n: string) => /work or school Microsoft 365/.test(n)));
 });
+
+// D5810 (#5810): the Teams row is the signed-in member's own grant, read truthfully.
+test('D5810 capabilities: another member’s grant is not mine; an unreadable grant is null, never "not connected"; the deployment is its own flag', async (t) => {
+  mockFetch(t, {});
+  const f = world();
+  f.db.prepare('INSERT INTO microsoft_oauth_tokens (user_id, refresh_token, scope) VALUES (?, ?, ?)').run(7, 'enc-other', 'Calendars.ReadWrite');
+  let teams = (await call(f.env, 'GET', '/meetings/capabilities')).body.providers.teams;
+  assert.deepEqual([teams.connected, teams.can_create_meeting, teams.create_available], [false, false, true], 'member 7’s grant is not member 2’s');
+  // A read that fails for any reason but a missing table.
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  f.env.DB.prepare = (sql: string) => {
+    if (/FROM microsoft_oauth_tokens/.test(sql)) throw new Error('D1_ERROR: storage unavailable');
+    return prepare(sql);
+  };
+  teams = (await call(f.env, 'GET', '/meetings/capabilities')).body.providers.teams;
+  assert.deepEqual([teams.connected, teams.can_create_meeting], [null, false]);
+  f.env.DB.prepare = prepare;
+  // Connected, on a deployment with no Microsoft client: the grant is still reported, creating is off.
+  await connectMicrosoft(f);
+  const off = world({ MICROSOFT_CLIENT_ID: undefined, MICROSOFT_CLIENT_SECRET: undefined });
+  off.db.prepare('INSERT INTO microsoft_oauth_tokens (user_id, refresh_token, scope) VALUES (?, ?, ?)').run(ME, 'enc-mine-token-fixture', 'Calendars.ReadWrite');
+  teams = (await call(off.env, 'GET', '/meetings/capabilities')).body.providers.teams;
+  assert.deepEqual([teams.connected, teams.create_available, teams.can_create_meeting], [true, false, false]);
+  assert.ok(!JSON.stringify(teams).includes('enc-mine-token-fixture'), 'no token in the reply');
+});

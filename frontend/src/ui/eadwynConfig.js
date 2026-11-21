@@ -133,7 +133,7 @@ export const ASSIST_SURFACES = {
         safety: 'Nothing on this page is sent to anyone. Every AI result is a proposal until you accept it.',
       },
       Build: {
-        fills: 'Drafts a Monday plan from what moved, summarises the week on the board for a Friday retro, argues one roadmap ordering, and annotates the metric that moved most.',
+        fills: 'Drafts a Monday plan from what moved, summarises the week on the board for a Friday retro, argues one roadmap ordering, annotates the metric that moved most, checks the founding team’s split with its vesting, and summarises the open filings for company creation.',
         safety: 'An internal page. Every draft is yours to keep or discard, and nothing is sent.',
       },
       Raise: {

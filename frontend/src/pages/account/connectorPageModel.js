@@ -47,7 +47,9 @@ export function pageEntry({ data, key, channels } = {}) {
 export function pageReturn(search, key) {
   const ret = oauthReturn(search);
   if (!ret) return null;
-  return ret.key === key ? { ret, strip: ret.strip } : { ret: null, strip: ret.strip };
+  // D5810: Microsoft Teams signs in on the one Microsoft connection, so it reads Microsoft's return.
+  const mine = ret.key === key || (key === 'teams' && ret.key === 'microsoft');
+  return mine ? { ret, strip: ret.strip } : { ret: null, strip: ret.strip };
 }
 
 /** D753 F4 (#1957): the GitHub App's Setup URL query. Stripped on GitHub's page; never printed or stored. */

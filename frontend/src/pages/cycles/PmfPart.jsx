@@ -4,7 +4,7 @@ import { cyclesWrite } from '../../lib/api/cycles';
 import { PmfMethodButton } from './PmfMethod';
 import {
   EMPTY_NOTE, MISSING_FOOT, POINTS_FOOT, TITLE,
-  gapRows, historyView, inputGroups, kitView, pmfView, validateHref,
+  gapRows, historyView, inputGroups, pmfView, validateHref,
 } from './pmfModel';
 import Sheet from '../../ui/Sheet.jsx';
 
@@ -15,7 +15,8 @@ import Sheet from '../../ui/Sheet.jsx';
  * D1145 draws the score part 3 stores (D1144), from the module read's
  * `parts.pmf`, beside the raise kit the module's own card scores:
  *
- *   RD1   the two tiles, the inputs, the gaps and the score history
+ *   RD1   the two tiles, the inputs, the gaps and the score history (D6049:
+ *         the kit tile and the history are exported for the page's Detail)
  *   RD2–3 an input's lightbox (a bottom sheet on a phone, RD18 B)
  *   RD8   the history, from `GET /api/cycles/raise/pmf/history`
  *   RD9   product pull, Not expected yet until a product is live
@@ -47,28 +48,35 @@ const BAND_GLYPH = { Strong: '▲', Fair: '◐', Weak: '▼' };
 const BTN = 'inline-flex min-h-[34px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-3 text-[12.5px] font-bold max-sm:min-h-[44px]';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
-const CHIP = (on) => `inline-flex min-h-[28px] items-center rounded-full border px-3 text-[12px] max-sm:min-h-[40px] ${on
-  ? 'border-violet-200 bg-violet-50 font-bold text-axal-violet-deep dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300'
-  : 'border-axal-hairline bg-white font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`;
 const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
 
-export function PmfPart({ part, card = null, records = null, projectId = null, reload = null }) {
+/**
+ * D6049 (#6049, RA-16): Product-market fit is its own section on the
+ * readiness page, apart from the Raise areas and never averaged into them:
+ * its tile, what it rests on and its own gaps. The raise kit tile and the
+ * score history moved under the page's collapsed Detail (`ReadinessHome`),
+ * which hands this part the history it reads once (`usePmfHistory`), and a
+ * raise kit gap is now its area's action in the areas table.
+ */
+export function PmfPart({ part, projectId = null, reload = null, history: given = null }) {
   const search = projectId ? `?project_id=${projectId}` : '';
   const view = useMemo(() => pmfView(part), [part]);
   const groups = useMemo(() => inputGroups(part, search), [part, search]);
-  const gaps = useMemo(() => gapRows(view.kind === 'unreadable' ? null : part, records, search), [part, records, search, view.kind]);
-  const kit = useMemo(() => kitView(card), [card]);
-  const history = useHistory(projectId, view.kind === 'unreadable' ? null : part?.id ?? 'none');
+  const gaps = useMemo(() => gapRows(view.kind === 'unreadable' ? null : part, null, search), [part, search, view.kind]);
+  const own = usePmfHistory(given ? null : projectId, view.kind === 'unreadable' ? null : part?.id ?? 'none');
+  const history = given || own;
   const [open, setOpen] = useState(null);
   const opened = open ? groups.flatMap((g) => g.rows).find((r) => r.key === open) : null;
 
   return (
-    <section className="flex flex-col gap-3" id="product-market-fit" data-testid="pmf-part">
-      <div className="grid gap-3 lg:grid-cols-2">
-        <PmfTile view={view} history={history} reload={reload} />
-        <KitTile kit={kit} />
+    <section className="flex flex-col gap-3" id="product-market-fit" aria-labelledby="pmf-section-title" data-testid="pmf-part">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="pmf-section-title" className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{TITLE}</h2>
+        <span className={`text-[12px] font-semibold ${MUTED}`}>Supporting · from Validate</span>
       </div>
+      <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="pmf-apart">Kept separate from the Raise areas above. It informs Traction; it is not averaged into readiness.</p>
+      <PmfTile view={view} history={history} reload={reload} />
       {view.kind === 'unreadable' ? null : (
         <>
           {view.empty ? (
@@ -86,7 +94,6 @@ export function PmfPart({ part, card = null, records = null, projectId = null, r
           </div>
         </>
       )}
-      <HistoryCard history={history} pivotAt={part?.pivot_at ?? null} />
       <PmfMethodButton projectId={projectId} search={search} />
       {opened ? <InputLightbox row={opened} onClose={() => setOpen(null)} /> : null}
     </section>
@@ -94,7 +101,7 @@ export function PmfPart({ part, card = null, records = null, projectId = null, r
 }
 
 /** RD8's points, read once per stored point. A failed read is said, never an empty history. */
-function useHistory(projectId, key) {
+export function usePmfHistory(projectId, key) {
   const [state, setState] = useState({ status: 'loading', items: [], more: false, cursor: null });
   const load = useCallback(async () => {
     if (!projectId) { setState({ status: 'none', items: [], more: false, cursor: null }); return; }
@@ -159,7 +166,7 @@ function PmfTile({ view, history, reload }) {
   );
 }
 
-function KitTile({ kit }) {
+export function KitTile({ kit }) {
   return (
     <div className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="kit-tile" data-state={kit.kind}>
       <p className={EYE}>Raise kit</p>
@@ -301,25 +308,16 @@ function InputLightbox({ row, onClose }) {
 // ---------------------------------------------------------------------------
 
 function Gaps({ gaps }) {
-  const [scope, setScope] = useState('all');
-  const n = { all: gaps.length, pmf: gaps.filter((g) => g.scope === 'pmf').length, kit: gaps.filter((g) => g.scope === 'kit').length };
-  const shown = scope === 'all' ? gaps : gaps.filter((g) => g.scope === scope);
   return (
     <div className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="pmf-gaps">
       <h3 className={`m-0 text-[15px] font-extrabold tracking-[-.01em] ${INK}`}>Gaps · {gaps.length}</h3>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Which gaps">
-        {[['all', 'All'], ['pmf', TITLE], ['kit', 'Raise kit']].map(([k, l]) => (
-          <button key={k} type="button" className={CHIP(scope === k)} aria-pressed={scope === k} onClick={() => setScope(k)} data-testid={`pmf-gaps-${k}`}>{l} {n[k]}</button>
-        ))}
-      </div>
-      <p className={`m-0 text-[12.5px] ${MUTED}`}>Every next step that raises either score, by what it raises.</p>
-      {shown.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="pmf-gaps-none">No gap is recorded{scope === 'all' ? '' : ' here'}.</p> : null}
-      {shown.map((g, i) => (
+      <p className={`m-0 text-[12.5px] ${MUTED}`}>Every next step that raises {TITLE}, by what it raises. A Raise area's gap is that area's action in the table above.</p>
+      {gaps.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="pmf-gaps-none">No gap is recorded.</p> : null}
+      {gaps.map((g, i) => (
         <div key={`${g.scope}-${i}`} className="flex flex-col gap-1.5 border-t border-axal-hairline py-2.5 dark:border-gray-800" data-testid="pmf-gap" data-scope={g.scope}>
           <p className={`m-0 text-[13.5px] font-bold leading-snug ${INK}`}>{g.text}</p>
           <div className="flex flex-wrap items-center gap-1.5">
             {g.gains.map((w) => <span key={w} className={P_VIOLET}>{w}</span>)}
-            <span className={P_NEUTRAL}>{g.scopeLabel}</span>
             {g.href ? <Link className={`${PILL} min-h-[26px] border-violet-200 bg-white text-axal-violet-deep max-sm:min-h-[44px] dark:border-violet-500/40 dark:bg-gray-900 dark:text-violet-300`} to={g.href}>{g.moduleLabel} ›</Link>
               : g.moduleLabel ? <span className={`font-mono text-[11.5px] ${MUTED}`}>{g.moduleLabel}</span> : null}
           </div>
@@ -333,7 +331,7 @@ function Gaps({ gaps }) {
 // Score history (RD8)
 // ---------------------------------------------------------------------------
 
-function HistoryCard({ history, pivotAt }) {
+export function HistoryCard({ history, pivotAt }) {
   const [mode, setMode] = useState('chart');
   const points = useMemo(() => historyView(history.items, pivotAt), [history.items, pivotAt]);
   return (

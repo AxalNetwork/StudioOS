@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validate v2 Discovery and ICP · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+.vx-sh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.vx-sh.wr{grid-template-columns:200px minmax(0,1fr) 320px}
+.vx-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.vx-hd h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.vx-obj{font-size:14px;color:var(--ink);margin-top:6px;max-width:680px;line-height:1.5}
+.vx-obj span{color:var(--mu)}
+.vx-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--mu)}
+.vx-mods{display:flex;gap:2px;border-bottom:1px solid var(--hair);flex-wrap:nowrap;overflow:hidden}
+.vx-mods a{padding:9px 11px 10px;font:600 12.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.vx-mods a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.vx-jr{display:flex;gap:6px;align-items:center;font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu)}
+.vx-jr span{padding:3px 8px;border-radius:999px;border:1px solid var(--hair);background:var(--card)}
+.vx-jr span.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.vx-next{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 18px;align-items:center;padding:16px 20px;border-radius:14px;border:1px solid var(--lavE);background:var(--lav)}
+.vx-next .ey{font:800 10px var(--mo);letter-spacing:.09em;text-transform:uppercase;color:var(--vt)}
+.vx-next b{font-size:17px;font-weight:800;letter-spacing:-.01em;display:block;margin-top:2px}
+.vx-next p{font-size:13px;color:var(--ink);margin-top:3px;line-height:1.5}
+.vx-next .alt{grid-column:1/-1;font-size:12px;color:var(--mu)}
+.vx-ev{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.vx-ev>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.vx-ev>div:last-child{border-right:0}
+.vx-ev b{font:700 20px var(--mo);letter-spacing:-.02em}
+.vx-ev .l{font-size:12.5px;font-weight:700}
+.vx-ev small{font-size:11.5px;color:var(--mu);line-height:1.4}
+.vx-dir{display:inline-flex;align-items:center;gap:5px;font:700 11.5px var(--sg);padding:1px 8px 1px 6px;border-radius:6px;white-space:nowrap}
+.vx-dir.s{color:var(--pos);background:var(--posBg);border:1px solid var(--posE)}
+.vx-dir.c{color:var(--neg);background:var(--negBg);border:1px solid var(--negE)}
+.vx-dir.u{color:var(--mu);background:transparent;border:1px dashed var(--hair2)}
+.vx-dir i{font-style:normal;font:800 12px var(--mo)}
+.vx-hy{display:grid;grid-template-columns:44px minmax(0,1.8fr) 120px 150px 120px auto;gap:14px;align-items:center;padding:11px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.vx-hy:first-child{border-top:0}
+.vx-hy .code{font:700 12px var(--mo);color:var(--vt)}
+.vx-hy .claim{font-size:13px;font-weight:700;line-height:1.4}
+.vx-hy small{display:block;color:var(--mu);font-size:11.5px;margin-top:2px}
+.vx-chg li{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.vx-chg li:first-child{border-top:0}
+.vx-chg li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.vx-sug{border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.vx-sug .row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:10px 14px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.vx-sug .row:last-child{border-bottom:0}
+.vx-sug .row>span:first-child{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.vx-sug .q{border-left:3px solid var(--hair2);padding-left:10px;color:var(--ink);font-style:italic}
+.vx-sug .ai{border:1px dashed var(--lavE);background:var(--lav);border-radius:8px;padding:6px 10px}
+.vx-sug .ft{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;background:var(--raised)}
+.vx-tr{display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6}
+.vx-tr p{display:grid;grid-template-columns:64px 90px minmax(0,1fr);gap:10px}
+.vx-tr p span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.vx-tr p span:nth-child(2){font-weight:700}
+.vx-tr p.hl{background:var(--amBg);border-radius:6px;padding:2px 6px;margin:0 -6px}
+.vx-rec{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.vx-rec .t{font:700 34px var(--mo);letter-spacing:-.02em}
+.vx-dot{display:inline-block;width:10px;height:10px;border-radius:999px;background:var(--neg)}
+.vx-wave{display:flex;gap:3px;align-items:center;height:36px}
+.vx-wave i{display:block;width:4px;border-radius:2px;background:var(--hair2)}
+.vx-pipe{display:flex;gap:0;width:100%}
+.vx-pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.vx-pipe span+span{border-left:0}
+.vx-pipe span:first-child{border-radius:8px 0 0 8px}.vx-pipe span:last-child{border-radius:0 8px 8px 0}
+.vx-pipe span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.vx-pipe span.on{color:#fff;background:#7c3aed;border-color:#7c3aed}
+.vx-pipe span.x{color:#fff;background:var(--neg);border-color:var(--neg)}
+.vx-dec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.vx-dec label{border:1.5px solid var(--hair2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:4px;background:var(--card);font-size:12.5px}
+.vx-dec label b{font-size:15px}
+.vx-dec label.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.vx-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.vx-col h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px;display:flex;gap:8px;align-items:center}
+.vx-item{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);display:flex;flex-direction:column;gap:5px;font-size:12.5px;margin-bottom:8px}
+.vx-item .m{font:500 11px var(--mo);color:var(--mu)}
+.vx-breadth{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px dashed var(--hair2);border-radius:10px;font-size:13px}
+.vx-breadth b{font:700 15px var(--mo)}
+.vx-exp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.vx-exp article{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:13px 15px;display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+.vx-exp article.vplan{border-style:dashed;background:transparent}
+.vx-exp dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:3px 8px}
+.vx-exp dt{color:var(--mu)}
+.vx-exp dd{font-weight:600;margin:0}
+.vx-sw{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600}
+.vx-sw i{width:32px;height:18px;border-radius:999px;background:#7c3aed;position:relative;display:inline-block}
+.vx-sw i:after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:999px;background:#fff}
+.vx-field{display:flex;flex-direction:column;gap:5px}
+.vx-field label{font-size:12px;font-weight:700}
+.vx-field .in{min-height:36px;display:flex;align-items:center;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px}
+.vx-field .in.err{border-color:var(--neg);box-shadow:0 0 0 1px var(--neg)}
+.vx-field .em{font-size:12px;color:var(--neg);font-weight:600}
+.vx-seg2{display:inline-flex;border:1px solid var(--hair2);border-radius:8px;overflow:hidden}
+.vx-seg2 span{padding:6px 12px;font-size:12.5px;font-weight:600;border-right:1px solid var(--hair2);background:var(--card)}
+.vx-seg2 span:last-child{border-right:0}
+.vx-seg2 span.on{background:var(--ink);color:var(--card)}
+.vx-card{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.vx-card .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.vx-card b{font-size:14px}
+.vx-card small{font-size:12px;color:var(--mu)}
+.vx-card>.stt,.vx-card .r1>.stt{flex:none}
+.vx-mods{flex-wrap:wrap}
+.vx-hy .vx-code{font:700 12px var(--mo);color:var(--vt)}
+.vx-sh .eadx{max-width:320px;overflow:hidden}
+.vx-sh .eadx>div{width:100%;box-sizing:border-box;min-width:0}
+.vx-sh .eadx .hist li{grid-template-columns:96px minmax(0,1fr)}
+.vx-sh .eadx .prm button{width:100%}
+.vx-hy>a{white-space:nowrap}
+.cv .mono{font-family:var(--mo)}
+.vap-own{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap}
+.vap-sev,.vap-fit,.vap-stp,.vap-stg,.vap-evd,.vap-cs{width:fit-content;display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.vap-sev.sv3{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.vap-sev.sv2{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.vap-sev.sv1{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.vap-sev.nj,.vap-fit.u,.vap-stp.m,.vap-evd.nrr{border-style:dashed;background:transparent;font-style:italic;font-weight:600}
+.vap-fit.s{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.vap-fit.p{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.vap-fit.n{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.vap-stp.d{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.vap-stp.s{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.vap-stg{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.vap-stg i{font:500 10.5px var(--mo);font-style:normal;color:var(--mu);margin-left:4px}
+.vap-stg.done{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.vap-stg.booked{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.vap-stg.none{color:var(--pos);border-style:dashed;background:transparent}
+.vap-evd.pat{color:var(--ink);background:var(--card);border-color:var(--ink)}
+.vap-evd.an{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.vap-cs.y{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.vap-cs.n{color:var(--mu);background:transparent;border-style:dashed}
+.vap-mb{display:inline-flex;align-items:center;gap:8px;font-size:12px}
+.vap-bar{display:inline-block;width:120px;height:8px;border-radius:999px;background:var(--hair);overflow:hidden;flex:none}
+.vap-bar i{display:block;height:100%;background:var(--vi);border-radius:999px}
+.vap-tr{font:600 11.5px var(--mo);color:var(--ink)}
+.vap-thh,.vap-th{display:grid;grid-template-columns:30px minmax(0,1fr) 150px 120px 150px 36px;gap:12px;padding:0 16px}
+.vap-thh{padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair);background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.vap-th{padding-top:12px;padding-bottom:12px;border-bottom:1px solid var(--hair);align-items:start}
+.vap-th:last-child{border-bottom:0}
+.vap-rk{font:700 15px var(--mo);color:var(--mu);padding-top:1px}
+.vap-tt{font-size:13.5px;font-weight:800;color:var(--ink)!important;line-height:1.35}
+.vap-ngt{display:inline-flex;align-items:center;padding:0 7px;border-radius:6px;border:1px dashed var(--hair2);font:600 11px var(--sg);color:var(--mu);font-style:italic;white-space:nowrap}
+.vap-dsh{font-size:11.5px;color:var(--mu);display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.vap-why{font-size:11.5px;color:var(--ink);line-height:1.7}
+.vap-why span:first-child{color:var(--mu)}
+.vap-cn{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--mu)}
+.vap-cn b{font:700 12px var(--mo);color:var(--ink);margin-left:3px}
+.vap-hc{display:inline-flex;padding:0 7px;border-radius:6px;font:700 11.5px var(--mo);border:1px solid var(--hair2)}
+.vap-hc.s{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.vap-hc.c{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.vap-menu{position:absolute;right:0;top:38px;z-index:5;width:280px;background:var(--card);border:1px solid var(--hair2);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.16);padding:6px;display:flex;flex-direction:column;gap:2px}
+.vap-menu a{display:flex;align-items:center;gap:8px;min-height:34px;padding:0 10px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--ink)!important}
+.vap-menu a:first-child{background:var(--lav)}
+.vap-uq{display:flex;flex-direction:column}
+.vap-uq li{display:grid;grid-template-columns:22px minmax(0,1.3fr) minmax(0,1fr) 70px;gap:12px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vap-uq li .q{font-style:italic}
+.vap-uq.ph2 li{grid-template-columns:28px minmax(0,1fr);min-height:56px}
+.vap-uq.ph2 small{color:var(--mu);font-size:12px}
+.vap-ck{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;border:1.5px solid var(--hair2);background:var(--card);font-size:11px;font-weight:800;color:#fff;flex:none}
+.vap-ck.on{background:#7c3aed;border-color:#7c3aed}
+.vap-uq.ph2 .vap-ck{width:24px;height:24px}
+.vap-selb{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px}
+.vap-bot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.vap-sg{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:11px 12px;display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+.vap-sg b{font-size:13px;line-height:1.4}
+.vap-sa{display:flex;flex-direction:column;gap:6px}
+.vap-sa>div{display:flex;gap:6px}
+.vap-sa .btn{flex:1}
+.vap-mem{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mu)}
+.vap-mem li{display:flex;gap:8px;align-items:center}
+.vap-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.vap-facts>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:4px;min-width:0}
+.vap-facts>div:last-child{border-right:0}
+.vap-facts dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.vap-facts dd{margin:0;font-size:13px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.vap-facts dd b.mono{font-size:16px}
+.vap-facts small{font-size:11.5px;color:var(--mu)}
+.vap-ql{display:flex;flex-direction:column}
+.vap-ql li{padding:9px 0;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:5px}
+.vap-ql li:last-child{border-bottom:0}
+.vap-ql .q{font-size:13px;font-style:italic;border-left:3px solid var(--hair2);padding-left:10px}
+.vap-ql .m{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--mu);padding-left:13px}
+.vap-hf{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;gap:10px;align-items:center;font-size:12.5px;padding:6px 0}
+.vap-dlg{background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.14);display:flex;flex-direction:column;overflow:hidden}
+.vap-dlg .mdb{padding:4px 18px 14px}
+.vap-dlg .mdh{padding:16px 18px 10px}
+.vap-dlg .mdf{padding:10px 18px}
+.vap-leg{display:flex;gap:8px;flex-wrap:wrap}
+.vap-fc{display:grid;grid-template-columns:200px minmax(0,1fr) 100px;gap:12px;align-items:center;font-size:12.5px}
+.vap-stk{display:flex;height:22px;border-radius:6px;overflow:hidden;gap:2px}
+.vap-stk i{display:grid;place-items:center;font:700 11px var(--mo);font-style:normal}
+.vap-stk i.s{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.vap-stk i.p{background:var(--lav);color:var(--vt);border:1px solid var(--lavE)}
+.vap-stk i.n{background:var(--card);color:var(--ink);border:1px solid var(--hair2)}
+.vap-stk i.u{background:transparent;color:var(--mu);border:1px dashed var(--hair2)}
+.vap-tog{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--ink)}
+.vap-tog i{width:30px;height:17px;border-radius:999px;background:var(--hair2);position:relative;display:inline-block}
+.vap-tog i:after{content:"";position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:999px;background:#fff}
+.vap-tog.on i{background:#7c3aed}
+.vap-tog.on i:after{left:auto;right:2px}
+.vap-step{display:grid;grid-template-columns:20px minmax(0,1fr) auto auto;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.vap-step:first-of-type{border-top:0}
+.vap-cmp{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.vap-cmp th,.vap-cmp td{padding:10px 14px;border-bottom:1px solid var(--hair);border-right:1px solid var(--hair);text-align:left;vertical-align:top;line-height:1.45}
+.vap-cmp thead th{background:var(--raised)}
+.vap-cmp tbody th{width:190px;font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);background:var(--raised);position:sticky;left:0}
+.vap-cmp thead th:first-child{width:190px}
+.vap-x{border:0;background:transparent;color:var(--mu);font-size:11px;padding:0 0 0 4px;cursor:pointer}
+.vap-fun{display:flex;align-items:stretch;gap:8px}
+.vap-fun a{flex:1;border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:3px;background:var(--card);color:var(--ink)!important;min-width:0}
+.vap-fun a.on{border-color:var(--vi);box-shadow:0 0 0 1px var(--vi)}
+.vap-fun b{font-size:22px;letter-spacing:-.02em}
+.vap-fun small{font-size:11.5px;color:var(--ink)}
+.vap-fun small.mu{color:var(--mu)}
+.vap-arr{align-self:center;color:var(--mu);font-weight:700}
+.vap-wl{display:flex;flex-direction:column}
+.vap-wl li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vap-wl li small{display:block;color:var(--mu);font-size:11.5px}
+.vap-err{margin-top:5px;font-size:12px;font-weight:600;color:var(--neg);white-space:normal}
+.vap-guide{display:flex;flex-direction:column;gap:10px}
+.vap-draft{display:flex;flex-direction:column;gap:5px;padding:10px 12px;border:1px dashed var(--lavE);border-radius:10px;background:var(--lav)}
+.vap-gg{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.vap-ggh{display:flex;gap:10px;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-size:12.5px;font-weight:600}
+.vap-gq{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--hair)}
+.vap-gq:last-child{border-bottom:0}
+.vap-gq.ea{background:var(--lav);border-left:3px dashed var(--vi)}
+.vap-hd2{color:var(--mu);font-size:11px;letter-spacing:-2px;cursor:grab}
+.vap-drw{position:absolute;right:0;top:0;bottom:0;width:560px;z-index:8;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 50px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.vap-sgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.vap-box{gap:8px}
+.vap-box .ch h2{font-size:13px}
+.vap-c2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vap-c2>div{border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:9px 11px;display:flex;flex-direction:column;gap:2px}
+.vap-c2 b{font-size:18px}
+.vap-c2 small{font-size:11px;color:var(--mu)}
+.vap-pbar{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 24px;background:var(--card);border-top:1px solid var(--hair);display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;font-size:14px}
+.vap-rad{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 12px;border:1px solid var(--hair);border-radius:10px;font-size:14px;font-weight:600}
+.vap-rad>span:first-child{width:18px;height:18px;border-radius:999px;border:2px solid var(--hair2);flex:none}
+.vap-rad.on{border-color:var(--vi);background:var(--lav)}
+.vap-rad.on>span:first-child{border:5px solid #7c3aed}
+.vap-acc{border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:0 12px}
+.vap-acc summary{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:48px;list-style:none;font-size:13.5px}
+.vap-acc[open]{padding-bottom:12px}
+.vap-pg{display:flex;gap:6px;justify-content:center}
+.vap-pg i{width:8px;height:8px;border-radius:999px;background:var(--hair2)}
+.vap-pg i.on{background:#7c3aed;width:20px}
+.vap-pgl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:0;font-size:12.5px}
+.vap-pgl dt{font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);padding:8px 8px 8px 0;border-bottom:1px solid var(--hair);background:var(--bg)}
+.vap-pgl dd{margin:0;padding:8px 0;border-bottom:1px solid var(--hair)}
+.vap-seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair2);border-radius:10px;overflow:hidden}
+.vap-seg button{min-height:56px;border:0;border-right:1px solid var(--hair2);background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--ink)}
+.vap-seg button:last-child{border-right:0}
+.vap-seg button[aria-checked=true]{background:var(--ink);color:var(--card)}
+.vap-seg b{font-size:17px}
+.vap-seg small{font-size:11px}
+.vap-big{font-size:22px;font-weight:700;line-height:1.35;padding:18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.cv .nt.g{display:flex;grid-template-columns:none;gap:10px}
+.cv .selb,.cv .ta,.cv .vx-field .in{color:var(--ink)}
+.cv .etb td,.cv .etb td b{color:var(--ink)}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "VAP17", "options": ["VAP17", "VAP18", "VAP18B", "VAP19", "VAP21", "VAP22", "VAP22B", "VAP23", "VAP24", "VAP26", "VAP27B", "VAP30A", "VAP30B", "VAP30C", "VAP19B", "VAP20", "VAP23B", "VAP25", "VAP26B", "VAP27", "VAP27C", "VAP28", "VAP29A", "VAP29B", "VAP29C", "VAP29D", "VAP29E", "VAP29F", "VAP29G", "VAP29H", "VAP31"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'VAP17';
+    const dark = ['VAP30A', 'VAP30B', 'VAP30C'].includes(B);
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      ny: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1 1.8"/>'),
+      dot: SV('<circle cx="6" cy="6" r="4.5" fill="currentColor"/>'),
+      bk: SV('<rect x="1.5" y="2.5" width="9" height="8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.5 5h9M4 1v2.5M8 1v2.5" stroke="currentColor" stroke-width="1.4"/>'),
+      env: SV('<rect x="1" y="2.5" width="10" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.5 3l4.5 3.5L10.5 3" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      no: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 9l6-6" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const S = {
+      'Not recorded': ['ni', 'nd'], Unavailable: ['un', 'ua'], Refused: ['ni', 'lk'], Processing: ['pd', 'pd'], 'Needs review': ['xar', 'ar'], Locked: ['ni', 'lk'],
+      Reviewed: ['ok', 'ok'], Ready: ['ok', 'ok'], Testing: ['pd', 'pd'], Mixed: ['xar', 'half'], Supported: ['ok', 'ok'], 'Not started': ['ni', 'ny'], Saving: ['pd', 'pd'], Saved: ['ok', 'ok'], Failed: ['fl', 'fl'], Accepted: ['ok', 'ok'], Archived: ['ni', 'nd']
+    };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NREC = (t) => '<span class="nrec">' + (t || 'Not recorded') + '</span>';
+    const NEW = (t) => '<span class="ptag" title="Needs backend work">◇ ' + (t || 'Backend required') + '</span>';
+    const OWN = (t) => '<span class="vap-own" title="Owner decision">⚑ ' + t + '</span>';
+
+    /* ---------- vocabulary: severity, fit, step, stage, direction ---------- */
+    const dots = (n) => '<svg aria-hidden="true" width="22" height="8" viewBox="0 0 22 8">' + J([0, 1, 2].map(i => '<circle cx="' + (4 + i * 7) + '" cy="4" r="3" ' + (i < n ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="1.2"') + '/>')) + '</svg>';
+    const sev = (s) => s === 'Severe' ? '<span class="vap-sev sv3">' + dots(3) + 'Severe</span>' : s === 'Real' ? '<span class="vap-sev sv2">' + dots(2) + 'Real</span>' : s === 'Mild' ? '<span class="vap-sev sv1">' + dots(1) + 'Mild</span>' : '<span class="vap-sev nj">' + SH.ny + (s || 'Not judged') + '</span>';
+    const fit = (f) => f === 's' ? '<span class="vap-fit s">' + SH.dot + 'Strong fit</span>' : f === 'p' ? '<span class="vap-fit p">' + SH.half + 'Partial fit</span>' : f === 'n' ? '<span class="vap-fit n">' + SH.no + 'No fit</span>' : '<span class="vap-fit u">' + SH.ny + 'Fit not recorded</span>';
+    const step = (k) => k === 'd' ? '<span class="vap-stp d">' + SH.ok + 'Done</span>' : k === 's' ? '<span class="vap-stp s">' + SH.ar + 'Needs a source</span>' : '<span class="vap-stp m">' + SH.ny + 'Missing</span>';
+    const stage = (k, d) => { const M = { lead: ['Lead', 'nd'], invited: ['Invited', 'env'], booked: ['Booked', 'bk'], done: ['Done', 'ok'], none: ['Done', 'ny'] }[k]; return '<span class="vap-stg ' + k + '">' + SH[M[1]] + M[0] + (d ? '<i>' + d + '</i>' : '') + '</span>'; };
+    const dir = (d) => d === 's' ? '<span class="vx-dir s"><i aria-hidden="true">+</i>Supporting</span>' : '<span class="vx-dir c"><i aria-hidden="true">−</i>Contradicting</span>';
+    const ev = (e) => e === 'Pattern' ? '<span class="vap-evd pat">' + SH.dot + 'Pattern</span>' : e === 'Anecdote' ? '<span class="vap-evd an">' + SH.half + 'Anecdote</span>' : '<span class="vap-evd nrr">' + SH.ny + 'Not recorded</span>';
+    const bar = (n, N, lab) => '<span class="vap-mb"><span class="vap-bar" aria-hidden="true"><i style="width:' + Math.round(n / N * 100) + '%"></i></span><span class="mono">' + (lab || n + ' of ' + N + ' interviews') + '</span></span>';
+    const trend = (t) => t === null ? '<span class="nrec">No dated mention</span>' : '<span class="vap-tr">' + (t > 0 ? '▲ ' + t : t < 0 ? '▼ ' + (-t) : '■ 0') + ' in 30 days</span>';
+
+    /* ---------- shell (Validate v2) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const MODS = ['Overview', 'Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency', 'Experiments and evidence', 'Verdict'];
+    const side = () => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%" aria-haspopup="listbox"><span>[Tidepool] · venture</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Validate' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const top = (who) => '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px">' + (who ? '<span class="raw">' + who + '</span>' : '') + '<button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">ML</span></div></div>';
+    const railOpen = (body, foot) => '<aside class="sp eadx" aria-label="Eadwyn" style="width:320px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b><span class="raw">· balanced model</span></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1">' + body + '</div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px">' + (foot || '<div class="inp" style="min-width:0;min-height:38px">Ask Eadwyn about Validate…</div>') + '<div style="display:flex;justify-content:space-between;align-items:center"><span class="vx-sw"><i></i>AI assistance</span><a href="#" style="font-size:12px;font-weight:700">AI settings</a></div></div></aside>';
+    const railShut = (n) => '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn' + (n ? ': ' + n + ' suggestions to review' : '') + '" aria-expanded="false">E</button>' + (n ? '<span class="pl a" style="font-size:10px;padding:0 5px" aria-hidden="true">' + n + '</span>' : '') + '<span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="vx-sh' + (o.rail ? ' wr' : '') + '" style="min-height:' + (o.h || 900) + 'px">' + side() + '<div class="mn">' + top(o.who) + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail || railShut(o.n)) + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const mods = (cur) => '<nav class="vx-mods" aria-label="Validate modules">' + J(MODS.map(m => '<a href="#"' + (m === cur ? ' aria-current="page"' : '') + '>' + m + '</a>')) + '</nav>';
+    const crumb = (items) => '<div class="crumb">' + items.map((x, i) => i === items.length - 1 ? '<b>' + x + '</b>' : '<a href="#">' + x + '</a>').join(' / ') + '</div>';
+    const head = (h1, obj, acts) => '<header class="vx-hd"><div style="min-width:0;flex:1"><h1>' + h1 + '</h1>' + (obj ? '<p class="vx-obj">' + obj + '</p>' : '') + '</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + (acts || '') + '</div></header>';
+    const fld = (l, v, err) => '<div class="vx-field"><label>' + l + '</label><div class="in' + (err ? ' err' : '') + '"' + (err ? ' aria-invalid="true"' : '') + '>' + v + '</div>' + (err ? '<span class="em" role="alert">✕ ' + err + '</span>' : '') + '</div>';
+    const strip = (cells, n) => '<div class="vx-ev" style="grid-template-columns:repeat(' + (n || cells.length) + ',minmax(0,1fr))">' + J(cells.map(e => '<div><span class="l">' + e[0] + '</span><b>' + e[1] + '</b><small>' + e[2] + '</small></div>')) + '</div>';
+    const note = (k, t, d, extra) => '<div class="nt' + (k ? ' ' + k : '') + '"' + (k === 'r' ? ' role="alert"' : '') + '><span class="ic" aria-hidden="true">' + (k === 'r' ? '✕' : k === 'a' ? '!' : 'i') + '</span><div><b>' + t + '</b>' + (d ? '<div>' + d + '</div>' : '') + (extra || '') + '</div></div>';
+    const box = (t, inner, tag) => '<section class="cd vap-box"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2>' + (tag || '') + '</div>' + inner + '</section>';
+    const sug3 = (by) => '<div class="vap-sa"><span class="raw">' + by + '</span><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Discard</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm p">Accept</button></div></div>';
+
+    /* ---------- sample data (one venture, Sat 14 Nov 2026) ---------- */
+    const N = 12;
+    const TH = [
+      { r: 1, t: 'Matching carrier invoices by hand every month', m: 7, sv: 'Severe', tr: 3, icp: 6, need: 4, fnr: 1, hy: [['H1', 's']], src: '7 people · 7 organisations', sc: '1 supporting · 0 contradicting', why: 'Most mentions · 6 from ICP · mostly Severe', g: true },
+      { r: 2, t: 'Month-end close slips by days', m: 5, sv: 'Real', tr: 5, icp: 4, need: 2, fnr: 1, hy: [['H1', 's']], src: '5 people · 5 organisations', sc: '1 supporting · 0 contradicting', why: 'Rising fastest · 4 from ICP · mostly Real', g: true },
+      { r: 3, t: 'No budget line for a standalone tool', m: 3, sv: 'Real', tr: 1, icp: 2, need: 0, fnr: 0, hy: [['H2', 'c'], ['H3', 's']], src: '3 people · 3 organisations', sc: '1 supporting · 1 contradicting', why: 'Feeds two hypotheses · 2 from ICP', g: true },
+      { r: 4, t: 'Re-keying PDFs into the ERP', m: 2, sv: null, tr: 2, icp: 1, need: 0, fnr: 1, hy: [], g: false },
+      { r: 5, t: 'Disputes with carriers over surcharges', m: 2, sv: null, tr: 2, icp: 2, need: 0, fnr: 0, hy: [], src: '2 people · 2 organisations', sc: '0 supporting · 0 contradicting', why: '2 mentions, both in the last 30 days', g: true },
+      { r: 6, t: 'Fuel surcharge tables change weekly', m: 1, sv: null, tr: null, icp: 0, need: 0, fnr: 0, hy: [], g: false, nodate: true },
+      { r: 7, t: 'Nobody owns the carrier master data', m: 1, sv: null, tr: 1, icp: 1, need: 0, fnr: 0, hy: [], g: false }
+    ];
+    const UNTH = [['Re-keying PDFs into the ERP', '[Ana Petrov] · [Danubex]', '10 Nov', true], ['Re-keying PDFs into the ERP', '[Wei Zhang] · [Pearlroute]', '12 Nov', true], ['Fuel surcharge tables change weekly', '[Karl Jensen] · [Skagfreight]', 'No date', false], ['Nobody owns the carrier master data', '[Ruth Okafor] · [Lagoship]', '11 Nov', false]];
+    const QUO = [
+      ['We close the month two days late because someone matches every carrier invoice by hand', '[Jonas Berg] · [Nordfrakt] · Finance lead', '21 Oct', 'Real', 'n'],
+      ['Every invoice gets ticked against a delivery note, one by one', '[Priya Raman] · [CargoLoop] · COO', '28 Oct', 'Severe', 'y'],
+      ['Two of my team lose most of a week to it at month end', '[Maya Chen] · [Fleetwise] · Ops lead', '2 Oct', 'Severe', 'y'],
+      ['We match four carriers’ invoices in a spreadsheet', '[Omar Haddad] · [Gulfline] · Ops director', '5 Nov', 'Severe', 'y'],
+      ['Matching is the job nobody wants', '[Tom Ellis] · [Portside] · Head of ops', '12 Nov', 'Severe', 'y'],
+      ['Finance waits on ops to finish the matching', '[Lena Vogt] · [Rheinlog] · Head of finance', '3 Nov', 'Real', 'y'],
+      ['I match them by hand, it takes a day', '[Sam Ortiz] · [Haulbase] · Ops manager', '28 Sep', null, 'na']
+    ];
+    const SEG = [
+      { n: 'Mid-size 3PL ops', src: 'From the ICP wizard', i: 5, s: 4, p: 1, no: 0, u: 0, e: 'Pattern', up: '12 Nov', pr: true },
+      { n: 'Freight forwarder finance', src: 'Accepted from an interview', i: 3, s: 2, p: 1, no: 0, u: 0, e: 'Pattern', up: '10 Nov' },
+      { n: 'Small owner-run carriers', src: 'Added by hand', i: 1, s: 0, p: 0, no: 1, u: 0, e: 'Anecdote', up: '9 Oct' }
+    ];
+    const UNA = [['[Sam Ortiz] · [Haulbase]', '28 Sep', 'u'], ['[Ruth Okafor] · [Lagoship]', '11 Nov', 'p'], ['[Wei Zhang] · [Pearlroute]', '12 Nov', 'u']];
+
+    /* ================= PROBLEM DISCOVERY ================= */
+    const pdStats = (o) => { o = o || {}; return strip(o.early ? [['Themes', '0', 'named groups'], ['Interviews', '3', 'held, all time'], ['Phrases in no theme', '4', 'distinct phrases, all time'], ['Need-to-have', NREC(), 'no need-to-have ever recorded'], ['ICP mention', '0', 'themes with a strong or partial fit mention'], ['Fit not recorded', '0', 'themes with a mention whose fit isn’t recorded']]
+      : [['Themes', '4', 'named groups'], ['Interviews', '12', 'held, all time'], ['Phrases in no theme', '3', 'distinct phrases, all time'], ['Need-to-have', '2', 'themes with a need-to-have mention'], ['ICP mention', '4', 'themes with a strong or partial fit mention'], ['Fit not recorded', '2', 'themes with a mention whose fit isn’t recorded']]); };
+    const pdTools = () => '<div class="tools" style="justify-content:space-between"><div class="tools"><button type="button" class="selb" style="min-width:150px"><span>Severity: Any</span><span aria-hidden="true">▾</span></button><button type="button" class="selb" style="min-width:170px"><span>Hypothesis: Any</span><span aria-hidden="true">▾</span></button><div class="chips"><button type="button" role="switch" aria-checked="false">ICP only</button><button type="button" role="switch" aria-checked="false">Need-to-have</button></div></div><button type="button" class="selb" style="min-width:170px"><span>Sort: Mentions</span><span aria-hidden="true">▾</span></button></div>';
+    const thRow = (t, o) => { o = o || {}; const nd = t.nodate; return '<div class="vap-th' + (t.g ? '' : ' ng') + '" role="row"><span class="vap-rk" role="cell">' + t.r + '</span><div role="cell" style="min-width:0;display:flex;flex-direction:column;gap:5px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + (t.g ? '<a href="#" class="vap-tt">' + t.t + '</a>' : '<span class="vap-tt">' + t.t + '</span><span class="vap-ngt">Not grouped · no record to open</span>') + '</div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' + bar(t.m, o.N || N) + (t.g && !o.lite ? '<span class="vap-dsh">' + t.src + '</span>' + NEW('#6006') : '') + '</div>' + (t.g && !o.lite ? '<div class="vap-why"><span>Why rank ' + t.r + ':</span> ' + t.why + ' ' + NEW('#6006') + '</div>' : '') + '</div>'
+      + '<div role="cell" style="display:flex;flex-direction:column;gap:5px">' + sev(t.sv) + (nd ? '<span class="nrec">No dated mention</span>' : trend(t.tr)) + '</div>'
+      + '<div role="cell" class="vap-cn"><span>ICP <b>' + t.icp + '</b></span><span>Need <b>' + t.need + '</b></span><span>Fit not recorded <b>' + t.fnr + '</b></span></div>'
+      + '<div role="cell" style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">' + (t.hy.length ? '<span style="display:flex;gap:5px;flex-wrap:wrap">' + J(t.hy.map(h => '<span class="vap-hc ' + h[1] + '">' + (h[1] === 's' ? '+' : '−') + ' ' + h[0] + '</span>')) + '</span>' : '<span class="nrec">No hypothesis linked</span>') + (t.g && !o.lite ? '<span class="vap-dsh">' + t.sc + ' ' + NEW('#6006') + '</span>' : '') + '</div>'
+      + '<div role="cell" style="position:relative">' + (t.g && !o.ro ? '<button type="button" class="ib" aria-label="Actions for ' + t.t + '" aria-haspopup="menu"' + (o.menu ? ' aria-expanded="true"' : '') + '>⋯</button>' : '') + (o.menu ? '<div class="vap-menu" role="menu"><a href="#" role="menuitem">Open the record</a><a href="#" role="menuitem">Write a hypothesis from this</a><a href="#" role="menuitem">See who has it</a><span class="raw" style="padding:4px 10px 2px">Opens New hypothesis with this theme chosen, or Ideal customer profile filtered to the segments whose interviews name it</span></div>' : '') + '</div></div>'; };
+    const thList = (rows, o) => { o = o || {}; return '<section class="cd" style="padding:0;gap:0;overflow:visible"><div class="ch" style="padding:12px 16px;border-bottom:1px solid var(--hair)"><h2 style="font-size:14.5px">Themes, ranked</h2><span class="raw">' + (o.cap || '7 rows · 4 themes and 3 phrases not grouped · mentions are distinct interviews, all time') + '</span></div><div class="vap-thh" role="row"><span>#</span><span>Theme · mentions</span><span>Severity · trend</span><span>Mentions by fit</span><span>Hypotheses</span><span></span></div><div role="table" aria-label="Themes">' + J(rows.map((t, i) => thRow(t, Object.assign({}, o, { menu: o.menu && i === 0 })))) + '</div></section>'; };
+    const unthemed = (o) => { o = o || {}; const rows = o.rows || UNTH; return '<section class="cd" style="gap:10px"><div class="ch"><h2 style="font-size:14.5px">Unthemed quotes · <span class="mono">' + (o.total || 4) + '</span> waiting</h2><span class="raw">each phrase counted once per interview that said it · not the same as “phrases in no theme” above</span></div>'
+      + '<ul class="vap-uq">' + J(rows.map(r => '<li><span class="vap-ck' + (r[3] && !o.ro ? ' on' : '') + '" role="checkbox" aria-checked="' + (r[3] && !o.ro) + '"' + (o.ro ? ' aria-disabled="true"' : '') + '>' + (r[3] && !o.ro ? '✓' : '') + '</span><span class="q">' + (o.ro && r[4] ? '<span class="nrec">Quote withheld (no consent to quote)</span>' : '“' + r[0] + '”') + '</span><span>' + r[1] + '</span><span class="mono mu">' + r[2] + '</span></li>')) + '</ul>'
+      + (o.ro ? '' : '<div class="vap-selb"><span><b class="mono">' + (o.sel === undefined ? 2 : o.sel) + '</b> selected</span><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + (o.saving ? st('Saving', 'Assigning…') : '') + '<button type="button" class="btn bsm"' + (o.sel === 0 ? ' aria-disabled="true"' : '') + '>Assign to theme ▾</button>' + NEW('several at once · #6006') + '<button type="button" class="btn bsm"' + (o.sel === 0 ? ' aria-disabled="true"' : '') + '>New theme from selected</button></div></div><p class="foot">Today Assign moves one quote per call (<code>POST /api/progress/pain-groups/:projectId/assign</code>); with two selected it is drawn as one step only once #6006 adds a bulk write.</p>') + '</section>'; };
+    const pdBottom = () => '<div class="vap-bot"><a class="btn bsm" href="#">Export map (CSV)</a><a class="btn t bsm" href="#">Open the Problem slide →</a><span style="flex:1"></span><button type="button" class="btn bsm" aria-disabled="true">Share link</button><button type="button" class="btn bsm" aria-disabled="true">PDF</button>' + NEW('share and PDF · #6006') + '</div>';
+    const pdHead = (o) => { o = o || {}; return crumb(['[Tidepool]', 'Validate', 'Problem discovery']) + head('Problem discovery', 'Which problems your interviews keep naming, how much they hurt, and what each one feeds.', o.ro ? '<span class="pl">' + SH.lk + ' Read only · partner</span>' : o.empty ? '' : '<button type="button" class="btn p">New theme</button>') + mods('Problem discovery'); };
+    const pdRail = () => railOpen('<p style="font-size:12.5px;line-height:1.55">From your interviews, Eadwyn suggests severities and groupings. Nothing is saved until you accept.</p>'
+      + '<div class="ch"><b style="font-size:13px">Waiting for your review</b><span class="pl a">3</span></div>'
+      + '<article class="vap-sg"><span class="eye">Severity for a phrase</span><b>“Re-keying PDFs into the ERP”</b><div class="ai2" style="padding:8px 10px;gap:4px">' + sev('Real') + '<span style="font-size:12px">costs time or money: “it takes Ana’s team two afternoons”</span></div>' + sug3('From [Ana Petrov] · 10 Nov interview') + '</article>'
+      + '<article class="vap-sg"><span class="eye" style="display:flex;gap:6px;align-items:center">Proposed grouping ' + NEW('#6006') + '</span><b><span class="mono">2</span> quotes → new theme “Re-keying invoices into the ERP”</b><ul class="vap-mem"><li>[Ana Petrov] · 10 Nov</li><li>[Wei Zhang] · 12 Nov</li></ul>' + sug3('Accept the set, edit its title or members first') + '</article>'
+      + '<article class="vap-sg"><span class="eye" style="display:flex;gap:6px;align-items:center">Proposed grouping ' + NEW('#6006') + '</span><b><span class="mono">1</span> quote → add to “Disputes with carriers over surcharges”</b><ul class="vap-mem"><li>[Karl Jensen] · no date</li></ul>' + sug3('Eadwyn’s · not saved') + '</article>');
+    const pdMain = (o) => pdHead(o) + pdStats() + pdTools() + thList(TH, { menu: !(o && o.nomenu) }) + unthemed() + pdBottom();
+
+    /* theme record */
+    const recHead = (o) => { o = o || {}; return crumb(['[Tidepool]', 'Validate', 'Problem discovery', 'Matching carrier invoices…']) + '<header class="vx-hd"><div style="min-width:0;flex:1"><span class="eye">Pain theme</span><h1 style="margin-top:2px">Matching carrier invoices by hand every month</h1><div class="vx-meta"><span>Mentioned in <b class="mono" style="color:var(--ink)">7</b> of <b class="mono" style="color:var(--ink)">12</b> interviews</span>' + sev('Severe') + '<span class="pl v">Frequent · half the held interviews or more</span></div></div><div style="display:flex;gap:8px;align-items:center">' + (o.ro ? '<span class="pl">' + SH.lk + ' Read only · partner</span>' : '<button type="button" class="btn">Edit</button><button type="button" class="btn" aria-haspopup="menu">More ▾</button><a class="btn p" href="#">Write a hypothesis from this</a>') + '</div></header>'; };
+    const recFacts = () => '<dl class="vap-facts"><div><dt>How often</dt><dd><b class="mono">7 of 12</b> held interviews, all time</dd></div><div><dt>How severe</dt><dd>' + sev('Severe') + '<small>4 Severe · 2 Real · 1 not judged</small></dd></div><div><dt>Trend</dt><dd><b class="mono">▲ 3</b> in 30 days<small>5 in the last 30 days vs 2 in the 30 before</small></dd></div><div><dt>First heard</dt><dd><b class="mono">28 Sep 2026</b><small>[Sam Ortiz] · [Haulbase]</small></dd></div></dl>';
+    const probStmt = (o) => { o = o || {}; return '<section class="cd" style="gap:10px"><div class="ch"><h2>Problem statement ' + NEW('no field yet · #6006') + '</h2>' + (o.ro ? '' : '<button type="button" class="btn bsm">Write it</button>') + '</div><dl class="kv2" style="grid-template-columns:170px minmax(0,1fr)"><dt>Who has it</dt><dd>' + NREC() + '</dd><dt>How they cope today</dt><dd>' + NREC() + '</dd><dt>What it costs</dt><dd>' + NREC() + '</dd></dl>'
+      + (o.draft ? '<div class="ai2"><span class="eye" style="display:flex;justify-content:space-between"><span>Eadwyn’s draft · from 7 quotes · marked Eadwyn’s until edited</span>' + NEW('#6006') + '</span><dl class="kv2" style="grid-template-columns:150px minmax(0,1fr)"><dt>Who has it</dt><dd>Ops and finance leads at 3PLs and forwarders with several road carriers</dd><dt>How they cope today</dt><dd>A spreadsheet, ticking each invoice against a delivery note by hand</dd><dt>What it costs</dt><dd>Up to a day per person each month; close slips by about two days (3 quotes)</dd></dl>' + sug3('Cites [Jonas Berg] 21 Oct · [Maya Chen] 2 Oct · [Omar Haddad] 5 Nov') + '</div>' : '') + '</section>'; };
+    const consent = (c, ro) => c === 'y' ? '<span class="vap-cs y">' + SH.ok + 'Consented</span>' : '<span class="vap-cs n">' + SH.no + 'No quote consent</span>';
+    const quotes = (o) => { o = o || {}; return '<section class="cd" style="gap:8px"><div class="ch"><h2>Quotes · <span class="mono">7</span></h2>' + (o.ro ? '<span class="raw">quotes without consent are withheld from partners</span>' : '<button type="button" class="btn bsm">Attach a quote</button>') + '</div><ul class="vap-ql">' + J(QUO.map(q => '<li><div class="q">' + (o.ro && q[4] !== 'y' ? '<span class="nrec">Quote withheld (no consent to quote)</span>' : '“' + q[0] + '”') + '</div><div class="m"><span>' + q[1] + '</span><span class="mono">' + q[2] + '</span>' + (q[3] ? sev(q[3]) : sev(null)) + consent(q[4]) + '</div></li>')) + '</ul></section>'; };
+    const feeds = (o) => { o = o || {}; return '<section class="cd" style="gap:8px"><div class="ch"><h2>Hypotheses it feeds</h2>' + (o.ro ? '' : '<button type="button" class="btn bsm">Link to a hypothesis</button>') + '</div><div class="vap-hf"><span class="vx-code mono" style="color:var(--vt);font-weight:700">H1</span><span>Ops leads at 50–200-person logistics firms lose 5+ hours a week reconciling carrier invoices</span>' + dir('s') + st('Testing') + '</div><p class="foot">Accepted hypotheses continue in Experiments and evidence (V7, V8).</p></section>'; };
+    const recSide = () => '<aside style="display:flex;flex-direction:column;gap:14px"><section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:14px">Segments</h2><a href="#" class="btn t bsm">See who has it →</a></div><span class="raw">segments of the interviews that name it</span><ul class="rz"><li><b>Mid-size 3PL ops</b><small>5 interviews</small></li><li><b>Freight forwarder finance</b><small>1 interview</small></li><li><b class="nrec">No segment</b><small>1 interview · [Sam Ortiz]</small></li></ul></section><section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:14px">Used on slide</h2>' + NEW('#6006') + '</div><p style="font-size:12.5px">' + NREC('Not tracked per theme yet') + '. The deck reads the themes as a whole.</p><a href="#" class="btn bsm" style="align-self:flex-start">Open the Problem slide →</a></section></aside>';
+    const record = (o) => { o = o || {}; return recHead(o) + recFacts() + '<div class="ws" style="grid-template-columns:minmax(0,1fr) 300px"><div style="display:flex;flex-direction:column;gap:14px">' + probStmt(o) + quotes(o) + feeds(o) + '</div>' + recSide() + '</div>'; };
+
+    const dlg = (t, sub, body, foot, w) => '<div role="dialog" aria-modal="true" class="vap-dlg" style="width:' + (w || 320) + 'px"><div class="mdh"><div style="display:flex;flex-direction:column;gap:4px"><span class="raw">' + sub + '</span><h2 style="font-size:16px">' + t + '</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="mdb">' + body + '</div><div class="mdf">' + foot + '</div></div>';
+
+    /* ================= ICP ================= */
+    const fitChart = () => '<section class="cd" style="gap:10px"><div class="ch"><h2>Customer fit by segment</h2><span class="raw">held interviews, all time · 9 placed in a segment</span></div><div class="vap-leg">' + fit('s') + fit('p') + fit('n') + fit('u') + '</div>'
+      + J(SEG.concat([{ n: 'No segment', i: 3, s: 0, p: 1, no: 0, u: 2, none: true }]).map(s => '<div class="vap-fc"><span class="' + (s.none ? 'nrec' : '') + '" style="font-weight:700">' + s.n + '</span><span class="vap-stk" role="img" aria-label="' + s.n + ': ' + s.s + ' strong, ' + s.p + ' partial, ' + s.no + ' no fit, ' + s.u + ' not recorded">' + J([['s', s.s], ['p', s.p], ['n', s.no], ['u', s.u]].filter(x => x[1]).map(x => '<i class="' + x[0] + '" style="flex:' + x[1] + '">' + x[1] + '</i>')) + '</span><span class="mono mu">' + s.i + ' interview' + (s.i > 1 ? 's' : '') + '</span></div>')) + '</section>';
+    const segTable = (o) => { o = o || {}; const rows = o.rows || SEG; return '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="etb"><thead><tr><th scope="col">Segment</th><th scope="col">Interviews</th><th scope="col">Strong fit</th><th scope="col">Evidence</th><th scope="col">Updated</th><th scope="col">Primary ICP ' + NEW('#6007') + '</th></tr></thead><tbody>' + J(rows.map(s => '<tr><td><a href="#" style="font-weight:700;color:var(--ink)">' + s.n + '</a><small>' + s.src + '</small></td><td class="mono">' + s.i + '</td><td class="mono">' + s.s + ' of ' + s.i + '</td><td>' + ev(s.e) + '</td><td class="w">' + s.up + '</td><td>' + (s.pr ? '<span class="pl v">★ Primary</span>' : '<span class="raw">—</span>') + '</td></tr>')) + '</tbody></table></section>'; };
+    const icpTools = () => '<div class="tools" style="justify-content:space-between"><div class="tools"><span class="raw">Evidence</span><div class="chips"><button type="button" aria-checked="true">Any</button><button type="button" aria-checked="false">Anecdote</button><button type="button" aria-checked="false">Pattern</button><button type="button" aria-checked="false">Not recorded</button></div><span class="raw">Fit</span><div class="chips"><button type="button" aria-checked="true">Any</button><button type="button" aria-checked="false">Has a strong fit</button><button type="button" aria-checked="false">No strong fit</button></div></div><button type="button" class="selb" style="min-width:160px"><span>Sort: Evidence</span><span aria-hidden="true">▾</span></button></div>';
+    const unassigned = (o) => { o = o || {}; return '<section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:14.5px">Interviews in no segment · <span class="mono">3</span> held</h2>' + NEW('the list · #6002') + '</div>' + (o.countOnly ? '<p style="font-size:12.5px">Today the read returns the count only. Open each interview to place it.</p>' : '<table class="etb"><thead><tr><th>Interviewee</th><th>Date</th><th>Fit</th><th>Put in a segment</th></tr></thead><tbody>' + J(UNA.map(u => '<tr><td><b>' + u[0] + '</b></td><td class="w">' + u[1] + '</td><td>' + fit(u[2]) + '</td><td>' + (o.ro ? '<span class="raw">—</span>' : '<button type="button" class="selb" style="min-width:210px"><span>Assign to a segment</span><span aria-hidden="true">▾</span></button>') + '</td></tr>')) + '</tbody></table><p class="foot">The select offers each segment and “No segment”. It writes <code>PUT /api/cycles/validate/interviews/:id/segment</code>, which exists today.</p>') + '</section>'; };
+    const icpHead = (o) => { o = o || {}; return crumb(['[Tidepool]', 'Validate', 'Ideal customer profile']) + head('Ideal customer profile', 'Who the customer is, and how much interview evidence holds each segment.', o.ro ? '<span class="pl">' + SH.lk + ' Read only · partner</span>' : o.empty ? '' : '<button type="button" class="btn">Compare segments</button>' + NEW('#6007') + '<button type="button" class="btn p">New segment</button>') + mods('Ideal customer profile'); };
+    const icpRail = () => railOpen('<p style="font-size:12.5px;line-height:1.55">From interviews it structured, Eadwyn suggests a segment, a fit, a firmographic or a job to be done. Each names its interview.</p><div class="ch"><b style="font-size:13px">Waiting for your review</b><span class="pl a">3</span></div>'
+      + '<article class="vap-sg"><span class="eye">Segment for an interview</span><b>Put [Wei Zhang] in “Freight forwarder finance”</b><div class="ai2" style="padding:8px 10px;font-size:12px">“I run payables for a 90-person forwarder”</div>' + sug3('From [Wei Zhang] · 12 Nov interview') + '</article>'
+      + '<article class="vap-sg"><span class="eye">Firmographic</span><b>Company size · 80–120 people</b>' + sug3('From [Ruth Okafor] · 11 Nov interview') + '</article>'
+      + '<article class="vap-sg"><span class="eye">Job to be done</span><b>Close carrier payables within 3 days of month end</b>' + sug3('From [Ana Petrov] · 10 Nov interview') + '</article>');
+    const icpMain = () => icpHead() + fitChart() + icpTools() + segTable() + unassigned();
+
+    /* segment record */
+    const STEPS = [['Who they are', 'Ops leads at 50–200-person 3PLs running road freight', 'd', '[Maya Chen] · 2 Oct'], ['Context', null, 'm'], ['Job to be done', 'Reconcile carrier invoices against shipments before month-end close', 'd', '[Tom Ellis] · 12 Nov'], ['Urgency', 'High', 'd', null], ['Value promised', 'Carrier invoices matched automatically; close on day 2', 'd', '[Maya Chen] interview · 2 Oct']];
+    const segHead = (o) => { o = o || {}; return crumb(['[Tidepool]', 'Validate', 'Ideal customer profile', 'Mid-size 3PL ops']) + '<header class="vx-hd"><div style="min-width:0;flex:1"><span class="eye">Segment</span><h1 style="margin-top:2px">Mid-size 3PL ops</h1><div class="vx-meta"><span>One of <b class="mono" style="color:var(--ink)">3</b> segments · updated <span class="mono">12 Nov</span> · from the ICP wizard</span>' + ev('Pattern') + (o.ro ? '' : '<span class="vap-tog on" role="switch" aria-checked="true"><i></i>Primary ICP</span>' + NEW('#6007')) + '</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + (o.ro ? '<a class="btn" href="#">Export persona</a><span class="pl">' + SH.lk + ' Read only · partner</span>' : '<a class="btn" href="#">Export persona</a><button type="button" class="btn">Compare segments</button>' + NEW('#6007') + '<button type="button" class="btn" aria-haspopup="menu">More ▾</button><button type="button" class="btn p">Edit</button>') + '</div></header>'; };
+    const segFacts = () => '<dl class="vap-facts"><div><dt>Interviews</dt><dd><b class="mono">5</b> held, scored since 1 Oct</dd></div><div><dt>Strong fit</dt><dd><b class="mono">4 of 5</b><small>1 partial · 0 none · 0 not recorded</small></dd></div><div><dt>Urgency</dt><dd><b>High</b></dd></div><div><dt>Value promised</dt><dd>Invoices matched automatically<small>Source: [Maya Chen] interview · 2 Oct</small></dd></div></dl>';
+    const stepsCard = (o) => { o = o || {}; return '<section class="cd" style="gap:6px"><div class="ch"><h2>Five steps</h2><span class="raw">4 done · 1 missing · each edits in place</span></div>' + J(STEPS.map((s, i) => '<div class="vap-step"><span class="mono mu">' + (i + 1) + '</span><div style="min-width:0"><b>' + s[0] + '</b><div style="font-size:12.5px;margin-top:2px">' + (s[1] ? s[1] : NREC('Not written yet')) + '</div>' + (i === 4 ? '<div class="raw" style="margin-top:3px">Source: ' + s[3] + '</div>' : '<div class="raw" style="margin-top:3px;display:flex;gap:6px;align-items:center">Source: ' + NREC('not stored') + NEW('a source on every step · no issue yet') + '</div>') + (o.draft && i === 1 ? '<div class="ai2" style="margin-top:6px;padding:8px 10px;gap:4px"><span class="eye" style="display:flex;justify-content:space-between"><span>Eadwyn proposes</span>' + NEW('#6007') + '</span><span style="font-size:12.5px">Month-end close with 3–6 road carriers; invoices arrive as PDFs by email</span>' + sug3('From [Priya Raman] 28 Oct · [Omar Haddad] 5 Nov') + '</div>' : '') + '</div>' + step(s[2]) + (o.ro ? '' : '<button type="button" class="btn t bsm">Edit</button>') + '</div>')) + '<div class="vap-step"><span></span><div><b>Score against interviews since</b><div style="font-size:12.5px;margin-top:2px"><span class="mono">1 Oct 2026</span> · 5 of 5 interviews fall after it <span class="mu">(blank: all interviews)</span></div></div><span></span>' + (o.ro ? '' : '<button type="button" class="btn t bsm">Edit</button>') + '</div></section>'; };
+    const scored = () => '<section class="cd" style="gap:6px"><div class="ch"><h2>Interviews scored against it</h2><a class="btn t bsm" href="#">Open in Customer research →</a></div><span class="raw">fit as recorded on each interview · no computed score</span><table class="etb"><tbody>' + J([['[Tom Ellis] · [Portside]', '12 Nov', 's'], ['[Omar Haddad] · [Gulfline]', '5 Nov', 's'], ['[Priya Raman] · [CargoLoop]', '28 Oct', 's'], ['[Jonas Berg] · [Nordfrakt]', '21 Oct', 'p'], ['[Maya Chen] · [Fleetwise]', '2 Oct', 's']].map(r => '<tr><td><b>' + r[0] + '</b></td><td class="w">' + r[1] + '</td><td>' + fit(r[2]) + '</td></tr>')) + '</tbody></table></section>';
+    const segSide = (o) => { o = o || {}; return '<aside style="display:flex;flex-direction:column;gap:14px"><section class="cd" style="gap:6px"><h2 style="font-size:14px">Pain themes</h2><span class="raw">mentions by this segment’s interviews</span><ul class="rz"><li><b>Matching carrier invoices by hand</b><small class="mono">5 of 5</small></li><li><b>Month-end close slips by days</b><small class="mono">1 of 5</small></li><li><b>No budget line for a standalone tool</b><small class="mono">1 of 5</small></li><li><b>Disputes with carriers over surcharges</b><small class="mono">1 of 5</small></li></ul></section>'
+      + '<section class="cd" style="gap:6px"><h2 style="font-size:14px">From interviews</h2><span class="raw">accepted findings, each traced to its interview</span><dl class="kv2" style="grid-template-columns:96px minmax(0,1fr)"><dt>Role</dt><dd>Ops lead <small class="raw">· [Maya Chen]</small></dd><dt>Company size</dt><dd>140 people <small class="raw">· [Jonas Berg]</small></dd><dt>Industry</dt><dd>Road freight 3PL <small class="raw">· [Priya Raman]</small></dd><dt>Geography</dt><dd>Nordics <small class="raw">· [Jonas Berg]</small></dd><dt>Stage</dt><dd>' + NREC() + '</dd><dt>Tools</dt><dd>Excel, Visma <small class="raw">· [Omar Haddad]</small></dd><dt>Job</dt><dd>Close the month on time <small class="raw">· [Tom Ellis]</small></dd></dl></section>'
+      + '<section class="cd" style="gap:6px;border-style:dashed"><div class="ch"><h2 style="font-size:14px">Firmographics and disqualifiers</h2>' + NEW('#6007') + '</div><p class="foot">Stored on the segment itself (size range, region, freight mode) and the disqualifiers (“Under 20 staff”, “No road freight”). No columns yet.</p></section>'
+      + '<section class="cd" style="gap:6px"><h2 style="font-size:14px">Persona card</h2><p style="font-size:12.5px">The five steps and the findings above, on one page.</p><a class="btn bsm" href="#" style="align-self:flex-start">Export PDF</a></section></aside>'; };
+    const segRecord = (o) => segHead(o) + segFacts() + '<div class="ws" style="grid-template-columns:minmax(0,1fr) 320px"><div style="display:flex;flex-direction:column;gap:14px">' + stepsCard(o) + scored() + '</div>' + segSide(o) + '</div>';
+
+    /* compare */
+    const CMP = [
+      ['Who they are', ['Ops leads at 50–200-person 3PLs running road freight', 'Finance managers at freight forwarders, 30–150 people', 'Owner-operators with under 20 trucks']],
+      ['Context', [null, null, null]],
+      ['Job to be done', ['Reconcile carrier invoices against shipments before month-end close', 'Close carrier payables within 3 days of month end', null]],
+      ['Urgency', ['High', 'Medium', 'nset']],
+      ['Value promised', ['Carrier invoices matched automatically; close on day 2', 'Payables closed in 3 days', null]],
+      ['Value source', ['[Maya Chen] interview · 2 Oct', 'src', null]],
+      ['Interviews and fit', ['5 · 4 strong, 1 partial', '3 · 2 strong, 1 partial', '1 · 1 no fit']],
+      ['Evidence', ['Pattern', 'Pattern', 'Anecdote']],
+      ['Top pain themes', ['Matching invoices by hand (5) · Close slips (1) · No budget line (1)', 'Close slips (3) · Matching invoices by hand (1) · No budget line (1)', 'No budget line (1)']],
+      ['Disqualifiers ◇', [null, null, null]]
+    ];
+    const cmpCell = (r, v) => r === 'Evidence' ? ev(v) : v === null ? NREC() : v === 'nset' ? NREC('Not set') : v === 'src' ? '<span class="vap-stp s">' + SH.ar + 'Needs a source</span>' : v;
+    const compare = () => crumb(['[Tidepool]', 'Validate', 'Ideal customer profile', 'Compare']) + head('Compare segments', 'Two to four segments side by side. Anything unwritten reads Not recorded.', '<a class="btn" href="#">Done comparing</a>') + '<div class="tools"><span class="raw">Comparing 3 of up to 4</span>' + J(SEG.map(s => '<span class="pl">' + s.n + ' <button type="button" class="vap-x" aria-label="Remove ' + s.n + '">✕</button></span>')) + '<button type="button" class="btn bsm">+ Add a segment</button>' + OWN('Owner pick A · a mode on the module page (?compare=ids), no new route') + NEW('multi-segment read · #6007') + '</div>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="vap-cmp"><thead><tr><th scope="col"><span class="sr">Row</span></th>' + J(SEG.map(s => '<th scope="col"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>' + s.n + '</b>' + (s.pr ? '<span class="pl v">★ Primary</span>' : '<button type="button" class="btn t bsm">Set primary</button>') + '</div><small class="raw">' + s.src + '</small></th>')) + '</tr></thead><tbody>' + J(CMP.map(r => '<tr><th scope="row">' + (r[0].indexOf('◇') > 0 ? 'Disqualifiers ' + NEW('#6007') : r[0]) + '</th>' + J(r[1].map(v => '<td>' + cmpCell(r[0], v) + '</td>')) + '</tr>')) + '</tbody></table></section><p class="foot">Set primary from a column header ◇ (#6007): exactly one segment per venture is primary, so setting it here clears the other.</p>';
+
+    /* ================= RECRUITING ================= */
+    const FUN = [['Lead', 24, 'reached Lead or later', '19 interviews + 5 waitlist sign-ups (2 new, 2 invited, 1 followed up)'], ['Invited', 20, 'reached Invited or later', '17 interviews + 2 invited and 1 followed-up sign-up'], ['Booked', 14, 'reached Booked or later', 'interviews only'], ['Done', 12, 'held', 'interviews; 1 with no stage counts here']];
+    const funnel = (o) => { o = o || {}; return '<section class="cd" style="gap:10px"><div class="ch"><h2>Recruiting funnel</h2><span class="raw">cumulative · each stage counts every row that reached it or later · all time</span></div><div class="vap-fun" role="list">' + J(FUN.map((f, i) => '<a href="#" role="listitem" class="' + (o.sel === f[0] ? 'on' : '') + '"><span class="l">' + stage(f[0].toLowerCase()) + '</span><b class="mono">' + (o.wlFail && i < 2 ? (i === 0 ? 19 : 17) : f[1]) + '</b><small>' + f[2] + '</small><small class="mu">' + (o.wlFail ? (i < 2 ? 'interviews only' : f[3]) : f[3]) + '</small></a>' + (i < 3 ? '<span class="vap-arr" aria-hidden="true">→</span>' : ''))) + '</div>' + (o.wlFail ? note('a', 'The waitlist couldn’t be read.', 'The funnel counts interviews only until it can. Lead and Invited may be low.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>') : '<p class="foot">Each stage opens the list filtered to it ' + NEW('Stage filter · #6001') + '</p>') + '</section>'; };
+    const IVS = [
+      ['[Hana Sato] · [Kobe Freight]', 'Ops lead', 'lead', 'added 13 Nov', 'Call', null],
+      ['[Erik Lund] · [Ostsee Cargo]', 'Controller', 'invited', 'invited 9 Nov', 'Call', 'no slot yet'],
+      ['[Fatima Noor] · [Atlasroad]', 'Head of finance', 'invited', 'invited 10 Nov', 'In person', 'no slot yet'],
+      ['[Paul Weber] · [Elbtrans]', 'Ops director', 'invited', 'invited 11 Nov', null, 'no slot yet'],
+      ['[Mei Lin] · [Harbourline]', 'Finance manager', 'booked', 'booked 18 Nov · 14:00', 'Call', null],
+      ['[Tom Ellis] · [Portside]', 'Head of ops', 'done', 'done 12 Nov', 'Call', null],
+      ['[Wei Zhang] · [Pearlroute]', 'Finance manager', 'done', 'done 12 Nov', 'Text chat', null],
+      ['[Ruth Okafor] · [Lagoship]', 'Ops lead', 'none', 'no stage · read as Done', 'In person', 'promoted from the waitlist 4 Nov']
+    ];
+    const chan = (c) => c ? c : NREC('No channel');
+    const ivTable = (o) => { o = o || {}; const rows = o.rows || IVS; return '<section class="cd" style="padding:0;gap:0;overflow:visible"><table class="etb"><thead><tr><th>Person</th><th>Stage · date reached</th><th>Channel</th><th>Note</th><th><span class="sr">Action</span></th></tr></thead><tbody>' + J(rows.map((r, i) => '<tr' + (o.failRow === i ? ' class="sel"' : '') + '><td><b>' + r[0] + '</b><small>' + r[1] + '</small></td><td>' + stage(r[2], r[3]) + (o.failRow === i ? '<div class="vap-err" role="alert">✕ Couldn’t move to Booked. It stays at Invited; your date is kept.</div>' : '') + '</td><td>' + chan(r[4]) + '</td><td style="font-size:12px">' + (r[5] ? r[5] : '') + '</td><td style="text-align:right;position:relative">' + (o.ro ? '' : '<button type="button" class="btn bsm" aria-haspopup="menu"' + (o.menu === i ? ' aria-expanded="true"' : '') + '>Move stage ▾</button>') + (o.menu === i ? moveMenu() : '') + '</td></tr>')) + '</tbody></table></section>'; };
+    const moveMenu = () => '<div class="vap-menu" role="menu" style="right:12px;left:auto;width:260px;text-align:left"><span class="eye" style="padding:6px 10px 2px">Move [Erik Lund] to</span>' + J([['lead', ''], ['invited', 'current · 9 Nov'], ['booked', ''], ['done', '']].map(s => '<a href="#" role="menuitemradio" aria-checked="' + (s[1] ? 'true' : 'false') + '" style="display:flex;justify-content:space-between">' + stage(s[0]) + '<span class="raw">' + s[1] + '</span></a>')) + '<div style="padding:6px 10px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--hair)">' + fld('Date reached · optional', '<span class="mono">14 Nov 2026</span>') + '<button type="button" class="btn p bsm">Move to Booked</button></div></div>';
+    const WL = [['[Grace Kim] · [Baltic Haul]', 'New', 'signed up 12 Nov', 'Invite'], ['[Noah Fischer] · [Rhonelink]', 'New', 'signed up 13 Nov', 'Invite'], ['[Sofia Rossi] · [Adriafret]', 'Invited', 'invited 8 Nov', 'Follow up'], ['[Jan Novak] · [Vltava Log]', 'Invited', 'invited 10 Nov', 'Follow up'], ['[Elif Demir] · [Bosfor]', 'Followed up', 'followed up 11 Nov', ''], ['[Ruth Okafor] · [Lagoship]', 'Promoted', 'now an interview', 'Open interview']];
+    const waitlist = (o) => { o = o || {}; return '<section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:14.5px">Waitlist leads · <span class="mono">6</span></h2><span class="raw">New counts in Lead · Invited and Followed up count in Invited</span></div>' + (o.fail ? note('r', 'The waitlist couldn’t be read.', 'Nothing here is shown as empty. The interview list still works.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>') : '<ul class="vap-wl">' + J(WL.map(w => '<li><div><b>' + w[0] + '</b><small>' + w[2] + '</small></div><span class="pl' + (w[1] === 'New' ? ' v' : w[1] === 'Promoted' ? ' g' : '') + '">' + w[1] + '</span><div style="display:flex;gap:6px;justify-content:flex-end">' + (o.ro ? '' : w[3] === 'Open interview' ? '<a class="btn t bsm" href="#">Open interview →</a>' : (w[3] ? '<button type="button" class="btn bsm">' + w[3] + '</button>' : '') + '<button type="button" class="btn bsm">Promote</button>') + '</div></li>')) + '</ul><p class="foot">Promote makes an interview. ' + OWN('Owner pick A · at stage Lead') + ' ' + NEW('#6001') + ' Today it lands with no stage, which reads as Done.</p>') + '</section>'; };
+    const crHead = (o) => { o = o || {}; return crumb(['[Tidepool]', 'Validate', 'Customer research']) + head('Customer research', 'Who you’ve talked to, who is coming next, and what still needs your review.', o.ro ? '<span class="pl">' + SH.lk + ' Read only · partner</span>' : '<button type="button" class="btn">Prepare questions</button>' + NEW('#6008') + '<button type="button" class="btn">Add a lead</button>' + NEW('#6001') + '<button type="button" class="btn p">Record a session</button>') + mods('Customer research'); };
+    const crStrip = () => '<div class="dl3"><div><small>Interviews held this month</small><b>7</b><small>November so far</small></div><div><small>Held in the previous 30 days</small><b>9</b><small>15 Oct – 14 Nov</small></div><div><small>Awaiting your review</small><b style="color:var(--amT)">2</b><small>3 proposed findings</small></div><div><small>Assigned to a segment</small><b>9 of 12</b><small>held interviews</small></div></div>';
+    const stageChips = () => '<div class="tools" style="justify-content:space-between"><div class="tools"><div class="inp">⌕ Search people or companies</div><span class="raw">At this stage now</span><div class="chips" role="radiogroup" aria-label="Stage"><button type="button" role="radio" aria-checked="true">All<span>19</span></button><button type="button" role="radio" aria-checked="false">Lead<span>2</span></button><button type="button" role="radio" aria-checked="false">Invited<span>3</span></button><button type="button" role="radio" aria-checked="false">Booked<span>2</span></button><button type="button" role="radio" aria-checked="false">Done<span>12</span></button></div>' + NEW('Stage filter · #6001') + '</div><button type="button" class="selb" style="min-width:150px"><span>Channel: Any</span><span aria-hidden="true">▾</span></button></div>';
+    const crMain = (o) => crHead(o) + crStrip() + funnel() + '<div class="ws" style="grid-template-columns:minmax(0,1fr) 380px">' + '<div style="display:flex;flex-direction:column;gap:12px">' + stageChips() + ivTable({ menu: 1 }) + '<p class="raw">Showing 8 of 19 · newest stage first</p></div>' + '<div style="display:flex;flex-direction:column;gap:12px">' + waitlist() + '<section class="vx-next" style="grid-template-columns:1fr"><div><span class="ey">On the Validate overview card</span><b>Book the [3] invited leads with no slot yet</b><p>Lands here filtered to Invited with no booked date. With none left, it reads “Invite the [2] new waitlist leads”.</p></div><a class="btn t bsm" href="#" style="justify-self:start">See the landing ↓</a></section></div></div>';
+
+    /* ================= INTERVIEW GUIDE ================= */
+    const GQ = [
+      ['H1', 'Ops leads at 50–200-person logistics firms lose 5+ hours a week reconciling carrier invoices', [['Walk me through the last time you matched a carrier invoice. What did you open first?', 'me', 1], ['How many hours did last month’s matching take, and who did it?', 'ea', 1], ['What happens when an invoice doesn’t match?', 'me']]],
+      ['H2', 'They will pay €300 a month for automatic reconciliation', [['What do you pay today for anything that touches invoices?', 'me'], ['If this disappeared tomorrow, what would you do instead?', 'ea']]],
+      ['H3', 'Finance, not ops, signs off on reconciliation tools', [['Who signed off the last tool your team bought?', 'me']]]
+    ];
+    const gq = (q, o) => o.inRec ? '<li class="vap-gq"><span class="vap-ck' + (q[2] ? ' on' : '') + '" role="checkbox" aria-checked="' + !!q[2] + '" aria-label="Asked">' + (q[2] ? '✓' : '') + '</span><div style="font-size:13px' + (q[2] ? ';color:var(--mu)' : '') + '">' + q[0] + '</div><span class="raw">' + (q[2] ? 'asked' : '') + '</span></li>' : '<li class="vap-gq' + (q[1] === 'ea' ? ' ea' : '') + '"><span class="vap-hd2" aria-label="Reorder" role="button">⋮⋮</span><div style="min-width:0"><div style="font-size:13px">' + q[0] + '</div>' + (q[1] === 'ea' ? '<span class="raw">Eadwyn’s · until you edit it</span>' : '') + '</div><div style="display:flex;gap:4px">' + (q[1] === 'ea' && !o.ro ? '<button type="button" class="btn bsm">Discard</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm p">Accept</button>' : o.ro ? '' : '<button type="button" class="btn t bsm">Edit</button><button type="button" class="ib" style="width:26px;height:26px" aria-label="Remove question">✕</button>') + '</div></li>';
+    const guide = (o) => { o = o || {}; const qs = o.def ? [['Default', 'Discovery questions · no open hypothesis yet', [['Tell me about the last time this came up at work.', 'me'], ['What did you try, and what did it cost you?', 'me'], ['Who else is involved when it goes wrong?', 'me']]]] : GQ; return '<div class="vap-guide"><div class="ch"><b style="font-size:14px">Interview guide</b>' + NEW('#6008') + '</div><span class="raw">kept for the venture · a copy is taken onto the interview when used ' + OWN('Owner pick A') + '</span>'
+      + (o.inRec ? '<div class="vap-selb"><span>Copy taken onto this interview at 14:00 · <b class="mono">2 of 7</b> asked</span><a href="#" class="btn t bsm">Edit the venture’s guide</a></div>' : o.ai === 'off' ? '<div class="nt"><span class="ic" aria-hidden="true">–</span><div><b>AI assistance is off for this venture.</b><div class="mu">Eadwyn can’t draft questions. The guide stays writable by hand.</div></div></div>' : o.ro ? '' : '<div class="vap-draft"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12.5px">Draft for</span><button type="button" class="selb" style="min-width:230px;gap:8px"><span>Segment: Mid-size 3PL ops</span><span aria-hidden="true">▾</span></button><button type="button" class="btn bsm">Draft with Eadwyn</button></div><span class="raw">Holds about [$0.04] of AI credit before it runs · unused credit is released</span></div>')
+      + J(qs.map(g => '<div class="vap-gg"><div class="vap-ggh"><span class="mono" style="color:var(--vt);font-weight:700">' + g[0] + '</span><span>' + g[1] + '</span></div><ul>' + J(g[2].map(q => gq(q, o))) + '</ul></div>'))
+      + (o.def ? '' : '<div class="vap-gg"><div class="vap-ggh"><span class="mono mu" style="font-weight:700">Theme</span><span>Not judged yet · Disputes with carriers over surcharges</span></div><ul>' + gq(['When did a surcharge last change an invoice you’d already approved?', 'me'], o) + '</ul></div>')
+      + (o.ro || o.inRec ? '' : '<button type="button" class="btn t bsm" style="align-self:flex-start">+ Add a question</button>') + '</div>'; };
+    const recWide = (g) => '<div role="dialog" aria-modal="true" aria-labelledby="rec2" class="vap-dlg" style="width:1100px;display:grid;grid-template-columns:minmax(0,1fr) 460px"><div style="display:flex;flex-direction:column;border-right:1px solid var(--hair)"><div class="mdh"><div style="display:flex;flex-direction:column;gap:6px"><span class="raw">[Tidepool] · Customer research</span><h2 id="rec2">Session with [Mei Lin] · [Harbourline]</h2><span style="font-size:12.5px;color:var(--mu)">Booked 18 Nov · 14:00 · call · consent given at the start</span></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="mdb"><div class="vx-rec"><div class="vx-wave" aria-hidden="true">' + J(Array.from({ length: 34 }, (_, i) => '<i style="height:' + (6 + ((i * 37) % 26)) + 'px;background:#7c3aed"></i>')) + '</div><span class="t">08:12</span>' + st('Processing', 'Recording · last chunk saved 2 s ago') + '</div><div class="nt"><span class="ic" aria-hidden="true">i</span><div>Questions you mark asked are noted on the interview’s copy of the guide. The venture’s guide doesn’t change.</div></div></div><div class="mdf" style="justify-content:space-between;align-items:center;margin-top:auto"><span role="status" style="font-size:12px;color:var(--mu)">Recording</span><div style="display:flex;gap:8px"><button type="button" class="btn">Pause</button><button type="button" class="btn p">Stop and save</button></div></div></div><div style="padding:16px;overflow:hidden">' + g + '</div></div>';
+
+    /* ================= PHONES ================= */
+    const phone = (title, body, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Open Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (sheet ? '<div style="position:absolute;inset:0;background:var(--dim);z-index:7"></div><div class="sheet"><div class="grab"></div><div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:12px">' + sheet + '</div></div>' : '') + '</div></div>';
+    const msel = (cur) => '<button type="button" class="selb" style="min-height:44px" aria-haspopup="listbox"><span>Module: ' + cur + '</span><span aria-hidden="true">▾</span></button>';
+    const chip2 = (cells) => '<div class="vap-c2">' + J(cells.map(c => '<div><small>' + c[0] + '</small><b class="mono">' + c[1] + '</b><small>' + c[2] + '</small></div>')) + '</div>';
+    const thCard = (t) => '<div class="vx-card"><div class="r1"><b>' + t.t + '</b>' + (t.g ? '' : '<span class="vap-ngt">Not grouped</span>') + '</div>' + bar(t.m, N) + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + sev(t.sv) + (t.nodate ? '<span class="nrec">No dated mention</span>' : trend(t.tr)) + '</div></div>';
+    const MOB = {
+      VAP29A: () => phone('Problem discovery', msel('Problem discovery') + chip2([['Themes', '4', 'named groups'], ['Interviews', '12', 'held, all time'], ['In no theme', '3', 'distinct phrases'], ['Need-to-have', '2', 'themes'], ['ICP mention', '4', 'themes'], ['Fit not recorded', '2', 'themes']]) + '<button type="button" class="btn p" style="min-height:48px">New theme</button>' + J(TH.slice(0, 3).map(thCard))),
+      VAP29B: () => phone('Unthemed quotes', '<p class="raw">4 waiting · tap to select</p><ul class="vap-uq ph2">' + J(UNTH.map(r => '<li><span class="vap-ck' + (r[3] ? ' on' : '') + '" role="checkbox" aria-checked="' + r[3] + '">' + (r[3] ? '✓' : '') + '</span><div><div class="q">“' + r[0] + '”</div><small>' + r[1] + ' · ' + r[2] + '</small></div></li>')) + '</ul><span class="eye" style="display:flex;gap:6px;align-items:center">Eadwyn’s groupings ' + NEW('#6006') + '</span><article class="vap-sg"><b><span class="mono">2</span> quotes → “Re-keying invoices into the ERP”</b><span class="raw">[Ana Petrov] · [Wei Zhang]</span><div style="display:flex;gap:6px"><button type="button" class="btn" style="flex:1">Discard</button><button type="button" class="btn" style="flex:1">Edit</button><button type="button" class="btn" style="flex:1;border-color:var(--vi);color:var(--vt)!important">Accept</button></div></article><div class="vap-pbar"><span><b class="mono">2</b> selected</span><button type="button" class="btn p" style="min-height:48px">Assign 2</button></div>'),
+      VAP29C: () => phone('Theme', '<span class="eye">Pain theme</span><h1 style="font-size:21px;font-weight:800;line-height:1.2">Matching carrier invoices by hand every month</h1><p style="font-size:13px">Mentioned in <b class="mono">7</b> of <b class="mono">12</b> interviews</p><div style="display:flex;gap:8px;flex-wrap:wrap">' + sev('Severe') + '<span class="pl v">Frequent</span></div><dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>How often</dt><dd>7 of 12 held</dd><dt>Trend</dt><dd>▲ 3 in 30 days</dd><dt>First heard</dt><dd>28 Sep 2026</dd></dl><button type="button" class="btn" style="min-height:44px">Actions</button>', '<b style="font-size:16px">Theme actions</b>' + J(['Edit title and severity', 'Write a hypothesis from this', 'See who has it', 'Merge into another theme', 'Split into a new theme'].map(a => '<button type="button" class="btn" style="min-height:48px;justify-content:flex-start">' + a + '</button>')) + '<button type="button" class="btn" style="min-height:48px;justify-content:flex-start;color:var(--neg)!important">Delete theme…</button>'),
+      VAP29D: () => phone('Ideal customer profile', msel('Ideal customer profile') + J(SEG.map(s => '<div class="vx-card"><div class="r1"><b>' + s.n + '</b>' + (s.pr ? '<span class="pl v">★ Primary ◇</span>' : '') + '</div><small>' + s.i + ' interviews · ' + s.s + ' strong fit</small>' + ev(s.e) + '</div>')) + '<section class="cd" style="padding:12px 14px;gap:6px"><b>Interviews in no segment · <span class="mono">3</span></b><div class="vx-card" style="padding:10px 12px"><div class="r1"><b>[Ruth Okafor]</b>' + fit('p') + '</div><small>11 Nov</small></div></section>', '<b style="font-size:16px">Put [Ruth Okafor] in a segment</b>' + J(['Mid-size 3PL ops', 'Freight forwarder finance', 'Small owner-run carriers', 'No segment'].map((s, i) => '<label class="vap-rad' + (i === 1 ? ' on' : '') + '"><span aria-hidden="true"></span>' + s + '</label>')) + '<button type="button" class="btn p" style="min-height:48px">Save</button>'),
+      VAP29E: () => phone('Segment', '<span class="eye">Segment</span><h1 style="font-size:21px;font-weight:800">Mid-size 3PL ops</h1><div style="display:flex;gap:8px;flex-wrap:wrap">' + ev('Pattern') + '<span class="raw">5 interviews · 4 strong fit</span></div>' + J(STEPS.map((s, i) => '<details class="vap-acc"' + (i === 1 ? ' open' : '') + '><summary><b>' + (i + 1) + ' · ' + s[0] + '</b>' + step(s[2]) + '</summary>' + (i === 1 ? '<div class="ta" style="min-height:70px;margin-top:8px">' + NREC('Not written yet') + '</div><button type="button" class="btn p" style="min-height:44px;margin-top:8px">Save</button>' : '') + '</details>'))),
+      VAP29F: () => phone('Compare · 1 of 3', '<div class="vap-pg" aria-label="Segment 1 of 3"><i class="on"></i><i></i><i></i></div><div class="vx-card"><div class="r1"><b>Mid-size 3PL ops</b><span class="pl v">★ Primary</span></div><small>swipe for Freight forwarder finance →</small></div><dl class="vap-pgl">' + J(CMP.slice(0, 9).map(r => '<dt>' + r[0] + '</dt><dd>' + cmpCell(r[0], r[1][0]) + '</dd>')) + '</dl><p class="foot">Row labels stay pinned; one segment per screen, never a wide table.</p>'),
+      VAP29G: () => phone('Customer research', msel('Customer research') + '<div class="vap-seg" role="radiogroup" aria-label="Funnel stage">' + J(FUN.map((f, i) => '<button type="button" role="radio" aria-checked="' + (i === 1) + '"><b class="mono">' + f[1] + '</b><small>' + f[0] + '</small></button>')) + '</div><p class="raw">cumulative · reached the stage or later</p>' + J(IVS.slice(1, 4).map(r => '<div class="vx-card"><div class="r1"><b>' + r[0] + '</b></div>' + stage(r[2], r[3]) + '</div>')), '<b style="font-size:16px">Move [Erik Lund]</b>' + J([['lead', ''], ['invited', 'current'], ['booked', ''], ['done', '']].map((s, i) => '<label class="vap-rad' + (i === 2 ? ' on' : '') + '"><span aria-hidden="true"></span>' + stage(s[0]) + '<small class="raw" style="margin-left:auto">' + s[1] + '</small></label>')) + fld('Date reached · optional', '<span class="mono">14 Nov 2026</span>') + '<button type="button" class="btn p" style="min-height:48px">Move to Booked</button>'),
+      VAP29H: () => phone('Recording · 08:12', '<div class="vap-pg" aria-label="Question 3 of 7"><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i></div><span class="eye">H1 · question 3 of 7 · 2 asked</span><div class="vap-big">What happens when an invoice doesn’t match?</div><span class="raw">swipe for the next question</span><button type="button" class="btn p" style="min-height:52px">Mark asked</button><button type="button" class="btn" style="min-height:44px">Skip</button><div style="margin-top:auto" class="vx-rec">' + st('Processing', 'Recording · saved 2 s ago') + '</div>')
+    };
+
+    /* ================= STATES ================= */
+    const skel = (n) => '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px">' + J(Array.from({ length: n || 3 }, (_, i) => '<span class="sk" style="height:' + (i % 2 ? 12 : 18) + 'px;width:' + [70, 90, 55, 80][i % 4] + '%"></span>')) + '</div>';
+    const ro = '<div class="nt"><span class="ic" aria-hidden="true">' + SH.lk + '</span><div><b>You’re reading as a partner.</b><div>No write tools, exports or suggestions. Writers are the venture’s own team or an admin.</div></div></div>';
+    const STATES = {
+      VAP19B: () => crop('<span class="eye">Theme actions · Edit, Merge, Split, Delete (Scope → Review → Result) · nothing changes until confirmed</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start">'
+        + dlg('Edit theme', 'Matching carrier invoices…', fld('Title', 'Matching carrier invoices by hand every month') + '<div class="vx-field"><label>Severity</label><div class="vx-seg2"><span>Mild</span><span>Real</span><span class="on">Severe</span></div></div><p class="raw">Mild: a nuisance. Real: costs time or money. Severe: blocks the job.</p>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Save</button>')
+        + dlg('Merge into another theme', 'Review', fld('Merge into', 'Month-end close slips by days ▾') + '<dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Phrases</dt><dd>3 move across</dd><dt>Interviews</dt><dd><span class="mono">10</span> distinct (7 + 5, 2 shared)</dd><dt>Hypotheses</dt><dd>H1 link kept once</dd></dl><p class="raw">This theme’s record closes; its old link says where it went.</p>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Merge</button>')
+        + dlg('Split into a new theme', 'Scope', fld('New theme title', 'Finance waits on ops') + '<span class="eye">Phrases to move</span><ul class="vap-mem"><li><span class="vap-ck on">✓</span> “Finance waits on ops to finish the matching”</li><li><span class="vap-ck"></span> “Matching is the job nobody wants”</li><li><span class="vap-ck"></span> “Matching invoices by hand”</li></ul>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Split 1 phrase</button>')
+        + dlg('Delete this theme?', 'Review', '<p style="font-size:13px;line-height:1.5"><b>Its quotes stay on their interviews, unthemed. Its links to hypotheses go.</b></p><dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Quotes</dt><dd>7 return to Unthemed</dd><dt>Links</dt><dd>1 (H1 · Supporting) removed</dd><dt>Interviews</dt><dd>unchanged</dd></dl>', '<button type="button" class="btn">Keep it</button><button type="button" class="btn dg">Delete theme</button>')
+        + '</div>' + note('g', 'Result · Theme deleted.', '7 quotes are back in Unthemed quotes. H1 lost one supporting link.'), 1440),
+      VAP20: () => crop('<span class="eye">Problem discovery and theme record · states · Zero, Not recorded and Unavailable never look alike</span><div class="vap-sgrid">'
+        + box('Loading', skel(4) + '<span class="raw">Announced: “Loading Problem discovery”</span>')
+        + box('Not recorded · list row', '<div style="display:flex;flex-direction:column;gap:6px">' + sev(null) + '<span class="nrec">No dated mention</span>' + fit('u') + '</div><p class="raw">A phrase with no judged quote, no dated interview and no fit. Never drawn as 0.</p>')
+        + box('Not recorded · record', '<dl class="kv2" style="grid-template-columns:100px minmax(0,1fr)"><dt>How often</dt><dd>' + NREC('No interview names it yet') + '</dd><dt>How severe</dt><dd>' + NREC('No quote judged yet') + '</dd><dt>Trend</dt><dd>' + NREC('No dated mention') + '</dd><dt>Problem stmt</dt><dd>' + NREC() + ' ' + NEW('#6006') + '</dd></dl>')
+        + box('Zero is a value', '<div class="vx-ev" style="grid-template-columns:1fr 1fr"><div><span class="l">Need-to-have</span><b>0</b><small>themes · need recorded on other themes</small></div><div><span class="l">Need-to-have</span><b>' + NREC() + '</b><small>never recorded on any interview</small></div></div>')
+        + box('Unavailable · theme list', st('Unavailable') + note('r', 'The theme list couldn’t be read at 14:30.', 'Nothing is shown as zero.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>') + '<p class="raw">Unthemed quotes and Record a session still work below it.</p>')
+        + box('Unavailable · Eadwyn’s suggestions', st('Unavailable') + '<p style="font-size:12.5px">Eadwyn’s suggestions couldn’t be read. This doesn’t mean there are none.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>')
+        + box('Refused · partner reading', ro + '<ul class="vap-ql"><li><div class="q"><span class="nrec">Quote withheld (no consent to quote)</span></div><div class="m"><span>[Jonas Berg] · 21 Oct</span></div></li></ul><p class="raw">No New theme, Assign, Export map or suggestions.</p>')
+        + box('Saving · Assign', '<div class="vap-selb"><span><b class="mono">1</b> selected</span>' + st('Saving', 'Assigning to “Month-end close…”') + '</div><p class="raw">Buttons stay disabled until the server answers.</p>')
+        + box('Save failed · Assign, Merge, Split', note('r', 'Couldn’t merge.', 'Nothing changed. Your choices are kept in the dialog.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>') + '<p class="raw">Assign keeps the selection; Split keeps the title and phrases.</p>')
+        + box('Stale link · 404', '<b style="font-size:13px">This theme isn’t here any more.</b><p style="font-size:12.5px">It was merged or deleted. Its quotes stay on their interviews.</p><a class="btn bsm" href="#" style="align-self:flex-start">Back to Problem discovery</a>')
+        + '</div>', 1440),
+      VAP23B: () => crop('<span class="eye">Segment · inline step edit and Archive (Scope → Review → Result)</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start">'
+        + '<section class="cd" style="gap:8px"><b>2 · Context</b><div class="ta" style="min-height:70px">Month-end close with 3–6 road carriers; invoices arrive as PDFs by email</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="raw">Editing in place</span><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Cancel</button><button type="button" class="btn bsm p">Save</button></div></div></section>'
+        + dlg('Archive this segment?', 'Review ' + '· ◇ #6003', '<p style="font-size:13px;line-height:1.5"><b>Its 5 interviews keep their fit and leave the segment.</b> They appear in Interviews in no segment.</p><dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>Interviews</dt><dd>5 → no segment</dd><dt>Primary ICP</dt><dd>cleared; choose another</dd><dt>Steps</dt><dd>kept, read only</dd></dl>' + OWN('Owner pick A · #6003’s PR follows it'), '<button type="button" class="btn">Keep it</button><button type="button" class="btn dg">Archive segment</button>', 400)
+        + note('g', 'Result · Segment archived.', '5 interviews are in no segment now, with their fit kept. Mid-size 3PL ops is no longer primary.') + '</div>', 1300),
+      VAP25: () => crop('<span class="eye">Ideal customer profile and segment record · states</span><div class="vap-sgrid">'
+        + box('Loading', skel(4) + '<span class="raw">Announced: “Loading Ideal customer profile”</span>')
+        + box('Not recorded · steps', '<div class="vap-step" style="grid-template-columns:minmax(0,1fr) auto"><div><b>Context</b><div>' + NREC('Not written yet') + '</div></div>' + step('m') + '</div><div class="vap-step" style="grid-template-columns:minmax(0,1fr) auto"><div><b>Urgency</b><div>' + NREC('Not set') + '</div></div>' + step('m') + '</div><div class="vap-step" style="grid-template-columns:minmax(0,1fr) auto"><div><b>Value promised</b><div>Payables closed in 3 days</div></div>' + step('s') + '</div>')
+        + box('Not recorded · fit', fit('u') + '<p class="raw">An interview placed with no fit. Counted in the chart as “Fit not recorded”, never as no fit.</p>')
+        + box('Evidence stops at Pattern', ev('Anecdote') + ev('Pattern') + '<p class="raw">Under 3 interviews: Anecdote. 3 or more: Pattern. “Measured” is never drawn on a segment.</p>')
+        + box('Unavailable · segment read', st('Unavailable') + note('r', 'Segments couldn’t be read.', 'The count is not zero; it is unknown.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>') + '<p class="raw">Interviews in no segment still works below.</p>')
+        + box('Refused · partner reading', ro + '<p class="raw">No Assign, Edit, Archive or suggestions. Who can grant write access: the venture’s founder or an admin.</p>')
+        + box('Saving · step edit', '<div class="ta" style="min-height:44px">Month-end close with 3–6 road carriers…</div>' + st('Saving'))
+        + box('Save failed · step edit', '<div class="ta" style="min-height:44px">Month-end close with 3–6 road carriers…</div><div class="vap-err" role="alert">✕ Couldn’t save. Your text is kept here.</div><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>')
+        + box('Chart waiting', '<p style="font-size:12.5px"><b class="mono">1</b> interview placed in a segment so far. The chart appears at 3.</p>')
+        + box('Archived segment · stale link', '<b style="font-size:13px">This segment was archived.</b><p style="font-size:12.5px">Its interviews kept their fit and are in no segment now.</p><a class="btn bsm" href="#" style="align-self:flex-start">Back to Ideal customer profile</a>')
+        + '</div>', 1440),
+      VAP26B: () => crop('<span class="eye">Recruiting · Add a lead, Move stage, and where the next link lands</span><div style="display:grid;grid-template-columns:380px 340px minmax(0,1fr);gap:14px;align-items:start">'
+        + dlg('Add a lead', 'New interview at stage Lead · ◇ #6001', fld('Name', '[Hana Sato]') + fld('Company', '[Kobe Freight]') + fld('Role', 'Ops lead') + '<div class="vx-field"><label>Channel</label><div class="vx-seg2"><span>In person</span><span class="on">Call</span><span>Text chat</span><span>Typed notes</span></div></div><p class="raw">Whether the create route takes a stage is unconfirmed (#6001).</p>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Add lead</button>', 380)
+        + '<section class="cd" style="gap:6px;position:relative;min-height:330px"><b>Move stage</b><span class="raw">on each row · writes <code>PUT …/interviews/:id/stage</code></span>' + moveMenu().replace('class="vap-menu"', 'class="vap-menu" style="position:static;box-shadow:none;width:auto"') + '</section>'
+        + '<section class="cd" style="gap:8px"><b>Landing from the overview’s next link</b><div class="chips"><button type="button" aria-checked="true">Invited · no slot yet<span>3</span></button><button type="button" aria-checked="false">Clear</button></div>' + ivTable({ rows: IVS.slice(1, 4) }) + '</section></div>', 1440),
+      VAP27: () => crop('<span class="eye">Interview guide in the recording lightbox · ⚑ owner pick A: a panel here and a sheet from Customer research, no new route</span>' + recWide(guide({ inRec: true })), 1150),
+      VAP27C: () => crop('<span class="eye">Interview guide · no open hypothesis, and AI off</span><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start"><section class="cd">' + guide({ def: true }) + '<p class="raw">Labelled default discovery questions while no hypothesis is open.</p></section><section class="cd">' + guide({ ai: 'off' }) + '</section></div>', 1200),
+      VAP28: () => crop('<span class="eye">Recruiting and interview guide · states</span><div class="vap-sgrid">'
+        + box('Loading', skel(4) + '<span class="raw">Announced: “Loading Customer research”</span>')
+        + box('Not recorded · stage and channel', stage('none', 'no stage · read as Done') + NREC('No channel') + '<p class="raw">An interview with no stage counts in Done, and says so.</p>')
+        + box('Unavailable · funnel', st('Unavailable') + note('r', 'The funnel couldn’t be read.', 'The interview list below still works.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>'))
+        + box('Unavailable · waitlist', note('a', 'The waitlist couldn’t be read.', 'Lead 19 and Invited 17 count interviews only until it can.', '<button type="button" class="btn bsm" style="margin-top:6px">Try again</button>'))
+        + box('Refused · partner reading', ro + '<p class="raw">No Move stage, Invite, Follow up, Promote or guide edits.</p>')
+        + box('Saving · stage move', stage('invited', '→ Booked') + st('Saving'))
+        + box('Save failed · stage move', stage('invited', 'invited 9 Nov') + '<div class="vap-err" role="alert">✕ Couldn’t move to Booked. It stays at Invited; your date is kept.</div><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>')
+        + box('Invite refused', note('r', 'Invite not sent.', '“This sign-up has no email address on file.”', '') + '<p class="raw">The Worker’s sentence, shown as it came.</p>')
+        + box('Guide · Unavailable', st('Unavailable') + '<p style="font-size:12.5px">The guide couldn’t be read. Recording still works.</p>' + NEW('#6008'))
+        + box('Guide · draft failed', note('r', 'Eadwyn couldn’t draft questions.', 'The held credit is released. Your questions are unchanged.', ''))
+        + '</div>', 1440)
+    };
+
+    /* ================= DOCS ================= */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      VAP31: () => dk('<h1>Developer handoff · addendum (V17–V31)</h1><p>Continues the Validate v2 canvas (#4837, V0–V16). Checked against <code>main</code> 6d7712c6d1 on 14 Nov 2026: <code>cloudflare-worker/src/services/cycleValidate.ts</code>, <code>services/records/validate.ts</code>, <code>routes/cycle_validate.ts</code>, <code>routes/progress.ts</code>, <code>routes/founder_validate.ts</code>, <code>services/callOutputs.ts</code>. No new route is drawn.</p>'
+        + '<h2>Requires engineering (◇)</h2>' + tbl(['Issue', 'What', 'Boards'], [
+          ['#6006', 'Rank reason; problem statement (who has it, how they cope, what it costs); sources vs mentions; supporting vs contradicting counts on the list; Eadwyn grouping proposals accepted as a set; bulk assign; used on slide; pain map share link and PDF', 'V17, V19, V20, V29'],
+          ['#6007', 'Primary ICP (one per venture); structured firmographics and disqualifiers on the segment; Compare segments (multi-segment read); Eadwyn’s proposed step text', 'V21, V23, V24, V29'],
+          ['#6003', 'Archive a segment (in progress; <code>archived_at</code> is read, nothing writes it)', 'V23'],
+          ['#6002', 'The list of interviews in no segment (only the count is read today)', 'V21'],
+          ['#6001', 'Add a lead at stage Lead; Promote at stage Lead; the Stage filter listed', 'V26, V28'],
+          ['#6008', 'Interview guide: store, read, Eadwyn draft with a cost hold', 'V27, V28, V29'],
+          ['No issue yet', 'A source on every segment step (only Value promised has <code>value_source</code>)', 'V23']])
+        + '<h2>Working on main (drawn as real)</h2><p>The problem-discovery read (<code>problemRecords</code>: title, wordings, mentions, severity, trend, ICP / need / fit-not-recorded counts, supports, <code>parts.stats</code>, <code>parts.unthemed</code> and <code>unthemed_total</code>, writer-only <code>parts.suggestions</code> of kind <code>pain_severity</code>); quotes withheld as “Quote withheld (no consent to quote)” for non-writers; the theme record (facts, quotes with Consented / No quote consent, hypotheses both directions, segments); assign one phrase (<code>POST /api/progress/pain-groups/:projectId/assign</code>); theme create, edit, delete, merge, split; the pain map CSV export. ICP: segments with source, fit split and Anecdote / Pattern; the unassigned count; suggestions of kind <code>segment</code>, <code>icp_fit</code>, <code>firmographic</code>, <code>job_to_be_done</code>; <code>PUT …/interviews/:id/segment</code>; the five steps with <code>value_source</code> and <code>score_since</code>; findings; persona export. Recruiting: <code>pipelineOf</code> (cumulative; no stage reads as Done; waitlist new in Lead, invited / followed up in Invited); <code>PUT …/interviews/:id/stage</code>; waitlist invite, follow-up, promote.</p>'
+        + '<h2>Owner questions (option A drawn, ⚑)</h2>' + tbl(['Question', 'Drawn'], [['Where Compare lives', 'A · a mode on the module page (<code>?compare=ids</code>), no new route. B would be <code>/validate/ideal-customer-profile/compare</code> and changes #6007’s scope'], ['Where the guide lives', 'A · a panel in the recording lightbox and a sheet from Customer research'], ['Guide kept per', 'A · per venture, with a copy onto an interview when used'], ['Archive rule', 'A · interviews leave the segment and keep their fit (binds #6003)'], ['Promoted sign-up', 'A · becomes an interview at stage Lead']])
+        + '<h2>Frontend only</h2><p>Labelled stats strip; filters and sorts; the not-grouped row; the selection bar; facts layout; consent and severity pills; the fit chart (from 3 placed interviews); evidence pill; step states; the cumulative funnel labels; stage chips once the filter exists; phone sheets, accordion and pager; dark tokens.</p>'
+        + '<h2>Notes</h2><p>States use the Platform States words (D5129): Unavailable for a failed read, where V13 drew “Unreadable”. Severity, fit, step and stage each carry a word and a glyph. Evidence stops at Pattern. Accessibility follows V16: 44px targets on phone, focus returns after dialogs, Saving announced politely and failures as alerts.</p>')
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'VAP17') html = page(pdMain(), { h: 1880, rail: pdRail() });
+    else if (B === 'VAP18') html = page(pdHead({ empty: true }) + '<section class="vx-next" style="grid-template-columns:minmax(0,1fr) auto"><div><span class="ey">Start here</span><b>No interview yet</b><p>Problem discovery fills from what interviewees say. Each pain you log appears in the list as a one-phrase theme marked Not grouped, and in Unthemed quotes, until you group it.</p></div><a class="btn p" href="#">Record your first session</a></section><section class="cd" style="gap:8px;max-width:760px"><span class="eye">What appears here</span><ul class="rz"><li><b>Themes, ranked</b><small>by distinct interviews that name each one</small></li><li><b>Unthemed quotes</b><small>phrases not yet grouped, with who said them</small></li><li><b>Hypotheses it feeds</b><small>Supporting or Contradicting, by code</small></li></ul></section>', { h: 900 });
+    else if (B === 'VAP18B') html = page(pdHead() + pdStats({ early: true }) + thList([{ r: 1, t: 'Matching carrier invoices by hand', m: 2, sv: null, tr: -2, icp: 1, need: 0, fnr: 1, hy: [], g: false }, { r: 2, t: 'Month-end close slips by days', m: 1, sv: null, tr: -1, icp: 1, need: 0, fnr: 0, hy: [], g: false }, { r: 3, t: 'No budget line for a standalone tool', m: 1, sv: null, tr: null, icp: 1, need: 0, fnr: 0, hy: [], g: false, nodate: true }, { r: 4, t: 'Disputes with carriers over surcharges', m: 1, sv: null, tr: 1, icp: 1, need: 0, fnr: 0, hy: [], g: false }], { N: 3, lite: true, cap: '4 rows · 0 themes · every phrase not grouped yet · 3 interviews held' }) + unthemed({ total: 5, sel: 0, rows: [['Matching carrier invoices by hand', '[Maya Chen] · [Fleetwise]', '2 Oct', false], ['Matching carrier invoices by hand', '[Sam Ortiz] · [Haulbase]', '28 Sep', false], ['Month-end close slips by days', '[Maya Chen] · [Fleetwise]', '2 Oct', false], ['No budget line for a standalone tool', '[Priya Raman] · [CargoLoop]', 'No date', false], ['Disputes with carriers over surcharges', '[Priya Raman] · [CargoLoop]', '28 Oct', false]] }), { h: 1120 });
+    else if (B === 'VAP19') html = page(record({ draft: true }), { h: 1420, n: 3 });
+    else if (B === 'VAP21') html = page(icpMain(), { h: 1280, rail: icpRail() });
+    else if (B === 'VAP22') html = page(icpHead({ empty: true }) + '<section class="vx-next" style="grid-template-columns:minmax(0,1fr) auto"><div><span class="ey">Start here</span><b>No segment yet</b><p>A segment says who the customer is, in five steps: who they are, their context, the job to be done, how urgent it is, and the value you promise.</p></div><a class="btn p" href="#">Start the profile</a></section><section class="cd" style="gap:8px;max-width:760px"><div class="ch"><h2 style="font-size:14px">Customer fit by segment</h2></div><p style="font-size:12.5px"><b class="mono">0</b> interviews placed in a segment so far. The chart appears at 3.</p></section>' + unassigned({ countOnly: true }).replace('<span class="mono">3</span> held', '<span class="mono">12</span> held'), { h: 900 });
+    else if (B === 'VAP22B') html = page(icpHead() + '<section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:14px">Customer fit by segment</h2><span class="raw">held interviews, all time</span></div><p style="font-size:12.5px"><b class="mono">1</b> interview placed in a segment so far. The chart appears at 3.</p></section>' + segTable({ rows: [{ n: 'Mid-size 3PL ops', src: 'From the ICP wizard', i: 1, s: 1, e: 'Anecdote', up: '2 Oct' }] }), { h: 900 });
+    else if (B === 'VAP23') html = page(segRecord({ draft: true }), { h: 1300, n: 3 });
+    else if (B === 'VAP24') html = page(compare(), { h: 1000 });
+    else if (B === 'VAP26') html = page(crMain(), { h: 1340, n: 3 });
+    else if (B === 'VAP27B') html = page(crHead() + crStrip() + funnel(), { h: 1000, overlay: '<div style="position:absolute;inset:0;background:var(--dim);z-index:7"></div><aside role="dialog" aria-modal="true" aria-label="Prepare questions" class="vap-drw"><div class="mdh"><div><span class="raw">Customer research</span><h2>Prepare questions</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div style="padding:0 20px 20px;overflow:hidden">' + guide() + '</div></aside>' });
+    else if (B === 'VAP30A') html = page(pdMain({ nomenu: true }), { h: 1880, rail: pdRail() });
+    else if (B === 'VAP30B') html = page(icpMain(), { h: 1280, rail: icpRail() });
+    else if (B === 'VAP30C') html = page(segRecord({}), { h: 1300, n: 3 });
+    else if (STATES[B]) html = STATES[B]();
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(pdMain(), { h: 1880, rail: pdRail() });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

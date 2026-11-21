@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals v2 Best-Fit Consultation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Admin · Approvals · Best-Fit consultations · #5884 · addendum to Approvals v2, boards AP-20 to AP-31</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Best-Fit consultations — a native Approvals board for confirming, cancelling and completing consultation requests</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Approvals v2 canvas (last board AP-19) on the native-board grammar of AP-08 to AP-13: breadcrumb, status tabs, the four-cell summary, the queue, the owner-first drawer and the decision dialog with What changes · Who is told · What is recorded. Address (option A): /admin/approvals/best-fit with /confirmed, /completed and /cancelled, and one item at /admin/approvals/best-fit/:item. Any admin can decide. Only the transitions the Worker allows are offered: Requested → Confirmed or Cancelled, Confirmed → Completed or Cancelled; Completed and Cancelled have no next step. Nobody is told yet. The report is shown as Recorded / Not recorded only (option A). States follow Platform States (D5129); violet dashed ◇ tags mark what needs backend work (#5885), amber ⚑ tags the pending notification decision (#5886).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 12:40 UTC · signed in as Admin A · checked against main 6d7712c6d1 · 5 requested, 3 confirmed, 4 completed, 2 cancelled · [Member A] to [Member N], Admin A and Admin B, their topics and slot times are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Approvals v2 Best-Fit Consultation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['AP-20', 'Best-Fit consultations · Requested · desktop 1440', 'The board under Approvals › Lanes. Tabs Requested 5 · Confirmed 3 · Completed 4 · Cancelled 2; the summary counts requests waiting now (Requested 5, Overdue 2 with 1 unowned, Unassigned 2, Oldest 5 d 3 h). Rows: Member (name, or the email with “No name recorded”), Topic or “No topic recorded”, Requested with the slot time under it, Waiting with its band in words, Owner from the Approvals inbox, Review →. Eadwyn is the 44px rail.', [F('BFC20', false, 780)]],
+      ['AP-21', 'Item drawer · requested item, Eadwyn opened', '600px drawer over the marked row: Owner first (Unassigned · Assign to me · Change…), then the facts the store keeps, the ◇ History section and the two decisions Requested allows: Confirm… and Cancel…. Eadwyn, opened on purpose, proposes a summary of the topic and notes and, since no slot time is recorded, a slot-time wording; Accept only fills the Confirm field. It never decides.', [F('BFC21', false, 1000)]],
+      ['AP-22', 'Confirm dialog and result', 'A · Requested → Confirmed, Nobody yet told, the decision, you and the time recorded; the slot field holds the wording accepted from Eadwyn. B · An item with a recorded slot: the field is prefilled and blank keeps it. C · After confirming: the drawer shows Confirmed and the next decisions, the row leaves Requested (4 now), the toast links to Decided.', [F('BFC22a', 'A · Confirm, slot filled from Eadwyn', 1000), C('BFC22b', 'B · Confirm with a recorded slot', 640, 492), F('BFC22c', 'C · Result', 900)]],
+      ['AP-23', 'Cancel and Complete dialogs', 'Same grammar. Cancel (from Requested or Confirmed) is the danger action and cannot be undone; its dismiss reads Keep consultation. Complete (from Confirmed only) says completion is history, not a second approval, and does not appear in Decided. No note field: the store keeps none.', [C('BFC23', false, 1240, 447)]],
+      ['AP-24', 'Changed while you were reviewing', 'A · version_conflict: “This consultation changed after you read it.” with the item as it stands now (Confirmed, slot changed) and only the decisions Confirmed allows. B · illegal_transition (version matched, the decision is not allowed from the status): “A consultation cannot move from Cancelled to Confirmed.” and Nothing left to decide; nobody is said to have decided it. C · No answer: “We could not tell whether this was saved.” with Read again; decisions wait for the read. In every case the typed slot time stays on screen.', [F('BFC24a', 'A · version_conflict', 900), F('BFC24b', 'B · illegal_transition', 900), F('BFC24c', 'C · no answer from the server', 900)]],
+      ['AP-25', 'Confirmed, Completed and Cancelled tabs', 'Confirmed: Member · Topic · Slot time · Owner (◇ not read outside Requested) · Review →; its drawer offers Complete… and Cancel… with the Owner box marked ◇. Completed and Cancelled are read-only, with ◇ for when and by whom on each row; the drawer says “Nothing left to decide.” Completed history rows are sample rows of the ◇ per-item read.', [F('BFC25a', 'Confirmed', 820), F('BFC25b', 'Confirmed · drawer', 900), F('BFC25c', 'Completed · drawer', 900), F('BFC25d', 'Cancelled', 700)]],
+      ['AP-26', 'Empty · nothing waiting', 'A read that succeeded: Requested 0 · measured, Oldest —, “No Best-Fit consultations are waiting.”, “Members book from their Best-Fit report; new requests appear here.” and Open Confirmed · 3. Never drawn like Unreadable.', [F('BFC26', false, 700)]],
+      ['AP-27', 'States', 'A · Loading: skeleton rows, tab counts and summary cells blank, never 0. B · The state key, and Not recorded: no name, topic, notes, slot time or report snapshot; decisions before 10 November 2026. C · Unreadable (consultations_unreadable): the banner, — in every count and tab, no rows; the Inbox still works. D · Owner not read: “? Not read” per row, and the Unassigned cell says Not read instead of a number. E · Not found. F · Refused for a non-admin. G · Saving, and a save that failed with the slot time kept.', [C('BFC27a', 'A · Loading', 1200, 465), C('BFC27b', 'B · State key and Not recorded', 1200, 602), C('BFC27c', 'C · Unreadable', 1200, 440), C('BFC27d', 'D · Owner not read', 1200, 440), C('BFC27e', 'E · Not found', 640, 192), C('BFC27f', 'F · Refused', 640, 210), C('BFC27g', 'G · Saving and save failed', 1140, 553)]],
+      ['AP-28', 'Tablet 768', 'AP-20 with the topic folded under the member and the summary as 2 × 2; the drawer becomes a full-height sheet with ‹ Requested.', [C('BFC28a', 'List', 768, 1024), C('BFC28b', 'Item sheet', 768, 1024)]],
+      ['AP-29', 'Phone 390', '‹ Lanes, tabs that scroll sideways, a 2 × 2 summary and cards (member, topic, waiting with its band in words, slot time, owner, Open, Assign only when nobody owns it). The item is a full page with pinned decisions; the Confirm dialog is a bottom sheet. Every target is 44px; no table is wider than the screen.', [P('BFC29a', 'List'), P('BFC29b', 'Item'), P('BFC29c', 'Confirm sheet')]],
+      ['AP-30', 'Dark', 'AP-21 on the dark tokens with the rail closed: Unassigned stays amber with its word, Due soon and Overdue keep their glyphs, Cancel… keeps its danger outline.', [F('BFC30', false, 1000)]],
+      ['AP-31', 'Handoff', 'Every value with the read and column it comes from, what needs backend work (◇ #5885), what waits on the owner (⚑ #5886 and the slot-clearing question), what is frontend only, what is preserved, accessibility and open questions.', [W('BFC31')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

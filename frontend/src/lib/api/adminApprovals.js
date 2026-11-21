@@ -21,9 +21,9 @@ function queryOf(keys, filters) {
 }
 
 export const adminApprovalsApi = {
-  inbox: (page = 1, filters = {}) => {
+  inbox: (page = 1, filters = {}, signal) => {
     const rest = queryOf(INBOX_KEYS, filters);
-    return request(`/admin/approvals?page=${encodeURIComponent(page)}${rest ? `&${rest}` : ''}`);
+    return request(`/admin/approvals?page=${encodeURIComponent(page)}${rest ? `&${rest}` : ''}`, { signal });
   },
   item: (lane, itemId) => request(`/admin/approvals/items/${encodeURIComponent(lane)}/${encodeURIComponent(itemId)}`),
   history: (lane, itemId) => request(
@@ -33,9 +33,9 @@ export const adminApprovalsApi = {
     method: 'POST',
     body: JSON.stringify({ assignee_user_id: assigneeUserId, items }),
   }),
-  decided: (page = 1, filters = {}) => {
+  decided: (page = 1, filters = {}, signal) => {
     const rest = queryOf(DECIDED_KEYS, filters);
-    return request(`/admin/approvals/decided?page=${encodeURIComponent(page)}${rest ? `&${rest}` : ''}`);
+    return request(`/admin/approvals/decided?page=${encodeURIComponent(page)}${rest ? `&${rest}` : ''}`, { signal });
   },
   weekly: () => request('/admin/approvals/decided/weekly'),
 };

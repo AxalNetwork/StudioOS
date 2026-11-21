@@ -140,11 +140,16 @@ export function sendPreview(item) {
   const v = item?.latest_version;
   if (!v) return { sendable: false, line: 'There is no version to send.' };
   const tag = `v${v.version}`;
+  const note = String(v.summary ?? '').trim();
+  // #5961 (D5960): a stored file is content too, named by its file name.
+  if (v.document === 'file') {
+    const name = String(v.file?.name || '').trim() || 'document';
+    return { sendable: true, line: `Sends ${tag}${note ? ` — “${note}”` : ''} · file ${name}` };
+  }
   const link = typeof v.link_url === 'string' ? v.link_url.trim() : '';
   let host = '';
   if (link && httpsHref(link)) { try { host = new URL(link).hostname; } catch { host = ''; } }
-  if (!host) return { sendable: false, line: `${tag} has no content to send. Add a version with a link, then send that one.` };
-  const note = String(v.summary ?? '').trim();
+  if (!host) return { sendable: false, line: `${tag} has no content to send. Add a version with a file or a link, then send that one.` };
   return { sendable: true, line: `Sends ${tag}${note ? ` — “${note}”` : ''} · opens ${host}` };
 }
 

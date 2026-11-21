@@ -216,10 +216,14 @@ export function EventDrawer({ row, onClose, onActor }) {
   );
 }
 
+/** Whether a page ended inside one second the next page cannot continue (the server sent no `skip`). */
+const splitUnreached = (page) => Boolean(page?.page_split_second) && !page?.cursor?.skip;
+
 /**
  * The workspace. `feed` is the first page (null while reading, `unavailable`
- * when the read failed); `loadOlder(before)` resolves to the next page under
- * the same category and filters.
+ * when the read failed); `loadOlder(before, skip)` resolves to the next page under
+ * the same category and filters. D4708 part 2: `skip` is the server's, sent back
+ * when a page lay wholly inside one second, so the next page continues inside it.
  */
 export default function EventsWorkspace({
   feed, unavailable, filter, setFilter, controls, setControls, onRetry, loadOlder, se, now = Date.now(), categories,
@@ -227,7 +231,7 @@ export default function EventsWorkspace({
   const ready = feed && feed !== unavailable;
   const [older, setOlder] = useState([]);
   const [olderState, setOlderState] = useState(() => ({
-    cursor: ready ? feed.cursor || null : null, busy: false, failed: false, split: Boolean(ready && feed.page_split_second),
+    cursor: ready ? feed.cursor || null : null, busy: false, failed: false, split: Boolean(ready && splitUnreached(feed)),
   }));
   const [open, setOpen] = useState(null);
   const [sheet, setSheet] = useState(false);
@@ -241,7 +245,7 @@ export default function EventsWorkspace({
   useEffect(() => {
     listOf.current = feed;
     setOlder([]);
-    setOlderState({ cursor: ready ? feed.cursor || null : null, busy: false, failed: false, split: Boolean(ready && feed.page_split_second) });
+    setOlderState({ cursor: ready ? feed.cursor || null : null, busy: false, failed: false, split: Boolean(ready && splitUnreached(feed)) });
   }, [feed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => (ready ? mergePages(feed.rows, ...older) : []), [ready, feed, older]);
@@ -264,10 +268,10 @@ export default function EventsWorkspace({
     const list = feed;
     setOlderState((s) => ({ ...s, busy: true, failed: false }));
     try {
-      const page = await loadOlder(olderState.cursor.before);
+      const page = await loadOlder(olderState.cursor.before, olderState.cursor.skip);
       if (listOf.current !== list) return;
       setOlder((cur) => [...cur, page.rows || []]);
-      setOlderState({ cursor: page.cursor || null, busy: false, failed: false, split: Boolean(page.page_split_second) });
+      setOlderState({ cursor: page.cursor || null, busy: false, failed: false, split: splitUnreached(page) });
     } catch {
       if (listOf.current !== list) return;
       setOlderState((s) => ({ ...s, busy: false, failed: true }));

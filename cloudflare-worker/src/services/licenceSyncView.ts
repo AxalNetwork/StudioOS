@@ -5,6 +5,7 @@
  */
 import type { Env } from '../types';
 import type { LicenceSyncSummary } from './licenceContracts';
+import { licenceBranchReport } from './licenceBranchReport';
 
 type StepState = 'pending' | 'done' | 'failed';
 /** `licence_termination_ops`, one row per terminated licence. */
@@ -27,11 +28,17 @@ export type TerminationOps = {
  * one state per consequence. Each store is read on its own, so one that cannot
  * be read says so rather than blanking the rest, and a figure nobody recorded
  * is null — never 0.
+ *
+ * D5925 (#5925): `branch_revision` stays the branch's answer to HQ's last
+ * push. `branch_report` is a separate read of what the branch says it holds
+ * now, from the branch itself; a branch that cannot be read reports
+ * `unreadable` there, never the last pushed revision.
  */
-export async function syncSummary(env: Env, licenceId: number): Promise<LicenceSyncSummary> {
+export async function syncSummary(env: Env, licenceId: number, licenceUid: string): Promise<LicenceSyncSummary> {
   const out: LicenceSyncSummary = {
     available: true, hq_revision: null, branch_revision: null, last_success_at: null,
     pending: null, pending_available: true, termination: null, termination_available: true,
+    branch_report: await licenceBranchReport(env, licenceUid),
   };
   try {
     const row = await env.DB.prepare(

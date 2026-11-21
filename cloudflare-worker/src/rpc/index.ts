@@ -25,6 +25,7 @@
  */
 import { branchSegmentOverview } from '../services/personaSegmentScopes';
 import { recordProgramUsage, type ProgramFigure } from '../services/programUsage';
+import type { PromoIssuedReport } from '../services/promoIssuedReport';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { promoCeilingReadback } from '../services/promoCeilingReadback';
 import type { Env } from '../types';
@@ -39,7 +40,7 @@ import {
   type EmergencySignOutRequest,
 } from './branchOps';
 import {
-  recordEscalation, licenceForBranch, reportUsage,
+  recordEscalation, licenceForBranch, reportUsage, reportPromoIssued,
   type EscalationInput, type UsageFigure, type EscalationAnswer,
 } from './hqOps';
 import { loadInsightsForBranch } from '../routes/admin_insights';
@@ -197,6 +198,13 @@ export class BranchEntrypoint extends WorkerEntrypoint<Env> {
   // attribution and not authentication.
   reportUsage(callerCode: string, secret: string, period: string, figures: UsageFigure[]) {
     return reportUsage(this.env, callerCode, secret, period, figures);
+  }
+
+  // D5949: what this branch has issued and spent against its promo ceiling.
+  // Money-adjacent, so authenticated like `reportUsage`; a reported copy for
+  // HQ's Revenue page, never read by a checkout.
+  reportPromoIssued(callerCode: string, secret: string, report: PromoIssuedReport) {
+    return reportPromoIssued(this.env, callerCode, secret, report);
   }
 
   // D1156: authenticated, aggregate-only program figures from this branch.

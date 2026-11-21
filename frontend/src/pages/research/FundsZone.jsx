@@ -12,7 +12,13 @@ import {
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import FundDirectory, { UnreadableBadge } from './FundDirectory';
 import { directoryTabLabel } from './fundDirectoryRead';
+import { updatedAgo } from './fundDossierRead';
 import { Money } from './ResearchOverviewPanel';
+import { researchMyFundsApi } from '../../lib/api/researchMyFunds.js';
+import { MY_FUNDS_PAGE, countScopeLine, dossierMap, identityChip, offsetOf, pageLine } from './myFundsRead';
+import SheetsSyncCard from './SheetsSyncCard';
+
+export { dossierMap };
 
 /**
  * Research · Funds — the funds you have researched, and what the research said.
@@ -42,13 +48,12 @@ import { Money } from './ResearchOverviewPanel';
  * rather than as 0 — which would say no fund writes cheques your size.
  *
  * GOOGLE SHEETS IS A COPY, NOT THE STORE, AND ONLY THE SUPER ADMIN MAY MAKE
- * ONE. The Worker writes to a spreadsheet the Super Admin names and reads it
- * back into POST/PATCH of that same owner's rows. Founders keep a shortlist
- * on Axal; they do not get Connect / Pull / Push. Sheets never talks to D1,
- * pull overwrites the sheet's data rows, and push never deletes a fund — a
- * pass is a state, and a row that left the sheet is not a delete. The card
- * lives in this body rather than as a fourth canvas op, because the
- * zone-action row is three slots.
+ * ONE. The Worker writes to a tab the Super Admin chose and reads it back
+ * into that same owner's rows. Founders keep a shortlist on Axal; they never
+ * see the card. Sheets never talks to D1, and Import from Sheets never
+ * deletes a fund — a pass is a state, and a row that left the sheet is not a
+ * delete. The card (`SheetsSyncCard.jsx`, D7170) lives in this body rather
+ * than as a fourth canvas op, because the zone-action row is three slots.
  *
  * THE DIRECTORY IS THE SERVER'S (D535 steps 4–5). It filtered a bundled
  * `fundDirectory.json` in the browser, 48 rows at a time; `FundDirectory` now
@@ -63,6 +68,17 @@ import { Money } from './ResearchOverviewPanel';
  * `GET /api/research/overview` only once the Directory tab has been opened.
  * "Add to my funds" writes here, to the shortlist, and keeps the row the
  * POST returns, so the drawer can open its dossier at once.
+ *
+ * PAST 500, BY UID (D7168, canvas FND-S01). My funds reads one page of 50 from
+ * `GET /api/research/funds`, searched (`?mq=`) and paged (`?mpage=`) on the
+ * Worker, and every count in the strip is over ALL saved funds, which the strip
+ * says. It used to be the newest 500 with every count over those alone, and an
+ * older fund was neither listed nor counted. Each row names its identity — a
+ * catalogue record, your own record, or a legacy entry that needs a choice —
+ * and its uid; stage fit, route in and status are three columns. The
+ * Directory's "Open your dossier" and "on My funds" are keyed by catalogue uid
+ * (`catalogue_links`), never by a normalised name. The search keys are `mq`
+ * and `mpage` because the Directory tab already owns `q` in the same URL.
  */
 
 const STAGE_LABEL = { right: 'Right stage', wrong: 'Wrong stage' };
@@ -103,24 +119,6 @@ export function fundsSearchFor(params, key) {
   if (key === 'directory') next.set('view', 'directory');
   else next.delete('view');
   return next;
-}
-
-const normalizeFundName = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-
-/**
- * The founder's own row for each directory fund, by normalized name → uid.
- * No column links the two, so the name is the match, as on the catalog
- * profile: the list as read first, then any row an Add created (`created`,
- * from the POST's own answer) that the list has not caught up with.
- */
-export function dossierMap(items, created = {}) {
-  const byName = new Map();
-  for (const fund of items || []) {
-    const key = normalizeFundName(fund.name);
-    if (!byName.has(key)) byName.set(key, fund.uid);
-  }
-  for (const [key, uid] of Object.entries(created)) if (!byName.has(key)) byName.set(key, uid);
-  return byName;
 }
 
 /**
@@ -234,13 +232,43 @@ export function MoneyBand({ load = researchOverviewApi.get }) {
   return <MoneyBandView state={state} onRetry={() => setAttempt((n) => n + 1)} />;
 }
 
+/** The search box's own control: typed text is applied on submit, kept in the URL as `mq`. */
+function MyFundsSearch({ value, saved, onSearch }) {
+  const [text, setText] = useState(value || '');
+  useEffect(() => { setText(value || ''); }, [value]);
+  const placeholder = saved == null ? 'Search your saved funds' : `Search all ${Number(saved).toLocaleString('en-US')} saved funds`;
+  return (
+    <form
+      role="search"
+      className="flex min-w-[240px] flex-1 items-center gap-2"
+      onSubmit={(e) => { e.preventDefault(); onSearch(text.trim()); }}
+    >
+      <label className="sr-only" htmlFor="my-funds-search">Search your saved funds</label>
+      <input
+        id="my-funds-search"
+        type="search"
+        className={inputClass}
+        value={text}
+        maxLength={120}
+        placeholder={placeholder}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <button type="submit" className={ghostButtonClass}>Search</button>
+    </form>
+  );
+}
+
 export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const { user } = useAuth() || {};
   const canSyncSheets = isSuperAdminUser(user);
   const [params, setParams] = useSearchParams();
   const tab = fundsTabOf(params);
+  // D7168: the search and the page live in the URL, under keys the Directory does not use.
+  const search = params.get('mq') || '';
+  const pageNo = Math.max(1, Number.parseInt(params.get('mpage') || '1', 10) || 1);
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [filter, setFilter] = useState('all');
+  const [identity, setIdentity] = useState('all');
   const [form, setForm] = useState({ name: '', thesis: '', note: '' });
   const [busy, setBusy] = useState(false);
   // Each note is `{ ok, text }`, the shape `SaveNote` reads: it was given a
@@ -254,7 +282,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   const directoryInFlight = useRef(false);
   const [directoryNote, setDirectoryNote] = useState(null);
   const [directoryTotal, setDirectoryTotal] = useState(null);
-  // Rows an Add created, by normalized name → uid: the POST's own answer, so
+  // Rows an Add created, by catalogue uid → uid: the POST's own answer, so
   // the drawer's link to the dossier does not wait on the list's reload.
   const [created, setCreated] = useState({});
   // The band reads the overview the first time the Directory tab is open, and
@@ -264,20 +292,44 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
   // Switching tabs rewrites the URL in place, adding no history entry.
   const pick = (key) => setParams(fundsSearchFor(params, key), { replace: true });
+  const setListParams = (next) => {
+    const p = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(next)) {
+      if (v === null || v === undefined || v === '' || (k === 'mpage' && Number(v) <= 1)) p.delete(k);
+      else p.set(k, String(v));
+    }
+    setParams(p, { replace: true });
+  };
+  // D7166 (RFD-01): the empty list's two ways forward. Browse opens the Directory with its search focused.
+  const browse = () => { pick('directory'); setTimeout(() => document.getElementById('fd-q')?.focus(), 0); };
+  const addByHand = () => document.getElementById('fz-add-name')?.focus();
 
+  // One read per page: the newest 500 by created_at was the whole list, and
+  // every count was over those 500. Now the Worker pages and counts.
+  const reads = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++reads.current;
     setState((s) => ({ ...s, loading: true }));
     try {
-      const data = await api.research.funds();
+      const data = await researchMyFundsApi.list({
+        q: search || undefined,
+        limit: MY_FUNDS_PAGE,
+        offset: (pageNo - 1) * MY_FUNDS_PAGE,
+        filter: filter === 'all' ? undefined : filter,
+        identity: identity === 'all' ? undefined : identity,
+      });
+      if (mine !== reads.current) return;
       setState({ loading: false, error: null, data });
     } catch (e) {
+      if (mine !== reads.current) return;
       setState({ loading: false, error: e?.detail || e?.message || 'The fund list did not load.', data: null });
     }
-  }, []);
+  }, [search, pageNo, filter, identity]);
   useEffect(() => { load(); }, [load]);
 
   // One PATCH per change, then a reload — the row the worker returns is the row
   // that is stored, and the counts in the strip above are computed there too.
+  // Each select sends its own field and nothing else.
   const setRead = async (uid, patch) => {
     setRowNote(null);
     try {
@@ -304,9 +356,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
   const data = state.data;
   const items = data?.items || [];
-  const dossiers = useMemo(() => dossierMap(items, created), [items, created]);
-  const researchedNames = useMemo(() => new Set(dossiers.keys()), [dossiers]);
-  const dossierOf = useCallback((fund) => dossiers.get(normalizeFundName(fund?.name)) || null, [dossiers]);
+  const links = data?.catalogue_links;
+  // D7168: keyed by catalogue uid. "Atlas A-I" and "Atlas AI" are two vehicles
+  // and open two dossiers; a legacy entry is never matched by name.
+  const dossiers = useMemo(() => dossierMap(links, created), [links, created]);
+  const dossierOf = useCallback((fund) => (fund?.uid ? dossiers.get(fund.uid) || null : null), [dossiers]);
+  const isAdded = useCallback((fund) => Boolean(fund?.uid && dossiers.has(fund.uid)), [dossiers]);
   // Until the list has answered, or once it has failed, a directory fund
   // cannot be told apart from one already on it — so no add is offered.
   const listState = state.error ? 'unreadable' : !data ? 'loading' : 'ok';
@@ -315,15 +370,15 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   // named as the directory names it. The directory's facts stay in the directory.
   // The row the POST returns is kept: it is the dossier the drawer now opens.
   const addDirectoryFund = async (fund) => {
-    if (!fund || listState !== 'ok' || researchedNames.has(normalizeFundName(fund.name)) || directoryBusy || directoryInFlight.current) return;
+    if (!fund || listState !== 'ok' || isAdded(fund) || directoryBusy || directoryInFlight.current) return;
     directoryInFlight.current = true;
     setDirectoryBusy(fund.uid);
     setDirectoryNote(null);
     try {
       // D4613: the directory uid makes a repeat of this add idempotent on the Worker.
       const row = await api.research.fundCreate({ name: fund.name, source_url: fund.website || null, catalogue_uid: fund.uid });
-      if (row?.uid) setCreated((rows) => ({ ...rows, [normalizeFundName(fund.name)]: row.uid }));
-      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on My funds.` : `${fund.name} added to My funds.` });
+      if (row?.uid) setCreated((rows) => ({ ...rows, [fund.uid]: row.uid }));
+      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on your shortlist.` : `${fund.name} saved to your shortlist.` });
       await load();
     } catch (e) {
       setDirectoryNote({ uid: fund.uid, ok: false, text: e?.detail || e?.message || 'That did not save.' });
@@ -334,14 +389,20 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   };
   // The canvas has no `All` of its own — its first slot reads `Best fit`, which
   // the table renders as the unfiltered view because no fit score is stored. So
-  // the chip that is on is also the way back off it.
-  const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
-  const visible = items.filter((f) => {
-    if (filter === 'right') return f.stage_fit === 'right';
-    if (filter === 'warm') return f.path === 'warm';
-    if (filter === 'passed') return f.status === 'passed';
-    return true;
-  });
+  // the chip that is on is also the way back off it. The filter runs on the
+  // Worker now, over every saved fund, and a change goes back to page 1.
+  const choose = (key) => {
+    setFilter((current) => (current === key ? 'all' : key));
+    setListParams({ mpage: null });
+  };
+  const chooseIdentity = (key) => {
+    setIdentity((current) => (current === key ? 'all' : key));
+    setListParams({ mpage: null });
+  };
+  const visible = items;
+  const paging = data ? pageLine(data.total, data.limit || MY_FUNDS_PAGE, data.offset || 0) : null;
+  const goTo = (page) => setListParams({ mpage: offsetOf(page, data?.total, MY_FUNDS_PAGE) / MY_FUNDS_PAGE + 1 });
+  const narrowed = Boolean(search) || filter !== 'all' || identity !== 'all';
 
   return (
     <div className="space-y-6">
@@ -360,17 +421,42 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         )}
         <ZoneHeading
           title="Fund research"
-          blurb="Thesis in their words, stage and path as separate facts — every fund you have looked into, and why it is on or off the list."
+          blurb="Your private shortlist. Stage fit, route in and status are three separate reads; public catalogue facts stay in the catalogue."
           action={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
         />
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <FundStat label="Researched" value={data?.researched_count} note="funds on file" phase={listState} />
-          <FundStat label="Right stage" value={data?.right_stage_count} note="they write where you are" phase={listState} />
+        <div className="flex flex-wrap items-center gap-2">
+          <MyFundsSearch value={search} saved={data?.saved_count} onSearch={(q) => setListParams({ mq: q, mpage: null })} />
+          <button
+            type="button"
+            aria-pressed={identity === 'legacy'}
+            data-testid="my-funds-legacy-filter"
+            className={identity === 'legacy' ? buttonClass : ghostButtonClass}
+            onClick={() => chooseIdentity('legacy')}
+          >
+            {`Needs a choice · ${data?.legacy_count ?? '…'}`}
+          </button>
+        </div>
+
+        <p data-testid="my-funds-count-scope" className="text-[11.5px] text-axal-muted dark:text-gray-400">
+          {countScopeLine(data) || 'No figure is shown until the read answers.'}
+        </p>
+        {/* D7166 (RFD-01): an empty list shows no counters, never a row of zeros. */}
+        <div className={listState === 'ok' && !narrowed && !items.length ? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-5'}>
+          <FundStat label="Researched" value={data?.saved_count ?? data?.researched_count} note="every fund you saved" phase={listState} />
+          <FundStat label="Right stage" value={data?.right_stage_count} note="your read · they write where you are" phase={listState} />
           <FundStat
-            label="Cheque overlap"
+            label="Whole-round test"
             value={data?.cheque_overlap_count}
-            note={data?.cheque_overlap_note || 'your ask fits their range'}
+            note={data?.cheque_overlap_note || 'cheque range includes your whole round'}
+            phase={listState}
+          />
+          <FundStat
+            label="Allocation test"
+            value={data?.allocation_count}
+            note={data && data.allocation_set_count != null
+              ? `range includes the allocation you set · ${data.allocation_set_count} have one`
+              : 'range includes the allocation you set'}
             phase={listState}
           />
           <FundStat
@@ -385,54 +471,60 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
 
         <ZoneBody
-          loading={state.loading}
+          loading={state.loading && !data}
           error={state.error}
-          isEmpty={!items.length}
+          isEmpty={!items.length && !narrowed}
           onRetry={load}
           empty={(
             <NothingYet
               title="No fund is on your list yet"
-              body="Add the funds you are researching. What goes in is your own reading — their thesis in their words, whether they write at your stage, and whether you have a route in."
+              body="Start from the Directory and choose a vehicle, or add a fund by hand. What you record stays private to you."
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={buttonClass} onClick={browse} data-testid="funds-browse-directory">Browse fund directory</button>
+                  <button type="button" className={ghostButtonClass} onClick={addByHand}>Add a fund by hand</button>
+                </div>
+              )}
             />
           )}
         >
           <Card padding="lg">
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h3 className="text-sm font-extrabold tracking-tight">Fund profiles</h3>
-              <span className="text-[11px] text-gray-600 dark:text-gray-300">
-                Thesis in their own words · what the research says
+              <h3 className="text-sm font-extrabold tracking-tight">Your saved funds</h3>
+              <span className="text-[11px] text-gray-600 dark:text-gray-300" aria-live="polite" data-testid="my-funds-results">
+                {search && data
+                  ? `${Number(data.total).toLocaleString('en-US')} of ${Number(data.saved_count).toLocaleString('en-US')} saved funds match “${search}”.`
+                  : paging ? `${paging.text} · sorted by last updated` : null}
               </span>
             </div>
             <SaveNote note={rowNote} />
             {!visible.length ? (
-              <p className="text-[12.5px] text-gray-600 dark:text-gray-300">No fund matches this filter.</p>
+              <div className="text-[12.5px] text-gray-600 dark:text-gray-300">
+                <p>{search ? `No saved fund matches “${search}”.` : 'No fund matches this filter.'}</p>
+                <button
+                  type="button"
+                  className={`${ghostButtonClass} mt-2`}
+                  onClick={() => { setFilter('all'); setIdentity('all'); setListParams({ mq: null, mpage: null }); }}
+                >
+                  Show all funds
+                </button>
+              </div>
             ) : (
-              /* THE CANVAS'S FOUR COLUMNS — `Fund · Cheque · State · What the
-                 research says` — over exactly the fields this zone already read as
-                 a list. Nothing new is fetched and no value is derived that was
-                 not derived before; what changed is the shape.
-
-                 `State` HOLDS THREE PILLS AND NOT ONE, which is the one place this
-                 table deliberately departs from the artboard, for the reason the
-                 docblock at the top of this file gives: the canvas draws `Warm
-                 path`, `Right stage`, `Wrong stage` and `Passed` as if they were
-                 one column, and migration 216 keeps them apart precisely because
-                 they are not. A fund can write at your stage AND be someone you
-                 have a route to, and those are the ones worth the meeting.
-                 Collapsing them to fit a single-pill column would throw away the
-                 distinction the store was shaped to keep.
-
-                 The three editors live in that cell for the same reason: they set
-                 those three states, and a column that shows a state is where a
-                 reader looks to change it.
+              /* D7168 (FND-S01): the canvas's seven columns — `Fund · vehicle ·
+                 identity`, `Their cheque`, `Stage fit`, `Route in`, `Status`,
+                 `Your note`, `Updated`. Stage fit, route in and status are
+                 three columns now, as migration 216 keeps them three columns:
+                 a fund can write at your stage AND be someone you have a
+                 route to, and those are the ones worth the meeting. Each
+                 column holds its own editor, which sends that field alone.
 
                  Its own scroller, so a narrow viewport scrolls the table and never
                  the page — the idiom `LibraryZone` established. */
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse text-left">
+                <table className="w-full min-w-[960px] border-collapse text-left">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-800">
-                      {['Fund', 'Cheque', 'State', 'What the research says'].map((head) => (
+                      {['Fund · vehicle · identity', 'Their cheque', 'Stage fit', 'Route in', 'Status', 'Your note', 'Updated'].map((head) => (
                         <th
                           key={head}
                           scope="col"
@@ -444,27 +536,34 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((f) => (
-                      <tr key={f.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
-                        <td className="py-3 pr-3">
-                          <Link
-                            to={`/research/funds/${encodeURIComponent(f.uid)}`}
-                            className="text-[13px] font-extrabold text-axal-ink underline-offset-2 hover:underline"
-                          >
-                            {f.name}
-                          </Link>
-                        </td>
-                        {/* A range with one end missing renders as the end it has,
-                            and no range at all renders as unrecorded — never as a
-                            zero, which would say no fund writes cheques your
-                            size. */}
-                        <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
-                          {cheque(f) || <Unrecorded>Not recorded</Unrecorded>}
-                        </td>
-                        <td className="py-3 pr-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {f.status === 'passed' && <Pill tone="danger">Passed</Pill>}
-                            {f.path && <Pill tone={f.path === 'warm' ? 'ok' : 'neutral'}>{PATH_LABEL[f.path]}</Pill>}
+                    {visible.map((f) => {
+                      const chip = identityChip(f);
+                      return (
+                        <tr key={f.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
+                          <td className="py-3 pr-3">
+                            <Link
+                              to={`/research/funds/${encodeURIComponent(f.uid)}`}
+                              className="text-[13px] font-extrabold text-axal-ink underline-offset-2 hover:underline"
+                            >
+                              {f.name}
+                            </Link>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <Pill tone={chip.kind === 'linked' ? 'ok' : chip.kind === 'legacy' ? 'warn' : 'neutral'}>
+                                <span aria-hidden="true">{chip.kind === 'linked' ? '⛓ ' : chip.kind === 'own' ? '✎ ' : '? '}</span>
+                                {chip.label}
+                              </Pill>
+                              <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{f.uid}</span>
+                            </div>
+                          </td>
+                          {/* A range with one end missing renders as the end it has,
+                              and no range at all renders as unrecorded — never as a
+                              zero, which would say no fund writes cheques your
+                              size. */}
+                          <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
+                            {cheque(f) || <Unrecorded>Not recorded</Unrecorded>}
+                            {cheque(f) ? <span className="block text-[10px] text-gray-500 dark:text-gray-400">USD · your record</span> : null}
+                          </td>
+                          <td className="py-3 pr-3">
                             {/* A null `stage_fit` is "not assessed" and NOT "wrong
                                 stage". Rendering the two alike is how a fund you
                                 have not looked at yet drops out of your own
@@ -472,28 +571,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                             <Pill tone={f.stage_fit === 'right' ? 'ok' : f.stage_fit === 'wrong' ? 'warn' : 'neutral'}>
                               {STAGE_LABEL[f.stage_fit] || 'Stage not assessed'}
                             </Pill>
-                          </div>
-                          {/* THE WRITERS THESE THREE COLUMNS NEVER HAD.
-                              `stage_fit`, `path` and `status` have been in the
-                              schema, validated by the worker and accepted by
-                              `PATCH /research/funds/:uid` since this zone shipped
-                              — and no surface ever set one. The add-a-fund form
-                              sends a name, a thesis and a note, and
-                              `api.research.fundUpdate` had no callers at all, so
-                              every row carried a NULL fit, a NULL path and
-                              `researching`. Three filters read those columns,
-                              which meant three chips that could only ever match
-                              nothing.
-                              Blank is a real option on the first two: "not
-                              assessed" is a different fact from "wrong", and the
-                              route stores the difference. */}
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">
-                              Your read
-                            </span>
+                            {/* Blank is a real option: "not assessed" is a
+                                different fact from "wrong", and the route stores
+                                the difference. */}
                             <select
                               aria-label={`Stage fit for ${f.name}`}
-                              className={READ_SELECT}
+                              className={`${READ_SELECT} mt-1.5 block`}
                               value={f.stage_fit || ''}
                               onChange={(e) => setRead(f.uid, { stage_fit: e.target.value })}
                             >
@@ -501,9 +584,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                               <option value="right">Right stage</option>
                               <option value="wrong">Wrong stage</option>
                             </select>
+                          </td>
+                          <td className="py-3 pr-3">
+                            {f.path ? <Pill tone={f.path === 'warm' ? 'ok' : 'neutral'}>{PATH_LABEL[f.path]}</Pill> : <Unrecorded>Not recorded</Unrecorded>}
                             <select
                               aria-label={`Route in for ${f.name}`}
-                              className={READ_SELECT}
+                              className={`${READ_SELECT} mt-1.5 block`}
                               value={f.path || ''}
                               onChange={(e) => setRead(f.uid, { path: e.target.value })}
                             >
@@ -511,45 +597,66 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                               <option value="warm">Warm path</option>
                               <option value="cold">No route in</option>
                             </select>
+                          </td>
+                          <td className="py-3 pr-3">
+                            {f.status === 'passed' ? <Pill tone="danger">Passed</Pill> : <Pill tone="neutral">Researching</Pill>}
                             <select
                               aria-label={`Status for ${f.name}`}
-                              className={READ_SELECT}
+                              className={`${READ_SELECT} mt-1.5 block`}
                               value={f.status || 'researching'}
                               onChange={(e) => setRead(f.uid, { status: e.target.value })}
                             >
                               <option value="researching">Researching</option>
                               <option value="passed">Passed</option>
                             </select>
-                          </div>
-                        </td>
-                        {/* The thesis is QUOTED and the note is not: one is the
-                            fund's own words and the other is yours, and a reader
-                            deciding whether to take a meeting needs to know which
-                            is which. */}
-                        <td className="py-3 text-[12px] leading-relaxed">
-                          {f.thesis && (
-                            <p className="italic text-gray-600 dark:text-gray-300">“{f.thesis}”</p>
-                          )}
-                          {f.note && (
-                            <p className="mt-1 text-gray-700 dark:text-gray-300">{f.note}</p>
-                          )}
-                          {f.status === 'passed' && (
-                            <p className="mt-1 text-gray-600 dark:text-gray-300">
-                              {f.pass_reason
-                                ? `Passed: ${f.pass_reason}`
-                                : <Unrecorded>Passed with no reason recorded — worth adding one before you rediscover them.</Unrecorded>}
-                            </p>
-                          )}
-                          {!f.thesis && !f.note && f.status !== 'passed' && (
-                            <Unrecorded>Nothing recorded yet</Unrecorded>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                            {f.status === 'passed' && !f.pass_reason ? (
+                              <span className="mt-1 block text-[10.5px] font-semibold text-red-700 dark:text-red-300">No reason recorded</span>
+                            ) : null}
+                          </td>
+                          {/* The thesis is QUOTED and the note is not: one is the
+                              fund's own words and the other is yours, and a reader
+                              deciding whether to take a meeting needs to know which
+                              is which. */}
+                          <td className="py-3 pr-3 text-[12px] leading-relaxed">
+                            {f.thesis && (
+                              <p className="italic text-gray-600 dark:text-gray-300">“{f.thesis}”</p>
+                            )}
+                            {f.note && (
+                              <p className="mt-1 text-gray-700 dark:text-gray-300">{f.note}</p>
+                            )}
+                            {f.status === 'passed' && (
+                              <p className="mt-1 text-gray-600 dark:text-gray-300">
+                                {f.pass_reason
+                                  ? `Passed: ${f.pass_reason}`
+                                  : <Unrecorded>Passed with no reason recorded — worth adding one before you rediscover them.</Unrecorded>}
+                              </p>
+                            )}
+                            {!f.thesis && !f.note && f.status !== 'passed' && (
+                              <Unrecorded>Nothing recorded yet</Unrecorded>
+                            )}
+                          </td>
+                          <td className="py-3 text-[11px] text-gray-600 dark:text-gray-300">
+                            {updatedAgo(f.updated_at) || <Unrecorded>Not recorded</Unrecorded>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
+            {paging && paging.pages > 1 ? (
+              <nav aria-label="Pages of your saved funds" className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+                <span className="text-gray-600 dark:text-gray-300">{paging.text}</span>
+                <button type="button" className={ghostButtonClass} disabled={paging.page <= 1 || state.loading} onClick={() => goTo(paging.page - 1)}>
+                  ‹ Previous
+                </button>
+                <span aria-current="page" className="font-semibold">{paging.pageText}</span>
+                <button type="button" className={ghostButtonClass} disabled={paging.page >= paging.pages || state.loading} onClick={() => goTo(paging.page + 1)}>
+                  Next ›
+                </button>
+              </nav>
+            ) : null}
           </Card>
         </ZoneBody>
 
@@ -559,7 +666,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
           <h3 className="text-sm font-extrabold tracking-tight">Add a fund</h3>
           <form className="mt-3 grid gap-3 md:grid-cols-3" onSubmit={add}>
             <Field label="Fund">
-              <input className={inputClass} value={form.name} maxLength={200} required
+              <input id="fz-add-name" className={inputClass} value={form.name} maxLength={200} required
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </Field>
             <Field label="Their thesis, in their words">
@@ -588,7 +695,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
       </div>
 
       <div role="tabpanel" id="funds-panel-directory" aria-labelledby="funds-tab-directory" hidden={tab !== 'directory'}>
-        <FundDirectory researchedNames={researchedNames} onAdd={addDirectoryFund} busy={directoryBusy}
+        <FundDirectory isAdded={isAdded} onAdd={addDirectoryFund} busy={directoryBusy}
           dossierOf={dossierOf} listState={listState} notice={directoryNote} onTotal={setDirectoryTotal}
           band={directorySeen ? <MoneyBand /> : null} role={role} />
       </div>
@@ -614,174 +721,6 @@ export function FundStat({ label, value, note, phase = 'ok' }) {
         {figure}
       </div>
       <div className="mt-1 text-[10px] leading-relaxed text-gray-600 dark:text-gray-300">{note}</div>
-    </Card>
-  );
-}
-
-/**
- * Connect / Pull / Push for Google Sheets. Super-admin only — the zone
- * mounts this card behind `isSuperAdminUser`, and every worker route behind
- * `requireSuperAdmin`. Lives in the zone body rather than as a fourth canvas
- * op — the toolbar is three slots and adding one here would fail the
- * profile_zone_actions canvas check.
- *
- * HONEST EMPTY. If the Worker has no Sheets OAuth client, this card says so
- * instead of offering Connect. Pull needs a connected Google account AND a
- * spreadsheet URL; Push never deletes a fund in Axal.
- */
-function SheetsSyncCard() {
-  const [status, setStatus] = useState({ loading: true, error: null, data: null });
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(null);
-  const [note, setNote] = useState(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api.research.fundSheetStatus();
-      setStatus({ loading: false, error: null, data });
-      setUrl((current) => {
-        if (current) return current;
-        if (!data?.spreadsheet_id) return current;
-        const gid = data.sheet_gid == null ? '' : `#gid=${data.sheet_gid}`;
-        return `https://docs.google.com/spreadsheets/d/${data.spreadsheet_id}/edit${gid}`;
-      });
-    } catch (e) {
-      setStatus({
-        loading: false,
-        error: e?.detail || e?.message || 'Sheets status did not load.',
-        data: null,
-      });
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const flash = params.get('sheets');
-    if (!flash) return;
-    if (flash === 'connected') setNote({ ok: true, text: 'Google Sheets connected.' });
-    else {
-      const reason = params.get('reason') || 'callback_failed';
-      setNote({ ok: false, text: `Google Sheets did not connect (${reason}).` });
-    }
-    params.delete('sheets');
-    params.delete('reason');
-    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash || ''}`;
-    window.history.replaceState({}, '', next);
-    load();
-  }, [load]);
-
-  const data = status.data;
-  const run = async (key, fn, okText) => {
-    setBusy(key);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: okText });
-      await load();
-    } catch (e) {
-      const code = e?.data?.code;
-      if (code === 'oauth_config_missing') {
-        setNote({ ok: false, text: 'Google Sheets is not configured on this server yet.' });
-      } else {
-        setNote({ ok: false, text: e?.detail || e?.message || 'That did not work.' });
-      }
-    } finally { setBusy(null); }
-  };
-
-  const connect = () => run('connect', async () => {
-    const r = await api.research.fundSheetConnect();
-    const href = r?.redirect_url || r?.auth_url;
-    if (!href) throw new Error('Google did not return a consent URL.');
-    window.location.assign(href);
-  }, 'Opening Google…');
-
-  const saveLink = () => run('link', () => api.research.fundSheetLink(url), 'Spreadsheet saved.');
-  const pull = () => run('pull', () => api.research.fundSheetPull(), 'Wrote your funds onto the sheet.');
-  const push = () => run('push', () => api.research.fundSheetPush(), 'Updated Axal from the sheet. Nothing was deleted.');
-  const disconnect = () => run('disconnect', () => api.research.fundSheetDisconnect(), 'Google Sheets disconnected.');
-
-  return (
-    <Card padding="lg">
-      <h3 className="text-sm font-extrabold tracking-tight">Google Sheets</h3>
-      <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
-        A copy of this list on a spreadsheet you name. Pull writes Axal onto the
-        sheet. Push creates or updates funds from the sheet — it never deletes one.
-        Cheque amounts on the sheet are US dollars; blank is not zero.
-      </p>
-
-      {status.loading ? (
-        <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-300">Checking connection…</p>
-      ) : status.error ? (
-        <p className="mt-3 text-[12px] text-red-700 dark:text-red-300">{status.error}</p>
-      ) : data && data.configured === false ? (
-        <p className="mt-3 text-[12.5px] text-gray-600 dark:text-gray-300">
-          Google Sheets is not configured on this server yet. You can still add
-          funds here, or export a CSV from the toolbar.
-        </p>
-      ) : (
-        <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {data?.connected ? (
-              <>
-                <Pill tone="ok">{data.google_email ? `Connected as ${data.google_email}` : 'Connected'}</Pill>
-                <button type="button" className={ghostButtonClass} disabled={!!busy} onClick={disconnect}>
-                  {busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
-                </button>
-              </>
-            ) : (
-              <button type="button" className={buttonClass} disabled={!!busy} onClick={connect}>
-                {busy === 'connect' ? 'Opening Google…' : 'Connect Google Sheets'}
-              </button>
-            )}
-            {data?.last_pulled_at && (
-              <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                Last pull {data.last_pulled_at.slice(0, 10)}
-              </span>
-            )}
-            {data?.last_pushed_at && (
-              <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                Last push {data.last_pushed_at.slice(0, 10)}
-              </span>
-            )}
-          </div>
-          {data?.last_error && (
-            <p className="text-[12px] text-red-700 dark:text-red-300">{data.last_error}</p>
-          )}
-          <Field label="Spreadsheet URL" hint="The tab is the gid in the URL. Pull overwrites that tab's data rows.">
-            <input
-              className={inputClass}
-              value={url}
-              placeholder={data?.suggested_url || ''}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-          </Field>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={ghostButtonClass} disabled={!!busy || !url.trim()} onClick={saveLink}>
-              {busy === 'link' ? 'Saving…' : 'Save spreadsheet'}
-            </button>
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={!!busy || !data?.connected || !data?.spreadsheet_id}
-              onClick={pull}
-            >
-              {busy === 'pull' ? 'Writing…' : 'Pull from Axal'}
-            </button>
-            <button
-              type="button"
-              className={ghostButtonClass}
-              disabled={!!busy || !data?.connected || !data?.spreadsheet_id}
-              onClick={push}
-            >
-              {busy === 'push' ? 'Reading…' : 'Push to Axal'}
-            </button>
-          </div>
-        </div>
-      )}
-      <SaveNote note={note} />
     </Card>
   );
 }

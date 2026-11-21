@@ -1,4 +1,4 @@
-import { request } from '../api.js';
+import { api, request } from '../api.js';
 import { makeCycleWrites } from './cycleWrites.js';
 
 // D661 (#1474) — the cycle pages' shared read (#1469, D656), one entry per
@@ -50,6 +50,8 @@ export const cyclesApi = {
     if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
     return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/activity?project=${encodeURIComponent(projectId)}&page=${encodeURIComponent(page)}`);
   },
+  // D6124 (#6124): a Grow table's filtered rows as a CSV, a writer's only (Worker: routes/cycle_grow.ts).
+  growExport: (projectId, slug, q = {}) => api._downloadCsv(`/cycles/grow/modules/${encodeURIComponent(slug)}/export?${query(projectId, { ...q, page: 1 })}`, `${slug}.csv`),
   // D909 (#2693): D908's section-by-section compare of two narrative versions.
   narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
   // One implementation with the write table's, which Add filing's Proof calls (D695 #1656).

@@ -165,6 +165,7 @@ function freshDb() {
   `);
 
   db.exec(migration('208_partner_delivery_stores'));
+  db.exec(migration('202611141535_5944_negotiation_wip_limits'));
   db.exec(migration('209_partner_offers_stores'));
   db.exec(migration('229_fit_rule_signal'));
   db.exec(migration('233_partner_lead_passes'));

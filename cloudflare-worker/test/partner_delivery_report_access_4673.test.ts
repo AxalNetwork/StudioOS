@@ -120,6 +120,8 @@ function freshDb() {
   db.exec(migration('208_partner_delivery_stores'));
   db.exec(migration('202611072115_delivery_revisions'));
   db.exec(migration('202611111140_5314_status_report_blocked_history'));
+  // #4709: blockers kept at send, report amendments and deliverable corrections.
+  db.exec(migration('202611152339_4709_delivery_history'));
   // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
   // written by its two `PUT`s, so the harness runs their migration files for
   // the same reason it runs 208's: a hand-copied DDL that drifts from the file

@@ -79,7 +79,8 @@ const SPECS: Spec[] = [
   {
     key: 'founder:studio', family: 'founder', name: 'Raise + Grow', tagline: 'Raise the money, then grow the company.', licence_key: 'founder:studio', matches: { tier: 'studio' },
     sellable: true,
-    included: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
+    // D4653 part 3 (#4653): Studio states its startup and interview limits, so the founder cards compare without reading the one before.
+    included: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
   },
   {
     key: 'investor:free', family: 'investor', name: 'Investor Basic', tagline: 'Browse the network.', licence_key: 'investor:free', matches: null,
@@ -90,12 +91,12 @@ const SPECS: Spec[] = [
     // D1334 (#3540): sold monthly, between Basic and Pro. `planOf` maps `investor_tier=plus` to it.
     key: 'investor:plus', family: 'investor', name: 'Investor Plus', tagline: 'For angel investors, independent investors and investment professionals.', licence_key: 'investor:plus', matches: { investor_tier: 'plus' },
     sellable: true,
-    included: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+    included: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'AI usage from your plan allowance and AI tokens'],
   },
   {
     key: 'investor:professional', family: 'investor', name: 'Investor Pro', tagline: 'For professional angels, investment analysts and smaller firms.', licence_key: 'investor:professional', matches: { investor_tier: 'professional' },
     sellable: true,
-    included: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+    included: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'AI usage from your plan allowance and AI tokens', 'More advanced investment workflows'],
   },
   {
     key: 'investor:institutional', family: 'investor', name: 'Institutional', tagline: 'For institutional investors, family offices and investment teams.', licence_key: 'investor:institutional', matches: { investor_tier: 'institutional' },
@@ -115,12 +116,14 @@ const SPECS: Spec[] = [
   {
     key: 'partner:free', family: 'partner', name: 'Partner Basic', tagline: 'Get listed.', licence_key: null, matches: null,
     sellable: false, sellable_reason: NOT_SOLD.free,
-    included: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', TOP_UP],
+    // D4653 part 2 (#4653): no "Verification badges" and no Stripe Connect payouts; D676 dropped both as not running.
+    included: ['Provider profile and directory listing', 'Live founder requests', TOP_UP],
   },
   {
-    key: 'partner:pro', family: 'partner', name: 'Operating Partner Pro', tagline: 'Inbound demand on tap.', licence_key: 'partner', matches: { plan_group: 'partner' },
+    key: 'partner:pro', family: 'partner', name: 'Operating Partner Pro', tagline: 'Manage client work from proposal to delivery.', licence_key: 'partner', matches: { plan_group: 'partner' },
     sellable: true,
-    included: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
+    // D4653 part 3 (#4653): no "views"; nothing counts a profile view (D676).
+    included: ['Proposals, pipeline and delivery', 'Partner insights: leads and conversion', 'Client status reports'],
   },
   {
     key: 'other', family: 'other', name: 'No plan yet', tagline: 'Choose a profile to see its plans.', licence_key: 'other', matches: null,

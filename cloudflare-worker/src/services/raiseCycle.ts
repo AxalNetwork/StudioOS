@@ -1,3 +1,4 @@
+import { liveFiles } from './dataRoomTrash';
 import { holdsLicence } from './accountLicences';
 import { posthogFigure } from './posthog/raise';
 import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
@@ -39,6 +40,7 @@ import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
 import { deckReaders, readBySentence } from './narrative/readers';
 import { readObjections } from './narrative/objections';
+import { claimTally, type SectionOf } from './narrative/claimTally';
 import { inputsFrom, readCapTable } from './capTableToday';
 import { simulate } from './captable';
 import { deckShareMetrics } from './deckShareUse';
@@ -78,6 +80,8 @@ const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.pr
  */
 const pitchHref = (ctx: Ctx) => `/raise/pitch?project_id=${ctx.projectId}`;
 const shareHref = (ctx: Ctx) => `/raise/pitch/share?project_id=${ctx.projectId}`;
+/** D6045: the same addresses for the Overview's stage and primary action (`raiseJourney.ts`). */
+export const raiseLinks = { module: href, add: addHref, pitch: pitchHref, share: shareHref } as const;
 /**
  * The full tools the module pages summarise; the pages link to them.
  * D1109 (#2989): the Data room has no tool beside its module any more: the
@@ -864,7 +868,7 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
 
 /**
  * D909: where a version started, as the versions table and the Versions tab
- * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * say it: "v1", "Blank", the live wording, "Pitch deck v3" (D6069), or null (saved before 463 recorded
  * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
  * a Spin-Out venture reads it by that name; any other venture's earlier
  * versions copied it under today's name, "The live deck".
@@ -872,6 +876,8 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
 export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
   if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
   if (v.start_from === 'blank') return 'Blank';
+  // D6069: a deck start keeps the deck version it read in based_on_version.
+  if (v.start_from === 'deck' && v.based_on_version != null) return `Pitch deck v${v.based_on_version}`;
   if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
   return null;
 }
@@ -932,9 +938,12 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
  *   - `spinout`: whether New version offers the Spin-Out deck wording;
  *   - `objections` (D913): the objections investors raised, project-wide,
  *     `{ state: 'unreadable' }` on its own when the feedback cannot be read.
- * Claims backed (#2430) has no store, so the part carries none; the page says why.
+ *   - `claims` (D6068): the newest version's claim store tally, backed of
+ *     total and the sections with a Mismatch (`narrative/claimTally.ts`, by
+ *     the caller's `sectionOf`, the route's `sectionOfField`),
+ *     `{ state: 'unreadable' }` on its own; null with no version.
  */
-export async function narrativeHome(ctx: Ctx) {
+export async function narrativeHome(ctx: Ctx, sectionOf: SectionOf) {
   const [versions, readers, objections] = await Promise.all([
     loadVersions(ctx), deckReaders(ctx.env, ctx.projectId),
     readObjections(ctx.env, ctx.projectId).catch((e) => {
@@ -945,6 +954,7 @@ export async function narrativeHome(ctx: Ctx) {
   const newest = versions[0] ?? null;
   const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
   const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  const claims = newest ? await claimTally(ctx.env, ctx.projectId, Number(newest.version), sectionOf) : null;
   return {
     state: 'ok' as const,
     versions: versions.map((v) => {
@@ -962,6 +972,7 @@ export async function narrativeHome(ctx: Ctx) {
     deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
     spinout: readers.spinout,
     objections,
+    claims,
   };
 }
 
@@ -1147,7 +1158,7 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('data-room', 'Last 90 days', 'How much of each diligence area the files answer, and who opened the room.', 'Data room'), async (): Promise<CardBody> => {
     const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
     if (!accessible.length) {
-      const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+      const staged = await ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?${await liveFiles(ctx.env.DB)}`).bind(ctx.projectId).first<{ n: number }>();
       const reason = 'No files are currently downloadable by a granted investor.';
       if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${DATA_ROOM_ACCESS}?project_id=${ctx.projectId}` }, reason };
       return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
@@ -1212,7 +1223,7 @@ async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     `SELECT f.id, f.name, f.visibility, f.checklist_item, f.updated_at, f.folder_id, d.name AS folder,
             f.access_tier, f.access_expires_at, f.dd_request_id
        FROM data_room_files f LEFT JOIN data_room_folders d ON d.id = f.folder_id
-      WHERE f.project_id = ? ORDER BY f.updated_at DESC, f.id DESC`,
+      WHERE f.project_id = ?${await liveFiles(ctx.env.DB, 'f')} ORDER BY f.updated_at DESC, f.id DESC`,
   ).bind(ctx.projectId).all<any>();
   const all = res.results || [];
   const requested = [...new Set(all.map((f) => Number(f.dd_request_id)).filter((n) => Number.isInteger(n) && n > 0))];
@@ -1723,6 +1734,25 @@ export async function prospectFunds(ctx: Ctx): Promise<Map<number, ProspectFund>
   return out;
 }
 
+/** D6077: what Capital relationships' Pipeline filters and sorts on, besides the prospect row itself. */
+export type ProspectSignals = { fit: Fit | 'not_recorded'; via_call: boolean; last_contact: string | null };
+
+/**
+ * D6077 (#6077): each prospect's Fit, whether it came through a round call,
+ * and its last contact, by prospect id, for `GET
+ * /api/contacts/raise-prospects`. The same derivation the Cycle table's
+ * capital records use (`loadProspects`, `prospectFunds`): Fit is "not
+ * recorded" without a served fund, `via_call` is false with round calls off,
+ * and last contact is the stored contact's activity or null. The caller has
+ * already scoped `projectId` to the user.
+ */
+export async function prospectSignals(env: Env, projectId: number): Promise<Map<number, ProspectSignals>> {
+  const [rows, funds] = await Promise.all([loadProspects(env, projectId), prospectFunds({ env, projectId, today: '' })]);
+  return new Map(rows.map((p) => [Number(p.id), {
+    fit: funds.get(Number(p.id))?.fit ?? 'not_recorded', via_call: p.via_call, last_contact: p.last_contact ?? null,
+  }]));
+}
+
 /** D752: each prospect's confirmed raise receipt, by its posted date. Stored matches only. */
 export async function receivedDates(env: Env, projectId: number): Promise<Map<number, string>> {
   const rows = (await env.DB.prepare(
@@ -1951,7 +1981,7 @@ async function deckViewsFigure(ctx: Ctx): Promise<Figure> {
  */
 export type RoomFileCount = (ctx: Ctx) => Promise<number>;
 export const ownerRoomFileCount: RoomFileCount = async (ctx) => {
-  const row = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+  const row = await ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?${await liveFiles(ctx.env.DB)}`).bind(ctx.projectId).first<{ n: number }>();
   const n = Number(row?.n);
   if (!Number.isSafeInteger(n) || n < 0) throw new Error('Data room file count unavailable');
   return n;

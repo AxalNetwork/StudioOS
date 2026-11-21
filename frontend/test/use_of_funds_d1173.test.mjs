@@ -102,14 +102,16 @@ test('the canvas\'s seven tabs, and only their words are tabs; a section is stil
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('Allocation draws the module read\'s sections, each opening its record, never a record called "allocation"', async () => {
+test('Allocation draws the module read\'s sections, each opening its section sheet (D6083), never a record called "allocation"', async () => {
   const v = await mounted('/raise/use-of-funds/allocation?project_id=3');
   try {
     assert.ok(v.requests.some((u) => u.includes('/cycles/raise/modules/use-of-funds?project=3')));
     assert.ok(!v.requests.some((u) => /\/records\/allocation/.test(u)), 'a tab word is not a record');
     assert.ok(v.testIds().includes('uof-allocation-page') && v.testIds().includes('uof-tabs'));
     assert.match(v.text(), /Product & engineering[\s\S]*GTM: sales and marketing/);
-    assert.ok(v.hrefs().includes('/raise/use-of-funds/product?project_id=3'));
+    // D6083 (#6083): a section opens its sheet inside the tool, at its own address, not the record page.
+    assert.ok(v.hrefs().includes('/raise/use-of-funds/allocation?project_id=3&section=product'));
+    assert.ok(!v.hrefs().includes('/raise/use-of-funds/product?project_id=3'));
   } finally { await v.close(); }
 });
 
@@ -122,7 +124,10 @@ test('Home is the module page with the tabs; a section is still its record page;
   const home = await mounted('/raise/use-of-funds?project_id=3');
   try {
     assert.ok(home.testIds().includes('cycle-module') && home.testIds().includes('uof-tabs'));
-    assert.ok(home.hrefs().includes('/raise/use-of-funds/runway/forecast?project_id=3'), 'the tool link keeps the venture (broken item 8)');
+    // D5081 (RA-14): the generic "Open the forecast" door under Home is gone with the rest of the generic layer;
+    // the forecast is Runway's, one tab away, and both links keep the venture (broken item 8; the test above).
+    assert.ok(home.hrefs().includes('/raise/use-of-funds/runway?project_id=3'), 'the Runway tab keeps the venture');
+    assert.ok(!home.testIds().includes('cycle-module-tool'), 'no generic tool door under the tool');
   } finally { await home.close(); }
   const row = await mounted('/raise/use-of-funds/product?project_id=3');
   try {

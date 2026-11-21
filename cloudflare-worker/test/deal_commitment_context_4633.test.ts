@@ -12,6 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import deals from '../src/routes/deals.ts';
@@ -68,6 +69,7 @@ function freshDb() {
       ('c-legacy', ${DEAL}, ${IVO}, NULL, 5000, 'pending', '2026-09-01 00:00:00'),
       ('c-lone', ${DEAL}, ${LONE}, NULL, 7000, 'pending', '2026-09-02 00:00:00');
   `);
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
   return db;
 }
 

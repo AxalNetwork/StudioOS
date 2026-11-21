@@ -60,7 +60,8 @@ const FROM_URL = [
   'pages/founder/FounderGrowCustomers.jsx',
   'pages/founder/FounderGrowFocus.jsx',
   'pages/founder/FounderGrowLaunch.jsx',
-  'pages/founder/FounderGrowPartnerships.jsx',
+  // FounderGrowPartnerships.jsx stood here; D6118 (#6118) made Partnerships Partner network's
+  // cycle page, which reads `?project_id=` through CycleRoute (below).
   'pages/founder/FounderGrowTalent.jsx',
   'pages/founder/FounderNetworkOrganizations.jsx',
   'pages/founder/FounderNetworkRelationships.jsx',
@@ -79,8 +80,11 @@ const FROM_URL = [
 test('every page that lost a picker can still be pointed at a startup', () => {
   for (const rel of FROM_URL) {
     const src = code(`frontend/src/${rel}`);
-    // D5074 (#5074): CycleRoute reads the param through the shared venture helper, held below.
-    assert.match(src, rel === 'pages/cycles/CycleRoute.jsx' ? /\bventureRef\(searchParams\)/ : /\bget\(['"]project_id['"]\)/,
+    // D5074 / D6117: both routes read venture context through the same helper, held below.
+    const reader = rel === 'pages/cycles/CycleRoute.jsx' ? /\bventureRef\(searchParams\)/
+      : rel === 'pages/founder/FounderGrowTalent.jsx' ? /\bventureRef\(location\.search\)/
+        : /\bget\(['"]project_id['"]\)/;
+    assert.match(src, reader,
       `${rel} lost its startup picker in #181, so \`?project_id=\` is now the ONLY way to `
       + 'aim it at a startup — it must still read the param');
   }

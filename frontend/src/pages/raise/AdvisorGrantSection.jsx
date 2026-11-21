@@ -4,7 +4,9 @@ import { api } from '../../lib/api';
 // than re-written here. `sent_at` and `opened_at` are instants written by the
 // worker's `nowIso()`, and that module's header argues why they go through the
 // browser's own formatter while a stored calendar day must not.
-import { shortMoment } from '../advisor/practice/deliveryTrail';
+import { shortMoment, versionDocument, versionSummary } from '../advisor/practice/deliveryTrail';
+import VersionFile from '../advisor/practice/VersionFile';
+import { advisorDeliverableFilesApi } from '../../lib/api/advisorDeliverableFiles';
 // D571 — the client company's side of the access log: who opened this record,
 // and when. The route that reads it answers the founder who owns the project,
 // which is why it is read here and not on the advisor's page.
@@ -293,6 +295,10 @@ function ReceivedWorkProducts() {
                         </strong>
                         {v.summary ? ` · ${v.summary}` : ''}
                         {v.sent_at ? ` · sent ${shortMoment(v.sent_at)}` : ''}
+                        {/* #5961 (D5959): the version's summary, only when the advisor wrote one. */}
+                        {versionSummary(v) && (
+                          <span className="block text-gray-600 dark:text-gray-400" data-testid={`received-summary-${v.uid}`}>{versionSummary(v)}</span>
+                        )}
                       </span>
                       {v.opened_at ? (
                         <span className="shrink-0 font-semibold text-emerald-700 dark:text-emerald-400">
@@ -311,6 +317,18 @@ function ReceivedWorkProducts() {
                     </li>
                   ))}
                 </ul>
+                {/* #5961 (D5960): a version whose document is a stored file offers it as a download. */}
+                {item.versions.filter((v) => versionDocument(v)?.kind === 'file').map((v) => {
+                  const doc = versionDocument(v);
+                  return (
+                    <div key={`file-${v.uid}`} className="mt-1.5">
+                      <VersionFile name={`${v.label || `v${v.version}`} · ${doc.name}`} sizeLabel={doc.sizeLabel}
+                        testid={`received-file-${v.uid}`}
+                        download={() => advisorDeliverableFilesApi.downloadReceivedFile(v.uid)}
+                        describeError={(e) => userFacingRaiseError(e, { fallback: 'The file could not be downloaded.' })} />
+                    </div>
+                  );
+                })}
                 {item.versions.some((v) => v.link_url) && (
                   <div className="mt-1.5 flex flex-wrap gap-2">
                     {item.versions.filter((v) => v.link_url).map((v) => (

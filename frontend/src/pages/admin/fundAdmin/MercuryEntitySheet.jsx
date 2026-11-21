@@ -224,7 +224,7 @@ export function MercuryEntitySheet({ p, superAdmin = false, branch = null, api =
     <Sheet label={title} eyebrow={eyebrow} width={520} onClose={onClose} testId="mercury-entity-sheet"
       title={<span className="flex items-center gap-2"><BrandIcon provider={p?.key || 'mercury'} name={name} size={24} />{title}</span>}
       sub="The four Axal entities' Mercury organizations."
-      footer={<span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_SHEET_AUDIT_FOOT}</span>}>
+      footer={<span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_SHEET_AUDIT_FOOT}</span>}>
       <div className="pb-4">
         <MercuryEntityConnections superAdmin={superAdmin} branch={branch} api={api} docsUrl={p?.docs_url || null} />
         {!branch && <p className="mx-5 mt-4 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="mercury-feeds">{ENTITY_FEEDS}</p>}

@@ -446,8 +446,17 @@ export async function listRunJobs(env: Env, runId: string | number): Promise<GhR
   return { ...res, data: Array.isArray(res.data?.jobs) ? res.data.jobs : [] };
 }
 
-export async function createIssue(env: Env, args: { title: string; body: string; labels: string[] }): Promise<GhResult> {
-  return ghFetch(env, '/issues', { method: 'POST', body: JSON.stringify(args) });
+/**
+ * `retry: false` (D5984) sends the POST once: a create that timed out or
+ * answered 5xx may still have opened the issue, so its caller settles it from
+ * a durable intent instead of sending it again.
+ */
+export async function createIssue(
+  env: Env,
+  args: { title: string; body: string; labels: string[]; assignees?: string[] },
+  opts: { retry?: boolean } = {},
+): Promise<GhResult> {
+  return ghFetch(env, '/issues', { method: 'POST', body: JSON.stringify(args) }, opts);
 }
 
 export async function updateIssue(env: Env, issueNumber: number, patch: {
@@ -456,8 +465,8 @@ export async function updateIssue(env: Env, issueNumber: number, patch: {
   return ghFetch(env, `/issues/${issueNumber}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }
 
-export async function addComment(env: Env, issueNumber: number, body: string): Promise<GhResult> {
-  return ghFetch(env, `/issues/${issueNumber}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+export async function addComment(env: Env, issueNumber: number, body: string, opts: { retry?: boolean } = {}): Promise<GhResult> {
+  return ghFetch(env, `/issues/${issueNumber}/comments`, { method: 'POST', body: JSON.stringify({ body }) }, opts);
 }
 
 export async function setLabels(env: Env, issueNumber: number, labels: string[]): Promise<GhResult> {
@@ -484,4 +493,17 @@ export async function fetchIssue(env: Env, issueNumber: number): Promise<GhResul
 
 export async function fetchComments(env: Env, issueNumber: number): Promise<GhResult> {
   return ghFetch(env, `/issues/${issueNumber}/comments?per_page=50`, { method: 'GET' });
+}
+
+/**
+ * D5585 part 3 — one page (100) of an issue's or pull request's comments, oldest first, so a caller can read them
+ * all before concluding a comment is absent (`fetchComments` reads the first 50 only).
+ */
+export async function fetchCommentsPage(env: Env, issueNumber: number, page: number): Promise<GhResult> {
+  return ghFetch(env, `/issues/${issueNumber}/comments?per_page=100&page=${page}`, { method: 'GET' });
+}
+
+/** D5585 part 3 — delete one issue or pull request comment by its id. GitHub answers 204; an absent one is 404. */
+export async function deleteComment(env: Env, commentId: number): Promise<GhResult> {
+  return ghFetch(env, `/issues/comments/${commentId}`, { method: 'DELETE' }, { retry: false });
 }

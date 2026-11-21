@@ -110,7 +110,7 @@ test('provider chips show their status; Connect links to Connectors; importing f
   const text = renderedText(video);
   // D1346 (#3554): Eadwyn AI joins Meet as a guest, so the chip never asks for a connection.
   assert.ok(!text.includes('Google Meet · Connect'), 'no Connect on the Meet chip');
-  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Coming soon', 'WhatsApp · Coming soon', 'Telegram · Coming soon', 'Signal · Coming soon', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
+  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Checking', 'WhatsApp · Coming soon', 'Telegram · Coming soon', 'Signal · Coming soon', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
   const wa = render({ initialMode: 'text', channels: CHANNELS });
   assert.ok(renderedText(tag(wa, 'record-provider-whatsapp') + 'x').length > 0);
   assert.ok(renderedText(wa).includes('WhatsApp · Connect'));

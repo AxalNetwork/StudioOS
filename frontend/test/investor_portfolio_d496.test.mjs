@@ -29,8 +29,10 @@ test('IP2: the page explains source handling without exposing implementation dec
   assert.doesNotMatch(t, /Parse review/i);
 });
 
-test('IP1: Add follow-on stays an admin write, unoffered on the investor’s book', () => {
-  const a = investorZoneActions('portfolio/positions').find((x) => x.label === 'Add follow-on');
-  assert.equal(a.disabled, true);
-  assert.match(a.title, /admin write/);
+test('IP1: Add follow-on stays an admin write, and the investor’s book no longer draws a button that can never be enabled (D6205)', () => {
+  // With the page's own handler and view, as InvestorPortfolioPositions hands them.
+  const ops = investorZoneActions('portfolio/positions', { handlers: { markHistory: () => {} }, view: { header: ['Company'], rows: [{ name: 'A' }], cells: (r) => [r.name] } });
+  // Export greys out only while the book has no rows, a state that passes; nothing else may be disabled.
+  assert.equal(ops.find((x) => x.label === 'Add follow-on'), undefined);
+  assert.equal(ops.some((x) => x.disabled), false, 'no permanently disabled op on Positions');
 });

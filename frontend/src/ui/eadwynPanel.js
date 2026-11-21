@@ -135,14 +135,14 @@ export function useEadwynTrigger() {
  * rail's phone panel, and opening that panel closes Ask: one surface at a time.
  */
 const ASK_CLOSERS = new Set(['close', 'escape', 'route', 'sheet', 'scrim', 'unavailable']);
-const ASK_CLOSED = { open: false, available: false, page: null, label: '', intent: null, slot: null };
+const ASK_CLOSED = { open: false, available: false, page: null, label: '', intent: null, slot: null, draft: null };
 let ask = { ...ASK_CLOSED };
 let askRails = 0;
 const askListeners = new Set();
 
 function setAsk(next) {
   if (next.open === ask.open && next.available === ask.available && next.page === ask.page && next.label === ask.label
-    && next.intent === ask.intent && next.slot === ask.slot) return;
+    && next.intent === ask.intent && next.slot === ask.slot && next.draft === ask.draft) return;
   const was = ask;
   ask = next;
   // D1443 part 4 (#3992): the panel closing ends the intent it was holding, so its host forgets it too.
@@ -159,22 +159,28 @@ function subscribeAsk(listener) {
   return () => { askListeners.delete(listener); };
 }
 
-/** `{ type: 'open', label? }` and the closers. Nothing opens Ask for a viewer it does not serve. */
+/**
+ * `{ type: 'open', label?, draft? }` and the closers. Nothing opens Ask for a viewer it does not serve.
+ * D5077 (#5077): `draft` is a page's suggested ask; the panel puts its words in the composer and sends
+ * nothing. Each open with a draft is a new object, so pressing the same ask again fills it again.
+ */
 export function askPanelEvent(event) {
   if (event?.type === 'open') {
     if (!ask.available) return;
     const label = typeof event.label === 'string' && event.label.trim() ? event.label.trim() : ask.label;
     if (state.open) set({ ...state, open: false });
     setAsk({ ...ask, open: true, label });
+    const words = typeof event.draft === 'string' ? event.draft.trim() : '';
+    if (words || ask.draft) setAsk({ ...ask, draft: words ? { text: words } : null });
     return;
   }
-  if (ask.open && ASK_CLOSERS.has(event?.type)) setAsk({ ...ask, open: false });
+  if (ask.open && ASK_CLOSERS.has(event?.type)) setAsk({ ...ask, open: false, draft: null });
 }
 
-export const openAskPanel = (label) => askPanelEvent({ type: 'open', label });
+export const openAskPanel = (label, draft) => askPanelEvent({ type: 'open', label, draft });
 export const closeAskPanel = () => askPanelEvent({ type: 'close' });
 
-/** `{ open, available, page, label }`. Closed and unavailable on the server. */
+/** `{ open, available, page, label, draft }`. Closed and unavailable on the server. */
 export function useAskPanel() {
   return useSyncExternalStore(subscribeAsk, () => ask, () => ASK_CLOSED);
 }

@@ -117,8 +117,11 @@ test('Validate\'s overview opens Fundraising readiness, keeping the venture; Bui
 
 test('the wiring: the score part beside From Mercury, the Validate chip, read-only history and the canvas', () => {
   const route = cycleRouteText();
-  assert.match(route, /import \{ PmfPart \} from '\.\.\/PmfPart';/);
-  assert.match(route, /'fundraising-readiness': \(data, ctx\) => \(\s*<>\s*<PmfPart part=\{data\?\.parts\?\.pmf\} card=\{data\?\.card\} records=\{data\?\.records\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>\s*\{mercuryPart\('fundraising-readiness', data, ctx\)\}/);
+  // D6049 (#6049, RA-16): the part is the page home's own section, and the sources follow it.
+  assert.match(route, /import ReadinessHome, \{ ReadinessBands \} from '\.\.\/ReadinessHome';/);
+  assert.match(read('frontend/src/pages/cycles/ReadinessHome.jsx'), /<PmfPart part=\{part\} projectId=\{projectId\} reload=\{reload\} history=\{history\} \/>/);
+  assert.match(route, /body: \(p\) => <ReadinessHome \{\.\.\.p\} part=\{data\?\.parts\?\.pmf\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} role=\{ctx\.role\} \/>/);  // D6897: role offers founders the snapshot link
+  assert.match(route, /'fundraising-readiness': \(data, ctx\) => \(\s*<>\s*\{mercuryPart\('fundraising-readiness', data, ctx\)\}/);
   assert.match(route, /chip=\{cycle === 'validate' && projectId \? <PmfChip projectId=\{projectId\} search=\{q\} \/> : null\}/);
   const part = read('frontend/src/pages/cycles/PmfPart.jsx') + read('frontend/src/pages/cycles/pmfModel.js');
   assert.ok(!/fetch\(|method: 'POST'|\.rescore\(/.test(part), 'the part writes nothing');

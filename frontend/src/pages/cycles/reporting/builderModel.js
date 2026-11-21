@@ -44,6 +44,8 @@ export function valueText(f) {
   if (f.unit === 'usd') return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   if (f.unit === 'pct') return `${Math.round(v * 10) / 10}%`;
   if (f.unit === 'months') return `${Math.round(v * 10) / 10} ${v === 1 ? 'month' : 'months'}`;
+  // D6104: burn multiple.
+  if (f.unit === 'multiple') return `${Math.round(v * 100) / 100}×`;
   return v.toLocaleString('en-US');
 }
 

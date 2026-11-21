@@ -23,6 +23,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from './_admin_security_source.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -303,7 +304,7 @@ test('the Security feed joins the column the transfer now fills', () => {
   // The feed reads `admin_audit_log` in full and names the target through
   // `viewed_user_id`. Pinned here beside the write, because the two are one
   // claim: a record the feed cannot name is not "recorded in Security".
-  const feed = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8');
+  const feed = readAdminSecurity();
   assert.ok(feed.includes('LEFT JOIN users t ON t.id = a.viewed_user_id'),
     'the governance feed no longer names an audit row\'s target');
   const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_super_admins.ts'), 'utf8');

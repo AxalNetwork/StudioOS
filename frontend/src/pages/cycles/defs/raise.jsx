@@ -8,17 +8,29 @@ import MercuryRaiseFeed from '../MercuryRaiseFeed';
 import FromNotion from '../FromNotion';
 import RaisePosthog from '../RaisePosthog';
 import NotionSnapshotImport from '../NotionSnapshotImport';
-import { PmfPart } from '../PmfPart';
+import ReadinessHome, { ReadinessBands } from '../ReadinessHome';
+import { coverageLine, nextPriorityAction } from '../readinessModel';
 import RaiseReceiptMatches from '../../../components/RaiseReceiptMatches';
 import EvidencePart from '../evidence/EvidencePart';
-import { isNarrativeAdmin } from '../../raise/narrative/narrativeModel';
-import { forecastHref } from '../../raise/useoffunds/useOfFundsModel';
+import { LINE as NARRATIVE_LINE } from '../../raise/narrative/narrativeModel';
+// D7103 (#7103, RA-14): Investor narrative's header action, Save version, from the part's capability map.
+import { saveVersionAction } from '../../raise/narrative/narrativeHomeModel';
+import { HOME_PATH, SET_ACTION, forecastHref, tabSearch } from '../../raise/useoffunds/useOfFundsModel';
+import { ADD_ACTION as CAP_REL_ADD, addHref as capRelAddHref } from '../../raise/caprel/capRelModel';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+import { ShareStatusButton } from '../evidence/ShareStatus';
+// D5081 (#5081, RA-14): Use of funds' Home read, which CycleRoute holds for the header's action and Home (HUBS.md: a cycle's
+// new part comes in through its defs file, so the frozen route gains no import).
+export { useUseOfFundsHome } from '../../raise/useoffunds/useOfFundsRead.js';
+// D5081 part 2 (#5081, RA-22): Capital relationships' Overview reads, which CycleRoute holds for the header's action and Overview.
+export { useCapRelHome } from '../../raise/caprel/capRelHomeRead.js';
+// D5081 part 3 (#5081, RA-20): the Cap table record read, which CycleRoute holds for the header's action and Overview.
+export { useCapTableHome } from '../../raise/captable/capTableHomeRead.js';
 
 // D4574 (#4574, H5): Raise's step behind its own lazy boundary.
-const NarrativeHome = lazyStep(() => import('../../raise/narrative/NarrativeTool'), 'NarrativeHome');
+const NarrativeOwnedHome = lazyStep(() => import('../../raise/narrative/NarrativeOwnedHome'), 'default');
 
 /** D840 part 2 (#2347): a Raise module's From Mercury, from `parts.mercury`, which only the founder's own read carries. */
 const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={data?.parts?.mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -41,6 +53,14 @@ const raise = {
   path: 'call',
   Mount: RaiseMount,
   action: (q) => ({ label: 'Build your deck', href: `/raise/pitch${q}` }),
+  // D5081 (#5081, RA-14): a module's own primary in place of Build your deck. On Use of funds' tabs it is
+  // Set raise & allocation, opening Allocation; on Home CycleRoute opens Edit split in place (`homeAction`).
+  actions: toFnMap({
+    'use-of-funds': (q) => ({ label: SET_ACTION, href: `${HOME_PATH}/allocation${tabSearch(q)}` }),
+    // D5081 part 2 (RA-22): on Capital relationships' tabs it is Add investor, opening Pipeline's Add investor;
+    // on Overview CycleRoute chooses from the prospects read (`homeAction`); on Pipeline the tab's own Add is it.
+    'capital-relationships': (q) => ({ label: CAP_REL_ADD, href: capRelAddHref(q) }),
+  }),
   // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
   // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
   // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
@@ -54,20 +74,18 @@ const raise = {
         <EvidencePart slug={m.slug} projectId={ctx.projectId} />
       </>
     )])),
-    // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
-    // D913: its Objections heard, with no Answer it for an admin.
+    // D7103 (#7103): Home's tiles, Needs you and footer (D909, D913, D5074 part 7) are now its own page (`homes` below).
     'investor-narrative': (data, ctx) => (
       <>
-        <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} projectId={ctx.projectId} />
         {mercuryPart('investor-narrative', data, ctx)}
         <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
         <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
       </>
     ),
-    // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
+    // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`. D6049 (#6049, RA-16): it is now its own
+    // section of the page's home (`homes` below), so only the sources follow here: From Mercury, PostHog, Evidence.
     'fundraising-readiness': (data, ctx) => (
       <>
-        <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
         {mercuryPart('fundraising-readiness', data, ctx)}
         <RaisePosthog slug="fundraising-readiness" projectId={ctx.projectId} />
         <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
@@ -103,13 +121,36 @@ const raise = {
     // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
   }),
   add: toFnMap({}),
+  // D6897 part 4 (#6897, RA-31): the Overview header's Share outside Axal, the Raise status page; founders only.
+  overviewMore: ({ projectId, role }) => (role === 'founder' ? <ShareStatusButton projectId={projectId} /> : null),
+  // D6049 (#6049, Raise v2 RA-16): a module that owns its page. `(data, ctx)` → `{ sub, body, Bands, action }`: the
+  // header's coverage and freshness line, the page drawn in place of the generic chart and records table
+  // (handed the card, records, Add and record links), and the collapsed AI gap analysis the bands draw in.
+  homes: toFnMap({
+    'fundraising-readiness': (data, ctx) => ({
+      sub: coverageLine(data?.records),
+      // D5081 part 5 (RA-12, RA-14): the header's action is the page's own, Fix next priority, or none.
+      action: nextPriorityAction(data?.records),
+      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} role={ctx.role} />,
+      Bands: ReadinessBands,
+    }),
+    // D7103 (#7103, RA-14, RA-17): Investor narrative owns its Home; its action is Save version, or none, or disabled for a reader.
+    'investor-narrative': (data, ctx) => ({
+      sub: NARRATIVE_LINE,
+      action: saveVersionAction(data, { projectId: ctx.projectId }),
+      body: (p) => <NarrativeOwnedHome {...p} data={data} projectId={ctx.projectId} reload={ctx.reload} />,
+    }),
+  }),
   fills: {},
   // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
   // read: the round and its order of payment on Cap table, which holds the
   // scenario both read; the room and the clauses on Fundraising readiness,
   // which scores the data room and the documents, so the room's band sits
   // there rather than on Data room's module page. The narrative band sits on
-  // Investor narrative, whose check it phrases.
+  // Investor narrative, whose check it phrases. D6049 (#6049): RA-16 draws
+  // the readiness page's Eadwyn readings as "AI gap analysis", collapsed
+  // under Detail, so the room and the clauses bands stay here and draw
+  // inside that disclosure (`ReadinessBands`).
   drafts: new Map([
     ['cap-table', [{
       surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',

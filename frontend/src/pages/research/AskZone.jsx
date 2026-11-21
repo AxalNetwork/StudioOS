@@ -19,6 +19,8 @@ import {
 } from './researchStates.js';
 import { openAddTokens } from '../../lib/aiTokens.js';
 import Sheet from '../../ui/Sheet.jsx';
+import AddToResearch from './AddToResearch.jsx';
+import { canAddToResearch } from './researchComparisons.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
@@ -59,7 +61,9 @@ const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
  */
 // #4610: four scopes, four server reads. `discarded` joined them — it was a
 // client-side filter over `all`'s window and so could not see past it.
-const SCOPES = new Set(['session', 'all', 'saved', 'discarded']);
+// D6272: `cleared` is the fifth — the sessions Clear history hid, read back by
+// the investor's `Show cleared` filter. `all` and `session` leave them out.
+const SCOPES = new Set(['session', 'all', 'saved', 'discarded', 'cleared']);
 
 /**
  * The stat strip, per licence, because the four artboards ask for DIFFERENT
@@ -186,6 +190,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const [pricing, setPricing] = useState(null);
   const [savingUid, setSavingUid] = useState('');
   const [copiedUid, setCopiedUid] = useState('');
+  const [projectAnswer, setProjectAnswer] = useState(null);
   // D3701 part 6 (RS-10B): on a phone a citation opens as a bottom sheet with
   // its passage; wider screens list every passage inline.
   const phone = usePhoneWidth();
@@ -309,6 +314,37 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     }
   };
 
+  // D6272 (owner, #6274 question 4 B): Clear history HIDES the caller's
+  // sessions and nothing is deleted, so it needs no confirm step — Restore
+  // undoes it. The next question starts a fresh thread.
+  const clearHistory = async () => {
+    setError('');
+    try {
+      const r = await api.research.askClearHistory();
+      const n = Number(r?.cleared || 0);
+      setAnnounce(n
+        ? `Cleared ${n} session${n === 1 ? '' : 's'}. Nothing was deleted: Show cleared brings ${n === 1 ? 'it' : 'them'} back.`
+        : 'There was nothing to clear.');
+      setView('session');
+      await loadThread('session', '');
+    } catch {
+      setError('Your history could not be cleared right now. Nothing was changed.');
+    }
+  };
+
+  const restoreHistory = async () => {
+    setError('');
+    try {
+      const r = await api.research.askRestoreHistory();
+      const n = Number(r?.restored || 0);
+      setAnnounce(n ? `Restored ${n} session${n === 1 ? '' : 's'} to your history.` : 'There was nothing to restore.');
+      setView('all');
+      await loadThread('all', '');
+    } catch {
+      setError('Your cleared history could not be restored right now. Nothing was changed.');
+    }
+  };
+
   const toggleSaved = async (item) => {
     setSavingUid(item.uid);
     try {
@@ -367,7 +403,15 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const askPrice = pricing?.prices?.[askModel] || null;
 
   const strip = ASK_STRIP[role] || [];
-  const ready = Boolean(payload && thread.payload);
+  // #6264: a failed history read is an answer too, and the strip draws it
+  // through `UNREADABLE` like the #4610 tiles say, not as a skeleton forever.
+  const ready = Boolean(payload && (thread.payload || thread.error));
+  // #6264: the banner draws as soon as pricing answers, which can be before the
+  // history read. Pending shows the rate alone; a failed read (or one without
+  // totals) says Unreadable, never $0.00.
+  const spent = totals
+    ? `this session: ${formatCost(totals.cost_usd)}`
+    : thread.loading ? null : `this session: ${UNREADABLE}`;
   const ctx = { indexed, docs: items.length, totals, rows: all, pageSize: all.length, hasMore };
 
   const libRows = items.map((d) => {
@@ -405,7 +449,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
              both are controls that cannot act, which is the same rule the
              Library applies to a client's document. With rows they are back,
              unchanged. */
-          actions={visible.length ? zoneActions(visible, { newSession, savedAnswers: () => setView('saved') }) : []}
+          actions={visible.length ? zoneActions(visible, { newSession, clearHistory, savedAnswers: () => setView('saved') }) : []}
         />
       )}
       <ZoneHeading
@@ -425,7 +469,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       {askPrice ? (
         <MeteredNote
           rate={`${formatRate(askPrice.in)} / M in · ${formatRate(askPrice.out)} / M out`}
-          spent={`this session: ${formatCost(totals.cost_usd)}`}
+          spent={spent}
         >
           Each question is charged on what it retrieves, then on what the answer costs to
           write. A question the library cannot answer never reaches the model and is
@@ -587,6 +631,22 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             now, and an empty scope is an empty READ — `all` is itself zero —
             so the guard admits those two, or the Archived tab with nothing
             archived would render no body at all. */}
+        {/* D6272: the cleared view says what it holds and offers Restore. */}
+        {view === 'cleared' && !thread.loading && !thread.error ? (
+          <div className="flex flex-wrap items-center gap-2" data-testid="ask-cleared-bar">
+            <p className="text-[12.5px] leading-relaxed text-gray-700 dark:text-gray-300">
+              {all.length
+                ? 'These sessions were cleared from your history. Nothing in them was deleted.'
+                : 'No cleared sessions.'}
+            </p>
+            {all.length ? (
+              <button type="button" className={buttonClass} onClick={restoreHistory} data-testid="ask-restore-history">
+                Restore to history
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {!thread.loading && !thread.error && visible.length === 0
           && (all.length > 0 || view === 'discarded' || view === 'saved') ? (
           <Card className="border-dashed p-4">
@@ -731,6 +791,13 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                     {copiedUid === t.uid ? 'Copied' : 'Copy with citations'}
                   </button>
                 ) : null}
+                {t.uid && t.reason === 'answered' && !t.discarded && canAddToResearch(role) ? (
+                  <button type="button" data-testid={`button-ask-save-project-${t.uid}`}
+                    className="whitespace-nowrap text-[10px] font-bold text-violet-700 underline dark:text-violet-300"
+                    onClick={() => setProjectAnswer({ uid: t.uid, name: t.question })}>
+                    Save to project
+                  </button>
+                ) : null}
               </div>
 
               <AnswerDisposition item={t} busy={savingUid === t.uid} onUpdate={(changes) => updateAnswer(t, changes)} />
@@ -751,6 +818,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             );
           })}
         </div>
+        {projectAnswer ? <AddToResearch kind="answer" items={[projectAnswer]} onClose={() => setProjectAnswer(null)} /> : null}
 
         {/* THE ARTBOARD'S INSTRUMENT CARD. Every column is a field
             `api.research.documents()` already returns and this page has already

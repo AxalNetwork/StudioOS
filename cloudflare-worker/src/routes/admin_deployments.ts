@@ -69,7 +69,9 @@ type DeploymentRow = {
  * deployed before D452 answers without it.
  */
 type BranchHealthLive = Pick<BranchHealth, 'ok' | 'licence_status' | 'licence_pushed_at'>
-  & Partial<Pick<BranchHealth, 'deploy_version'>>;
+  // D5925: `licence_revision` and `licence_copy_state` are what the branch's own copy
+  // holds; a build before D5925 answers without them, so `live` shows them only when sent.
+  & Partial<Pick<BranchHealth, 'deploy_version' | 'licence_revision' | 'licence_copy_state'>>;
 
 // ── D4706: attempts ─────────────────────────────────────────────────────────
 //

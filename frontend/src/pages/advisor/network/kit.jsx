@@ -80,7 +80,8 @@ export function FilterChips({ options, value, onChange }) {
             key={o.id}
             type="button"
             onClick={() => onChange(o.id)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            aria-pressed={active}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 max-sm:min-h-[44px] rounded-full text-xs font-medium border transition-colors ${
               active
                 ? 'bg-violet-600 border-violet-600 text-white'
                 : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-violet-300'

@@ -6,6 +6,7 @@ import { canAccessProject } from '../services/projectAccess';
 import { isTeamViewer } from '../services/mercury/growFeeds';
 import { Refused } from '../services/growWriters';
 import { utmSource } from '../services/growCycle';
+import { campaignChannelMonths, NO_CHANNEL_MONTHS } from '../services/growCampaigns';
 
 const router = new Hono<{ Bindings: Env }>();
 type Month = { month: string; spend_cents: number; source: 'manual' | 'mercury' };
@@ -36,9 +37,11 @@ export async function readAds(env: Env, user: User, pid: number, uid: string, no
   } catch { counts = null; }
   const channels = await Promise.all((links.results ?? []).filter(g => g.budget_type != null || /^(google|google_ads|google_search|youtube|meta|facebook|instagram|x|twitter|linkedin_ads)$/.test(g.utm_source)).map(async g => {
     let months: Month[] = []; let reason: string | null = 'Not recorded: no complete campaign date window';
-    if(campaign.starts_on && campaign.ends_on) {
+    const range = campaignChannelMonths(campaign, g);
+    if (range.reason === 'outside_link') reason = NO_CHANNEL_MONTHS;
+    else if (range.reason === null) {
       try {
-        const start=campaign.starts_on.slice(0,7), end=campaign.ends_on.slice(0,7);
+        const { start, end } = range;
         const manual=await env.DB.prepare('SELECT month, spend_cents FROM channel_spend WHERE channel_id = ? AND month >= ? AND month <= ?').bind(g.id,start,end).all<{month:string;spend_cents:number}>();
         const mercury=team ? await env.DB.prepare("SELECT period, amount_cents FROM mercury_grow_facts WHERE project_id = ? AND module = 'distribution' AND kind = 'channel_spend' AND subject = ? AND period >= ? AND period <= ?").bind(pid,g.uid,start,end).all<{period:string;amount_cents:number|null}>() : {results:[]};
         months=mergeMonths(manual.results ?? [],mercury.results ?? []);

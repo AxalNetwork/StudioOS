@@ -7,7 +7,8 @@
  *   · `grow/talent` → `Post a role` — "no role posting is stored". `job_postings`
  *     IS the store, it carries the very `project_id` this desk's role chips filter
  *     on, `jobs.create()` writes one, and `/jobs/new` is a mounted founder route.
- *   · `grow/talent` → `Bulk reject` — "no candidate records exist to act on".
+ *   · `grow/talent` → `Bulk reject` — "no candidate records exist to act on" (and, since #6109,
+ *     "no endpoint sets an application status": a single stage writer exists).
  *     `job_applications` exists and this page already tabulates it. The real gap
  *     is narrower: no endpoint sets an application's status.
  *   · `grow/customers` → `Stalled` — "no activity timeline is stored".
@@ -74,12 +75,14 @@ test('Bulk reject names the writer it lacks, not records that exist', () => {
   // It must NOT deny the records: they are read on this very page.
   assert.doesNotMatch(m[1], /no candidate records exist/,
     'Bulk reject denies candidate records that jobs.applications() returns and this page tabulates');
-  assert.match(m[1], /no endpoint sets an application status/);
+  // #6109: one application's stage is set by PATCH /api/cycles/grow/applications/:id/stage
+  // (`declined` among its stages); what is missing is the bulk form.
+  assert.match(m[1], /no endpoint declines several at once/);
+  assert.doesNotMatch(m[1], /no endpoint sets an application status/, 'the single stage writer exists');
   assert.ok(TALENT.includes('jobsApi.applications('), 'the page stopped reading applications');
-  // And the claim's other half: there is genuinely no status writer. If one is
-  // added, this fails and the refusal has to become a handler.
+  // And the claim's other half: `routes/jobs.ts` still has no status writer of its own.
   assert.ok(!/UPDATE job_applications\s+SET status/i.test(JOBS_ROUTE),
-    'an application-status writer exists now, so Bulk reject is no longer a gap');
+    'an application-status writer exists in routes/jobs.ts now: check whether Bulk reject is still a gap');
 });
 
 test('Stalled is live, and computed from the stamps the route returns', () => {

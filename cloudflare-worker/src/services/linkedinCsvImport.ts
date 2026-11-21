@@ -390,7 +390,9 @@ export async function ownContact(env: Env, owner: number, id: number) {
 /**
  * D1352 (#3567): the member's own book, for Network › Relationships. Each row
  * carries its sources (so the page can say "From LinkedIn"), its note count
- * and its open follow-ups. Every statement binds the owner.
+ * and its open follow-ups; #5310 (NW2) adds how many of those are overdue, the
+ * next due date, and the last note and finished follow-up. Every statement
+ * binds the owner.
  */
 export const BOOK_PAGE = 50;
 export async function bookOf(env: Env, owner: number, q: string, page: number, filters: { source?: string; follow_up?: string } = {}) {
@@ -406,13 +408,18 @@ export async function bookOf(env: Env, owner: number, q: string, page: number, f
     `SELECT n.id, n.name, n.email, n.company, n.title, n.linkedin_url, n.connected_on, n.created_at,
             (SELECT GROUP_CONCAT(DISTINCT s.source) FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id) AS sources,
             (SELECT COUNT(*) FROM network_contact_notes x WHERE x.owner_user_id = ? AND x.contact_id = n.id) AS notes,
-            (SELECT COUNT(*) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL) AS open_tasks
+            (SELECT COUNT(*) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL) AS open_tasks,
+            (SELECT COUNT(*) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL
+                AND t.due_on IS NOT NULL AND t.due_on < date('now')) AS overdue_tasks,
+            (SELECT MIN(t.due_on) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL) AS next_due_on,
+            (SELECT MAX(x.created_at) FROM network_contact_notes x WHERE x.owner_user_id = ? AND x.contact_id = n.id) AS last_note_at,
+            (SELECT MAX(t.done_at) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id) AS last_done_at
        FROM network_connections n
       WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\')
       AND (? IS NULL OR EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id AND s.source = ?))
       AND (? IS NULL OR EXISTS (SELECT 1 FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL AND ? = 'open'))
       ORDER BY n.name COLLATE NOCASE, n.id LIMIT ? OFFSET ?`,
-  ).bind(owner, owner, owner, owner, term, like, like, ...filterArgs, BOOK_PAGE, offset).all<any>()).results || [];
+  ).bind(owner, owner, owner, owner, owner, owner, owner, owner, term, like, like, ...filterArgs, BOOK_PAGE, offset).all<any>()).results || [];
   const total = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM network_connections n
       WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\') AND (? IS NULL OR EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id AND s.source = ?))
@@ -425,6 +432,43 @@ export async function bookOf(env: Env, owner: number, q: string, page: number, f
       connected_on: r.connected_on, created_at: r.created_at,
       sources: r.sources ? String(r.sources).split(',').sort() : [],
       notes: Number(r.notes), open_tasks: Number(r.open_tasks),
+      // #5310 (NW2): the row's follow-up state and its last recorded activity. A follow-up with no due date is never
+      // overdue (B1); no note and no finished follow-up is null, never "today".
+      overdue_tasks: Number(r.overdue_tasks), next_due_on: r.next_due_on ?? null,
+      last_note_at: r.last_note_at ?? null, last_done_at: r.last_done_at ?? null,
+    })),
+  };
+}
+
+/**
+ * #5310 (NW1, owner answer B1): "needs attention" is overdue follow-ups only — an open follow-up on
+ * the member's own book whose due date is before today (UTC). Oldest due first; `total` counts every
+ * overdue follow-up, not the page. A follow-up with no due date is never overdue. Each row names its
+ * contact and the last note on them (`last_note_at`, null when none is recorded). Every statement
+ * binds the owner, so another member's book is never read.
+ */
+export const FOLLOW_UPS_DUE_MAX = 20;
+export async function followUpsDueOf(env: Env, owner: number, limit: number) {
+  const n = Math.min(FOLLOW_UPS_DUE_MAX, Math.max(1, Math.trunc(limit) || 5));
+  const rows = (await env.DB.prepare(
+    `SELECT t.uid AS task_uid, t.title AS task_title, t.due_on, n.id AS contact_id, n.name, n.company, n.title,
+            (SELECT MAX(x.created_at) FROM network_contact_notes x WHERE x.owner_user_id = ? AND x.contact_id = n.id) AS last_note_at,
+            (SELECT GROUP_CONCAT(DISTINCT s.source) FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id) AS sources
+       FROM network_contact_tasks t JOIN network_connections n ON n.id = t.contact_id AND n.user_id = ?
+      WHERE t.owner_user_id = ? AND t.done_at IS NULL AND t.due_on IS NOT NULL AND t.due_on < date('now')
+      ORDER BY t.due_on, t.id LIMIT ?`,
+  ).bind(owner, owner, owner, owner, n).all<any>()).results || [];
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM network_contact_tasks t JOIN network_connections n ON n.id = t.contact_id AND n.user_id = ?
+      WHERE t.owner_user_id = ? AND t.done_at IS NULL AND t.due_on IS NOT NULL AND t.due_on < date('now')`,
+  ).bind(owner, owner).first<{ n: number }>();
+  if (!total || !Number.isSafeInteger(Number(total.n))) throw new Error('follow-ups count unreadable');
+  return {
+    total: Number(total.n),
+    items: rows.map((r) => ({
+      task_uid: String(r.task_uid), task_title: r.task_title, due_on: r.due_on,
+      contact: { id: Number(r.contact_id), name: r.name, company: r.company ?? null, title: r.title ?? null, sources: r.sources ? String(r.sources).split(',').sort() : [] },
+      last_note_at: r.last_note_at ?? null,
     })),
   };
 }

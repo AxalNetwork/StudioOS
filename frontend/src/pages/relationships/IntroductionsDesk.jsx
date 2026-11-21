@@ -7,6 +7,7 @@ import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestinatio
 import RecordCompose from '../email/RecordCompose.jsx';
 import SendUncertain from '../email/SendUncertain.jsx';
 import DraftFlow, { useDraftFlow } from './DraftFlow.jsx';
+import IntroRecordSheet from './IntroRecordSheet.jsx';
 import {
   ASK_DRAFT_FOLLOW_UP, ASK_DRAFT_INTRO, INBOX_EMPTY, INTRO_GONE, LOG_EMPTY, LOG_UNREAD, NOTE_MAX, NOT_NOW, OUTCOMES, SENDS_NOTHING, STATUS_FILTERS, STATUS_LABEL, SUMMARY_TITLE, SUMMARY_UNREAD,
   UPDATE_RECORD, WRITE_INTRO, dayAfter, deliveryOf, followUps, introSubject, isOpenForMe, logRows, personOf, summaryField,
@@ -91,6 +92,8 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
   const [notice, setNotice] = useState(null);
   const [declining, setDeclining] = useState(null);
   const [writing, setWriting] = useState(null); // { request, draft: { subject, body } | null }
+  // #5310 (NW3.2): the record a row opens, { uid, side }, read on its own (`GET /intro-requests/:uid`).
+  const [record, setRecord] = useState(null);
   const [summary, setSummary] = useState({ status: 'loading', data: null });
   const highlightRefs = useRef(new Map());
 
@@ -247,6 +250,7 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
                     <td className={`px-2 py-2 text-[12.5px] ${INK}`} data-testid={`${testId}-outcome-${x.uid}`}>{x.outcome}</td>
                     <td className={`px-2 py-2 text-[12.5px] ${INK}`}>{x.followUp}</td>
                     <td className="px-2 py-2">
+                      <button type="button" className={QUIET} onClick={() => setRecord({ uid: x.uid, side: x.side === 'sent' ? 'asker' : 'teammate' })} data-testid={`${testId}-row-${x.uid}-open`}>Open record</button>
                       <RowActions row={x.row} side={x.side} busy={busy === x.uid} act={act} testId={`${testId}-row-${x.uid}`} />
                       {notice?.uid === x.uid ? <p className="m-0 text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert">{notice.text}</p> : null}
                     </td>
@@ -258,6 +262,7 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
         ) : null}
       </section>
 
+      {record ? <IntroRecordSheet uid={record.uid} side={record.side} onClose={() => setRecord(null)} onChanged={load} /> : null}
       {writing ? (
         <IntroCompose request={writing.request} draft={writing.draft} onClose={() => setWriting(null)} onSent={() => { setWriting(null); load(); }} testId={`${testId}-compose`} />
       ) : null}

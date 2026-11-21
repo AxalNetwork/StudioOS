@@ -80,7 +80,7 @@ for (const [role, scope, portal, url] of [
 }
 
 test('the Billing page hands its role to the reads, and remounts them when the role changes', () => {
-  const src = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../src/pages/account/BillingSection.jsx', import.meta.url), 'utf8');
   assert.match(src, /const reads = useBillingReads\(\{ role \}\);/);
   assert.match(src, /<BillingConsole key=\{role\} role=\{role\} billing=\{billing\} reads=\{reads\} \/>/);
   assert.match(src, /overview=\{reads\.overview\}/);

@@ -198,7 +198,7 @@ test('Auto-reload: the limit line with Open limits, and the Paused state in plac
 // ------------------------------------------------------------------ the page
 
 test('the page lays the cards out in the canvas\'s order, and stacks them on a phone', () => {
-  const page = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../src/pages/account/BillingSection.jsx', import.meta.url), 'utf8');
   const start = page.indexOf('function BillingConsole(');
   const src = page.slice(start, page.indexOf('\n}\n', start));
   const order = ['<TokenBalanceCard', '<PlanAllowanceCard', '<BuyTokensCard', '<PlanHeader', '<PaymentDetailsCard', '<AutoReloadCard', '<Orders'];

@@ -1,13 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
 import { api } from '../lib/api';
+import { parseStamp } from '../ui/parseStamp.js';
+import { fundReportDeliveryLabel, fundReportDeliveryTime } from '../lib/fundReportDelivery';
+import { useLeaveGuard } from '../lib/leaveGuard';
+import { fundReportsApi } from '../lib/api/fundReports.js';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { readableFund, readablePeriod, useFundReport } from '../hooks/useFundReport';
 import { FundReadState, Recorded } from './FundPage';
+import { fundDraftsApi } from '../lib/api/fundDrafts.js';
+import FundDraftBand from './FundDraftBand';
 import './fundPage.css';
 
 export default function FundReportPeriodPage({ role = 'investor', reading: supplied }) {
@@ -25,11 +31,28 @@ export default function FundReportPeriodPage({ role = 'investor', reading: suppl
       note="Issuing freezes the report. A correction is recorded as a separate period." />}>
     {reading.loading || reading.error || !data || denied ? <FundReadState reading={denied ? { ...reading, error: { status: 403 } } : reading} />
       : <PeriodEditor key={`${data.fund.id}:${data.period.id || 'new'}:${data.period.revision || params.get('corrects') || ''}`}
-        data={data} onSaved={(id) => { if (String(id) === periodId) reading.reload(); else navigate(`/funds/${data.fund.id}/reporting/${id}`, { replace: true }); }} />}
+        data={data} onDeleted={() => navigate(`/funds/${data.fund.id}`, { replace: true })} onSaved={(id) => { if (String(id) === periodId) reading.reload(); else navigate(`/funds/${data.fund.id}/reporting/${id}`, { replace: true }); }} />}
   </WorkspaceShell></div>;
 }
 
-export function PeriodEditor({ data, onSaved }) {
+const SECTIONS = { letter: 'Letter', developments: 'Key developments', outlook: 'Outlook', subsequent: 'Subsequent events' };
+const validEntryDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
+export function reportEntryError(section, entry) {
+  if (section === 'letter' || section === 'outlook') return entry.trim() ? null : 'Enter a paragraph.';
+  if (section === 'developments') {
+    if (!validEntryDate(entry.date)) return 'Enter a valid date.';
+    if (!entry.title.trim()) return 'Enter a title.';
+    return entry.body.trim() ? null : 'Enter text.';
+  }
+  if (!validEntryDate(entry.d)) return 'Enter a valid date.';
+  return entry.e.trim() ? null : 'Enter text.';
+}
+
+export function PeriodEditor({ data, onSaved, onDeleted }) {
   const { user } = useAuth();
   // D712 decision 6: an admin issues a period only through the reporting
   // queue's pack. A non-admin GP of record keeps today's buttons.
@@ -37,23 +60,63 @@ export function PeriodEditor({ data, onSaved }) {
   const [form, setForm] = useState(() => ({ ...structuredClone(data.period), period_start: data.period.period_start ?? '', period_end: data.period.period_end ?? '' }));
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [validated, setValidated] = useState(false);
+  const allowLeave = useRef(false);
   const [error, setError] = useState(null);
+  const savedAt = parseStamp(form.updated_at);
   const issued = data.period.status === 'issued';
   const editable = data.can_manage && !issued;
   const disabled = !editable || pending;
+  const dirty = editable && (['period', 'period_start', 'period_end'].some(key => form[key] !== (data.period[key] ?? ''))
+    || JSON.stringify(form.narrative) !== JSON.stringify(data.period.narrative));
+  useLeaveGuard(dirty, 'Leave this report with unsaved changes?', (message) => allowLeave.current || window.confirm(message));
   useEffect(() => {
-    if (!confirm) return undefined;
-    const close = (event) => { if (event.key === 'Escape' && !pending) setConfirm(false); };
+    if (!confirm && !deleting) return undefined;
+    const close = (event) => { if (event.key === 'Escape' && !pending) { setConfirm(false); setDeleting(false); } };
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
-  }, [confirm, pending]);
+  }, [confirm, deleting, pending]);
   const change = (key, value) => setForm(previous => ({ ...previous, [key]: value }));
   const update = (section, index, key, value) => setForm(previous => ({ ...previous, narrative: { ...previous.narrative,
     [section]: previous.narrative[section].map((entry, i) => i !== index ? entry : key === null ? value : { ...entry, [key]: value }) } }));
   const add = (section, value) => setForm(previous => ({ ...previous, narrative: { ...previous.narrative, [section]: [...previous.narrative[section], value] } }));
   const remove = (section, index) => setForm(previous => ({ ...previous, narrative: { ...previous.narrative, [section]: previous.narrative[section].filter((_, i) => i !== index) } }));
+  const move = (section, index, offset) => setForm(previous => {
+    const rows = [...previous.narrative[section]];
+    const next = index + offset;
+    if (next < 0 || next >= rows.length) return previous;
+    [rows[index], rows[next]] = [rows[next], rows[index]];
+    return { ...previous, narrative: { ...previous.narrative, [section]: rows } };
+  });
+  // D6252: Accept puts the drafted opening first in the letter, in the unsaved editor; saving and issuing stay the
+  // page's own buttons. A letter already at its 50 paragraphs refuses rather than drops one.
+  const acceptOpening = (text) => {
+    if (form.narrative.letter.length >= 50) return 'The letter already has 50 paragraphs. Remove one before adding the opening.';
+    setForm(previous => ({ ...previous, narrative: { ...previous.narrative, letter: [text, ...previous.narrative.letter] } }));
+    return null;
+  };
+  const hasInvalidEntries = Object.entries(form.narrative).some(([section, entries]) => entries.some(entry => reportEntryError(section, entry)));
+  const validate = () => {
+    setValidated(true);
+    setError(null);
+    return !hasInvalidEntries;
+  };
+  const deleteDraft = async () => {
+    if (!editable || !form.id || !deleting || pending) return;
+    setPending(true); setError(null);
+    try {
+      const result = await fundReportsApi.deleteDraft(data.fund.id, form.id, form.revision);
+      if (result?.ok !== true) throw new Error('Delete was not confirmed.');
+      allowLeave.current = true;
+      onDeleted();
+    } catch (failure) {
+      setError([400, 402, 403, 404, 409].includes(failure?.status) ? failure.message : 'Unreadable: deletion could not be confirmed. Try again.');
+      setDeleting(false);
+    } finally { setPending(false); }
+  };
   const save = async (issue) => {
-    if (!editable || pending || (issue && !confirm)) return;
+    if (!editable || pending || (issue && !confirm) || !validate()) return;
     setPending(true); setError(null);
     try {
       const result = await api.fundsSaveReportPeriod(data.fund.id, {
@@ -61,6 +124,7 @@ export function PeriodEditor({ data, onSaved }) {
         ...(form.id ? { id: form.id, revision: form.revision } : {}), corrects_period_id: form.corrects_period_id ?? null, issue,
       });
       if (!Number.isSafeInteger(result?.period?.id) || result.period.id <= 0) throw new Error('Unreadable saved report.');
+      allowLeave.current = true;
       setConfirm(false); onSaved(result.period.id);
     } catch (failure) {
       // Public API refusals are fixed sentences; unexpected errors stay generic.
@@ -69,30 +133,52 @@ export function PeriodEditor({ data, onSaved }) {
   };
   return <>
     {form.corrects_period_id && <p>This period corrects <Link to={`/funds/${data.fund.id}/reporting/${form.corrects_period_id}`}>{form.corrects_period || `period ${form.corrects_period_id}`}</Link>. The original remains issued.</p>}
-    {issued && <article className="fd-card"><h2>Issued · read-only</h2><dl><div><dt>Issued at</dt><dd><Recorded value={form.issued_at} reason="The issue timestamp was not recorded." /></dd></div><div><dt>Issued by</dt><dd><Recorded value={form.issued_by} reason="The issuing actor was not recorded." /></dd></div></dl><p>Issuing cannot be undone. Record a correcting period to change this report.</p></article>}
+    {issued && <article className="fd-card"><h2>Issued · read-only</h2><dl><div><dt>Issued at</dt><dd><Recorded value={form.issued_at} reason="The issue timestamp was not recorded." /></dd></div><div><dt>Issued by</dt><dd><Recorded value={form.issued_by} reason="The issuing actor was not recorded." /></dd></div>
+      {data.can_manage && <div><dt>{data.period.lps_notified_at ? 'LPs notified at' : 'LP notices'}</dt><dd>
+        {data.period.lps_notified_at && <time dateTime={data.period.lps_notified_at}>{fundReportDeliveryTime(data.period)} · </time>}
+        {fundReportDeliveryLabel(data.period)}
+      </dd></div>}
+    </dl><p>Issuing cannot be undone. Record a correcting period to change this report.</p></article>}
     {!Object.values(form.narrative).some(rows => rows.length) && <p>This period has no content yet.</p>}
     <section className="fd-facts fd-period" aria-label="Reporting period"><article className="fd-card"><label>Period label<input aria-label="Period label" maxLength={100} value={form.period} readOnly={!editable || Boolean(form.id)} disabled={pending} onChange={e => change('period', e.target.value)} /></label></article>
       <article className="fd-card"><label>Start date<input aria-label="Start date" type="date" value={form.period_start} readOnly={!editable} disabled={pending} onChange={e => change('period_start', e.target.value)} /></label>{!form.period_start && <Recorded value={null} reason="The start date has not been set for this period." />}</article>
       <article className="fd-card"><label>End date<input aria-label="End date" type="date" value={form.period_end} readOnly={!editable} disabled={pending} onChange={e => change('period_end', e.target.value)} /></label>{!form.period_end && <Recorded value={null} reason="The end date has not been set for this period." />}</article></section>
-    {['letter', 'developments', 'outlook', 'subsequent'].map(section => <article className="fd-card" key={section}>
-      <h2>{({ letter: 'Letter', developments: 'Key developments', outlook: 'Outlook', subsequent: 'Subsequent events' })[section]}</h2>
+    {editable && <FundDraftBand testId="letter-draft-band" title="Letter draft" run="Draft the opening"
+      body="Draft the letter’s opening paragraph from this period’s recorded capital movements."
+      writes="Accept writes into the draft. Issuing stays a human click."
+      blocked={!form.id ? 'Save the draft first: the opening is drafted from the saved period’s dates.' : dirty && ['period_start', 'period_end'].some(key => form[key] !== (data.period[key] ?? '')) ? 'Save the new dates first: the opening is drafted from the saved period’s dates.' : null}
+      onRun={() => fundDraftsApi.letter(data.fund.id, form.id)} onAccept={acceptOpening} />}
+    {Object.keys(SECTIONS).map(section => <article className="fd-card" key={section}>
+      <h2>{SECTIONS[section]}</h2>
       {!form.narrative[section].length && <Recorded value={null} reason={`No ${section === 'letter' || section === 'outlook' ? 'paragraphs' : 'entries'} have been recorded in this section.`} />}
-      {form.narrative[section].map((entry, index) => <div className="fd-entry" key={index}>
+      {form.narrative[section].map((entry, index) => {
+        const entryError = validated ? reportEntryError(section, entry) : null;
+        const errorId = entryError ? `report-${section}-${index}-error` : undefined;
+        return <div className="fd-entry" key={index} role="group" aria-label={`${SECTIONS[section]} entry ${index + 1}`} aria-describedby={errorId}>
         {section === 'letter' || section === 'outlook'
           ? <label>{`${section} paragraph ${index + 1}`}<textarea aria-label={`${section} paragraph ${index + 1}`} maxLength={10000} value={entry} readOnly={!editable} disabled={pending} onChange={e => update(section, index, null, e.target.value)} /></label>
           : <><label>Date<input type="date" aria-label={`${section} date ${index + 1}`} value={section === 'developments' ? entry.date : entry.d} readOnly={!editable} disabled={pending} onChange={e => update(section, index, section === 'developments' ? 'date' : 'd', e.target.value)} /></label>
             {section === 'developments' && <label>Title<input aria-label={`Development title ${index + 1}`} maxLength={200} value={entry.title} readOnly={!editable} disabled={pending} onChange={e => update(section, index, 'title', e.target.value)} /></label>}
             <label>Text<textarea aria-label={`${section} text ${index + 1}`} maxLength={10000} value={section === 'developments' ? entry.body : entry.e} readOnly={!editable} disabled={pending} onChange={e => update(section, index, section === 'developments' ? 'body' : 'e', e.target.value)} /></label></>}
-        {editable && <button type="button" disabled={disabled} onClick={() => remove(section, index)}>Remove {section} {index + 1}</button>}
-      </div>)}
+        {entryError && <p id={errorId} role="alert">{entryError}</p>}
+        {editable && <div className="fd-actions">
+          <button type="button" disabled={disabled || index === 0} aria-label={`Move ${section} ${index + 1} up`} onClick={() => move(section, index, -1)}>Move up</button>
+          <button type="button" disabled={disabled || index === form.narrative[section].length - 1} aria-label={`Move ${section} ${index + 1} down`} onClick={() => move(section, index, 1)}>Move down</button>
+          <button type="button" disabled={disabled} onClick={() => remove(section, index)}>Remove {section} {index + 1}</button>
+        </div>}
+      </div>;
+      })}
       {editable && <button type="button" disabled={disabled || form.narrative[section].length >= (section === 'letter' || section === 'outlook' ? 50 : 100)} onClick={() => add(section, section === 'letter' || section === 'outlook' ? '' : section === 'developments' ? { date: '', title: '', body: '' } : { d: '', e: '' })}>Add {section === 'letter' || section === 'outlook' ? `${section} paragraph` : section === 'developments' ? 'development' : 'subsequent event'}</button>}
     </article>)}
+    {editable && savedAt !== null && <p>Saved at <time dateTime={new Date(savedAt).toISOString()}>{new Date(savedAt).toLocaleString()}</time></p>}
+    {validated && hasInvalidEntries && <p role="alert">Correct the marked entries before saving.</p>}
     {error && <p role="alert">{error}</p>}
     {admin && form.id && <PackCard data={data} user={user} onChanged={() => onSaved(form.id)} />}
-    <div className="fd-actions">{editable && <><button type="button" disabled={pending} onClick={() => save(false)}>{pending ? 'Saving…' : 'Save draft'}</button>{!admin && <button type="button" disabled={pending} onClick={() => setConfirm(true)}>Issue</button>}</>}
+    <div className="fd-actions">{editable && <><button type="button" disabled={pending} onClick={() => save(false)}>{pending ? 'Saving…' : 'Save draft'}</button>{!admin && <button type="button" disabled={pending} onClick={() => { if (validate()) setConfirm(true); }}>Issue</button>}{form.id && <button type="button" disabled={pending} onClick={() => setDeleting(true)}>Delete draft</button>}</>}
       {issued && data.can_manage && !admin && <Link to={`/funds/${data.fund.id}/reporting/new?corrects=${form.id}`}>Issue a correcting period</Link>}
       <Link to={`/funds/${data.fund.id}`}>Back to fund</Link></div>
-    {confirm && <div className="fd-confirm"><div className="fd-card" role="dialog" aria-modal="true" aria-labelledby="fd-issue-title"><h2 id="fd-issue-title">Issue this period?</h2><p>Issuing cannot be undone. LPs can read the issued report. Any change requires a separate correcting period.</p><div className="fd-actions"><button type="button" disabled={pending} autoFocus onClick={() => setConfirm(false)}>Keep draft</button><button type="button" disabled={pending} onClick={() => save(true)}>Confirm issue</button></div></div></div>}
+    {deleting && <div className="fd-confirm"><div className="fd-card" role="dialog" aria-modal="true" aria-labelledby="fd-delete-title"><h2 id="fd-delete-title">Delete this draft?</h2><p>This removes the draft and any unsaved edits.</p><div className="fd-actions"><button type="button" disabled={pending} autoFocus onClick={() => setDeleting(false)}>Keep draft</button><button type="button" disabled={pending} onClick={deleteDraft}>Confirm deletion</button></div></div></div>}
+    {confirm && <div className="fd-confirm"><div className="fd-card" role="dialog" aria-modal="true" aria-labelledby="fd-issue-title"><h2 id="fd-issue-title">Issue this period?</h2><p>Issuing cannot be undone. LPs can read the issued report. Eligible LP accounts receive an in-app notice. Any change requires a separate correcting period.</p><div className="fd-actions"><button type="button" disabled={pending} autoFocus onClick={() => setConfirm(false)}>Keep draft</button><button type="button" disabled={pending} onClick={() => save(true)}>Confirm issue</button></div></div></div>}
   </>;
 }
 

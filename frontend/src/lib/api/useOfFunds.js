@@ -3,6 +3,7 @@
 // `revision` it was read at; a plan that moved since answers 409 `changed_since_open`.
 // D5375: so does a hire edit or removal, with the hire's own revision.
 import { request } from '../api.js';
+import { api } from '../api.js';
 const q = (project, values = {}) => new URLSearchParams({ ...values, project: String(project) }).toString();
 const seg = value => encodeURIComponent(String(value));
 export const useOfFundsApi = {
@@ -17,6 +18,9 @@ export const useOfFundsApi = {
   updateScenario: (project, id, body) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteScenario: (project, id) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}?${q(project)}`, { method: 'DELETE' }),
   makeBase: (project, id) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}/make-base?${q(project)}`, { method: 'POST', body: '{}' }),
+  // D6085 (#6085): the venture's cap-table scenarios for the picker, and the link set, changed or cleared (null) with the scenario's revision.
+  capTableScenarios: (project, scenarioId) => request(`/cycles/raise/use-of-funds/cap-table-scenarios?${q(project, scenarioId == null ? {} : { scenario_id: String(scenarioId) })}`),
+  linkCapTable: (project, id, uid, revision) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}/cap-table?${q(project)}`, { method: 'PUT', body: JSON.stringify({ cap_table_scenario_uid: uid ?? null, expected_revision: revision }) }),
   compare: (project, ids) => request(`/cycles/raise/use-of-funds/compare?${q(project, { ids: ids.join(',') })}`),
   milestones: (project, scenarioId) => request(`/cycles/raise/use-of-funds/milestones?${q(project, scenarioId == null ? {} : { scenario_id: String(scenarioId) })}`),
   milestone: (project, id) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project)}`),
@@ -25,11 +29,17 @@ export const useOfFundsApi = {
   // D5069: a DELETE has no body, so the scenario revision it read travels in the query.
   deleteMilestone: (project, id, revision) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),
   hires: project => request(`/cycles/raise/use-of-funds/hires?${q(project)}`),
+  // D6083: Add a hire (UF6). A new hire starts at revision 0, so it carries none.
+  createHire: (project, body) => request(`/cycles/raise/use-of-funds/hires?${q(project)}`, { method: 'POST', body: JSON.stringify(body) }),
   updateHire: (project, id, body) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   // D5375: a hire edit carries `expected_revision` in its body; a removal, having no body, carries it in the query.
   deleteHire: (project, id, revision) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),
   // D1177 (#3104): the plan's history, 20 a page; Mercury rows are the founder's alone.
   history: (project, page = 1) => request(`/cycles/raise/use-of-funds/history?${q(project, { page: String(page) })}`),
+  // D6084 (#6084): the base plan as a file, and a dated PDF filed in the data room. Each writes an audit row.
+  exportCsv: project => api._downloadCsv(`/cycles/raise/use-of-funds/export.csv?${q(project)}`, 'use-of-funds.csv'),
+  exportPdf: project => api._downloadCsv(`/cycles/raise/use-of-funds/export.pdf?${q(project)}`, 'use-of-funds.pdf'),
+  snapshot: project => request(`/cycles/raise/use-of-funds/snapshot?${q(project)}`, { method: 'POST', body: '{}' }),
   saveSplit: (project, body) => request(`/cycles/raise/use-of-funds?${q(project)}`, { method: 'PUT', body: JSON.stringify(body) }),
   // Forecast retains its existing store and strict driver/source validation.
   forecast: project => request(`/financials/${seg(project)}`),

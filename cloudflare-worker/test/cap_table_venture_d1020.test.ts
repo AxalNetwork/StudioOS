@@ -289,6 +289,7 @@ test('a snapshot whose file row fails leaves no stored object', async () => {
   try {
     const r = await call(f, FOUNDER, '/register/10/snapshot', 'POST', {});
     assert.equal(r.status, 500);
+    // D6651: the object this request just stored, named by no row, is erased as `unreferenced`.
     assert.equal(f.files.size, 0);
   } finally { console.error = quiet; }
 });

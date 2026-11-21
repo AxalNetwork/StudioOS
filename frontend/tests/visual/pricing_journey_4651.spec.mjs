@@ -15,7 +15,16 @@
  *   · a failed catalogue read on registration says so, and Try again reads it.
  */
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
+
+// #7247: the catalogue handler awaits `route.fetch()`. When a test ends while that request is still in flight,
+// the await throws "route.fetch: Test ended" and Playwright reports a passed journey as failed. Unrouting here
+// waits for handlers already running and drops the error of one the test's end cut off, as Playwright advises.
+test.afterEach(async ({ page }) => {
+  // A test that closed its own tab has no routes left to wait for.
+  if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
 
 const PAID = {
   'founder:growth': { month: 5000, year: 48000 },
@@ -40,17 +49,21 @@ function priced(body) {
  * The page's network: off-host requests aborted, the catalogue priced, and the session the test's to give.
  * `state.signedIn` flips when the email link is confirmed or Google returns.
  */
-async function wire(page, manifest, state) {
+async function wire(page, request, manifest, state) {
+  // Read the real catalogue before navigation. A request from a page the test
+  // has already left must not leave a Worker fetch waiting during teardown.
+  const response = await request.get('/api/public/plans-and-packs');
+  expect(response.ok(), 'the visual Worker serves the public catalogue').toBeTruthy();
+  const catalogue = priced(await response.json());
   await page.addInitScript((consentVersion) => {
     try {
       localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the journey fails loudly on its first check */ }
   }, CONSENT_VERSION);
   await page.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort('blockedbyclient'));
-  await page.route('**/api/public/plans-and-packs', async (route) => {
+  await page.route('**/api/public/plans-and-packs', (route) => {
     if (state.catalogueDown > 0) { state.catalogueDown -= 1; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Unavailable"}' }); }
-    const res = await route.fetch();
-    return route.fulfill({ response: res, json: priced(await res.json()) });
+    return route.fulfill({ json: catalogue });
   });
   await page.route('**/api/auth/me', async (route) => {
     // The session probe after Google is a real round trip; the catalogue can answer first.
@@ -76,33 +89,122 @@ async function manifestOf(request) {
 const returnOf = (url) => new URL(url).searchParams.get('next');
 const kept = (page) => page.evaluate(() => { try { return JSON.parse(localStorage.getItem('gvpn:next') || 'null')?.path ?? null; } catch { return null; } });
 
+/** Focus stays inside clipped tab strips and contrasts with the selected fill. */
+async function expectVisibleTabFocus(tab) {
+  await expect(tab).toBeFocused();
+  const indicator = await tab.evaluate(element => {
+    const style = getComputedStyle(element);
+    const luminance = color => {
+      const rgb = color.match(/\d+(?:\.\d+)?/g).slice(0, 3).map(value => {
+        const channel = Number(value) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    };
+    const outline = luminance(style.outlineColor), background = luminance(style.backgroundColor);
+    return { width: parseFloat(style.outlineWidth), offset: parseFloat(style.outlineOffset),
+      contrast: (Math.max(outline, background) + 0.05) / (Math.min(outline, background) + 0.05) };
+  });
+  expect(indicator.width).toBeGreaterThanOrEqual(2);
+  expect(indicator.offset).toBeLessThan(0);
+  expect(indicator.contrast).toBeGreaterThanOrEqual(3);
+}
+
 for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
   test.describe(`${label} (${width}px)`, () => {
     test.use({ viewport: { width, height } });
 
     test('pricing exposes the active comparison and keeps audience choices visible', async ({ page, request }, testInfo) => {
-      await wire(page, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
+      await wire(page, request, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
       await page.goto('/pricing?for=founder');
       const comparison = page.getByRole('table', { name: width === 390 ? /plan features/ : 'Compare plans' });
       await expect(comparison.getByRole('rowheader', { name: 'Customer interviews' })).toBeVisible();
-      if (width !== 390) {
-        await expect(comparison.getByRole('columnheader', { name: 'Validate + Build' })).toBeVisible();
-      }
+      await expect(comparison.getByRole('columnheader', { name: 'Feature', exact: true })).toBeVisible();
+      await expect(comparison.getByRole('columnheader', { name: 'Validate + Build' })).toBeVisible();
+      await expect(page.getByRole('tabpanel', { name: 'Founder', exact: true })).toBeVisible();
+      const accessibility = await new AxeBuilder({ page }).include('.axp').withTags(['wcag2a', 'wcag2aa']).analyze();
+      expect(accessibility.violations).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath('pricing-comparison.png'), fullPage: true });
       await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toHaveAttribute('aria-selected', 'true');
       const models = page.getByRole('tab', { name: 'Models', exact: true });
       await expect(models).toBeInViewport({ ratio: 1 });
+      await page.locator('.axp-compare').evaluate(element => window.scrollTo({ top: element.getBoundingClientRect().top + scrollY - 120, behavior: 'instant' }));
+      await page.screenshot({ path: testInfo.outputPath('pricing-comparison-detail.png') });
       await page.getByRole('tab', { name: 'Founder', exact: true }).focus();
-      for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab');
+      await page.keyboard.press('Control+ArrowRight');
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await page.keyboard.press('End');
       await expect(models).toBeFocused();
-      await page.screenshot({ path: testInfo.outputPath('pricing-audience-focus.png') });
-      await page.keyboard.press('Enter');
       await expect(models).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('tabpanel', { name: 'Models', exact: true })).toBeVisible();
+      await expectVisibleTabFocus(models);
+      await page.screenshot({ path: testInfo.outputPath('pricing-audience-focus.png') });
+      await page.keyboard.press('ArrowRight');
+      await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toBeFocused();
+      await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    test('pricing control states, phone comparison and shared signup labels survive keyboard navigation', async ({ page, request }, testInfo) => {
+      await wire(page, request, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
+      await page.goto('/pricing?for=founder');
+      const billing = page.getByRole('group', { name: 'Billing', exact: true });
+      await billing.getByRole('button', { name: 'Yearly', exact: true }).click();
+      await expect(billing.getByRole('button', { name: 'Yearly', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(billing.getByRole('button', { name: 'Monthly', exact: true })).toHaveAttribute('aria-pressed', 'false');
+
+      if (width === 390) {
+        const plans = page.getByRole('tablist', { name: 'Plan', exact: true });
+        await plans.getByRole('tab', { name: 'Validate + Build', exact: true }).focus();
+        await page.keyboard.press('End');
+        await expect(plans.getByRole('tab', { name: 'Raise + Grow', exact: true })).toBeFocused();
+        await expectVisibleTabFocus(plans.getByRole('tab', { name: 'Raise + Grow', exact: true }));
+        await expect(plans.getByRole('tab', { name: 'Raise + Grow', exact: true })).toHaveAttribute('aria-selected', 'true');
+        const panel = page.getByRole('tabpanel', { name: 'Raise + Grow', exact: true });
+        await expect(panel.getByRole('columnheader', { name: 'Raise + Grow', exact: true })).toBeVisible();
+        await page.keyboard.press('Home');
+        await expect(page.getByRole('table', { name: 'Free plan features', exact: true }).getByRole('row', { name: 'Customer interviews 5', exact: true })).toBeVisible();
+      }
+
+      const faq = page.locator('.axp-faq button').first();
+      const answer = page.locator(`#${await faq.getAttribute('aria-controls')}`);
+      await faq.focus();
+      await expect(faq).toHaveAttribute('aria-expanded', 'true');
+      await expect(answer).toBeVisible();
+      await page.keyboard.press('Enter');
+      await expect(faq).toHaveAttribute('aria-expanded', 'false');
+      await expect(answer).toBeHidden();
+      await page.keyboard.press('Enter');
+      await expect(answer).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath('pricing-faq-open.png') });
+
+      // 320 CSS pixels exercises the reflow width of a 1280px viewport at 400% zoom.
+      await page.setViewportSize({ width: 320, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      for (const name of ['Founder', 'Investor', 'Advisors', 'Operating Partners', 'Models']) {
+        const tab = page.getByRole('tab', { name, exact: true });
+        const rect = await tab.boundingBox();
+        expect(rect.x).toBeGreaterThanOrEqual(0);
+        expect(rect.x + rect.width).toBeLessThanOrEqual(320);
+      }
+      await page.screenshot({ path: testInfo.outputPath('pricing-reflow-320.png'), fullPage: true });
+      await page.locator('a[href*="plan=founder%3Agrowth"], a[href*="plan=founder:growth"]').first().click();
+      await expect(page).toHaveURL(/\/register\?/);
+      for (const label of [/Full name/i, /Email/i]) {
+        const field = page.getByRole('textbox', { name: label });
+        await expect(field).toBeVisible();
+        const id = await field.getAttribute('id');
+        expect(id).toBeTruthy();
+        await page.locator(`label[for="${id}"]`).click();
+        await expect(field).toBeFocused();
+      }
+      await page.screenshot({ path: testInfo.outputPath('pricing-origin-signup-labels.png'), fullPage: true });
     });
 
     test('Back and choosing another plan before signing up carry the new plan only; the email link opens its checkout', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
-      await wire(page, manifest, state);
+      await wire(page, request, manifest, state);
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
@@ -142,7 +244,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     test('the Google return lands on the Pricing return and opens that plan once the session is read', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
-      await wire(page, manifest, state);
+      await wire(page, request, manifest, state);
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
@@ -166,7 +268,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     test('a catalogue that cannot be read on registration says so, and Try again reads it', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
-      await wire(page, manifest, state);
+      await wire(page, request, manifest, state);
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();

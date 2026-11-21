@@ -200,3 +200,27 @@ test('HEAD cannot consume a visit through Hono’s implicit GET fallback',async(
     assert.equal((await call(1,'whats-new')).body.first_visit,true);
   }finally{db.close();}
 });
+
+// #6192. Mutation checked: the count left unfiltered (fails); the filter dropped (fails);
+// a blank name sent as a name (fails); no author name joined (fails).
+test('#6192: ?tag= narrows the rows and the total; each note names its author to the firm', async()=>{
+  const {db,call}=world();try{
+    db.exec("UPDATE users SET name='Ada Example' WHERE id=2; UPDATE users SET name='  ' WHERE id=1");
+    db.exec(`INSERT INTO deal_notes(uid,deal_id,author_user_id,company_id,tag,body) VALUES
+      ('a',9,1,11,'Risk','one'),('b',9,2,11,'Risk','two'),('c',9,2,11,'Thesis','three'),('d',9,3,22,'Risk','FOREIGN'),('e',9,2,11,'','four')`);
+    const all=(await call(1,'notes')).body;
+    assert.equal(all.total,4);assert.equal(all.tag,null);
+    const risk=(await call(1,'notes?tag=Risk')).body;
+    assert.equal(risk.total,2,'the count follows the filter');assert.equal(risk.tag,'Risk');
+    assert.deepEqual(risk.items.map((n:any)=>n.uid).sort(),['a','b']);
+    assert.doesNotMatch(JSON.stringify(risk),/FOREIGN/);
+    assert.equal(risk.items.find((n:any)=>n.uid==='b').author_name,'Ada Example');
+    assert.equal(risk.items.find((n:any)=>n.uid==='a').author_name,null,'a blank name is no name');
+    const paged=(await call(1,'notes?tag=Risk&limit=1&offset=1')).body;
+    assert.equal(paged.items.length,1);assert.equal(paged.total,2);
+    assert.equal((await call(1,'notes?tag=Decision')).body.total,0);
+    assert.equal((await call(1,`notes?tag=${'x'.repeat(81)}`)).status,400);
+    assert.equal((await call(3,'notes?tag=Risk')).body.total,1,'the other firm counts only its own');
+    assert.equal((await call(3,'notes?tag=Risk')).body.items[0].author_name,'Three');
+  }finally{db.close();}
+});

@@ -7,8 +7,14 @@
  * member's saved layout or the investor default; the reads below are the
  * same, one per source, shared by the tiles. The header is Studio, the
  * purpose line and Customise. No AIRail on /studio (owner, #3698 G).
+ *
+ * D6129 (#6129, canvas D6126): Investor Studio home v2. The default holds Needs
+ * you, Funds, Returns, Thesis fit on live deals, Arrivals, Upcoming events,
+ * Usage & quota and Deal lifecycle; the thesis band carries the profile's
+ * chips. Customise keeps the header's primary while the owner's "one primary
+ * per screen" question is open.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CircleAlert, Sparkles } from 'lucide-react';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
@@ -38,11 +44,10 @@ export default function InvestorStudioHome({
 }) {
   const [advisorAvailable, setAdvisorAvailable] = useState(null);
   // #4622: each source is read, committed and retried on its own (`useInvestorSources`).
-  const { records, failures, readAll, retryFailed } = useInvestorSources({ previewing });
+  const { records, failures, read, readAll, retryFailed } = useInvestorSources({ previewing });
 
   // D4362 (#4362): an admin previewing arranges their own Investor Studio; its tiles stay withheld (`withheld`).
   const studio = useStudioLayout({ profile: 'investor', viewer: user });
-  const opportunities = useMemo(() => list(dashboard?.ai_scored_opportunities, ['items', 'opportunities']).filter(Boolean).slice(0, 4), [dashboard]);
   // D4620 (#4620): the count is the ELIGIBLE total the worker counted, never the preview's length (the
   // preview is capped, and was cut before eligibility); null when the read failed or the payload predates it.
   const dealSummary = dashboard?.proprietary_deal_flow_summary;
@@ -64,7 +69,8 @@ export default function InvestorStudioHome({
   const retryLifecycle = onRetryLifecycle || refreshContext;
   const quick = quickStats({ previewing, dashboard, dashboardUnavailable, lifecycle, dealCount, dealCountIsLowerBound: dealSummary?.total_is_lower_bound === true });
   const tiles = investorTiles({
-    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, opportunities, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources,
+    // D6129: Arrivals counts the deals offered to you from the dashboard summary.
+    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources, retrySource: read,
   });
 
   return (

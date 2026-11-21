@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formation Partner Workspace · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Partner workspace · Formation · #6722 · new canvas (FORM-00 onward) · not yet scheduled</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Formation partner workspace — case offers, my cases, the case file and recording a filing</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Not yet scheduled. The owner answered #6681 question 4 with A on 15 Nov 2026: partners are HQ records first; a scoped partner workspace comes later. These boards draw that later workspace, so every board carries the violet dashed ◇ tag “Not yet scheduled”; until then HQ records partner events for them (HQ Formation Console, HQI-03). The workspace is a Formation row in the Operating Partner shell (no HQ navigation), for members of a verified formation partner. A partner sees only its own firm’s cases: a redacted offer before it accepts, then only what the founder agreed to share with that firm. It sees no other partner, no Axal fee or cost and no member data beyond the case. The partner files; Axal VC does not. It cannot change the form, the price or a country fact; it can flag a fact. Submitted needs the founder’s approval of the filing pack and every appointee’s consent; Accepted needs a registration number, a registry date and the certificate, and Axal confirms a partner’s first 5. Stages, waiting-on, age bands and filing states match HQ Formation Console and Incorporate Any Country. States follow Platform States (D5129). Amber ⚑ tags mark owner questions of the brief, #6681 and #6682, drawn as option A. Each board says Worker or Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 15 Nov 2026, 10:45 UTC · checked against main d82e3e9263 · [Partner A], [Handler A1], [Handler A2], [Company B] to [Company T], [Founder B] to [Founder T], [Person N2], Admin A, Admin B, OF-0311, references, licence and registration numbers and every [amount] are fictional bracketed samples; Companies House is named as a public registry only</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Formation Partner Workspace Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FORM-00', 'Cover · not yet scheduled', 'Why this canvas exists now: #6681 Q4 was answered A (partners are HQ records first; the scoped workspace later). What a partner sees and never sees, the board list with Worker or Frontend only, and the two sibling canvases.', [W('FPW00')]],
+      ['FORM-01', 'Case offers · desktop 1440 · Worker ◇ #6711 · #6710', 'One redacted offer: United Kingdom Ltd, simple route, 2 people (GB, FR), flags none, the firm’s own fee lines in GBP, “Answer within 18 h”. No names and no documents until it accepts. Primary: Accept the offer; secondary: Decline with a reason. The tab is “Case offers” because the partner shell already has an Offers row.', [F('FPW01', false, 900), C('FPW01B', 'Accept and Decline sheets', 1180, 509)]],
+      ['FORM-02', 'My cases · desktop 1440 · Worker ◇ #6711', '[Partner A]’s 5 open cases (the same five as HQI-06): company, country and form, stage, waiting on (Us, Founder, Axal, Registry), age with its band, next due (Not recorded and Not applicable kept apart) and the Axal case manager. Views: Waiting on us 1, Waiting on founder 1, Waiting on Axal 1, With the registry 2, Done 2. Primary: open the oldest case waiting on us. Eadwyn: “Summarise what is waiting on us”, a proposal that changes nothing.', [F('FPW02', false, 1100), F('FPW02B', 'Eadwyn open · Summarise what is waiting on us', 900)]],
+      ['FORM-03', 'Case file · desktop 1440 · Worker ◇ #6711', '[Company B]: header with “Waiting on us for 2 days” and the case manager, the line “You cannot change the form or the price” with Flag a fact, “Shared with you by [Founder B] on 3 Nov 2026”, items to complete from the UK Ltd pack (evidence Stored, Missing or Not applicable) and the Filings tab with the preconditions. Then the other tabs (People, Requests, Documents, Notes to Axal, Fees: only the firm’s own lines) and the Flag a fact sheet.', [F('FPW03', false, 1080), C('FPW03B', 'Tabs · People, Requests, Documents, Notes to Axal, Fees', 1400, 864), C('FPW03C', 'Flag a fact', 620, 457)]],
+      ['FORM-04', 'Record a filing · sheet · Worker ◇ #6694 · #6711', 'The steps of one filing: Prepared, the two read-only preconditions, Submitted (reference, date, receipt through the system picker), then Registry question and Accepted or Rejected. Each save names who records it. Then: [Company N] with Submitted disabled and its reason, and [Company K]’s three next steps; Accepted shows that Axal confirms the first 5 registrations (2 of 5 so far).', [F('FPW04', false, 1080), C('FPW04B', 'Submitted blocked · Registry question · Accepted · Rejected', 1440, 508)]],
+      ['FORM-05', 'People and requests · Worker ◇ #6705 · #6695 · #6711', '(a) People of [Company N]: set each verification state (Not required, Requested, Verified, Failed) and type the firm’s reference; “Keep the document in your own system.” (b) Ask the founder: kind, tied to an item, what and why, due date, Send. No chat; an identity check asks for no upload.', [C('FPW05A', 'People · verification state and reference', 1180, 362), C('FPW05B', 'Ask the founder', 620, 581)]],
+      ['FORM-06', 'Our firm · desktop 1440 · Worker ◇ #6692 · #6711 · read only', 'Coverage by country and service, licences with expiry, data agreement, next review, HQ confirmation 2 of 5 and the members Axal added. Primary: Ask Axal to change this. Then the same licences on 2 Jun 2027, when one is within 30 days of expiry.', [F('FPW06', false, 900), C('FPW06B', 'A licence within 30 days of expiry', 1000, 297)]],
+      ['FORM-07', 'States · Worker ◇ #6711', 'Loading; empty (“No offers right now”, “No cases assigned yet”); Not recorded never drawn as 0; documents Unavailable while filings work; Refused for another firm’s case and for a non-member; waiting for the founder’s agreement; consent withdrawn with the deletion request; offer expired; conflict on a filing; saving and save failed with the upload kept; firm suspended, read only.', [C('FPW07A', 'Loading · Empty', 1240, 198), C('FPW07B', 'Not recorded · one block unavailable', 1240, 306), C('FPW07C', 'Refused · waiting for agreement · consent withdrawn', 1440, 237), C('FPW07D', 'Offer expired · conflict · saving · save failed · suspended', 1400, 480)]],
+      ['FORM-08', 'Phone 390 · Frontend only', 'Case offers with Accept pinned, My cases as cards, the case file stacked with the primary action pinned, and Record a filing as a full-height sheet whose upload opens the system picker. 44px targets; no table wider than the screen.', [P('FPW08A', 'Case offers'), P('FPW08B', 'My cases'), P('FPW08C', 'Case file'), P('FPW08D', 'Record a filing')]],
+      ['FORM-09', 'Dark · desktop 1440 · Frontend only', 'FORM-02 and FORM-03 on the dark tokens. Age bands, evidence and states keep their words and glyphs.', [F('FPW09A', 'My cases', 1100), F('FPW09B', 'Case file', 1080)]],
+      ['FORM-10', 'Handoff', 'What was checked on main, what needs engineering by issue, the owner questions drawn as option A, frontend only, the handoff to HQ and the founder’s tracker, accessibility and what is still open.', [W('FPW10')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

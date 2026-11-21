@@ -43,10 +43,11 @@ export async function botEpisodeKey(script:BotHealthWindow['script'],provider:Bo
 }
 export async function buildBotSourceReceipts(w:BotHealthWindow):Promise<CfReceipt[]>{
   if(!Number.isSafeInteger(w.now)||!Number.isSafeInteger(w.since)||w.since<0||w.since>w.now||w.runs.length>1000)throw Error('invalid_bot_observation');
-  const make=async(provider:BotProvider|'none',s:Symptom,count:number,denominator:number,extra:unknown=null)=>parseCfReceipt({version:1,
+  // #5988: `revision` carries the affected runtime version only when every counted run reports the same one; the stored inventory reads it back.
+  const make=async(provider:BotProvider|'none',s:Symptom,count:number,denominator:number,extra:unknown=null,revision:string|null=null)=>parseCfReceipt({version:1,
     id:await cfHash([w.script,provider,s,w.since,w.now,count,extra]),script:w.script,audience:cfAudience(w.script),family:'recording',provider,
     platform_episode:w.script==='studioos-meeting-bot'?(s.component==='startup'?'meeting_bot:start_failed':s.component==='callback'?'meeting_bot:unreported':null):null,
-    ...s,occurred_ms:w.now,observed_ms:w.now,count,denominator,window_start_ms:w.since,window_end_ms:w.now,versions:[],source:'unknown',github:null,revision:null,
+    ...s,occurred_ms:w.now,observed_ms:w.now,count,denominator,window_start_ms:w.since,window_end_ms:w.now,versions:[],source:'unknown',github:null,revision,
     episode_key:provider==='none'?await cfHash(['cf',w.script,'bot-coverage']):await botEpisodeKey(w.script,provider,s.component),owner:w.script.endsWith('-preview')?'preview_owner':'meeting_oncall'});
   if(!w.complete)return [await make('none',{component:'coverage',code:'telemetry_unavailable',state:'unknown'},0,0)];
   const latest=new Map<string,BotStageEvidence>();
@@ -54,10 +55,10 @@ export async function buildBotSourceReceipts(w:BotHealthWindow):Promise<CfReceip
     if(typeof r.key!=='string'||!r.key||!['queued','joining','waiting_room','recording','processing','done','failed','stopped'].includes(r.status)||!Number.isSafeInteger(r.scheduled_ms)||[r.started_ms,r.ended_ms,r.heartbeat_ms,r.callback_ms,r.processing_ms].some(t=>t!==null&&(!Number.isSafeInteger(t)||t<0))||!['zoom','google_meet','teams'].includes(r.provider)||!Number.isSafeInteger(r.revision)||r.revision<0||!Number.isSafeInteger(r.created_ms)||r.created_ms>w.now+60000)throw Error('invalid_bot_evidence');
     const prior=latest.get(r.key);if(!prior||r.revision>prior.revision)latest.set(r.key,r);
   }
-  const rows=[...latest.values()],groups=new Map<string,{provider:BotProvider;s:Symptom;count:number}>(),out:CfReceipt[]=[];
-  for(const r of rows){const s=symptom(r,w),key=JSON.stringify([r.provider,s]);const g=groups.get(key);if(g)g.count++;else groups.set(key,{provider:r.provider,s,count:1});}
+  const rows=[...latest.values()],groups=new Map<string,{provider:BotProvider;s:Symptom;count:number;versions:Set<string|null>}>(),out:CfReceipt[]=[];
+  for(const r of rows){const s=symptom(r,w),key=JSON.stringify([r.provider,s]),v=runtimeVersion(r.runtime_version);const g=groups.get(key);if(g){g.count++;g.versions.add(v);}else groups.set(key,{provider:r.provider,s,count:1,versions:new Set([v])});}
   if(!rows.length)return [await make('none',{component:'recording',code:Object.values(w.enabled).some(Boolean)?'idle':'disabled',state:Object.values(w.enabled).some(Boolean)?'activity':'disabled'},0,0)];
-  for(const g of groups.values())out.push(await make(g.provider,g.s,g.count,rows.filter(r=>r.provider===g.provider).length));
+  for(const g of groups.values())out.push(await make(g.provider,g.s,g.count,rows.filter(r=>r.provider===g.provider).length,null,g.s.state==='firing'&&g.versions.size===1?[...g.versions][0]:null));
   for(const e of w.episodes_complete===true?w.openEpisodes??[]:[]){
     const shared=['startup','callback'].includes(e.component)&&w.script==='studioos-meeting-bot';
     if(out.some(r=>(shared||r.provider===e.provider)&&r.component===e.component&&r.state==='firing'))continue;
@@ -78,7 +79,9 @@ export function botPrerequisiteReport(env:Env){
     verification:'presence_only' as const};
 }
 /** Read only existing recording/processing receipt metadata; no URL, participant, media, diagnostic payload or customer identifier leaves this projection. */
-export async function readBotSourceEvidence(env:Env,now=Date.now()){
+/** #5988: the scheduled bridge passes its script and the open-episode inventory it read from stored receipts; the HQ read passes neither and so never claims a recovery. */
+export type BotEpisodeInventory={complete:boolean;episodes:BotOpenEpisode[]};
+export async function readBotSourceEvidence(env:Env,now=Date.now(),opts:{script?:BotHealthWindow['script'];inventory?:BotEpisodeInventory}={}){
   const preflight=botPrerequisiteReport(env),runs:BotStageEvidence[]=[];let complete=true;
   try{
     const result=await env.DB.prepare(`SELECT b.uid,b.platform,b.status,b.failure_code,b.created_at,b.scheduled_at,b.started_at,b.ended_at,b.heartbeat_at,
@@ -94,7 +97,8 @@ export async function readBotSourceEvidence(env:Env,now=Date.now()){
       runtime_error:runtimeErrorCode(r.runtime_error_code),failure_code:typeof r.failure_code==='string'?r.failure_code:null,runtime_version:runtimeVersion(r.runtime_version),
       processing_ms:typeof r.processing_updated_at==='string'&&Number.isFinite(Date.parse(r.processing_updated_at))?Date.parse(r.processing_updated_at.replace(' ','T')+(/Z$|[+-]\d\d:\d\d$/.test(r.processing_updated_at)?'':'Z')):null,final_receipt:r.final_receipt===null?null:r.final_receipt===1});
   }catch{complete=false;}
-  const receipts=await buildBotSourceReceipts({now,since:now-86400000,script:'studioos-meeting-bot',complete,enabled:preflight.provider_enabled,runs});
+  const receipts=await buildBotSourceReceipts({now,since:now-86400000,script:opts.script??'studioos-meeting-bot',complete,enabled:preflight.provider_enabled,runs,
+    episodes_complete:opts.inventory?.complete===true,openEpisodes:opts.inventory?.episodes??[]});
   return {state:complete?'observed':'unknown',preflight,receipts,
     stage_coverage:RECORDING_STAGES.map(stage=>({stage,availability:['demand','callback','processing','terminal'].includes(stage)?'ledger_metadata':'requires_verified_snapshot'})),delivery:'not_configured'};
 }

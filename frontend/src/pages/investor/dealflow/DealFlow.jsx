@@ -30,23 +30,24 @@ import { DealStrip, StripKey } from '../../../components/scoring/scorecard/Score
 import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
   MAX_COMPARE, SCOPES, SCOPE_SWITCH,
-  compareHref, opensDeal, viewHref,
+  compareHref, opensDeal, picksOf, viewHref,
 } from './dealFlowModel';
 import {
-  DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
-  settingsOfSpec, sortRows, viewChanged,
+  DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, attentionOf, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
+  passAnswersInvitation, settingsOfSpec, sortRows, viewChanged,
 } from './flowModel';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
 import { FlowTable, PhoneCards } from './FlowTable';
 import {
-  AddToFlowDialog, CardScopesPopover, ColumnsPopover, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, SortPopover, TOOL, ViewsMenu,
+  AddToFlowDialog, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, TAP, TOOL, ViewEdited, ViewSettings,
 } from './FlowControls';
 import NewForYou from './NewForYou';
 import OtherDealActivity from './OtherDealActivity';
 import { ZonePrimary } from '../../../workspaces/ZoneActions';
 import PeekDrawer from './PeekDrawer';
+import { FlowOwnerContext, meOf } from './OwnerControls';
 import { CommitDialog, MoveBackDialog, PassDialog } from './StageDialogs';
-import { moveKind } from './movesModel';
+import { moveKind, unreadSources } from './movesModel';
 
 export { CompareView, DealCompare } from './Compare';
 
@@ -164,6 +165,62 @@ function useScoresAndFit(ids) {
   return { scores, fits, retry: () => setAgain((n) => n + 1) };
 }
 
+/**
+ * D4815 part 3 (canvas DX1, board DE01): Needs your attention, above the board
+ * or table. Its one item with a field behind it is "new" (`attentionOf`): the
+ * deals that reached you and are not yet in your flow, linking to New for
+ * you. Its read answers alone: a failure says Unreadable with Try again for
+ * the strip and never 0, and the board below is unaffected.
+ */
+function StaleRule({rule,onSaved}) {
+ const [days,setDays]=useState(rule.days??'');const [busy,setBusy]=useState(false);const [error,setError]=useState(null);
+ useEffect(()=>setDays(rule.days??''),[rule.days]);
+ async function save(){setBusy(true);setError(null);try{await dealFlowApi.setAttentionRule(days===''?null:Number(days));onSaved?.();}catch{setError('The firm’s stale rule could not be saved.');}finally{setBusy(false);}}
+ return <details className="text-xs"><summary className={`cursor-pointer font-semibold ${TAP}`}>Firm stale rule</summary><div className="mt-2 flex flex-wrap items-end gap-2">
+ <label>Days in stage<input aria-label="Firm stale days" type="number" min="1" max="3650" step="1" value={days} onChange={e=>setDays(e.target.value)} className={`ml-2 w-20 rounded border border-axal-hairline p-1 dark:border-gray-700 dark:bg-gray-900 ${TAP}`} /></label>
+ <button type="button" disabled={busy||(days!==''&&(!Number.isInteger(Number(days))||Number(days)<1||Number(days)>3650))} onClick={save} className={`font-semibold underline disabled:opacity-50 ${TAP}`}>{busy?'Saving…':'Save firm rule'}</button>
+ <span className="text-axal-muted dark:text-gray-400">Leave empty to keep stale Not recorded.</span>{error&&<span role="alert">{error}</span>}</div></details>;
+}
+
+export function AttentionStrip({ read, onRetry, newHref, recorded, onRuleSaved }) {
+  const a = attentionOf(read, unreadSources, recorded);
+  const head = <b className="text-[13.5px]">Needs your attention</b>;
+  const shell = 'flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900';
+  if (a.kind === 'loading') return <section className={shell} aria-label="Needs your attention" aria-busy="true" data-testid="dealflow-attention">{head}<span className="text-[12.5px] text-axal-muted dark:text-gray-400">Reading…</span></section>;
+  if (a.kind === 'unreadable') {
+    return (
+      <section className={shell} aria-label="Needs your attention" data-testid="dealflow-attention">
+        {head}
+        <span className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="dealflow-attention-unreadable">Unreadable</span>
+        <span className="text-[12.5px] text-axal-muted dark:text-gray-400">What needs your attention could not be read. That is not the same as nothing needing it.</span>
+        <button type="button" className={`text-[12.5px] font-semibold underline ${TAP}`} onClick={onRetry} data-testid="dealflow-attention-retry">Try again</button>
+      </section>
+    );
+  }
+  return (
+    <section className={shell} aria-label="Needs your attention" data-testid="dealflow-attention">
+      {head}
+      {a.items.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {a.items.map((i) => (
+            i.key !== 'new' ? <span key={i.key} className="rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold dark:border-gray-700" data-testid={`dealflow-attention-${i.key}`}>{i.word}</span> : <Link key={i.key} to={newHref} aria-label={i.label} className={`inline-flex items-center rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800 ${TAP}`} data-testid={`dealflow-attention-${i.key}`}>
+              {i.word}
+            </Link>
+          ))}
+        </div>
+      ) : <span className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-attention-none">{recorded ? 'No recorded items need your attention' : 'Nothing new for you'}{a.unread.length ? ' from the ways in that could be read' : ''}.</span>}
+      {recorded?.data?.stale?.state === 'not_recorded' && <span className="text-xs text-axal-muted dark:text-gray-400">Stale · Not recorded: {recorded.data.stale.reason}</span>}
+      {recorded?.data?.rule?.writable && <StaleRule rule={recorded.data.rule} onSaved={onRuleSaved} />}
+      {a.unread.length > 0 && (
+        <span className="text-[12.5px] text-amber-800 dark:text-amber-300" data-testid="dealflow-attention-unread">
+          {a.unread.join(', ')} could not be read, so there may be more.
+          <button type="button" className={`ml-2 font-semibold underline ${TAP}`} onClick={onRetry} data-testid="dealflow-attention-retry">Try again</button>
+        </span>
+      )}
+    </section>
+  );
+}
+
 const CLEAR_BTN = 'inline-flex w-fit items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 /**
@@ -199,7 +256,8 @@ function EmptyFlow() {
  * address. D4815 (canvas DX1): the root is My Deal Flow only. Screening, the
  * committee, Closing and the deal rooms are one "Other deal activity" line
  * linking to their routes (the deal rooms at `/deals/rooms` since the second
- * slice; My tasks moved to Studio).
+ * slice; My tasks moved to Studio). Part 3 (#5899): Needs your attention above
+ * the board or table, and View settings for the advanced view options.
  */
 export default function DealFlow({ view, scope }) {
   const location = useLocation();
@@ -208,7 +266,8 @@ export default function DealFlow({ view, scope }) {
   const phone = usePhoneWidth();
   const settings = useMemo(() => settingsOf(location.search), [location.search]);
   const viewUid = new URLSearchParams(location.search).get('v');
-  const [picked, setPicked] = useState([]);
+  // D6149 (#6149): Compare's Add a venture returns with its picks ticked (`&pick=`).
+  const [picked, setPicked] = useState(() => picksOf(location.search));
   const [page, setPage] = useState(1);
   const [words, setWords] = useState(true);
   const [dialog, setDialog] = useState(null);
@@ -222,6 +281,12 @@ export default function DealFlow({ view, scope }) {
   const [views, retryViews] = useRead(() => dealViewsApi.list(), []);
   // D4635: one accepted weighting for the control and the sort: a save re-reads it, and the order follows.
   const [weights, retryWeights] = useRead(() => ventureScoresApi.weights(), []);
+  // D4815 part 3: the strip's one read, the inbox New for you already lists; not made under New for you itself.
+  const [attention, retryAttention] = useRead(() => (lists ? dealFlowApi.attention() : Promise.resolve(null)), [lists]);
+  const [inbox, retryInbox] = useRead(() => (lists ? dealFlowApi.inbox() : Promise.resolve(null)), [lists]);
+  // D6145 (#6145): who a deal can be given to, for the peek's picker and "Assign to me".
+  const [owners, retryOwners] = useRead(() => (lists ? dealFlowApi.owners() : Promise.resolve(null)), [lists]);
+  const me = meOf(owners);
   const [entries, setEntries] = useState(null);
   useEffect(() => { setEntries(flow.kind === 'ok' ? flow.data?.items || [] : null); }, [flow]);
 
@@ -280,21 +345,48 @@ export default function DealFlow({ view, scope }) {
   };
   const peekRow = dialog?.kind === 'peek' ? rows.find((r) => r.id === dialog.id) || null : null;
   const saveNote = async (row, note) => { replaceEntry(await dealFlowApi.update(row.id, { note })); };
+  /**
+   * D6145: an owner change, then a toast with Undo. The row is the Worker's answer, so the board, the table and the
+   * Owner filter follow it at once. The peek's picker passes `rethrow` to keep a refusal in its own row.
+   */
+  const assignOwner = async (row, ownerId, { rethrow = false, undoing = false } = {}) => {
+    const before = row.owner ? Number(row.owner.id) : null;
+    setBusy(true);
+    try {
+      const next = await dealFlowApi.update(row.id, { owner_user_id: ownerId });
+      replaceEntry(next);
+      const owner = next?.owner || null;
+      const text = !owner ? `${row.name} is unassigned.`
+        : Number(owner.user_id) === me ? `You own ${row.name} now.` : `${owner.name || 'A colleague'} owns ${row.name} now.`;
+      setToast({ kind: 'moved', text, undo: undoing ? null : () => assignOwner({ ...row, owner: ownerId == null ? null : { id: ownerId } }, before, { undoing: true }) });
+    } catch (e) {
+      reportError('DealFlow:owner', e);
+      if (rethrow) throw e;
+      setToast({ kind: 'refused', text: e?.message || `${row.name} could not be assigned. Nothing changed.` });
+    } finally { setBusy(false); }
+  };
+  // With no firm every deal is the investor's own: no shortcut (`me` null hides it).
+  const ownerCtx = { me: owners.data?.scope === 'firm' ? me : null, busy, onAssign: (row, id) => { if (!busy) assignOwner(row, id); } };
 
+  const viewList = views.kind === 'unreadable' ? 'failed' : views.data;
   const controls = lists && (
     <div className="flex flex-col gap-2" data-testid="dealflow-controls">
       <div className="flex flex-wrap items-center gap-2">
-        <ViewsMenu views={views.kind === 'unreadable' ? 'failed' : views.data} current={{ view, scope, settings }} activeUid={viewUid} edited={edited}
-          onPick={(v) => (v ? navigate(settingsHref({ ...settingsOfSpec(v.spec), viewUid: v.uid })) : navigate(viewHref({ view, scope })))}
-          onSave={() => setDialog({ kind: 'save' })} onSaveChanges={(v) => setDialog({ kind: 'save', editing: v })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} />
         <input type="search" value={settings.filters.q} onChange={(e) => setSettings({ filters: { ...settings.filters, q: e.target.value } })} placeholder="Search ventures, sectors" aria-label="Search ventures, sectors"
-          className="min-w-[200px] rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="dealflow-search" />
-        <button type="button" className={TOOL} onClick={() => setDialog({ kind: 'filters' })} aria-haspopup="dialog" data-testid="dealflow-filters-open">
+          className={`min-w-[200px] flex-1 rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[13px] sm:flex-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 ${TAP}`} data-testid="dealflow-search" />
+        <button type="button" className={`${TOOL} ${TAP}`} onClick={() => setDialog({ kind: 'filters' })} aria-haspopup="dialog" data-testid="dealflow-filters-open">
           Filters{filterCount(settings.filters) ? <span className="rounded-full bg-violet-600 px-1.5 text-[10.5px] text-white dark:bg-violet-500">{filterCount(settings.filters)}</span> : null}
         </button>
-        <SortPopover sort={settings.sort} onSort={(sort) => setSettings({ sort })} />
-        {view === 'table' ? <ColumnsPopover columns={settings.columns} onColumns={(columns) => setSettings({ columns })} defaults={DEFAULT_COLUMNS} />
-          : <CardScopesPopover cards={settings.cards} onCards={(cards) => setSettings({ cards })} />}
+        <ViewEdited views={viewList} activeUid={viewUid} edited={edited} onSave={() => setDialog({ kind: 'save' })} onSaveChanges={(v) => setDialog({ kind: 'save', editing: v })} />
+        <div className="ml-auto">
+          {/* D4815 part 3 (DE01): Sort, Columns or Card scopes, and the saved view, under View settings; each still in the address. */}
+          <ViewSettings view={view} views={viewList} activeUid={viewUid}
+            sort={settings.sort} onSort={(sort) => setSettings({ sort })}
+            columns={settings.columns} onColumns={(columns) => setSettings({ columns })} defaults={DEFAULT_COLUMNS}
+            cards={settings.cards} onCards={(cards) => setSettings({ cards })}
+            onPick={(v) => (v ? navigate(settingsHref({ ...settingsOfSpec(v.spec), viewUid: v.uid })) : navigate(viewHref({ view, scope })))}
+            onSave={() => setDialog({ kind: 'save' })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} />
+        </div>
       </div>
       <FilterChips filters={settings.filters} onFilters={(filters) => setSettings({ filters })} />
     </div>
@@ -343,7 +435,7 @@ export default function DealFlow({ view, scope }) {
         {nothing || (view === 'board'
           ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />)
-          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
+          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowTable rows={shown} columns={settings.columns} sort={settings.sort} onSort={(sort) => setSettings({ sort })} filters={settings.filters}
               onMin={(key, min) => setSettings({ filters: { ...settings.filters, min: { ...settings.filters.min, [key]: min } } })}
               picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} words={words} onWords={setWords} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />))}
@@ -355,7 +447,8 @@ export default function DealFlow({ view, scope }) {
     <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow">
       <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} onWeightsSaved={retryWeights} />
       {controls}
-      {body}
+      {lists && <AttentionStrip read={inbox} recorded={attention} onRuleSaved={retryAttention} onRetry={() => {retryInbox();retryAttention();}} newHref={settingsHref({ view, scope: 'new', settings })} />}
+      <FlowOwnerContext.Provider value={ownerCtx}>{body}</FlowOwnerContext.Provider>
       {toast && (
         <div className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-[13px] ${toast.kind === 'refused' ? 'border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} role={toast.kind === 'refused' ? 'alert' : 'status'} data-testid="dealflow-toast">
           <span>{toast.text}</span>
@@ -364,10 +457,11 @@ export default function DealFlow({ view, scope }) {
         </div>
       )}
       {picked.length > 0 && (
+        // D5902 (DE03d): on a phone the bar's Compare and Clear are 44px targets.
         <div className="flex items-center gap-3" data-testid="dealflow-compare-bar">
           <span className="text-[13px]">{picked.length} selected</span>
-          {picked.length >= 2 ? <Link to={compareHref(picked)} className="font-semibold underline" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
-          <button type="button" className="text-[13px] underline" onClick={() => setPicked([])}>Clear</button>
+          {picked.length >= 2 ? <Link to={compareHref(picked)} className="inline-flex items-center font-semibold underline max-sm:min-h-[44px]" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
+          <button type="button" className="text-[13px] underline max-sm:min-h-[44px]" onClick={() => setPicked([])}>Clear</button>
         </div>
       )}
       <OtherDealActivity surviving={flowUnreadable} />
@@ -383,10 +477,11 @@ export default function DealFlow({ view, scope }) {
         <DeleteViewDialog view={dialog.view} onClose={() => setDialog(null)} onDeleted={() => { setDialog(null); retryViews(); if (viewUid === dialog.view.uid) navigate(settingsHref({ view, scope, settings }), { replace: true }); }} />
       )}
       {peekRow && (
-        <PeekDrawer row={peekRow} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
+        <PeekDrawer row={peekRow} pass={entries?.find((entry) => String(entry.deal_id) === String(peekRow.id))?.pass || null} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote}
+          owners={owners} onRetryOwners={retryOwners} onAssign={(r, id) => assignOwner(r, id, { rethrow: true })} />
       )}
       {dialog?.kind === 'pass' && (
-        <PassDialog row={dialog.row} invited={dialog.row.enteredVia === 'invited'} onClose={() => setDialog(null)}
+        <PassDialog row={dialog.row} invited={passAnswersInvitation(dialog.row)} onClose={() => setDialog(null)}
           onPassed={(next) => { replaceEntry(next); setDialog(null); setToast({ kind: 'moved', text: `You passed on ${dialog.row.name}. The round stays open for other investors.` }); }} />
       )}
       {dialog?.kind === 'back' && <MoveBackDialog row={dialog.row} to={dialog.to} onClose={() => setDialog(null)} onMove={() => confirmMove(dialog.row, dialog.to)} />}

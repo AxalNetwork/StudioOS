@@ -1,56 +1,27 @@
 /**
- * D1311 (#2398, #2408) — Build's connector parts, in the order the owner's
- * Lovable and Vercel canvases draw them, one line per connector, each in its
- * own boundary.
+ * D1311 (#2398, #2408) — Build's connector parts: one line per connector, each
+ * in its own boundary, mounted by CycleRoute through buildPartsMap. The order
+ * the owner's canvases draw them is the contract in
+ * build_parts_contract_5507.test.mjs (#5507, D5507), not this file's.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/build_parts_d1311.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
-import { BUILD_PARTS, PartBoundary, builtParts, buildPartsMap } from '../src/pages/cycles/buildParts.jsx';
+import { BUILD_PARTS, PartBoundary, buildPartsMap } from '../src/pages/cycles/buildParts.jsx';
 import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
-const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
-const order = (slug) => BUILD_PARTS[slug].map(([key]) => key);
 
-test('each module lists its connectors in the canvases\' order', () => {
-  // VC1: the Hosting block after Tools history and GitHub's Code system.
-  assert.deepEqual(order('operating-systems'), ['tools', 'vercel', 'posthog']);
-  // VC4a: Runs on under GitHub's From GitHub; D1314: Google's and Notion's proposals after.
-  assert.deepEqual(order('solution-design'), ['github', 'vercel', 'google', 'notion']);
-  // VC2 and LV7: From Lovable under From GitHub; Vercel's Live strip between.
-  assert.deepEqual(order('prototype-mvp'), ['github', 'vercel', 'lovable', 'notion', 'posthog']);
-  // VC3: "The Deploys strip sits above GitHub's Releases strip."
-  // Mutation checked: put github first → this fails.
-  assert.deepEqual(order('product-roadmap'), ['vercel', 'github', 'google', 'notion', 'posthog']);
-  assert.deepEqual(order('company-creation'), ['github', 'vercel']);
-  assert.deepEqual(order('founding-team'), ['github']);
-});
+// #5507: every module's complete, ordered list of parts is owned by
+// build_parts_contract_5507.test.mjs (D5507); each provider's own suite
+// asserts where its part sits and what it mounts. This file keeps the
+// registry's mechanics: the boundary, the map's shape and CycleRoute's wiring.
 
-test('completed connector parts are mounted from the module registry', () => {
-  const src = read('frontend/src/pages/cycles/buildParts.jsx');
-  for (const [issue, decision, component] of [
-    ['#2962', 'D1097', 'RunsOnFromVercel'], ['#2962', 'D1097', 'HostingFromVercel'],
-    ['#2963', 'D1098', 'MvpFromVercel'], ['#2963', 'D1098', 'RoadmapFromVercel'],
-    ['#2964', 'D1099', 'CompanyFromVercel'], ['#2948', 'D1083', 'FromLovable'],
-  ]) {
-    assert.ok(src.includes(`${issue} (${decision}), ${component}`), `${component} names ${issue}`);
-  }
-  // D5064: each completed connector now draws from the existing module read.
-  // D1088 (#2953) filled Notion's three lines: From Notion draws last on each module.
-  // D1093 (#2958) filled Google's two lines: From Google draws before From Notion.
-  // Mutation checked: replacing any of the four render functions with null drops
-  // its key and fails these exact registry expectations.
-  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['vercel', 'github', 'google', 'notion', 'posthog']);
-  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'vercel', 'lovable', 'notion', 'posthog']);
-  assert.deepEqual(builtParts('company-creation').map(([k]) => k), ['github', 'vercel']);
-  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion'], 'D1097\'s Runs on, From Google, then From Notion');
-  // CycleRoute takes Build's parts from here, and from nowhere else.
+test('CycleRoute takes Build\'s parts from the module registry, and from nowhere else', () => {
   assert.match(cycleRouteText(), /parts: toFnMap\(buildPartsMap\(\)\),/);
 });
 

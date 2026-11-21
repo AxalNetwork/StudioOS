@@ -3,7 +3,7 @@
  * (migration 513): the licence year, issuing once per year, recording payment,
  * the PDF, who may do each, and the Administrator's read.
  *
- * On node:sqlite with the baseline's own DDL and migrations 260, 472, 513 and 202611090909
+ * On node:sqlite with the baseline's own DDL and migrations 260, 472, 513, 202611090909 and D5954's 202611141106
  * from their files. The bank account is written as the console writes it, with
  * a number drawn at run time, so no account number is in this file; the people
  * and the licensees are placeholders. The PDF renderer is stubbed. Each case
@@ -31,6 +31,7 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { NOTICE_TYPES, buildNoticeFigures, formatMoney, noticeSpecimen } from '../src/services/fundNotices.ts';
 import { AXAL_ENTITIES, AXAL_LEGAL_ADDRESS } from '../src/services/legalDocFormat.ts';
 import { DEFAULT_PAYMENT_TERMS_DAYS, addDays, licenceYear, paymentTermsDays } from '../src/services/licenceFeeInvoices.ts';
+import { licenceFeeReceivables } from '../src/services/licenceFeeReceivables.ts';
 import { licenceRevisionAlters } from './_licence_revisions.mjs';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -41,7 +42,11 @@ const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'terr
   // D797's terms table; its branch-copy column is a branch table this test does not use.
   + '\n' + mig('512_licence_terms.sql').replace(/ALTER TABLE branch_licence[^;]*;/, '')
   // D4694 — the revision columns, read from their migration.
-  + '\n' + licenceRevisionAlters('territory_licences', 'licence_terms', 'licence_fee_invoices');
+  + '\n' + licenceRevisionAlters('territory_licences', 'licence_terms', 'licence_fee_invoices')
+  // D5954 — the initial invoice, and D5017's pricing decisions it reads, from their migrations.
+  + '\n' + mig('202611141106_5954_licence_initial_fee_invoice.sql')
+  + '\n' + stripForeignKeys(/CREATE TABLE IF NOT EXISTS licence_pricing_decisions \([\s\S]*?\n\);/.exec(mig('202611081906_country_pricing_schema.sql'))![0])
+  + '\n' + mig('202611082159_licence_pricing_apply.sql').split('\n').filter((l) => l.startsWith('ALTER TABLE licence_pricing_decisions ')).map(stripForeignKeys).join('\n');
 const SECRET = ['d802', 'invoices', 'fixture', 'signing', 'secret'].join('-');
 
 const SUPER = 1, SUPER_PW = 2, ADMIN = 3, PRINCIPAL = 4, DELEGATE = 5, OTHER_PRINCIPAL = 6, MEMBER = 7;
@@ -407,4 +412,143 @@ test('D5029: the invoice paper prints the fee at the currency\'s own decimals, a
   assert.equal(refused.body.error, 'currency_unknown');
   assert.match(refused.text, /not one StudioOS can price in/);
   assert.equal(f.rows('SELECT uid FROM licence_fee_invoices').length, before, 'no invoice was drawn in a guessed currency');
+});
+
+// D5954 ───────────────────────────────────────────────────────────────────────
+/** A pricing decision as D5017's apply records it; `null` is a figure the decision does not record. */
+function decide(f: { db: any }, licenceUid: string, o: { uid: string; currency?: string; initial: number | null; surcharge: number | null; at: string; decision?: string }) {
+  f.db.prepare(`INSERT INTO licence_pricing_decisions (uid, licence_uid, snapshot_uid, currency, accepted_initial_fee_cents,
+      accepted_annual_fee_cents, accepted_royalty_bps, accepted_regulatory_surcharge_cents, decision, override_reason, effective_from, created_at, created_by)
+    VALUES (?, ?, 'snap', ?, ?, 1200000, 3000, ?, ?, ?, '2026-01-01', ?, 'user:1')`)
+    .run(o.uid, licenceUid, o.currency ?? 'EUR', o.initial, o.surcharge, o.decision ?? 'accepted', o.decision === 'overridden' ? 'HQ set it' : null, o.at);
+}
+const INITIAL = { kind: 'initial' };
+
+test('D5954: HQ issues one initial invoice per licence — the accepted initial fee and surcharge as two lines, frozen, audited; a second is refused, a void one included', async () => {
+  // Mutations checked: the one-per-licence check removed (and the index dropped); the surcharge not added; the
+  // surcharge line dropped; the currency the licence's instead of the decision's; an older decision read; no audit row.
+  const f = await fixture();
+  decide(f, 'lic_a', { uid: 'dec_old', initial: 999, surcharge: 1, at: '2026-01-01T00:00:00Z' });
+  decide(f, 'lic_a', { uid: 'dec_new', currency: 'USD', initial: 2500000, surcharge: 300000, at: '2026-06-01T00:00:00Z' });
+  const r = await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL);
+  assert.equal(r.status, 201, r.text);
+  const inv = r.body.invoice;
+  assert.deepEqual([inv.kind, inv.amount_cents, inv.initial_fee_cents, inv.regulatory_surcharge_cents, inv.currency, inv.pricing_decision_uid, inv.status],
+    ['initial', 2800000, 2500000, 300000, 'USD', 'dec_new', 'issued']);
+  assert.deepEqual([inv.period_label, inv.period_start, inv.reference], ['Initial fee', '2020-03-15', 'AXAL-LIC-LIC-A-INITIAL']);
+  assert.equal(inv.due_at, addDays(TODAY(), 30));
+  const row = f.rows('SELECT figures_json, figures_sha256 FROM licence_fee_invoices WHERE uid = ?', inv.uid)[0];
+  const figures = JSON.parse(row.figures_json);
+  assert.deepEqual(figures.tables[0].rows.map((x: string[]) => [x[0], x[2]]),
+    [['Initial licence fee, LIC-A', '$25,000.00'], ['Regulatory surcharge, LIC-A', '$3,000.00'], ['Total', '$28,000.00']]);
+  assert.ok(figures.key_figures.some((k: any) => k.label === 'Amount due' && k.value === '$28,000.00'));
+  assert.ok(figures.key_figures.some((k: any) => k.label === 'Licence start' && k.value === '2020-03-15'));
+  assert.equal(figures.payment.reference, inv.reference);
+  assert.match(row.figures_sha256, /^[0-9a-f]{64}$/);
+  const audit = f.rows("SELECT details FROM activity_logs WHERE action = 'licence_initial_fee_invoice_issued'");
+  assert.equal(audit.length, 1);
+  assert.equal(JSON.parse(audit[0].details).pricing_decision_uid, 'dec_new');
+
+  const again = await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL);
+  assert.deepEqual([again.status, again.body.error, again.body.invoice_uid], [409, 'initial_invoice_exists', inv.uid]);
+  const v = await f.call(SUPER, 'PATCH', `/admin/licences/lic_a/fee-invoices/${inv.uid}`, { status: 'void', void_note: 'Issued against the wrong decision', expected_revision: inv.revision });
+  assert.equal(v.body.invoice.status, 'void', v.text);
+  assert.equal((await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL)).body.error, 'initial_invoice_exists', 'a void initial invoice still holds the licence');
+  assert.equal(f.rows("SELECT uid FROM licence_fee_invoices WHERE kind = 'initial'").length, 1);
+  // The index holds even past the route's read.
+  assert.throws(() => f.db.prepare(`INSERT INTO licence_fee_invoices (uid, licence_uid, kind, period_label, period_start, period_end, amount_cents, currency,
+    reference, issued_at, due_at, figures_json, figures_sha256, initial_fee_cents, pricing_decision_uid)
+    VALUES ('x', 'lic_a', 'initial', 'x', '2021-01-01', '2021-12-31', 5, 'EUR', 'r', 'd', 'd', '{}', 'h', 5, 'dec_new')`).run(), /UNIQUE/);
+  assert.equal((await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', { kind: 'monthly' })).body.error, 'bad_kind');
+});
+
+test('D5954: a surcharge not recorded adds no line and is not billed as 0; no initial fee, no decision, not started or no account refuses and says why', async () => {
+  // Mutations checked: a null surcharge stored as 0; the null-fee refusal removed; the start-day check removed; the payment refusal ignored.
+  const f = await fixture();
+  decide(f, 'lic_a', { uid: 'dec_a', initial: 1000000, surcharge: null, at: '2026-06-01T00:00:00Z' });
+  const r = await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL);
+  assert.equal(r.status, 201, r.text);
+  assert.deepEqual([r.body.invoice.amount_cents, r.body.invoice.regulatory_surcharge_cents], [1000000, null]);
+  assert.equal(f.rows('SELECT regulatory_surcharge_cents FROM licence_fee_invoices WHERE uid = ?', r.body.invoice.uid)[0].regulatory_surcharge_cents, null);
+  const rows = JSON.parse(f.rows('SELECT figures_json FROM licence_fee_invoices WHERE uid = ?', r.body.invoice.uid)[0].figures_json).tables[0].rows;
+  assert.deepEqual(rows.map((x: string[]) => x[0]), ['Initial licence fee, LIC-A', 'Total']);
+
+  const none = await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices', INITIAL);
+  assert.deepEqual([none.status, none.body.error], [409, 'no_pricing_decision']);
+  decide(f, 'lic_b', { uid: 'dec_b', currency: 'USD', initial: null, surcharge: 50000, at: '2026-06-01T00:00:00Z' });
+  const noFee = await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices', INITIAL);
+  assert.deepEqual([noFee.status, noFee.body.error], [409, 'no_initial_fee']);
+  assert.match(noFee.body.message, /does not record an initial fee/);
+  f.db.prepare("UPDATE territory_licences SET starts_on = '2999-01-01' WHERE uid = 'lic_b'").run();
+  decide(f, 'lic_b', { uid: 'dec_b2', currency: 'USD', initial: 100000, surcharge: null, at: '2026-07-01T00:00:00Z' });
+  const early = await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices', INITIAL);
+  assert.deepEqual([early.status, early.body.error, early.body.starts_on], [409, 'licence_not_started', '2999-01-01']);
+  decide(f, 'lic_draft', { uid: 'dec_d', initial: 100000, surcharge: null, at: '2026-07-01T00:00:00Z' });
+  assert.equal((await f.call(SUPER, 'POST', '/admin/licences/lic_draft/fee-invoices', INITIAL)).body.error, 'licence_not_billable');
+  assert.equal(f.rows("SELECT uid FROM licence_fee_invoices WHERE licence_uid != 'lic_a'").length, 0);
+
+  const g = await fixture({ account: false });
+  decide(g, 'lic_a', { uid: 'dec_a', initial: 1000000, surcharge: 1, at: '2026-06-01T00:00:00Z' });
+  const noAccount = await g.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL);
+  assert.equal(noAccount.status, 409);
+  assert.notEqual(noAccount.body.error, 'initial_invoice_exists');
+  assert.equal(g.rows('SELECT uid FROM licence_fee_invoices').length, 0, 'never issued without payment instructions');
+  for (const who of [ADMIN, PRINCIPAL, SUPER_PW]) {
+    const w = await g.call(who, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL);
+    assert.ok(w.status === 401 || w.status === 403, `${who}: ${w.status}`);
+  }
+});
+
+test('D5954: a later apply, override or market update never changes an issued initial invoice; the annual year beside it is still issued once', async () => {
+  // Mutations checked: the annual duplicate check counting the initial row (the first year refused); the freeze trigger removed.
+  const f = await fixture();
+  f.db.prepare("UPDATE territory_licences SET starts_on = ? WHERE uid = 'lic_a'").run(TODAY());
+  decide(f, 'lic_a', { uid: 'dec_1', initial: 1000000, surcharge: 20000, at: '2026-06-01T00:00:00Z' });
+  const ini = (await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL)).body.invoice;
+  assert.equal(ini.period_start, TODAY());
+  const before = f.rows('SELECT * FROM licence_fee_invoices WHERE uid = ?', ini.uid);
+  // A later override and a re-termed licence, as an apply writes them.
+  decide(f, 'lic_a', { uid: 'dec_2', initial: 7, surcharge: 7, at: '2026-08-01T00:00:00Z', decision: 'overridden' });
+  f.db.prepare("UPDATE territory_licences SET annual_fee_cents = 4321, currency = 'USD' WHERE uid = 'lic_a'").run();
+  assert.deepEqual(f.rows('SELECT * FROM licence_fee_invoices WHERE uid = ?', ini.uid), before);
+  assert.throws(() => f.db.prepare('UPDATE licence_fee_invoices SET amount_cents = 1 WHERE uid = ?').run(ini.uid), /initial_frozen/);
+  assert.throws(() => f.db.prepare("UPDATE licence_fee_invoices SET kind = 'annual' WHERE uid = ?").run(ini.uid), /initial_frozen/);
+
+  // The first licence year starts the same day; it is invoiced once, and the initial row never fills it.
+  const annual = await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices');
+  assert.equal(annual.status, 201, annual.text);
+  assert.deepEqual([annual.body.invoice.kind, annual.body.invoice.period_start, annual.body.invoice.amount_cents], ['annual', TODAY(), 4321]);
+  assert.equal(annual.body.invoice.initial_fee_cents, undefined);
+  assert.equal((await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices')).body.error, 'invoice_exists');
+  assert.equal((await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', { kind: 'annual' })).body.error, 'invoice_exists');
+  assert.throws(() => f.db.prepare(`INSERT INTO licence_fee_invoices (uid, licence_uid, period_label, period_start, period_end, amount_cents, currency,
+    reference, issued_at, due_at, figures_json, figures_sha256, initial_fee_cents) VALUES ('y', 'lic_b', 'x', '2021-01-01', '2021-12-31', 1, 'EUR', 'r', 'd', 'd', '{}', 'h', 1)`).run(),
+    /initial_shape/, 'an annual row carries no component');
+  assert.deepEqual(f.rows('SELECT * FROM licence_fee_invoices WHERE uid = ?', ini.uid), before);
+});
+
+test('D5954: paid, PDF, the licensee\'s view and the receivables ledger treat the initial invoice as an invoice', async () => {
+  // Mutations checked: the licensee view without kind; the receivables periods counting the initial row as the first year.
+  const f = await fixture();
+  f.db.prepare("UPDATE territory_licences SET starts_on = ? WHERE uid = 'lic_a'").run(TODAY());
+  decide(f, 'lic_a', { uid: 'dec_1', initial: 1000000, surcharge: 20000, at: '2026-06-01T00:00:00Z' });
+  const ini = (await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices', INITIAL)).body.invoice;
+  const paid = await f.call(SUPER, 'PATCH', `/admin/licences/lic_a/fee-invoices/${ini.uid}`, { paid_cents: 1020000, expected_revision: ini.revision });
+  assert.deepEqual([paid.status, paid.body.invoice.status, paid.body.invoice.outstanding_cents], [200, 'paid', 0]);
+  const pdf = await f.call(SUPER, 'GET', `/admin/licences/lic_a/fee-invoices/${ini.uid}/pdf`);
+  assert.equal(pdf.status, 200, pdf.text);
+  assert.match(pdf.headers.get('content-disposition')!, /filename="AXAL-LIC-LIC-A-INITIAL\.pdf"/);
+  const mine = await f.call(PRINCIPAL, 'GET', '/licence/mine/statements');
+  const seen = mine.body.fee_invoices.find((i: any) => i.uid === ini.uid);
+  assert.deepEqual([seen.kind, seen.amount_cents, seen.initial_fee_cents, seen.regulatory_surcharge_cents], ['initial', 1020000, 1000000, 20000]);
+  assert.equal((await f.call(PRINCIPAL, 'GET', `/licence/mine/fee-invoices/${ini.uid}/pdf`)).status, 200);
+
+  const today = TODAY();
+  const period = { start: today, end: addDays(today, 1), label: 'today' };
+  const led = await licenceFeeReceivables(f.env, period, today);
+  assert.equal(led.available, true);
+  if (!led.available) return;
+  const eur = led.by_currency.find((b) => b.currency === 'EUR')!;
+  assert.deepEqual([eur.invoices, eur.invoiced_cents, eur.collected_cents, eur.outstanding_cents], [1, 1020000, 1020000, 0]);
+  assert.ok(led.expected_not_invoiced.some((g) => g.licence_uid === 'lic_a' && g.gap === 'not_invoiced'), 'the first year is still expected');
 });

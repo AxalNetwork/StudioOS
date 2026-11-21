@@ -38,6 +38,8 @@ export function makeCycleWrites(request) {
       signalUpdate: (projectId, id, body) => request(`/cycles/validate/demand-signals/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       hypothesis: (projectId, body) => request(`/cycles/validate/hypotheses?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       hypothesisUpdate: (projectId, id, body) => request(`/cycles/validate/hypotheses/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // D6001 (#6001): Add a lead, an interview at stage `lead`, through the interview create route.
+      lead: (projectId, body) => request(`/progress/discovery/${seg(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
     },
     // D695 (#1657, PR 2): Raise's Adds and Edits, through #1700's routes. The
     // venture goes in the query; the data room's routes take its uid in the
@@ -104,11 +106,18 @@ export function makeCycleWrites(request) {
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       checklist: (projectId, key, done) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, done: done === true }) }),
+      // D6789 (#6789): mark a checklist item Not applicable (out of the score), or say it applies again.
+      checklistNotApplicable: (projectId, key, na) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, not_applicable: na === true }) }),
       // D1090 (#2955): Distribution's content calendar, typed by hand. A piece from Notion is edited in Notion.
       content: (projectId, body) => request('/cycles/grow/channels/content', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       contentDelete: (projectId, uid) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
       // Edits: a PATCH changes only the fields it is sent.
+      // D6098 (#6098): rename one feedback theme, or merge it (`merge: true`); the roadmap items that answer it follow.
+      feedbackTheme: (projectId, body) => request('/cycles/grow/feedback/themes', { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D6865 (#6865): one theme's weight and its Close the loop rows (a writer's read), and Mark told for several.
+      feedbackWeight: (projectId, theme) => request(`/cycles/grow/feedback/weight?project=${encodeURIComponent(projectId)}&theme=${encodeURIComponent(theme)}`),
+      feedbackTold: (projectId, uids, via) => request('/cycles/grow/feedback/told', { method: 'POST', body: JSON.stringify({ project: projectId, uids, via }) }),
       feedbackUpdate: (projectId, uid, body) => request(`/cycles/grow/feedback/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       partnerUpdate: (projectId, uid, body) => request(`/cycles/grow/partners/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
@@ -120,6 +129,12 @@ export function makeCycleWrites(request) {
       acceptMercuryPartner: (projectId, id, body = {}) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       dismissMercuryPartner: (projectId, id) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
       deleteMercuryFact: (projectId, id) => request(`/cycles/grow/mercury/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
+      // D5866 (#5866): the founder's own TikTok (D5863 sync and delete, D5864 the channel proposal). `kind` is
+      // `account` (an audience snapshot) or `video` (a video's figures), as the Worker's delete reads it.
+      syncTiktok: (projectId) => request('/cycles/grow/tiktok/sync', { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      deleteTiktokFact: (projectId, id, kind) => request(`/cycles/grow/tiktok/facts/${seg(id)}?${new URLSearchParams({ project: String(projectId), kind: kind === 'account' ? 'account' : 'video' })}`, { method: 'DELETE' }),
+      acceptTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      dismissTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
     },
     // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
     // FormData body (Upload proof) goes as it is.
@@ -133,16 +148,24 @@ export function makeCycleWrites(request) {
       // D695 (#1656, PR 3b): Build's canvas Adds and Edits, through #1695's routes (#1792).
       addFeature: (projectId, body) => request(`/cycles/build/features?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       addMustHave: (projectId, body) => request(`/cycles/build/must-haves?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      // D6031 (#6031): the MVP target date, from Prototype / MVP's summary line (null clears it).
+      mvpTarget: (projectId, date) => request(`/cycles/build/project/target?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify({ mvp_target_date: date }) }),
       roadmapItem: (projectId, body) => request(`/cycles/build/roadmap?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // #6041: remove an item added by mistake, with its dependency edges.
+      roadmapItemDelete: (projectId, id) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       // The cap table's plan gate answers 402; the dialog shows it as its refusal (D651).
       founder: (projectId, body) => request(`/cycles/build/founders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
       founderUpdate: (projectId, id, body) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body), inlinePaywall: true }),
+      // #6041: remove a founder added by mistake (only one with nothing attached; a 409 names what is).
+      founderDelete: (projectId, id) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStep: (projectId, body, idempotencyKey) => request(`/cycles/build/formation-steps?${q(projectId)}`, {
         method: 'POST', body: JSON.stringify(body), headers: { 'Idempotency-Key': idempotencyKey },
       }),
       formationStepUpdate: (projectId, id, body) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // #6041: remove the venture's own filing added by mistake, with its checklist and proof file.
+      formationStepDelete: (projectId, id) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       // A feature's must-have mark and due date (D662). The feature itself is
       // MVP scope's row: `mvpFeature` adds one, with the project in the path.
       feature: (projectId, id, body) => request(`/cycles/build/features/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),

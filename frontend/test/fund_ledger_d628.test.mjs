@@ -31,6 +31,11 @@ test('LP mode forces a summary even when journal is requested and data is accide
   assert.match(html,/LP summary only/); assert.match(html,/\$4,986\.30/);
   assert.doesNotMatch(html,/Legal invoice|Actor #2|Bank Q1|Trial balance|>Journal<|>Fees</);
 });
+test('D6241: the GP of record reads Journal and Fees, read only, and is told who writes',()=>{
+  const html=render({items:[{...fund,can_manage:false,full_read:true}],view:'journal'});
+  for(const value of ['Legal invoice','Trial balance · selected period','>Journal<','>Fees<','GP of record read','only the fund administrator writes']) assert.ok(html.includes(value),value);
+  assert.doesNotMatch(html,/Administrator read|LP summary only/);
+});
 test('selected fund and period use recorded closed state without blending funds',()=>{
   const html=render({items:[fund,{...fund,id:20,name:'Fixture Fund B',period:{...period,label:'Closed quarter',closed:1},summary:{...fund.summary,fee_cents:55,expense_cents:66}}],fundId:'20'});
   assert.match(html,/Fixture Fund B · Closed quarter/);assert.match(html,/Closed/);assert.match(html,/\$0\.55/);assert.match(html,/\$0\.66/);

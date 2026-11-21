@@ -12,7 +12,7 @@ import { HQ_READS_COMMISSIONS, NOT_READ_YET, isFailed, isLoading, isReady } from
 import {
   NO_EVENT_YET, PAGE, PARTNERS_EMPTY, QUEUE_EMPTY, QUEUE_WHO, RULES_LOCK, RULES_NOTE, SEGMENTS, SEGMENT_ONE, SORTS,
   TERMS_FILTERS, TERMS_WORD, commissionChart, contractLabel, dayLabel, introductionsChart, listParams, moneyReadable,
-  partnerTiles, rowActions, rowMoney, ruleLine, termsSentence,
+  partnerParticipationTiles, partnerTiles, rowActions, rowMoney, ruleLine, termsSentence,
 } from './referralPartnersModel';
 
 /**
@@ -253,6 +253,22 @@ export function PartnersOverview({ superAdmin, tick, open }) {
       </div>
       <PartnersTable segment={segment} superAdmin={superAdmin} tick={tick} open={open} />
     </div>
+  );
+}
+
+/**
+ * D5888 (#5888): Participation, the shell's section on the program's own summary (the read Overview makes, under
+ * the same key, so the two agree): active partners and this quarter's introductions as recorded, and the partners
+ * behind those introductions "Not recorded" with its reason.
+ */
+export function PartnersParticipation({ tick, open }) {
+  const summary = useRead('partners:summary', 'summary', tick, true, () => referralPartnersApi.summary());
+  return (
+    <Card title="Participation" testId="programs-partners-participation">
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        {partnerParticipationTiles(summary).map((t) => <Tile key={t.key} t={t} onRetry={open.reload} />)}
+      </div>
+    </Card>
   );
 }
 

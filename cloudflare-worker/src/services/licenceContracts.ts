@@ -11,6 +11,7 @@
  * Where a list is also a CHECK constraint (statuses: migration 187; kinds:
  * migration 279), the migration is the authority and the test reads it.
  */
+import type { LicenceBranchReport } from './licenceBranchReport';
 import type { LicencePushResult } from './licencePush';
 
 /** `territory_licences.status`, migration 187's CHECK, in lifecycle order. */
@@ -151,10 +152,13 @@ export type LicenceSyncTermination = {
 export type LicenceSyncSummary = {
   available: boolean;
   hq_revision: number | null;
+  /** The branch's answer to HQ's last push (#4686), not a read of what it holds; see `branch_report`. */
   branch_revision: number | null;
   last_success_at: string | null;
   pending: LicenceSyncPending | null;
   pending_available: boolean;
   termination: LicenceSyncTermination | null;
   termination_available: boolean;
+  /** D5925: what the branch reports it holds, read from the branch itself (`services/licenceBranchReport.ts`). */
+  branch_report: LicenceBranchReport;
 };

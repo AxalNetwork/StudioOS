@@ -53,10 +53,12 @@ export function deriveStudio({ profile, viewer, readOnly = false, modules, layou
   const noProfile = !!(layout?.failed && layout.kind === 'no_profile');
   const layoutRead = layout === undefined ? 'loading' : layout.failed ? 'failed' : 'ready';
   const modulesRead = modules === undefined ? 'loading' : modules.failed ? 'failed' : 'ready';
-  const catalogue = modules && !modules.failed && Array.isArray(modules.modules) ? modules.modules : null;
+  // An older Worker may still offer the retired tile during deployment.
+  const isOffered = ({ key }) => profile !== 'investor' || key !== 'scored_opportunities';
+  const catalogue = modules && !modules.failed && Array.isArray(modules.modules) ? modules.modules.filter(isOffered) : null;
   let placed = [];
   if (layoutRead === 'failed' && !noProfile) placed = fallbackLayout(profile);
-  else if (layoutRead === 'ready') placed = toSave(layout.layout);
+  else if (layoutRead === 'ready') placed = toSave(layout.layout).filter(isOffered);
   const canCustomise = !readOnly && layoutRead === 'ready' && !!catalogue;
   return {
     profile,

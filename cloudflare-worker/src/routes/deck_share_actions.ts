@@ -539,7 +539,7 @@ deckShareActions.post('/share/:token/nda', async (c) => {
   await logConversion(c.env, {
     deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: ctx.project_id, userId,
-    type: 'nda_signed', refId: docId ? String(docId) : null,
+    type: 'nda_signed', refId: String(docId),
   });
 
   return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA recorded with the venture founder. This does not grant data-room access; a separate founder grant is required.' });

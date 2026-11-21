@@ -331,7 +331,8 @@ test('mounted: each block is drawn from its own read, and no roster name reaches
     assert.match(m.of('community-figure-circles'), /3 of 4/);
     assert.match(m.of('community-figure-roster'), /3.*active on the roster/s);
     // This fixture carries no weekly registrations, so that figure says it could not be read.
-    assert.match(m.of('community-tile-registrations'), /Unreadable/);
+    // D5129 (Q2 = A): the screen word for a failed read is Unavailable.
+    assert.match(m.of('community-tile-registrations'), /Unavailable/);
     assert.match(m.of('community-card-jobs'), /Backend Engineer.*14 applications/s);
     assert.match(m.of('community-circle-counts'), /3 published · 1 draft · 2 featured/);
     assert.match(m.of('community-members-entered'), /212.*As entered/s);

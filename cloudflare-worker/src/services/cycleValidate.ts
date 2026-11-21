@@ -37,6 +37,7 @@ import {
 } from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
+import { currentMarketFigures, marketFigureHistory, type MarketFigureRow } from './marketFigures';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
 
 export const CYCLE = 'validate';
@@ -69,6 +70,12 @@ export type Ctx = { env: Env; projectId: number; today: string; canWrite?: boole
 const href = (ctx: Ctx, slug: string) => `/validate/${slug}?project=${ctx.projectId}`;
 /** D685 §5.4 — the setup modal's own route. */
 const recordHref = (ctx: Ctx) => `/validate/record?project=${ctx.projectId}`;
+/**
+ * D6010 (#6010) — the market sizing tool, opened from Market intelligence for
+ * this venture. Every step the market card names (a figure, a competitor, the
+ * positioning map) is done there; the module page itself has no control for them.
+ */
+const sizingHref = (ctx: Ctx) => `/validate/market-intelligence/sizing?project=${ctx.projectId}`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** `YYYY-MM-DD` `n` days before `today`. */
@@ -180,6 +187,18 @@ export type Theme = {
   last_30d: number;
   prior_30d: number;
   supports: string[];
+  /** D6006: the hypothesis codes this theme contradicts, beside `supports`. */
+  contradicts: string[];
+  /** D6006: each wording an interview said that lands here, once per interview and wording (`mentions` counts interviews). */
+  phrases: number;
+  /**
+   * D6006: who said it, among the interviews counted in `mentions`. Distinct interviewee names and companies,
+   * and how many of those interviews recorded none. `null` when not one of them recorded a name (or a company).
+   */
+  people: number | null;
+  organisations: number | null;
+  people_unrecorded: number;
+  organisations_unrecorded: number;
 };
 
 /**
@@ -193,15 +212,19 @@ export function themesOf(
   severities: Array<{ interview_id: number; phrase_norm: string; severity: string }>,
   today: string,
   supportsByGroup: Map<number, string[]> = new Map(),
+  contradictsByGroup: Map<number, string[]> = new Map(),
 ): Theme[] {
   const sevBy = new Map<string, string>();
   for (const r of severities) sevBy.set(`${r.interview_id}\u0000${r.phrase_norm}`, r.severity);
   const cut30 = daysBefore(today, 30);
   const cut60 = daysBefore(today, 60);
-  type Acc = { key: string; title: string; groupId: number | null; ivs: Set<number>; lv: Record<PainSeverityLevel, Set<number>>; first: string | null; recent: Set<number>; prior: Set<number> };
+  type Acc = { key: string; title: string; groupId: number | null; ivs: Set<number>; lv: Record<PainSeverityLevel, Set<number>>; first: string | null; recent: Set<number>; prior: Set<number>;
+    phrases: number; people: Set<string>; orgs: Set<string>; noPerson: number; noOrg: number };
+  const who = (v: string | null | undefined) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   const acc = new Map<string, Acc>();
   for (const iv of interviews) {
     const seen = new Set<string>();
+    const said = new Set<string>();
     const d = heldDate(iv);
     for (const phrase of safeParseStrings(iv.pains_json)) {
       const display = phrase.trim();
@@ -210,12 +233,17 @@ export function themesOf(
       const r = resolvePhrase(norm, display, model);
       let a = acc.get(r.key);
       if (!a) {
-        a = { key: r.key, title: r.title, groupId: r.groupId, ivs: new Set(), lv: { severe: new Set(), real: new Set(), mild: new Set() }, first: null, recent: new Set(), prior: new Set() };
+        a = { key: r.key, title: r.title, groupId: r.groupId, ivs: new Set(), lv: { severe: new Set(), real: new Set(), mild: new Set() }, first: null, recent: new Set(), prior: new Set(),
+          phrases: 0, people: new Set(), orgs: new Set(), noPerson: 0, noOrg: 0 };
         acc.set(r.key, a);
       }
+      if (!said.has(norm)) { said.add(norm); a.phrases += 1; }
       if (!seen.has(r.key)) {
         seen.add(r.key);
         a.ivs.add(iv.id);
+        const person = who(iv.interviewee_name), org = who(iv.interviewee_company);
+        if (person) a.people.add(person); else a.noPerson += 1;
+        if (org) a.orgs.add(org); else a.noOrg += 1;
         if (d) {
           if (a.first == null || d < a.first) a.first = d;
           if (d > cut30 && d <= today) a.recent.add(iv.id);
@@ -235,6 +263,12 @@ export function themesOf(
       severe, real, mild, severity, first_mention: a.first,
       last_30d: a.recent.size, prior_30d: a.prior.size,
       supports: a.groupId != null ? (supportsByGroup.get(a.groupId) || []) : [],
+      contradicts: a.groupId != null ? (contradictsByGroup.get(a.groupId) || []) : [],
+      phrases: a.phrases,
+      people: a.people.size ? a.people.size : null,
+      organisations: a.orgs.size ? a.orgs.size : null,
+      people_unrecorded: a.noPerson,
+      organisations_unrecorded: a.noOrg,
     };
   }).sort((x, y) => y.mentions - x.mentions || x.title.localeCompare(y.title));
 }
@@ -605,11 +639,14 @@ export async function problemDiscoveryCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-export function supportsByGroup(hyps: HypRow[], links: LinkRow[]): Map<number, string[]> {
+/** D6006: the open hypotheses each theme contradicts, by code. */
+export const contradictsByGroup = (hyps: HypRow[], links: LinkRow[]) => supportsByGroup(hyps, links, 'contradicts');
+
+export function supportsByGroup(hyps: HypRow[], links: LinkRow[], direction: 'supports' | 'contradicts' = 'supports'): Map<number, string[]> {
   const code = new Map(hyps.map((h) => [Number(h.id), h.code]));
   const out = new Map<number, string[]>();
   for (const l of links) {
-    if (l.direction !== 'supports' || !code.has(Number(l.hypothesis_id))) continue;
+    if (l.direction !== direction || !code.has(Number(l.hypothesis_id))) continue;
     if (!out.has(l.pain_group_id)) out.set(l.pain_group_id, []);
     out.get(l.pain_group_id)!.push(code.get(Number(l.hypothesis_id))!);
   }
@@ -642,6 +679,13 @@ export function pipelineOf(interviews: InterviewRow[], signups: Array<{ crm_stat
   return { lead, invited, booked, done };
 }
 
+/**
+ * D6001: the Stage filter's "Invited · no slot yet", the rows the card's
+ * "Book the N invited leads" names. `researchRecords` filters the same rows in SQL.
+ */
+export const NO_SLOT = 'invited_no_slot';
+export const waitingForSlot = (i: { stage: string | null; booked_at: string | null }) => i.stage === 'invited' && !i.booked_at;
+
 export async function customerResearchCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('customer-research', 'Last 12 weeks', 'Interviews per week, beside the recruiting pipeline.', 'Interviews and the customer waitlist'), async (): Promise<CardBody> => {
     const [interviews, signups, weeks, painData] = await Promise.all([
@@ -652,13 +696,15 @@ export async function customerResearchCard(ctx: Ctx): Promise<Card> {
       return { state: 'empty', series: null, next: { text: 'Record your first session', href: recordHref(ctx) }, reason: 'No interviews yet. Validate starts with the first conversation.' };
     }
     const funnel = pipelineOf(interviews, signups);
-    const waitingSlot = interviews.filter((i) => i.stage === 'invited' && !i.booked_at).length;
+    const waitingSlot = interviews.filter(waitingForSlot).length;
     const newLeads = signups.filter((s) => s.crm_status == null || s.crm_status === 'new').length;
     const held = interviews.filter(isHeld).length;
     const next = waitingSlot > 0
-      ? { text: `Book the ${plural(waitingSlot, 'invited lead', 'invited leads')} with no slot yet`, href: href(ctx, 'customer-research') }
+      // D6001 (#6001): each link lands on the rows it names, the list filtered
+      // to them or the Waitlist leads panel.
+      ? { text: `Book the ${plural(waitingSlot, 'invited lead', 'invited leads')} with no slot yet`, href: `${href(ctx, 'customer-research')}&filter=stage:${NO_SLOT}` }
       : newLeads > 0
-        ? { text: `Invite the ${plural(newLeads, 'new waitlist lead', 'new waitlist leads')}`, href: href(ctx, 'customer-research') }
+        ? { text: `Invite the ${plural(newLeads, 'new waitlist lead', 'new waitlist leads')}`, href: `${href(ctx, 'customer-research')}#waitlist-leads` }
         : held < LAB_MIN_INTERVIEWS
           ? { text: `Log ${plural(LAB_MIN_INTERVIEWS - held, 'more interview', 'more interviews')}`, href: href(ctx, 'customer-research') }
           : null;
@@ -700,7 +746,7 @@ export type SegmentSummary = {
  * payment to a segment yet. Saying Measured from interview counts alone would
  * be the overclaim the canvas's own legend exists to prevent.
  */
-export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]): { segments: SegmentSummary[]; unassigned: number } {
+export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]) {
   const held = interviews.filter(isHeld);
   const summary = (id: number | null, name: string, source: string | null, updated: string | null): SegmentSummary => {
     const ivs = held.filter((i) => (i.segment_id ?? null) === id);
@@ -716,9 +762,11 @@ export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]): 
     };
   };
   const known = new Set(segments.map((s) => Number(s.id)));
+  const unassignedInterviews = held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id)));
   return {
     segments: segments.map((s) => summary(Number(s.id), s.name, s.source, s.updated_at)),
-    unassigned: held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id))).length,
+    unassigned: unassignedInterviews.length,
+    unassignedInterviews,
   };
 }
 
@@ -748,19 +796,28 @@ export async function icpCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-type MarketFigure = { value: number | null; source: string | null; reason: string | null };
+type MarketFigure = {
+  value: number | null; source: string | null; reason: string | null;
+  /** D6011: the date the current figure was set, its link and method, when a `market_figures` row holds them. */
+  as_of: string | null; source_url: string | null; method: string | null;
+};
 
+/**
+ * D6011 (#6011): each figure's latest `market_figures` row, while it still
+ * describes the project's value; otherwise `projects.*` with no source.
+ */
 async function loadMarket(ctx: Ctx) {
-  const p = await ctx.env.DB.prepare('SELECT tam, sam, som FROM projects WHERE id = ?')
-    .bind(ctx.projectId).first<{ tam: number | null; sam: number | null; som: number | null }>();
-  const fig = (v: number | null | undefined): MarketFigure => {
-    const n = Number(v);
-    if (v == null || !Number.isFinite(n) || n <= 0) return { value: null, source: null, reason: 'No figure entered' };
-    // No store records where a total, serviceable or obtainable figure came
-    // from — only the sizing INPUTS carry a sourced fill. Said, not guessed.
-    return { value: n, source: null, reason: 'No source recorded for this figure' };
+  const { values, current } = await currentMarketFigures(ctx.env, ctx.projectId);
+  const fig = (n: number | null, cur: MarketFigureRow | null): MarketFigure => {
+    if (n == null || n <= 0) return { value: null, source: null, reason: 'No figure entered', as_of: null, source_url: null, method: null };
+    // A figure saved before D6011, or by a writer that records no row yet.
+    if (!cur) return { value: n, source: null, reason: 'No source recorded for this figure', as_of: null, source_url: null, method: null };
+    const as_of = String(cur.set_at).slice(0, 10);
+    return cur.source_title
+      ? { value: n, source: cur.source_title, reason: null, as_of, source_url: cur.source_url, method: cur.method }
+      : { value: n, source: null, reason: 'No source named when this figure was saved', as_of, source_url: null, method: cur.method };
   };
-  return { tam: fig(p?.tam), sam: fig(p?.sam), som: fig(p?.som) };
+  return { tam: fig(values.tam, current.tam), sam: fig(values.sam, current.sam), som: fig(values.som, current.som) };
 }
 
 async function loadMarketReadiness(ctx: Ctx) {
@@ -826,15 +883,15 @@ export async function marketCard(ctx: Ctx): Promise<Card> {
     const [market, tracked, readiness] = await Promise.all([loadMarket(ctx), loadTracked(ctx), loadMarketReadiness(ctx)]);
     const defined = [market.tam, market.sam, market.som].filter((f) => f.value != null).length;
     if (defined === 0 && tracked.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Add the total market, with its source', href: href(ctx, 'market-intelligence') }, reason: 'No market size yet.' };
+      return { state: 'empty', series: null, next: { text: 'Add the total market, with its source', href: sizingHref(ctx) }, reason: 'No market size yet.' };
     }
     const missing = market.tam.value == null ? 'total' : market.sam.value == null ? 'serviceable' : market.som.value == null ? 'obtainable' : null;
     const next = missing
-      ? { text: `Add the ${missing} market`, href: href(ctx, 'market-intelligence') }
+      ? { text: `Add the ${missing} market`, href: sizingHref(ctx) }
       : tracked.length < 3
-        ? { text: `Track ${3 - tracked.length} more ${3 - tracked.length === 1 ? 'competitor' : 'competitors'}`, href: href(ctx, 'market-intelligence') }
+        ? { text: `Track ${3 - tracked.length} more ${3 - tracked.length === 1 ? 'competitor' : 'competitors'}`, href: sizingHref(ctx) }
         : !readiness.positioning_map
-          ? { text: 'Complete the positioning map', href: href(ctx, 'market-intelligence') }
+          ? { text: 'Complete the positioning map', href: sizingHref(ctx) }
           : null;
     return {
       state: 'ok',
@@ -848,7 +905,8 @@ export async function marketCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-async function loadDemand(ctx: Ctx) {
+/** The recorded demand signals and the paid pre-sales; `demandRecords` and the signals CSV (D6019) read both. */
+export async function loadDemand(ctx: Ctx) {
   const signals = await ctx.env.DB.prepare(
     `SELECT id, kind, who, amount_cents, currency, period, signal_date, status, source_kind
        FROM demand_signals WHERE project_id = ? ORDER BY signal_date DESC, id DESC`,
@@ -863,12 +921,17 @@ async function loadDemand(ctx: Ctx) {
   return { signals: signals.results || [], paid: paid.results || [] };
 }
 
+export async function readWaitlistBar(ctx: Ctx): Promise<number | null> {
+  const row = await ctx.env.DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
+    .bind(ctx.projectId, WAITLIST_TARGET_KEY).first<{ target_value: number }>();
+  return row ? Number(row.target_value) : null;
+}
+
 export async function demandCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('demand-signals', 'Last 13 weeks', 'Waitlist sign-ups against the bar you set, and the share calling it a need-to-have.', 'Waitlist, demand signals and the revenue ledger'), async (): Promise<CardBody> => {
     const [{ weeks, total }, bar, demand, sev, interviews] = await Promise.all([
       weeklySignups(ctx, 13),
-      ctx.env.DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
-        .bind(ctx.projectId, WAITLIST_TARGET_KEY).first<{ target_value: number }>(),
+      readWaitlistBar(ctx),
       loadDemand(ctx), loadSeverities(ctx), loadInterviews(ctx),
     ]);
     // Need-to-have: of the interviews in which a severity was judged at all,
@@ -885,25 +948,47 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
     const counts: Record<string, number> = { loi: 0, pre_sale: 0, waitlist: 0, need_to_have: 0, would_pay: 0 };
     for (const s of demand.signals) if (s.status !== 'to_confirm' && s.kind in counts) counts[s.kind] += 1;
     counts.pre_sale += demand.paid.length;
+    // Recurring and one-off terms are separate commitments. A Would pay
+    // signal expresses interest and is excluded from committed value.
+    const committed = new Map<string, Map<string, number>>();
+    const addCommitment = (amount: number | null, currency: string | null, period: string | null) => {
+      if (!Number.isSafeInteger(amount) || Number(amount) <= 0 || !currency) return;
+      const code = currency.toUpperCase();
+      const cadence = period ?? 'not_recorded';
+      const buckets = committed.get(code) ?? new Map<string, number>();
+      buckets.set(cadence, (buckets.get(cadence) ?? 0) + Number(amount));
+      committed.set(code, buckets);
+    };
+    for (const signal of demand.signals) {
+      if (signal.status === 'confirmed' && (signal.kind === 'loi' || signal.kind === 'pre_sale')) {
+        addCommitment(signal.amount_cents, signal.currency, signal.period);
+      }
+    }
+    for (const paid of demand.paid) {
+      if (paid.verification === 'verified') addCommitment(paid.amount_cents, paid.currency, 'once');
+    }
+    const commitments = [...committed].sort(([a], [b]) => a.localeCompare(b)).flatMap(([currency, buckets]) =>
+      [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([period, amount_cents]) => ({ currency, period, amount_cents })));
     const toConfirm = demand.signals.filter((s) => s.status === 'to_confirm').length;
     if (total === 0 && demand.signals.length === 0 && demand.paid.length === 0 && judged.size === 0) {
-      return { state: 'empty', series: null, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
+      return { state: 'empty', series: null, next: ctx.canWrite === false ? null : { text: 'Open the landing-page builder', href: `/build/brand?project_id=${ctx.projectId}` }, reason: 'No waitlist connected.' };
     }
-    const next = !bar
-      ? { text: 'Set the bar for waitlist sign-ups', href: href(ctx, 'demand-signals') }
-      : toConfirm > 0
-        ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
-        : null;
+    const next = ctx.canWrite === false ? null
+      : bar == null ? { text: 'Set the bar for waitlist sign-ups', href: `${href(ctx, 'demand-signals')}#waitlist-bar` }
+      : toConfirm > 0 ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
+      : null;
     const state = seriesState(weeks);
     return {
       state: state === 'empty' && (demand.signals.length > 0 || demand.paid.length > 0 || judged.size > 0) ? 'too_little' : state,
       series: {
+        chart_ready: state === 'ok',
         signups: cumulative(weeks, total).map((n, i) => ({ week_start: daysBefore(ctx.today, (13 - i) * 7 - 1), total: n })),
-        bar: bar ? Number(bar.target_value) : null,
-        bar_reason: bar ? null : 'No bar set',
+        bar,
+        bar_reason: bar == null ? 'No bar set' : null,
         need_to_have: judged.size > 0 ? { interviews: need.size, of: judged.size } : null,
         need_to_have_reason: judged.size > 0 ? null : 'No interview has a pain judged yet',
         signals: counts,
+        committed: commitments,
       },
       next,
       reason: state === 'ok' ? null : `${plural(weeks.filter((w) => w > 0).length, 'week', 'weeks')} with a sign-up in the last 13. The line appears at 3.`,
@@ -1035,8 +1120,8 @@ const STRENGTHS = [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), opt('
 /**
  * D690 decision 10 — each list's columns, filters and sorts, per the canvas
  * (CO:611-616). Experiments' Sprint options are the venture's own, added on
- * read. Customer research keeps its `stage` filter and `booked` sort working
- * for the recruiting picker without listing them.
+ * read. Customer research keeps its `booked` sort working for the recruiting
+ * picker without listing it, and its `stage:pipeline`; D6001 lists the Stage filter.
  */
 export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; sorts: SortSpec[] }> = {
   'problem-discovery': {
@@ -1058,16 +1143,20 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
       { key: 'consent', label: 'Quotes OK', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
       // Video and audio calls are one "Call" (the owner, 2026-10-21): `call` matches both stored channels.
       { key: 'channel', label: 'Channel', options: [opt('in_person', 'In person'), opt('call', 'Call'), opt('text', 'Text chat')] },
+      // D6001 (#6001): the stage each row is at now. An interview with no stage
+      // is a conversation logged after it was held, so it is in Done, and says so.
+      { key: 'stage', label: 'Stage', options: [opt('lead', 'Lead'), opt('invited', 'Invited'), opt('invited_no_slot', 'Invited · no slot yet'),
+        opt('booked', 'Booked'), opt('done', 'Done · or no stage recorded')] },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },
   'ideal-customer-profile': {
     cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
     filters: [
-      { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), opt('measured', 'Measured'), NOT_RECORDED] },
+      { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), NOT_RECORDED] },
       { key: 'fit', label: 'Fit', options: [opt('strong', 'Has a strong fit'), opt('none', 'No strong fit')] },
     ],
-    sorts: [{ key: 'evidence', label: 'Evidence' }],
+    sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'name', label: 'Name' }, { key: 'strong', label: 'Strong fit' }, { key: 'interviews', label: 'Interviews' }],
   },
   'market-intelligence': {
     cols: ['Company', 'Kind', 'Latest signal', 'Date', 'Source'],
@@ -1086,8 +1175,9 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    // D4585: the status counts interviews only (the approved policy), so the column says so.
-    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
+    // D6016 (#6016, V7): the Hypotheses list in the canvas's columns. Relationships carries D4585's interview-only support
+    // (support, contradiction and unknown fit together); Distinct sources counts interviews, organizations and other evidence.
+    cols: ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
         opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('contested', 'Contested'), opt('refuted', 'Refuted'),
@@ -1117,6 +1207,27 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
 };
 
 const listOf = (slug: ModuleSlug) => ({ filters: LISTS[slug].filters, sorts: LISTS[slug].sorts });
+
+const SEVERITY_WORD: Record<PainSeverityLevel, string> = { severe: 'Severe', real: 'Real', mild: 'Mild' };
+
+/**
+ * D6006 (V17): why the theme at `i` ranks where it does, in the default order `themesOf` returns (most
+ * interviews, then by name). Built from counts only, never from a quote, so it reads the same for every reader.
+ * A tie names the name order that breaks it rather than implying the interviews decided it.
+ */
+export function rankReason(themes: Theme[], i: number, icpCount: number): string {
+  const t = themes[i];
+  const n = t.mentions;
+  const tied = (i > 0 && themes[i - 1].mentions === n) || (i + 1 < themes.length && themes[i + 1].mentions === n);
+  const parts: string[] = [];
+  if (n === 0) parts.push('Named in no held interview');
+  else if (i === 0 && !tied) parts.push('Most mentions');
+  else parts.push(`${n} ${n === 1 ? 'mention' : 'mentions'}${n > 1 && t.last_30d === n ? `, ${n === 2 ? 'both' : 'all'} in the last 30 days` : ''}`);
+  if (icpCount > 0) parts.push(`${icpCount} from ICP`);
+  if (t.severity) parts.push(`mostly ${SEVERITY_WORD[t.severity]}`);
+  if (tied && n > 0) parts.push('tied on mentions, ordered by name');
+  return parts.join(' · ');
+}
 
 /** Decision 2's Quotes rule: what a non-writer reads in place of a phrase said without consent. */
 export const QUOTE_WITHHELD = 'Quote withheld (no consent to quote)';
@@ -1148,7 +1259,11 @@ async function problemRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       wordings: g ? g.phrases.map((p) => wording(p.display_phrase)) : [wording(t.title)],
     };
   };
-  let rows = themesOf(interviews, model, sev, ctx.today, supportsByGroup(hyps, links))
+  // D6006: the rank is the theme's place in the whole venture's default order (most interviews first, then by
+  // name), fixed before any search, filter or sort, so a filtered list keeps each theme's number.
+  const ranked = themesOf(interviews, model, sev, ctx.today, supportsByGroup(hyps, links), contradictsByGroup(hyps, links));
+  const rankOf = new Map(ranked.map((t, i) => [t.key, { rank: i + 1, reason: rankReason(ranked, i, counted(t).icp_count) }]));
+  let rows = ranked
     .filter((t) => has(rq.q, t.title))
     .map((t) => ({ t, c: counted(t) }));
   const f = rq.filter;
@@ -1183,6 +1298,20 @@ async function problemRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     id: t.group_id, theme: t.title, mentions: t.mentions, severity: t.severity,
     trend: t.last_30d - t.prior_30d, supports: t.supports.length ? t.supports : null,
     ...c,
+    // D6006 (V17): a phrase in no theme still ranks, as its own row that opens no record.
+    grouped: t.group_id != null,
+    rank: rankOf.get(t.key)!.rank,
+    rank_reason: rankOf.get(t.key)!.reason,
+    // Sources beside mentions: who said it, and each wording said, once per interview.
+    sources: {
+      interviews: t.mentions, people: t.people, organisations: t.organisations,
+      people_unrecorded: t.people_unrecorded, organisations_unrecorded: t.organisations_unrecorded,
+    },
+    phrases: t.phrases,
+    // Open hypotheses this theme is linked to, by direction (a theme in no group links to none).
+    supporting: t.supports.length,
+    contradicting: t.contradicts.length,
+    contradicts: t.contradicts.length ? t.contradicts : null,
   })), rq.page, {
     ...listOf('problem-discovery'),
     parts: {
@@ -1270,12 +1399,12 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const recording = ['given', 'declined', 'not_asked'].includes(f.recording_consent) ? f.recording_consent : '';
   const consent = ['agreed', 'declined', 'not_asked'].includes(f.consent) ? f.consent : '';
   // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
-  const stage = ['lead', 'invited', 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
+  const stage = ['lead', 'invited', NO_SLOT, 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
   const channel = ['in_person', 'call', 'video', 'phone', 'text', 'manual'].includes(f.channel) ? f.channel : '';
   const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
-  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, channel, channel, channel];
+  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, stage, channel, channel, channel];
   const sort = rq.sort === 'oldest' || rq.sort === 'name' || rq.sort === 'booked' ? rq.sort : 'newest';
   const total = await ctx.env.DB.prepare(
     `SELECT COUNT(*) AS n
@@ -1287,7 +1416,8 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
         AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
-        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
+        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked'))
+             OR (? = 'invited_no_slot' AND i.stage = 'invited' AND COALESCE(i.booked_at, '') = ''))
         AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))`,
   ).bind(...binds).first<{ n: number }>();
   // The page, each interview beside its latest session (by id). A pains blob
@@ -1306,7 +1436,8 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
         AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
-        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
+        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked'))
+             OR (? = 'invited_no_slot' AND i.stage = 'invited' AND COALESCE(i.booked_at, '') = ''))
         AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))
       ORDER BY CASE WHEN ? = 'booked' THEN CASE i.stage WHEN 'booked' THEN 0 WHEN 'invited' THEN 1 WHEN 'lead' THEN 2 ELSE 3 END END ASC,
                CASE WHEN ? = 'name' THEN lower(i.interviewee_name) END ASC,
@@ -1357,7 +1488,8 @@ const EVIDENCE_RANK: Record<string, number> = { measured: 3, pattern: 2, anecdot
 
 async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const [segments, interviews] = await Promise.all([loadSegments(ctx), loadInterviews(ctx)]);
-  let rows = segmentsOf(segments, interviews).segments.filter((s) => has(rq.q, s.name));
+  const summary = segmentsOf(segments, interviews);
+  let rows = summary.segments.filter((s) => has(rq.q, s.name));
   if (rq.filter.evidence) rows = rows.filter((s) => (rq.filter.evidence === 'not_recorded' ? s.evidence == null : s.evidence === rq.filter.evidence));
   if (rq.filter.fit === 'strong') rows = rows.filter((s) => s.strong > 0);
   if (rq.filter.fit === 'none') rows = rows.filter((s) => s.strong === 0);
@@ -1368,7 +1500,16 @@ async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   else rows.sort((a, b) => (EVIDENCE_RANK[b.evidence ?? ''] ?? 0) - (EVIDENCE_RANK[a.evidence ?? ''] ?? 0) || b.interviews - a.interviews);
   return paged(LISTS['ideal-customer-profile'].cols, rows.map((s) => ({
     id: s.id, segment: s.name, interviews: s.interviews, strong_fit: s.strong, evidence: s.evidence, updated: s.updated_at,
-  })), rq.page, listOf('ideal-customer-profile'));
+  })), rq.page, {
+    ...listOf('ideal-customer-profile'),
+    ...(ctx.canWrite === true ? { parts: {
+      segments: segments.map(({ id, name }) => ({ id, name })),
+      unassigned_total: summary.unassigned,
+      unassigned: summary.unassignedInterviews.slice().sort((a, b) =>
+        (heldDate(b) ?? '').localeCompare(heldDate(a) ?? '') || b.id - a.id,
+      ).slice(0, PAGE_SIZE).map((i) => ({ id: i.id, interviewee: i.interviewee_name, date: heldDate(i), fit: i.icp_fit })),
+    } } : {}),
+  });
 }
 
 async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
@@ -1382,24 +1523,49 @@ async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     id: /^[a-z0-9][a-z0-9_-]*$/.test(String(c.id)) ? c.id : null,
     company: c.name, kind: c.kind, latest_signal: c.latest_signal, date: c.latest_on,
     source: c.source_url ?? c.source_kind ?? null,
-  })), rq.page, listOf('market-intelligence'));
+  })), rq.page, { ...listOf('market-intelligence'), parts: { market_history: await marketHistoryPart(ctx) } });
 }
 
-async function demandRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
-  const [demand, signups] = await Promise.all([
-    loadDemand(ctx),
-    ctx.env.DB.prepare(
-      `SELECT id, name, created_at FROM waitlist_signups
-        WHERE project_id = ? AND (audience IS NULL OR audience = 'customer') ORDER BY created_at DESC, id DESC`,
-    ).bind(ctx.projectId).all<{ id: number; name: string | null; created_at: string | null }>(),
-  ]);
-  type Row = { key: string; signal: string; who: string | null; amount_cents: number | null; currency: string | null; period: string | null; date: string | null; counts: string };
-  let rows: Row[] = [
+/** D6011 (#6011): the History part, every figure change with who and when. Unreadable is null, on its own. */
+async function marketHistoryPart(ctx: Ctx) {
+  try {
+    return { rows: await marketFigureHistory(ctx.env, ctx.projectId) };
+  } catch (e) {
+    console.warn('[cycleValidate] market history unreadable:', (e as Error)?.message);
+    return null;
+  }
+}
+
+/**
+ * The venture's customer waitlist sign-ups: id, name and date only. The address is never selected, so neither the
+ * list nor the signals CSV (D6019) can carry it.
+ */
+export async function loadCustomerWaitlist(ctx: Ctx) {
+  const res = await ctx.env.DB.prepare(
+    `SELECT id, name, created_at FROM waitlist_signups
+      WHERE project_id = ? AND (audience IS NULL OR audience = 'customer') ORDER BY created_at DESC, id DESC`,
+  ).bind(ctx.projectId).all<{ id: number; name: string | null; created_at: string | null }>();
+  return res.results || [];
+}
+
+export type DemandRow = { key: string; signal: string; who: string | null; amount_cents: number | null; currency: string | null; period: string | null; date: string | null; counts: string };
+
+/** Demand and urgency signals' one population: recorded signals, paid pre-sales and waitlist sign-ups (D6019 shares it). */
+export function demandRowsOf(
+  demand: Awaited<ReturnType<typeof loadDemand>>,
+  signups: Awaited<ReturnType<typeof loadCustomerWaitlist>>,
+): DemandRow[] {
+  return [
     ...demand.signals.map((s) => ({ key: `signal-${s.id}`, signal: s.kind, who: s.who, amount_cents: s.amount_cents, currency: s.currency, period: s.period, date: s.signal_date, counts: s.status })),
     ...demand.paid.map((p) => ({ key: `revenue-${p.id}`, signal: 'pre_sale', who: p.customer, amount_cents: p.amount_cents, currency: p.currency, period: 'once', date: p.received_on, counts: 'confirmed' })),
     // A sign-up's name is shown when they gave one; an address is not a name.
-    ...(signups.results || []).map((w) => ({ key: `waitlist-${w.id}`, signal: 'waitlist', who: w.name ?? null, amount_cents: null, currency: null, period: null, date: (w.created_at || '').slice(0, 10) || null, counts: 'counted' })),
+    ...signups.map((w) => ({ key: `waitlist-${w.id}`, signal: 'waitlist', who: w.name ?? null, amount_cents: null, currency: null, period: null, date: (w.created_at || '').slice(0, 10) || null, counts: 'counted' })),
   ];
+}
+
+async function demandRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const [demand, signups] = await Promise.all([loadDemand(ctx), loadCustomerWaitlist(ctx)]);
+  let rows = demandRowsOf(demand, signups);
   rows = rows.filter((r) => has(rq.q, r.signal, r.who));
   if (rq.filter.kind) rows = rows.filter((r) => r.signal === rq.filter.kind);
   if (rq.filter.period === '30' || rq.filter.period === '90') {

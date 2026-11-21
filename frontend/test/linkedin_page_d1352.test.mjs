@@ -194,7 +194,8 @@ test('the Network lists the member\'s own contacts with their source chips, note
 });
 
 test('Network › Relationships mounts the contacts; phone and dark are drawn', () => {
-  assert.match(read('frontend/src/workspaces/NetworkWorkspace.jsx'), /slug === 'relationships' && <Suspense fallback=\{null\}><NetworkContacts \/><\/Suspense>/);
+  // #5310 part 2: a founder's book is NW2's table (FounderRelationshipBook); every other licence keeps NetworkContacts.
+  assert.match(read('frontend/src/workspaces/NetworkWorkspace.jsx'), /slug === 'relationships' && <Suspense fallback=\{null\}>\{role === 'founder' \? <FounderRelationshipBook \/> : <NetworkContacts \/>\}<\/Suspense>/);
   for (const f of ['frontend/src/pages/account/LinkedInSection.jsx', 'frontend/src/pages/NetworkContacts.jsx']) {
     const src = read(f);
     assert.match(src, /dark:/, `${f} has dark styles`);

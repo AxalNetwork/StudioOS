@@ -50,10 +50,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { codeOnly } from './_codeOnly.mjs';
+import { readAccountPage } from './_accountSource.mjs';
 import { accountPathFor, accountViewFor } from '../src/pages/account/accountPhone.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const settings = read('frontend/src/pages/SettingsPage.jsx');
+const settings = readAccountPage();
 const company = read('frontend/src/pages/CompanySettingsPage.jsx');
 
 const sections = () => {

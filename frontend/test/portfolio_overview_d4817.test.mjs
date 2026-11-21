@@ -17,7 +17,7 @@
  *   - the table drawing an empty book for a failed positions read → test 4
  *     (and #5365's test 1);
  *   - the Reporting card drawing "0 of 0" for an empty population → test 2;
- *   - `ZoneNav` losing `row.extra` (no Performance in the local nav) → test 1;
+ *   - the shell losing the Performance zone (no Performance in the local nav) → test 1;
  *   - the frame not setting the document title → test 1.
  */
 import test from 'node:test';
@@ -110,7 +110,12 @@ const UPDATES = { items: [
   { uid: 'u1', project_id: 1, project: { name: 'Lumen Robotics' }, period: '2026-Q3', submitted_at: '2026-11-02T10:00:00Z', kpis: { runway_months: 30 } },
   { uid: 'u2', project_id: 2, project: { name: 'Northwind Labs' }, period: '2026-Q2', submitted_at: '2026-07-12T10:00:00Z', kpis: { runway_months: 4.8 } },
 ] };
-const SUPPORT = { entries: [], untouched: [{ project_id: 3 }], totals: { delivered: 7, promised: 4, withdrawn: 0, companies_in_book: 3, companies_supported: 2 } };
+const SUPPORT = {
+  entries: [], untouched: [{ project_id: 3 }],
+  // D6203: the D6202 figures, including the introductions' own (`by_kind.intro`).
+  totals: { delivered: 7, promised: 4, withdrawn: 0, in_progress: 1, outstanding: 5, overdue: 0, companies_in_book: 3, companies_supported: 2,
+    by_kind: { intro: { entries: 4, delivered: 3, outstanding: 1, meetings_held: 2 } } },
+};
 
 const book = (over = {}) => ({ path }) => {
   const routes = {
@@ -120,6 +125,16 @@ const book = (over = {}) => ({ path }) => {
   if (path in over) return over[path];
   return path in routes ? json(routes[path]) : json({});
 };
+
+test('Needs attention names the first red snapshot within 90 days', async () => {
+  const health = { ...HEALTH_READ, items: HEALTH_READ.items.map((item) => item.project_id === 2
+    ? { ...item, previous_status: 'yellow', status_changed_at: '2026-10-20', age_days: 7 }
+    : item) };
+  const view = await mount(book({ '/api/portfolio/health': json(health) }));
+  try {
+    assert.match(view.text('attention-2'), /HealthHealth turned to Attention on 20 Oct 2026 · first snapshot with this status/);
+  } finally { await view.close(); }
+});
 
 test('1. populated: performance with basis and as-of, evidence-backed attention, and the company table in the frame', async () => {
   const view = await mount(book());
@@ -147,10 +162,12 @@ test('1. populated: performance with basis and as-of, evidence-backed attention,
       'Report2026-Q3 not received · last reported 12 Jul 2026MarkLatest mark below cost · 0.80× · 31 Mar 2026',
       'MarkLatest mark 31 Mar 2026, older than two quartersOpen Northwind Labs',
     ].join(''));
+    assert.doesNotMatch(view.text('attention-2'), /Health turned to Attention/, 'one snapshot proves no status change');
     assert.match(view.text('attention-3'), /Kite SystemsNot recordedHealthNo health snapshot is recorded for this company\..*MarkNo mark recorded · carried at cost \$1,000,000/);
     // Summaries.
-    assert.match(view.text('portfolio-reporting-figures'), /^Received2 of 3Not received1Period2026-Q3Complete$/);
-    assert.match(view.text('portfolio-support-figures'), /^Open commitments4.*Delivered7.*No support recorded12 of 3 companies supported$/);
+    // D6204: this fixture's reporting read carries no due dates, so Overdue is Not recorded, never 0.
+    assert.match(view.text('portfolio-reporting-figures'), /^Received2 of 3Not received1OverdueNot recordedNo due dates in the reporting readPeriod2026-Q3Complete$/);
+    assert.match(view.text('portfolio-support-figures'), /^Open commitments5.*Delivered7.*Introductions made3.*Meetings resulting2.*No support recorded12 of 3 companies supported$/);
     // The table: sorted by health, the name is the link, an unmarked position says so.
     const table = all.slice(all.indexOf('Portfolio companies'));
     assert.ok(table.indexOf('Northwind Labs') < table.indexOf('Kite Systems') && table.indexOf('Kite Systems') < table.indexOf('Lumen Robotics'));
@@ -181,7 +198,8 @@ test('2. Not recorded: an empty book draws Not recorded with its reason, never a
     assert.equal(view.text('metric-tvpi'), 'TVPIUnavailableNo paid-in capital is recorded.');
     assert.match(view.text('portfolio-no-positions'), /No position is recorded for this investor account yet/);
     assert.match(view.text('attention-empty'), /Nothing in the recorded health, reporting, runway or marks needs attention/);
-    assert.match(all, /Meetings resulting from introductions: Not recorded/);
+    // D6203: a meeting nobody recorded is not counted as no meeting; the card says so.
+    assert.match(all, /An introduction counts toward Meetings resulting only when a member recorded its meeting as held/);
     assert.match(view.text('portfolio-reporting-empty'), /^No company is in the reporting population for 2026-Q3\.$/);
     assert.doesNotMatch(view.text('investor-portfolio-canvas'), /\$0\b|0\.00×|could not be read|0 of 0/);
   } finally { await view.close(); }

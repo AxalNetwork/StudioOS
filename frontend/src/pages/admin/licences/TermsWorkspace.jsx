@@ -14,6 +14,11 @@
  * The rules are `../licenceTermsAmendModel.js`; the writes are the existing
  * `PATCH /terms` (core) and `PUT /terms` (schedule), each naming the revision
  * it read (D4694). No browser dialog is used anywhere here.
+ *
+ * D4819 part 20 (#5932), board L20 — a phone offers no terms editor: below
+ * `md` the section is the read view alone, with no Amend terms, and says the
+ * terms are amended on a wider screen. A session already open when the
+ * window narrows is kept, so nothing typed is lost.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -21,6 +26,7 @@ import { api } from '../../../lib/api';
 import { licenceTermsApi } from '../../../lib/api/licenceTerms';
 import { reportError } from '../../../lib/log';
 import { Unreadable } from '../../../ui';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError, outcomeOfError } from '../../../lib/mutationOutcome';
 import { TermInput, saveError } from '../LicenceTermsSchedule';
@@ -75,6 +81,7 @@ export default function TermsWorkspace({ licence, onSaved, onOpenTab }) {
   const [notice, setNotice] = useState(null);
   const [askDiscard, setAskDiscard] = useState(false);
   const focusRef = useRef(null);
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
 
   const loadSchedule = useCallback(() => {
     setStored(undefined);
@@ -253,7 +260,13 @@ export default function TermsWorkspace({ licence, onSaved, onOpenTab }) {
       {mode === 'read' && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Read-only · current ledger terms</p>
-          <button type="button" className={primary} onClick={amend} data-testid="licence-terms-amend">Amend terms</button>
+          {phone ? (
+            <p className="text-[12px] text-gray-600 dark:text-gray-400" data-testid="licence-terms-phone-note">
+              Terms are amended on a wider screen. A phone shows them read-only.
+            </p>
+          ) : (
+            <button type="button" className={primary} onClick={amend} data-testid="licence-terms-amend">Amend terms</button>
+          )}
         </div>
       )}
       {mode === 'read' && scheduleOff && (

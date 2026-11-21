@@ -51,33 +51,57 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canViewLpData } from '../auth';
-import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
-import { investorActiveCompany } from './_investorProjectScope';
+import { isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { receivedInvestorUpdate } from '../services/portfolioAskAccess';
+import { isSupportSession } from '../integrations/providers/mercury';
+import { investorActiveCompany, investorHeldProjectIds } from './_investorProjectScope';
 import { supportBookIds } from '../services/profileWriteGates';
 import { pageFacts, pageWindow } from '../services/listPage';
 
 /** #4647: one page of the ledger. The totals beside it are over the whole scope, never over this. */
 const SUPPORT_PAGE = 400;
 /** The states an entry can be filtered to, so an outstanding promise stays reachable at any depth. */
-const STATES = ['promised', 'delivered', 'withdrawn'] as const;
+const STATES = ['promised', 'in_progress', 'delivered', 'withdrawn', 'cancelled'] as const;
 
 /** One project's figures over the WHOLE authorized population, read by its own GROUP BY. */
 type AggRow = {
   project_id: number; project_uid: string | null; project_name: string | null;
   entries: number; delivered: number; withdrawn: number; promised: number;
+  in_progress: number; cancelled: number; overdue: number;
   hours: number; entries_without_hours: number;
 };
 
 const r = new Hono<{ Bindings: Env }>();
 
 export const SUPPORT_KINDS = new Set(['intro', 'board_prep', 'hiring', 'customer', 'fundraising', 'other']);
-export const SUPPORT_STATES = new Set(['promised', 'delivered', 'withdrawn']);
+export const SUPPORT_STATES = new Set(['promised', 'in_progress', 'delivered', 'withdrawn', 'cancelled']);
+/**
+ * D6202: the states a promise is still open in. An open entry may move on; delivered, withdrawn and cancelled are
+ * terminal. `in_progress` never moves back to `promised`: work that started is not un-started.
+ */
+export const OPEN_STATES = new Set(['promised', 'in_progress']);
+/** D6202: the states an entry may be logged in. Withdrawn and cancelled are states an entry reaches. */
+const OPENING_STATES = new Set(['promised', 'in_progress', 'delivered']);
+/** D6202: whether an introduction's meeting happened. */
+export const MEETING_OUTCOMES = new Set(['held', 'not_held']);
+/** D6202: what `overdue` is measured against, said rather than assumed. */
+const OVERDUE_BASIS = "open entries whose due date is before the Worker's date (UTC)";
+/** D6202: every kind with zero figures, so a kind with no entries reads 0 rather than missing. */
+const emptyByKind = (): Record<string, { entries: number; delivered: number; outstanding: number; meetings_held: number }> =>
+  Object.fromEntries([...SUPPORT_KINDS].map((k) => [k, { entries: 0, delivered: 0, outstanding: 0, meetings_held: 0 }]));
 
 type SupportRow = {
-  uid: string; fund_id: number | null; project_id: number;
+  uid: string; fund_id: number | null; project_id: number; ask_uid?: string | null;
   kind: string; state: string; hours: number | null;
   promised_at: string | null; delivered_at: string | null; withdrawn_at: string | null;
   summary: string; outcome: string | null;
+  /** D6202: when the promise is due; an entry with none is never overdue. */
+  due_date?: string | null;
+  /** D6202: an introduction's meeting, and its date. */
+  meeting_outcome?: string | null; meeting_at?: string | null;
+  cancelled_at?: string | null;
+  /** D6203: whether this open entry is past its due date by the Worker's own date (UTC), as `totals.overdue` counts. */
+  overdue?: number | boolean | null;
   recorded_by: number | null; created_at: string; updated_at: string;
   /** D4642: bumped by every amendment; the compare-and-swap key. */
   revision?: number | null;
@@ -97,7 +121,7 @@ const revisionOf = (row: SupportRow): number => {
 };
 
 /** The amendable fields, and how to read each one off a PATCH body. */
-const AMENDABLE = ['hours', 'outcome', 'summary', 'delivered_at'] as const;
+const AMENDABLE = ['hours', 'outcome', 'summary', 'delivered_at', 'due_date', 'meeting_outcome', 'meeting_at'] as const;
 
 /** YYYY-MM-DD or null. A malformed date is dropped rather than stored. */
 function isoDate(v: unknown): string | null {
@@ -129,6 +153,32 @@ function hoursOrNull(v: unknown): number | null {
 }
 
 /**
+ * D6202: the lifecycle fields a POST or PATCH body carries, read and checked. `undefined` means the body did not send
+ * the field (PATCH keeps the stored value); `null` clears it. A malformed date or outcome is refused with a sentence,
+ * never dropped: a due date the member typed and the store silently lost would read as "no due date".
+ */
+function lifecycleFields(body: Record<string, unknown>, kind: string): { error: string } | {
+  due_date?: string | null; meeting_outcome?: string | null; meeting_at?: string | null;
+} {
+  const out: { due_date?: string | null; meeting_outcome?: string | null; meeting_at?: string | null } = {};
+  for (const field of ['due_date', 'meeting_at'] as const) {
+    if (body[field] === undefined) continue;
+    if (body[field] === null || body[field] === '') { out[field] = null; continue; }
+    const day = isoDate(body[field]);
+    if (!day || String(body[field]).length !== 10) return { error: `${field} must be a date written YYYY-MM-DD` };
+    out[field] = day;
+  }
+  if (body.meeting_outcome !== undefined) {
+    if (body.meeting_outcome === null || body.meeting_outcome === '') out.meeting_outcome = null;
+    else if (!MEETING_OUTCOMES.has(String(body.meeting_outcome))) return { error: 'meeting_outcome must be held or not_held' };
+    else out.meeting_outcome = String(body.meeting_outcome);
+  }
+  const meeting = (out.meeting_outcome ?? null) !== null || (out.meeting_at ?? null) !== null;
+  if (meeting && kind !== 'intro') return { error: 'Only an introduction records a meeting' };
+  return out;
+}
+
+/**
  * The caller's accessible project set, or a short-circuit.
  *
  * Returns `{ ids }` where `ids` is null for an operator (no narrowing) or an
@@ -154,9 +204,11 @@ r.get('/', async (c) => {
         page_state: 'recorded', filter: { state: null },
         totals_basis: 'all_entries_in_scope',
         totals: {
-          delivered: 0, promised: 0, withdrawn: 0, entries: 0,
+          delivered: 0, promised: 0, withdrawn: 0, in_progress: 0, cancelled: 0,
+          outstanding: 0, overdue: 0, entries: 0,
           hours_recorded: 0, entries_without_hours: 0,
           companies_in_book: 0, companies_supported: 0,
+          by_kind: emptyByKind(), overdue_basis: OVERDUE_BASIS,
         },
         totals_reason: null,
       });
@@ -169,14 +221,21 @@ r.get('/', async (c) => {
     // the shape the scope predicate beside it already uses, so no fragment
     // reaches the query text (`check-sql-prepare`).
     const win = pageWindow({ limit: c.req.query('limit'), offset: c.req.query('offset') }, SUPPORT_PAGE);
-    const stateFilter = STATES.includes(String(c.req.query('state') || '') as any)
-      ? String(c.req.query('state')) : null;
+    // D6203: `open` is the two open states together (promised or in progress), so Outstanding keeps work that started.
+    const askedState = String(c.req.query('state') || '');
+    const stateFilter = STATES.includes(askedState as any) || askedState === 'open' ? askedState : null;
 
-    const [entries, book, agg] = await Promise.all([
+    const [entries, book, agg, kinds] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT s.uid, s.fund_id, s.project_id, s.kind, s.state, s.hours,
+        `SELECT s.uid, s.fund_id, s.project_id, s.ask_uid, s.kind, s.state, s.hours,
                 s.promised_at, s.delivered_at, s.withdrawn_at, s.summary, s.outcome,
                 s.recorded_by, s.created_at, s.updated_at,
+                -- D6202: the lifecycle fields.
+                s.due_date, s.meeting_outcome, s.meeting_at, s.cancelled_at,
+                -- D6203: the row's own Overdue, by the Worker's date and the rule totals.overdue counts with,
+                -- so the page never measures a due date against the browser's clock.
+                CASE WHEN s.state IN ('promised','in_progress') AND s.due_date IS NOT NULL
+                          AND s.due_date < date('now') THEN 1 ELSE 0 END AS overdue,
                 -- D4642: the revision a client sends back to amend the row, and
                 -- who last amended it. A row from before the migration reads 1.
                 s.revision, s.updated_by,
@@ -184,11 +243,12 @@ r.get('/', async (c) => {
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
-            AND (? IS NULL OR s.state = ?)
+            AND (s.ask_uid IS NULL OR s.recorded_by = ?)
+            AND (? IS NULL OR s.state = ? OR (? = 'open' AND s.state IN ('promised','in_progress')))
           ORDER BY s.created_at DESC, s.id DESC
           LIMIT ? OFFSET ?`,
-      ).bind(csv, csv, stateFilter, stateFilter, win.limit, win.offset)
-        .all<SupportRow>().catch(() => ({ results: [] as SupportRow[] })),
+      ).bind(csv, csv, user.id, stateFilter, stateFilter, stateFilter, win.limit, win.offset)
+        .all<SupportRow>().catch(() => ({ results: null as SupportRow[] | null })),
       // The book itself, so "no support at all" is an anti-join over two stored
       // sets rather than an inference from the ledger's silence.
       c.env.DB.prepare(
@@ -213,17 +273,43 @@ r.get('/', async (c) => {
                 COUNT(*) AS entries,
                 SUM(CASE WHEN s.state = 'delivered' THEN 1 ELSE 0 END) AS delivered,
                 SUM(CASE WHEN s.state = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn,
-                SUM(CASE WHEN s.state NOT IN ('delivered','withdrawn') THEN 1 ELSE 0 END) AS promised,
+                SUM(CASE WHEN s.state = 'promised' THEN 1 ELSE 0 END) AS promised,
+                -- D6202: the two new states, and the open entries past their due date on the
+                -- Worker's own date. An entry with no due date is never overdue.
+                SUM(CASE WHEN s.state = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+                SUM(CASE WHEN s.state = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+                SUM(CASE WHEN s.state IN ('promised','in_progress') AND s.due_date IS NOT NULL
+                          AND s.due_date < date('now') THEN 1 ELSE 0 END) AS overdue,
                 COALESCE(SUM(CASE WHEN s.hours IS NULL THEN 0 ELSE s.hours END), 0) AS hours,
                 SUM(CASE WHEN s.hours IS NULL THEN 1 ELSE 0 END) AS entries_without_hours
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            AND (s.ask_uid IS NULL OR s.recorded_by = ?)
           GROUP BY s.project_id`,
-      ).bind(csv, csv).all<AggRow>().catch(() => ({ results: null })),
+      ).bind(csv, csv, user.id).all<AggRow>().catch(() => ({ results: null })),
+      // D6202: the same population split by kind, so "Introductions made" is a counted figure
+      // (delivered intros) and a held meeting is counted rather than inferred.
+      c.env.DB.prepare(
+        `SELECT s.kind, COUNT(*) AS entries,
+                SUM(CASE WHEN s.state = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN s.state IN ('promised','in_progress') THEN 1 ELSE 0 END) AS outstanding,
+                SUM(CASE WHEN s.meeting_outcome = 'held' THEN 1 ELSE 0 END) AS meetings_held
+           FROM portfolio_support_entries s
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            AND (s.ask_uid IS NULL OR s.recorded_by = ?)
+          GROUP BY s.kind`,
+      ).bind(csv, csv, user.id).all<{ kind: string; entries: number; delivered: number; outstanding: number; meetings_held: number }>()
+        .catch(() => ({ results: null })),
     ]);
 
-    const rows = entries.results || [];
+    // #5847: a failed entries read is Unreadable, never an empty ledger. Only
+    // the figures (below) may fail on their own and leave a readable page.
+    if (entries.results == null) {
+      const reason = "Unreadable — the support ledger's entries could not be read. Try again.";
+      return c.json({ available: false, source: 'entries', detail: reason, reason }, 503);
+    }
+    const rows = (entries.results || []).map((r) => ({ ...r, overdue: Number(r.overdue) === 1 }));
     const bookRows = book.results || [];
     // #4647: a failed aggregate read is not zero. `agg.results` is null only
     // when the read itself failed, and the figures then say Unreadable rather
@@ -233,6 +319,7 @@ r.get('/', async (c) => {
     const byProject = new Map<number, {
       project_id: number; project_uid: string | null; name: string;
       delivered: number; promised: number; withdrawn: number;
+      in_progress: number; cancelled: number; overdue: number;
       hours: number; entries_without_hours: number; entries: number;
     }>();
     const bump = (pid: number, uid: string | null, name: string | null) => {
@@ -240,7 +327,8 @@ r.get('/', async (c) => {
       if (!x) {
         x = {
           project_id: pid, project_uid: uid || null, name: name || `Startup ${pid}`,
-          delivered: 0, promised: 0, withdrawn: 0, hours: 0, entries_without_hours: 0, entries: 0,
+          delivered: 0, promised: 0, withdrawn: 0, in_progress: 0, cancelled: 0, overdue: 0,
+          hours: 0, entries_without_hours: 0, entries: 0,
         };
         byProject.set(pid, x);
       }
@@ -251,13 +339,17 @@ r.get('/', async (c) => {
     let hoursRecorded = 0;
     let withoutHours = 0;
     let entriesTotal = 0;
-    const counts = { delivered: 0, promised: 0, withdrawn: 0 } as Record<string, number>;
+    const counts = { delivered: 0, promised: 0, withdrawn: 0, in_progress: 0, cancelled: 0 } as Record<string, number>;
+    let overdue = 0;
     for (const a of aggRows || []) {
       const x = bump(Number(a.project_id), a.project_uid ?? null, a.project_name ?? null);
       x.entries = Number(a.entries) || 0;
       x.delivered = Number(a.delivered) || 0;
       x.withdrawn = Number(a.withdrawn) || 0;
       x.promised = Number(a.promised) || 0;
+      x.in_progress = Number(a.in_progress) || 0;
+      x.cancelled = Number(a.cancelled) || 0;
+      x.overdue = Number(a.overdue) || 0;
       // An entry with no hours is COUNTED, never summed as zero: the reader is
       // told how much of the total is unmeasured rather than shown a total that
       // silently understates it.
@@ -267,6 +359,9 @@ r.get('/', async (c) => {
       counts.delivered += x.delivered;
       counts.withdrawn += x.withdrawn;
       counts.promised += x.promised;
+      counts.in_progress += x.in_progress;
+      counts.cancelled += x.cancelled;
+      overdue += x.overdue;
       hoursRecorded += Number(a.hours) || 0;
       withoutHours += x.entries_without_hours;
     }
@@ -281,10 +376,17 @@ r.get('/', async (c) => {
       .map((x) => ({ project_id: x.project_id, project_uid: x.project_uid, name: x.name }));
 
     // #4647: the figures are Unreadable, not zero, when their own read failed.
-    const unreadable = aggRows == null;
-    const matchingEntries = stateFilter === 'delivered' ? counts.delivered
-      : stateFilter === 'promised' ? counts.promised
-        : stateFilter === 'withdrawn' ? counts.withdrawn : entriesTotal;
+    // D6202: the per-kind figures share the aggregate's rule: a failed read is Unreadable, never zero.
+    const kindRows = kinds.results as Array<{ kind: string; entries: number; delivered: number; outstanding: number; meetings_held: number }> | null;
+    const unreadable = aggRows == null || kindRows == null;
+    const byKind = emptyByKind();
+    for (const k of kindRows || []) {
+      if (!byKind[k.kind]) continue;
+      byKind[k.kind] = { entries: Number(k.entries) || 0, delivered: Number(k.delivered) || 0,
+        outstanding: Number(k.outstanding) || 0, meetings_held: Number(k.meetings_held) || 0 };
+    }
+    const matchingEntries = stateFilter === 'open' ? counts.promised + counts.in_progress
+      : stateFilter ? (counts[stateFilter] ?? 0) : entriesTotal;
     return c.json({
       entries: rows,
       // The page the `entries` above are, and where the next one starts. The
@@ -304,6 +406,11 @@ r.get('/', async (c) => {
       totals_basis: 'all_entries_in_scope',
       totals: unreadable ? null : {
         ...counts,
+        // D6202: what is still owed (promised or in progress), and how much of it is past due.
+        outstanding: counts.promised + counts.in_progress,
+        overdue,
+        overdue_basis: OVERDUE_BASIS,
+        by_kind: byKind,
         entries: entriesTotal,
         hours_recorded: Math.round(hoursRecorded * 100) / 100,
         entries_without_hours: withoutHours,
@@ -341,14 +448,17 @@ r.post('/', async (c) => {
     // after it is done rather than before.
     const asked = body.state === undefined || body.state === null ? null : String(body.state);
     if (asked !== null && !SUPPORT_STATES.has(asked)) {
-      return c.json({ detail: 'state must be promised or delivered' }, 400);
+      return c.json({ detail: 'state must be promised, in_progress or delivered' }, 400);
     }
     const state = asked ?? 'promised';
-    // Withdrawn is a state an entry REACHES, never one it opens in — a promise
-    // that was never made cannot be withdrawn. PATCH owns that transition.
-    if (state === 'withdrawn') {
-      return c.json({ detail: 'an entry cannot be logged as already withdrawn' }, 400);
+    // Withdrawn and cancelled are states an entry REACHES, never ones it opens in — a promise
+    // that was never made cannot be withdrawn or cancelled. PATCH owns those transitions.
+    if (!OPENING_STATES.has(state)) {
+      return c.json({ detail: `an entry cannot be logged as already ${state}` }, 400);
     }
+    // D6202: a due date, and an introduction's meeting, checked before anything is written.
+    const life = lifecycleFields(body, kind);
+    if ('error' in life) return c.json({ detail: life.error }, 400);
 
     const proj = await c.env.DB.prepare(
       'SELECT id FROM projects WHERE uid = ? AND deleted_at IS NULL',
@@ -362,25 +472,46 @@ r.post('/', async (c) => {
       return c.json({ detail: 'Project not found' }, 404);
     }
 
+    const askUid = body.ask_uid == null ? null : body.ask_uid;
+    if (askUid !== null) {
+      if (typeof askUid !== 'string' || !askUid || askUid.length > 80 || state !== 'promised') {
+        return c.json({ detail: 'A linked entry must identify an ask and start as promised.' }, 400);
+      }
+      if (!isInvestor(user) || await isSupportSession(c)) return c.json({ detail: 'Forbidden' }, 403);
+      const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
+      const ask = await c.env.DB.prepare(
+        `SELECT u.id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id
+          WHERE a.uid = ? AND u.project_id = ? AND u.sent_at IS NOT NULL AND (u.kind IS NULL OR u.kind <> 'report')`,
+      ).bind(askUid, proj.id).first<{ id: number }>();
+      if (!held?.includes(proj.id) || !ask || !(await receivedInvestorUpdate(c.env, ask.id, user.id))) {
+        return c.json({ detail: 'Ask not found' }, 404);
+      }
+    }
+
     const uid = newUid();
     const now = nowIso();
     const delivered = state === 'delivered';
-    await c.env.DB.prepare(
+    const write = await c.env.DB.prepare(
       `INSERT INTO portfolio_support_entries
          (uid, fund_id, project_id, kind, state, hours, promised_at, delivered_at,
-          summary, outcome, recorded_by, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          summary, outcome, recorded_by, created_at, updated_at,
+          due_date, meeting_outcome, meeting_at, ask_uid)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (ask_uid, recorded_by) DO NOTHING`,
     ).bind(
       uid, proj.id, kind, state, hoursOrNull(body.hours),
       isoDate(body.promised_at), delivered ? (isoDate(body.delivered_at) || now.slice(0, 10)) : null,
       summary, typeof body.outcome === 'string' ? body.outcome.slice(0, 2000) : null,
       user.id, now, now,
+      life.due_date ?? null, life.meeting_outcome ?? null, life.meeting_at ?? null, askUid,
     ).run();
 
-    const row = await c.env.DB.prepare(
-      'SELECT * FROM portfolio_support_entries WHERE uid = ?',
-    ).bind(uid).first<SupportRow>();
-    return c.json({ item: row }, 201);
+    const created = !askUid || !!write.meta.changes;
+    const row = askUid
+      ? await c.env.DB.prepare('SELECT * FROM portfolio_support_entries WHERE ask_uid = ? AND recorded_by = ?')
+        .bind(askUid, user.id).first<SupportRow>()
+      : await c.env.DB.prepare('SELECT * FROM portfolio_support_entries WHERE uid = ?').bind(uid).first<SupportRow>();
+    return c.json({ item: row }, created ? 201 : 200);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -397,7 +528,7 @@ r.patch('/:uid', async (c) => {
     const existing = await c.env.DB.prepare(
       'SELECT * FROM portfolio_support_entries WHERE uid = ?',
     ).bind(c.req.param('uid')).first<SupportRow>();
-    if (!existing) return c.json({ detail: 'Not found' }, 404);
+    if (!existing || (existing.ask_uid && Number(existing.recorded_by) !== Number(user.id))) return c.json({ detail: 'Not found' }, 404);
     if (empty || (ids != null && !ids.includes(Number(existing.project_id)))) {
       return c.json({ detail: 'Not found' }, 404);
     }
@@ -422,8 +553,11 @@ r.patch('/:uid', async (c) => {
 
     const asked = body.state === undefined ? null : String(body.state);
     if (asked !== null && !SUPPORT_STATES.has(asked)) {
-      return c.json({ detail: 'state must be promised, delivered or withdrawn' }, 400);
+      return c.json({ detail: 'state must be promised, in_progress, delivered, withdrawn or cancelled' }, 400);
     }
+    // D6202: the lifecycle fields, checked against the entry's own kind.
+    const life = lifecycleFields(body, existing.kind);
+    if ('error' in life) return c.json({ detail: life.error }, 400);
 
     // D4642: the compare-and-swap key. A client that read revision N sends it
     // back; if the row has moved on, the amendment is refused and the caller is
@@ -459,10 +593,21 @@ r.patch('/:uid', async (c) => {
     // survive. D4642: the refusal now names the record, so a page showing many
     // entries can say which one it is talking about, and says what a member
     // CAN still do, because amending a terminal entry is allowed.
-    if (asked !== null && asked !== existing.state && existing.state !== 'promised') {
+    if (asked !== null && asked !== existing.state && !OPEN_STATES.has(existing.state)) {
       return c.json({
         code: 'state_is_terminal',
         detail: `This entry is already ${existing.state}, so its state cannot change. Its hours, outcome and description can still be amended.`,
+        ...names,
+        state: existing.state,
+      }, 409);
+    }
+
+    // D6202: work that started is not un-started. In progress moves on to delivered, withdrawn or
+    // cancelled, never back to promised.
+    if (asked === 'promised' && existing.state === 'in_progress') {
+      return c.json({
+        code: 'cannot_reopen',
+        detail: 'This entry is already in progress, so it cannot move back to promised. It can be delivered or cancelled.',
         ...names,
         state: existing.state,
       }, 409);
@@ -482,6 +627,13 @@ r.patch('/:uid', async (c) => {
     const withdrawnAt = state === 'withdrawn'
       ? (existing.withdrawn_at || (moving ? day : null))
       : existing.withdrawn_at;
+    // D6202: cancelling stamps its own date, as withdrawing does.
+    const cancelledAt = state === 'cancelled'
+      ? (existing.cancelled_at || (moving ? day : null))
+      : (existing.cancelled_at ?? null);
+    const dueDate = life.due_date === undefined ? (existing.due_date ?? null) : life.due_date;
+    const meetingOutcome = life.meeting_outcome === undefined ? (existing.meeting_outcome ?? null) : life.meeting_outcome;
+    const meetingAt = life.meeting_at === undefined ? (existing.meeting_at ?? null) : life.meeting_at;
     const hours = body.hours === undefined ? existing.hours : hoursOrNull(body.hours);
     const outcome = body.outcome === undefined
       ? existing.outcome
@@ -499,6 +651,9 @@ r.patch('/:uid', async (c) => {
       if (field === 'hours') return hours !== existing.hours;
       if (field === 'outcome') return outcome !== existing.outcome;
       if (field === 'summary') return summary !== existing.summary;
+      if (field === 'due_date') return dueDate !== (existing.due_date ?? null);
+      if (field === 'meeting_outcome') return meetingOutcome !== (existing.meeting_outcome ?? null);
+      if (field === 'meeting_at') return meetingAt !== (existing.meeting_at ?? null);
       return deliveredAt !== existing.delivered_at;
     });
     const moved = state !== existing.state;
@@ -515,10 +670,11 @@ r.patch('/:uid', async (c) => {
         `UPDATE portfolio_support_entries
             SET state = ?, hours = ?, outcome = ?, summary = ?,
                 delivered_at = ?, withdrawn_at = ?, updated_at = ?,
-                revision = ?, updated_by = ?
+                revision = ?, updated_by = ?,
+                cancelled_at = ?, due_date = ?, meeting_outcome = ?, meeting_at = ?
           WHERE uid = ? AND revision = ?`,
       ).bind(state, hours, outcome, summary, deliveredAt, withdrawnAt, now,
-        nextRevision, user.id, existing.uid, current),
+        nextRevision, user.id, cancelledAt, dueDate, meetingOutcome, meetingAt, existing.uid, current),
       // The history row is written by the same batch, from the row the UPDATE
       // just wrote: its SELECT matches on the revision the UPDATE produced AND
       // on this request's own `updated_at` and `updated_by`, so it cannot fire
@@ -574,9 +730,9 @@ r.get('/:uid/history', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const { ids, empty } = await scopeFor(c, user);
     const existing = await c.env.DB.prepare(
-      'SELECT id, uid, project_id, state, revision FROM portfolio_support_entries WHERE uid = ?',
+      'SELECT id, uid, project_id, state, revision, ask_uid, recorded_by FROM portfolio_support_entries WHERE uid = ?',
     ).bind(c.req.param('uid')).first<SupportRow & { id: number }>();
-    if (!existing) return c.json({ detail: 'Not found' }, 404);
+    if (!existing || (existing.ask_uid && Number(existing.recorded_by) !== Number(user.id))) return c.json({ detail: 'Not found' }, 404);
     if (empty || (ids != null && !ids.includes(Number(existing.project_id)))) {
       return c.json({ detail: 'Not found' }, 404);
     }

@@ -11,20 +11,28 @@
  * flow's table and the deal's Overview (SC6, DL24a). The founder's page keeps
  * its waits: it is part 5's (#3281).
  *
+ * D6168 (#6168): `ScopeRows` draws a few scopes' rows on the deal's Team,
+ * Market and Traction tabs from the same read, and the panel's drawer has an
+ * address (`?scope=team`) when the page asks for it (`addressed`).
+ *
  * Nothing here computes a score. A scope with no value is "Not enough
  * recorded", "Not expected yet", "Not scored yet" or "Could not be read",
  * never a bar or a number of zero.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Unreadable } from '../../../ui';
 import { ventureScoresApi } from '../../../lib/api/ventureScores';
 import { reportError } from '../../../lib/log';
 import {
-  COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_REVIEWED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS,
-  barText, bandWord, batches, coverageText, gradeMix, panelOf, reviewText, stampText, stripBar, stripOf, unreadScopes,
+  COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_REVIEWED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS, WEIGHTING_LINE,
+  CHANGE_NOT_RECORDED, CONTEXT_VIEW, barText, bandWord, batches, coverageText, evidenceOf, panelOf, reviewText, scoreCellOf, stampText, stripBar, stripOf,
+  scopeParam, unreadScopes, valueOf,
 } from './scorecardModel';
+import { ScopeScore } from '../../../pages/investor/dealflow/ScopeScore.jsx';
+import { scopeHref, tabHref } from '../../../pages/dealPageModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import WeightingControl from './Weighting';
 
 const CARD = 'flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const SUB = 'text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -187,19 +195,6 @@ function Mix({ mix, wide = false }) {
   );
 }
 
-function ValueBar({ s }) {
-  if (s.state === 'unreadable') return <span className="text-[11.5px] text-red-700 dark:text-red-300">{UNREADABLE}</span>;
-  if (s.state === 'scored' && s.value != null) {
-    return (
-      <span className="block h-1.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-800">
-        <span className="block h-full rounded bg-violet-600 dark:bg-violet-400" style={{ width: `${Math.min(100, Math.max(0, s.value))}%`, opacity: OPACITY[s.confidence] ?? 0.3 }} />
-      </span>
-    );
-  }
-  if (s.state === 'not_enough') return <span className="block border-t border-dashed border-gray-400 dark:border-gray-500" />;
-  return <span className={SUB}>—</span>;
-}
-
 const stateWord = (s) => ({ not_enough: NOT_ENOUGH, not_expected: NOT_EXPECTED, not_scored: NOT_SCORED, unreadable: UNREADABLE }[s.state] || null);
 
 /** SC1's chart: each scope's value on 0–100, opacity its confidence. Open reads only. */
@@ -226,45 +221,79 @@ function GlanceChart({ scopes }) {
   );
 }
 
-const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_auto_36px_14px] items-center gap-2 sm:grid-cols-[minmax(0,1.25fr)_116px_36px_minmax(56px,1fr)_88px_84px_58px_14px]';
+/*
+ * D4815 part 51 (#5905, board DE05): Scope, Score (the shared score: band and confidence, or the
+ * state's own word), Value (0–100 when the read sent one, Locked before the NDA), Coverage,
+ * Change, Evidence. On a phone: Scope, Score, Value and the disclosure mark.
+ */
+const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_auto_40px_14px] items-center gap-2 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_52px_84px_96px_minmax(0,1.2fr)_14px]';
+const HEADS = ['Scope', 'Score', 'Value', 'Coverage', 'Change', 'Evidence', ''];
 
-/** One scope row (SC1, SC19a). Open reads open the drawer; a masked read shows the band and locks the value. */
-function ScopeRow({ s, masked, onOpen, onRetry }) {
+/**
+ * One scope row (DE05, SC19a). The row is a disclosure: it expands in place into the scope's
+ * evidence (`aria-expanded`, `aria-controls`), by click, Enter or Space. A row that could not be
+ * read says so with Try again and never expands.
+ */
+function ScopeRow({ s, masked, expanded, onToggle, onRetry }) {
   if (s.state === 'unreadable') {
     return (
       <div role="row" className="my-1.5 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900 dark:bg-red-950/40" data-testid={`scorecard-scope-${s.key}`}>
         <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{s.label}</span>
+        <ScopeScore cell={scoreCellOf(s)} label={s.label} testId={`scorecard-score-${s.key}`} />
         <span className="text-[12.5px] text-red-700 dark:text-red-300" role="alert">{STATE_WORDS.scope_unreadable(s.label)}</span>
         <button type="button" onClick={onRetry} className={`${BTN} ml-auto`} data-testid={`scorecard-retry-${s.key}`}>Try again</button>
       </div>
     );
   }
-  const word = stateWord(s);
   const review = reviewText(s.review);
-  const opens = !masked && Array.isArray(s.inputs);
-  const cells = (
-    <>
+  const value = valueOf(s, masked);
+  const ev = evidenceOf(s, masked);
+  const label = masked && s.state === 'scored' ? `${s.label}: ${bandWord(s.band, s.key)}, ${s.confidence} confidence, value locked` : barText(s);
+  return (
+    <button type="button" aria-expanded={expanded} aria-controls={`scorecard-evidence-${s.key}`} aria-label={`${label}. ${expanded ? 'Hide' : 'Show'} its evidence`}
+      onClick={() => onToggle(s.key)}
+      className={`${ROW_GRID} min-h-[44px] w-full border-b border-gray-100 px-2 py-2 text-left hover:bg-violet-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-800 dark:hover:bg-violet-950/40 ${expanded ? 'bg-violet-50 dark:bg-violet-950/40' : ''}`}
+      data-testid={`scorecard-scope-${s.key}`}>
       <span className="flex min-w-0 flex-col text-left">
         <span className="text-[13px] font-semibold leading-tight text-axal-ink dark:text-gray-100">{s.label}</span>
         {review && <span className="truncate text-[11.5px] text-violet-700 dark:text-violet-300">{review}</span>}
       </span>
-      <span>{word ? <span className="block text-[11.5px] leading-tight text-axal-muted dark:text-gray-400">{word}</span> : <BandPill band={s.band} scope={s.key} />}</span>
-      <span className="font-mono text-[13.5px] font-semibold text-axal-ink dark:text-gray-100">
-        {s.state !== 'scored' ? <span className="text-axal-muted dark:text-gray-400">—</span> : masked ? <span aria-label="Value locked until the NDA" className="text-axal-muted dark:text-gray-400">⊘</span> : s.value == null ? '—' : Math.round(s.value)}
+      <span className="min-w-0"><ScopeScore cell={scoreCellOf(s)} label={s.label} testId={`scorecard-score-${s.key}`} /></span>
+      <span className="font-mono text-[13.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid={`scorecard-value-${s.key}`}>
+        {value.kind === 'value' ? value.text : value.kind === 'locked' ? <ScopeScore cell={value.cell} label={`${s.label} value`} /> : <span className="text-axal-muted dark:text-gray-400">—</span>}
       </span>
-      <span className="hidden sm:block">{masked && s.state === 'scored' ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">After the NDA</span> : <ValueBar s={s} />}</span>
-      <span className="hidden sm:block"><Confidence level={s.state === 'scored' ? s.confidence : null} /></span>
       <span className="hidden font-mono text-[11.5px] text-axal-ink dark:text-gray-300 sm:block">{coverageText(s.coverage) || '—'}</span>
-      <span className="hidden sm:block">{masked ? null : <Mix mix={gradeMix(s.inputs)} />}</span>
-      <span aria-hidden="true" className="text-axal-muted dark:text-gray-500">{opens ? '›' : ''}</span>
-    </>
-  );
-  const label = masked && s.state === 'scored' ? `${s.label}: ${bandWord(s.band, s.key)}, ${s.confidence} confidence, value locked` : barText(s);
-  if (!opens) return <div role="row" aria-label={label} className={`${ROW_GRID} min-h-[44px] border-b border-gray-100 px-2 py-2 dark:border-gray-800`} data-testid={`scorecard-scope-${s.key}`}>{cells}</div>;
-  return (
-    <button type="button" aria-label={`${label}. Open its inputs`} onClick={() => onOpen(s.key)} className={`${ROW_GRID} min-h-[44px] w-full border-b border-gray-100 px-2 py-2 text-left hover:bg-violet-50 dark:border-gray-800 dark:hover:bg-violet-950/40`} data-testid={`scorecard-scope-${s.key}`}>
-      {cells}
+      <span className="hidden text-[11.5px] text-axal-muted dark:text-gray-400 sm:block" title={CHANGE_NOT_RECORDED} data-testid={`scorecard-change-${s.key}`}>Not recorded</span>
+      <span className="hidden min-w-0 sm:flex sm:flex-col sm:gap-1" data-testid={`scorecard-evidence-state-${s.key}`}>
+        {ev.state === 'graded' && <Mix mix={ev.mix} />}
+        <span className={`text-[11.5px] ${ev.state === 'graded' ? 'text-axal-ink dark:text-gray-300' : 'text-axal-muted dark:text-gray-400'}`}>{ev.text}</span>
+      </span>
+      <span aria-hidden="true" className="text-axal-muted dark:text-gray-500">{expanded ? '⌄' : '›'}</span>
     </button>
+  );
+}
+
+/** What one scope rests on, in place under its row (DE05): its evidence, the door to the full detail and its context. */
+function ScopeExpansion({ s, masked, dealId, ndaHref, onDetail }) {
+  const view = CONTEXT_VIEW[s.key];
+  return (
+    <div id={`scorecard-evidence-${s.key}`} role="region" aria-label={`${s.label} evidence`}
+      className="flex flex-col gap-2 border-b border-gray-100 bg-violet-50/40 px-3 py-3 dark:border-gray-800 dark:bg-violet-950/20" data-testid={`scorecard-expansion-${s.key}`}>
+      {masked ? (
+        <>
+          <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-200">{s.label}’s inputs, their grades and dates open after you sign the NDA. Its band and confidence show now.</p>
+          {ndaHref && <Link to={ndaHref} className={`${BTN_P} w-fit`} data-testid={`scorecard-expansion-nda-${s.key}`}>{STATE_WORDS.masked.act}</Link>}
+        </>
+      ) : (
+        <>
+          <ScopeEvidence s={s} />
+          <button type="button" className={`${BTN} w-fit`} onClick={() => onDetail(s.key)} data-testid={`scorecard-detail-${s.key}`}>Open full detail</button>
+        </>
+      )}
+      {view && dealId != null && (
+        <Link to={tabHref(dealId, view)} className={LINK} data-testid={`scorecard-context-${s.key}`}>{s.label} in full, under Scorecard</Link>
+      )}
+    </div>
   );
 }
 
@@ -332,12 +361,55 @@ function InputRow({ i }) {
   );
 }
 
-/** SC2–SC5, SC22: one scope's drawer. A bottom sheet on a phone (SC19b). It reads nothing and changes nothing. */
-export function ScopeDrawer({ s, model, computedAt, onClose }) {
+/** One scope's evidence: its state, review, inputs (PMF in its groups), Risk's layers. It reads nothing and changes nothing. */
+function ScopeEvidence({ s }) {
   const inputs = s.inputs || [];
   const groups = s.key === 'pmf' && inputs.some((i) => i.group) ? Object.entries(PMF_GROUPS).map(([g, title]) => [title, inputs.filter((i) => i.group === g)]).filter(([, l]) => l.length) : [['Inputs · value and points', inputs]];
   const review = reviewText(s.review);
   const word = stateWord(s);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-3">
+        {word ? <span className="rounded-full border border-dashed border-gray-400 px-2 py-0.5 text-[11.5px] font-bold text-axal-muted dark:border-gray-500 dark:text-gray-400">{word}</span>
+          : <><BandPill band={s.band} scope={s.key} /><span className="font-mono text-[24px] font-bold leading-none text-axal-ink dark:text-gray-100">{s.value == null ? '—' : Math.round(s.value)}</span><Confidence level={s.confidence} /></>}
+        {coverageText(s.coverage) && <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{coverageText(s.coverage)}</span>}
+      </div>
+      {s.key === 'risk' && <p className={`m-0 ${SUB}`}>A higher value means lower risk.</p>}
+      {s.reason && s.state !== 'scored' && <p className={`m-0 ${SUB}`}>{s.reason}</p>}
+      {review && <p className="m-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="scorecard-review">{review} The computed value stays as it is.</p>}
+      {inputs.length === 0 && <p className={`m-0 ${SUB}`}>No input is stored for this scope yet.</p>}
+      {groups.map(([title, list]) => (
+        <div key={title}>
+          <h4 className={`${EYE} mb-0.5 mt-4`}>{title}</h4>
+          <ul className="m-0 list-none p-0">{list.map((i) => <InputRow key={i.key} i={i} />)}</ul>
+        </div>
+      ))}
+      {s.layers && (
+        <div data-testid="scorecard-risk-layers">
+          <h4 className={`${EYE} mb-0.5 mt-4`}>The ten venture-risk layers · analyst reviews</h4>
+          <ul className="m-0 list-none p-0">
+            {s.layers.map((l) => (
+              <li key={l.key} className="flex flex-col gap-0.5 border-b border-axal-hairline py-1.5 text-[13px] last:border-0 dark:border-gray-800" data-testid={`risk-layer-${l.key}`}>
+                <span className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-axal-ink dark:text-gray-100">{l.label}</span>
+                  <span className={`font-mono text-[12px] ${l.reviewed ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{l.text}{l.reviewed_on ? ` · ${l.reviewed_on}` : ''}</span>
+                </span>
+                {l.note && <span className={SUB}>{l.note}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className={`m-0 mt-1 ${SUB}`}>Each layer is an analyst&rsquo;s review; one no analyst scored is {NOT_REVIEWED.toLowerCase()}, never 0. They feed &ldquo;Analyst layer reviews&rdquo; above as their mean.</p>
+        </div>
+      )}
+      {inputs.some((i) => i.kind === 'counted') && (
+        <p className="m-0 mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-600 dark:text-gray-300">Individual skills and values are never shown. {COUNTED}.</p>
+      )}
+    </div>
+  );
+}
+
+/** SC2–SC5, SC22: one scope's drawer, the full detail of `ScopeEvidence`. A bottom sheet on a phone (SC19b). */
+export function ScopeDrawer({ s, model, computedAt, onClose }) {
   const footer = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2 text-[12px] text-axal-muted dark:text-gray-400">
       <span className="font-mono">Model v{model || '1.0'}{stampText(s.computed_at || computedAt) ? ` · computed ${stampText(s.computed_at || computedAt)} UTC` : ''}</span>
@@ -346,43 +418,7 @@ export function ScopeDrawer({ s, model, computedAt, onClose }) {
   );
   return (
     <Sheet label={`${s.label} scope`} eyebrow="Scorecard · scope" title={s.label} onClose={onClose} width={560} phone="sheet" footer={footer} testId={`scorecard-drawer-${s.key}`}>
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-3">
-          {word ? <span className="rounded-full border border-dashed border-gray-400 px-2 py-0.5 text-[11.5px] font-bold text-axal-muted dark:border-gray-500 dark:text-gray-400">{word}</span>
-            : <><BandPill band={s.band} scope={s.key} /><span className="font-mono text-[24px] font-bold leading-none text-axal-ink dark:text-gray-100">{s.value == null ? '—' : Math.round(s.value)}</span><Confidence level={s.confidence} /></>}
-          {coverageText(s.coverage) && <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{coverageText(s.coverage)}</span>}
-        </div>
-        {s.key === 'risk' && <p className={`m-0 ${SUB}`}>A higher value means lower risk.</p>}
-        {s.reason && s.state !== 'scored' && <p className={`m-0 ${SUB}`}>{s.reason}</p>}
-        {review && <p className="m-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="scorecard-review">{review} The computed value stays as it is.</p>}
-        {inputs.length === 0 && <p className={`m-0 ${SUB}`}>No input is stored for this scope yet.</p>}
-        {groups.map(([title, list]) => (
-          <div key={title}>
-            <h4 className={`${EYE} mb-0.5 mt-4`}>{title}</h4>
-            <ul className="m-0 list-none p-0">{list.map((i) => <InputRow key={i.key} i={i} />)}</ul>
-          </div>
-        ))}
-        {s.layers && (
-          <div data-testid="scorecard-risk-layers">
-            <h4 className={`${EYE} mb-0.5 mt-4`}>The ten venture-risk layers · analyst reviews</h4>
-            <ul className="m-0 list-none p-0">
-              {s.layers.map((l) => (
-                <li key={l.key} className="flex flex-col gap-0.5 border-b border-axal-hairline py-1.5 text-[13px] last:border-0 dark:border-gray-800" data-testid={`risk-layer-${l.key}`}>
-                  <span className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-axal-ink dark:text-gray-100">{l.label}</span>
-                    <span className={`font-mono text-[12px] ${l.reviewed ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{l.text}{l.reviewed_on ? ` · ${l.reviewed_on}` : ''}</span>
-                  </span>
-                  {l.note && <span className={SUB}>{l.note}</span>}
-                </li>
-              ))}
-            </ul>
-            <p className={`m-0 mt-1 ${SUB}`}>Each layer is an analyst&rsquo;s review; one no analyst scored is {NOT_REVIEWED.toLowerCase()}, never 0. They feed &ldquo;Analyst layer reviews&rdquo; above as their mean.</p>
-          </div>
-        )}
-        {inputs.some((i) => i.kind === 'counted') && (
-          <p className="m-0 mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-600 dark:text-gray-300">Individual skills and values are never shown. {COUNTED}.</p>
-        )}
-      </div>
+      <ScopeEvidence s={s} />
     </Sheet>
   );
 }
@@ -406,6 +442,84 @@ export function useDealScorecard(dealId) {
   }, [dealId]);
   useEffect(() => { load(); }, [load]);
   return [read, load];
+}
+
+/** D6168: the refusals as the panel words them, in a line instead of a centred card. */
+const REFUSED = new Set(['not_on_deal', 'no_access', 'not_found', 'locked']);
+
+/** D6168: one scope's row as the Scorecard tab draws it, with Open to its drawer there. */
+function ScopeLine({ s, masked, dealId, onRetry, testId }) {
+  const cell = <ScopeScore cell={scoreCellOf(s)} label={s.label} testId={`${testId}-score-${s.key}`} />;
+  const name = <span className="min-w-0 flex-1 basis-[150px] text-[13px] font-semibold text-axal-ink dark:text-gray-100">{s.label}</span>;
+  const ROW = 'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 py-2 first:border-t-0 dark:border-gray-800';
+  if (s.state === 'unreadable') {
+    return (
+      <li className={ROW} data-testid={`${testId}-${s.key}`}>
+        {name}{cell}
+        <span className="text-[12.5px] text-red-700 dark:text-red-300" role="alert">{STATE_WORDS.scope_unreadable(s.label)}</span>
+        <button type="button" onClick={onRetry} className={BTN} data-testid={`${testId}-retry-${s.key}`}>Try again</button>
+      </li>
+    );
+  }
+  const value = valueOf(s, masked);
+  const coverage = coverageText(s.coverage);
+  return (
+    <li className={ROW} data-testid={`${testId}-${s.key}`}>
+      {name}{cell}
+      {value.kind === 'value' && <span className="font-mono text-[12.5px] text-axal-ink dark:text-gray-100" data-testid={`${testId}-value-${s.key}`}><span className="font-sans text-axal-muted dark:text-gray-400">Value </span>{value.text}</span>}
+      {value.kind === 'locked' && <span data-testid={`${testId}-value-${s.key}`}><ScopeScore cell={value.cell} label={`${s.label} value`} /></span>}
+      {coverage && <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-coverage-${s.key}`}>{coverage}</span>}
+      {!masked && (
+        <Link to={scopeHref(dealId, s.key)} aria-label={`Open ${s.label} on the scorecard`} className={`${LINK} inline-flex min-h-[44px] items-center sm:min-h-0`} data-testid={`${testId}-open-${s.key}`}>Open</Link>
+      )}
+    </li>
+  );
+}
+
+/**
+ * D6168 (#6168): a few scopes' rows (`keys`, in the order given) for the deal's Team, Market and
+ * Traction tabs, read through `useDealScorecard` once per mount. Each row is the Scorecard tab's:
+ * the shared score (band and confidence, or the state's own word), the value only after the NDA,
+ * and coverage; Open goes to that scope's drawer on the Scorecard tab. Locked, not on the deal, no
+ * access and unreadable read as the tab words them. Nothing is a zero.
+ */
+export function ScopeRows({ dealId, keys, ndaHref = null, testId = 'scope-rows' }) {
+  const [read, retry] = useDealScorecard(dealId);
+  const panel = panelOf(read);
+  let body;
+  if (panel.state === 'loading') body = <p className={`m-0 ${SUB}`} aria-live="polite">{STATE_WORDS.reading}</p>;
+  else if (panel.state === 'unreadable') body = <div data-testid={`${testId}-unreadable`}><Unreadable what="The scorecard" claim="That is not a score of zero." onRetry={retry} /></div>;
+  else if (REFUSED.has(panel.state)) {
+    const words = panel.state === 'locked' ? { title: STATE_WORDS.locked.title, line: panel.reason } : STATE_WORDS[panel.state];
+    body = (
+      <div className="flex flex-col gap-1" data-testid={`${testId}-${panel.state.replace(/_/g, '-')}`}>
+        <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{words.title}</p>
+        <p className={`m-0 ${SUB}`}>{words.line}</p>
+      </div>
+    );
+  } else {
+    const masked = panel.state === 'masked';
+    const rows = keys.map((k) => panel.scopes.find((s) => s.key === k)).filter(Boolean);
+    body = (
+      <>
+        <ul className="m-0 flex list-none flex-col p-0">
+          {rows.map((s) => <ScopeLine key={s.key} s={s} masked={masked} dealId={dealId} onRetry={retry} testId={testId} />)}
+        </ul>
+        {masked && (
+          <p className={`m-0 ${SUB}`} data-testid={`${testId}-masked`}>
+            {STATE_WORDS.masked.line}{ndaHref && <> <Link to={ndaHref} className={LINK}>{STATE_WORDS.masked.act}</Link></>}
+          </p>
+        )}
+      </>
+    );
+  }
+  return (
+    <section className={CARD} data-testid={testId}>
+      <span className={EYE}>Venture scorecard</span>
+      <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">On the scorecard</h3>
+      {body}
+    </section>
+  );
 }
 
 function Header({ panel }) {
@@ -453,13 +567,42 @@ function Loading() {
 }
 
 /**
+ * #6169: the investor's own weighting (D1258, D4635), read from `GET
+ * /api/venture-scores/weights` and edited in the same dialog as Deal flow's.
+ * A failed read says so with Try again; it never reads as Equal.
+ */
+function Weighting() {
+  return <div className={CARD} data-testid="scorecard-weighting"><WeightingControl note={WEIGHTING_LINE} /></div>;
+}
+
+/**
  * SC1's panel. With a `dealId` it reads the deal's scorecard by the
  * visibility rule (D1256 §2) and draws one of SC1 and SC15–SC18. The
  * founder's audience keeps D1253's waits: their page is part 5's.
+ * `weighting={false}` leaves the weighting out where the page already draws
+ * it (Deal flow's toolbar, whose sort it must re-read on save).
  */
-export default function VentureScorecard({ audience = 'investor', dealId = null, ndaHref = null }) {
+export default function VentureScorecard({ audience = 'investor', dealId = null, ndaHref = null, weighting = true, addressed = false }) {
   const [read, retry] = useDealScorecard(audience === 'founder' ? null : dealId);
-  const [open, setOpen] = useState(null);
+  // D6168: on the deal page the drawer is `?scope=<key>`: opening it is a step in history, so Back closes it;
+  // its own close replaces the address. Elsewhere (Deal flow's peek) it stays the panel's own state.
+  const [params, setParams] = useSearchParams();
+  const [local, setLocal] = useState(null);
+  const open = addressed ? scopeParam(params.get('scope')) : local;
+  const setOpen = useCallback((key) => {
+    if (!addressed) { setLocal(key); return; }
+    setParams((was) => {
+      const next = new URLSearchParams(was);
+      if (key) next.set('scope', key); else next.delete('scope');
+      return next;
+    }, { replace: !key });
+  }, [addressed, setParams]);
+  const [expanded, setExpanded] = useState(() => new Set());
+  const toggle = useCallback((key) => setExpanded((was) => {
+    const next = new Set(was);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
 
   if (audience === 'founder' || dealId == null) {
     return (
@@ -473,7 +616,7 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
             </li>
           ))}
         </ul>
-        {audience === 'founder' ? <><ScorecardWait id="founder" /><ScorecardWait id="sharing" /><ScorecardWait id="trajectory" /></> : <ScorecardWait id="weighting" />}
+        {audience === 'founder' ? <><ScorecardWait id="founder" /><ScorecardWait id="sharing" /><ScorecardWait id="trajectory" /></> : weighting && <WeightingControl note={WEIGHTING_LINE} />}
       </section>
     );
   }
@@ -488,7 +631,8 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
   else if (panel.state === 'locked') body = <Closed words={{ title: STATE_WORDS.locked.title, line: panel.reason }} testId="scorecard-locked" />;
   else {
     const masked = panel.state === 'masked';
-    const shown = panel.scopes.find((s) => s.key === open);
+    // A drawer opens on a scope that could be read, and never before the NDA: its inputs are not sent.
+    const shown = masked ? null : panel.scopes.find((s) => s.key === open && s.state !== 'unreadable');
     body = (
       <>
         {masked && (
@@ -506,15 +650,26 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
           <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
             {!masked && <GlanceChart scopes={panel.scopes} />}
             <section className={CARD} data-testid="scorecard-scopes">
-              <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Scopes <span className="font-normal text-axal-muted dark:text-gray-400">· {panel.empty ? STATE_WORDS.empty : masked ? 'No overall total.' : 'No overall total. Open a scope to see its inputs.'}</span></h3>
+              <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Eleven scopes <span className="font-normal text-axal-muted dark:text-gray-400">· no overall score. {panel.empty ? STATE_WORDS.empty : 'Open a scope to see its evidence.'}</span></h3>
               <div role="table" aria-label="Scorecard scopes">
                 <div role="row" className={`${ROW_GRID} border-b border-gray-100 px-2 py-2 dark:border-gray-800`}>
-                  {['Scope', 'Band', 'Value', '0–100', 'Confidence', 'Coverage', 'Grades', ''].map((x, i) => (
-                    <span key={x || i} role="columnheader" className={`${EYE} ${i >= 3 && i <= 6 ? 'hidden sm:block' : ''}`}>{x}</span>
+                  {HEADS.map((x, i) => (
+                    <span key={x || i} role="columnheader" className={`${EYE} ${i >= 3 && i <= 5 ? 'hidden sm:block' : ''}`}>{x}</span>
                   ))}
                 </div>
-                {panel.scopes.map((s) => <ScopeRow key={s.key} s={s} masked={masked} onOpen={setOpen} onRetry={retry} />)}
+                {panel.scopes.map((s) => (
+                  <React.Fragment key={s.key}>
+                    <ScopeRow s={s} masked={masked} expanded={expanded.has(s.key)} onToggle={toggle} onRetry={retry} />
+                    {s.state !== 'unreadable' && expanded.has(s.key) && <ScopeExpansion s={s} masked={masked} dealId={dealId} ndaHref={ndaHref} onDetail={setOpen} />}
+                  </React.Fragment>
+                ))}
               </div>
+              <p className={`m-0 ${SUB}`} data-testid="scorecard-context">
+                Each scope’s change since your last visit is not recorded yet. Team, Market and Traction each read in full under this tab:{' '}
+                {Object.values(CONTEXT_VIEW).map((v, i) => (
+                  <React.Fragment key={v}>{i ? ', ' : ''}<Link to={tabHref(dealId, v)} className={LINK} data-testid={`scorecard-context-link-${v}`}>{v[0].toUpperCase() + v.slice(1)}</Link></React.Fragment>
+                ))}.
+              </p>
             </section>
           </div>
           <div className="flex min-w-0 flex-col gap-4">
@@ -524,7 +679,7 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
                 <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[12.5px] text-axal-ink dark:text-gray-300">{STATE_WORDS.after_nda.map((x) => <li key={x}>{x}</li>)}</ul>
               </section>
             ) : <RestsOn mix={panel.rests} />}
-            {panel.viewer === 'investor' && <ScorecardWait id="weighting" />}
+            {panel.viewer === 'investor' && weighting && <Weighting />}
           </div>
         </div>
         {shown && <ScopeDrawer s={shown} model={panel.model} computedAt={panel.computed_at} onClose={() => setOpen(null)} />}

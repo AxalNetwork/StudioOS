@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import FromLovable from '../src/pages/cycles/FromLovable.jsx';
 import { LOVABLE_WORDS, checkedAt, slotView } from '../src/pages/cycles/lovableAppLink.js';
+import { isBefore, modulesWith, partElement } from './_buildParts.mjs'; // #5507: Lovable's key only; the full list is build_parts_contract_5507's
 import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
@@ -158,4 +159,14 @@ test('remove asks first and says nothing changes in Lovable; the experiment reco
   } finally { await m.unmount(); }
   const route = cycleRouteText();
   assert.match(route, /experiments: \(read, ctx\) => <div className="space-y-3">[\s\S]*?<FromLovable part=\{read\.parts\.lovable\} cycle="validate" projectId=\{ctx\.projectId\} onRetry=\{ctx\.reload\} \/>/);
+});
+
+test('Build: From Lovable sits on Prototype / MVP only, under From GitHub (LV7), and mounts for the build cycle', () => {
+  // #5507: moved here from build_parts_d1311's source-text check; the module's full list is build_parts_contract_5507's.
+  assert.deepEqual(modulesWith('lovable'), ['prototype-mvp']);
+  assert.ok(isBefore('prototype-mvp', 'github', 'lovable'));
+  const lovable = { state: 'ok' }; const reload = () => {};
+  const el = partElement('prototype-mvp', 'lovable', { parts: { lovable } }, { projectId: 7, reload });
+  assert.equal(el.type, FromLovable);
+  assert.deepEqual(el.props, { part: lovable, cycle: 'build', projectId: 7, onRetry: reload });
 });

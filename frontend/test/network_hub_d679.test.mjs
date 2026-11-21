@@ -107,7 +107,7 @@ test('the hub draws its rows from the lists it is handed, links each block, and 
 
   for (const [text, to] of [
     ['Browse all →', '/directory'], ['Calendar →', '/events'], ['All articles →', '/articles'],
-    ['All circles →', '/circles'], ['All roles →', '/jobs'], ['Request directory access →', '/contact'],
+    ['All circles →', '/circles'], ['All roles →', '/jobs'], ['Request directory access →', '/contact?topic=directory'],
   ]) assert.ok(empty.includes(`href="${to}" data-discover="true">${text}</a>`), `${text} links ${to}`);
   assert.match(empty, /Verified members only\./, 'the canvas\'s access line stays');
 
@@ -242,10 +242,12 @@ test('the directory pills are the entity types the live rows carry', () => {
   assert.match(src, /api\.publicListPartners\(params\)/, 'the rows are the public directory read');
   assert.match(src, /directoryTypeOptions\(partners\)/);
   assert.match(src, /directoryTypeOf\(p\) === type/, 'a pill filters the rows by type');
-  // The page keeps its own behaviour: search, the detailed filters, verified-only, the profile links.
-  for (const keep of [/onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\) apply\(\); \}\}/, /CATEGORIES\.map/, /verified_only/, /KYB-verified partners only/, /Request directory access →/]) {
+  // The page keeps its own behaviour: search, the detailed filters, the profile links.
+  for (const keep of [/onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\) apply\(\); \}\}/, /CATEGORIES\.map/, /Request directory access →/]) {
     assert.match(src, keep);
   }
+  // D5513 (#5513): no KYB-verified filter is offered; the directory read records no KYB status.
+  assert.doesNotMatch(src, /KYB-verified partners only/);
 
   const row = render(React.createElement('ul', null, React.createElement(dir.PartnerCard, {
     p: { slug: 'acme-legal', name: 'Acme Legal', company: 'Acme', headline: 'Formation counsel', categories: ['legal'], kyb_verified: true, featured: true },

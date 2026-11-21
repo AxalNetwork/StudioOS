@@ -7,6 +7,8 @@
  *   GET  /summary        connected integrations, scheduled-job health, the
  *                        monitoring and broadcast consoles, and the platform's
  *                        switches, read-only
+ *   GET  /scopes         every subsidiary the scope switcher can narrow to (D5786)
+ *   GET  /scopes/:code   one subsidiary's attributable health signals, HQ-only and unavailable ones named (D5786)
  *   GET  /switches       the switches an operator can throw, both halves (D203)
  *   POST /switches/:key  throw or release one, with a reason, audited (D203)
  *   GET  /topology       what this Worker binds, exports and calls, and what
@@ -115,6 +117,7 @@ import {
 } from '../services/platformCapacityHistory';
 import { branchOf } from '../util/branch';
 import { readPlatformSummary } from '../services/platformSummary';
+import { listScopes, readScope, ScopeRefused } from '../services/platformScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -126,6 +129,36 @@ r.get('/summary', async (c) => {
   await requireSuperAdmin(c);
   // D4859: every panel is read at once, each in its own state; a reader that fails or hangs answers for its own block only.
   return c.json({ ...(await readPlatformSummary(c.env)), ...DERIVED_UNAVAILABLE });
+});
+
+// ---------------------------------------------------------------------------
+// D5786 (#5786) — Platform readings scoped to one subsidiary, for the scope switcher (#5757). SUPER ADMIN ONLY,
+// as the three HQ-wide reads it sits beside are: one branch's health and traffic is that branch's, and only the
+// Super Admin supervises every branch (D161). On a branch `requireSuperAdmin` answers "HQ only".
+//
+//   GET /scopes        every subsidiary HQ can scope to, by code and licence
+//   GET /scopes/:code  that subsidiary's attributable signals, each with availability, observation time and source;
+//                      the signals that are HQ-only or unavailable for it, named with the reason; one state by the
+//                      summary's rule. `/summary` is unchanged and stays the HQ-wide reading.
+// A code that is not a branch code is 400 and one HQ does not know is 404; nothing is read for either.
+// ---------------------------------------------------------------------------
+r.get('/scopes', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(await listScopes(c.env));
+});
+
+r.get('/scopes/:code', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  try {
+    return c.json(await readScope(c.env, c.req.param('code')));
+  } catch (refused) {
+    if (refused instanceof ScopeRefused) {
+      return c.json({ error: refused.message, code: refused.code }, refused.code === 'invalid_scope' ? 400 : 404);
+    }
+    throw refused;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -224,7 +257,7 @@ r.post('/switches/:key', async (c) => {
   }
   const auditAction = thrown ? 'platform_switch_thrown' : 'platform_switch_released';
   let changed: boolean;
-  let recorded = true;
+  let recorded: boolean;
   let mirrored: boolean | null = null;
   try {
     // The change and its audit row in one batch: both or neither (D4703).
@@ -428,6 +461,9 @@ r.put('/take-rate', async (c) => {
 // Booking uid and amount only: no founder or advisor is named here. #5305 adds
 // the row's id (what the resolve below names), and for a resolved row who
 // resolved it (an operator, by name), when, and the reason they gave.
+// D5305: open rows newest recorded first, then resolved rows most recently
+// resolved first (the HQ list says so), so the 200-row read keeps the latest
+// resolutions rather than the latest-recorded ones.
 r.get('/advisory-refunds-due', async (c) => {
   await requireSuperAdmin(c);
   try {
@@ -438,7 +474,8 @@ r.get('/advisory-refunds-due', async (c) => {
               u.name AS resolved_by_name, r.resolution_reason AS resolution_reason
          FROM advisory_refunds_due r
          LEFT JOIN users u ON u.id = r.resolved_by
-        ORDER BY (r.resolved_at IS NOT NULL), r.created_at DESC LIMIT 200`,
+        ORDER BY (r.resolved_at IS NOT NULL), datetime(COALESCE(r.resolved_at, r.created_at)) DESC, r.id DESC
+        LIMIT 200`,
     ).all<Record<string, unknown>>();
     const items = rows.results || [];
     return c.json({ items, open: items.filter((r) => r.resolved_at == null).length });

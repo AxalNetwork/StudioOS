@@ -9,10 +9,11 @@
  *   · `menu`, the danger actions (Delete), behind ⋯.
  * Ask and Email are not the read's: the header puts Ask after the primary and
  * Email after Ask, so the order is primary, Ask, Email, secondary, ⋯.
- * An action the read did not declare is never invented here.
+ * An action the read did not declare is never invented here, and one it
+ * declared `row_only` (D6101, a KPI entry's Remove) runs from its row alone.
  */
 export function headerRow(actions = []) {
-  const list = (Array.isArray(actions) ? actions : []).filter((a) => a && typeof a.key === 'string' && a.label);
+  const list = (Array.isArray(actions) ? actions : []).filter((a) => a && typeof a.key === 'string' && a.label && !a.row_only);
   const primary = list.find((a) => a.tone === 'primary') || null;
   const menu = list.filter((a) => a.tone === 'danger');
   const secondary = list.filter((a) => a !== primary && a.tone !== 'danger');

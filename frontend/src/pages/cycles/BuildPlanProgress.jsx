@@ -5,10 +5,11 @@ import Sheet from '../../ui/Sheet.jsx';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import {
   BACK_IN_FOOT, BUCKETS, BUILT_UNREAD, CHART_FOOT, MODULE_FILTERS, NOT_RECORDED_FOOT, PER_PAGE, PROGRESS_FILTERS, SORTS, STAGES, STAGE_FILTERS, STAGE_WORD,
-  TOOL_FILTERS, TRAIL_FOOT, asOfLine, builtPerWeek, chartLabel, filterRows, pageRows, phoneStatus, progressRows, stageChart, stageLead, trailNodes, trailTable,
+  TOOL_FILTERS, TRAIL_FOOT, asOfLine, builtPerWeek, chartLabel, filterCount, filterRows, pageRows, phoneStatus, progressRows, stageChart, stageLead, trailNodes, trailTable,
   waitingLinks, weekLine,
 } from './buildProgressModel';
 import { ventureSearch } from './buildPlanModel';
+import { ChoiceField } from './BuildPlanCards';
 
 /**
  * D1070 (#2940) — the plan's Progress tab: VB10 (founder), VB12 (dark),
@@ -158,10 +159,9 @@ function Cell({ stage, cell }) {
  * The state is the page's now (`useProgressFilter`), and both branches read
  * `filterRows(rows, f, sort)` from it, so the same inputs select the same
  * items at either width — that is the audit's finding 7, and it is the model
- * rather than the layout: these are the DESKTOP controls, reused as they are
- * and wrapping at a phone's width. The compact arrangement belongs to the
- * approved Build V2 boards (#4846), whose export is not on `main` yet; when it
- * lands it restyles this row and changes nothing underneath.
+ * rather than the layout. Step 2 drew the phone's compact arrangement from
+ * the Build v2 boards (BD14m A, BD5): `PhoneProgressControls`, over the same
+ * state and the same `filterRows`.
  */
 export function useProgressFilter() {
   const [f, setF] = useState(PROGRESS_FILTERS);
@@ -172,31 +172,94 @@ export function useProgressFilter() {
   return { f, sort, page, set, onSort, setPage };
 }
 
-/** The controls themselves, drawn above the table and above the phone's cards. */
-function ProgressControls({ state, phone = false }) {
+/** The desk's controls, drawn above the table. */
+function ProgressControls({ state }) {
   const { f, sort, set, onSort } = state;
   const pick = (k, label, options) => (
     <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
       <span className="sr-only">{label}</span>
-      <select value={f[k]} onChange={(e) => set(k, e.target.value)} className={`${FIELD} ${phone ? 'min-h-[44px]' : ''}`} data-testid={`plan-progress-filter-${k}`}>
+      <select value={f[k]} onChange={(e) => set(k, e.target.value)} className={FIELD} data-testid={`plan-progress-filter-${k}`}>
         <option value="">{label}</option>
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </label>
   );
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid={phone ? 'plan-progress-controls-phone' : 'plan-progress-controls'}>
+    <div className="flex flex-wrap items-center gap-2" data-testid="plan-progress-controls">
       <input type="search" value={f.q} onChange={(e) => set('q', e.target.value)} placeholder="Search items" aria-label="Search items"
-        className={`${FIELD} w-full max-w-[240px] ${phone ? 'min-h-[44px]' : ''}`} data-testid="plan-progress-search" />
+        className={`${FIELD} w-full max-w-[240px]`} data-testid="plan-progress-search" />
       {pick('module', 'Module', MODULE_FILTERS)}
       {pick('stage', 'Stage', STAGE_FILTERS)}
       {pick('tool', 'Tool', TOOL_FILTERS)}
       <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
         Sort
-        <select value={sort} onChange={(e) => onSort(e.target.value)} className={`${FIELD} ${phone ? 'min-h-[44px]' : ''}`} data-testid="plan-progress-sort">
+        <select value={sort} onChange={(e) => onSort(e.target.value)} className={FIELD} data-testid="plan-progress-sort">
           {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </label>
+    </div>
+  );
+}
+
+/** A filter's options as a choice field's: '' first, worded All or Any, then each value. */
+const choice = (key, label, entries, anyWord) => ({
+  key, label, options: ['', ...entries.map(([v]) => v)], words: { '': anyWord, ...Object.fromEntries(entries) },
+});
+const FILTER_FIELDS = [
+  choice('module', 'Module', MODULE_FILTERS, 'All'),
+  choice('stage', 'Stage', STAGE_FILTERS, 'Any'),
+  choice('tool', 'Tool', TOOL_FILTERS, 'Any'),
+];
+const SORT_FIELD = { key: 'sort', label: 'Sort by', options: SORTS.map(([v]) => v), words: Object.fromEntries(SORTS) };
+
+/**
+ * D4602 (#4602, BD14m A, BD5) — the phone's compact controls: Search, then
+ * Filters (N) and Sort, each opening a bottom sheet. The filters are native
+ * radio chips (`ChoiceField`, BD16) on a draft; Show N items applies them, so
+ * the count is what the list will hold, read by the same `filterRows` the
+ * desktop table uses. Sort applies as it is picked. The state is the page's
+ * (`useProgressFilter`), so the same choices select the same items at either
+ * width.
+ */
+export function PhoneProgressControls({ state, all = [] }) {
+  const { f, sort, set, onSort } = state;
+  const [sheet, setSheet] = useState(null);
+  const [draft, setDraft] = useState(f);
+  const n = filterCount(f);
+  const shown = filterRows(all, draft, sort).length;
+  const openFilters = () => { setDraft(f); setSheet('filters'); };
+  const apply = () => { for (const k of ['module', 'stage', 'tool']) if (draft[k] !== f[k]) set(k, draft[k]); setSheet(null); };
+  const sortWord = (SORTS.find(([v]) => v === sort) || SORTS[0])[1];
+  return (
+    <div className="flex min-w-0 items-center gap-2" data-testid="plan-progress-controls-phone">
+      <input type="search" value={f.q} onChange={(e) => set('q', e.target.value)} placeholder="Search" aria-label="Search items"
+        className={`${FIELD} min-h-[44px] min-w-0 flex-1`} data-testid="plan-progress-search" />
+      <button type="button" onClick={openFilters} aria-haspopup="dialog" className={`${n ? BTN_P : BTN} min-h-[44px] shrink-0`} data-testid="plan-progress-filters-open">
+        Filters{n ? ` (${n})` : ''}
+      </button>
+      <button type="button" onClick={() => setSheet('sort')} aria-haspopup="dialog" aria-label={`Sort: ${sortWord}`} className={`${BTN} min-h-[44px] shrink-0`} data-testid="plan-progress-sort-open">Sort</button>
+      {sheet === 'filters' ? (
+        <Sheet title="Filters" label="Filters" phone="sheet" width={480} testId="plan-progress-filters" onClose={() => setSheet(null)}
+          footer={(
+            <div className="flex justify-between gap-2">
+              <button type="button" className={`${BTN} min-h-[44px]`} onClick={() => setDraft({ ...draft, module: '', stage: '', tool: '' })} data-testid="plan-progress-filters-clear">Clear</button>
+              <button type="button" className={`${BTN_P} min-h-[48px] flex-1`} onClick={apply} data-testid="plan-progress-filters-show">Show {shown} {shown === 1 ? 'item' : 'items'}</button>
+            </div>
+          )}>
+          <div className="flex flex-col gap-4">
+            {FILTER_FIELDS.map((field) => (
+              <ChoiceField key={field.key} field={field} value={draft[field.key]} name={`plan-progress-${field.key}`} testPrefix="plan-progress-f" phone
+                onPick={(v) => setDraft((d) => ({ ...d, [field.key]: v }))} />
+            ))}
+          </div>
+        </Sheet>
+      ) : null}
+      {sheet === 'sort' ? (
+        <Sheet title="Sort" label="Sort" phone="sheet" width={480} testId="plan-progress-sort-sheet" onClose={() => setSheet(null)}
+          footer={<button type="button" className={`${BTN_P} min-h-[48px] w-full`} onClick={() => setSheet(null)} data-testid="plan-progress-sort-done">Done</button>}>
+          <ChoiceField field={SORT_FIELD} value={sort} name="plan-progress-sort" testPrefix="plan-progress-s" phone onPick={onSort} />
+        </Sheet>
+      ) : null}
     </div>
   );
 }
@@ -289,7 +352,7 @@ function BuiltPerWeek({ series }) {
  * a time. The window goes back to five whenever the filters change, so Show
  * more never leaves a founder reading the eleventh card of a four-card result.
  */
-function PhoneItems({ rows, onOpen, state }) {
+function PhoneItems({ rows, all, onOpen, state }) {
   const [n, setN] = useState(5);
   const { f, sort } = state;
   useEffect(() => { setN(5); }, [f, sort]);
@@ -297,7 +360,7 @@ function PhoneItems({ rows, onOpen, state }) {
     <div className="flex flex-col gap-2.5" data-testid="plan-progress-phone">
       <section className={CARD} aria-labelledby="plan-progress-phone-items">
         <h2 id="plan-progress-phone-items" className={H2}>Accepted items</h2>
-        <ProgressControls state={state} phone />
+        <PhoneProgressControls state={state} all={all} />
       </section>
       {rows.length === 0
         ? <p className={MUTED} data-testid="plan-progress-phone-none">No accepted item matches these filters.</p>
@@ -446,7 +509,7 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
         {!phone ? <BuiltPerWeek series={weeks} /> : null}
       </div>
       {phone
-        ? <PhoneItems rows={filterRows(rows, filter.f, filter.sort)} onOpen={setOpen} state={filter} />
+        ? <PhoneItems rows={filterRows(rows, filter.f, filter.sort)} all={rows} onOpen={setOpen} state={filter} />
         : <ItemsTable rows={rows} onOpen={setOpen} state={filter} />}
       {open ? <ItemTrail projectId={projectId} row={open} handoffs={p.handoffs} links={p.links} search={search} onClose={() => setOpen(null)} /> : null}
       {backIn ? <BackIn projectId={projectId} scope={scope} rows={waiting} onClose={() => setBackIn(false)} onDone={p.reload} /> : null}

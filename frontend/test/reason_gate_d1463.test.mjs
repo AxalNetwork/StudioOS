@@ -24,7 +24,6 @@ import {
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 
 const NARRATIVE = { record: 'Investor narrative', what: 'this narrative', rule: { kind: 'grant', hours: 8 }, min: 3, max: 200 };
 const CAP_TABLE = { record: 'Cap table', what: 'this cap table', rule: { kind: 'per_open' }, min: 10, max: 500 };
@@ -206,5 +205,9 @@ test('RR07: a founder sees who read the narrative on Home, even with no saved ve
   assert.match(founder, /data-testid="narrative-reads"/);
   assert.match(founder, /An admin gives a reason before reading\. You see each read here\./);
   assert.doesNotMatch(html(h(NarrativeHome, { data: { parts: {} }, projectId: 7, admin: true })), /narrative-reads/);
-  assert.match(cycleRouteText(), /<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} projectId=\{ctx\.projectId\} \/>/);
+  // D7103 (#7103): Home is the module's own page; it draws NarrativeHome with the part's map, and the reads in every state.
+  assert.match(cycleRouteText(), /body: \(p\) => <NarrativeOwnedHome \{\.\.\.p\} data=\{data\} projectId=\{ctx\.projectId\}/);
+  const owned = readFileSync(new URL('../src/pages/raise/narrative/NarrativeOwnedHome.jsx', import.meta.url), 'utf8');
+  assert.match(owned, /<NarrativeHome data=\{data\} search=\{here\} admin=\{view\.standing\.readOnly\} projectId=\{projectId\} \/>/);
+  assert.match(owned, /const reads = !view\.standing\.readOnly && projectId \? <NarrativeReads projectId=\{projectId\} \/> : null;/);
 });

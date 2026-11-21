@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { railProposalsApi } from '../../../lib/api/railProposals';
 import { Unreadable } from '../../../ui';
-import { ACCEPT_ALL_MAX, PROPOSABLE, proposalGroups, proposalLine } from './capRelTabsModel';
+import { ACCEPT_ALL_MAX, PROPOSABLE, patternView, proposalGroups, proposalLine } from './capRelTabsModel';
+import { answerItHref } from '../narrative/narrativeModel';
+import { runRefusal } from '../narrative/storyModel';
+import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -13,8 +17,11 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
  * one prospect writer (`…/proposals/:uid/accept`). Eadwyn never proposes an
  * amount, a status, a Fit, or a move to Committed or Passed.
  *
- * "A pattern across feedback" is not read here yet: no read groups feedback
- * by theme across investors (D1193 §5).
+ * CRL11 (#6080): "From feedback across investors" is one Eadwyn run over the
+ * feedback recorded on each investor. It names up to three things several
+ * investors said, each with the investors and the words it came from, and
+ * links to the Investor narrative objection those words already are. It
+ * writes nothing.
  */
 
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -24,6 +31,54 @@ const BTN = 'inline-flex min-h-[32px] items-center justify-center rounded-lg bor
 const BTN_S = `${BTN} border-axal-hairline bg-white text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const BTN_P = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-violet-700 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500`;
 const EADWYN = 'flex h-6 w-6 flex-none items-center justify-center rounded-full bg-axal-violet text-[11px] font-extrabold text-white dark:bg-violet-600';
+
+/** CRL11 (#6080): what several investors said in common, read by one Eadwyn run that writes nothing. */
+function FeedbackPattern({ projectId }) {
+  const [run, setRun] = useState({ busy: false, view: null, refusal: null });
+  const go = async () => {
+    setRun({ busy: true, view: null, refusal: null });
+    try {
+      const answer = await capitalRelationshipsApi.feedbackPattern(projectId);
+      setRun({ busy: false, view: patternView(answer, (key) => answerItHref(key, `?project_id=${projectId}`)), refusal: null });
+    } catch (e) { setRun({ busy: false, view: null, refusal: runRefusal(e) }); }
+  };
+  const v = run.view;
+  return (
+    <section className="flex flex-col gap-2" data-testid="caprel-proposals-pattern">
+      <h4 className={`m-0 text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED}`}>From feedback across investors</h4>
+      <p className={`m-0 text-[12.5px] ${MUTED}`}>Eadwyn reads the feedback recorded on each investor and names what several of them said. Nothing is saved.</p>
+      <button type="button" className={`${BTN_S} w-fit`} disabled={run.busy} onClick={go} data-testid="caprel-pattern-run">{run.busy ? 'Reading the feedback…' : v ? 'Read it again' : 'Find a pattern'}</button>
+      {run.refusal ? (
+        <div role="alert" className={`flex flex-col gap-1 rounded-[10px] border p-3 ${run.refusal.kind === 'tokens' ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800'}`} data-testid={`caprel-pattern-refused-${run.refusal.kind}`}>
+          <span className={`text-[13px] font-semibold ${INK}`}>{run.refusal.text}</span>
+          {run.refusal.sub ? <span className={`text-[12px] ${MUTED}`}>{run.refusal.sub}</span> : null}
+          {run.refusal.kind === 'tokens' ? <Link to={ADD_TOKENS_PATH} className={`${BTN_S} mt-1 w-fit`} data-testid="caprel-pattern-topup">Top up AI tokens</Link> : null}
+        </div>
+      ) : null}
+      {v && v.state !== 'ok' ? <p className={`m-0 text-[12.5px] ${INK}`} data-testid={`caprel-pattern-${v.state}`}>{v.line}</p> : null}
+      {v && v.state === 'ok' ? (
+        <div className="flex flex-col gap-2" data-testid="caprel-pattern-themes">
+          {v.themes.map((t) => (
+            <div key={t.key} className="flex flex-col gap-1.5 rounded-[10px] border border-violet-200 bg-axal-lavender p-3 dark:border-violet-900 dark:bg-violet-950/30" data-testid="caprel-pattern-theme">
+              <div className="flex items-start gap-2.5">
+                <span className={EADWYN} aria-hidden="true">E</span>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className={`text-[13px] font-bold leading-snug ${INK}`}>{t.title}</span>
+                  {t.summary ? <span className={`text-[12.5px] ${INK}`}>{t.summary}</span> : null}
+                </div>
+              </div>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label={`Where “${t.title}” comes from`}>
+                {t.sources.map((src) => <li key={src.key} className={`text-[12px] ${MUTED}`} data-testid="caprel-pattern-source">{src.investor}: “{src.words}”</li>)}
+              </ul>
+              {t.objection ? <Link to={t.objection.href} className="w-fit text-[12px] font-semibold text-axal-violet underline-offset-2 hover:underline dark:text-violet-300" data-testid="caprel-pattern-objection">Open it in Investor narrative’s objections ›</Link> : null}
+            </div>
+          ))}
+          <p className={`m-0 text-[11.5px] ${MUTED}`}>{v.line}</p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 /** One proposal: Accept, Edit (then Accept as edited) or Dismiss, each saying what it changes. */
 function Proposal({ projectId, p, onDecided }) {
@@ -115,7 +170,7 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
     try {
       const out = await capitalRelationshipsApi.acceptProposals(projectId, uids);
       failed = Array.isArray(out?.results) ? out.results.filter((r) => r.ok !== true).length : uids.length;
-    } catch { failed = uids.length; }
+    } catch { /* the whole request failed: every proposal stays counted as not accepted */ }
     setAll({ busy: false, failed, open: '' });
     reload();
   };
@@ -151,11 +206,7 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
           </section>
         ))}
         {all.failed ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300">{all.failed} could not be accepted. They are still listed.</p> : null}
-        <section className="flex flex-col gap-1" data-testid="caprel-proposals-pattern">
-          <h4 className={`m-0 text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED}`}>From feedback across investors</h4>
-          <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">Not read here yet</span>
-          <p className={`m-0 text-[12.5px] ${MUTED}`}>A pattern across investors’ feedback needs a read that groups it by theme. Each investor’s feedback is on their record.</p>
-        </section>
+        <FeedbackPattern projectId={projectId} />
         <p className={`m-0 text-[11.5px] ${MUTED}`}>Eadwyn proposes only. It never sets an amount, a status or a Fit, and never moves anyone to Committed or Passed.</p>
       </div>
     </Sheet>

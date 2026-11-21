@@ -365,3 +365,31 @@ test('D1357 (#3572): a request names the asker and the teammate, by name, to the
     }
   } finally { f.close(); }
 });
+
+// #5310 (NW3.2): one request's record. The asker and the teammate read it; anyone else, and a uid that is not
+// a request, reads the same 404 as a request that does not exist. The asker never reads the introducer's send.
+// Mutation checked: the side check dropped (a stranger reads it, fails); 'asker' in place of 'either' (the
+// teammate is refused, fails).
+test('#5310: GET /intro-requests/:uid is the record, to the two people on it only, in the log\'s own shape', async () => {
+  const f = fixture();
+  try {
+    await shareAll(f, 2);
+    const uid = await ask(f, { context_note: 'Ada runs partnerships at Acme.' });
+    const asker = await call(f, 4, 'GET', `${R}/intro-requests/${uid}`);
+    assert.equal(asker.status, 200, asker.text);
+    assert.deepEqual([asker.body.request.uid, asker.body.request.status, asker.body.request.person.name, asker.body.request.context_note], [uid, 'pending', 'Synthetic Ada', 'Ada runs partnerships at Acme.']);
+    assert.equal(asker.body.request.mail_sent_uid, null, 'the asker never reads the introducer\'s send');
+    assert.equal(asker.body.request.delivery, null);
+    const logRow = (await call(f, 4, 'GET', `${R}/intro-requests`)).body.sent[0];
+    assert.deepEqual(asker.body.request, logRow, 'the record is the log row, the same shape');
+    const teammate = await call(f, 2, 'GET', `${R}/intro-requests/${uid}`);
+    assert.equal(teammate.status, 200, teammate.text);
+    assert.equal(teammate.body.request.teammate.id, 2);
+    for (const who of [3, 5, 6]) {
+      const r = await call(f, who, 'GET', `${R}/intro-requests/${uid}`);
+      assert.equal(r.status, 404, `${who} is not on the request`);
+      assert.ok(!r.text.includes('Acme'), `${who} reads nothing of it`);
+    }
+    assert.equal((await call(f, 4, 'GET', `${R}/intro-requests/not-a-uid`)).status, 404);
+  } finally { f.close(); }
+});

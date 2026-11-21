@@ -41,7 +41,8 @@ const OPERATOR = { user_id: 3, name: 'Olu Operator', assigned_at: '2026-10-01 09
 
 test('nothing recorded: each value says Not recorded with its reason', () => {
   const html = row({ status: 'ready', data: { operator: null, last_review: null, next_follow_up: null } });
-  assert.ok(cell(html, 'text-83b-operator').includes(`title="${OPERATOR_REASONS.noOperator}">Not recorded`));
+  // D5129: the shared Not recorded chip draws an aria-hidden glyph before its word; the reason stays on its title.
+  assert.ok(cell(html, 'text-83b-operator').replace(/<svg[\s\S]*?<\/svg>/g, '').includes(`title="${OPERATOR_REASONS.noOperator}">Not recorded`));
   assert.match(cell(html, 'text-83b-last-review'), /Not recorded/);
   assert.match(cell(html, 'text-83b-next-follow-up'), /Not recorded/);
   assert.doesNotMatch(html, /Olu Operator/);
@@ -50,8 +51,8 @@ test('nothing recorded: each value says Not recorded with its reason', () => {
 test('an operator with no review: the name, and no review or follow-up on record', () => {
   const html = row({ status: 'ready', data: { operator: OPERATOR, last_review: null, next_follow_up: null } });
   assert.equal(cell(html, 'text-83b-operator'), 'Olu Operator');
-  assert.ok(cell(html, 'text-83b-last-review').includes(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
-  assert.ok(cell(html, 'text-83b-next-follow-up').includes(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
+  assert.ok(cell(html, 'text-83b-last-review').replace(/<svg[\s\S]*?<\/svg>/g, '').includes(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
+  assert.ok(cell(html, 'text-83b-next-follow-up').replace(/<svg[\s\S]*?<\/svg>/g, '').includes(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
 });
 
 test('an operator with a review: its outcome and date, and the next follow-up', () => {
@@ -70,7 +71,7 @@ test('an operator with a review: its outcome and date, and the next follow-up', 
     next_follow_up: null,
   } });
   assert.equal(cell(noNext, 'text-83b-last-review'), 'Record complete · Oct 6, 2026');
-  assert.ok(cell(noNext, 'text-83b-next-follow-up').includes(`title="${OPERATOR_REASONS.noFollowUp}">Not recorded`));
+  assert.ok(cell(noNext, 'text-83b-next-follow-up').replace(/<svg[\s\S]*?<\/svg>/g, '').includes(`title="${OPERATOR_REASONS.noFollowUp}">Not recorded`));
 });
 
 test('a failed read is Unreadable on every value, and no company record says so', () => {

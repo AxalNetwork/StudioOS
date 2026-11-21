@@ -55,7 +55,7 @@ export function genericKeyFrom(pathname) {
  */
 export const MODULE_LABEL = Object.freeze({
   applications: 'Applications', hosts: 'Hosts', cohorts: 'Cohorts', referral_queue: 'Referral queue', perk_queue: 'Perk queue',
-  learners: 'Learners', influencers: 'Influencers', offers: 'Offers', nda_signature: 'NDA / signature',
+  learners: 'Learners', influencers: 'Influencers', offers: 'Offers', nda_signature: 'NDA / signature', wellbeing: 'My Wellbeing',
 });
 const MODULE_PATHS = Object.freeze({
   'spinout-lab': { applications: '/applications', cohorts: '/cohorts', hosts: '/hosts' },
@@ -65,7 +65,7 @@ const MODULE_PATHS = Object.freeze({
   'refer-and-earn': { referral_queue: '/queue' },
   perks: { perk_queue: '/queue' },
   learning: { learners: '/people' },
-  influencer: { applications: '', influencers: '' },
+  influencer: { applications: '/applications', influencers: '/influencers' },
 });
 export const NO_MODULES = 'None yet. This program works with the core sections alone.';
 export const MODULES_UNREAD = 'Its modules could not be read.';
@@ -78,10 +78,10 @@ export function moduleRows(programKey, program) {
   const paths = MODULE_PATHS[programKey] || {};
   return {
     state: 'ready',
-    rows: program.modules.map((m) => ({
-      key: m, label: MODULE_LABEL[m] || m,
-      path: m in paths ? `${PROGRAMS_PATH}/${programKey}${paths[m]}` : null,
-    })),
+    rows: program.modules.map((m) => {
+      const path = m in paths ? `${PROGRAMS_PATH}/${programKey}${paths[m]}` : null;
+      return { key: m, label: MODULE_LABEL[m] || m, path: m === 'wellbeing' && program.studio_only === null ? '/wellbeing' : path };
+    }),
   };
 }
 

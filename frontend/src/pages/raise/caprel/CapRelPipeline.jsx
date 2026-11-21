@@ -1,19 +1,23 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PIPELINE_FILTERS, clearFilters, useTabFilters } from './capRelUrlFilters';
-import { api } from '../../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
 import { RecordFacts, RecordSection } from '../../cycles/RecordView';
 import { recordHref } from '../../cycles/recordModel';
 import {
-  IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, boardColumns, chunks,
+  IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, chunks,
   importRows, mergeImport, moveBody, moveSentence, moveTargets, parseCsv, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
+import CapRelExportMenu from './CapRelExportMenu.jsx';
+import { pipelineCsv } from './capRelExports.js';
+import { CLEAR_PATCH, PIPELINE_OPTIONS, activeFilters, pipelineView, sortedColumns } from './capRelPipelineFilters.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
-import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { useProspects } from './capRelHomeRead.js';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -29,41 +33,29 @@ import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.j
  * (50 rows a request), a next step through `PUT …/next-step`, and a step and
  * feedback through the record's own actions (`log`, `add-feedback`). Every
  * change opens an in-page dialog that says what it changes.
+ *
+ * D6077 (#6077): the bar above both views (the canvas's `pipeBar`): Search
+ * investors; Stage, Fit, Warm path, Source and Next step; Sort, Next step due
+ * first. They live in the address (`PIPELINE_FILTERS`) and narrow the loaded
+ * read, so the Board and the List show the same investors, and bulk Move acts
+ * only on picked rows still shown.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold disabled:opacity-50';
+const BTN = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[36px] justify-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold disabled:opacity-50';
 const BTN_P = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-violet-700 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500`;
 const BTN_S = `${BTN} border-axal-hairline bg-white text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
 const NR = 'rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 
 export const errText = (e, fallback) => (e?.status === 409 ? 'Already in the pipeline: this venture tracks an investor with that email.' : userFacingRaiseError(e, { fallback }));
 export const nameOf = (p) => [p?.name, p?.firm && p.firm !== p.name ? p.firm : null].filter(Boolean).join(' · ') || 'Investor';
 
-/** The prospects read, with a reload. */
-export function useProspects(projectId) {
-  const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', items: null, projectId });
-  useEffect(() => {
-    let alive = true;
-    // D5073: a re-read of the SAME venture keeps its investors drawn until the new answer lands; another venture's never are.
-    setRead((r) => ({ status: 'loading', items: r.projectId === projectId ? r.items : null, projectId }));
-    Promise.resolve().then(() => api.raiseProspects(projectId))
-      .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId }); })
-      // D5079 (#5079): a refusal is not a failed read. Mapping a 403 to
-      // `unreadable` told the founder the pipeline "could not be read", which
-      // is a claim about the store rather than about access.
-      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), items: null, projectId, message: userFacingRaiseError(error, { fallback: '' }) }); });
-    return () => { alive = false; };
-  }, [projectId, n]);
-  // The frame before the effect runs still holds the previous venture's state: never draw it.
-  const own = read.projectId === projectId ? read : { status: 'loading', items: null };
-  return { status: own.status, items: own.items, message: own.message ?? '', reload: () => setN((x) => x + 1) };
-}
+// D5081 part 2 (#5081): the prospects read lives in `capRelHomeRead.js`, so CycleRoute holds it without this step.
+export { useProspects };
 
 /* ------------------------------------------------------------------ *
  * Dialogs (CRL6, CRL5)
@@ -391,8 +383,10 @@ function Card({ p, onOpen, onMove }) {
   );
 }
 
-function Board({ cols, onOpen, onMove, phone, showPassed, setShowPassed }) {
-  const [one, setOne] = useState(STAGES[0]);
+function Board({ cols, onOpen, onMove, phone, showPassed, setShowPassed, stage = '' }) {
+  const [one, setOne] = useState(STAGES.includes(stage) ? stage : STAGES[0]);
+  // D6077: a Stage filter picks the phone's one column too.
+  useEffect(() => { if (STAGES.includes(stage)) setOne(stage); }, [stage]);
   const visible = phone ? cols.columns.filter((c) => c.stage === one) : cols.columns;
   return (
     <div className="flex flex-col gap-3" data-testid="caprel-board">
@@ -440,26 +434,73 @@ function List({ items, onOpen, onBulk }) {
           <button type="button" className={BTN_S} onClick={() => setPicked(new Set())}>Clear</button>
         </div>
       ) : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
-          <thead><tr className={`text-[11px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}>
-            <th className="w-8 px-2 py-2"><span className="sr-only">Pick</span></th>
-            {['Investor', 'Stage', 'Commitment', 'Next step', 'Due'].map((h) => <th key={h} className="px-2 py-2">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {items.map((p) => (
-              <tr key={p.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`caprel-row-${p.id}`}>
-                <td className="px-2 py-2"><input type="checkbox" aria-label={`Pick ${nameOf(p)}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} data-testid={`caprel-pick-${p.id}`} /></td>
-                <td className="px-2 py-2"><button type="button" className={`m-0 border-0 bg-transparent p-0 text-left font-semibold ${INK} hover:underline`} onClick={() => onOpen(p)}>{nameOf(p)}</button></td>
-                <td className="px-2 py-2">{stageLabel(p.stage)}</td>
-                <td className="px-2 py-2">{p.stage === 'committed' ? `${statusLabel(p.commit_status)} · ${amountText(p.amount) || 'Amount not recorded'}` : <span className={MUTED}>—</span>}</td>
-                <td className="px-2 py-2">{p.next_step || <span className={MUTED}>No next step set</span>}</td>
-                <td className="px-2 py-2 font-mono">{p.next_step_due ? String(p.next_step_due).slice(0, 10) : <span className={MUTED}>—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <ResponsiveRecords>
+          <table role="table" className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+            <thead role="rowgroup"><tr role="row" className={`text-[11px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}>
+              <th role="columnheader" className="w-8 px-2 py-2"><span className="sr-only">Pick</span></th>
+              {['Investor', 'Stage', 'Commitment', 'Next step', 'Due'].map((h) => <th role="columnheader" key={h} className="px-2 py-2">{h}</th>)}
+            </tr></thead>
+            <tbody role="rowgroup">
+              {items.map((p) => (
+                <tr role="row" key={p.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`caprel-row-${p.id}`}>
+                  <td role="cell" className="px-2 py-2"><label className="inline-flex min-h-11 min-w-11 items-center justify-center lg:min-h-0 lg:min-w-0"><input type="checkbox" aria-label={`Pick ${nameOf(p)}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} data-testid={`caprel-pick-${p.id}`} /></label></td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Investor</RecordLabel><button type="button" className={`m-0 border-0 bg-transparent p-0 text-left font-semibold ${INK} hover:underline`} onClick={() => onOpen(p)}>{nameOf(p)}</button></td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Stage</RecordLabel>{stageLabel(p.stage)}</td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Commitment</RecordLabel>{p.stage === 'committed' ? `${statusLabel(p.commit_status)} · ${amountText(p.amount) || 'Amount not recorded'}` : <span className={MUTED}>—</span>}</td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Next step</RecordLabel>{p.next_step || <span className={MUTED}>No next step set</span>}</td>
+                  <td role="cell" className="px-2 py-2 font-mono"><RecordLabel>Due</RecordLabel>{p.next_step_due ? String(p.next_step_due).slice(0, 10) : <span className={MUTED}>—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ResponsiveRecords>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * The bar (D6077, the canvas's `pipeBar`)
+ * ------------------------------------------------------------------ */
+
+const CHIP = 'min-h-11 rounded-lg border border-axal-hairline bg-white px-2.5 text-[12.5px] font-semibold text-axal-ink focus-visible:outline-2 focus-visible:outline-violet-600 disabled:opacity-50 lg:min-h-[32px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const SIGNALS_LINE = {
+  unreadable: 'Fit, source and last contact are unreadable right now, so those filters and that sort are off.',
+  not_read: 'Fit, source and last contact were not read, so those filters and that sort are off.',
+};
+
+export function PipelineBar({ f, setF, signals, roundCalls, shown, total }) {
+  const [typed, setTyped] = useState(f.q);
+  // Back, Forward or a venture switch moves the address: the box follows it, unless it already says the same.
+  useEffect(() => { setTyped((t) => (t.trim() === f.q ? t : f.q)); }, [f.q]);
+  const read = signals === 'ok';
+  const on = activeFilters(f, { signals, roundCalls });
+  const chip = (key, label, any, { disabled = false } = {}) => (
+    <select className={CHIP} aria-label={label} value={f[key]} disabled={disabled} onChange={(e) => setF({ [key]: e.target.value })} data-testid={`caprel-pipe-${key}`}>
+      <option value="">{any}</option>
+      {PIPELINE_OPTIONS[key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="caprel-pipe-bar">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Search, filter and sort investors">
+        <input type="search" className={`${CHIP} w-full font-normal sm:w-52`} placeholder="Search investors" aria-label="Search investors" maxLength={100} value={typed}
+          onChange={(e) => { setTyped(e.target.value); setF({ q: e.target.value }, { replace: true }); }} data-testid="caprel-pipe-q" />
+        {chip('stage', 'Stage', 'Any stage')}
+        {chip('fit', 'Fit', 'Any fit', { disabled: !read })}
+        {chip('path', 'Warm path', 'Any warm path')}
+        {roundCalls ? chip('source', 'Source', 'Any source', { disabled: !read }) : null}
+        {chip('next', 'Next step', 'Any next step')}
+        <select className={CHIP} aria-label="Sort" value={f.sort} onChange={(e) => setF({ sort: e.target.value })} data-testid="caprel-pipe-sort">
+          {PIPELINE_OPTIONS.sort.map(([v, l]) => <option key={v} value={v} disabled={v === 'last_contact' && !read}>Sort: {l}</option>)}
+        </select>
+        {on.length ? <button type="button" className={BTN_S} onClick={() => setF(CLEAR_PATCH)} data-testid="caprel-pipe-clear">Clear filters</button> : null}
+      </div>
+      <p className={`m-0 text-[12px] ${MUTED}`} role="status" data-testid="caprel-pipe-count">
+        {on.length ? `Showing ${shown} of ${total} ${total === 1 ? 'investor' : 'investors'}.` : `${total} ${total === 1 ? 'investor' : 'investors'}.`}
+        {!read && SIGNALS_LINE[signals] ? ` ${SIGNALS_LINE[signals]}` : ''}
+      </p>
     </div>
   );
 }
@@ -491,6 +532,14 @@ export default function CapRelPipeline({ projectId, search = '' }) {
   // D5377: whether the Passed column is open is the address's too (`?passed=1`); a venture switch closes it.
   const [board, setBoard] = useTabFilters(PIPELINE_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
+  // D5081 part 2 (#5081): Overview's and the header's Add investor and Import pipeline arrive here as
+  // `?open=add` or `?open=import`; the dialog opens once and the word leaves the address.
+  const opening = params.get('open');
+  useEffect(() => {
+    if (opening !== 'add' && opening !== 'import') return;
+    setDialog({ kind: opening });
+    setParams((p) => { const n = new URLSearchParams(p); n.delete('open'); return n; }, { replace: true });
+  }, [opening, setParams]);
   const reload = useCallback(() => read.reload(), [read]);
   const items = read.items || [];
   const byId = useMemo(() => new Map(items.map((p) => [p.id, p])), [items]);
@@ -503,7 +552,12 @@ export default function CapRelPipeline({ projectId, search = '' }) {
     setDialog(null);
     setParams((p) => { const n = clearFilters(PIPELINE_FILTERS, p); n.delete('investor'); return n; }, { replace: true });
   }, [projectId, setParams]);
-  const cols = useMemo(() => boardColumns(items), [items]);
+  // D6077: the bar's filters and sort narrow both views alike; the List's picks follow what is shown.
+  const today = new Date().toISOString().slice(0, 10);
+  const visible = useMemo(() => pipelineView(items, board, { signals: read.signals, roundCalls: read.roundCalls, today }),
+    [items, board, read.signals, read.roundCalls, today]);
+  const cols = useMemo(() => sortedColumns(visible, board.sort), [visible, board.sort]);
+  const noMatch = items.length > 0 && visible.length === 0;
   const onMove = (p, to) => setDialog({ kind: 'move', prospects: [p], to });
   return (
     <div className="flex flex-col gap-4" data-testid="caprel-pipeline">
@@ -511,13 +565,14 @@ export default function CapRelPipeline({ projectId, search = '' }) {
         <div className="inline-flex rounded-lg border border-axal-hairline p-0.5 text-[12px] font-semibold dark:border-gray-700" role="radiogroup" aria-label="Show as">
           {[['board', 'Board'], ['list', 'List']].map(([k, l]) => (
             <button key={k} type="button" role="radio" aria-checked={view === k} onClick={() => setView(k)} data-testid={`caprel-view-${k}`}
-              className={view === k ? 'rounded-md bg-violet-50 px-2.5 py-1 text-axal-ink dark:bg-violet-950 dark:text-gray-100' : `rounded-md px-2.5 py-1 ${MUTED}`}>{l}</button>
+              className={`min-h-11 lg:min-h-0 focus-visible:outline-2 focus-visible:outline-violet-600 ${view === k ? 'rounded-md bg-violet-50 px-2.5 py-1 text-axal-ink dark:bg-violet-950 dark:text-gray-100' : `rounded-md px-2.5 py-1 ${MUTED}`}`}>{l}</button>
           ))}
         </div>
         <div className="flex gap-2">
           <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'proposals' })} data-testid="caprel-proposals-open">Eadwyn’s proposals</button>
-          <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })} data-testid="caprel-import">Import</button>
           <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })} data-testid="caprel-add">Add investor</button>
+          <CapRelExportMenu zone="pipeline" csv={read.status === 'ready' ? pipelineCsv(items) : null}
+            buttonClass={BTN_S} otherLabel="Import investors" otherTestId="caprel-import" onOther={() => setDialog({ kind: 'import' })} />
         </div>
       </div>
 
@@ -532,8 +587,16 @@ export default function CapRelPipeline({ projectId, search = '' }) {
           <div className="flex gap-2"><button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })}>Add investor</button><button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })}>Import</button></div>
         </section>
       ) : null}
-      {items.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} showPassed={board.passed} setShowPassed={(v) => setBoard({ passed: v }, { replace: true })} /> : null}
-      {items.length && view === 'list' ? <List items={items} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
+      {items.length ? <PipelineBar f={board} setF={setBoard} signals={read.signals} roundCalls={read.roundCalls} shown={visible.length} total={items.length} /> : null}
+      {noMatch ? (
+        <section className={`${CARD} flex flex-col items-center gap-2 px-6 py-8 text-center`} data-testid="caprel-pipe-nomatch">
+          <h3 className={`m-0 text-[15px] font-bold ${INK}`}>No investor matches these filters</h3>
+          <p className={`m-0 max-w-md text-[12.5px] ${MUTED}`}>{items.length} {items.length === 1 ? 'investor is' : 'investors are'} in the pipeline. Clear the filters to see them.</p>
+          <button type="button" className={BTN_S} onClick={() => setBoard(CLEAR_PATCH)} data-testid="caprel-pipe-nomatch-clear">Clear filters</button>
+        </section>
+      ) : null}
+      {visible.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} stage={board.stage} showPassed={board.passed} setShowPassed={(v) => setBoard({ passed: v }, { replace: true })} /> : null}
+      {visible.length && view === 'list' ? <List items={visible} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
       {cols.unknown.length ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="caprel-unknown-stage">{cols.unknown.length} {cols.unknown.length === 1 ? 'investor has' : 'investors have'} a stage the board does not draw; the list shows them.</p> : null}
 
       {open ? <InvestorLightbox key={`${projectId}:${open.id}`} projectId={projectId} prospect={open} search={search} onClose={() => setOpen(null)} onChanged={reload} /> : null}

@@ -28,12 +28,15 @@ test('D1379 the Privacy Policy has a Google user data section with the Limited U
 
 test('D1379 the homepage shell names Axal VC and says what it does before the app starts', () => {
   const index = src('frontend/index.html');
+  // Reads the built index.html up to its first <script>; it writes none.
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   const root = index.slice(index.indexOf('<div id="root">'), index.indexOf('<script', index.indexOf('<div id="root">')));
   assert.match(root, /<h1[^>]*>Axal VC<\/h1>/);
   assert.match(root, /founders validate an idea with customer interviews/i);
   assert.match(root, /href="\/privacy"/);
   assert.match(root, /href="\/terms"/);
-  assert.match(index, /<title>Axal VC — from idea to funded company<\/title>/);
+  // #6988 (X6): the title no longer promises funding.
+  assert.match(index, /<title>Axal VC — StudioOS, the founder workspace<\/title>/);
   assert.doesNotMatch(index, /Global Venture Partner Network — partners/);
 });
 

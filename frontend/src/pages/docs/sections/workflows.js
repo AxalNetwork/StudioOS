@@ -1,6 +1,7 @@
 // D4639 (#4639): task-oriented guides for current Research, Email, Validate, Network, Build, Grow and connected workflows.
 // Routes and role gates were rechecked against frontend/src/App.jsx on the implementation branch.
 // A route being registered does not establish that a provider is configured or a production action succeeded.
+// D7515 (#7515): each guide's "Prerequisite:" step moved into `beforeYouStart`, its own section on the guide page, with the "Prerequisite:" label dropped and the first letter capitalised; no other word changed.
 export default {
   id: 'workflows',
   title: 'Current workflows',
@@ -11,8 +12,10 @@ export default {
       title: 'Research: from a question to saved evidence',
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor'],
       overview: 'Research Ask, Markets, Geographies and Library are available to eligible signed-in roles. Companies is limited to founder, advisor and admin roles; Funds to founders and admins. An accessible route does not guarantee a source has fresh data.',
+      beforeYouStart: [
+        'Sign in with an eligible role and choose the correct company or research context. Start at /research/ask.',
+      ],
       howto: [
-        'Prerequisite: sign in with an eligible role and choose the correct company or research context. Start at /research/ask.',
         'Ask a specific question, or open /research/markets or /research/geographies. Inspect source names, dates and limitations before relying on any answer.',
         'If your role permits it, continue to /research/companies or /research/funds for more detailed records. Do not treat a missing role-gated page as a failed search.',
         'Open /research/library to inspect and reopen saved findings. A missing save, unreadable source or incomplete retrieval is not evidence that no data exists.',
@@ -36,8 +39,10 @@ export default {
       title: 'Email: connect, compose, send and follow up',
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'],
       overview: 'The Email page at /email shows connected mailboxes, people and drafts. Read and send capabilities differ by provider and granted permissions. Eadwyn sees only the records switched on for a specific draft.',
+      beforeYouStart: [
+        'Sign in and open /email or /email/settings. When no connected sending account is available, use the offered Connect panel and inspect provider permissions.',
+      ],
       howto: [
-        'Prerequisite: sign in and open /email or /email/settings. When no connected sending account is available, use the offered Connect panel and inspect provider permissions.',
         'Confirm the mailbox shown at the top. If authorization expired, use the reconnect path; an unreadable accounts response is not the same as an empty mailbox.',
         'Choose a person from the profile groups. For an introduction contact, email access may require that both people share an address; sharing can be stopped.',
         'Choose Draft an email. Review the per-record context switches: turn off any company or person record Eadwyn should not read for this draft.',
@@ -62,8 +67,10 @@ export default {
       title: 'Validate: record and review discovery evidence',
       roles: ['admin', 'founder'],
       overview: 'The /validate workspace has recording and session-review routes. Recording channels, external bots and processing availability depend on the configured environment. An uploaded or scheduled recording is not proof of a usable transcript.',
+      beforeYouStart: [
+        'Choose the correct venture, explain the purpose of recording and obtain the participant consent required for your channel and jurisdiction.',
+      ],
       howto: [
-        'Prerequisite: choose the correct venture, explain the purpose of recording and obtain the participant consent required for your channel and jurisdiction.',
         'Open /validate/record for the available recording choices; supported pages may include /validate/record/live, /validate/record/calls and the messaging-channel inboxes.',
         'Verify recording and upload status before leaving the page. If capture or processing fails, preserve your consent evidence and note which step failed.',
         'Open /validate/inbox or the individual /validate/session/<id> route for a session that exists. Review the transcript and proposed findings; correct inaccuracies before accepting them as evidence.',
@@ -79,8 +86,10 @@ export default {
       title: 'Network: request and follow an introduction',
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor'],
       overview: 'Introductions have distinct request, acceptance/decline, consent, NDA and delivery states. An allowance debit is not the same as a successfully delivered connection.',
+      beforeYouStart: [
+        'Sign in with a permitted role and open /network/introductions; confirm whose company or relationship is in scope.',
+      ],
       howto: [
-        'Prerequisite: sign in with a permitted role and open /network/introductions; confirm whose company or relationship is in scope.',
         'Review the proposed contact, purpose and the disclosure that the other participants will see before you request or accept an introduction.',
         'Follow the status record for acceptance, decline, expiration, cancellation or any required NDA steps. Do not move ahead as though a three-way NDA is signed until each required party has completed it.',
         'Inspect the separate introduction allowance or credits and the operation outcome. An error, delayed notification or unknown delivery must not be displayed as an introduction completed.',
@@ -95,16 +104,19 @@ export default {
       title: 'Build: run a weekly operating cycle',
       roles: ['admin', 'founder'],
       overview: 'Founders can use /build/this-week, /build/board, /build/roadmap, /build/cadence and /build/kpi as separate views of planning, execution and measurements.',
+      beforeYouStart: [
+        'Choose the correct venture; open /build/this-week and identify the outcomes for the current week.',
+      ],
       howto: [
-        'Prerequisite: choose the correct venture; open /build/this-week and identify the outcomes for the current week.',
         'Open /build/board to move the relevant tasks through the supported states. Record blocked work and dependencies rather than marking it done.',
         'Use /build/roadmap to connect this week’s tasks to longer-term milestones. Review /build/cadence for the current meeting or review rhythm.',
         'Open /build/kpi to enter only observed figures and their measurement dates. If no source exists, say Not recorded instead of estimating.',
         'At the weekly review, carry over unfinished tasks explicitly and revisit the next week’s priorities.',
+        'To remove a mistaken feature, open its record in /build/solution-design and choose Remove feature from the actions, then confirm in the page. To keep the feature but take it off the must-have list, open its record in /build/prototype-mvp and choose No longer a must-have, then confirm.',
         'Outcome: a reviewable plan, work state and KPI snapshot; a failed save requires verification before assuming changes persisted.',
       ],
-      tips: ['A KPI read error means Unreadable, not zero.'],
-      pitfalls: ['Do not silently move unfinished work into Done or backfill unsupported measurements.'],
+      tips: ['A KPI read error means Unreadable, not zero.', 'The Build Plan keeps its original acceptance and shows Feature removed or No longer a must-have when the target leaves the list.'],
+      pitfalls: ['Do not silently move unfinished work into Done or backfill unsupported measurements.', 'Removing a feature is permanent and removes its design links and release checks. Linked roadmap items, risks or test sessions prevent removal. No longer a must-have keeps the feature and its related work.'],
       related: [{ label: 'Roadmap', href: '#build/roadmap' }],
     },
     {
@@ -118,6 +130,7 @@ export default {
         'Open /grow/focus to agree on the most important objective; then use /grow/talent for team capacity and /grow/customers for customer progress.',
         'Track partner work at /grow/partnerships and the current milestones at /grow/launch. Use /build/brand for brand work where that page is available.',
         'Use /grow/reporting to inspect available growth reporting. Reporting access may extend to advisor or partner roles, but editing is more restricted.',
+        'Open a sent report and choose Print or save as PDF to keep its frozen figures, sources, narrative and revision. Choose a printer or Save as PDF in your browser. Download any attached statements separately.',
         'Outcome: recorded priorities, responsibilities and launch status; if a zone or report is unavailable, state the missing permission or unreadable source rather than making up a completion state.',
       ],
       tips: ['Connect each activity to a measurable outcome and date when the corresponding store supports them.'],

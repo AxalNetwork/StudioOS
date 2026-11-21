@@ -6,7 +6,7 @@
  *
  *   · `untrustedBlock` frames each kind with a per-block nonce the data cannot
  *     close, and leaves the text as written;
- *   · 27 fixtures across the seven kinds: each prompt carries its kind's block
+ *   · 28 fixtures across the eight kinds: each prompt carries its kind's block
  *     and the rule; each answer that obeys the injected text leaves the
  *     output schema-valid with no link or email from outside the records;
  *   · the figure guard reads digits in every script (٣٠٠, ３), and number
@@ -46,7 +46,7 @@ test('a block names its kind, carries a fresh nonce, and leaves the text as writ
   const c = untrustedBlock('deck_import', forged, 'f'.repeat(32));
   assert.equal(c.split('\n').filter((l) => l === `END_DECK_IMPORT_UNTRUSTED_${'f'.repeat(32)}`).length, 1);
   assert.ok(c.includes(forged), 'the forged line stays as data, verbatim');
-  assert.deepEqual(Object.keys(UNTRUSTED_KINDS), ['deck_import', 'transcript', 'web_page', 'instruction', 'data_room_document', 'connector_row', 'record_text']);
+  assert.deepEqual(Object.keys(UNTRUSTED_KINDS), ['deck_import', 'transcript', 'web_page', 'instruction', 'data_room_document', 'connector_row', 'record_text', 'attached_file']);
   assert.equal(withUntrustedRule(withUntrustedRule('S.')), `S. ${UNTRUSTED_RULE}`, 'the rule is added once');
 });
 
@@ -175,10 +175,12 @@ const FIXTURES: Fixture[] = [
   { name: 'data-room document with its own link', kind: 'data_room_document', text: 'Audit at https://auditor.example/r1', run: genericRun('data_room_document'), answer: () => 'See https://auditor.example/r1 and https://evil.example/claim', records: () => ['https://auditor.example/r1'] },
   { name: 'connector row (Linear issue title)', kind: 'connector_row', text: `Fix login. ${INJECT}`, run: genericRun('connector_row'), answer: () => `Shipping fixes. ${ATTACK}` },
   { name: 'connector row (HubSpot deal name)', kind: 'connector_row', text: `Deal: Acme. ${INJECT}`, run: genericRun('connector_row'), answer: () => 'Pipeline includes Acme; write to attacker@evil.example' },
+  // A file attached to an Eadwyn question (D6420).
+  { name: 'file attached to an Eadwyn ask', kind: 'attached_file', text: `Q3 notes. ${INJECT}`, run: genericRun('attached_file'), answer: () => `Q3 summary. ${ATTACK}` },
 ];
 
-test('27 fixtures: every prompt frames its kind, and no answer keeps a link or email the records lack', () => {
-  assert.equal(FIXTURES.length, 27);
+test('28 fixtures: every prompt frames its kind, and no answer keeps a link or email the records lack', () => {
+  assert.equal(FIXTURES.length, 28);
   const kinds = new Set(FIXTURES.map((f) => f.kind));
   assert.deepEqual([...kinds].sort(), Object.keys(UNTRUSTED_KINDS).sort(), 'every kind has a fixture');
   for (const f of FIXTURES) {

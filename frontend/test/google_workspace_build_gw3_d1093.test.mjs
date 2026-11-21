@@ -1,7 +1,9 @@
 // D1093 (#2958), part two — From Google on Build (GW3) and the roadmap Sheet's
 // Map columns (GW4), mounted on the Worker side part one built
 // (`routes/build_google.ts`). Stubbed fetch: no test reaches Google. Every
-// name and figure is made up.
+// name and figure is made up. Owns Google's placement on Build and what its
+// two lines mount; every module's full part list is the contract in
+// build_parts_contract_5507.test.mjs (#5507, D5507).
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/google_workspace_build_gw3_d1093.test.mjs
@@ -16,7 +18,7 @@ import {
   DESIGN_COLUMNS, REQUIRED, ROADMAP_COLUMNS, ROADMAP_FIELDS, RoadmapFromGoogle, SolutionDesignFromGoogle,
   decodeRoadmap, designRows, encodeRoadmap, missingFields, roadmapRows, syncSentence,
 } from '../src/pages/cycles/BuildFromGoogle.jsx';
-import { BUILD_PARTS, builtParts } from '../src/pages/cycles/buildParts.jsx';
+import { isBefore, modulesWith, partElement } from './_buildParts.mjs'; // #5507: Google's key only; the full list is build_parts_contract_5507's
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -106,10 +108,17 @@ test('a sync in one sentence: counts only', () => {
 });
 
 test('the wiring: Google\'s two Build lines draw, between GitHub\'s and Notion\'s; one client; no pop-up, no hex', () => {
-  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion']);
-  // D5064 (#5064): product-roadmap's Vercel line now draws first.
-  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['vercel', 'github', 'google', 'notion', 'posthog']);
-  assert.ok(BUILD_PARTS['solution-design'].some(([k, r]) => k === 'google' && typeof r === 'function'));
+  // #5507: each module's complete list is build_parts_contract_5507's (D5507). Here, only Google's key.
+  assert.deepEqual(modulesWith('google'), ['product-roadmap', 'solution-design']);
+  for (const slug of ['solution-design', 'product-roadmap']) {
+    assert.ok(isBefore(slug, 'github', 'google') && isBefore(slug, 'google', 'notion'), `${slug}: From Google after From GitHub, before From Notion`);
+  }
+  const reload = () => {};
+  for (const [slug, Part] of [['solution-design', SolutionDesignFromGoogle], ['product-roadmap', RoadmapFromGoogle]]) {
+    const el = partElement(slug, 'google', {}, { projectId: 7, reload });
+    assert.equal(el.type, Part, slug);
+    assert.deepEqual(el.props, { projectId: 7, reload }, slug);
+  }
   const src = read('frontend/src/pages/cycles/BuildFromGoogle.jsx');
   assert.doesNotMatch(src, /\b(alert|confirm|prompt)\(|window\.open/);
   assert.doesNotMatch(src, /(bg|text|border)-\[#/);

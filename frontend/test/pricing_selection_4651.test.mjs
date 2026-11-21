@@ -97,10 +97,10 @@ test('cards: a visitor\'s paid card carries the plan and the interval chosen, th
 
 test('selectionFor: the plan, its monthly figure, how it is charged and the full commitment; or not offered, or unreadable; never another plan', () => {
   const yearly = selectionFor(READ, { planKey: 'founder:studio', interval: 'yearly' });
-  assert.deepEqual([yearly.state, yearly.name, yearly.perMonth, yearly.basis], ['ready', 'Raise + Grow', '$80 / month', '$960 billed yearly']);
+  assert.deepEqual([yearly.state, yearly.name, yearly.perMonth, yearly.basis], ['ready', 'Raise + Grow', '$80 / month per licence', '$960 billed yearly']);
   assert.match(yearly.commitment, /full \$960 is charged at checkout, for the whole year/);
   const monthly = selectionFor(READ, { planKey: 'founder:studio', interval: 'monthly' });
-  assert.deepEqual([monthly.perMonth, monthly.basis, monthly.commitment], ['$100 / month', 'billed every month', 'Charged each month at checkout.']);
+  assert.deepEqual([monthly.perMonth, monthly.basis, monthly.commitment], ['$100 / month per licence', 'billed every month', 'Charged each month at checkout.']);
   // Mutation checked: falling back to the monthly price for a yearly choice → a $100 figure is drawn for a yearly request.
   const noYear = selectionFor(READ, { planKey: 'advisor:pro', interval: 'yearly' });
   assert.equal(noYear.state, 'unavailable');
@@ -169,7 +169,7 @@ test('registration shows the selected plan, how it is charged and the full yearl
   const m = await mountRegister('?lane=founder&plan=founder%3Astudio&interval=yearly', { read: READ });
   try {
     assert.equal(text(m.by('register-plan-name')), 'Raise + Grow');
-    assert.equal(text(m.by('register-plan-price')), '$80 / month · $960 billed yearly');
+    assert.equal(text(m.by('register-plan-price')), '$80 / month per licence · $960 billed yearly');
     assert.match(text(m.by('register-plan-commitment')), /full \$960 is charged at checkout, for the whole year/);
     assert.equal(text(m.by('register-title')), 'Create your account to get Raise + Grow', 'the heading names the plan, not a pitch');
     assert.match(m.props(m.by('register-plan-change')).href || '', /pricing\?for=founder/, 'the plan can be changed');
@@ -187,13 +187,13 @@ test('an advisor is not asked for a pitch; each audience has its own entry copy'
     assert.equal(text(m.by('register-title')), 'Create your account to get Advisor Pro');
     assert.doesNotMatch(m.text(), /Submit your pitch|Spin-Out Lab/);
     assert.equal(m.by('register-step-spinout'), undefined, 'the Spin-Out Lab is a founder step only');
-    assert.match(text(m.by('register-plan-price')), /\$49 \/ month · billed every month/);
+    assert.match(text(m.by('register-plan-price')), /\$49 \/ month per licence · billed every month/);
   } finally { await m.close(); }
-  for (const [lane, want, never] of [['advisor', /Create your Advisor account/, /Submit your pitch/], ['investor', /Investor|Open your LP|Join the Partner/, /Advisor account/], ['founder', /Submit your pitch/, /Advisor account/]]) {
+  for (const [lane, want, never] of [['advisor', /Create your Advisor account/, /Submit your pitch/], ['investor', /Create your investor account/, /Advisor account|Open your LP/], ['founder', /Create your founder account/, /Advisor account|Submit your pitch/]]) {
     const v = await mountRegister(`?lane=${lane}`, { read: READ });
     try {
       const t = v.text();
-      if (lane !== 'investor') assert.match(t, want, lane);
+      assert.match(t, want, lane); // #6983 (X1): the investor lane has its own heading now
       assert.doesNotMatch(t, never, lane);
       assert.equal(v.by('register-plan'), undefined, 'no plan chosen, no selection drawn');
       assert.ok(v.by('register-steps'), 'the steps are still said');

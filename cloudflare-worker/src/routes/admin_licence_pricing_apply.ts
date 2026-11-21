@@ -13,8 +13,10 @@
  *
  * The apply is the D4694 revision-safe terms write: a stale `expected_terms_revision`
  * answers 409 `terms_conflict` and records nothing. It never instantiates, sends
- * or edits a contract and never touches an issued invoice; a changed annual fee
- * or royalty marks the agreement as not matching, and the read says so until
+ * or edits a contract and never touches an issued invoice. Since D5953 it also
+ * writes the accepted minimum royalty into the schedule's minimum guarantee
+ * (`licence_terms.minimum_guarantee_cents`) in the same batch; a changed annual
+ * fee, royalty or minimum guarantee marks the agreement as not matching, and the read says so until
  * HQ instantiates the replacement (`POST /api/admin/licences/:uid/contract`).
  * The branch push's outcome comes back on its own (`pushed`), apart from HQ's
  * commit (`committed: true`).
@@ -35,8 +37,8 @@ import { PricingError, activeModel, decisionsForLicence, getCountry } from '../s
 import { STALE_CODES, pricingIncident } from '../services/pricingIncidents';
 import {
   addYear, applyStatements, createLicenceSnapshot, currentContract, driftOf, effectiveBasis, getLicenceSnapshot, getReview,
-  latestLicenceSnapshot, nextReviewOn, openReview, planApply, policyOf, resolveReview, reviewsFor, territoryOf,
-  validateApplyBody, validatePolicyBody, type ApplyInput, type Values,
+  latestLicenceSnapshot, nextReviewOn, openReview, planApply, policyOf, resolveReview, reviewsFor, scheduleOf, territoryOf,
+  validateApplyBody, validatePolicyBody, type ApplyInput, type ScheduleState, type Values,
 } from '../services/licencePricingApply';
 
 type C = Context<{ Bindings: Env }>;
@@ -60,10 +62,11 @@ const reasonOf = (b: Record<string, unknown> | null, min = 3, max = 500) => {
 const noReason = (c: C) => refuse(c, 400, { code: 'reason_required', message: 'Say why, in 3 to 500 characters.' });
 const notFound = (c: C) => refuse(c, 404, { code: 'not_found', message: 'No licence with that id.' });
 
-/** The licence's current terms as the pricing panel shows them. */
-const termsOf = (l: LicenceRow) => ({
+/** The licence's current terms as the pricing panel shows them; D5953 adds the schedule's minimum guarantee and revision (0 when no schedule is recorded). */
+const termsOf = (l: LicenceRow, s: ScheduleState) => ({
   annual_fee_cents: l.annual_fee_cents ?? null, revenue_share_bps: l.revenue_share_bps ?? null, currency: l.currency ?? null,
   terms_revision: Number((l as any).terms_revision ?? 0),
+  minimum_guarantee_cents: s?.minimum_guarantee_cents ?? null, schedule_revision: s?.revision ?? 0,
 });
 
 /**
@@ -84,7 +87,7 @@ async function agreementOf(c: C, licenceUid: string) {
     contract,
     decision_uid: later ? String(later.uid) : null,
     reason: later
-      ? 'A pricing decision changed the annual fee or royalty after this agreement was drawn, so it may no longer match. Instantiate the replacement agreement on the Contract tab; the current one is not edited.'
+      ? 'A pricing decision changed the annual fee, royalty or minimum guarantee after this agreement was drawn, so it may no longer match. Instantiate the replacement agreement on the Contract tab; the current one is not edited.'
       : null,
   };
 }
@@ -95,9 +98,9 @@ r.get('/:uid/pricing', async (c) => {
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return notFound(c);
     const territory = await territoryOf(c.env, licence.id);
-    const [policy, model, snapshot, decisions, reviews] = await Promise.all([
+    const [policy, model, snapshot, decisions, reviews, schedule] = await Promise.all([
       policyOf(c.env, licence.uid), activeModel(c.env), latestLicenceSnapshot(c.env, licence.uid),
-      decisionsForLicence(c.env, licence.uid), reviewsFor(c.env, licence.uid),
+      decisionsForLicence(c.env, licence.uid), reviewsFor(c.env, licence.uid), scheduleOf(c.env, licence.uid),
     ]);
     const eff = effectiveBasis(policy, territory);
     const countries = await Promise.all(territory.map(async (code) => {
@@ -128,7 +131,7 @@ r.get('/:uid/pricing', async (c) => {
       && snapshot.territory.join(',') === territory.join(',') ? snapshot : null;
     return c.json({
       licence_uid: licence.uid,
-      terms: termsOf(licence),
+      terms: termsOf(licence, schedule),
       territory,
       basis: eff.ok ? { ...eff.value, policy } : { required: true, code: eff.code, reason: eff.sentence, policy },
       model: model ? { uid: model.uid, version: model.version, currency: model.currency, effective_from: model.effective_from } : null,
@@ -137,7 +140,7 @@ r.get('/:uid/pricing', async (c) => {
       recommendation: current,
       recommendation_reason: current ? null : snapshot ? 'The last recommendation was made for another territory or basis; refresh it.' : 'No recommendation has been made for this licence yet.',
       latest_decision: latest,
-      drift: driftOf(current, licence),
+      drift: driftOf(current, licence, schedule),
       next_review_on: next,
       review_due: !!next && next <= today(),
       reviews,
@@ -240,7 +243,9 @@ r.post('/:uid/pricing/apply', async (c) => {
     if (licence.currency && licence.currency !== snap.currency) {
       return refuse(c, 409, { code: 'currency_mismatch', message: `This licence is held in ${licence.currency}, and the recommendation is in ${snap.currency}. Change the licence currency on the Terms tab first, or override in ${snap.currency}.` });
     }
-    const plan = planApply(snap, licence, input.accepted, input.override_reason);
+    // D5953: the schedule as it stands now; the batch below refuses to write over any other state of it.
+    const schedule = await scheduleOf(c.env, licence.uid);
+    const plan = planApply(snap, licence, input.accepted, input.override_reason, schedule);
     if (!plan.ok) return refuse(c, 400, { code: plan.code, message: plan.sentence });
     let contract: Awaited<ReturnType<typeof currentContract>> = null;
     try { contract = await currentContract(c.env, licence.uid); } catch {
@@ -263,28 +268,31 @@ r.post('/:uid/pricing/apply', async (c) => {
     const reviewOn = input.pricing_review_on ?? addYear(input.effective_from);
     const full: ApplyInput = { ...input, accepted: plan.plan.accepted as Values };
     const commit = await runDecision(c.env, applyStatements(c.env, {
-      licence, snap, input: full, plan: plan.plan, actor: actorOf(admin), decisionUid, now, contractUid: contract?.uid ?? null, reviewOn,
+      licence, snap, input: full, plan: plan.plan, actor: actorOf(admin), actorUserId: admin.id, decisionUid, now, contractUid: contract?.uid ?? null, reviewOn, schedule,
     }));
     if (commit.lost) {
       pricingIncident('stale_revision_conflict', { code: 'terms_conflict', licence_uid: licence.uid, expected_terms_revision: input.expected_terms_revision });
       const fresh = await byUid(c.env, licence.uid);
+      const freshSchedule = await scheduleOf(c.env, licence.uid);
       return refuse(c, 409, {
         code: 'terms_conflict',
         message: 'These terms changed since you opened them, so nothing was saved. Reload them and apply again.',
-        extra: { current_revision: fresh ? Number((fresh as any).terms_revision ?? 0) : null, current: fresh ? termsOf(fresh) : null },
+        extra: { current_revision: fresh ? Number((fresh as any).terms_revision ?? 0) : null, current: fresh ? termsOf(fresh, freshSchedule) : null },
       });
     }
     const after = (await byUid(c.env, licence.uid)) ?? licence;
-    // D272 — the branch's copy holds the core terms, so the apply pushes like every terms write.
+    const scheduleAfter = await scheduleOf(c.env, licence.uid);
+    // D272 — the branch's copy holds the core terms and the schedule (`terms_json`), so the apply pushes like every terms write.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     const outcome = pushOutcome(pushed);
     if (outcome === 'partial') pricingIncident('branch_push_partial', { licence_uid: licence.uid, decision_uid: decisionUid, failure_code: (pushed as { failure_code?: string }).failure_code ?? null });
-    const before = { annual_fee_cents: licence.annual_fee_cents ?? null, revenue_share_bps: licence.revenue_share_bps ?? null, currency: licence.currency };
-    const afterTerms = { annual_fee_cents: after.annual_fee_cents ?? null, revenue_share_bps: after.revenue_share_bps ?? null, currency: after.currency };
+    const before = { annual_fee_cents: licence.annual_fee_cents ?? null, revenue_share_bps: licence.revenue_share_bps ?? null, currency: licence.currency, minimum_guarantee_cents: schedule?.minimum_guarantee_cents ?? null };
+    const afterTerms = { annual_fee_cents: after.annual_fee_cents ?? null, revenue_share_bps: after.revenue_share_bps ?? null, currency: after.currency, minimum_guarantee_cents: scheduleAfter?.minimum_guarantee_cents ?? null };
     await logEvent(c.env, licence.id, 'terms_changed', admin.id, {
       source: 'country_pricing', decision_uid: decisionUid, decision: plan.plan.decision, snapshot_uid: snap.uid,
       model_version: snap.pricing_model_version, reason: input.reason, override_reason: plan.plan.decision === 'overridden' ? input.override_reason : null,
       changed: plan.plan.changed_terms,
+      schedule_revision: plan.plan.schedule_write ? { before: schedule?.revision ?? 0, after: scheduleAfter?.revision ?? null } : null,
     }, input.reason, { before, after: afterTerms }, outcome);
     await logAdminAction(c.env, admin.id, admin.email || '', 'licence_pricing_applied', {
       licence_uid: licence.uid, decision_uid: decisionUid, decision: plan.plan.decision, snapshot_uid: snap.uid, differs: plan.plan.differs,
@@ -295,7 +303,7 @@ r.post('/:uid/pricing/apply', async (c) => {
     return c.json({
       ok: true, committed: true,
       decision: { uid: decisionUid, decision: plan.plan.decision, accepted: plan.plan.accepted, recommended: snap.recommended, effective_from: input.effective_from, pricing_review_on: reviewOn },
-      terms: termsOf(after), changed: plan.plan.changed_terms,
+      terms: termsOf(after, scheduleAfter), changed: plan.plan.changed_terms,
       agreement: plan.plan.contractual_change && contract
         ? { state: 'mismatch', contract_uid: contract.uid, reason: 'The agreement was drawn on the old figures. Instantiate the replacement on the Contract tab; the current one was not edited.' }
         : { state: contract ? 'matches' : 'none', contract_uid: contract?.uid ?? null },

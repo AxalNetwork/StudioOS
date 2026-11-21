@@ -169,13 +169,15 @@ test('Cap table: a refused record read draws the refusal and none of the module�
   } finally { await view.close(); }
 });
 
-test('Cap table: an empty record read still draws the module’s card and table', async () => {
+test('Cap table: an empty record read draws the tool’s own empty card, not a refusal', async () => {
+  // D5081 part 3 (#5081, RA-20): the tool owns its page, so the module's generic card and Holders table are not
+  // drawn under it; an answered empty record is the tool's "Nothing is recorded yet." card instead.
   const view = await mounted(`/raise/cap-table?project_id=${P}`);
   try {
     assert.ok(!view.by('cycle-module-refused'), 'nothing was refused');
-    assert.ok(view.by('cycle-module-chart'), 'a measured empty cap table still shows its card');
-    assert.match(view.text(), /· at a glance/);
-    assert.match(view.text(), /No holders yet/, 'an empty read is allowed to say it is empty');
+    assert.ok(view.by('captable-empty'), 'a measured empty cap table says it is empty');
+    assert.ok(!view.by('cycle-module-chart'), 'no generic card under the tool');
+    assert.doesNotMatch(view.text(), /· at a glance/);
   } finally { await view.close(); }
 });
 
@@ -300,7 +302,8 @@ const CHECKS = [
   { name: 'the data room’s Home says a summary is not the room', file: 'frontend/src/pages/raise/dataroom/DataRoomHome.jsx',
     before: "  if (read.room?.mode === 'summary') {", after: "  if (read.room?.mode === 'summary') { return null; }\n  if (false) {",
     pattern: 'a summary answer is not the room' },
-  { name: 'the pipeline tells a refusal from a failure', file: 'frontend/src/pages/raise/caprel/CapRelPipeline.jsx',
+  // D5081 part 2 (#5081): the prospects read moved to `capRelHomeRead.js`, shared by Pipeline, Overview and CycleRoute.
+  { name: 'the pipeline tells a refusal from a failure', file: 'frontend/src/pages/raise/caprel/capRelHomeRead.js',
     before: "setRead({ status: raiseReadState(error), items: null, projectId, message: userFacingRaiseError(error, { fallback: '' }) })",
     after: "setRead({ status: 'unreadable', items: null, projectId })", pattern: 'never as an unreadable store' },
   { name: 'the pipeline reports its refusal', file: 'frontend/src/pages/raise/caprel/CapRelOverview.jsx',

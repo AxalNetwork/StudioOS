@@ -41,6 +41,8 @@ import { memKV } from '../../../cloudflare-worker/test/_mem_kv.mjs';
 import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
 import { securityBackups, seedSecurity, SECURITY_ADMIN } from './_security_seed.ts';
+import { seedFundAdmin } from './_fund_admin_seed.ts';
+import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const DOCS = join(ROOT, 'docs');
@@ -165,8 +167,11 @@ const security = { ...(await seedSecurity(db, env, NOW)), user: null as unknown 
 security.user = await worker.fetch(new Request(`${ORIGIN}/api/auth/me`, { headers: { Authorization: `Bearer ${security.token}` } }), env, ctx)
   .then((r) => r.json()).catch(() => ({ ...SECURITY_ADMIN, role: 'admin', is_super_admin: 1 }));
 
+// D4812 (#4812, part 8): the fund Fund Admin's browser pass reads, as that Super Admin (`_fund_admin_seed.ts`).
+const fundAdmin = seedFundAdmin(db, NOW, SECURITY_ADMIN.id);
+
 const me = await api('GET', '/api/auth/me').catch(() => null);
-const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security };
+const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security, fundAdmin };
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
@@ -205,8 +210,8 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
     res.end(readFileSync(file));
   } catch (e) {
-    // The trace goes to the runner's log, never into the reply.
-    console.error('[visual] request failed', e);
+    // Keep a diagnostic classification, without exception messages, paths or stack contents.
+    reportPrivateError('visual_request', e);
     res.writeHead(500, { 'content-type': 'text/plain' });
     res.end('The visual test server could not answer this request.');
   }

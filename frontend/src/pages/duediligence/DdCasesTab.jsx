@@ -13,9 +13,10 @@
  * with no case says "No diligence cases yet." with measured zeros; filters
  * that match nobody say what they asked for, with Clear filters.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
+import { usePhoneWidth } from '../../ui';
 import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { reportError } from '../../lib/log';
 import { useToast } from '../../components/useToast';
@@ -23,7 +24,7 @@ import ToastMessage from '../../components/ToastMessage';
 import {
   ADVISOR_NOTE, CHANGE_REFUSED, LIST_FAILED, LIST_FAILED_SUB, PAGE_SIZES, SORTS, SUBJECT_TYPES,
   ageChart, canChangeCase, canOpenCase, decisionsChart, filterChips, listQuery, noMatchText, overviewTiles,
-  pageCount, rangeText, rowCells, stageStrip,
+  pageCount, rangeText, readCasesSearch, rowCells, stageStrip, writeCasesSearch,
 } from './ddListModel.js';
 import { BAND_WORD, DECISION_WORD } from './ddModel.js';
 import { ChartCard } from './DdCharts.jsx';
@@ -67,11 +68,11 @@ function Tile({ t }) {
 function RowMenu({ row, me, base, onPick }) {
   const [open, setOpen] = useState(false);
   const mine = canChangeCase(me, row);
-  const item = 'block w-full rounded-md px-3 py-2 text-left text-[13px] text-gray-800 hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
+  const item = 'flex min-h-11 items-center w-full rounded-md px-3 py-2 text-left text-[13px] text-gray-800 hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
   return (
     <div className="relative">
       <button type="button" aria-label={`Actions for ${row.subject_label}`} aria-expanded={open} onClick={() => setOpen((v) => !v)}
-        className="rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`dd-row-menu-${row.uid}`}>
+        className="inline-grid min-h-11 min-w-11 place-items-center rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`dd-row-menu-${row.uid}`}>
         <MoreHorizontal size={16} />
       </button>
       {open ? (
@@ -127,6 +128,35 @@ function CaseRow({ row, me, base, onPick, now }) {
   );
 }
 
+function CaseCard({ row, me, base, onPick, now }) {
+  const c = rowCells(row, now);
+  const facts = [
+    ['Stage', c.stageWord],
+    ['Lead', c.lead],
+    ['Checklist', c.checklist],
+    ['Open flags', [c.flags, c.severity].filter((value) => value != null && value !== '').join(' · ')],
+    ['Risk band', c.band],
+    ['Target IC date', [c.target.day, c.target.sub].filter(Boolean).join(' · ')],
+  ];
+  return (
+    <article className="min-w-0 border-t border-axal-hairline p-3 first:border-0 dark:border-gray-800" data-testid={`dd-card-${row.uid}`}>
+      <div className="flex items-start justify-between gap-2">
+        <Link to={`${base}/${row.uid}`} className="inline-flex min-h-11 min-w-0 items-center break-words text-sm font-bold text-axal-violet dark:text-violet-300">{c.name}</Link>
+        <RowMenu row={row} me={me} base={base} onPick={onPick} />
+      </div>
+      <p className={`m-0 text-xs ${muted}`}>{c.short} · {c.type}</p>
+      <dl className="mb-0 mt-3 grid grid-cols-2 gap-3">
+        {facts.map(([label, value]) => (
+          <div key={label} className="min-w-0 break-words">
+            <dt className={eyebrowCls}>{label}</dt>
+            <dd className="m-0 mt-1 text-[13px] font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </article>
+  );
+}
+
 function FiltersPanel({ filters, me, onChange }) {
   const sel = (key, label, options) => (
     <label className="block min-w-[150px]">
@@ -168,22 +198,21 @@ function Empty({ title, sub, children, testId }) {
 const clock = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 export default function DdCasesTab({ me, now = Date.now() }) {
+  const phone = usePhoneWidth('(max-width: 767px)');
   const navigate = useNavigate();
   // A case link stays on the caller's base, so a member never reaches an /admin/ address.
-  const { pathname } = useLocation();
+  const { pathname, search, hash } = useLocation();
+  const address = useMemo(() => readCasesSearch(search), [search]);
+  const { filters, stage, q, sort, page, pageSize } = address;
+  const update = useCallback((patch, options) => navigate({ pathname, search: writeCasesSearch(search, { ...address, ...patch }), hash }, options), [navigate, pathname, search, hash, address]);
   const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   const [ov, setOv] = useState(null);
   const [list, setList] = useState(null);
   const [listState, setListState] = useState('loading');
   const [readAt, setReadAt] = useState(null);
-  const [filters, setFilters] = useState({});
-  const [stage, setStage] = useState('');
-  const [qInput, setQInput] = useState('');
-  const [q, setQ] = useState('');
-  const [sort, setSort] = useState('opened');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [qInput, setQInput] = useState(q);
+  const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
+  const listRead = useRef(0);
   const [dialog, setDialog] = useState(null);
   const [templates, setTemplates] = useState(null);
   const { toast, success, dismissToast } = useToast();
@@ -197,30 +226,34 @@ export default function DdCasesTab({ me, now = Date.now() }) {
   }, []);
   const query = useMemo(() => listQuery({ filters, stage, q, sort, page, pageSize }), [filters, stage, q, sort, page, pageSize]);
   const loadList = useCallback(async () => {
+    const request = ++listRead.current;
     setListState('loading');
     try {
       const r = await ddDeskApi.cases(query);
+      if (request !== listRead.current) return;
       setList({ items: r.items || [], total: Number(r.total ?? (r.items || []).length) });
       setListState('ok');
       setReadAt(new Date());
     } catch (e) {
+      if (request !== listRead.current) return;
       if (e?.status === 404) { setListState('unavailable'); return; }
       reportError('DdCasesTab:list', e);
       setListState('failed');
     }
   }, [query]);
   useEffect(() => { loadOverview(); }, [loadOverview]);
-  useEffect(() => { loadList(); }, [loadList]);
+  useEffect(() => { loadList(); return () => { listRead.current += 1; }; }, [loadList]);
+  useEffect(() => { setQInput(q); }, [q]);
   // A changed search reads the server from page 1; an unchanged one never moves the page.
   useEffect(() => {
     if (qInput === q) return undefined;
-    const t = setTimeout(() => { setQ(qInput); setPage(1); }, 250);
+    const t = setTimeout(() => update({ q: qInput, page: 1 }, { replace: true }), 250);
     return () => clearTimeout(t);
-  }, [qInput, q]);
+  }, [qInput, q, update]);
 
   const refresh = () => { loadOverview(); loadList(); };
-  const setF = (next) => { setFilters(next); setPage(1); };
-  const clearAll = () => { setFilters({}); setStage(''); setQInput(''); setQ(''); setPage(1); };
+  const setF = (next) => update({ filters: next, page: 1 });
+  const clearAll = () => { setQInput(''); update({ filters: {}, stage: '', q: '', page: 1 }); };
   const chips = filterChips(filters, me);
   const narrowed = chips.length > 0 || Boolean(stage) || Boolean(q.trim());
   const openDialog = async () => {
@@ -231,6 +264,9 @@ export default function DdCasesTab({ me, now = Date.now() }) {
   };
   const done = (msg) => { setDialog(null); success(msg); refresh(); };
   const pages = pageCount(list?.total ?? 0, pageSize);
+  useEffect(() => {
+    if (listState === 'ok' && page > pages) update({ page: pages }, { replace: true });
+  }, [listState, page, pages, update]);
   const shown = list?.items.length ?? 0;
   const age = ov && !ov.failed ? ageChart(ov.ages) : null;
   const dec = ov && !ov.failed ? decisionsChart(ov.decisions) : null;
@@ -258,7 +294,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
             </div>
           ) : null}
 
-          <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
+          <div className="mt-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-2">
             <ChartCard title="Open cases by age" chart={age} state={chartState(age, ov?.ages)} onRetry={loadOverview} testId="dd-chart-age" />
             <ChartCard title="Decisions, last 12 months" chart={dec} state={chartState(dec, ov?.decisions)} onRetry={loadOverview} testId="dd-chart-decisions" />
           </div>
@@ -267,7 +303,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
             {stageStrip(ov).map((s) => {
               const on = stage === s.key;
               return (
-                <button key={s.key} type="button" aria-pressed={on} onClick={() => { setStage(on ? '' : s.key); setPage(1); }} data-testid={`dd-stage-${s.key}`}
+                <button key={s.key} type="button" aria-pressed={on} onClick={() => { update({ stage: on ? '' : s.key, page: 1 }); }} data-testid={`dd-stage-${s.key}`}
                   className={`rounded-xl border px-3.5 py-2.5 text-left ${on ? 'border-violet-300 bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40' : 'border-axal-hairline bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800'}`}>
                   <span className={`block text-[12.5px] font-semibold ${on ? 'text-violet-800 dark:text-violet-200' : muted}`}>{s.label}</span>
                   <span className="block font-mono text-[20px] font-semibold text-gray-900 dark:text-gray-100">{s.n == null ? '—' : s.n}</span>
@@ -288,7 +324,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
             </button>
             <label className="inline-flex items-center gap-1.5">
               <span className="sr-only">Sort</span>
-              <select className={`${inputCls} h-9 w-auto py-0`} value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} aria-label="Sort" data-testid="dd-sort">
+              <select className={`${inputCls} h-11 max-w-full w-auto py-0 md:h-9`} value={sort} onChange={(e) => { update({ sort: e.target.value, page: 1 }); }} aria-label="Sort" data-testid="dd-sort">
                 {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
             </label>
@@ -296,9 +332,9 @@ export default function DdCasesTab({ me, now = Date.now() }) {
               {readAt ? <span className={muted}>Read at <span className="font-mono">{clock(readAt)}</span> · <button type="button" onClick={refresh} className="font-semibold text-axal-violet hover:underline dark:text-violet-300"><RefreshCw size={11} className="mr-0.5 inline" />Refresh</button></span> : null}
               {list ? <span className="font-mono text-gray-900 dark:text-gray-100" data-testid="dd-range">{rangeText(page, pageSize, shown, list.total)}</span> : null}
               <span className="inline-flex gap-1">
-                <button type="button" className={`${btnCls} h-8 px-2`} aria-label="Previous page" onClick={() => setPage((p) => Math.max(1, p - 1))}>‹</button>
+                <button type="button" className={`${btnCls} min-h-11 min-w-11 justify-center px-2 md:min-h-8 md:min-w-8`} aria-label="Previous page" onClick={() => update({ page: Math.max(1, page - 1) })}>‹</button>
                 <span className="inline-grid h-8 min-w-[32px] place-items-center rounded-lg border border-violet-200 bg-violet-50 font-mono text-[12px] font-bold text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200" data-testid="dd-page">{page}</span>
-                <button type="button" className={`${btnCls} h-8 px-2`} aria-label="Next page" onClick={() => setPage((p) => Math.min(pages, p + 1))} data-testid="dd-next">›</button>
+                <button type="button" className={`${btnCls} min-h-11 min-w-11 justify-center px-2 md:min-h-8 md:min-w-8`} aria-label="Next page" onClick={() => update({ page: Math.min(pages, page + 1) })} data-testid="dd-next">›</button>
               </span>
             </div>
           </div>
@@ -321,13 +357,19 @@ export default function DdCasesTab({ me, now = Date.now() }) {
                 <button type="button" className={btnCls} onClick={loadList}><RefreshCw size={14} />Try again</button>
               </Empty>
             ) : listState === 'ok' && !shown && !narrowed ? (
-              <Empty title="No diligence cases yet." sub="Open one when a deal, a founder or a partner needs checking." testId="dd-empty">
-                {canOpenCase(me?.role) ? <button type="button" className={btnCls} onClick={openDialog}><Plus size={14} />Open a case</button> : null}
+              <Empty title="No diligence cases yet." sub="Open a case from a deal’s Diligence tab, or use Open a case here." testId="dd-empty">
+                {canOpenCase(me?.role) ? <><Link to="/deals" className={btnCls} data-testid="dd-empty-deals">Open Deals</Link><button type="button" className={btnCls} onClick={openDialog}><Plus size={14} />Open a case</button></> : null}
               </Empty>
             ) : listState === 'ok' && !shown ? (
               <Empty title="No cases match these filters." sub={noMatchText({ filters, stage, q }, me)} testId="dd-no-match">
                 <button type="button" className={btnCls} onClick={clearAll}>Clear filters</button>
               </Empty>
+            ) : phone ? (
+              <div data-testid="dd-case-cards">
+                {listState === 'loading'
+                  ? <p className={`p-4 text-sm ${muted}`} role="status">Loading cases…</p>
+                  : list.items.map((r) => <CaseCard key={r.uid} row={r} me={me} base={base} now={now} onPick={(kind, row) => setDialog({ kind, row })} />)}
+              </div>
             ) : (
               <table className="w-full min-w-[1080px] border-collapse text-left">
                 <thead>
@@ -353,7 +395,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
                   {PAGE_SIZES.map((n, i) => (
                     <React.Fragment key={n}>
                       {i ? ' · ' : ''}
-                      <button type="button" aria-pressed={pageSize === n} onClick={() => { setPageSize(n); setPage(1); }}
+                      <button type="button" aria-pressed={pageSize === n} onClick={() => { update({ pageSize: n, page: 1 }); }}
                         className={pageSize === n ? 'font-mono font-bold text-gray-900 dark:text-gray-100' : 'hover:underline'}>{n}</button>
                     </React.Fragment>
                   ))}

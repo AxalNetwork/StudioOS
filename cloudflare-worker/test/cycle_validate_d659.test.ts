@@ -55,6 +55,8 @@ function fixture() {
   db.exec(sqlOf('460_validate_record_stores.sql'));
   // D693 (#1704): Verdict is the seventh card, over migration 464's decisions.
   db.exec(sqlOf('464_verdict_decisions.sql'));
+  // D6011 (#6011): the market card reads each figure's source from `market_figures`.
+  db.exec(sqlOf('202611150130_6011_market_figures.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 0);
@@ -143,13 +145,13 @@ test('D659: a new venture — every card empty with its one starting action, eve
   assert.equal(r.status, 200);
   for (const c of r.body.cards) {
     assert.equal(c.state, 'empty', c.slug);
-    assert.ok(c.next && c.next.text && c.next.href.startsWith('/validate/'), `${c.slug} names its starting action`);
+    assert.ok(c.next && c.next.text && (c.next.href.startsWith('/validate/') || c.slug === 'demand-signals'), `${c.slug} names its starting action`);
     assert.equal(c.series, null, `${c.slug} draws nothing`);
   }
   assert.equal(card(r.body, 'problem-discovery').next.text, 'Record your first session');
   assert.equal(card(r.body, 'ideal-customer-profile').next.text, 'Start the profile');
   assert.equal(card(r.body, 'market-intelligence').next.text, 'Add the total market, with its source');
-  assert.equal(card(r.body, 'demand-signals').next.text, 'Connect a landing page');
+  assert.deepEqual(card(r.body, 'demand-signals').next, { text: 'Open the landing-page builder', href: `/build/brand?project_id=${P}` });
   assert.equal(card(r.body, 'experiments').next.text, 'Write the claim you most need to be true');
   assert.equal(card(r.body, 'verdict').next.text, 'Record a decision');
   for (const f of r.body.figures) {
@@ -163,6 +165,19 @@ test('D659: a new venture — every card empty with its one starting action, eve
 // ---------------------------------------------------------------------------
 // The five states
 // ---------------------------------------------------------------------------
+
+test('a waitlist bar persists without sign-ups; the card stays empty until sign-ups arrive', async () => {
+  const db = fixture();
+  const url = `/modules/demand-signals?project=${P}`;
+  const target = `/waitlist-target?project=${P}`;
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: 40 })).status, 200);
+  const saved = (await call(db, FOUNDER, 'GET', url)).body;
+  assert.equal(saved.card.state, 'empty');
+  assert.equal(saved.card.series, null);
+  assert.equal(saved.parts.waitlist_bar, 40);
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: null })).status, 200);
+  assert.equal((await call(db, FOUNDER, 'GET', url)).body.parts.waitlist_bar, null);
+});
 
 test('D659: one failing source makes only its own card unreadable, naming the source', async () => {
   const db = fixture();
@@ -219,8 +234,8 @@ test('D659: a value the source does not hold is null with its reason — never 0
   db.prepare("INSERT INTO waitlist_signups (project_id, email, audience) VALUES (?, 'a@x.test', 'customer')").run(P);
   const r = await overview(db);
   const m = card(r.body, 'market-intelligence').series;
-  assert.deepEqual(m.tam, { value: 4200000000, source: null, reason: 'No source recorded for this figure' });
-  assert.deepEqual(m.sam, { value: null, source: null, reason: 'No figure entered' });
+  assert.deepEqual(m.tam, { value: 4200000000, source: null, reason: 'No source recorded for this figure', as_of: null, source_url: null, method: null });
+  assert.deepEqual(m.sam, { value: null, source: null, reason: 'No figure entered', as_of: null, source_url: null, method: null });
   const d = card(r.body, 'demand-signals').series;
   assert.equal(d.bar, null);
   assert.equal(d.bar_reason, 'No bar set');
@@ -311,7 +326,8 @@ test('D659: next names the number it counted — the invited leads with no slot'
   db.prepare("INSERT INTO waitlist_signups (project_id, email, audience, crm_status) VALUES (?, 'n@x.test', 'customer', 'new'), (?, 'i@x.test', 'customer', 'invited')").run(P, P);
   const r = await overview(db);
   const cr = card(r.body, 'customer-research');
-  assert.deepEqual(cr.next, { text: 'Book the 2 invited leads with no slot yet', href: `/validate/customer-research?project=${P}` });
+  // D6001 (#6001): the link lands on the list filtered to the two rows it names.
+  assert.deepEqual(cr.next, { text: 'Book the 2 invited leads with no slot yet', href: `/validate/customer-research?project=${P}&filter=stage:invited_no_slot` });
   assert.deepEqual(cr.series.funnel, { lead: 7, invited: 5, booked: 1, done: 1 });
 });
 
@@ -452,7 +468,11 @@ test('D659: a demand signal — an amount of 0 is refused, a typed signal is con
   const d = card(o.body, 'demand-signals');
   assert.equal(d.series.signals.loi, 1);
   assert.equal(d.series.signals.pre_sale, 1, 'the paid deposit counts; the unconfirmed one does not yet');
-  assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}` });
+  assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}#waitlist-bar` });
+  assert.equal(card((await overview(db, PARTNER)).body, 'demand-signals').next, null);
+  const partnerModule = await call(db, PARTNER, 'GET', `/modules/demand-signals?project=${P}`);
+  assert.equal(partnerModule.body.parts.can_write, false);
+  assert.equal(partnerModule.body.card.next, null);
   assert.equal((await call(db, FOUNDER, 'PUT', `/waitlist-target?project=${P}`, { value: 40 })).status, 200);
   const o2 = await overview(db);
   assert.equal(card(o2.body, 'demand-signals').series.bar, 40);
@@ -569,9 +589,16 @@ test('D659: problem discovery records filter by severity and say what links to a
   assert.deepEqual(m.body.records.rows, [
     // One mention in the last 30 days, one in the 30 before: no change.
     { id: 1, theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'],
-      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'] },
+      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'],
+      // D6006 (#6006, V17): the rank and why, sources beside mentions, and the claims it supports and contradicts.
+      grouped: true, rank: 1, rank_reason: 'Most mentions · mostly Severe',
+      sources: { interviews: 2, people: 2, organisations: null, people_unrecorded: 0, organisations_unrecorded: 2 },
+      phrases: 2, supporting: 1, contradicting: 0, contradicts: null },
     { id: null, theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null,
-      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'] },
+      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'],
+      grouped: false, rank: 2, rank_reason: '1 mention',
+      sources: { interviews: 1, people: 1, organisations: null, people_unrecorded: 0, organisations_unrecorded: 1 },
+      phrases: 1, supporting: 0, contradicting: 0, contradicts: null },
   ]);
   m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}&filter=severity:not_recorded`);
   assert.deepEqual(m.body.records.rows.map((x: any) => x.theme), ['Paper forms']);
@@ -760,4 +787,44 @@ test('D685 §5.12: the interviews target shares metric_targets but never reaches
     assert.equal(res.status, 200, JSON.stringify(body));
     assert.deepEqual(body.items.map((t: any) => t.metric_key), ['mrr']);
   } finally { [console.warn, console.error] = saved; }
+});
+
+
+test('demand commits keep currency and period separate and exclude interest and unconfirmed terms', async () => {
+  const db = fixture();
+  for (const [kind, amount_cents, currency, period, status] of [
+    ['loi', 12500, 'eur', 'month', 'confirmed'],
+    ['pre_sale', 2500, 'eur', 'month', 'confirmed'],
+    ['loi', 30000, 'eur', 'year', 'confirmed'],
+    ['pre_sale', 10000, 'usd', 'month', 'confirmed'],
+    ['would_pay', 50000, 'eur', 'month', 'confirmed'],
+    ['loi', 60000, 'eur', 'month', 'to_confirm'],
+  ]) {
+    const result = await call(db, FOUNDER, 'POST', `/demand-signals?project=${P}`, { kind, amount_cents, currency, period, status });
+    assert.equal(result.status, 201);
+  }
+  const data = card((await overview(db)).body, 'demand-signals').series;
+  assert.equal(data.signals.would_pay, 1);
+  assert.deepEqual(data.committed, [
+    { currency: 'EUR', period: 'month', amount_cents: 15000 },
+    { currency: 'EUR', period: 'year', amount_cents: 30000 },
+    { currency: 'USD', period: 'month', amount_cents: 10000 },
+  ]);
+});
+
+// #5999: the overview says whether the viewer may write, by the gate the target's writer uses.
+// Mutation checked: `can_write: true` in the route fails it (a partner reads true); no `can_write`
+// fails it (undefined for every viewer); the PUT gated on `canReadBoard` in place of `canWrite` fails
+// it and D685's test (a partner's save is allowed).
+test('#5999: the overview returns can_write — true for a writer, false for a read-only partner — and the PUT agrees', async () => {
+  const db = fixture();
+  for (const [who, pid, can] of [[FOUNDER, P, true], [ADMIN, P, true], [LAB, P_LAB, true], [PARTNER, P, false]] as const) {
+    const o = await overview(db, who, pid);
+    assert.equal(o.status, 200);
+    assert.equal(o.body.can_write, can, `overview can_write, user ${who}`);
+    // The same viewer's save: allowed exactly where the read says it may write.
+    const put = await call(db, who, 'PUT', `/interviews-target?project=${pid}`, { value: 8 });
+    assert.equal(put.status, can ? 200 : 403, `PUT /interviews-target, user ${who}`);
+  }
+  assert.equal((await call(db, PARTNER, 'PUT', `/interviews-target?project=${P}`, { value: null })).status, 403, 'a non-writer cannot clear it either');
 });

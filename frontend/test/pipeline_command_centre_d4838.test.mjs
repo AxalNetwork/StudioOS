@@ -15,7 +15,7 @@ import { renderedText } from './_renderedText.mjs';
 
 import {
   ok, unreadable, setupSteps, isFirstRun, openPipelineMetric, weightedMetric, winRateMetric, cycleMetric,
-  attentionItems, riskItems, lifecycleStrip, railSteps, quotesEverSent,
+  attentionItems, riskItems, lifecycleStrip, railSteps, quotesEverSent, movementView, activityRows, EVENT_WORDS, MOVEMENT_SHOWN,
 } from '../src/pages/partner/pipeline/commandCentre.js';
 import { FirstRun, CommandCentre, pipelineView, readPipeline } from '../src/pages/partner/pipeline/PipelineCommandCentre.jsx';
 
@@ -36,7 +36,16 @@ const firstRunSources = () => ({
     forecast: { weighted_value: 0, unweighted_value: 0, by_stage: [], note: 'Weighted over undecided quotes only.' } }),
   fitRules: ok({ items: [] }),
   services: ok({ items: [] }),
+  activity: ok({ items: [] }),
 });
+
+/** D5942's feed as the Worker answers it: newest first, each event naming its opportunity. */
+const FEED = [
+  { key: 'proposal_lost:3', kind: 'proposal_lost', occurred_at: '2026-11-14T10:00:00Z', opportunity: { need_id: 33, uid: 'n-33', title: 'Pinecrest rebuild' } },
+  { key: 'negotiation_moved:7', kind: 'negotiation_moved', occurred_at: '2026-11-12T09:00:00Z', opportunity: { need_id: 32, uid: 'n-32', title: 'Verwood payments' } },
+  { key: 'mystery:1', kind: 'mystery', occurred_at: '2026-11-11T09:00:00Z', opportunity: { need_id: 31, uid: 'n-31', title: 'Unknown' } },
+  { key: 'passed:4', kind: 'passed', occurred_at: '2026-11-10T08:00:00Z', opportunity: { need_id: 13, uid: 'n-13', title: 'Mining ops' } },
+];
 
 /** A populated firm, every field one the Worker returns today. */
 const populated = () => ({
@@ -68,6 +77,7 @@ const populated = () => ({
     forecast: { weighted_value: 9000, unweighted_value: 30000, by_stage: [{ stage: 'submitted', count: 2, value: 30000, weighted: 9000, weight: 0.3 }], note: 'Weighted over undecided quotes only.' } }),
   fitRules: ok({ items: [{ id: 1, kind: 'budget_floor', is_active: 1 }] }),
   services: ok({ items: [] }),
+  activity: ok({ items: FEED }),
 });
 
 test('first run renders the setup path, its two CTAs to the real editors, and no outcome zero', () => {
@@ -174,7 +184,7 @@ test('risks and the lifecycle strip read the same records; Unreadable is never a
   assert.deepEqual([failed[3].state, failed[3].count], ['unreadable', null]);
 });
 
-test('the populated root draws attention first, then metrics, lifecycle, movement (Not recorded) and risks', () => {
+test('the populated root draws attention first, then metrics, lifecycle, movement (the feed) and risks', () => {
   const view = pipelineView(populated());
   assert.equal(view.firstRun, false);
   const html = render(CommandCentre, { view });
@@ -183,7 +193,9 @@ test('the populated root draws attention first, then metrics, lifecycle, movemen
   assert.ok(at.every((i) => i >= 0), 'a section is missing');
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'the command centre is out of the canvas’s order');
   const movement = renderedText(html.slice(at[3], at[4]));
-  assert.match(movement, /Recent movement\s*Not recorded/, 'Recent movement drew a feed the platform does not record');
+  // D4838 part 9 (#5943): Recent movement is the recorded feed, newest first, each event with its opportunity.
+  assert.match(movement, /Recent movement\s*Nov 14, 2026\s*Proposal lost · Pinecrest rebuild\s*Nov 12, 2026\s*Negotiation last moved · Verwood payments\s*Nov 10, 2026\s*Lead passed · Mining ops/);
+  assert.doesNotMatch(movement, /Not recorded|Unknown/, 'an unknown kind or a placeholder was drawn');
   const text = renderedText(html);
   assert.ok(text.includes('How calculated'));
   assert.ok(text.includes('0 of 3 decided'));
@@ -236,4 +248,54 @@ test('the route renders the command centre at /pipeline and follows its state in
   assert.match(routes, /steps=\{pipelineRoot \? pipelineView\?\.rail/);
   assert.match(routes, /usageAt=\{pipelineRoot \? '\/account\/ai-tokens' : null\}/);
   assert.doesNotMatch(routes, /'\/pipeline': 'Win the work\./, 'the intro repeats the title');
+});
+
+/* ------------------------------------------------------------------ *
+ * D4838 part 9 (#5943): Recent movement and the sheet's Activity from D5942's lifecycle feed
+ * ------------------------------------------------------------------ */
+
+test('Recent movement: the feed newest first; an empty answered feed says nothing moved; a failed read is Unreadable', () => {
+  const ok3 = movementView(ok({ items: FEED }));
+  assert.equal(ok3.state, 'ok');
+  assert.deepEqual(ok3.rows.map((r) => [r.text, r.who]), [
+    ['Proposal lost', 'Pinecrest rebuild'], ['Negotiation last moved', 'Verwood payments'], ['Lead passed', 'Mining ops'],
+  ], 'the feed order is kept and an unknown kind is left out');
+  // No event is derived on the page: the rows are the feed's, in the feed's order, and nothing else.
+  const reversed = movementView(ok({ items: [...FEED].reverse() }));
+  assert.deepEqual(reversed.rows.map((r) => r.text), ['Lead passed', 'Negotiation last moved', 'Proposal lost'], 'the page re-sorted the feed');
+  assert.deepEqual(movementView(ok({ items: Array.from({ length: 20 }, (_, i) => ({ key: `passed:${i}`, kind: 'passed', occurred_at: '2026-11-01T00:00:00Z' })) })).rows.length, MOVEMENT_SHOWN);
+
+  const empty = render(CommandCentre, { view: pipelineView({ ...populated(), activity: ok({ items: [] }) }) });
+  assert.match(empty, /data-testid="pipeline-movement-none"/);
+  assert.match(renderedText(empty), /Nothing has moved yet/);
+  assert.doesNotMatch(empty, /pipeline-movement-unreadable/);
+
+  for (const bad of [unreadable(), undefined]) {
+    const html = render(CommandCentre, { view: pipelineView({ ...populated(), activity: bad }) });
+    assert.match(html, /data-testid="pipeline-movement-unreadable"/, 'a failed or missing feed read was not Unreadable');
+    assert.doesNotMatch(html, /pipeline-movement-none|Nothing has moved/, 'a failed read was drawn as nothing moved');
+  }
+  // One failed feed read does not take the page down: the zones still draw.
+  assert.equal(pipelineView({ ...populated(), activity: unreadable() }).failed, false);
+});
+
+test('first run still draws no movement, and the feed does not decide first run', () => {
+  const view = pipelineView({ ...firstRunSources(), activity: ok({ items: FEED }) });
+  assert.equal(view.firstRun, true, 'a feed event turned first run into the command centre');
+  const html = render(FirstRun, { steps: view.steps, scoringNote: view.scoringNote });
+  assert.doesNotMatch(html, /pipeline-movement/);
+});
+
+test('the page asks the feed through its API module, and the sheet uses the same words for the same kinds', async () => {
+  const src = readFileSync(resolve(process.cwd(), 'frontend/src/pages/partner/pipeline/PipelineCommandCentre.jsx'), 'utf8');
+  assert.match(src, /activity: \(\) => partnerPipelineActivityApi\.list\(\{ limit: MOVEMENT_SHOWN \}\)/);
+  assert.doesNotMatch(codeOnly(src), /Nothing joins lead, proposal/, 'the old placeholder is still drawn');
+  const sheet = await import('../src/pages/partner/pipeline/OpportunitySheet.jsx');
+  assert.equal(sheet.activityRows, activityRows, 'the sheet keeps its own event words');
+  assert.deepEqual(Object.keys(EVENT_WORDS), ['passed', 'proposal_version', 'proposal_won', 'proposal_lost', 'negotiation_moved', 'retainer_created', 'retainer_ended']);
+  // A "no partner profile" from the feed is said once, like any other read.
+  const good = Object.fromEntries(Object.entries(firstRunSources()).map(([k, v]) => [k, async () => v.data]));
+  const r = await readPipeline({ ...good, activity: async () => { throw new Error('boom'); } });
+  assert.equal(r.sources.activity.state, 'unreadable');
+  assert.equal(r.noProfile, false);
 });

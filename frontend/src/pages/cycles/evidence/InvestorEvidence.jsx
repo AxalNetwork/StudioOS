@@ -1,8 +1,10 @@
 /**
  * D1268 (#3291) — the investor's evidence block (VR8, VR9), one item's drawer
  * (VR10) and the phone (VR18), on D1265's read (`investorEvidence`). Placed on
- * the deal page's Evidence tab (`EvidenceSummary`), an investor's round call
- * (the call read's own `evidence`) and the diligence room (`SharedEvidence`).
+ * an investor's round call (the call read's own `evidence`) and the diligence
+ * room (`SharedEvidence`). The deal page's Evidence tab (`EvidenceSummary`)
+ * reads the same projection and, since D6164, draws it to the Deals v2
+ * addendum in `DealEvidence.jsx`.
  *
  * WHAT THE READ HOLDS BACK STAYS OUT. Before the NDA the read carries coverage
  * only, so nothing here can draw a value, an item or a claim. After it, every
@@ -17,12 +19,14 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence.js';
-import { BASE, claimWord, coverageTile, investorView, kindWord, refusalOf, sourceLine, sourceWord, strengthWord } from './evidenceModel';
+import { groupHref, notesHref, tabHref } from '../../dealPageModel';
+import { BASE, STAFF_READ_LINE, claimWord, coverageTile, investorView, kindWord, refusalOf, sourceLine, sourceWord, strengthWord } from './evidenceModel';
+import { DealEvidence, DealEvidenceLoading, DealEvidenceUnreadable } from './DealEvidence';
 
 const box = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono tabular-nums';
-const BTN = 'w-fit rounded-lg border border-axal-hairline bg-white px-3 py-1.5 text-[13px] font-semibold hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800 max-sm:min-h-[44px]';
+const BTN = 'inline-flex w-fit items-center rounded-lg border border-axal-hairline bg-white px-3 py-1.5 text-[13px] font-semibold hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800 max-sm:min-h-[44px]';
 const PILL = 'inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11.5px] font-semibold';
 const CLAIM_TONE = {
   backed: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
@@ -131,7 +135,7 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
                       <ul className="m-0 flex list-none flex-col divide-y divide-gray-100 p-0 dark:divide-gray-800">
                         {rows.map((i) => (
                           <li key={i.uid} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`evidence-row-${i.uid}`}>
-                            <button type="button" className="min-h-[32px] text-left text-[13px] font-semibold text-axal-violet hover:underline dark:text-violet-300" onClick={() => setOpen(i)} data-testid={`evidence-open-${i.uid}`}>{kindWord(i.kind)}</button>
+                            <button type="button" className="min-h-[32px] text-left text-[13px] font-semibold text-axal-violet hover:underline dark:text-violet-300" onClick={() => setOpen(i.uid)} data-testid={`evidence-open-${i.uid}`}>{kindWord(i.kind)}</button>
                             <span className={`text-[13px] ${i.figure != null ? MONO : MUTED}`} data-testid={`evidence-value-${i.uid}`}>{i.figure ?? i.value_reason ?? 'No figure is recorded for this item.'}</span>
                             <span className={`text-[12px] ${MUTED}`}>{sourceLine(i)}</span>
                             <ClaimPills claims={i.claims} />
@@ -146,9 +150,14 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
         </>
       )}
       {v.partial && <p className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="evidence-partial">Some of the founder’s evidence could not be checked against its record just now, so it is left out. Try again later.</p>}
-      {open && <ItemDrawer item={open} onClose={() => setOpen(null)} />}
+      <OpenItem uid={open} items={v.items} onClose={() => setOpen(null)} />
     </section>
   );
+}
+
+function OpenItem({ uid, items, onClose }) {
+  const item = uid && items?.ok && items.rows.find((row) => row.uid === uid);
+  return item ? <ItemDrawer item={item} onClose={onClose} /> : null;
 }
 
 /** A read the block draws itself: loading, then the read or its refusal. */
@@ -170,8 +179,8 @@ function Loading() {
 }
 
 /** The refused read, in the deal page's words; the founder is pointed to their own view. */
-function Refused({ error, onRetry }) {
-  const r = refusalOf(error);
+function Refused({ error, onRetry, role = null }) {
+  const r = refusalOf(error, role);
   return (
     <section className={box} data-testid="evidence-summary" data-stage={`refused-${r.kind}`}>
       <h2 className="m-0 text-[15px] font-bold">Evidence</h2>
@@ -182,12 +191,24 @@ function Refused({ error, onRetry }) {
   );
 }
 
-/** The deal page's Evidence tab: `GET /api/deals/:id/evidence`. */
-export function EvidenceSummary({ dealId, company = null, api = raiseEvidenceApi }) {
+/**
+ * The deal page's Evidence tab: `GET /api/deals/:id/evidence`, drawn to the v2 addendum (D6164, `DealEvidence.jsx`).
+ * D6167: staff read the investor's projection, and say so. An investor gets the item sheet's hand-offs.
+ */
+export function EvidenceSummary({ dealId, company = null, role = null, ndaHref = null, api = raiseEvidenceApi }) {
   const r = useEvidence(() => api.forDeal(dealId), dealId ? `deal:${dealId}` : null);
-  if (r.status === 'loading') return <Loading />;
-  if (r.status === 'refused') return <Refused error={r.error} onRetry={r.retry} />;
-  return <InvestorEvidence read={r.data} onRetry={r.retry} company={company} />;
+  if (r.status === 'loading') return <DealEvidenceLoading />;
+  if (r.status === 'refused') {
+    if (refusalOf(r.error, role).kind === 'unreadable') return <DealEvidenceUnreadable onRetry={r.retry} />;
+    return <Refused error={r.error} onRetry={r.retry} role={role} />;
+  }
+  const actions = role === 'investor' ? {
+    dataRoomHref: groupHref(dealId, 'dataroom'), diligenceHref: tabHref(dealId, 'diligence'),
+    notesHref: notesHref(dealId), scorecardHref: tabHref(dealId, 'scorecard'),
+  } : null;
+  const block = <DealEvidence key={dealId} read={r.data} onRetry={r.retry} ndaHref={ndaHref} actions={actions} />;
+  if (r.data?.reader !== 'staff') return block;
+  return <div className="grid gap-2"><p className={`m-0 text-[12px] ${MUTED}`} data-testid="evidence-staff-read">{STAFF_READ_LINE}</p>{block}</div>;
 }
 
 /** The diligence room: `GET /api/data-room/shared/:projectUid/evidence`. A refusal draws nothing: the room already says what is open. */

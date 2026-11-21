@@ -9,7 +9,7 @@
  *                                                      the executed agreements that need replacing
  *   GET  /licences/:licenceUid/history                 the agreement lifecycle (D5048) and the legal events (D5052),
  *                                                      one list, oldest first, each line with actor and context
- *   POST /licences/:licenceUid/package-acceptances     freeze a package's latest policy on the licence  (write bar, reason)
+ *   POST /licences/:licenceUid/package-acceptances     retired: refuses with package_offer_required (#5024)
  *   GET  /:scopeKind/:scopeKey                         one package's or program's versions and their history
  *   POST /:scopeKind/:scopeKey                         a new policy version                             (write bar, reason)
  *
@@ -20,10 +20,8 @@
  * package is accepted again or the program is granted again. `GET /licences/:uid` says which version each
  * licence holds beside the latest, so HQ sees who is behind without anything changing for them.
  *
- * PACKAGE ACCEPTANCE IS HERE UNTIL #5021. No package offer store exists yet; when #5021 records an accepted
- * offer it calls the same statements. Accepting the package already held at its latest version and offer changes
- * nothing (no row, no line). Accepting another package supersedes the old holding and records that its executed
- * master needs replacing; the master itself is never touched, and no replacement is drafted or sent.
+ * PACKAGE ACCEPTANCE now belongs to the commercial offer workflow (#5024). Its guarded batch freezes these
+ * policies with the accepted offer and grants. The old legal-only endpoint refuses, preventing a bypass.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -31,19 +29,15 @@ import type { RouteMount } from '../util/routeRegistry';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
-import { pushLicenceToBranch } from '../services/licencePush';
 import type { LicenceLite } from '../services/programGrants';
 import {
-  DEFAULT_GATE, LEGAL_GATES, SCOPE_KINDS, STRATEGIES, alreadyHolds, freezeHoldingStatements, holdingsOf, latestPolicies, latestPolicy,
-  legalEventsOf, parsePolicyInput, policyVersionStatements, policyVersions, readLicenceLegal, replacementOnPackageMoveStatement,
-  syncLegalGate, type ScopeKind,
+  DEFAULT_GATE, LEGAL_GATES, SCOPE_KINDS, STRATEGIES, holdingsOf, latestPolicies,
+  legalEventsOf, parsePolicyInput, policyVersionStatements, policyVersions, readLicenceLegal,
+  type ScopeKind,
 } from '../services/agreementPolicies';
 
 const r = new Hono<{ Bindings: Env }>();
 const today = () => new Date().toISOString().slice(0, 10);
-const REASON_MIN = 10;
-const PACKAGE_KEY = /^[a-z0-9][a-z0-9_-]{0,59}$/;
-const OFFER_UID = /^[A-Za-z0-9_-]{1,64}$/;
 const refuse = (c: any, status: 400 | 404 | 409 | 422, error: string, message: string, extra: Record<string, unknown> = {}) =>
   c.json({ error, message, ...extra }, status);
 
@@ -120,47 +114,12 @@ r.get('/licences/:licenceUid/history', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// #5024: accepting a legal policy alone must never bypass the real offer and its grants.
 r.post('/licences/:licenceUid/package-acceptances', async (c) => {
   try {
-    const admin = await requireSuperAdminWriteBar(c);
-    const b = await c.req.json().catch(() => ({} as any));
-    const reason = typeof b?.reason === 'string' ? b.reason.trim().slice(0, 500) : '';
-    if (reason.length < REASON_MIN) return refuse(c, 400, 'reason_required', `Say why, in at least ${REASON_MIN} characters. It is the line HQ's record keeps.`);
-    const packageKey = typeof b?.package_key === 'string' && PACKAGE_KEY.test(b.package_key) ? b.package_key : null;
-    if (!packageKey) return refuse(c, 400, 'invalid_package', 'Name the package that was accepted.');
-    const offer = b?.package_offer_uid == null ? null : (typeof b.package_offer_uid === 'string' && OFFER_UID.test(b.package_offer_uid) ? b.package_offer_uid : undefined);
-    if (offer === undefined) return refuse(c, 400, 'invalid_offer', 'A package offer uid is letters, digits, dashes and underscores.');
-    const licence = await licenceOf(c.env, c.req.param('licenceUid'));
-    if (!licence) return refuse(c, 404, 'not_found', 'There is no such licence.');
-    const policy = await latestPolicy(c.env, 'package', packageKey);
-    if (!policy) return refuse(c, 409, 'no_policy', 'HQ has not recorded an agreement policy for this package, so there is nothing to freeze. Record one first.');
-    const holdings = await holdingsOf(c.env, licence.uid);
-    if (alreadyHolds(holdings, 'package', packageKey, policy, offer)) {
-      // Idempotent: a repeated acceptance (a retry, a double click) writes nothing.
-      return c.json({ ok: true, unchanged: true, holding: holdings.find((h) => h.scope_kind === 'package' && h.scope_key === packageKey) });
-    }
-    const uid = newUid();
-    const at = nowIso();
-    try {
-      await c.env.DB.batch([
-        replacementOnPackageMoveStatement(c.env, { licenceUid: licence.uid, packageKey, actorId: admin.id, at, reason }),
-        ...freezeHoldingStatements(c.env, {
-          uid, licenceUid: licence.uid, scopeKind: 'package', scopeKey: packageKey, origin: 'package_offer_accepted',
-          packageOfferUid: offer, actorId: admin.id, at, reason,
-        }),
-      ]);
-    } catch (e) {
-      if (/UNIQUE/i.test(e instanceof Error ? e.message : '')) return refuse(c, 409, 'acceptance_conflict', 'Another acceptance for this licence was recorded at the same moment. Read it again.');
-      throw e;
-    }
-    await logAdminAction(c.env, admin.id, admin.email, 'licence_package_policy_frozen', {
-      licence_uid: licence.uid, package_key: packageKey, package_offer_uid: offer, policy_uid: policy.uid, policy_version: policy.version, reason,
-    });
-    await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
-    // The branch copy's `legal_waiting` reads the holdings, so the licence goes to its branch now.
-    const pushed = await pushLicenceToBranch(c.env, licence.id);
-    const after = await holdingsOf(c.env, licence.uid);
-    return c.json({ ok: true, unchanged: false, holding: after.find((h) => h.uid === uid) ?? null, pushed }, 201);
+    await requireSuperAdminWriteBar(c);
+    if (!await licenceOf(c.env, c.req.param('licenceUid'))) return refuse(c, 404, 'not_found', 'There is no such licence.');
+    return refuse(c, 409, 'package_offer_required', 'Accept the licence’s commercial package offer. Its policy and Program Grants are recorded together there.');
   } catch (e) { return mapError(c, e); }
 });
 

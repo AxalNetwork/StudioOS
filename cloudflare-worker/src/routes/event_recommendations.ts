@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, selectJwt } from '../auth';
-import events, { canViewEvent, preferredEventTypes } from './events';
+import events, { canViewEvent, visibleEventIds, preferredEventTypes } from './events';
 import type { RouteMount } from '../util/routeRegistry';
 import { prefsError, readRecPrefs, recommendedEvents, saveRecPrefs } from '../services/eventRecommendations';
 import { assistOff, quoteRun, run } from '../services/aiRouter';
@@ -33,9 +33,18 @@ router.get('/recommendation-prefs', async c => {
   const s = await scope(c); if (s instanceof Response) return s;
   try {
     const prefs = await readRecPrefs(c.env,s.user.id);
-    const saved = await c.env.DB.prepare("SELECT f.event_id FROM event_rec_feedback f JOIN events e ON e.id=f.event_id WHERE f.user_id=? AND f.verdict='saved' ORDER BY f.created_at,f.event_id").bind(s.user.id).all<{event_id:number}>();
-    const ids = [];
-    for (const row of saved.results || []) { const event = await c.env.DB.prepare('SELECT * FROM events WHERE id=?').bind(row.event_id).first(); if (event && await canViewEvent(c.env,event,s.user)) ids.push(row.event_id); }
+    const ids: number[] = [];
+    // Preserve the complete ordered response, but bound each D1 result window.
+    let cursor: { at: string; id: number } | null = null;
+    for (;;) {
+      const saved: D1Result<{ id: number; saved_at: string }> = await c.env.DB.prepare(`SELECT e.*, f.created_at AS saved_at FROM event_rec_feedback f JOIN events e ON e.id=f.event_id WHERE f.user_id=? AND f.verdict='saved' AND (? IS NULL OR f.created_at > ? OR (f.created_at = ? AND f.event_id > ?)) ORDER BY f.created_at,f.event_id LIMIT 100`)
+        .bind(s.user.id, cursor?.at ?? null, cursor?.at ?? null, cursor?.at ?? null, cursor?.id ?? 0).all<{ id: number; saved_at: string }>();
+      if (!Array.isArray(saved.results)) throw new Error('saved events unreadable');
+      ids.push(...await visibleEventIds(c.env, saved.results, s.user));
+      if (saved.results.length < 100) break;
+      const last = saved.results[saved.results.length - 1];
+      cursor = { at: last.saved_at, id: last.id };
+    }
     return c.json({ prefs, saved: ids });
   } catch { return unavailable(c); }
 });

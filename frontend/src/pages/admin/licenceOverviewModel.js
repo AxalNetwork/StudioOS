@@ -324,6 +324,38 @@ export function identityFacts(l, facts) {
 }
 
 /* ------------------------------------------------------------------ *
+ * The phone (L20)                                                     *
+ * ------------------------------------------------------------------ */
+
+/** The phone header's one line under the name: "reference · territory", each as `identityFacts` says it. */
+export function phoneIdentity(rows) {
+  const by = Object.fromEntries((rows || []).map((r) => [r.key, r]));
+  return [by.ref?.text, by.territory?.text].filter(Boolean).join(' · ');
+}
+
+/**
+ * D4819 part 20 (#5932), board L20 — the phone's triage rows, under the items
+ * that need HQ and in this order: requests and decisions, then the agreement,
+ * then history. Each opens its section (`tab`). Requests waiting lead as the
+ * one primary action ("Review 2 requests"); otherwise Requests is a row that
+ * says its own state, never a 0. History says where it goes, not a latest
+ * event: the History read is the section's own, so the row does not guess one.
+ */
+export function phoneTriage(facts) {
+  const by = Object.fromEntries((facts || []).map((f) => [f.key, f]));
+  const req = by.requests;
+  const ag = by.agreement;
+  const waiting = req?.state === 'attention' && Number.isFinite(req.count) && req.count > 0;
+  return [
+    waiting
+      ? { key: 'requests', kind: 'primary', tab: 'notices', title: `Review ${req.count} ${req.count === 1 ? 'request' : 'requests'}` }
+      : { key: 'requests', kind: 'row', tab: 'notices', title: 'Requests and decisions', state: req?.state || 'reading', word: req?.word || READING, retry: req?.retry || null },
+    { key: 'agreement', kind: 'row', tab: 'contract', title: 'Agreement', state: ag?.state || 'reading', word: ag?.word || READING, detail: ag?.detail || null, retry: ag?.retry || null },
+    { key: 'history', kind: 'row', tab: 'history', title: 'History', state: 'neutral', word: 'Who changed what, and when' },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
  * Sources                                                             *
  * ------------------------------------------------------------------ */
 

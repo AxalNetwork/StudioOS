@@ -34,6 +34,8 @@ const read = (p) => codeOnly(raw(p));
 const CANVAS = raw('design/canvases/integrated/Pages · Partner Offers.dc.html');
 const pageRaw = raw('frontend/src/pages/ServiceCatalogPage.jsx');
 const page = read('frontend/src/pages/ServiceCatalogPage.jsx');
+// #4843 part 3 (D4843-p3): the price basis and the request cell moved to the zone's pure model.
+const model = read('frontend/src/pages/partner/offers/catalogModel.js');
 const worker = raw('cloudflare-worker/src/routes/services.ts');
 const migration = raw('cloudflare-worker/sql/migrations/227_service_offering_model_and_cents.sql');
 const filters = read('frontend/src/workspaces/partnerZoneFilters.js');
@@ -44,8 +46,8 @@ const routes = read('frontend/src/workspaces/partner/PartnerBucketRoutes.jsx');
 const PO1 = CANVAS.slice(CANVAS.indexOf("{ id:'po1'"), CANVAS.indexOf("{ id:'po2'"));
 assert.ok(PO1.includes("route:'/offers/catalog'"), 'the po1 artboard could not be found in the canvas');
 
-/** `MineTab`, bounded at the tile helper that follows it. */
-const MINE = page.slice(page.indexOf('export function MineTab('), page.indexOf('function CatalogTile('));
+/** `MineTab`, bounded at the offering form that follows it (#4843 part 3 removed the tile helper). */
+const MINE = page.slice(page.indexOf('export function MineTab('), page.indexOf('function OfferingFormModal('));
 assert.ok(MINE.length > 1000, 'MineTab could not be located');
 
 test('the four chips are live, and the reason they were not is gone', () => {
@@ -120,11 +122,11 @@ test('requests are counted from the request table by status, never stored on the
   assert.ok(!/\bsold\b/.test(worker.replace(/\/\/.*$/gm, '')), 'a sold count is back on the offering read');
   assert.ok(!/ADD COLUMN (sold|requested)|(sold|requested) INTEGER/.test(migration),
     'a request counter has been added to the row, where it can drift');
-  // A service nobody has linked reads an em dash rather than a zero: nothing
-  // has been sold AND nothing has been recorded are the same cell here, and
-  // "0" claims the first.
-  assert.match(MINE, /\{ text: rowRequests\(o\)\?\.requested \? String\(rowRequests\(o\)\.requested\) : '—' \}/,
-    'an unlinked service is reporting a zero it cannot know');
+  // #4843 part 3 (D4843-p3, OF-02): the count is a join, so a recorded 0 is a real zero
+  // ("0 requests"); a row the read sent without counts reads Not recorded, never zero.
+  assert.match(model, /const r = rowRequests\(o\);\s*if \(!r\) return null;/, 'a row without counts is given a number');
+  assert.match(MINE, /requestsLine\(o\);\s*return line \?\? <NotMeasured label="Not recorded"/,
+    'a row without counts no longer reads Not recorded');
 });
 
 test('an unpriced service is a draft, and the draft is derived rather than stored', () => {
@@ -133,9 +135,9 @@ test('an unpriced service is a draft, and the draft is derived rather than store
     'a service that cannot be quoted is no longer a draft');
   assert.match(fn, /return o\.is_active \? 'Live' : 'Unlisted';/,
     'the listing flag has stopped meaning what it meant');
-  // The Price cell says so too, rather than printing a placeholder figure.
-  assert.match(MINE, /o\.price_cents == null\s*\n\s*\? \{ nr: true \}/,
-    'an unpriced service is being given a number');
+  // The Price cell says so too, rather than printing a placeholder figure (OF-02: "No price yet").
+  assert.match(model, /if \(o\?\.price_cents == null\) return null;/, 'an unpriced service is being given a number');
+  assert.match(MINE, /priceBasis\(o\);\s*return line \?\? <span[^>]*>No price yet<\/span>/, 'the unpriced cell no longer says so');
 });
 
 test('the price column carries per-month only on the models that recur', () => {
@@ -144,59 +146,23 @@ test('the price column carries per-month only on the models that recur', () => {
   // beside one that has it reads as the same kind of number.
   assert.match(CANVAS, /c\.mode === 'Retainer' \|\| c\.mode === 'Seat' \? ' \/ mo' : ''/,
     'the canvas’s per-month rule has moved');
-  assert.match(MINE, /o\.engagement_model === 'retainer' \|\| o\.engagement_model === 'seat' \? ' \/ mo' : ''/,
+  // #4843 part 3 (D4843-p3): the price reads with its basis, "$48,000 fixed" or "$6,500 / month".
+  assert.match(model, /if \(o\.engagement_model === 'retainer' \|\| o\.engagement_model === 'seat'\) return `\$\{amount\} \/ month`;/,
     'the per-month suffix no longer follows the artboard’s two recurring models');
 });
 
-test('the four tiles are the artboard’s, and the strip counts the whole catalog', () => {
-  const adds = PO1.slice(PO1.indexOf('adds:['), PO1.indexOf('linkage:'));
-  const labels = [...adds.matchAll(/label:'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(labels, ['Live services', 'Booked to date', 'Highest price', 'Retainer price']);
-  // THE ONE DEPARTURE FROM THE ARTBOARD (#4696). Its second tile is "Booked to
-  // date", which the page computed as the current price times every
-  // non-cancelled request: a pending request read as a sale and a reprice
-  // restated the history. The tile is the request COUNT; no amount is stated.
-  assert.ok(!MINE.includes('label="Booked to date"'), 'the request-times-price tile is back');
-  assert.ok(MINE.includes('label="Requested"'), 'the requested tile is gone');
-  for (const label of labels.map((l) => (l === 'Booked to date' ? 'Requested' : l))) {
-    assert.ok(MINE.includes(`label="${label}"`), `the strip has lost the ${label} tile`);
+test('OF-02 supersedes the po1 composition: no tiles, no linkage note, no instrument', () => {
+  // #4843 part 3 (D4843-p3). Offers v2 board OF-02 draws the catalogue as one table: Service with its
+  // category, Engagement model, Price with its basis, Listing, Requests, one row action. The po1 strip,
+  // its linkage note and the five-column instrument with its long note left the page.
+  assert.ok(PO1.includes('Pipeline · Leads computes each lead'), 'the po1 artboard this test reads has moved');
+  for (const gone of ['<CatalogTile', 'Reads through to Pipeline', '<Instrument', 'label="Highest price"', 'Prices stored as integers']) {
+    assert.ok(!MINE.includes(gone), `${gone} is back on the page`);
   }
-  // COUNTED OVER `rows`, NEVER OVER THE CHIP-NARROWED LIST. A tile that changes
-  // because you clicked `Seat` is not reporting what it claims to.
-  const tiles = MINE.slice(MINE.indexOf('const priced = rows.filter('), MINE.indexOf('const handlers ='));
-  assert.ok(tiles.length > 0, 'the tile counts are gone');
-  assert.ok(!/\bvisible\b/.test(tiles), 'a tile count is reading the chip-narrowed list');
-  // The artboard's `Retainer price` is `Not recorded` because its retainer is
-  // the unpriced draft. Here it is the firm's own retainer when they have
-  // priced one — the same tile reporting on this reader's catalog.
-  assert.match(MINE, /label="Retainer price" nr/, 'the retainer tile can no longer be absent');
-  assert.match(MINE, /the one draft — scope not final/, 'the artboard’s note for that tile is gone');
-});
-
-test('the linkage note says an unpriced entry is a scoring gap', () => {
-  // The artboard's `linkage`, and the reason it is not decoration: "The unpriced
-  // retainer scores as a capability but not as a fit, so retainer-shaped leads
-  // currently read lower than they should — a pricing decision, surfacing as a
-  // pipeline symptom."
-  assert.match(PO1, /Pipeline · Leads computes each lead/, 'the canvas’s linkage note has moved');
-  assert.ok(MINE.includes('Reads through to Pipeline:'), 'the linkage note is gone');
-  assert.ok(MINE.includes('Pipeline · Leads computes each lead’s match score against these entries.'),
-    'the linkage note no longer says what reads through');
-  assert.ok(MINE.includes('as a capability but not as a fit'),
-    'the linkage note no longer says what an unpriced entry costs');
-});
-
-test('the instrument draws the artboard’s columns, in its order and at its widths', () => {
-  const head = JSON.parse(`[${PO1.match(/head:\[([^\]]+)\]/)[1].replace(/\\u2019/g, '’').replace(/'/g, '"')}]`);
-  assert.deepEqual(head, ['Service', 'Model', 'Price', 'Sold', 'What’s included']);
-  // `Sold` is the artboard's word; the page says Requested, because a request is not a sale (#4696).
-  const ours = head.map((h) => (h === 'Sold' ? 'Requested' : h));
-  assert.ok(MINE.includes(`head={${JSON.stringify(ours).replace(/"/g, "'").replace(/,/g, ', ')}}`),
-    'the instrument head is no longer the artboard’s five columns in its order');
-  assert.ok(MINE.includes(`cols="${PO1.match(/cols:'([^']+)'/)[1]}"`),
-    'the instrument no longer uses the artboard’s column widths');
-  assert.ok(MINE.includes(PO1.match(/instMeta:'([^']+)'/)[1]),
-    'the instrument’s meta line has left the artboard');
+  const heads = [...MINE.matchAll(/<th scope="col"[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(heads, ['Service', 'Engagement model', 'Price', 'Listing', 'Requests']);
+  // The listing switch counts the whole page of rows, never the narrowed list.
+  assert.match(MINE, /const counts = listingCounts\(rows, catalogState\);/, 'the switch counts a narrowed list');
 });
 
 test('the row keeps every control the card grid had', () => {

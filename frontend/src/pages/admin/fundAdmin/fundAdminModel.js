@@ -198,6 +198,9 @@ export function withFund(pathname, search, id) {
   return `${pathname}${q ? `?${q}` : ''}`;
 }
 
+/** D1161: where one fund's facts are edited, in the console's dialog. #6247 links the investor fund page here for an admin. */
+export const fundFactsEditHref = (fundId) => `${BASE}/funds/${fundId}?edit=facts`;
+
 /**
  * The header's one primary button (FND1), named by the act table: the
  * Super Admin, whom it allows to issue, sees "New capital call"; an Admin,
@@ -209,7 +212,7 @@ export function headerPrimary(view, access, fund, fundId = null) {
   const may = (act) => actRow(access, act)?.allowed === true;
   const tab = tabOfView(view);
   // D1161: New fund on the Funds tab; Edit fund facts on one fund's page. Each opens its dialog in place.
-  if (tab === 'funds') return fundId ? { label: 'Edit fund facts', to: `${BASE}/funds/${fundId}?edit=facts` } : { label: 'New fund', to: `${BASE}/funds?new=1` };
+  if (tab === 'funds') return fundId ? { label: 'Edit fund facts', to: fundFactsEditHref(fundId) } : { label: 'New fund', to: `${BASE}/funds?new=1` };
   if (tab === 'overview' || tab === 'calls') {
     return { label: may('capital_call.issue') ? 'New capital call' : 'Preview a capital call', to: fund ? `/funds/calls?fund=${fund.id}` : `${BASE}/calls` };
   }

@@ -292,10 +292,13 @@ test('RPT21b, RPT21c at 390: Reports as a list; a late period opens full screen 
     assert.equal(v.text('company-sheet-ask'), 'Ask for this report');
     assert.match(v.props('company-sheet-ask').className, /max-sm:min-h-11.*max-sm:flex-1/);
     assert.deepEqual(posted, [], 'opening asks nothing');
+    // D4817 part 9 (#5311) re-aimed: the pinned Ask opens the addendum's Review (PFA04) in place of RPT11's dialog.
     await v.click('company-sheet-ask');
-    assert.ok(v.has('company-ask-dialog') && !v.has('company-period-sheet'));
-    await v.click('company-ask-confirm');
+    assert.ok(v.has('report-review-ask') && !v.has('company-period-sheet'));
+    assert.deepEqual(posted, [], 'the Review asks nothing');
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask']);
+    await v.click('report-receipt-done');
     // A due period: nothing to ask yet, so Waive alone.
     await v.click('company-period-pq3');
     assert.ok(!v.has('company-sheet-ask') && v.has('company-sheet-waive'));
@@ -334,4 +337,49 @@ test('source: every light hover has its dark pair; lateness stays amber; no pop-
   assert.doesNotMatch(read('frontend/src/pages/investor/CompanyReports.jsx'), /\b(bg|text|border)-red-/);
   // The reminder dialog's checkboxes: each row a 44px target below 640px.
   assert.match(read('frontend/src/pages/cycles/reporting/ReportingDialogs.jsx'), /<label className="flex min-h-11 items-center gap-2 sm:min-h-0" key=\{testId\}>/);
+});
+
+// D6093 (#6093): the existing desk menu is also a writer's phone door.
+test('D6093 at 390: Share and Reminder settings are two taps away, with 44px targets and Escape/back dismissal', async () => {
+  const t = harness(); const back = screen(390); const s = stubs();
+  const keys = new Map(), history = new Map(); let shared = 0;
+  document.addEventListener = (type, fn) => { if (!keys.has(type)) keys.set(type, new Set()); keys.get(type).add(fn); };
+  document.removeEventListener = (type, fn) => keys.get(type)?.delete(fn);
+  window.addEventListener = (type, fn) => { if (!history.has(type)) history.set(type, new Set()); history.get(type).add(fn); };
+  window.removeEventListener = (type, fn) => history.get(type)?.delete(fn);
+  try {
+    await act(async () => t.root.render(page('/grow/reporting?project_id=7', { phone: true, action: { onOpen: () => { shared += 1; } } })));
+    await t.settle();
+    const prepare = t.text('reporting-prepare-pinned');
+    assert.match(t.props('reporting-more').className, /min-h-11 min-w-11/);
+    await t.click('reporting-more');
+    for (const id of ['reporting-more-share', 'reporting-more-reminders']) assert.match(t.props(id).className, /min-h-11/);
+    await act(async () => { for (const fn of keys.get('keydown') || []) fn({ key: 'Escape' }); });
+    assert.ok(!t.has('reporting-more-menu'));
+    await t.click('reporting-more');
+    await act(async () => { for (const fn of history.get('popstate') || []) fn({}); });
+    assert.ok(!t.has('reporting-more-menu'));
+    await t.click('reporting-more'); await t.click('reporting-more-share');
+    assert.equal(shared, 1); assert.ok(!t.has('reporting-more-menu'));
+    await t.click('reporting-more'); await t.click('reporting-more-reminders');
+    assert.ok(t.has('reporting-reminders'));
+    assert.equal(t.text('reporting-prepare-pinned'), prepare);
+    assert.equal(s.calls.filter(([name]) => name === 'draftReport').length, 0);
+  } finally { s.restore(); back(); await t.close(); }
+});
+
+test('D6093: readers get neither phone write action, including an empty desk', async () => {
+  for (const role of ['advisor', 'operating_partner', 'admin']) {
+    for (const empty of [false, true]) {
+      const t = harness(); const back = screen(390);
+      const s = stubs({ desk: async () => DESK({ can_write: false, ...(empty ? { duties: [] } : {}) }) });
+      try {
+        await act(async () => t.root.render(page('/grow/reporting?project_id=7', { phone: true, role, action: { onOpen() {} } })));
+        await t.settle();
+        assert.ok(!t.has('reporting-more'), role);
+        assert.ok(!t.has('reporting-prepare-bar'), role);
+        if (empty) assert.doesNotMatch(t.text('reporting-empty'), /Share an update/);
+      } finally { s.restore(); back(); await t.close(); }
+    }
+  }
 });

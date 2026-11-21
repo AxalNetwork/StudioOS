@@ -144,6 +144,11 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "POST /api/partner/delivery/status-reports/:id/amendments": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
   "POST /api/partner/delivery/status-reports/:id/send": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

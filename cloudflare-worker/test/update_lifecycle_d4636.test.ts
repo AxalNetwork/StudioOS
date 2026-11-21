@@ -55,14 +55,14 @@ app.route('/api/portfolio-updates', updates);
 const pending: Promise<unknown>[] = [];
 const ctx = { waitUntil: (p: Promise<unknown>) => { pending.push(p.catch(() => {})); }, passThroughOnException() {} };
 
-async function call(db: DatabaseSync, userId: number, method: string, path: string, body?: unknown) {
+async function call(db: DatabaseSync, userId: number, method: string, path: string, body?: unknown, binding?: ReturnType<typeof d1Over>) {
   const role = (db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as any)?.role ?? 'founder';
   const token = await new SignJWT({ user_id: userId, role }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await app.fetch(new Request(`http://t/api/portfolio-updates${path}`, {
     method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  }), { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any, ctx as any);
+  }), { JWT_SECRET, ENVIRONMENT: 'development', DB: binding ?? d1Over(db) } as any, ctx as any);
   const text = await res.text();
   await Promise.all(pending.splice(0));
   try { return { status: res.status, body: JSON.parse(text) as any }; } catch { throw new Error(`${method} ${path} → ${res.status}: ${text.slice(0, 300)}`); }
@@ -175,8 +175,20 @@ test('a correction is the next version, by its actor with its reason; the publis
   assert.deepEqual([stale.status, stale.body.code], [409, 'changed_since_open']);
   assert.equal(one(db, 'SELECT title FROM portfolio_updates WHERE uid = ?', uid).title, 'October (restated)');
   // Two corrections from the same read: one lands, the other is told the update changed.
+  // JWT/auth work can finish at different times under load. Hold the first
+  // correction batch until both requests have read the version they correct.
+  const binding = d1Over(db);
+  let arrivals = 0;
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => { release = resolve; });
+  const together = { ...binding, async batch(statements: any[]) {
+    if (++arrivals === 2) release();
+    await ready;
+    return binding.batch(statements);
+  } };
   const both = await Promise.all([
-    call(db, FOUNDER, 'PUT', `/${uid}`, { title: 'A' }), call(db, ADMIN, 'PUT', `/${uid}`, { title: 'B' }),
+    call(db, FOUNDER, 'PUT', `/${uid}`, { title: 'A' }, together).finally(() => release()),
+    call(db, ADMIN, 'PUT', `/${uid}`, { title: 'B' }, together).finally(() => release()),
   ]);
   assert.deepEqual(both.map((r) => r.status).sort(), [200, 409]);
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM portfolio_update_versions v JOIN portfolio_updates u ON u.id = v.update_id WHERE u.uid = ?', uid).n, 3);

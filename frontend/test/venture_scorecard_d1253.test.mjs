@@ -69,11 +69,11 @@ test('the panel draws the eleven scopes unread, the method door, and no number',
   const out = html(h(VentureScorecard));
   for (const s of SCOPES) assert.ok(out.includes(`data-testid="scorecard-scope-${s.key}"`), s.key);
   assert.ok(out.includes(`href="${METHOD}"`));
-  // D1257: with no deal there is nothing to read, so the scores' wait is gone; the weighting is part 5's.
-  assert.ok(!out.includes('scorecard-wait-scores') && out.includes('data-testid="scorecard-wait-weighting"'));
+  // D1257: with no deal there is nothing to read, so the scores' wait is gone; #6169: the weighting is read, not waited on.
+  assert.ok(!out.includes('scorecard-wait-scores') && !out.includes('scorecard-wait-weighting') && out.includes('data-testid="scorecard-weighting-control"'));
   assert.ok(!/>\s*0\s*</.test(out), 'no zero is drawn');
   const founder = html(h(VentureScorecard, { audience: 'founder' }));
-  assert.ok(founder.includes('data-testid="scorecard-wait-sharing"') && !founder.includes('scorecard-wait-weighting'));
+  assert.ok(founder.includes('data-testid="scorecard-wait-sharing"') && !founder.includes('scorecard-weighting'));
 });
 
 test('the strip: unread is one outlined strip read as Not read here yet; locked hides every bar', () => {
@@ -110,7 +110,8 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   assert.ok(app.includes(`<Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />`));
   assert.ok(app.indexOf('path="/raise/scorecard"') < app.indexOf('path="/raise/:slug"'), 'the static path is declared before the module route');
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}"), 'D1257: the tab reads its deal');
+  // D6168 (#6168): the tab's drawer is addressed (`?scope=`), so Team, Market and Traction can open it.
+  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} addressed />}"), 'D1257: the tab reads its deal');
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
   // D1240 (#3253): the live table's Scorecard column draws the strip from SCORING's batch.
   assert.ok(read('frontend/src/pages/investor/dealflow/FlowTable.jsx').includes('<ScopeStrip scopes={stripScopes(row.scores)} />'));

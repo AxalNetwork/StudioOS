@@ -2,41 +2,10 @@
 /**
  * Task #168 — does the magic-link sign-in actually work in production?
  *
- * WHY THIS EXISTS, AND WHY IT IS NOT A TIMING CHECK. `/login`'s magic link
- * timed out at 30s. The fix (D74, `routes/auth.ts` `/magic/start`) commits
- * the token row first and hands the email send to `waitUntil`, so the
- * response no longer waits on Gmail. That removes the latency — and creates
- * a failure mode the old code could not have: **the endpoint can answer 202
- * in 200ms while the mail silently never arrives.** A fast `/magic/start` is
- * necessary and nowhere near sufficient. Only a round-trip tells "fixed"
- * apart from "fast and broken", which is why this probe reads a real inbox
- * and follows a real link.
- *
- * It also cannot be run from the agent sandbox: that proxy answers
- * `403 CONNECT` for axal.vc. A GitHub Actions runner is not behind it. So
- * this is written to run in CI and nowhere else.
- *
- * WHAT IT ASSERTS — three things, reported SEPARATELY, because they fail for
- * different reasons and one pass/fail would hide which:
- *
- *   1. `/api/auth/magic/start` answered under MAGIC_START_BUDGET_MS.
- *      The original symptom.
- *   2. The mail ARRIVED within MAGIC_MAIL_BUDGET_MS.
- *      The `waitUntil` regression — the one that would otherwise be silent.
- *   3. The link in it completed a sign-in.
- *      That the flow still works end to end.
- *
- * THE STALE-MESSAGE TRAP, guarded deliberately: a matching email from a
- * previous run would satisfy a naive inbox search forever, and the probe
- * would pass for months after delivery broke. Every candidate message must
- * have an `internalDate` AFTER the moment this run called `/magic/start`.
- *
- * Reading the inbox mirrors the send path exactly. The worker sends through
- * the Gmail API with an OAuth refresh token
- * (`cloudflare-worker/src/services/email/gmail.ts`); this reads with the same
- * dance and a read-only scope. The magic token is stored HASHED in
- * `magic_link_tokens`, so there is no back door — the raw token exists only
- * in the email, and a mailbox is unavoidable.
+ * A successful /magic/start accepts the email for queued delivery. It can
+ * answer quickly while the mail never arrives. Check its latency, read the
+ * dedicated mailbox, then use the session issued by the email link to check
+ * the signed-in identity. Only a fresh message can satisfy the probe.
  *
  * NOT WIRED INTO `test:drift`. It needs production and secrets; a check that
  * cannot run must never report success. Its pure helpers ARE unit-tested, in
@@ -55,6 +24,7 @@
  *   MAGIC_START_BUDGET_MS    default 5000
  *   MAGIC_MAIL_BUDGET_MS     default 120000 (well inside the 15-min TTL)
  */
+import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { probeOutcome } from './lib/probeOutcome.mjs';
 import { describeRefusal } from './check-magic-link-insert.mjs';
@@ -71,30 +41,19 @@ export function missingConfig(env = process.env) {
     .filter((k) => !String(env[k] || '').trim());
 }
 
-/**
- * Pull the magic token out of an email body.
- *
- * Tolerant of what mail does to URLs — an HTML-entity `=` in `token=`, a
- * trailing `>` or quote from an anchor, and soft line breaks inserted by
- * quoted-printable encoding at 76 columns, which is exactly the sort of
- * thing that splits a long token in half.
- *
- * There is deliberately NO `&amp;` → `&` step: `&` is not in the token
- * charset below, so the match already stops at the query separator whether
- * the template wrote `&` or `&amp;`. A replace for it would be dead code
- * that reads as protection — and its test would pass for a reason that has
- * nothing to do with the line.
- */
+/** Read only an absolute verification link to the configured production origin. */
 export function extractMagicToken(body) {
-  if (!body) return null;
-  const unwrapped = String(body)
-    .replace(/=\r?\n/g, '')      // quoted-printable soft break
-    .replace(/&#61;/g, '=');     // an entity-encoded `=` in `token=`
-  const m = /\/api\/auth\/magic\/verify\?token=([A-Za-z0-9._\-~+/=%]+)/.exec(unwrapped);
-  if (!m) return null;
-  // Trim anything the surrounding markup glued on.
-  const token = m[1].replace(/(&|"|'|<|>|\)|\]|\.)+$/, '');
-  return token || null;
+  const expectedOrigin = new URL(HOST).origin;
+  const unwrapped = String(body || '').replace(/=\r?\n/g, '').replace(/&#61;|=3D/gi, '=');
+  for (const [candidate] of unwrapped.matchAll(/https?:\/\/[^\s<>"'()\]]+/gi)) {
+    let url;
+    try { url = new URL(candidate.replace(/\.+$/, '')); } catch { continue; }
+    if (url.origin !== expectedOrigin || url.username || url.password ||
+        url.pathname !== '/api/auth/magic/verify') continue;
+    const tokens = url.searchParams.getAll('token');
+    if (tokens.length === 1 && tokens[0]) return tokens[0];
+  }
+  return null;
 }
 
 /**
@@ -166,14 +125,18 @@ export function liveOutcome({ startStatus, refusal, rows }) {
 
 /** A successful verify redirects to `…?magic=ok`; every failure carries `magic_error`. */
 export function verifyOutcome({ status, location }) {
-  const loc = String(location || '');
   if (status !== 302) return { ok: false, why: `expected a 302 redirect, got ${status}` };
-  if (/magic_error=/.test(loc)) {
-    const code = (/magic_error=([a-z_]+)/.exec(loc) || [])[1] || 'unknown';
-    return { ok: false, why: `verify refused the link: magic_error=${code}` };
+  const url = URL.parse(location || '', HOST);
+  if (url && url.origin === new URL(HOST).origin && !url.username && !url.password) {
+    if (url.searchParams.has('magic_error')) {
+      const error = url.searchParams.get('magic_error');
+      const known = ['invalid', 'expired', 'rate', 'limiter', 'inactive', 'error'];
+      return { ok: false, why: `verify refused the link: magic_error=${known.includes(error) ? error : 'unknown'}` };
+    }
+    const values = url.searchParams.getAll('magic');
+    if (values.length === 1 && values[0] === 'ok') return { ok: true, why: 'success redirect' };
   }
-  if (!/[?&]magic=ok\b/.test(loc)) return { ok: false, why: `redirected somewhere unexpected: ${loc}` };
-  return { ok: true, why: loc };
+  return { ok: false, why: 'unexpected verify redirect' };
 }
 
 // ---------------------------------------------------------------------------
@@ -182,146 +145,227 @@ export function verifyOutcome({ status, location }) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const timeout = () => AbortSignal.timeout(FETCH_TIMEOUT_MS);
 
-async function gmailAccessToken() {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+class MailboxError extends Error {
+  constructor(classification, message) {
+    super(message);
+    this.classification = classification;
+  }
+}
+
+// Never replay a login request or one-time link. Only Google reads and the
+// access-token exchange are retried, all against the same delivery deadline.
+async function googleJson(url, options, deadline, stage) {
+  let detail = 'delivery deadline elapsed';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    let retryMs = Math.min(POLL_MS, 1000) * 2 ** attempt;
+    try {
+      const res = await fetch(url, {
+        ...options, redirect: 'error', signal: AbortSignal.timeout(Math.min(FETCH_TIMEOUT_MS, remaining)),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && typeof data === 'object') return data;
+      detail = `HTTP ${res.status}`;
+      const quota = data?.error?.errors?.some?.(({ reason }) =>
+        reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded');
+      if (!res.ok && res.status !== 408 && res.status !== 429 && res.status < 500 && !quota) {
+        // Only print known provider codes. Descriptions, bodies and URLs may contain credentials.
+        const code = ['invalid_grant', 'invalid_client', 'invalid_scope'].includes(data?.error) ? data.error : '';
+        throw new MailboxError(stage, `${stage} failed (${detail}${code ? `, ${code}` : ''})`);
+      }
+      const retryAfter = res.headers.get('retry-after');
+      if (retryAfter) {
+        const wait = /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now();
+        if (Number.isFinite(wait)) retryMs = Math.max(retryMs, wait);
+      }
+    } catch (e) {
+      if (e instanceof MailboxError) throw e;
+      detail = 'network failure';
+    }
+    if (attempt === 2 || Date.now() + retryMs >= deadline) break;
+    await sleep(retryMs);
+  }
+  throw new MailboxError('DEPENDENCY_FAILURE', `${stage} unavailable (${detail})`);
+}
+
+async function findMagicMail(address, requestedAtMs) {
+  const deadline = requestedAtMs + MAIL_BUDGET_MS;
+  const oauth = await googleJson('https://oauth2.googleapis.com/token', {
     method: 'POST',
-    signal: timeout(),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: process.env.GMAIL_CLIENT_ID,
       client_secret: process.env.GMAIL_CLIENT_SECRET,
       refresh_token: process.env.GMAIL_REFRESH_TOKEN,
       grant_type: 'refresh_token',
     }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.access_token) {
-    throw new Error(`Gmail OAuth failed: ${data.error_description || data.error || res.statusText}`);
+  }, deadline, 'GMAIL_AUTH');
+  if (typeof oauth.access_token !== 'string' || !oauth.access_token) {
+    throw new MailboxError('GMAIL_AUTH', 'Google returned no mailbox access token');
   }
-  return data.access_token;
+  const options = { headers: { Authorization: `Bearer ${oauth.access_token}` } };
+  const messagesUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/messages';
+  // Gmail's query uses whole seconds. Keep the millisecond check after the fetch.
+  const q = `to:${address} after:${Math.floor(requestedAtMs / 1000) - 1}`;
+  const inspected = new Set();
+  let polls = 0;
+  try {
+    while (Date.now() < deadline) {
+      polls++;
+      const params = new URLSearchParams({ q, maxResults: '100' });
+      do {
+        const list = await googleJson(`${messagesUrl}?${params}`, options, deadline, 'GMAIL_READ');
+        for (const { id } of list.messages || []) {
+          if (inspected.has(id)) continue;
+          const msg = await googleJson(`${messagesUrl}/${encodeURIComponent(id)}?format=full`, options, deadline, 'GMAIL_READ');
+          inspected.add(id);
+          if (!isFreshMessage(msg, requestedAtMs)) continue;
+          const token = extractMagicToken(decodeGmailBody(msg.payload));
+          if (token) return { token, at: Number(msg.internalDate) };
+        }
+        if (!list.nextPageToken) break;
+        params.set('pageToken', list.nextPageToken);
+      } while (Date.now() < deadline);
+      await sleep(Math.max(0, Math.min(POLL_MS, deadline - Date.now())));
+    }
+    return null;
+  } finally {
+    console.log(`  Gmail polls: ${polls}, distinct messages inspected: ${inspected.size}`);
+  }
 }
 
-async function findMagicMail(accessToken, address, requestedAtMs) {
-  const q = encodeURIComponent(`to:${address} newer_than:1d`);
-  const list = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${q}`,
-    { signal: timeout(), headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  if (!list.ok) throw new Error(`Gmail list failed: ${list.status} ${list.statusText}`);
-  const { messages = [] } = await list.json();
-  for (const { id } of messages) {
-    const res = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`,
-      { signal: timeout(), headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (!res.ok) continue;
-    const msg = await res.json();
-    if (!isFreshMessage(msg, requestedAtMs)) continue;
-    const token = extractMagicToken(decodeGmailBody(msg.payload));
-    if (token) return { token, at: Number(msg.internalDate) };
+async function verifySession(token, address) {
+  const res = await fetch(`${HOST}/api/auth/magic/verify?token=${encodeURIComponent(token)}`, {
+    signal: timeout(), redirect: 'manual',
+  });
+  const redirect = verifyOutcome({ status: res.status, location: res.headers.get('location') });
+  if (!redirect.ok) return redirect;
+  // The HQ Worker's authCookieName is studioos_auth. Send only that cookie to
+  // the fixed same-origin identity endpoint. Never follow a redirect with it.
+  const cookie = res.headers.getSetCookie()
+    .map((value) => value.split(';', 1)[0])
+    .find((pair) => /^studioos_auth=\S+$/.test(pair));
+  if (!cookie) return { ok: false, why: 'verify did not issue a session cookie' };
+  const me = await fetch(`${HOST}/api/auth/me`, {
+    headers: { Cookie: cookie }, redirect: 'manual', signal: timeout(),
+  });
+  if (me.status !== 200) return { ok: false, why: `session identity check returned HTTP ${me.status}` };
+  const identity = await me.json().catch(() => null);
+  if (typeof identity?.email !== 'string' || identity.email.toLowerCase() !== address.toLowerCase()) {
+    return { ok: false, why: 'session identity did not match the dedicated account' };
   }
-  return null;
+  return { ok: true, why: 'the session belongs to the dedicated account' };
+}
+
+function classify(classification) {
+  console.log(`  classification: ${classification}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `classification=${classification}\n`);
+  process.exitCode = classification === 'PASS' ? 0 : 1;
 }
 
 async function main() {
   const missing = missingConfig();
   if (missing.length) {
-    // NOT exit 0. A probe that passes when it never ran is precisely the
-    // failure this task exists to correct — the post-deploy smoke only
-    // watched /api/health and stayed green right through the outage.
     console.error(`check-magic-link-live: NOT CONFIGURED — missing ${missing.join(', ')}`);
-    console.error('  Task #168 stays unverified until these are set. This is not a pass.');
+    classify('CONFIG_ERROR');
     process.exit(2);
   }
 
+  if (![START_BUDGET_MS, MAIL_BUDGET_MS, POLL_MS, FETCH_TIMEOUT_MS].every(
+    (ms) => Number.isSafeInteger(ms) && ms > 0 && ms <= 2_147_483_647,
+  )) {
+    console.error('check-magic-link-live: probe timers must be positive integer milliseconds within the Node timer range');
+    classify('CONFIG_ERROR');
+    process.exit(2);
+  }
   const address = process.env.MAGIC_PROBE_EMAIL.trim();
-  console.log(`check-magic-link-live: ${HOST} → ${address}`);
-
   const requestedAtMs = Date.now();
   let startMs = NaN;
   let startStatus = null;
   let refusal = null;
+  let startClassification = 'START_FAILURE';
   try {
-    const t0 = Date.now();
     const res = await fetch(`${HOST}/api/auth/magic/start`, {
-      method: 'POST',
-      signal: timeout(),
+      method: 'POST', redirect: 'manual', signal: timeout(),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: address }),
     });
-    startMs = Date.now() - t0;
+    startMs = Date.now() - requestedAtMs;
     startStatus = res.status;
-    // 202 is the documented answer whether or not the account exists — it is
-    // deliberately not an enumeration oracle, so it proves nothing about
-    // delivery. Only the arrival below does.
-    if (res.status === 429) {
-      console.error('check-magic-link-live: rate-limited (429). magic-start allows 3 per 900s per address.');
-      console.error('  Widen the schedule rather than the limit; a probe that trips its own limiter proves nothing.');
-      console.log(`  outcome: ${liveOutcome({ startStatus: 429, refusal: null, rows: [] })}`);
-      process.exit(1);
-    }
+    console.log(`  /magic/start: HTTP ${startStatus} in ${startMs}ms (budget ${START_BUDGET_MS}ms)`);
     if (res.status !== 202) {
-      // #4571 R2-09: say WHO refused (edge or Worker), as the insert probe does.
-      refusal = describeRefusal({ status: res.status, headers: res.headers, body: await res.text().catch(() => '') });
-      console.error(`check-magic-link-live: /magic/start REFUSED — ${refusal.line}`);
-      console.error(`  ${refusal.reading}`);
+      const body = await res.text().catch(() => '');
+      refusal = describeRefusal({ status: res.status, headers: res.headers, body });
+      const challenge = res.headers.get('cf-mitigated') === 'challenge' ||
+        (res.status === 403 && refusal.origin === 'edge' &&
+          /<title>\s*Just a moment|\/cdn-cgi\/challenge-platform\//i.test(body));
+      console.error(`  request refused: HTTP ${startStatus}, origin ${challenge ? 'edge' : refusal.origin}`);
+      if (res.status === 429) console.error('  magic-start allows 3 per 900s per address');
+      if (res.status === 403 && (challenge || refusal.origin === 'edge') && process.env.GITHUB_ACTIONS === 'true') {
+        console.log('::notice title=StudioOS auth probe::edge-refused');
+      }
+      // probeOutcome calls every 'edge' a challenge. A generic CF error page
+      // (including an upstream 502) has no evidence of a challenge.
+      if (challenge) {
+        refusal = { origin: 'edge' };
+        startClassification = 'EDGE_CHALLENGED';
+      } else if (refusal.origin === 'edge') {
+        if (res.status === 403) startClassification = 'EDGE_REFUSED';
+        refusal = { origin: 'unknown' };
+      }
     }
-  } catch (e) {
-    console.error(`check-magic-link-live: /magic/start threw — ${e.message}`);
+  } catch {
+    console.error('  /magic/start request failed or timed out');
   }
 
-  // A refusal ends the run: an inbox wait after it would test nothing, and its
-  // checks are reported as NOT CHECKED, never as a failed delivery.
   if (startStatus !== 202) {
     console.log('  – mail_delivered: NOT CHECKED — /magic/start did not accept the request');
     console.log('  – sign_in_completed: NOT CHECKED — no link was asked for');
     console.log(`  outcome: ${liveOutcome({ startStatus, refusal, rows: [] })}`);
-    console.error('check-magic-link-live: FAILED — task #168 is not verified.');
-    process.exit(1);
+    return classify(startClassification);
   }
 
-  let mailMs = NaN;
-  let token = null;
+  let mail;
   try {
-    const accessToken = await gmailAccessToken();
-    const deadline = Date.now() + MAIL_BUDGET_MS;
-    while (Date.now() < deadline) {
-      const found = await findMagicMail(accessToken, address, requestedAtMs);
-      if (found) { token = found.token; mailMs = found.at - requestedAtMs; break; }
-      await sleep(POLL_MS);
-    }
+    mail = await findMagicMail(address, requestedAtMs);
   } catch (e) {
-    console.error(`check-magic-link-live: inbox read failed — ${e.message}`);
+    if (!(e instanceof MailboxError)) throw e;
+    console.error(`  ${e.message}`);
+    console.log('  – mail_delivered: NOT CHECKED — inbox observation unavailable');
+    console.log('  – sign_in_completed: NOT CHECKED — no link available to verify');
+    console.log(`  outcome: ${startMs <= START_BUDGET_MS ? 'ACCEPTED_NOT_VERIFIED' : 'APPLICATION_FAILED'}`);
+    return classify(e.classification);
   }
 
   let signedIn = false;
-  if (token) {
+  if (mail) {
     try {
-      const res = await fetch(`${HOST}/api/auth/magic/verify?token=${encodeURIComponent(token)}`, {
-        signal: timeout(), redirect: 'manual',
-      });
-      const outcome = verifyOutcome({ status: res.status, location: res.headers.get('location') });
-      signedIn = outcome.ok;
-      if (!outcome.ok) console.error(`check-magic-link-live: ${outcome.why}`);
-    } catch (e) {
-      console.error(`check-magic-link-live: verify threw — ${e.message}`);
+      const result = await verifySession(mail.token, address);
+      signedIn = result.ok;
+      if (!signedIn) console.error(`  ${result.why}`);
+    } catch {
+      console.error('  verification request failed or timed out');
     }
   }
-
   const { rows, ok } = verdicts({
-    startMs, mailMs, signedIn,
+    startMs, mailMs: mail ? mail.at - requestedAtMs : NaN, signedIn,
     startBudgetMs: START_BUDGET_MS, mailBudgetMs: MAIL_BUDGET_MS,
   });
-  for (const r of rows) console.log(`  ${r.ok ? '✓' : '✗'} ${r.key}: ${r.detail}`);
-  console.log(`  outcome: ${liveOutcome({ startStatus, refusal, rows })}`);
-
-  if (!ok) {
-    console.error('check-magic-link-live: FAILED — task #168 is not verified.');
-    process.exit(1);
+  for (const row of rows) {
+    if (row.key === 'sign_in_completed' && !mail) console.log('  – sign_in_completed: NOT CHECKED — no fresh link');
+    else console.log(`  ${row.ok ? '✓' : '✗'} ${row.key}: ${row.detail}`);
   }
-  console.log('check-magic-link-live: OK — a real sign-in completed end to end.');
+  console.log(`  outcome: ${liveOutcome({ startStatus, refusal, rows })}`);
+  if (ok) return classify('PASS');
+  if (!mail || mail.at - requestedAtMs > MAIL_BUDGET_MS) return classify('DELIVERY_FAILURE');
+  if (!signedIn) return classify('VERIFY_FAILURE');
+  return classify('START_FAILURE');
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  main().catch((e) => { console.error(`check-magic-link-live: ${e.stack || e.message}`); process.exit(1); });
+  main().catch(() => {
+    console.error('check-magic-link-live: unexpected probe error');
+    process.exitCode = 1;
+    classify('INFRA_FAILURE');
+  });
 }

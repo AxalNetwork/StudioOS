@@ -3,7 +3,7 @@ import type { Env, User } from '../types';
 import { embedText } from './vectorize';
 import { eventTopics, validEventTopics } from './eventTopics';
 import { EVENT_TYPE_IDS } from './eventTypes';
-import { registrationEligibility } from './eventOrganiser';
+import { registrationEligibilityBatch } from './eventOrganiser';
 import { shapeEvent } from './eventsCommon';
 
 export type Reason = { code: string; text: string; ref: { kind: string; id: number | string } };
@@ -11,10 +11,16 @@ type Signal = Reason & { match: string[]; fundraising?: boolean };
 export const RECOMMENDATION_DEPS = { embed: embedText };
 export const REC_FORMATS = ['virtual', 'in_person', 'hybrid'];
 const DEFAULT_PREFS = { enabled: true, interests: [] as string[], goals_90d: null as string | null, formats: [] as string[], types: [] as string[], home_city: null as string | null, travel_km: null as number | null };
+// D6414: historical/imported rows can be valid JSON without being arrays.
+function storedPreferenceArray(raw: string): any[] {
+  const value = JSON.parse(raw);
+  if (!Array.isArray(value)) throw new Error('invalid stored event preferences');
+  return value;
+}
 export async function readRecPrefs(env: Env, userId: number) {
   const row = await env.DB.prepare('SELECT * FROM event_rec_prefs WHERE user_id = ?').bind(userId).first<any>();
   if (!row) return { ...DEFAULT_PREFS };
-  return { enabled: row.enabled === 1, interests: JSON.parse(row.interests_json), goals_90d: row.goals_90d, formats: JSON.parse(row.formats_json), types: JSON.parse(row.types_json), home_city: row.home_city, travel_km: row.travel_km };
+  return { enabled: row.enabled === 1, interests: storedPreferenceArray(row.interests_json), goals_90d: row.goals_90d, formats: storedPreferenceArray(row.formats_json), types: storedPreferenceArray(row.types_json), home_city: row.home_city, travel_km: row.travel_km };
 }
 export function prefsError(b: any): { error: string; field: string } | null {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return { error: 'bad_field', field: 'prefs' };
@@ -109,7 +115,8 @@ export async function recommendedEvents(env: Env, u: Omit<User, 'role'> & { role
   const rows = await env.DB.prepare("SELECT e.*,f.verdict FROM events e LEFT JOIN event_rec_feedback f ON f.event_id=e.id AND f.user_id=? WHERE e.visibility='public' AND e.status='published' AND e.admin_published=1 AND datetime(e.starts_at)>=datetime('now') AND e.host_user_id!=? AND COALESCE(f.verdict,'')!='not_for_me' AND NOT EXISTS (SELECT 1 FROM event_registrations r WHERE r.event_id=e.id AND r.user_id=? AND r.status IN ('registered','confirmed','attended','waitlisted')) ORDER BY e.starts_at,e.id LIMIT 200").bind(u.id,u.id,u.id).all<any>();
   if (!Array.isArray(rows.results)) throw new Error('candidates unreadable');
   const eligible = [];
-  for (const event of rows.results) { const registration = await registrationEligibility(env,event,u.id,u.email); if (registration.eligible) eligible.push({ event,registration }); }
+  const registrations = await registrationEligibilityBatch(env, rows.results, u.id, u.email);
+  for (let i = 0; i < rows.results.length; i++) { const registration = registrations[i]; if (registration.eligible) eligible.push({ event: rows.results[i], registration }); }
   const budget = { left: vectors && env.AI ? 10 : 0 };
   const text = [...own.signals.map(s=>s.text),...prefs.interests,prefs.goals_90d,...prefs.formats,...prefs.types].filter(Boolean).join(' ').slice(0,4000);
   const member = text ? await cachedVector(env,true,u.id,text,budget) : null;
@@ -117,7 +124,7 @@ export async function recommendedEvents(env: Env, u: Omit<User, 'role'> & { role
   for (const {event,registration} of eligible) {
     const rule = rulesFor(event,own.signals,prefs,affinityOf(own.track));
     const vector = member ? await cachedVector(env,false,event.id,[event.title,event.summary,event.description,...eventTopics(event.topics_json)].filter(Boolean).join(' ').slice(0,4000),budget) : null;
-    scored.push({ score: rule.score + (member && vector ? cosine(member,vector)*5 : 0), event: { ...shapeEvent(event), source: 'axal', saved: event.verdict === 'saved', registration_eligible: registration, reasons: rule.reasons.slice(0,4) } });
+    scored.push({ score: rule.score + (member && vector ? cosine(member,vector)*5 : 0), event: { ...shapeEvent(event), saved: event.verdict === 'saved', registration_eligible: registration, reasons: rule.reasons.slice(0,4) } });
   }
   scored.sort((a,b)=>b.score-a.score || String(a.event.starts_at).localeCompare(String(b.event.starts_at)) || Number(a.event.id)-Number(b.event.id));
   return { enabled: true, profile: u.role, signals: own.states, events: scored.slice(0,limit).map(s=>s.event) };

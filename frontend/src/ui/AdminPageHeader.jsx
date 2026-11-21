@@ -162,8 +162,14 @@ export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-tes
  * SHL1's More menu: "⋯", then a menu of `HeaderMenuItem`s. Opening it moves
  * focus to the first item; the arrow keys, Home and End move between items;
  * Escape and an outside click close it, Escape returning focus to "⋯".
+ *
+ * Exported for a page that draws its own header (the licence identity header,
+ * D4819 part 4, #5927): `className` then replaces the header-grid placement.
+ * D6164 part 3: `label` names a menu that is not More (the deal's Share), and
+ * its button then shows that word with ▾ instead of "⋯".
  */
-function MoreMenu({ children, hasCrumb }) {
+export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin-page-more', label = null }) {
+  const name = label || 'More';
   const [open, setOpen] = useState(false);
   const phone = usePhoneWidth('(max-width: 639px)');
   const wrap = useRef(null);
@@ -198,15 +204,17 @@ function MoreMenu({ children, hasCrumb }) {
     all[(to + all.length) % all.length]?.focus?.();
   };
   const content = (
-    <div id={menu} role="menu" aria-label="More" className="flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="admin-page-more-menu">
+    <div id={menu} role="menu" aria-label={name} className="flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid={`${testId}-menu`}>
       <MenuClose.Provider value={close}>{children}</MenuClose.Provider>
     </div>
   );
   return (
-    <div ref={wrap} className={`relative col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`} onKeyDown={onKey}>
-      <button ref={button} type="button" aria-label="More" aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid="admin-page-more">⋯</button>
+    <div ref={wrap} className={`relative ${className ?? `col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`}`} onKeyDown={onKey}>
+      <button ref={button} type="button" aria-label={name} aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className={label
+        ? 'inline-flex h-11 items-center gap-1.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10'
+        : 'grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10'} data-testid={testId}>{label ? <>{label}<span aria-hidden="true">▾</span></> : '⋯'}</button>
       {open ? phone ? (
-        <Lightbox label="More" phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId="admin-page-more-sheet">
+        <Lightbox label={name} phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId={`${testId}-sheet`}>
           {content}
         </Lightbox>
       ) : <div className="absolute right-0 top-full z-30 mt-1.5">{content}</div> : null}
@@ -277,7 +285,7 @@ export default function AdminPageHeader({
         </div>
       ) : null}
       {tabs ? (
-        <nav aria-label={title} className="col-span-2 -mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" style={{ maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent)', paddingRight: 20 }} data-testid="admin-page-tabs">
+        <nav aria-label={title} className="relative col-span-2 -mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" style={{ maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent)', paddingRight: 20 }} data-testid="admin-page-tabs">
           {tabs}
         </nav>
       ) : null}

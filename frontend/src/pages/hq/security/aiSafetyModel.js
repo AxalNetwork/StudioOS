@@ -8,6 +8,7 @@
  * a rate. Each block reads its own source and its own availability, so one
  * unreadable table never zeroes the others.
  */
+import { isUnavailable } from '../../../lib/securityContract.js';
 
 /** Below this many evaluated outputs the fraction is a count, not a rate (D4800 uses the same line). */
 export const SMALL_SAMPLE = 20;
@@ -18,7 +19,7 @@ const sum = (rows, k) => (rows || []).reduce((n, r) => n + (Number(r?.[k]) || 0)
 export function contentSafety(block) {
   const v = block?.verdicts;
   if (!block) return { state: 'pending' };
-  if (block.available === false || !v || v.available === false) {
+  if (isUnavailable(block) || !v || isUnavailable(v)) {
     return { state: 'unavailable', reason: (v && v.reason) || block.reason || 'The guard verdicts could not be read.' };
   }
   const evaluated = Number(v.evaluated) || 0;
@@ -46,7 +47,7 @@ export function contentSafety(block) {
 export function deliveryEnforcement(block) {
   if (!block) return { state: 'pending' };
   const g = block.guard;
-  if (block.available === false || !g || g.available === false) {
+  if (isUnavailable(block) || !g || isUnavailable(g)) {
     return { state: 'unavailable', reason: (g && g.reason) || block.reason || 'Router enforcement could not be read.' };
   }
   const checks = sum(g.by_page, 'checks');
@@ -68,7 +69,7 @@ export function deliveryEnforcement(block) {
 export function usageAnomalies(block) {
   const t = block?.token_anomalies;
   if (!block || !t) return { state: block ? 'unavailable' : 'pending', reason: block ? 'The token check did not answer.' : null };
-  if (t.available === false) return { state: 'unavailable', reason: t.reason };
+  if (isUnavailable(t)) return { state: 'unavailable', reason: t.reason };
   const count = Number(t.count) || 0;
   const checked = Number(t.accounts_checked) || 0;
   return {
@@ -101,7 +102,7 @@ const VERDICT_STATE = Object.freeze({
 export function recentVerdicts(block) {
   const r = block?.recent_verdicts;
   if (!block || !r) return { state: 'pending', rows: null };
-  if (r.available === false) return { state: 'unavailable', reason: r.reason, rows: null };
+  if (isUnavailable(r)) return { state: 'unavailable', reason: r.reason, rows: null };
   return {
     state: r.rows.length ? 'ready' : 'empty',
     windowDays: r.window_days,

@@ -249,7 +249,8 @@ test('the figures with no source are absent, each with its own reason', async ()
   const r = await call(db, SUPER);
 
   assert.equal(r.body.subscriptions_available, false);
-  assert.match(String(r.body.subscriptions_reason), /no amount|not totalled/i);
+  assert.equal(r.body.subscriptions.state, 'unreadable');
+  assert.match(String(r.body.subscriptions_reason), /could not be read/i);
   assert.equal(r.body.subscriptions_cents, undefined, 'a subscriptions figure appeared');
 
   // A CEILING EXISTS NOW (D111) AND A DERIVED BUDGET STILL DOES NOT, which is

@@ -28,10 +28,12 @@ test('every NOTIFICATION_EVENTS/PARTNER_NOTIFICATION_EVENTS key is unique', () =
   assert.equal(new Set(keys).size, keys.length, 'a duplicate event key would make one label shadow another');
 });
 
-test('SettingsPage.jsx imports the shared map instead of declaring its own', () => {
-  const src = fs.readFileSync(path.join(__dirname, '../src/pages/SettingsPage.jsx'), 'utf8');
-  assert.match(src, /import \{ NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS \} from '\.\.\/lib\/notificationTypes'/);
-  assert.doesNotMatch(src, /const NOTIFICATION_EVENTS = \[/, 'SettingsPage redeclared its own copy of the matrix');
+// D4618 part 2: the matrix moved, unchanged, from SettingsPage.jsx to account/NotificationSections.jsx.
+test('the Account notification matrix imports the shared map instead of declaring its own', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../src/pages/account/NotificationSections.jsx'), 'utf8');
+  assert.match(src, /import \{ NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS \} from '\.\.\/\.\.\/lib\/notificationTypes'/);
+  assert.doesNotMatch(src, /const NOTIFICATION_EVENTS = \[/, 'the matrix redeclared its own copy of the map');
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../src/pages/SettingsPage.jsx'), 'utf8'), /const NOTIFICATION_EVENTS = \[/, 'SettingsPage redeclared its own copy of the matrix');
 });
 
 test('NotificationList.jsx renders labelForType(n.type), not the raw key', () => {

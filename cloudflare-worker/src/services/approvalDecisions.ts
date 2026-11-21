@@ -35,9 +35,9 @@
  */
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
-import { APPROVAL_SOURCES, approvalBoard, type ApprovalSource } from './approvalSources';
-import { HQ_APPROVAL_SOURCES } from './hqApprovalSources';
+import { approvalBoard, type ApprovalSource } from './approvalSources';
 import { medianOfHours, sqlStamp, utcMs } from './approvalAge';
+import { APPROVAL_LANES, recordedLane, unrecordedLane, type LaneFacts } from './approvalLaneRegistry';
 
 export type Outcome = 'approved' | 'declined' | 'other';
 export const OUTCOMES: readonly Outcome[] = ['approved', 'declined', 'other'];
@@ -78,8 +78,7 @@ export const REFERRAL_VERDICTS_SQL =
 /** Every lane, in the canvas's order: every studio's lanes, then HQ's. */
 export const DECISION_LANES: readonly DecisionLane[] = [
   {
-    key: 'lp', recorded: true, since: null,
-    caveat: 'An LP application keeps the time of its last review, so a note saved after the decision moves the time.',
+    ...recordedLane('lp'),
     sql:
       'SELECT a.id AS item_id, ' + WHO('u', 'a.user_id') + ' AS who, '
       + "CASE a.status WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -92,7 +91,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   {
     // A referral's decision is its EARLIEST verdict event (D210's `verdictSpans`):
     // it can move on to converted and rewarded, and those are not new decisions.
-    key: 'referrals', recorded: true, since: null,
+    ...recordedLane('referrals'),
     sql:
       'SELECT s.id AS item_id, ' + WHO('u', 's.referrer_user_id') + ' AS who, '
       + "CASE WHEN e.status IN ('rejected', 'closed') THEN 'declined' ELSE 'approved' END AS outcome, "
@@ -106,8 +105,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // `decided_by` is text: 'admin:<id>', or 'system' for the scheduler.
-    key: 'cohort', recorded: true, since: null,
-    caveat: 'A cohort decision made again replaces the earlier one, and an activated applicant keeps only its activation, so it is not listed.',
+    ...recordedLane('cohort'),
     sql:
       'SELECT ca.id AS item_id, ' + WHO('u', 'ca.user_id') + ' AS who, '
       + "CASE ca.status WHEN 'approved' THEN 'approved' WHEN 'rejected' THEN 'declined' ELSE 'other' END AS outcome, "
@@ -122,7 +120,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
     // A decided case keeps status 'under_review' with `resolved_at` set; what the
     // admin did is the case the same admin opened for the member straight after
     // (within a minute). None is a close.
-    key: 'moderation', recorded: true, since: null,
+    ...recordedLane('moderation'),
     sql:
       'SELECT m.id AS item_id, ' + WHO('u', 'm.user_id') + ' AS who, '
       + "CASE n.status WHEN 'active' THEN 'approved' WHEN 'suspended' THEN 'declined' WHEN 'ejected' THEN 'declined' ELSE 'other' END AS outcome, "
@@ -139,7 +137,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   {
     // One row per member: a resubmission leaves the last review's stamp, so a row
     // is decided only when its review is at or after its submission.
-    key: 'kyc', recorded: true, since: null,
+    ...recordedLane('kyc'),
     sql:
       'SELECT u.id AS item_id, ' + WHO('u', 'u.id') + ' AS who, '
       + "CASE u.kyc_status WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -150,7 +148,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + 'AND (u.kyc_submitted_at IS NULL OR julianday(u.kyc_reviewed_at) >= julianday(u.kyc_submitted_at))',
   },
   {
-    key: 'partner_profiles', recorded: true, since: '2026-10-25',
+    ...recordedLane('partner_profiles'),
     sql:
       "SELECT p.rowid AS item_id, COALESCE(NULLIF(u.name, ''), p.email) AS who, "
       + "CASE p.admin_status WHEN 'verified' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -162,7 +160,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // Giving the role is the only decision; nothing declines an Explorer.
-    key: 'exploring', recorded: true, since: null,
+    ...recordedLane('exploring'),
     sql:
       'SELECT u.id AS item_id, ' + WHO('u', 'u.id') + ' AS who, '
       + "'approved' AS outcome, 'Role given · ' || COALESCE(rr.assigned_role, 'role not recorded') AS outcome_word, "
@@ -172,13 +170,11 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + 'WHERE rr.role_confirmed = 1 AND rr.assigned_at IS NOT NULL',
   },
   {
-    key: 'jobs', recorded: false, since: null,
-    reason: 'A job posting keeps no decision time and no decider; an approval or rejection is only in the admin audit log.',
+    ...unrecordedLane('jobs'),
   },
   {
     // `approved_at` is migration 546's; a rejection writes no time.
-    key: 'events', recorded: true, since: '2026-10-24',
-    caveat: 'Events records when it approved, not who approved, and a sent-back event keeps no time, so only approvals are listed.',
+    ...recordedLane('events'),
     sql:
       'SELECT e.id AS item_id, ' + "COALESCE(NULLIF(u.name, ''), u.email, 'account ' || e.host_user_id, 'no host') AS who, "
       + "'approved' AS outcome, 'Approved' AS outcome_word, "
@@ -190,8 +186,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
     // #5301: confirming and cancelling are the review outcomes. Completion is
     // operational; it stays in the full transition history without becoming a
     // second approval. A later cancellation is preserved beside confirmation.
-    key: 'best_fit', recorded: true, since: '2026-11-10',
-    caveat: 'Best-Fit decisions before 10 November 2026 were not recorded.',
+    ...recordedLane('best_fit'),
     sql:
       'SELECT b.id AS item_id, ' + WHO('u', 'b.user_id') + ' AS who, '
       + "CASE e.to_status WHEN 'confirmed' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -206,8 +201,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
     // D5302: migration 620's decision and archive columns, written by
     // `POST /api/dd/cases/:uid/decision` and the archive. A case decided
     // before 620 has no decision (620: "NO OTHER BACKFILL").
-    key: 'due_diligence', recorded: true, since: null,
-    caveat: 'A due-diligence case decided again keeps only its latest decision, and its reason is kept encrypted with the case, so the log shows no note.',
+    ...recordedLane('due_diligence'),
     sql:
       'SELECT d.id AS item_id, ' + WHO('u', 'd.owner_user_id') + ' AS who, '
       + "CASE d.decision WHEN 'proceed' THEN 'approved' WHEN 'proceed_with_conditions' THEN 'approved' "
@@ -229,8 +223,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
     // (`kyb_businesses.id`), and the same scope as the inbox's lane: this
     // studio's cases, no licensed studio, no case linked to an admin (those
     // are the Super Admin's business queue).
-    key: 'kyb', recorded: true, since: null,
-    caveat: 'A business keeps the reason for its latest decision only, so the log shows no note.',
+    ...recordedLane('kyb'),
     bindings: (env) => [branchOf(env) || 'hq'],
     sql:
       "SELECT b.id AS item_id, COALESCE(NULLIF(b.display_name, ''), NULLIF(b.entity_name, ''), 'business ' || b.uid) AS who, "
@@ -251,8 +244,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
     // when the pitch goes out, and when the partner withdraws it (only an
     // approved pitch can be withdrawn with a review on it). A pitch published
     // before that has the publisher in the review columns, so it is left out.
-    key: 'comarketing', recorded: true, since: null,
-    caveat: 'A pitch published before 10 Nov 2026 lost its approval time to the publish, so it is not listed.',
+    ...recordedLane('comarketing'),
     sql:
       "SELECT c.id AS item_id, COALESCE(NULLIF(pt.name, ''), NULLIF(u.name, ''), u.email, 'account ' || c.submitter_user_id) AS who, "
       + "CASE c.status WHEN 'rejected' THEN 'declined' ELSE 'approved' END AS outcome, "
@@ -270,8 +262,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
     // fields, which a credential change clears; the history keeps them. A hide
     // or restore is the directory's visibility, not a decision on the
     // verification, so it is not listed; nor is a sample expert (the board's).
-    key: 'wellbeing_experts', recorded: true, since: '2026-10-26',
-    caveat: 'An expert verified before 26 Oct 2026 has no record of who verified them or when, so they are not listed.',
+    ...recordedLane('wellbeing_experts'),
     sql:
       "SELECT d.expert_id AS item_id, COALESCE(NULLIF(e.name, ''), NULLIF(u.name, ''), u.email, 'expert ' || e.id) AS who, "
       + "CASE d.decision WHEN 'verified' THEN 'approved' WHEN 'declined' THEN 'declined' ELSE 'other' END AS outcome, "
@@ -284,8 +275,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // A perk's `updated_at` moves with its review, so its arrival is not kept once decided.
-    key: 'perk_listings', recorded: true, since: null, arrivals: false,
-    caveat: 'A perk listing keeps no submission time once it is reviewed, so its wait is not recorded.',
+    ...recordedLane('perk_listings'), arrivals: false,
     sql:
       "SELECT pk.id AS item_id, COALESCE(NULLIF(pk.partner_name, ''), NULLIF(u.name, ''), u.email, 'account ' || pk.partner_user_id, 'no partner') AS who, "
       + "CASE pk.status WHEN 'live' THEN 'approved' WHEN 'rejected' THEN 'declined' ELSE 'other' END AS outcome, "
@@ -296,8 +286,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE pk.status IN ('live', 'rejected', 'paused') AND pk.reviewed_at IS NOT NULL",
   },
   {
-    key: 'strategic_access', recorded: true, since: null,
-    caveat: 'Strategic access records when it was decided, not who decided it.',
+    ...recordedLane('strategic_access'),
     sql:
       'SELECT r.id AS item_id, ' + WHO('u', 'r.user_id') + ' AS who, '
       + "CASE r.status WHEN 'granted' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -308,8 +297,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE r.status IN ('granted', 'declined') AND r.decided_at IS NOT NULL",
   },
   {
-    key: 'lab_hosts', recorded: true, since: null,
-    caveat: 'Revoking a host replaces its approval, so a revoked host shows only the revocation.',
+    ...recordedLane('lab_hosts'),
     sql:
       'SELECT h.id AS item_id, ' + WHO('u', 'h.user_id') + ' AS who, '
       + "CASE h.status WHEN 'approved' THEN 'approved' WHEN 'rejected' THEN 'declined' ELSE 'other' END AS outcome, "
@@ -320,7 +308,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE h.status IN ('approved', 'rejected', 'revoked') AND h.reviewed_at IS NOT NULL",
   },
   {
-    key: 'score_flags', recorded: true, since: null,
+    ...recordedLane('score_flags'),
     sql:
       "SELECT s.id AS item_id, COALESCE(NULLIF(p.name, ''), 'project ' || s.project_id) AS who, "
       + "CASE s.admin_review_status WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -334,7 +322,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   {
     // Approve and reject each keep their own time; a change request is the
     // revision the reviewer saved with reason 'request_changes'.
-    key: 'articles', recorded: true, since: null,
+    ...recordedLane('articles'),
     sql:
       'SELECT a.id AS item_id, ' + WHO('u', 'a.author_user_id') + " AS who, 'approved' AS outcome, 'Approved' AS outcome_word, "
       + 'datetime(a.approved_at) AS decided_at, a.reviewer_user_id AS decided_by_id, NULL AS decided_by_label, '
@@ -353,7 +341,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // Migration 576's own log; its approve and decline are the decisions.
-    key: 'product_testers', recorded: true, since: null,
+    ...recordedLane('product_testers'),
     sql:
       'SELECT ev.tester_id AS item_id, ' + WHO('u', 'ev.user_id') + ' AS who, '
       + "CASE ev.action WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -366,7 +354,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   // HQ's lanes (D1041 §4).
   {
     // An edit returns a sent-back programme to draft, so the decision is its event.
-    key: 'testing_programs', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('testing_programs'),
     sql:
       "SELECT t.id AS item_id, COALESCE(NULLIF(pt.name, ''), NULLIF(u.name, ''), u.email, 'account ' || t.created_by) AS who, "
       + "CASE ev.action WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -380,7 +368,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE ev.application_id IS NULL AND ev.action IN ('approved', 'rejected') AND t.owner_kind = 'partner'",
   },
   {
-    key: 'learning', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('learning'),
     sql:
       'SELECT s.id AS item_id, ' + WHO('u', 's.user_id') + ' AS who, '
       + "CASE s.status WHEN 'accepted' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -392,7 +380,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // Item ids are the ticket's, as the inbox lane's are.
-    key: 'tickets', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('tickets'),
     sql:
       "SELECT t.id AS item_id, COALESCE(NULLIF(u.name, ''), u.email, NULLIF(t.submitted_by, ''), 'account ' || t.user_id) AS who, "
       + "CASE f.status WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -409,7 +397,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE ct.status IN ('approved', 'declined') AND ct.decided_at IS NOT NULL",
   },
   {
-    key: 'payouts', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('payouts'),
     sql:
       'SELECT p.id AS item_id, ' + WHO('u', 'p.user_id') + ' AS who, '
       + "CASE p.status WHEN 'completed' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -421,12 +409,11 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE (p.status = 'completed' AND p.completed_at IS NOT NULL) OR (p.status = 'failed' AND p.failed_at IS NOT NULL)",
   },
   {
-    key: 'ai_runs', scope: 'hq', recorded: false, since: null,
-    reason: 'A held AI run keeps no time or decider for its charge or refund; only the activity log records it.',
+    ...unrecordedLane('ai_runs'),
   },
   {
     // Ending a licence turns a rejected response into withdrawn and keeps the review.
-    key: 'notices', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('notices'),
     sql:
       "SELECT n.id AS item_id, COALESCE(NULLIF(l.brand_name, ''), NULLIF(u.name, ''), u.email, 'account ' || n.user_id) AS who, "
       + "CASE n.status WHEN 'accepted' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -438,7 +425,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // Less the three program requests, as the inbox's Support lane (D1132): they are the `grants` lane.
-    key: 'support', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('support'),
     sql:
       "SELECT e.id AS item_id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
       + "CASE e.status WHEN 'answered' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -449,7 +436,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "AND e.kind NOT IN ('program_grant', 'program_terms_change', 'program_end')",
   },
   {
-    key: 'proposals', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('proposals'),
     sql:
       "SELECT pp.id AS item_id, COALESCE(NULLIF(l.brand_name, ''), CASE WHEN pp.licence_uid IS NULL THEN 'HQ-held' END, "
       + "NULLIF(u.name, ''), u.email, 'account ' || pp.created_by_user_id) AS who, "
@@ -464,7 +451,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
   {
     // D1132's lane: a studio's program request (D983), answered only while open.
-    key: 'grants', scope: 'hq', recorded: true, since: null,
+    ...recordedLane('grants'),
     sql:
       "SELECT e.id AS item_id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
       + "CASE e.status WHEN 'answered' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -476,11 +463,8 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   },
 ];
 
-const LABELS = new Map<string, string>([
-  ...APPROVAL_SOURCES.map((s) => [s.key, s.label] as [string, string]),
-  ...HQ_APPROVAL_SOURCES.map((s) => [s.key, s.label] as [string, string]),
-]);
-export const laneLabel = (key: string) => LABELS.get(key) ?? key;
+/** D5879: a lane's label is the registry's, the same one the inbox board prints. */
+export const laneLabel = (key: string) => (APPROVAL_LANES as Record<string, LaneFacts | undefined>)[key]?.label ?? key;
 
 /** The lanes a caller may read: HQ's only for a Super Admin. */
 export function decisionLanesFor(superAdmin: boolean, lanes: readonly DecisionLane[] = DECISION_LANES): readonly DecisionLane[] {

@@ -298,6 +298,10 @@ test('Ask: a sequence proposal is email steps only, and Accept saves a draft seq
   assert.throws(() => distributionRequest({ project: PA, target: 'form', kinds: ['sequence', 'post'], sources: ['validate'] }), /one sequence/);
   const values = { name: 'Sign-ups who went furthest', steps: [{ subject: 'Setup', body: 'You said setup takes weeks.', wait_days: 0 }, { subject: 'Following up', body: 'Still weeks?', wait_days: 3 }] };
   assert.equal(distributionOutput(JSON.stringify({ drafts: [{ index: 0, values }] }), input, new Set())[0].kind, 'sequence');
+  // #6420: a code fence or a lead-in line around the object is read; text with no object, or a second key, is still refused.
+  assert.equal(distributionOutput(`Here is the draft:\n\`\`\`json\n${JSON.stringify({ drafts: [{ index: 0, values }] })}\n\`\`\``, input, new Set())[0].kind, 'sequence');
+  assert.throws(() => distributionOutput('I could not draft this.', input, new Set()), /draft could not be read/);
+  assert.throws(() => distributionOutput(`\`\`\`json\n${JSON.stringify({ drafts: [{ index: 0, values }], note: 'x' })}\n\`\`\``, input, new Set()), /draft could not be read/);
   for (const bad of [{ ...values, steps: [{ ...values.steps[0], channel: 'whatsapp' }] }, { ...values, steps: [{ ...values.steps[0], wait_days: 2 }] }, { ...values, steps: [] }]) {
     assert.throws(() => distributionOutput(JSON.stringify({ drafts: [{ index: 0, values: bad }] }), input, new Set()), /sequence could not be read/);
   }

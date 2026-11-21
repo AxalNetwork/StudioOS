@@ -56,7 +56,10 @@ draws them: a pain group, an interview, a segment, a competitor, a demand record
 `demand_records`) and a hypothesis. Its actions call the writers the module's
 PATCH and POST routes call, and its `formOptions` serve the Add forms. An
 interview's Transcript, placements, Cost and Session sections are a writer's,
-and a quote with no consent reaches anyone else as withheld.
+and a quote with no consent reaches anyone else as withheld. A hypothesis's
+Evidence rows each carry Change strength (D6020, #6020): a pain link's through
+`setEvidenceStrength`, an evidence link's through `setLinkStrength`; Unlink
+evidence stays among the record's own actions.
 
 `raise.ts` holds Raise's seven module specs (D691, #1699 and #1700), as
 CO:375-381 draws them: a readiness item (by key), a narrative version, a deck
@@ -88,3 +91,9 @@ before invoking the spec. `formOptions` receives every query parameter except
 record must declare that reference for an ownership check before it writes.
 
 D1456 (#4014): Customer research returns recorded channel/capture labels, writer-only null-fact actions and a primary pending-findings link. The action contract gains an optional fact action key.
+
+D6113 (#6113): a row may carry further actions (`actions`, after its own `action`), a row's
+reference may carry `values` (a form's starting values for that row), and an action marked
+`row_only` runs only from the row that names it, so the record's own actions row never draws it.
+Market expansion's entry steps use all three, each step proved in `owned.ts`
+(`market_entry_steps`) and again against its market by the writer.

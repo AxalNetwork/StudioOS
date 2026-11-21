@@ -26,7 +26,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { cohortRecordFromBrief } from '../src/lib/spinoutLab.js';
-import * as BRIEF_LIB from '../src/lib/spinoutBrief.js';
 import { PIPELINE_PHASES } from '../src/lib/spinoutLab.js';
 import { DEFAULT_TRACK } from '../src/lib/spinoutLabArsenal.js';
 import { LabHero, LabApplyBand, applyLabelFor } from '../src/components/spinout/LabIntro.jsx';
@@ -89,7 +88,7 @@ test('the hero names the cohort the server names, and every date it holds', () =
   assert.equal(cell(html, 'ends'), 'November 29, 2026');
   assert.equal(cell(html, 'applications-close'), 'October 25, 2026');
   assert.match(renderedText(html), /Apply to the November 2026 cohort →/);
-  assert.match(renderedText(html), /Read from the cohort record\./);
+  assert.match(renderedText(html), /Dates come from the cohort record\./, '#6990: no engineering note');
 });
 
 test('still reading, a failed read and an absent value are three different sentences', () => {
@@ -108,11 +107,12 @@ test('the hero draws no seat count', () => {
   assert.doesNotMatch(heroSrc, /places/, 'the hero reads the place count');
 });
 
-test('the apply band names the cohort and the track, and the deadline it read', () => {
+test('the apply band names the cohort and the deadline it read, and no track until one is stored (#6990)', () => {
   const out = renderedText(band(OK, 'fit'));
-  assert.match(out, /Apply to the November 2026 cohort on the Find fit track\./);
+  assert.match(out, /Apply to the November 2026 cohort\./);
+  assert.doesNotMatch(out, /track/i, 'the application stores no track yet (#6989)');
   assert.match(out, /Applications close October 25, 2026 — seven days/);
-  assert.match(renderedText(band(FAILED)), /Apply on the Form track\./);
+  assert.match(renderedText(band(FAILED)), /Apply to the Spin-Out Lab\./);
   assert.equal(applyLabelFor(OK), 'Apply to the November 2026 cohort');
 });
 
@@ -130,25 +130,23 @@ test('no landing surface prints the client calendar’s cohort number any more',
 // the Brief prints the set the Lab enforces.
 // ---------------------------------------------------------------------------
 
-test('the Brief prints the enforced gates, read from PIPELINE_PHASES, never a copy of its own', () => {
-  const grid = BRIEF.slice(BRIEF.indexOf('data-testid="brief-gate-grid"'), BRIEF.indexOf('<PageFoot n={2}'));
-  assert.match(grid, /\{PIPELINE_PHASES\.map\(\(g, gi\) =>/, 'the Brief does not render the enforced set');
-  assert.match(grid, /pipelineItemsFor\(g\)/);
-  assert.match(grid, /\{g\.gate\}/);
-  assert.doesNotMatch(grid, /LAB_TRACKS\.map/, 'the Brief prints a gate column per track again');
+test('the Brief\'s journey reads the enforced weeks, never a copy of its own', () => {
+  // D6966: the presentation's journey is the four weeks the Lab checks (LAB_WEEKS over
+  // PIPELINE_PHASES), read in programs/content/spinout-lab.js, with no gate column per track.
+  const content = codeOnly(read('../src/pages/programs/content/spinout-lab.js'));
+  assert.match(content, /export const WEEKS = LAB_WEEKS\.map\(/, 'the Brief does not read the enforced set');
+  assert.doesNotMatch(content + BRIEF, /LAB_TRACKS/, 'the Brief prints a gate column per track again');
   // The enforced set is the four weeks, each with its own gate.
   assert.equal(PIPELINE_PHASES.length, 4);
   assert.ok(PIPELINE_PHASES.every((p) => p.gate && p.items.length));
 });
 
 test('no per-track gate copy and no open-decision notice remains', () => {
-  assert.equal(BRIEF_LIB.TRACK_GATES, undefined, 'spinoutBrief.js exports per-track gates again');
-  assert.equal(BRIEF_LIB.GATES_DECISION, undefined, 'spinoutBrief.js still says the gates call is open');
   for (const [label, src] of [['Brief', BRIEF], ['LabIntro', INTRO]]) {
     assert.doesNotMatch(src, /GATES_DECISION|TRACK_GATES/, `${label} still reads the per-track copy or the open call`);
     assert.doesNotMatch(src, /still to be decided/, `${label} still says the gates call is open`);
   }
-  assert.match(BRIEF, /One set of gates, the same for every track\./);
+  assert.match(read('../src/pages/programs/content/spinout-lab.js'), /The four weeks are the same for everyone\./);
   assert.match(INTRO, /The four gates are the same for every track\./);
   const sig = INTRO.slice(INTRO.indexOf('export function LabGates'));
   assert.ok(!sig.slice(sig.indexOf('('), sig.indexOf(')') + 1).includes('track'), 'the intro gates take a track again');

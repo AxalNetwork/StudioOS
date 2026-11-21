@@ -33,17 +33,20 @@ const NONE = { status: 'ready', data: { recorded: false, last4: null, masked: nu
 
 test('the card\'s value: the last four, Not recorded with its reason, or Unreadable', () => {
   assert.equal(render(h(EinValue, { ein: RECORDED })), '••-•••6789');
-  assert.equal(render(h(EinValue, { ein: NONE })), `<span class="italic text-gray-500 dark:text-gray-400" title="${EIN_REASONS.none}">Not recorded</span>`);
-  assert.match(render(h(EinValue, { ein: { status: 'unreadable', data: null } })), new RegExp(`title="${EIN_REASONS.unreadable}">Unreadable<`));
-  assert.match(render(h(EinValue, { ein: { status: 'no-project', data: null } })), new RegExp(`title="${EIN_REASONS.noProject}">Not recorded<`));
+  // D5129: the shared Not recorded chip: a dash glyph before the word, the reason on its title.
+  const chip = render(h(EinValue, { ein: NONE }));
+  assert.match(chip, /^<span class="[^"]*border-dotted[^"]*" data-platform-state="not_recorded"/);
+  assert.equal(chip.replace(/<svg[\s\S]*?<\/svg>/, '').replace(/^<span[^>]*?(title="[^"]*")>/, '<span $1>'), `<span title="${EIN_REASONS.none}">Not recorded</span>`);
+  assert.match(render(h(EinValue, { ein: { status: 'unreadable', data: null } })), new RegExp(`title="${EIN_REASONS.unreadable}">(?:<svg[\\s\\S]*?<\\/svg>)?Unreadable<`));
+  assert.match(render(h(EinValue, { ein: { status: 'no-project', data: null } })), new RegExp(`title="${EIN_REASONS.noProject}">(?:<svg[\\s\\S]*?<\\/svg>)?Not recorded<`));
 });
 
 test('the investor preview never shows the number', () => {
   const stored = render(h(EinPreviewValue, { ein: RECORDED }));
-  assert.ok(stored.includes(`title="${EIN_NOT_SHARED}">Not shared<`), stored);
+  assert.ok(stored.replace(/<svg[\s\S]*?<\/svg>/g, '').includes(`title="${EIN_NOT_SHARED}">Not shared<`), stored); // D5129: the chip's dash glyph
   assert.ok(!stored.includes('6789'), 'the preview shows the digits');
-  assert.match(render(h(EinPreviewValue, { ein: NONE })), new RegExp(`title="${EIN_REASONS.none}">Not recorded<`));
-  assert.match(render(h(EinPreviewValue, { ein: { status: 'unreadable', data: null } })), />Unreadable</);
+  assert.match(render(h(EinPreviewValue, { ein: NONE })), new RegExp(`title="${EIN_REASONS.none}">(?:<svg[\\s\\S]*?<\\/svg>)?Not recorded<`));
+  assert.match(render(h(EinPreviewValue, { ein: { status: 'unreadable', data: null } })), />(?:<svg[\s\S]*?<\/svg>)?Unreadable</);
   assert.match(EIN_NOT_SHARED, /do not see the EIN/);
 });
 

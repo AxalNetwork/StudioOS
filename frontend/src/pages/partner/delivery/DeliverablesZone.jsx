@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { partnerDeliveryHistoryApi } from '../../../lib/api/partnerDeliveryHistory';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
@@ -18,6 +19,7 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
 import { useMutations, useZoneRead, signature, failureNote, stated } from './useZoneMutations';
 import { DeliveryNote } from './deliveryEdits';
 import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
+import { HistoryPager, useMorePages } from './historyPages';
 
 /**
  * Delivery · Deliverables — `/delivery/deliverables`.
@@ -82,15 +84,48 @@ function notRecordedWhy(row, readsUnavailable = false) {
   return `${sub.charAt(0).toUpperCase()}${sub.slice(1)}.`;
 }
 
+/** #4709: what a sent deliverable's corrections replaced, oldest first, with who and why. */
+function Corrections({ list }) {
+  if (!Array.isArray(list) || list.length === 0) return null;
+  return (
+    <details className="mt-1.5 text-[11.5px] text-axal-muted" data-testid="deliverable-corrections">
+      <summary className="cursor-pointer font-semibold">Corrected {list.length === 1 ? 'once' : `${list.length} times`} since it was sent</summary>
+      <ol className="mt-1 space-y-1">
+        {list.map((k) => (
+          <li key={k.id}>
+            <span className="font-semibold">{k.corrected_by_name || 'Someone at the firm'}</span>
+            {' · '}{formatDay(k.corrected_at)}{' · '}“{k.reason}”
+            <div className="text-axal-faint">
+              Was: {[k.was?.title, k.was?.version, k.was?.link_url, k.was?.sent_at ? `sent ${formatDay(k.was.sent_at)}` : 'not sent']
+                .filter(Boolean).join(' · ')}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+/** #4709: whether a draft changes any of the four things the client was handed. */
+export function changesSentFields(row, draft) {
+  const v = (x) => (x == null ? '' : String(x).trim());
+  return ['title', 'version', 'link_url', 'sent_at'].some((k) => v(row?.[k]) !== v(draft?.[k]));
+}
+
 function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSave, onDelete, note }) {
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(row);
+  const [reason, setReason] = useState('');
+  // #4709: a sent deliverable is what the client received. A change to it is a
+  // correction, which needs a reason and keeps the values it replaces.
+  const sent = Boolean(row.sent_at);
+  const correcting = sent && changesSentFields(row, draft);
   const editButton = useRef(null);
   // Re-seeded only when THIS record's saved values change. Keying on the row
   // object reset the open editor on every refetch, including the one a save on
   // another row triggers (#4698).
   const seed = signature(row.title, row.version, row.link_url, row.sent_at);
-  useEffect(() => { setDraft(row); }, [seed]);
+  useEffect(() => { setDraft(row); setReason(''); }, [seed]);
   const busy = saving || deleting;
 
   return (
@@ -113,9 +148,10 @@ function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSav
               </a>
             )}
           </div>
+          <Corrections list={row.corrections} />
         </div>
         <button type="button" ref={editButton} className={ghostButtonClass} aria-expanded={edit}
-          onClick={() => { if (edit) setDraft(row); setEdit((v) => !v); }}>
+          onClick={() => { if (edit) { setDraft(row); setReason(''); } setEdit((v) => !v); }}>
           {edit ? 'Cancel' : 'Edit'}
         </button>
       </div>
@@ -135,11 +171,19 @@ function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSav
               <input className={inputClass} value={draft.link_url || ''} maxLength={600}
                 onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
             </Field>
-            <Field label="Sent on" hint="Empty means not sent. Clearing it un-sends the record.">
+            <Field label="Sent on" hint={sent ? 'The date it went to the client. Changing it is a correction.' : 'Empty means not sent.'}>
               <input className={inputClass} value={draft.sent_at || ''} maxLength={40} placeholder="2026-09-04"
                 onChange={(e) => setDraft({ ...draft, sent_at: e.target.value })} />
             </Field>
           </div>
+          {correcting && (
+            <div className="mt-3">
+              <Field label="Why is it being corrected?" hint="Required for a sent deliverable. The values it replaces are kept with your name and the date.">
+                <input className={inputClass} value={reason} maxLength={500}
+                  onChange={(e) => setReason(e.target.value)} data-testid="deliverable-correction-reason" />
+              </Field>
+            </div>
+          )}
           {/*
             NO "mark opened" CONTROL, and its absence is the feature. Only the
             client can say a thing was read; a button here would let the firm
@@ -157,16 +201,21 @@ function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSav
                 button drops keyboard focus, and the person is still here when
                 the save is refused. The handler's own guard is what stops a
                 second request. */}
-            <button type="button" className={buttonClass} aria-disabled={busy || undefined}
+            <button type="button" className={buttonClass} aria-disabled={busy || (correcting && !reason.trim()) || undefined}
+              title={correcting && !reason.trim() ? 'Say why it is being corrected first.' : undefined}
               onClick={async () => {
-                if (busy) return;
-                const ok = await onSave(row, draft);
+                if (busy || (correcting && !reason.trim())) return;
+                const ok = await onSave(row, draft, correcting ? reason.trim() : undefined);
                 // Close only on a confirmed save: a refused one leaves the
                 // typed values in the open editor, ready for another go.
                 if (ok) { setEdit(false); editButton.current?.focus?.(); }
               }}>{saving ? 'Saving…' : 'Save'}</button>
-            <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-              aria-disabled={busy || undefined} onClick={() => { if (!busy) onDelete(row); }}>Delete</button>
+            {sent ? (
+              <span className="ml-auto self-center text-[11.5px] text-axal-faint">Sent deliverables are records, not deletable rows.</span>
+            ) : (
+              <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
+                aria-disabled={busy || undefined} onClick={() => { if (!busy) onDelete(row); }}>Delete</button>
+            )}
           </div>
           <DeliveryNote note={note?.scope === `dl:${row.id}` ? note : null} />
         </div>
@@ -189,6 +238,9 @@ function ShipTile({ label, value, note, nr = false }) {
     </div>
   );
 }
+
+const deliverableKey = (r) => r.id;
+const fetchDeliverablesPage = (o) => partnerDeliveryHistoryApi.partnerDeliverablesPage(o);
 
 export default function PartnerDeliverablesZone() {
   const { state: read, load } = useZoneRead(async () => {
@@ -248,10 +300,12 @@ export default function PartnerDeliverablesZone() {
   }, [focusAdd, read.data]);
 
   const d = state.data;
+  // #4709: the read is the log's first page; Load more adds the rest.
+  const more = useMorePages(d, fetchDeliverablesPage, deliverableKey);
   // D4822 part 2: `?engagement=` (from the engagement Sheet) narrows the log to one engagement; every figure below
   // is then that engagement's, and the bar above the log says so.
   const focus = useEngagementFocus();
-  const allItems = Array.isArray(d?.items) ? d.items : [];
+  const allItems = Array.isArray(more?.items) ? more.items : [];
   const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const engagements = state.engagements || [];
   const focusId = focusEngagementId([engagements, allItems], focus.key);
@@ -269,6 +323,14 @@ export default function PartnerDeliverablesZone() {
   const signedOff = items.filter((r) => r.signed_off_at);
   const shippedThisMonth = items.filter((r) => r.days_since_sent != null && r.days_since_sent <= 31);
   const clientCount = new Set(items.map((r) => r.founder_name || r.need_title).filter(Boolean)).size;
+  // #4709: unfocused, the tiles are the WHOLE BOOK's, as the Worker counted
+  // them, not the loaded page's. Focused on one engagement they count its
+  // loaded rows, and the pager below says how many of the book that is.
+  const bookFigure = (v, loaded) => (!focus.key && typeof v === 'number' ? v : loaded);
+  const unopenedN = bookFigure(d?.unopened_count, unopened.length);
+  const signedOffN = bookFigure(d?.signed_off_count, signedOff.length);
+  const shippedN = bookFigure(d?.shipped_31d_count, shippedThisMonth.length);
+  const clientsN = bookFigure(d?.shipped_31d_clients, clientCount);
   const oldestUnopened = useMemo(() => {
     const sent = items.filter((x) => x.is_unopened && x.days_since_sent != null);
     if (!sent.length) return null;
@@ -448,7 +510,7 @@ export default function PartnerDeliverablesZone() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <ShipTile
             label="Never opened"
-            value={String(unopened.length)}
+            value={String(unopenedN)}
             nr={readsUnavailable}
             note={readsUnavailable
               ? 'read status unavailable: client opens are not currently tracked'
@@ -458,13 +520,13 @@ export default function PartnerDeliverablesZone() {
           />
           <ShipTile
             label="Signed off"
-            value={String(signedOff.length)}
-            note={signedOff.length ? 'the client marked it accepted' : 'nothing signed off yet'}
+            value={String(signedOffN)}
+            note={signedOffN ? 'the client marked it accepted' : 'nothing signed off yet'}
           />
           <ShipTile
             label="Shipped this month"
-            value={String(shippedThisMonth.length)}
-            note={`across ${clientCount} client${clientCount === 1 ? '' : 's'}`}
+            value={String(shippedN)}
+            note={`across ${clientsN} client${clientsN === 1 ? '' : 's'}`}
           />
           <ShipTile
             label="Median days to open"
@@ -525,6 +587,8 @@ export default function PartnerDeliverablesZone() {
             // #5314 part 1: opens are recorded when the client follows the shared link.
             : 'Unopened rows lead, oldest first, only where opens can be observed: an open is recorded when the client follows the shared link. A deliverable sent before that began, or with no link, reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d.'}
         />
+        <HistoryPager page={more.page} shown={allItems.length} noun="deliverables"
+          loadingMore={more.loadingMore} moreError={more.moreError} onMore={more.loadMore} />
 
         <ZoneDraft
           surface="delivery/deliverables"
@@ -551,14 +615,16 @@ export default function PartnerDeliverablesZone() {
                 saving={isPending(`save:${row.id}`)}
                 deleting={isPending(`delete:${row.id}`)}
                 note={note}
-                onSave={(r, draft) => act(
+                onSave={(r, draft, reason) => act(
                   `save:${r.id}`,
                   (rev) => api.updatePartnerDeliverable(r.id, {
                     title: draft.title, version: draft.version,
                     link_url: draft.link_url, sent_at: draft.sent_at || null,
                     expected_revision: stated(rev, r.revision),
+                    // #4709: a sent deliverable's change carries its reason.
+                    ...(reason ? { correction_reason: reason } : {}),
                   }),
-                  'Saved.', `dl:${r.id}`,
+                  reason ? 'Correction saved. The earlier values are kept.' : 'Saved.', `dl:${r.id}`,
                 )}
                 onDelete={(r) => act(
                   `delete:${r.id}`,

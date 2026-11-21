@@ -104,9 +104,10 @@ const COPY = {
   'durable-company-building': {
     title: 'Add obligation', cta: 'Add obligation', sub: 'Governance, compliance or risk, with an owner and a date.', foot: 'Appears on the compliance calendar.',
     labels: ['Obligation', 'Kind', 'Due', 'Owner', 'Repeats', 'Remind'],
-    chips: { kind: [['Governance', 'Compliance', 'Risk', 'Culture'], 'governance'], repeats: [['Once', 'Monthly', 'Quarterly', 'Yearly'], 'quarterly'] },
+    // D6790: the owner is a listbox of the company team (No one yet until form-options answers).
+    chips: { kind: [['Governance', 'Compliance', 'Risk', 'Culture'], 'governance'], owner_user_id: [['No one yet'], ''], repeats: [['Once', 'Monthly', 'Quarterly', 'Yearly'], 'quarterly'] },
     checks: { remind: [['14 days before', true], ['The day before', true]] },
-    placeholders: ['Board meeting, filing, review…', 'Name'],
+    placeholders: ['Board meeting, filing, review…'],
   },
 };
 const strings = (f) => {
@@ -269,7 +270,7 @@ async function assertFields(m) {
     assert.equal(ob.calls.length, 0); assert.ok(ob.text().includes('Due is required.'));
     await ob.input('due_at', '2026-12-12'); await ob.choose('kind', 'culture');
     await ob.submit();
-    assert.deepEqual(ob.calls[0][2], { title: 'Board meeting', kind: 'culture', due_at: '2026-12-12', owner_name: null, repeats: 'quarterly', remind_days: [14, 1] });
+    assert.deepEqual(ob.calls[0][2], { title: 'Board meeting', kind: 'culture', due_at: '2026-12-12', owner_user_id: null, repeats: 'quarterly', remind_days: [14, 1] });
   } finally { await ob.unmount(); }
 
   // No body carries a bare `currency`, and Add market's no size.
@@ -380,7 +381,7 @@ test('9: each Grow Edit sends only what its row carried or the founder filled', 
     ["  toBody: (v, key) => kpiBody({ ...v, kpi: key }),", '  toBody: (v) => kpiBody(v),'],
     ["key: 'edit-role',\n  title: 'Edit role',", "key: 'edit-role',\n  title: 'Edit a role',"],
     ["withChips(partner.fields[1], [['other', 'Other']])", 'bare(partner.fields[1])'],
-    ['const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null);', 'const scored = [];'],
+    ["const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null && e[`${k}_score`] !== '');", 'const scored = [];'],
   ]);
 });
 
@@ -497,7 +498,7 @@ const RAISE_COPY = {
   },
   'investor-narrative': {
     title: 'New version', cta: 'Create version', button: 'New version',
-    sub: 'One narrative per investor type. Each is checked for consistency.', foot: 'Start from a version or blank; you edit.',
+    sub: 'One narrative per investor type. Each is checked for consistency.', foot: 'Start from a version, the pitch deck or blank; you edit.',
     // D909 (NAR11): Audience; the Spin-Out wording only for a Spin-Out venture, so not here.
     labels: ['Audience', 'Start from', 'One-liner', 'Why now', 'The ask', 'Check against'],
     chips: {
@@ -751,7 +752,7 @@ test('2-6 (Raise): Re-score, New version, New link, Upload, Edit split, Add hold
     ['.filter((k) => k !== BY_HAND)', ''],
     ["since: v.since === 'all' ? 'all' : 'last'", "since: 'all'"],
     ["? { value, label, meta: `${when} · scored on its record`, checked: false, disabled: true }", "? { value, label, meta: `${when} · scored on its record`, checked: true }"],
-    ["start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,", "start_from: based ? 'version' : LIVE,"],
+    ["start_from: based ? 'version' : deck ? 'deck' : from === BLANK ? BLANK : LIVE,", "start_from: based ? 'version' : deck ? 'deck' : LIVE,"],
     ["name, data, visibility: 'nda',", 'name, data,'],
     ['if (why) { refused.push(`${file.name}: ${why}.`); continue; }', ''],
     ["...(folder.startsWith(NEW_FOLDER) ? { folder_name: folder.slice(NEW_FOLDER.length) } : folder ? { folder_uid: folder } : {}),", '...(folder ? { folder_uid: folder } : {}),'],

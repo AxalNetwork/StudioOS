@@ -167,6 +167,24 @@ export function periodState(p: { due_on: string; met_update_id?: number | null; 
 
 /** RPT7's defaults: 14 and 3 days before, on the day, and 7 days late; in the app and by email. */
 export const DEFAULT_REMINDERS = { offsets: [14, 3, 0, -7], channels: ['in_app', 'email'] as Array<'in_app' | 'email'> };
+
+/** The oldest outstanding period inside the venture's reminder window, including overdue periods. */
+export async function dueReportingPeriod(env: Env, projectId: number, today: string) {
+  const settings = await env.DB.prepare('SELECT offsets_json FROM reporting_reminder_settings WHERE project_id = ?')
+    .bind(projectId).first<{ offsets_json: string }>();
+  const offsets: unknown = settings ? JSON.parse(settings.offsets_json) : DEFAULT_REMINDERS.offsets;
+  if (!Array.isArray(offsets) || !offsets.every((n) => Number.isInteger(n) && n >= -30 && n <= 60)) {
+    throw new Error('Unreadable reporting reminder offsets');
+  }
+  const horizon = addDays(today, Math.max(0, ...offsets));
+  return env.DB.prepare(
+    `SELECT p.period_label, p.due_on, d.kind FROM reporting_periods p
+     JOIN reporting_duties d ON d.id = p.duty_id
+     WHERE d.project_id = ? AND d.status = 'active' AND p.met_update_id IS NULL
+       AND p.waived_at IS NULL AND p.due_on <= ?
+     ORDER BY p.due_on, p.id LIMIT 1`,
+  ).bind(projectId, horizon).first<{ period_label: string; due_on: string; kind: Kind }>();
+}
 export const MAX_OFFSETS = 6;
 
 /** The venture's founder team: its owner and accepted co-founders. Advisors and investors are never in it. */

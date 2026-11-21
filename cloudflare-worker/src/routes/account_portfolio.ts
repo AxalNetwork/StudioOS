@@ -17,6 +17,9 @@
  *
  * Archived companies (D1137) are left out of the switcher and do not resolve.
  *
+ * D6685 (#6685): each switcher company also carries the flat `formation_state`
+ * and `formation_order_id` (`services/formationState.ts`); its projects do not.
+ *
  * A block whose store failed is `{ available: false, reason }`, never a zero
  * or an empty list. The server's project scope does not change here: the
  * selection of a project is client state, as the active company is.
@@ -30,6 +33,7 @@ import { companyWriteDenial, isSupportSession, linkCanEdit } from '../services/c
 import { holdsLicence } from '../services/accountLicences';
 import { refuse } from '../util/refusal';
 import { companyPath, projectPath } from '../services/slugs';
+import { companyFormations } from '../services/formationState';
 
 type Row = Record<string, any>;
 type Block<T> = { available: true; value: T } | { available: false; reason: string };
@@ -84,13 +88,16 @@ r.get('/account/switcher', async (c) => {
     await ensureProjectMembershipSchema(c.env);
     const companies = await rows(c.env, 'Your companies', MY_COMPANIES_SQL, [user.id]);
     if (!companies.available) return refuse(c, 503, { code: 'switcher_unreadable', message: 'Your companies could not be read. That is not the same as none.' });
-    const projects = await rows(c.env, 'Your projects', MY_PROJECTS_SQL, [user.founder_id ?? null, user.id, user.founder_id ?? null]);
+    const [projects, formationOf] = await Promise.all([
+      rows(c.env, 'Your projects', MY_PROJECTS_SQL, [user.founder_id ?? null, user.id, user.founder_id ?? null]),
+      companyFormations(c.env, companies.value.map((co) => Number(co.id))),
+    ]);
     const mine = new Set(companies.value.map((co) => Number(co.id)));
     const under = (id: number): Block<ReturnType<typeof projectDto>[]> => (projects.available
       ? ok(projects.value.filter((p) => Number(p.company_id) === id).map(projectDto))
       : projects);
     return c.json({
-      companies: companies.value.map((co) => ({ ...companyDto(co), projects: under(Number(co.id)) })),
+      companies: companies.value.map((co) => ({ ...companyDto(co), projects: under(Number(co.id)), ...formationOf(Number(co.id)) })),
       standalone: projects.available ? ok(projects.value.filter((p) => p.company_id == null).map(projectDto)) : projects,
       // Seated projects whose company the caller does not belong to (or that is archived).
       elsewhere: projects.available

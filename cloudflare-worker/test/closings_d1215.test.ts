@@ -65,6 +65,7 @@ function freshDb() {
   db.exec(BASELINE);
   for (const f of ['312_fund_call_ledger.sql', '335_deal_transfers_and_closing_checklists.sql', '340_deal_transfer_company.sql',
     '410_safe_issuances.sql', '599_deal_currency.sql']) db.exec(MIG(f));
+    db.exec(MIG('202611161505_6195_commitment_route_preference.sql')); // D6195: commitments.route_preference
   // Migration 607's prospect cents, the one column of it a closing reads.
   db.exec('ALTER TABLE raise_prospects ADD COLUMN amount_cents INTEGER');
   // Rows written BEFORE 612: the copy must give them cents.
@@ -84,6 +85,7 @@ function freshDb() {
       (104, 'cm-o', 42, 8, 70000, 'confirmed');
   `);
   db.exec(MIG('612_closings.sql'));
+  db.exec(MIG('202611151545_6198_closing_sender_declarations.sql')); // D6198: the line status reads the sender's declarations
   return db;
 }
 
@@ -382,4 +384,21 @@ test('index.ts mounts /api/closings, and the desk before the /api/admin catch-al
   const catchAll = index.indexOf("app.route('/api/admin', admin);");
   assert.ok(desk > 0 && catchAll > 0 && desk < catchAll, 'the desk is mounted before the catch-all');
   assert.ok(index.includes("app.route('/api/closings', closings);"));
+});
+
+// D6195 (#6195): each line carries its commitment's route preference beside the route the
+// studio sets. The preference never sets the route, and setting the route never changes it.
+test('D6195: a line reads the investor\'s preference; the route stays the one the Admin sets', async () => {
+  const db = freshDb();
+  db.exec("UPDATE commitments SET route_preference = 'syndicate' WHERE uid = 'cm-a'");
+  const r = await call(db, 'POST', '/api/closings', ADMIN, { deal_id: DEAL });
+  assert.equal(r.status, 201, r.text);
+  assert.deepEqual(r.body.lines.map((l: any) => [l.investor_user_id, l.route, l.route_preference]),
+    [[INV_A, null, 'syndicate'], [INV_B, null, null]], 'a preference is not a route; none recorded stays null');
+  const a = r.body.lines[0].uid;
+  const set = await call(db, 'PUT', `/api/closings/${r.body.uid}/lines/${a}/route`, ADMIN, { route: 'direct' });
+  assert.equal(set.status, 200, set.text);
+  const after = await call(db, 'GET', `/api/closings/${r.body.uid}`, ADMIN);
+  assert.deepEqual(after.body.lines.map((l: any) => [l.route, l.route_preference]), [['direct', 'syndicate'], [null, null]]);
+  assert.equal(all(db, "SELECT route_preference FROM commitments WHERE uid = 'cm-a'")[0].route_preference, 'syndicate', 'setting the route leaves the preference as the investor recorded it');
 });

@@ -22,10 +22,17 @@ test('A6 has explicit founder-only overview ownership and preserves network deep
 test('A6 normalizes both relationship envelopes and reads only approved endpoints', () => {
   assert.match(desk, /normalizeRelationships = \(value\) => listFrom\(value, 'items'\)/);
   assert.match(desk, /value !== null && value !== undefined && value !== ''/);
-  assert.match(desk, /Number\.isNaN\(parsed\.getTime\(\)\)/);
-  assert.match(desk, /loading && !Object\.keys\(records\)\.length/);
-  for (const call of ['api.contactsList()', 'api.partnerRelationships()', 'api.partnerSummary()', 'api.introPropositions()']) assert.ok(desk.includes(call));
-  assert.ok(!/introAccept|introDecline|contactGet|createRelationship|updateRelationship|logActivity/.test(desk));
+  // #5310 (D5310): the NW1 overview's reads, each its own source so one failure never blanks the page.
+  for (const call of ["contactsBookApi.book('', 1)", 'contactsBookApi.followUpsDue(3)', 'relationshipsApi.summary()',
+    "relationshipsApi.introRequests({ status: 'pending' })", "relationshipsApi.introRequests({ status: 'accepted' })",
+    "relationshipsApi.introRequests({ status: 'made' })", "api.introPropositions({ status: 'pending' })", 'api.contactsList()',
+    // D5310-p5: the recorded-events read (D6557) behind Recent network activity.
+    'relationshipsApi.activity(ACTIVITY_LIMIT)']) {
+    assert.ok(desk.includes(call), call);
+  }
+  // NW1's curated matches accept and decline (one credit, gated on a read balance); nothing else writes.
+  assert.ok(!/contactGet|createRelationship|updateRelationship|logActivity|requestIntro\(/.test(desk));
+  assert.match(desk, /disabled=\{!gate\.enabled \|\| busy === m\.uid\}/, 'Accept is not gated on the read balance');
 });
 test('A6 hands off to its three zones and carries its loaded seed', () => {
   // D421. Every card linked to the legacy `/network?mode=workspace&tab=…`
@@ -39,7 +46,7 @@ test('A6 hands off to its three zones and carries its loaded seed', () => {
   for (const [testid, zone] of [
     ['link-open-network-relationships', 'Relationships'],
     ['link-open-network-introductions', 'Introductions'],
-    ['link-open-network-pairings', 'Introductions'],
+    ['link-open-network-matches', 'Introductions'],
     ['link-open-network-organizations', 'Organizations'],
   ]) {
     assert.match(desk, new RegExp(`testid="${testid}" to=\\{ZONE\\.${zone}\\}`), `${testid} does not hand off to the ${zone} zone`);
@@ -48,7 +55,7 @@ test('A6 hands off to its three zones and carries its loaded seed', () => {
   assert.match(desk, /founderNetworkSeed: \{ records \}/);
 });
 
-test('A6 flags going cold with the zone’s own definition', () => {
+test('A6 reads the zone’s own cold definition, and needs attention is overdue follow-ups only (B1)', () => {
   // ONE DEFINITION. The desk and /network/relationships used to be able to
   // disagree about one contact; both import it now.
   const lib = read('frontend/src/lib/networkBook.js');
@@ -59,14 +66,12 @@ test('A6 flags going cold with the zone’s own definition', () => {
     assert.match(src, /from '\.\.\/\.\.\/lib\/networkBook';/, `${file} does not read the shared cold flag`);
     assert.ok(!/> 60\b/.test(src), `${file} carries its own copy of the cold window`);
   }
-  // THE DESK SHOWS IT on every row and counts it in the card's meta.
-  assert.match(desk, /\{touchCell\(row\.last_activity_at \|\| row\.last_touch_at\)\}/, 'partner relationships are not flagged');
-  // D551 (#1144): a contact's strength is the one set on it, or Not recorded.
-  assert.match(desk, /\{strengthLabel\(row\)\}<\/span><span>\{touchCell\(row\.last_activity_at\)\}/, 'contacts are not flagged');
-  assert.match(desk, /\$\{cold\} going cold/, 'the relationships card does not count who is going cold');
+  // #5310 (owner answer B1 on #4799): the overview's attention list is overdue follow-ups, not going cold.
+  assert.match(desk, /followUps: \(\) => contactsBookApi\.followUpsDue\(3\)/);
+  assert.match(desk, /attentionRows\(records\.followUps\)/);
   // ORGANIZATIONS ARE THE RECORDED FIELD, never an email domain.
   assert.match(read('frontend/src/lib/networkBook.js'), /row\?\.organization \|\| row\?\.company \|\| row\?\.firm/);
-  assert.ok(!/split\('@'\)|\.email\.split|domain/.test(desk.replace(/email domains are not inferred/g, '')), 'an organization is being inferred from an email');
+  assert.ok(!/split\('@'\)|\.email\.split|domain/.test(desk), 'an organization is being inferred from an email');
   assert.doesNotMatch(desk, /recommendation/i, 'the desk calls what it shows a recommendation');
 });
 test('A6 does not resurrect rejected fixture records or unsupported AI claims', () => {

@@ -1,7 +1,7 @@
 // D5611: hand-computed measurements and unavailable evidence; no live Actions runs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarise, benchmarkLanes, secretJobs } from './runnerBenchmark.mjs';
+import { benchmarkStages, summarise, benchmarkLanes, secretJobs } from './runnerBenchmark.mjs';
 import { collect } from '../runner-benchmark-report.mjs';
 import { partsOf } from '../test-drift-parts.mjs';
 import { readFileSync } from 'node:fs';
@@ -66,4 +66,64 @@ test('global and unknown secret expressions conservatively apply to jobs', () =>
   const source = "env:\n  KEY: ${{ secrets.API_KEY }}\njobs:\n  job:\n    runs-on: ubuntu-latest\n";
   assert.deepEqual(secretJobs(source)[0].secrets, ['API_KEY']);
   assert.equal(secretJobs("jobs:\n  job:\n    runs-on: ubuntu-latest\n    env:\n      KEY: ${{ secrets [ key ] }}\n")[0].unknown, true);
+});
+
+const trial = { repository: 'AxalNetwork/StudioOS', event: 'push', ref: 'refs/heads/bench/runners-codebuild-1',
+  spendingCapVerified: 'true', codebuildReady: 'true', runId: '43728854751', attempt: '2' };
+
+test('AWS selects one fixed project and the specific Actions attempt on three isolated trial refs', () => {
+  for (const n of [1, 2, 3]) {
+    const options = { ...trial, ref: 'refs/heads/bench/runners-codebuild-' + n, github8Ready: 'true', ephemeralReady: 'true' };
+    assert.deepEqual(benchmarkLanes(options), [{ lane: 'codebuild', runner: 'codebuild-studioos-queue-suite-43728854751-2' }]);
+  }
+  assert.equal(benchmarkLanes({ ...trial, attempt: '3' })[0].runner, 'codebuild-studioos-queue-suite-43728854751-3');
+  for (const override of [{ event: 'pull_request' }, { repository: 'other/StudioOS' }, { spendingCapVerified: 'false' },
+    { codebuildReady: undefined }, { runId: '12/other' }, { attempt: '0' }]) {
+    assert.throws(() => benchmarkLanes({ ...trial, ...override }), /CodeBuild trial requires/);
+  }
+  for (const ref of ['refs/heads/bench/runners-free-1', 'refs/heads/bench/runners-codebuild-4', 'refs/heads/main', 'refs/pull/1/merge']) {
+    assert.deepEqual(benchmarkLanes({ ...trial, ref }), [{ lane: 'free', runner: 'ubuntu-latest' }]);
+  }
+});
+
+test('AWS report separates GitHub timings from provider cost, isolates the complete gate span and retains old reports', () => {
+  const run = { event: 'push', path: '.github/workflows/runner-benchmark.yml', head_branch: 'bench/runners-codebuild-1',
+    head_sha: 'c'.repeat(40), run_attempt: 1 };
+  const parts = partsOf(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url))).scripts);
+  const suite = parts.map((p, i) => job({ name: 'benchmark/codebuild/' + p.name,
+    runner_id: 375 + i, labels: ['codebuild-studioos-queue-suite-123-1'] }));
+  const planner = job({ name: 'plan', started_at: '2026-11-12T00:00:15Z', completed_at: '2026-11-12T00:00:25Z' });
+  const gate = job({ name: 'benchmark gate', created_at: '2026-11-12T00:02:37Z',
+    started_at: '2026-11-12T00:03:07Z', completed_at: '2026-11-12T00:03:15Z' });
+  const report = jobs => collect(path => path.includes('/jobs?') ? { jobs } : run, 'AxalNetwork/StudioOS', 123);
+  const result = report([planner, ...suite, gate]);
+  assert.equal(result.lanes[0].lane, 'codebuild');
+  assert.equal(result.lanes[0].runtimeMin.toFixed(1), (1.1 * parts.length).toFixed(1));
+  assert.equal(result.lanes[0].billedMinutes, null);
+  assert.equal(result.lanes[0].costUsd, null);
+  assert.equal(result.lanes[0].price, null);
+  assert.equal(result.lanes[0].githubRunnerAssignmentVerified, true);
+  assert.equal(result.lanes[0].awsComputeType, null);
+  // Even a supplied rate cannot make GitHub timestamps authoritative AWS build billing.
+  assert.equal(summarise([job({ lane: 'codebuild' })], { codebuild: price.paid })[0].costUsd, null);
+  assert.equal(result.stages.planner.waitMin, 0.25);
+  assert.equal(result.stages.gate.waitMin, 0.5);
+  assert.equal(result.stages.gate.completedAt, gate.completed_at);
+  assert.equal(result.stages.plannerToGateMin, 3.25);
+  assert.equal(result.candidateComparable, true);
+  for (const change of [{ runner_id: 0 }, { runner_id: undefined }, { labels: ['ubuntu-latest'] },
+    { labels: ['codebuild-studioos-queue-suite-123-2'] }, { labels: ['codebuild-studioos-queue-suite-456-1'] }, { labels: null }]) {
+    const wrongAssignment = report([planner, { ...suite[0], ...change }, ...suite.slice(1), gate]);
+    assert.equal(wrongAssignment.lanes[0].githubRunnerAssignmentVerified, false);
+    assert.equal(wrongAssignment.lanes[0].comparable, false);
+    assert.equal(wrongAssignment.candidateComparable, false);
+  }
+  assert.equal(report([planner, ...suite, { ...gate, conclusion: 'failure' }]).candidateComparable, false);
+  const old = report([planner, ...suite]);
+  assert.equal(old.lanes[0].comparable, true);
+  assert.equal(old.stages.gate, null);
+  assert.equal(old.stages.plannerToGateMin, null);
+  assert.equal(old.candidateComparable, false);
+  assert.equal(report([planner, ...suite, ...suite.map(j => ({ ...j, name: j.name.replace('/codebuild/', '/free/') })), gate]).candidateComparable, false);
+  assert.equal(benchmarkStages([planner, planner, gate]).plannerToGateMin, null);
 });

@@ -33,10 +33,15 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 import { dealStage } from '../src/lib/dealFlow.js';
+import {
+  closingKpis, ready, LOADING, UNREADABLE,
+} from '../src/pages/investor/deals/closingListModel.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const ZONE = read('frontend/src/pages/investor/deals/ClosingZone.jsx');
 const Z = codeOnly(ZONE);
+// D4815 part 8 (#5911): the strip's and the list's joins moved to the model.
+const MODEL = codeOnly(read('frontend/src/pages/investor/deals/closingListModel.js'));
 const RESEARCH = read('cloudflare-worker/src/routes/research.ts');
 const ESIGN = read('cloudflare-worker/src/routes/esign.ts');
 const SEED = read('cloudflare-worker/sql/migrations/085_seed_legal_templates.sql');
@@ -146,12 +151,22 @@ test('executed means completed, and a ratio is never mistaken for it', () => {
   // counter-signature can land while the envelope is still open.
   assert.match(Z, /rows\.filter\(\(e\) => e\.status === 'completed'\)/,
     'executed is no longer read off the status column');
-  assert.ok(!/signed_count\s*===\s*.*recipient_count/.test(Z),
+  assert.ok(!/signed_count\s*===\s*.*recipient_count/.test(Z + MODEL),
     'executed is inferred from a signature ratio');
+  // The strip's Paper executed counts the status too (D4815 part 8).
+  assert.match(MODEL, /paper\.filter\(\(e\) => e\.status === 'completed'\)/,
+    'Paper executed is no longer read off the status column');
   // An envelope with no recipient is excluded from the signature total rather
-  // than counted as complete.
-  assert.match(Z, /else unrecorded \+= 1;/, 'an envelope with no recipient is folded into the total');
-  assert.match(Z, /no recipient, and \$\{sigs\.unrecorded === 1 \? 'is' : 'are'\} not counted/,
+  // than counted as complete, and the strip's note says so.
+  assert.match(MODEL, /unrecorded \+= 1; continue;/, 'an envelope with no recipient is folded into the total');
+  const sig = closingKpis({
+    deals: ready([{ id: 1, status: 'funded' }]),
+    envelopes: ready([{ deal_id: 1, status: 'sent', recipient_count: 0, signed_count: 0 }]),
+    conditions: ready([]),
+    transfers: ready([]),
+  }).find((k) => k.key === 'signatures');
+  assert.equal(sig.value, 0);
+  assert.match(sig.reason, /1 envelope records no recipient and is not counted/,
     'the note stopped saying the recipient-less envelopes are excluded');
   // And it renders as unrecorded in its own row.
   assert.match(Z, /\{ nr: true, sub: 'no recipient recorded' \}/);
@@ -214,78 +229,50 @@ test('none of the artboard’s fixture rows or figures reaches the page', () => 
     assert.ok(!ZONE.includes(phrase), `the zone ships the artboard’s sample text "${phrase}"`);
   }
   assert.match(board, /label:'Funds moved'/, 'the artboard changed its fourth tile');
-  // The strip counts five recorded things — `Funds moved` is real now
-  // (migration 335), summed over the recorded transfers rather than copied
-  // from the artboard's `$0`.
-  for (const label of ['At closing', 'Executed', 'Signatures', 'Awaiting', 'Funds moved']) {
-    assert.ok(Z.includes(`label="${label}"`), `the strip lost its ${label} tile`);
-  }
-  assert.match(Z, /dealMoneyExact\(movedCents \/ 100\)/, 'Funds moved must sum the recorded transfers');
+  // D4815 part 8 (#5911): the strip is DX8's five figures now, each counted
+  // from a read rather than copied from the board's figures.
+  assert.deepEqual(
+    closingKpis({ deals: LOADING, envelopes: LOADING, conditions: LOADING, transfers: LOADING }).map((k) => k.label),
+    ['Deals at closing', 'Paper executed', 'Signatures outstanding', 'Blocking conditions', 'Transfers recorded'],
+    'the strip drifted from DE08',
+  );
+  assert.match(Z, /kpis\.map\(\(kpi\) => <KpiTile key=\{kpi\.key\} kpi=\{kpi\} \/>\)/, 'the strip no longer draws the model’s figures');
   const fixtures = [...CANVAS.matchAll(/\{ it:'([^']+)'/g)].map((m) => m[1]);
   for (const item of fixtures) {
     assert.ok(!ZONE.includes(item), `the zone ships the artboard’s sample checklist item ${item}`);
   }
 });
 
-/** One tile's own element, bounded at its closing `/>`. */
-function tile(label) {
-  const at = Z.indexOf(`label="${label}"`);
-  assert.ok(at > 0, `the ${label} tile is gone`);
-  const end = Z.indexOf('/>', at);
-  assert.ok(end > at, `the ${label} tile is not a self-closing element any more`);
-  return Z.slice(at, end);
-}
-
 test('one failed read is never counted as a zero — this strip is a join', () => {
-  // THE FAILURE THIS PINS. `rows` is the envelopes filtered against the closing
-  // deals, so it needs BOTH `listDeals` and `esignList`, and it collapses to
-  // `[]` when either is missing. A tile gated on one flag therefore printed a
-  // number it could not know: with the deal record unreadable, "Executed" read
-  // "0 of 0" and "Awaiting" read "0", each under a sentence explaining what the
-  // figure meant. `bothFailed` never caught it, because that only fires when
-  // BOTH reads fail — the noisy case. One failed read was the quiet one.
-  //
-  // This zone's own docblock already says "a record that is readable and holds
-  // no deal at this stage is a different fact from a record that could not be
-  // read". These assertions are that sentence, applied to the strip.
-  assert.match(Z, /const joinedReady = dealsReady && envReady;/,
-    'the joined-readiness flag is gone, or is retyped per tile rather than derived once');
-
-  // Three of the four figures cross both reads.
-  for (const label of ['Executed', 'Signatures', 'Awaiting']) {
-    const t = tile(label);
-    assert.match(t, /value=\{joinedReady\b/, `${label} counts from a single read`);
-    assert.match(t, /note=\{joinedReady\b/, `${label} explains a figure it may not have`);
+  // THE FAILURE THIS PINS (ID4, kept by D4815 part 8). Four of the five
+  // figures join the deals at closing with another read, so a figure gated on
+  // only its own read printed a zero it could not know. Driven on the model:
+  // with the deal record unreadable every join is Unreadable, not 0 of 0.
+  const all = { deals: ready([{ id: 1, status: 'funded' }]), envelopes: ready([]), conditions: ready([]), transfers: ready([]) };
+  const by = (reads) => Object.fromEntries(closingKpis(reads).map((k) => [k.key, k]));
+  const noDeals = by({ ...all, deals: UNREADABLE });
+  for (const key of ['deals', 'executed', 'signatures', 'blocking', 'transfers']) {
+    assert.equal(noDeals[key].state, 'unreadable', `${key} counts without the deal record`);
+    assert.equal(noDeals[key].value, null, `${key} prints a figure it cannot know`);
   }
-
-  // "At closing" is the half-exception, and the autofix that prompted this
-  // missed it: its VALUE counts deals, so `dealsReady` is right there — but its
-  // NOTE counts documents, which needs the envelopes too.
-  const atClosing = tile('At closing');
-  assert.match(atClosing, /value=\{dealsReady \? String\(closing\.length\) : null\}/,
-    'the closing count stopped standing on the deal read alone');
-  assert.match(atClosing, /note=\{joinedReady\b/,
-    'the document count still renders under a single read');
-
-  // And the tone follows the same gate — an amber "Awaiting" over a figure
-  // that is not there would be an alarm about nothing.
-  assert.match(tile('Awaiting'), /tone=\{joinedReady && awaiting\.length/,
-    'the awaiting tone is raised from a figure that may not exist');
+  // One read failing takes only the figures that need it.
+  const noPaper = by({ ...all, envelopes: UNREADABLE });
+  assert.deepEqual(['deals', 'executed', 'signatures', 'blocking', 'transfers'].map((k) => noPaper[k].state),
+    ['recorded', 'unreadable', 'unreadable', 'recorded', 'recorded']);
+  // A read still in flight is loading, never 0 either.
+  assert.equal(by({ ...all, transfers: LOADING }).transfers.state, 'loading');
+  assert.equal(by({ ...all, transfers: LOADING }).transfers.value, null);
 });
 
 test('an unreadable tile names WHICH read is missing, not just that one is', () => {
-  // "unreadable" on its own sends a reader to refresh the wrong thing. Both
-  // single-failure branches are distinct sentences and both name their source.
-  assert.match(Z, /const missingRead = dealsReady/, 'the per-source reason is gone');
-  assert.match(Z, /the signature archive could not be read, so nothing can be counted/,
-    'a missing signature archive no longer says so');
-  assert.match(Z, /the deal record could not be read, so there is nothing to count envelopes against/,
-    'a missing deal record no longer says so');
-  // The bare word is not a reason, and was what two of these tiles used to say.
-  for (const label of ['Signatures', 'Awaiting']) {
-    assert.doesNotMatch(tile(label), /:\s*'unreadable'/,
-      `the ${label} tile still falls back to the bare word "unreadable"`);
-  }
+  const all = { deals: ready([]), envelopes: ready([]), conditions: ready([]), transfers: ready([]) };
+  const by = (reads) => Object.fromEntries(closingKpis(reads).map((k) => [k.key, k]));
+  assert.equal(by({ ...all, envelopes: UNREADABLE }).executed.reason, 'the signature archive could not be read');
+  assert.equal(by({ ...all, deals: UNREADABLE }).executed.reason, 'the deal record could not be read');
+  assert.equal(by({ ...all, deals: UNREADABLE, envelopes: UNREADABLE }).signatures.reason,
+    'the deal record and the signature archive could not be read');
+  assert.equal(by({ ...all, conditions: UNREADABLE }).blocking.reason, 'the conditions record could not be read');
+  assert.equal(by({ ...all, transfers: UNREADABLE }).transfers.reason, 'the transfers record could not be read');
 });
 
 test('a blocking row is an open Commit condition, read from the store the hand-off runs on', () => {

@@ -29,7 +29,7 @@ const ZONES = {
   visibility: {
     file: 'VisibilityZone.jsx',
     empty: 'No surface is recorded yet',
-    emptyAction: 'Add a surface', headerAction: 'Add a surface',
+    emptyAction: 'Add a surface', headerAction: '+ Add surface', // #4843: OF-05's primary action
     editorId: 'surface-editor', submit: 'Add surface',
     fill: { Name: 'Axal directory' }, shown: 'Axal directory',
     createApi: 'createPartnerSurface', updateApi: 'updatePartnerSurface',
@@ -42,8 +42,10 @@ const ZONES = {
   },
   proof: {
     file: 'ProofZone.jsx',
-    empty: 'No proof is recorded yet',
-    emptyAction: 'Add a case study', headerAction: 'Add an item',
+    // D4842 (#4842): OF03b's empty state and OF-03's header action. A card's
+    // Edit sits behind View proof, so the row journey opens the card first.
+    empty: 'Show founders why they should hire you',
+    emptyAction: 'Add your first proof', headerAction: '+ Add proof', openRow: 'View proof',
     editorId: 'proof-editor', submit: 'Add item',
     fill: { Title: 'Seed round for a fintech' }, shown: 'Seed round for a fintech',
     createApi: 'createPartnerProof', updateApi: 'updatePartnerProof',
@@ -53,13 +55,16 @@ const ZONES = {
   },
   fit: {
     file: 'AudienceFitZone.jsx',
-    empty: 'No fit rule is recorded yet',
-    emptyAction: 'Write the first rule', headerAction: 'Add a rule',
-    editorId: 'rule-editor', submit: 'Add rule',
-    fill: { 'What it is about': 'Pre-seed fintech', 'The sentence a pass quotes': 'We start at seed.' }, shown: 'Pre-seed fintech',
+    // D4842 (#4842): the OF04b sheet asks the business questions, and one
+    // Save rule both adds and edits.
+    empty: 'Tell Pipeline who your firm is for',
+    emptyAction: 'Add your first fit rule', headerAction: '+ Add fit rule',
+    editorId: 'rule-editor', submit: 'Save rule',
+    fill: { 'Client type or sector': 'Pre-seed fintech', 'What should we say to them?': 'We start at seed.' }, shown: 'Pre-seed fintech',
     createApi: 'createPartnerFitRule', updateApi: 'updatePartnerFitRule',
-    edit: { field: 'The sentence a pass quotes', value: 'We start at Series A.', save: 'Save rule' },
-    row: (p, id) => ({ id, kind: p.kind, value: p.value, statement: p.statement, is_active: 1, floor_cents: null, signal: null, referred_to: null }),
+    edit: { field: 'What should we say to them?', value: 'We start at Series A.', save: 'Save rule' },
+    // The shared row seed names a surface kind; a fit rule there is a profile.
+    row: (p, id) => ({ id, kind: p.kind === 'directory' ? 'best_fit' : p.kind, value: p.value, statement: p.statement, is_active: 1, floor_cents: null, signal: null, referred_to: null }),
     reads: (rows) => ({ listPartnerFitRules: async () => ({ items: rows(), unstated_count: 0 }) }),
   },
 };
@@ -221,6 +226,7 @@ const journeys = {
   async rowEditFailureKeepsTheEditor(cfg, Zone) {
     await withZone(cfg, Zone, async (m, s) => {
       assert.ok(m.text().includes(cfg.shown));
+      if (cfg.openRow) await m.click(cfg.openRow);
       await m.click('Edit');
       await m.fill(cfg.edit.field, cfg.edit.value);
       await m.click(cfg.edit.save);
@@ -271,11 +277,15 @@ const HOOK_MUTATIONS = {
   'the error is not shown beside the form': [['export const scopedNote = (note, scope) => (note &&', 'export const scopedNote = (note, scope) => (false && note &&']],
 };
 const mutation = (cfg) => ({
-  'the editor sits behind the list (needs an existing row)': { zone: [['{adding && (\n        <div className="mb-6', '{adding && items.length > 0 && (\n        <div className="mb-6']] },
+  'the editor sits behind the list (needs an existing row)': {
+    visibility: { zone: [['{adding && (\n        <div className="mb-6', '{adding && items.length > 0 && (\n        <div className="mb-6']] },
+    proof: { zone: [['{adding && (\n        <div className="mb-6', '{adding && items.length > 0 && (\n        <div className="mb-6']] },
+    fit: { zone: [['{sheet && (\n        <FitRuleSheet', '{sheet && items.length > 0 && (\n        <FitRuleSheet']] },
+  }[cfg.name],
   'the draft is dropped when a save fails': {
     visibility: { zone: [["() => api.createPartnerSurface(newSurface), 'Surface added.'", "() => { const d = newSurface; setNewSurface({ name: '', kind: 'directory' }); return api.createPartnerSurface(d); }, 'Surface added.'"]] },
     proof: { zone: [["() => api.createPartnerProof(newItem), 'Added.'", "() => { const d = newItem; setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' }); return api.createPartnerProof(d); }, 'Added.'"]] },
-    fit: { zone: [['<RuleForm\n            busy={busy}', '<RuleForm\n            key={note ? "n" : "x"}\n            busy={busy}']] },
+    fit: { zone: [["key={sheet?.rule?.id ?? 'new'}", 'key={note ? "n" : "x"}']] },
   }[cfg.name],
   ...Object.fromEntries(Object.entries(HOOK_MUTATIONS).map(([k, v]) => [k, { hook: v }])),
 });

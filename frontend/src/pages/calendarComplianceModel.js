@@ -17,6 +17,7 @@ export const TYPE_WORDS = Object.freeze({
   franchise_tax: 'Franchise / corporate tax',
   registered_agent: 'Registered agent',
   board_meeting: 'Board meeting',
+  compliance: 'Compliance',
   other: 'Other',
 });
 

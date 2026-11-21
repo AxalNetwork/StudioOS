@@ -19,14 +19,14 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
-  CARD_DEADLINE_MS, PRIVATE_LINK_GLOBS, SHELL_HEADERS, matchPrivatePath, matchSocialPath, rewriteShell, sectionTags, serveSocialCard,
+  CARD_DEADLINE_MS, PRIVATE_LINK_GLOBS, SHELL_HEADERS, matchPrivatePath, matchSocialPath, resolveCard, rewriteShell, sectionTags, serveSocialCard,
 } from '../src/services/socialCards.ts';
+import { eventSocialCard } from '../../frontend/src/lib/eventSocialCard.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../..');
-const SQL = resolve(here, '../sql');
 
 /** The shell as `prerender-og.mjs` leaves it for `/`: the home card in the managed block. */
 const SHELL = `<!doctype html>
@@ -108,6 +108,17 @@ async function get(env: any, path: string, init: RequestInit = {}) {
 }
 const meta = (html: string, prop: string) => new RegExp(`<meta (?:property|name)="${prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" content="([^"]*)"`).exec(html)?.[1] ?? null;
 const titleOf = (html: string) => /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? null;
+
+test('the published event uses exactly the editor’s social metadata for the same fields', async () => {
+  const { env } = envFor(fixture());
+  const draft = {
+    title: 'Synthetic Demo Day', summary: 'Founders pitch.', starts_at: '2026-12-01 17:00:00',
+    timezone: 'UTC', location_kind: 'virtual', cover_url: null, location_url: 'https://meet.example.test/join-secret',
+    capacity: 40, price_cents: 2500, seats: 20,
+  };
+  const match = { kind: 'event' as const, key: 'demo-day', path: '/events/demo-day' };
+  assert.deepEqual(await resolveCard(env, match), { ...eventSocialCard(draft), url: 'https://axal.vc/events/demo-day' });
+});
 
 test('1. a published public event previews as itself; the shell\'s scripts are untouched', async () => {
   // Mutation checked: the admin_published term dropped → test 2's unreviewed event gets a card; a different block → the script check fails.
@@ -273,7 +284,8 @@ test('11. headers are the shell\'s own, never the Worker CSP or no-referrer; HEA
   assert.match(head.headers.get('content-type')!, /text\/html/);
   // In fetch(): after the /assets/* block, before the first app.fetch a page load reaches.
   const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
-  const start = index.indexOf('export default {');
+  const start = index.indexOf('fetch: async (request: Request');
+  assert.ok(start >= 0, 'Worker fetch entrypoint exists');
   const at = (needle: string) => index.indexOf(needle, start);
   assert.ok(at('serveSocialCard(request, env)') > at("pathname.startsWith('/assets/')"), 'after the /assets/* block');
   assert.ok(at('serveSocialCard(request, env)') < at("if (!pathname.startsWith('/api/'))"), 'before Hono answers a page load');

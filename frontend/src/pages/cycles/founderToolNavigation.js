@@ -12,7 +12,8 @@ export const FOUNDER_TOOLS = [
   { path: '/raise/capital-relationships/match', cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },
   { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
   { path: '/execution', cycle: 'build', module: 'product-roadmap' },
-  { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
+  // #6109: Team expansion's door to where headcount and the hiring plan are edited.
+  { path: '/build/team', cycle: 'grow', module: 'team-expansion', label: 'Open team roster and hiring plan', door: true, roles: ['admin', 'founder'] },
   { path: '/grow/partner-network/co-marketing', aliases: ['/comarketing'], cycle: 'grow', module: 'partner-network', label: 'Open co-marketing', door: true, roles: ['admin', 'founder'] },
   // D1180 (#3107) and D1194 (#3128): the capital workspace is gone. The model
   // forwards to Use of funds › Forecast, and the pipeline to Capital relationships.
@@ -42,6 +43,14 @@ export function moduleToolLinks(cycle, slug, user, search = '') {
     .map((tool) => ({ label: tool.label, href: doorHref(tool, search) }));
 }
 
+/**
+ * D6118 (#6118, GR-09): Partner network's module page is Partnerships, at /grow/partnerships;
+ * /grow/partner-network only forwards there. A link back to the module names the page itself.
+ */
+export const MODULE_PAGES = Object.freeze({
+  'grow/partner-network': { href: '/grow/partnerships', name: 'Partnerships' },
+});
+
 export function editorModuleLink(pathname, search = '', user) {
   if (!['admin', 'founder'].includes(user?.role)) return null;
   const tool = FOUNDER_TOOLS.filter((item) => [item.path, ...(item.aliases || [])]
@@ -49,6 +58,8 @@ export function editorModuleLink(pathname, search = '', user) {
     .sort((a, b) => b.path.length - a.path.length)[0];
   if (!tool) return null;
   const module = MODULES[tool.cycle].find((item) => item.slug === tool.module);
-  return { href: '/' + tool.cycle + '/' + tool.module + projectSearch(search),
-    label: '← ' + cycleOf(tool.cycle).name + ' › ' + module.name };
+  // D6118: a module whose page lives at another address names that page, not a forward.
+  const page = MODULE_PAGES[tool.cycle + '/' + tool.module];
+  return { href: (page?.href || '/' + tool.cycle + '/' + tool.module) + projectSearch(search),
+    label: '← ' + cycleOf(tool.cycle).name + ' › ' + (page?.name || module.name) };
 }

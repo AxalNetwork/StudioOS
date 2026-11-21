@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesApi } from '../../../lib/api/cycles';
-import { Unreadable } from '../../../ui';
+import { Unreadable, usePhoneWidth } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import CallsTab from '../calls/CallsTab';
 import { FounderClosing } from '../../closing/ClosingRoom';
-import { CLOSING, HOME_PATH, LINE, SLUG, TABS, TITLE, tabHref, tabSearch } from './capRelModel';
+import { CLOSING, HOME_PATH, LINE, SLUG, TABS, TITLE, capRelStanding, tabHref, tabSearch } from './capRelModel';
 import CapRelPipeline from './CapRelPipeline';
 import CapRelMatch from './CapRelMatch';
 import CapRelOutreach from './CapRelOutreach';
@@ -17,6 +17,8 @@ import CapRelSupport from './CapRelSupport';
 import SupportReadsCard from '../SupportReadsCard';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships.js';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+
+const PHONE_ACTION = 'flex min-h-11 w-full items-center justify-center rounded-lg bg-axal-violet px-4 text-[14px] font-bold text-white no-underline hover:bg-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:bg-violet-600 dark:hover:bg-violet-500';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
@@ -50,13 +52,20 @@ export function CapRelTabBar({ active, search = '' }) {
   );
 }
 
-/** Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1) above the module page's own. */
-export function CapRelHomeNav({ search = '', projectId = null, onRefused = null }) {
+/**
+ * Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1). D5081 part 2 (#5081, RA-22):
+ * they are the page (CycleRoute passes `owned`), drawn from CycleRoute's reads (`home`); `works` is whether
+ * the viewer may work the tool, for first use's set-up actions; `action` is the header's primary, which a
+ * phone's bar does not carry, so it is drawn here full width.
+ */
+export function CapRelHomeNav({ search = '', projectId = null, onRefused = null, home = null, works = false, action = null }) {
+  const phone = usePhoneWidth();
   return (
     <div className="flex flex-col gap-4">
       <MovedNotice />
+      {phone && action?.href ? <Link to={action.href} className={PHONE_ACTION} data-testid="caprel-home-action">{action.label}</Link> : null}
       <CapRelTabBar active="overview" search={search} />
-      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} onRefused={onRefused} /> : null}
+      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} onRefused={onRefused} home={home} works={works} /> : null}
     </div>
   );
 }
@@ -88,38 +97,62 @@ function Calls({ projectId }) {
   return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} status={read.status} projectId={projectId} onRetry={read.retry} /></div>;
 }
 
-/** D1464 (#4021, RR09): the founder's Activity carries who read the pipeline with a reason. */
-function ActivityWithReads({ projectId }) {
+/** D1464 (#4021, RR09): the founder's Activity carries who read the pipeline with a reason, when the map says so. */
+function ActivityWithReads({ projectId, supportReads = true }) {
   const load = useCallback((page) => capitalRelationshipsApi.supportReads(projectId, page), [projectId]);
   return (
     <div className="flex flex-col gap-4">
       <CapRelActivity projectId={projectId} />
-      <SupportReadsCard record="capital-relationships" load={load} testId="caprel-support-reads" />
+      {supportReads ? <SupportReadsCard record="capital-relationships" load={load} testId="caprel-support-reads" /> : null}
     </div>
   );
 }
 
-export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, admin = false, venture = null, viewer = 'admin', onSupportRead }) {
+/**
+ * D5074 slice 4: the module read's capability map, read once for the page. A refused or failed read carries no map;
+ * the tabs then draw their own refusals, as before.
+ */
+function useCapabilities(projectId) {
+  const [read, setRead] = useState({ status: 'loading', capabilities: null });
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let alive = true;
+    setRead({ status: 'loading', capabilities: null });
+    Promise.resolve().then(() => cyclesApi.module('raise', projectId, SLUG, {}))
+      .then((data) => { if (alive) setRead({ status: 'ready', capabilities: data?.capabilities ?? null }); })
+      .catch(() => { if (alive) setRead({ status: 'refused', capabilities: null }); });
+    return () => { alive = false; };
+  }, [projectId]);
+  return read;
+}
+
+export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, admin: adminAccount = false, venture = null, viewer = 'admin', onSupportRead }) {
   const here = TABS.find((t) => t.id === tab) || (tab === CLOSING.id ? CLOSING : TABS[0]);
+  // D5074 slice 4: staff's support view and the founder's tabs are the module read's capability map
+  // (`capRelStanding`). `adminAccount` (the account, from CycleRoute) only opens the reasoned support door when the
+  // read was refused and so carries no map; that door grants nothing by itself (the Worker gates the support read).
+  const caps = useCapabilities(projectId);
+  const standing = capRelStanding(caps.capabilities);
+  const support = standing.support || (caps.status === 'refused' && adminAccount);
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
-  else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
+  else if (!projectId || caps.status === 'loading') body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
   // D1464 (#4021, RR12): staff get one private response per reason, on every tab, never the founder's reads.
-  else if (admin) body = <CapRelSupport key={projectId} projectId={projectId} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
+  else if (support) body = <CapRelSupport key={projectId} projectId={projectId} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
   else if (tab === 'pipeline') body = <CapRelPipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
   // D1193 (#3127): Match, Outreach, Commitments and Activity, each from its own read.
   else if (tab === 'commitments') body = <CapRelCommitments projectId={projectId} search={search} />;
   else if (tab === 'match') body = <CapRelMatch projectId={projectId} search={search} />;
   else if (tab === 'outreach') body = <CapRelOutreach projectId={projectId} search={search} />;
-  else if (tab === 'activity') body = <ActivityWithReads projectId={projectId} />;
+  else if (tab === 'activity') body = <ActivityWithReads projectId={projectId} supportReads={standing.supportReads} />;
   else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
-        : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
+        : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={standing.works ? action : null} title={TITLE} sub={LINE} search={tabSearch(search)} />}
       <MovedNotice />
       <CapRelTabBar active={tab === CLOSING.id ? 'commitments' : tab} search={search} />
       {body}

@@ -2,7 +2,12 @@
  * #4707 — the HQ licence page's deployment. Moved out of `AdminLicences.jsx`
  * unchanged when the page was split by domain; the comments below are the
  * original ones.
+ *
+ * D5924 (#5924): the deployment is its own card (Licences v2 L14, L15) under
+ * the branch sync, and a registry that could not be read is Unreadable with
+ * Try again.
  */
+import { useConsequenceSheet } from '../LicenceConsequenceSheet';
 import React, { useCallback, useEffect, useState } from 'react';
 import DeployVersion from '../../../components/DeployVersion';
 import { Check, Globe } from 'lucide-react';
@@ -14,6 +19,7 @@ import { D1_JURISDICTIONS, LOCATION_HINTS, DO_JURISDICTIONS, BRANCH_CODE_RE, Chi
 import LicenceDeploymentAttempts from '../LicenceDeploymentAttempts';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { outcomeFromError } from '../../../lib/mutationOutcome';
+import { Unreadable } from '../../../ui/Honesty';
 
 /* ------------------------------------------------------------------ *
  * H3 step 6 — Deploy                                                   *
@@ -38,6 +44,8 @@ export function DeployStep({ licence }) {
   const [busy, setBusy] = useState(false);
   // D4706 — how the last Deploy ended, in the shared outcome vocabulary.
   const [notice, setNotice] = useState(null);
+  // D4819 part 21 (#5928): Deploy asks in the one consequence sheet (L17) first.
+  const [sheet, ask] = useConsequenceSheet();
 
   const load = useCallback(() => {
     api.deployments()
@@ -46,13 +54,21 @@ export function DeployStep({ licence }) {
   }, []);
   useEffect(load, [load]);
 
-  if (reg === false) return <p className="text-sm text-red-600">Could not read the deployment registry.</p>;
-  if (!reg) return <p className="text-sm text-gray-500">Loading…</p>;
+  // D5924: a failed read is Unreadable with Try again, never an empty registry or a Deploy form.
+  if (reg === false) {
+    return (
+      <div data-testid="licence-deploy-unreadable">
+        <Unreadable what="The deployment registry" claim="This is not a sign that no branch is deployed." onRetry={() => { setReg(null); load(); }} />
+      </div>
+    );
+  }
+  if (!reg) return <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>;
 
   const mine = (reg.deployments || []).find((d) => d.licence_uid === licence.uid) || null;
   const codeOk = BRANCH_CODE_RE.test(code);
 
   async function deploy() {
+    if (!await ask('deploy', licence)) return;
     setBusy(true); setNotice({ outcome: 'pending', message: 'Asking GitHub for the provisioning run…' });
     try {
       const r = await api.licenceDeploy(licence.uid, {
@@ -80,21 +96,24 @@ export function DeployStep({ licence }) {
     // which is not the thing that was broken.
     const { failed, done, total, states, summary } = deployProgress(mine.status);
     return (
-      <div data-testid="licence-deploy-step" className="space-y-3">
+      <section data-testid="licence-deploy-step" aria-labelledby="licence-deploy-heading"
+        className="space-y-3 rounded-lg border border-gray-200 bg-white p-3 sm:p-4 dark:border-gray-800 dark:bg-gray-900">
+        {/* D5924 (L14, L15): the deployment is its own card under the branch sync, headed as the canvas's Deployment row. */}
+        <h3 id="licence-deploy-heading" className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">Deployment</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <Globe size={14} className="text-gray-500" />
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{mine.hostname}</span>
+          <Globe size={14} className="text-gray-500 dark:text-gray-400" />
+          <span className="break-all text-sm font-medium text-gray-900 dark:text-gray-100">{mine.hostname}</span>
           {/* One definition of failed, shared with the timeline below, so the
               chip and the marks can never disagree about the same row. */}
           <Chip tone={failed
-            ? 'bg-red-50 text-red-700 border-red-200'
-            : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{mine.status.replace(/_/g, ' ')}</Chip>
+            ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+            : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800'}>{mine.status.replace(/_/g, ' ')}</Chip>
           {/* The live read is its own chip, never folded into the status: a
               deployment that reached `worker_live` and is unreachable right
               now has not regressed to `requested`. */}
           <Chip tone={mine.live_state === 'ok'
-            ? 'bg-green-50 text-green-700 border-green-200'
-            : 'bg-gray-100 text-gray-600 border-gray-200'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
+            ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800'
+            : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
         </div>
         {/* D4706 — the attempts: current, last failure, last success, and
             the Retry or status check the attempt's state allows. */}
@@ -102,7 +121,7 @@ export function DeployStep({ licence }) {
         {mine.status_note && (
           <div
             data-testid="deploy-status-note"
-            className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
           >
             {/* The heading says whose sentence this is. The note is written by
                 the route that stopped (admin_deployments.ts names the missing
@@ -158,12 +177,13 @@ export function DeployStep({ licence }) {
           Residency requested: {mine.residency_requested || 'none'}. Granted:{' '}
           {mine.residency_granted || 'not yet reported by provisioning'}.
         </p>
-      </div>
+      </section>
     );
   }
 
   return (
     <div data-testid="licence-deploy-step" className="space-y-4">
+      {sheet}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-gray-600 dark:text-gray-400">
           <span className="block">Branch code</span>
@@ -233,7 +253,7 @@ export function DeployStep({ licence }) {
       </div>
 
       {!reg.dispatch_available && (
-        <p data-testid="deploy-credential-reason" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p data-testid="deploy-credential-reason" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           {reg.dispatch_reason}
         </p>
       )}

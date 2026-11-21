@@ -169,6 +169,7 @@ function freshDb() {
   // The new tables come from the migration file verbatim. If it stops parsing,
   // these tests stop running — which is the point.
   db.exec(migration('208_partner_delivery_stores'));
+  db.exec(migration('202611141535_5944_negotiation_wip_limits'));
   // `/leads` scores a need against the firm's OWN rules, so the two tables that
   // hold them are here too — applied from their files rather than mirrored, for
   // the reason above: a hand-copied DDL that drifts makes every assertion below

@@ -30,8 +30,9 @@ const row = (name) => {
 
 /** Every approval lane's label, from the one list Approvals reads (D215). */
 function laneLabels() {
-  const src = raw('cloudflare-worker/src/services/approvalSources.ts');
-  return [...src.matchAll(/key: '([a-z_]+)',\s*\n\s*label: '([^']+)'/g)].map((m) => ({ key: m[1], label: m[2] }));
+  // D5879: a lane's label is written once, in the registry; the studio lanes are `scope: 'studio'`.
+  const src = raw('cloudflare-worker/src/services/approvalLaneRegistry.ts');
+  return [...src.matchAll(/^  ([a-z_]+): \{\n    label: '([^']+)', group: '[a-z]+', scope: 'studio',/gm)].map((m) => ({ key: m[1], label: m[2] }));
 }
 
 // ── What S7 draws ────────────────────────────────────────────────────────────

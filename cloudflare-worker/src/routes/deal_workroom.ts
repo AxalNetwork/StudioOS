@@ -17,12 +17,13 @@ import { holdsLicence } from '../services/accountLicences';
  * investors and a total. Logs hold outcomes only; a reason or a message is
  * stored, never logged.
  */
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { investorHasDealRelationship } from '../services/dealAccess';
+import { investorHasDealRelationship, ventureNdaStatus } from '../services/dealAccess';
 import { dealPageRequestStatement, REQUEST_MESSAGE_MAX } from '../services/dataRoomRequests';
 
 export const WITHDRAW_REASON_MAX = 500;
@@ -31,8 +32,12 @@ const r = new Hono<{ Bindings: Env }>();
 
 type Ctx = { user: User; dealId: number; projectId: number; currency: string };
 
-async function investorDeal(c: Context<{ Bindings: Env }>): Promise<Ctx | { error: Response }> {
-  const user = await requireAuth(c) as User;
+async function investorDeal(c: Context<{ Bindings: Env }>, action?: 'withdraw'): Promise<Ctx | { error: Response }> {
+  const user = await requireAuth(c);
+  if (action === 'withdraw') {
+    const error = investorPreviewRefusal(c, user);
+    if (error) return { error };
+  }
   if (!holdsLicence(user, 'investor')) return { error: c.json({ error: 'investor_only', detail: 'This is an investor’s own view of the deal.' }, 403) };
   const raw = String(c.req.param('id') || '');
   if (!/^[1-9][0-9]{0,14}$/.test(raw)) return { error: c.json({ error: 'deal_not_found' }, 404) };
@@ -67,15 +72,8 @@ r.get('/:id/room-access', async (c) => {
     `SELECT expires_at FROM data_room_grants WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ).bind(x.projectId, x.user.id).first<{ expires_at: string | null }>();
-  // The NDA is the venture founder's (data_room.ts projectNdaActive): an active
-  // one is on file until its date; a pending one is out for signature.
-  const nda = await db.prepare(
-    `SELECT n.status, n.valid_until FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id
-      WHERE owner.founder_id = ? AND n.party_b_user_id = ?
-        AND n.status IN ('active', 'pending', 'partially_signed')
-        AND (n.status <> 'active' OR n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
-      ORDER BY n.id DESC LIMIT 1`,
-  ).bind(project?.founder_id ?? null, x.user.id).first<{ status: string; valid_until: string | null }>();
+  // The NDA's status, from the one shared read (#6267, `ventureNdaStatus`): the same query that stood here.
+  const nda = await ventureNdaStatus(c.env, x.projectId, x.user.id);
   const request = await db.prepare(
     `SELECT state, created_at, decided_at, decline_reason FROM data_room_access_requests
       WHERE project_id = ? AND investor_user_id = ? ORDER BY id DESC LIMIT 1`,
@@ -86,7 +84,7 @@ r.get('/:id/room-access', async (c) => {
     project_uid: project?.uid ?? null,
     founder_user_id: founder?.id ?? null,
     granted: grant ? { expires_at: grant.expires_at ?? null } : null,
-    nda: nda ? { status: nda.status === 'active' ? 'on_file' : 'out_for_signature', valid_until: nda.valid_until ?? null } : null,
+    nda,
     request: request ?? null,
   });
 });
@@ -130,7 +128,7 @@ r.get('/:id/round', async (c) => {
 });
 
 r.post('/:id/commitments/:uid/withdrawal', async (c) => {
-  const x = await investorDeal(c);
+  const x = await investorDeal(c, 'withdraw');
   if ('error' in x) return x.error;
   const body = await c.req.json().catch(() => ({})) as { reason?: unknown };
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';

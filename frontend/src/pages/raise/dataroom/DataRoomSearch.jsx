@@ -16,7 +16,7 @@ const BTN = 'inline-flex min-h-[34px] items-center rounded-[8px] border border-a
 const INPUT = 'min-h-[34px] min-w-0 flex-1 rounded-[8px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const NOTE = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
 
-export default function DataRoomSearch({ projectUid, shared = false, canIndex = false, onOpen }) {
+export default function DataRoomSearch({ projectUid, shared = false, canIndex = false, onOpen, allowedFileUids, unavailableLabel, emptyLabel }) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(null);
   const [answer, setAnswer] = useState(null);
@@ -27,7 +27,7 @@ export default function DataRoomSearch({ projectUid, shared = false, canIndex = 
     if (!q.trim()) return;
     setBusy('search');
     try { setAnswer(await (shared ? dataRoomApi.sharedSearch(projectUid, q) : dataRoomApi.search(projectUid, q))); }
-    catch (err) { reportError('DataRoomSearch:search', err); setAnswer({ available: false, reason: userFacingRaiseError(err, { fallback: 'The data room could not be searched right now.' }) }); }
+    catch (err) { reportError('DataRoomSearch:search', err); setAnswer({ available: false, failed: true, reason: userFacingRaiseError(err, { fallback: 'The data room could not be searched right now.' }) }); }
     finally { setBusy(null); }
   };
   const index = async () => {
@@ -43,7 +43,7 @@ export default function DataRoomSearch({ projectUid, shared = false, canIndex = 
     finally { setBusy(null); }
   };
 
-  const hits = answer?.available ? answer.value?.hits || [] : [];
+  const hits = (answer?.available ? answer.value?.hits || [] : []).filter((hit) => !shared || !allowedFileUids || allowedFileUids.includes(hit.file_uid));
   return (
     <div className="flex flex-col gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800" data-testid="dataroom-search">
       <form className="flex flex-wrap items-center gap-2" onSubmit={search}>
@@ -52,7 +52,7 @@ export default function DataRoomSearch({ projectUid, shared = false, canIndex = 
         {canIndex ? <button type="button" className={BTN} onClick={index} disabled={busy === 'index'} data-testid="dataroom-search-index">{busy === 'index' ? 'Indexing…' : 'Index files for search'}</button> : null}
       </form>
       {indexLine ? <p className={NOTE} role="status" data-testid="dataroom-search-index-line">{indexLine}</p> : null}
-      {answer && !answer.available ? <p className={NOTE} role="status" data-testid="dataroom-search-off">{answer.reason}</p> : null}
+      {answer && !answer.available ? <p className={NOTE} role="status" data-testid="dataroom-search-off">{answer.failed ? answer.reason : unavailableLabel || answer.reason || 'Data room search is not switched on yet.'}</p> : null}
       {answer?.available ? (
         hits.length ? (
           <ol className="m-0 flex list-none flex-col gap-2 p-0" data-testid="dataroom-search-hits">
@@ -63,7 +63,7 @@ export default function DataRoomSearch({ projectUid, shared = false, canIndex = 
               </li>
             ))}
           </ol>
-        ) : <p className={NOTE} role="status">Nothing in the indexed files matches.</p>
+        ) : <p className={NOTE} role="status">{emptyLabel || 'Nothing in the indexed files matches.'}</p>
       ) : null}
     </div>
   );

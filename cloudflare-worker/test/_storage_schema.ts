@@ -9,7 +9,6 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { loadSchema } from './_schema_once.mjs';
 
-const ROOT = new URL('../sql/', import.meta.url);
 const OPTIONS = { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true } as const;
 let templatePath: string | null = null;
 let workdir: string | null = null;

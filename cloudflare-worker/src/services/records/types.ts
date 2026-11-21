@@ -9,13 +9,22 @@ export type Cycle = 'validate' | 'build' | 'raise' | 'grow';
  */
 export type Gate = 'read' | 'write' | ((project: ProjectRef, user: User, env: Env) => boolean | Promise<boolean>);
 
+/**
+ * A row's reference to a declared action: its key, and the body sent back with it.
+ * D6113 (#6113): `values` are a form action's starting values for this row only
+ * (an entry step's Edit opens on that step's text), overlaid on the declared fields' values.
+ */
+export type RowActionRef = string | { key: string; body: Record<string, unknown>; values?: Record<string, unknown> };
+
 export type Row = {
   a: string;
   b?: string;
   c?: string;
   tone?: string;
   href?: string;
-  action?: string | { key: string; body: Record<string, unknown> };
+  action?: RowActionRef;
+  /** D6113 (#6113): the row's further actions, drawn after `action` (an entry step's Edit and Remove). Writers only. */
+  actions?: RowActionRef[];
   /**
    * D1082 (#2947, LV1 and LV4): an experiment row's Build in Lovable. `can_launch`
    * is a writer's on a Planned experiment; `opened_at` is when it was last opened, or null.
@@ -26,6 +35,7 @@ export type Row = {
 export type RecordSection = {
   key: string;
   title: string;
+  note?: string;
   gate: 'read' | 'write';
   rows: Row[];
   empty?: string;
@@ -37,6 +47,7 @@ export type RecordSection = {
 export type SectionSpec = {
   key: string;
   title: string;
+  note?: string;
   side?: boolean;
   gate?: Gate;
   /** Required when a custom gate represents a writer-only section. */
@@ -50,7 +61,9 @@ export type RecordField = {
   key: string;
   label: string;
   kind: 'T' | 'CH' | 'CK';
-  input?: 'date' | 'money' | 'email' | 'file';
+  input?: 'date' | 'money' | 'email' | 'file' | 'textarea';
+  /** D6788: bound the existing text-area renderer for board resolutions. */
+  max?: number;
   placeholder?: string;
   value?: unknown;
   options?: Array<{ value: string; label: string }>;
@@ -71,8 +84,10 @@ export type RecordContent = {
   title: string;
   sub: string;
   pills: Array<string | { text: string; tone?: string }>;
-  /** #4411: interviews add a fifth fact to distinguish recording from quote permission. */
-  facts: [RecordFact, RecordFact, RecordFact, RecordFact] | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
+  /** Competitors show three facts (#6015). Interviews add a fifth for quote permission (#4411). */
+  facts: [RecordFact, RecordFact, RecordFact]
+    | [RecordFact, RecordFact, RecordFact, RecordFact]
+    | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
   /** A store's own uid beside the record id, where its other routes address it by uid (D691: a data-room file). */
   uid?: string;
   createdBy?: number | null;
@@ -83,7 +98,8 @@ export type RecordContent = {
 
 export type RecordFact = { label: string; value: string | number | null; reason?: string; action?: string };
 /** "Next for this record" (CO:263-269): what to do next, and the declared action that does it. */
-export type Next = { text: string; action: string | null };
+/** D6113 (#6113): a row's action keeps its body here, so the CTA addresses that row. */
+export type Next = { text: string; action: string | { key: string; body: Record<string, unknown> } | null };
 export type RecordForm = {
   title: string;
   sub?: string;
@@ -102,6 +118,12 @@ export type RecordAction = {
   form?: RecordForm;
   confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
+  /**
+   * D6101 (#6101): run only from a section row that names it with its body (a KPI
+   * entry's Remove); the page draws no header or Actions button for it. D6113 uses
+   * the same flag for an entry step's Mark done, Reopen, Edit and Remove.
+   */
+  row_only?: boolean;
   /**
    * D5375: fields the client sends back with the form's values, as read with this record. Edit split
    * puts the Base `expected_revision` here, so a save made from a drawer opened before another save is refused.
@@ -153,6 +175,10 @@ export type Store =
   | 'growth_partners' | 'markets' | 'compliance_events'
   // A KPI key (`mrr`, … or `custom-<uid>`), and a held meeting through its obligation (migration 462).
   | 'grow_kpis' | 'obligation_occurrences'
+  // D6113 (#6113): an entry step, by its uid, through its market.
+  | 'market_entry_steps'
+  // D6114 (#6114): a partner's deal and an obligation's agenda item, by uid, through their parent.
+  | 'growth_partner_deals' | 'obligation_agenda_items'
   // D690 (S18-B, #1694): Build's records, then the rows its sections name.
   | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
   | 'build_filings' | 'build_systems'

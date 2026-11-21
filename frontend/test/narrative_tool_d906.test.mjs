@@ -12,6 +12,7 @@ import {
   CHECK_RUNS, HOME_PATH, TABS, checkRows, checkSummary, chosenVersion, compareRows, isNarrativeTab, previousVersion,
   storyRows, tabHref, tabSearch, versionHref, versionsOf,
 } from '../src/pages/raise/narrative/narrativeModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -19,7 +20,8 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 
 // The Worker's shapes (`services/records/raise.ts`): form-options' versions,
 // and a version record's "The narrative" and "Consistency check" sections.
-const OPTIONS = { versions: [{ value: '2', label: 'v2 · angel' }, { value: '4', label: 'v4 · seed fund' }, { value: '3', label: 'v3 · pre-seed fund' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '2', label: 'v2 · angel' }, { value: '4', label: 'v4 · seed fund' }, { value: '3', label: 'v3 · pre-seed fund' }] });
 const version = (n, oneLiner) => ({
   title: `v${n} · seed fund`, sub: 'Saved 20 Oct 2026', pills: [], facts: [],
   main: [
@@ -217,7 +219,7 @@ test('a numbered address is still the version\'s record page, and Home draws the
 });
 
 test('no versions offers New version; a failed versions read says so, and reads no record', async () => {
-  const none = await mounted('/raise/investor-narrative/story?project_id=3', { handle: (u) => (u.includes('/form-options') ? response({ versions: [] }) : handler(u)) });
+  const none = await mounted('/raise/investor-narrative/story?project_id=3', { handle: (u) => (u.includes('/form-options') ? response(withNarrativeCapabilities({ versions: [] })) : handler(u)) });
   try {
     assert.ok(none.testIds().includes('narrative-no-version'));
     assert.ok(none.hrefs().includes(`${HOME_PATH}/new?project_id=3`), 'New version is the module\'s own Add');
@@ -301,7 +303,9 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // 2026-10-24 (D906 review): Home's tabs keep the address's version, as every other tab page does.
   // D5079 (#5079): each sensitive tool also reports a refused authoritative
   // read to the page, which then draws none of that tool's module data.
-  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} onRefused=\{onToolRefused\} \/>\s+: cycle === 'raise' && slug === USE_OF_FUNDS \? <UseOfFundsHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === CAP_REL \? <CapRelHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} \/> : undefined\}/);
+  // D5081 (#5081): Use of funds' Home nav is handed Home's shared read while Home owns the page; part 2
+  // hands Capital relationships' Overview its reads, whether the viewer works the tool, and the header's action.
+  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} home=\{capTableOwnsHome \? capTableHome : null\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} onRefused=\{onToolRefused\} onAction=\{dataRoomOwnsHome \? onDataRoomAction : null\} \/>\s+: cycle === 'raise' && slug === USE_OF_FUNDS \? <UseOfFundsHomeNav search=\{q\} projectId=\{projectId\} home=\{uofOwnsHome \? uofHome : null\} \/>\s+: cycle === 'raise' && slug === CAP_REL \? <CapRelHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} home=\{capRelOwnsHome \? capRelHome : null\} works=\{capRelWorks\} action=\{action\} \/> : undefined\}/);
   for (const f of ['Investor Narrative Page.dc.html', 'Investor Narrative · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
     assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);

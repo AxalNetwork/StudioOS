@@ -73,7 +73,8 @@ test('the brand kit is an UNNUMBERED tab, and it is gated on the kind in both ha
   assert.match(NAV_MODEL, /key: 'brand'[^}]*whiteLabelOnly: true/, 'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
   // D4819 part 3: the tabs are drawn per section, from `sectionTabs(section, d.kind)`, which filters `tabsFor(kind)`.
   assert.match(NAV_MODEL, /export function sectionTabs\(section, kind\) \{\n\s+return tabsFor\(kind\)\.filter\(/);
-  assert.match(PAGE, /const subTabs = sectionTabs\(section, d\.kind\);[\s\S]*\{subTabs\.map\(/,
+  // D4819 part 20: a phone draws `phoneSectionTabs`, which filters `sectionTabs(section, kind)` again (asserted in licence_phone_triage_d5932).
+  assert.match(PAGE, /const subTabs = phone \? phoneSectionTabs\(section, d\.kind\) : sectionTabs\(section, d\.kind\);[\s\S]*\{subTabs\.map\(/,
     'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
   // THE MOUNT — re-checked, so a kind that changed while the tab was open
   // falls back to nothing rather than to an editor for a store it has no row in.

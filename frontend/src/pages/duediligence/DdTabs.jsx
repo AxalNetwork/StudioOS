@@ -11,7 +11,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { CASE_TABS, NOT_YET, WAITS } from './ddModel';
 import DdMyReviews from './DdMyReviews';
 
-const tabCls = (on) => `whitespace-nowrap border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${on ? 'border-violet-600 text-gray-900 dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`;
+const tabCls = (on) => `inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-1 md:min-h-0 md:pb-2 text-[13.5px] font-semibold ${on ? 'border-violet-600 text-gray-900 dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`;
 const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 
 export function DdWait({ id }) {

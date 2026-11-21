@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Fund Detail Pages · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Fund · #6244 · continues Investor LP Canvas, boards I9 to I21</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor fund detail pages — the fund page, fund performance, and a reporting period for its author and its LPs</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/funds/:fundId, /funds/performance and /funds/:fundId/reporting/:periodId. Whoever manages the fund (its GP of record with the Institutional add-on, or an Axal admin) sees the GP view; an LP of the fund sees a read-only view and issued reports only. These boards continue the Investor LP Canvas from I9 (cited as “Investor LP Canvas I9”, never the bare id) and are built from I6’s single fund board; they use the union investor shell (#3704) and Eadwyn as the one rail (#5130). Every figure says what it counts, its date or period and the read behind it. Performance NAV counts investments only; the admin pack’s NAV (investment value plus fund cash less liabilities) appears only on the pack. IRR with no unique solution reads Unavailable, never a guess. States follow Platform States (D5129): a real zero, Not recorded and Unreadable never look alike. Issued is final; a change is a correcting period. Violet dashed ◇ tags mark backend work on #6244; the four owner questions are drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 09:12 UTC · checked against main 6d7712c6d1 (brief written on 45e7c55fa6) · [Northwind Seed Fund I], [Halden Family Office], [Dana Whitlock], every company and every figure in brackets are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Fund Detail Pages Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['I9', 'Fund page · GP view', 'Header with “You manage this fund”, the next action, facts, Committed and Invested today, and the performance band from the latest quarter row (the GP of record is not an LP, so today’s read answers nothing; ◇). Positions summary, periods, LPA refused, ◇ terms, GP of record, providers. Primary: New reporting period. Eadwyn proposes the next action and names the missing facts.', [F('IFP09', false, 1700), C('IFP09B', 'Admin header with today’s band · LPA refused, no body, failed', 1240, 860)]],
+      ['I10', 'Fund page · LP view', 'The same fund, read only: facts, the band as of today with each blank figure’s reason, Your position (linking to Axal VC Fund), issued reports newest first, LPA, GP and providers. Primary: Read latest report. ◇ Eadwyn summarises what changed since the last issued report, citing it.', [F('IFP10', false, 1700)]],
+      ['I11', 'Fund page · empty', 'A new fund: LPs 0 and Committed $0.00 are real zeros; Invested is Not recorded with its reason; no history, no LPA, no periods. Primary: Add the first LP. Also the LP view and the figures after the first LP is added.', [F('IFP11', false, 900), C('IFP11B', 'LP view · after the first LP', 1240, 310)]],
+      ['I12', 'Fund performance', 'One summary per fund (status filter), then the detail for a GP or admin: quarterly history with IRR Unavailable where no rate solves, the NAV-and-called chart, calls and distributions, positions with marks and three Unmarked. Eadwyn points at the unmarked positions. Also the ◇ Cash flows behind IRR panel.', [F('IFP12', false, 2180), C('IFP12B', 'Cash flows behind IRR · ◇', 760, 470)]],
+      ['I13', 'Fund performance · empty, partial, locked', 'Nothing called yet, first quarter not ended, truncated at 160 quarters, an LP’s summaries only; and the I6 locked notice on /funds/performance for an investor without the Institutional add-on.', [C('IFP13', false, 1240, 600), F('IFP13B', 'Locked', 560)]],
+      ['I14', 'Reporting period · author view', 'Figures beside the letter (today from /page; at 30 Sep 2026 from the matching /history row), the editor with Add and Remove on each section, Save draft, Preview as LP, Issue, and the advisory checklist (only the dates are enforced). ◇ Eadwyn drafts the letter; nothing is saved until Save draft.', [F('IFP14', false, 1460)]],
+      ['I15', 'Issue, the admin pack, issued, correction', '(a) The Issue dialog for a GP of record. (b) The admin pack card: none, draft, prepared (the preparer cannot issue), unmatched with an acknowledgement; its NAV labelled investment value plus fund cash less liabilities. (c) Issued, read only. (d) A correcting draft.', [F('IFP15A', 'Issue dialog', 1000), C('IFP15B', 'Admin pack', 1240, 780), C('IFP15C', 'Issued · correcting draft', 1240, 330)]],
+      ['I16', 'Reporting period · LP reading view', 'Typeset like a printed letter in the PDF’s section order: masthead, issued date and GP entity (◇ name), the correction banner, letter, developments, outlook, subsequent events. The side column links to the capital statement until ◇ frozen figures exist. Print; ◇ PDF; ◇ Eadwyn answers about this report only.', [F('IFP16', false, 1500)]],
+      ['I17', 'Correction banners and print', 'The correcting period’s banner (recorded today) and ◇ the original’s “Corrected by”, both readable; page 1 on A4 and Letter carries the banner.', [C('IFP17', false, 1240, 470)]],
+      ['I18', 'States', 'Loading that draws no zero; Not recorded with reasons; Unreadable in its place (fund, period, LPA download, performance); Refused; Locked; saving and the save failures with edits kept; a zero, Not recorded and Unreadable side by side.', [F('IFP18A', 'Loading', 560), C('IFP18B', 'Not recorded · Unreadable · Refused · Locked · Save failed', 1240, 1010)]],
+      ['I19', 'Phone 390 · fund page and performance', 'LP view with Your position first and a 2-column band; GP view with the next action first; performance as fund, quarter and position cards. 44px targets; no table wider than the screen.', [P('IFP19A', 'Fund page · LP'), P('IFP19B', 'Fund page · GP'), P('IFP19C', 'Performance')]],
+      ['I20', 'Phone 390 · reporting period', 'Author: figures collapse into a bar, sections are accordions, the checklist and Confirm issue sit in a bottom sheet. Reader: one column with Print and ◇ PDF in the top bar.', [P('IFP20A', 'Author'), P('IFP20B', 'Checklist sheet'), P('IFP20C', 'Reader')]],
+      ['I21', 'Dark', 'I9 and I16 on the dark tokens; states keep their words and shapes.', [F('IFP21A', 'I9 · dark', 1620), F('IFP21B', 'I16 · dark', 1180)]],
+      ['I-H', 'Handoff', 'Checked on main, frontend only, preserved, backend required (◇ #6244), the four owner picks (⚑, drawn as A), handoff links and accessibility.', [W('IFP22')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

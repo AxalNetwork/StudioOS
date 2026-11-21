@@ -1,4 +1,7 @@
+import { attentionRule, flowAttention, saveAttentionRule } from '../services/dealFlowAttention';
+import { selectJwt } from '../auth';
 import { holdsLicence } from '../services/accountLicences';
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -7,7 +10,7 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { mapError } from './_t13t14t15_helpers';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
-import { FlowError, addToFlow, dismissItem, flowEvents, inboxItems, passDeal, readFlow, scopeFor, updateFlow } from '../services/dealFlow';
+import { FlowError, addToFlow, dismissItem, flowEvents, flowOwners, inboxItems, passDeal, readFlow, readPasses, scopeFor, updateFlow } from '../services/dealFlow';
 import {
   NoteError, comparable, keepNote, newNotePayload, noteMaterial, notePrompt, parseIds, parseNote, receiptFor, savedNotes,
 } from '../services/dealCompareNote';
@@ -24,11 +27,17 @@ import { railFor, refuseRun } from '../util/railContext';
  *
  *   GET    /                       the flow, every stage, with days in stage
  *   POST   /                       add a deal { deal_id, stage?, owner_user_id?, via_key? }
- *   PATCH  /:dealId                move, change the owner, write the note
+ *   PATCH  /:dealId                move, change the owner (`owner_user_id: null` is Unassigned, a firm's flow only), write the note
  *   POST   /:dealId/pass           { reason, revisit?, revisit_at?, note?, via_key? }
  *   GET    /:dealId/events         what happened to it
- *   GET    /inbox                  New for you: deals not yet in the flow
+ *   GET    /inbox                  New for you: deals not yet in the flow, and passes back on their date (D6148)
  *   POST   /inbox/:key/dismiss     "Not for me" { reason? }
+ *
+ * D6145 (#6145): who a deal can be given to.
+ *   GET    /owners                 { scope, can_unassign, owners: [{ user_id, name, you }] }: the caller, and a firm's active investor seats
+ *
+ * D6148 (#6148): Pass reasons on Screening, the firm's own.
+ *   GET    /passes                 this flow's passes: counts per reason, and each passed deal with when it comes back
  *
  * D1241 (#3254): Compare's Eadwyn note (`services/dealCompareNote.ts`).
  *   GET    /compare-note?ids=      the notes this investor saved for these ventures
@@ -41,8 +50,8 @@ import { railFor, refuseRun } from '../util/railContext';
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
 
-async function scope(c: Ctx) {
-  const user = await requireAuth(c) as User;
+async function scope(c: Ctx, user?: User) {
+  user ??= await requireAuth(c);
   if (!holdsLicence(user, 'investor')) throw new FlowError('investor_required', 403, 'Deal flow is an investor’s own.');
   return scopeFor(user, await investorActiveCompany(c, user));
 }
@@ -69,7 +78,18 @@ function failure(c: Ctx, e: unknown) {
   return c.json({ error: 'Your deal flow could not be read. Try again.', code: 'deal_flow_unreadable' }, 503);
 }
 
-// Literal paths first: `/inbox` and `/compare-note` must not be read as a deal id.
+// Literal paths first: `/inbox`, `/owners`, `/passes` and `/compare-note` must not be read
+// as a deal id. Only PATCH and POST take a bare `/:dealId` today, so a GET
+// literal cannot be shadowed, but it sits here with the others all the same.
+// D6424: a firm's own recorded rule and recorded diligence waits.
+routes.get('/attention', async c => {try{return c.json(await flowAttention(c.env,await scope(c)));}catch(e){return failure(c,e);}});
+routes.get('/attention-rule', async c => {try{return c.json(await attentionRule(c.env,await scope(c)));}catch(e){return failure(c,e);}});
+routes.put('/attention-rule', async c => {try{
+ if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot change a firm’s stale rule.'});
+ return c.json(await saveAttentionRule(c.env,await scope(c),(await body(c)).days));
+}catch(e){return failure(c,e);}});
+routes.get('/owners', async (c) => { try { return c.json(await flowOwners(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
+routes.get('/passes', async (c) => { try { return c.json(await readPasses(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
 routes.get('/compare-note', async (c) => {
   try { const s = await scope(c); return c.json(await savedNotes(c.env, s.user, parseIds(c.req.query('ids')))); } catch (e) { return failure(c, e); }
 });
@@ -101,12 +121,41 @@ routes.post('/compare-note/keep', async (c) => {
 });
 routes.get('/inbox', async (c) => { try { return c.json(await inboxItems(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
 routes.post('/inbox/:key/dismiss', async (c) => {
-  try { const s = await scope(c); return c.json(await dismissItem(c.env, s, c.req.param('key') || '', await body(c))); } catch (e) { return failure(c, e); }
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    return c.json(await dismissItem(c.env, await scope(c, user), c.req.param('key') || '', await body(c)));
+  } catch (e) { return failure(c, e); }
 });
 routes.get('/', async (c) => { try { return c.json(await readFlow(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
-routes.post('/', async (c) => { try { const s = await scope(c); return c.json(await addToFlow(c.env, s, await body(c)), 201); } catch (e) { return failure(c, e); } });
-routes.patch('/:dealId', async (c) => { try { const s = await scope(c); return c.json(await updateFlow(c.env, s, dealId(c), await body(c))); } catch (e) { return failure(c, e); } });
-routes.post('/:dealId/pass', async (c) => { try { const s = await scope(c); return c.json(await passDeal(c.env, s, dealId(c), await body(c))); } catch (e) { return failure(c, e); } });
+routes.post('/', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    return c.json(await addToFlow(c.env, await scope(c, user), await body(c)), 201);
+  } catch (e) { return failure(c, e); }
+});
+routes.patch('/:dealId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const input = await body(c);
+    if (input.stage !== undefined || input.owner_user_id !== undefined) {
+      const previewRefusal = investorPreviewRefusal(c, user);
+      if (previewRefusal) return previewRefusal;
+    }
+    return c.json(await updateFlow(c.env, await scope(c, user), dealId(c), input));
+  } catch (e) { return failure(c, e); }
+});
+routes.post('/:dealId/pass', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    return c.json(await passDeal(c.env, await scope(c, user), dealId(c), await body(c)));
+  } catch (e) { return failure(c, e); }
+});
 routes.get('/:dealId/events', async (c) => { try { const s = await scope(c); return c.json(await flowEvents(c.env, s, dealId(c))); } catch (e) { return failure(c, e); } });
 
 export default routes;

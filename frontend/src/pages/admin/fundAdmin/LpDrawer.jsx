@@ -168,9 +168,9 @@ function ReceiptDialog({ apis, lp, line, onClose, onRecorded }) {
       <form className="flex flex-col gap-3 px-5 py-4" onSubmit={submit} data-testid="lp-receipt-form">
         <label className={L}><input type="radio" name="amount" checked={form.full} onChange={() => setForm((f) => ({ ...f, full: true }))} data-testid="lp-receipt-full" />The full outstanding {line.outstanding}</label>
         <label className={L}><input type="radio" name="amount" checked={!form.full} onChange={() => setForm((f) => ({ ...f, full: false }))} data-testid="lp-receipt-other" />Another amount</label>
-        {!form.full && <label className="text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200">Amount ($)<input className={`${INPUT} mt-1 ${NUM}`} inputMode="decimal" value={form.amount} onChange={set('amount')} disabled={busy} data-testid="lp-receipt-amount" /></label>}
-        <label className="text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200">Received on<input className={`${INPUT} mt-1`} type="date" value={form.receivedOn} onChange={set('receivedOn')} disabled={busy} data-testid="lp-receipt-date" /></label>
-        <label className="text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200">Reference<input className={`${INPUT} mt-1`} maxLength={120} value={form.reference} onChange={set('reference')} disabled={busy} data-testid="lp-receipt-reference" /></label>
+        {!form.full && <label className="text-[13px] font-semibold text-zinc-700 dark:text-gray-200">Amount ($)<input className={`${INPUT} mt-1 ${NUM}`} inputMode="decimal" value={form.amount} onChange={set('amount')} disabled={busy} data-testid="lp-receipt-amount" /></label>}
+        <label className="text-[13px] font-semibold text-zinc-700 dark:text-gray-200">Received on<input className={`${INPUT} mt-1`} type="date" value={form.receivedOn} onChange={set('receivedOn')} disabled={busy} data-testid="lp-receipt-date" /></label>
+        <label className="text-[13px] font-semibold text-zinc-700 dark:text-gray-200">Reference<input className={`${INPUT} mt-1`} maxLength={120} value={form.reference} onChange={set('reference')} disabled={busy} data-testid="lp-receipt-reference" /></label>
         <p className="m-0 rounded-axal-sm border border-axal-hairline bg-gray-50 px-3 py-2 text-[12px] text-axal-ink dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-100">This records money already received. It moves no money.</p>
         {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="lp-receipt-error">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -297,7 +297,7 @@ export function WithdrawDialog({ apis, lp, uid, onClose, onDone }) {
   return (
     <Lightbox label="Withdraw this booklet?" title="Withdraw this booklet?" sub={`${who} is told it was withdrawn. It stays in the booklet’s history.`} testId="lp-withdraw-dialog" onClose={onClose} width={460}>
       <form className="flex flex-col gap-3 px-5 py-4" onSubmit={submit} data-testid="lp-withdraw-form">
-        <label className="text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200">Reason · {WITHDRAW_MIN} to {WITHDRAW_MAX} characters
+        <label className="text-[13px] font-semibold text-zinc-700 dark:text-gray-200">Reason · {WITHDRAW_MIN} to {WITHDRAW_MAX} characters
           <textarea className={`${INPUT} mt-1 min-h-[64px]`} maxLength={WITHDRAW_MAX} value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} data-testid="lp-withdraw-reason" />
         </label>
         {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="lp-withdraw-error">{error}</p>}

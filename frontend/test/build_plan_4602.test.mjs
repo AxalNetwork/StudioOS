@@ -194,7 +194,11 @@ test('Progress is searched and filtered on a phone, by the same model as the tab
     // first of the narrowed list, never the eleventh of a two-item result.
     await phone.change('plan-progress-search', '');
     assert.equal(phone.count('plan-progress-card'), 5, 'the window reset with the filter');
-    await phone.change('plan-progress-filter-module', 'company-creation');
+    // Step 2 (BD14m A): the module filter is set in the Filters sheet, applied by Show.
+    await phone.click('plan-progress-filters-open');
+    await phone.pick('plan-progress-f-module-company-creation');
+    assert.equal(phone.textOf('plan-progress-filters-show'), 'Show 1 item');
+    await phone.click('plan-progress-filters-show');
     assert.equal(phone.count('plan-progress-card'), 1);
     await phone.change('plan-progress-search', 'nothing matches this');
     assert.equal(phone.count('plan-progress-card'), 0);

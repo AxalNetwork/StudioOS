@@ -290,7 +290,7 @@ test('the empty desk and the filters that match nobody say different things', as
   const empty = { stages: { available: true, open: 0 }, severe_flags: { available: true, open: 0, cases: 0 }, requests: { available: true, waiting: 0, past_due: null }, ages: { available: true, buckets: [] }, decisions: { available: true, recorded_from: null, months: [] } };
   const a = await desk({ over: { cases: async () => ({ items: [], total: 0 }), overview: async () => empty } });
   try {
-    assert.match(textOf(one(a.v, 'dd-empty')), /^No diligence cases yet\.Open one when a deal, a founder or a partner needs checking\.Open a case$/);
+    assert.match(textOf(one(a.v, 'dd-empty')), /^No diligence cases yet\.Open a case from a deal’s Diligence tab, or use Open a case here\.Open DealsOpen a case$/);
     assert.match(textOf(one(a.v, 'dd-tile-open')), /0None yet/);
   } finally { await a.v.unmount(); restore(); }
   const b = await desk({ over: { cases: async (q) => (q.past_target ? { items: [], total: 0 } : { items: ROWS, total: 26 }) } });

@@ -1,5 +1,12 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`research_global_funds_7326.test.ts` replays the worldwide manager import over
+the real fund migrations and through directory reads: preserves historical
+rows, reports, saved references, UID redirects and source reviews; suppresses
+duplicate managers, including declared vehicle-number suffixes and known legacy
+vehicle identities; preserves source takedowns and manual HQ mappings on replay;
+and verifies country facets, provenance and unknown financial/LP values.
+
 `aggregator_false_zeros_d301.test.ts` checks real SQLite aggregator counts, unreadable tables and draft suppression. Its first-day booking regression pins the clock so the seeded timestamp and preview share the exact window boundary.
 
 `admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
@@ -52,6 +59,12 @@ and its mark-paid, an order's invoice PDF, a saved card's detach, an LPA signatu
 withdraw. Every non-party, a co-founder, a withdrawn investor, another LP in the same fund, an LP without KYC, an
 admin where the record is a member's, a support session, a disabled party and no credentials are refused, with nothing
 named, no row changed, no reveal recorded and no charge or detach sent; the rightful party then gets each answer.
+
+`authz_venture_scores_d4570.test.ts` (#4570, D4570 part 8) asks the six venture-scorecard routes (the full read,
+sharing, trajectory, the investor's deal read, corrections and recompute) through the mounted router on the full
+schema. Another venture's founder, an advisor with no share or a share switched off, a removed co-founder, a roster
+advisor, an investor by venture id or off the deal, a disabled founder and no credentials are refused, with nothing of
+the venture named and no score, correction, sharing or log row changed; each rightful party then gets its read.
 
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
@@ -121,6 +134,9 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `dataroom_deck_sources_d1602.test.ts` | D1602: migrated data-room source permissions, quotes, billed extraction, code readers, citations, stale versions and withdrawal. |
 | `dataroom_deck_sources_d1602.mutations.mjs` | D1602: reproducible isolated-loader mutation proof, with passing original controls before and after; source files are never edited. |
 | `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
+| `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
+
+`_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
 
 ## Conventions
 
@@ -311,6 +327,10 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
 | `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
 | `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+| `workspace_containment_5567.test.ts` | D5567 part 4: the fail-closed containment gate (evidence source/freshness from an injected clock, egress per network mode, metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment credential scan, and the real compute VM start options and image user; synthetic only. |
+| `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
+| `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
+| `workspace_placement_5570.test.ts` | D5570: placement order and reasons, Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a restarted instance, reconcile-before-free, bill once; injected clock, synthetic only. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
 | File | Guarantee |
@@ -325,3 +345,49 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
 | `azure_jobs_executor_5571.test.ts` | D5571: disabled Azure Container Apps Jobs adapter on a synthetic ARM endpoint: digest-pinned secret-free template, fail-closed capabilities, ambiguous start located without a second start, status mapping, quota/revoked-identity/cross-region refusals; twelve mutations killed. |
+
+`package_offers_5024.test.ts` exercises real commercial package acceptance over
+the complete SQLite schema and authenticated routers: frozen prices and
+composition, grant conflicts, atomic rollback and competing decisions, policy
+versions and offer-bound agreements, normal branch delivery failure, and
+read-only historical contract values. Seeded HQ-only/unready items are refused
+without weakening Program Grants; successful cases publish a compatible test
+catalogue version only in the fixture.
+| `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
+| `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |
+| `build_feature_removal_6024.test.ts` | D6024: real record gates, protected/racing references, FK cascades and atomic actor audit, must-have demotion, canonical metrics and retained plan history. |
+
+`shared_arr_retention_6178.test.ts` covers recorded ARR/net retention, founder snapshot/context/save/send, source proof, unit rejection, Report Figures parity, sent immutability and investor sharing/NDA boundaries.
+`consultation_slot_6394.test.ts` (#6394) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+| `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
+`investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+`advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+| `network_intro_offers_6637.test.ts` | D6637: real migrated SQLite authorization, consent, failure and concurrency regressions. |
+| `network_tie_candidates_6636.test.ts` | D6636: real migrated SQLite authorization, consent, failure and concurrency regressions. |
+
+| `deal_flow_attention_6424.test.ts` | D6424: mounted per-firm stale rules, visible unanswered diligence requests, firm/reviewer isolation, null/unreadable counts and support refusal. |
+| `file_recovery_6428.test.mjs` | D6428: runs synthetic-only Python recovery regressions through the standard Worker test suite. |
+| `deal_activity_sources_6430.test.ts` | D6430: mounted real-SQLite data-room grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and per-source failures. |
+| `licence_agreement_revision_6562.test.ts` | D6562: recorded rendered-input snapshots, truthful comparisons, independent readiness, legacy uncertainty, frozen text and unready-send refusal over the full migrated schema. |
+| `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
+
+| `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+| `approval_board_pages_5876.test.ts` | Mounted summary and active-page queries across the three approval lanes (#5876). |
+| `research_global_funds_7325.test.mjs` | D7325: evidence validation, canonical catalogue preservation, source takedowns, country facets, duplicate suppression, replay and fault-injection checks on real SQLite. |
+
+| File | What it covers |
+|---|---|
+| `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
+| `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
+| `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
+
+| File | What it covers |
+|---|---|
+
+| `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
+| `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
+| `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
+
+`icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
+| `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |

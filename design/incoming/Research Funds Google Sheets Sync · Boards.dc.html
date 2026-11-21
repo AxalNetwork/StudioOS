@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Google Sheets Sync · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds · Google Sheets · FND-G · #7035 (Research Funds 5/5)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Funds — super-admin Google Sheets export, import and recovery</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Google Sheets card in Research → Funds → My funds (/research/funds), shown only to a super admin, drawn in the HQ admin shell. Axal is the record and the workbook is a copy that holds private notes and pass reasons. Two explicit actions, Export Axal funds to Sheets and Import from Sheets, each go Scope → Review → Result in the shared Sheet: the administrator checks workbook, tab, direction, range, record count and private fields before anything is written, and nothing transfers by itself. A missing tab is never replaced by the first tab; an uncertain writeback stays pending until reconciled; Complete is reserved for counts read back. States follow the Platform States vocabulary (Unavailable on screen). Board IDs FND-G00 to FND-G10 map to component keys RFG00 to RFG10. Violet dashed ◇ tags mark backend work for #7035; amber ⚑ tags mark owner decisions with option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026, 10:47 UTC · checked against main 87bf3ac4ac · the workbook “Axal HQ · Fund shortlist”, hq.research@example.com, Admin A and every fund are fictional; no real fund or figure appears</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds Google Sheets Sync Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FND-G00', 'Journey, routes, states and key', 'First use to recovery, each board’s route and state, the data on main behind it, the result vocabulary (Complete only when verified) and the row actions of an import.', [W('RFG00')]],
+      ['FND-G01', 'Connection and destination · the card', 'Connected: account, workbook, tab and gid, managed range, last confirmed result per direction, what can run, and the two explicit actions with one primary. Variants: first use (not connected), integration not configured, loading, status Unavailable; and who sees the card at all.', [F('RFG01', false, 900), C('RFG01B', 'First use, not configured, loading, Unavailable', 1400, 630), C('RFG01C', 'Scope · super admin only', 1300, 200)]],
+      ['FND-G02', 'Choose the workbook and tab', 'First-use destination step. The URL names the workbook; the tab is an explicit choice from the tabs read by gid, with none preselected. Saving writes nothing.', [F('RFG02', false, 900)]],
+      ['FND-G03', 'Export review', 'Scope (direction, fields, Notes and Pass reasons as Private and unticked by default), then Review: source, destination tab, managed range, record count, the 3 cells below the rows that are cleared, columns L–N that do not move with their funds, and a confirmation before the one primary. The 501-fund case against a 500-of-501 partial result.', [F('RFG03', 'Scope', 900), F('RFG03B', 'Review', 1040), C('RFG03C', '501 funds · review vs 500 of 501 written', 1300, 300)]],
+      ['FND-G04', 'Import mapping and preview', 'Header row and column mapping with the uid column moved from A to D; a preview with Create, Update, Unchanged, Skip and Resolve against the sheet’s own row numbers, a blank row 9 kept in place, private fields marked. Scope with field ticks and per-row resolution.', [F('RFG04', 'Review · mapping and preview', 1000), C('RFG04B', 'Scope and Resolve rows', 1300, 570)]],
+      ['FND-G05', 'Missing tab and relink', 'The linked tab is gone and “Archive 2025” is now first: the card blocks both directions, shows no destination as confirmed and asks for a choice; the relink reviews the replacement, including a new empty tab.', [F('RFG05', 'Card · tab missing', 900), F('RFG05B', 'Review the replacement', 1000)]],
+      ['FND-G06', 'Result, reconciliation, retry and completion', 'Timeout after Axal writes and before identifier writeback: what is confirmed, what is not, how to reconcile, and why retry is off. Failure before any write, an export cleared but not written, the check that finds 2 of 4 identifiers, the reconciled Complete and a clean first-try Complete.', [F('RFG06', 'Outcome uncertain', 1080), C('RFG06B', 'Failed before write · export partial', 1300, 340), C('RFG06C', 'Check, reconcile, complete', 1300, 370)]],
+      ['FND-G07', 'Phone 390 · light and dark', 'The card, the export review as a bottom sheet, the import preview as row cards with sheet row numbers, the missing-tab choice, and the uncertain result with counts and next action ahead of the collapsed log; dark variants of the result and the card.', [P('RFG07A', 'Card'), P('RFG07B', 'Export review'), P('RFG07C', 'Import preview'), P('RFG07D', 'Missing tab'), P('RFG07E', 'Outcome uncertain'), P('RFG07F', 'Outcome uncertain · dark'), P('RFG07G', 'Card · dark')]],
+      ['FND-G08', 'Dark mode · desktop', 'The connected card with visible focus on the primary, and the import review, on the dark tokens.', [F('RFG08', false, 900), F('RFG08B', 'Import review · dark', 1000)]],
+      ['FND-G09', 'Keyboard, focus and announcements', 'Focus sequence through the export, Esc and focus return per exit, live-region text for every result, and disabled controls that still explain themselves.', [W('RFG09')]],
+      ['FND-G10', 'Handoff', 'What exists on main and where, the gaps found in fundSheets.ts with the proposed contracts and the boards they serve, owner decisions, frontend-only work and reused components.', [W('RFG10')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -131,7 +131,8 @@ test('each list in its four states: loading, Unreadable with Try again, empty, a
   const rows = html(h(RulesTable, { read: ready({ rules: RULES }), onRetry: noop, onSaved: noop }));
   assert.match(rows, /data-testid="rule-row-cap:bounty_monthly"/, 'the cap is listed with the rules');
   assert.match(rows, /500 credits a month \(US\$500\)/);
-  assert.match(rows, /title="Set by the migration that created the rule[^"]*">Not recorded</);
+  // D5129: the shared Not recorded chip draws an aria-hidden dash glyph before its word; the reason stays on its title.
+  assert.match(rows, /title="Set by the migration that created the rule[^"]*">(?:<svg[\s\S]*?<\/svg>)?Not recorded</);
   assert.match(text(h(RulesTable, { read: ready({ rules: RULES }), onRetry: noop, onSaved: noop })), /1–3 of 3/);
   assert.doesNotMatch(rows, /usd_value|Dollar value/, 'the value is never an input');
 
@@ -140,7 +141,7 @@ test('each list in its four states: loading, Unreadable with Try again, empty, a
   assert.doesNotMatch(gbad, /<table/);
   assert.match(text(h(GrantsTable, { read: ready({ grants: [] }), onRetry: noop, onChanged: noop })), /No credit has been granted yet/);
   const g = html(h(GrantsTable, { read: ready({ grants: GRANTS }), onRetry: noop, onChanged: noop }));
-  assert.match(g, /title="No email is on record for account #5\.">Not recorded</);
+  assert.match(g, /title="No email is on record for account #5\.">(?:<svg[\s\S]*?<\/svg>)?Not recorded</);
   assert.match(text(h(GrantsTable, { read: ready({ grants: GRANTS }), onRetry: noop, onChanged: noop })), /−20 Manual adjustment/);
   assert.match(g, /data-testid="grant-state-6">Taken back 2026-10-04: “Duplicate report”</, 'the reason is in plain sight, not a hover');
   assert.match(g, /data-testid="grant-state-7">Deduction</);

@@ -95,7 +95,21 @@ export const FIRST_PARTY = [
   { key: 'google', display_name: 'Google Calendar', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
   { key: 'microsoft', display_name: 'Microsoft 365', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
   { key: 'linkedin', display_name: 'LinkedIn', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
+  { key: 'teams', display_name: 'Microsoft Teams', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
 ];
+
+/**
+ * D5810 (#5810): a first-party card with no connection of its own. Microsoft
+ * Teams is the member's one Microsoft grant (`microsoft_oauth_tokens`), the
+ * one Microsoft 365's page manages: the same status read, sign-in and
+ * disconnect, so both pages always say the same thing.
+ */
+// D5810: the Teams sign-in marker, for `IntegrationsRedirect` (App.jsx's import list is frozen, D5615).
+export { takeSignInFrom } from './teamsConnector.js';
+
+export const SHARED_CONNECTION = Object.freeze({ teams: 'microsoft' });
+/** The first-party key whose connection a key uses: its own, or the one it shares. */
+export const connectionKeyOf = (key) => (Object.hasOwn(SHARED_CONNECTION, key) ? SHARED_CONNECTION[key] : key);
 
 const FIRST_PARTY_EMAIL = { google: 'google_email', microsoft: 'microsoft_email', linkedin: 'linkedin_email' };
 
@@ -126,7 +140,8 @@ export function firstPartyConnection(key, status) {
     status: 'active',
     external_account_name: status[FIRST_PARTY_EMAIL[key]] || null,
     last_synced_at: status.last_synced_at || null,
-    last_error: null,
+    // D5810: Microsoft refusing Axal's saved grant (D1209's `connection_refused`) is a sign-in to renew.
+    last_error: key === 'microsoft' && status.sync_error === 'connection_refused' ? 'revoked' : null,
   };
 }
 
@@ -183,7 +198,10 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
   const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
   for (const fp of FIRST_PARTY) {
     if (seen.has(fp.key)) continue;
-    const status = firstParty[fp.key];
+    // D5810: a card on another's connection is listed only when the Worker describes it.
+    if (Object.hasOwn(SHARED_CONNECTION, fp.key) && !cards.has(fp.key)) continue;
+    const via = connectionKeyOf(fp.key);
+    const status = firstParty[via];
     const words = { ...(cards.get(fp.key) || {}), ...(aliased[fp.key] || {}) };
     const row = { ...words, ...fp };
     out.push({
@@ -192,7 +210,8 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       description: words.description ?? words.tagline ?? null,
       by: words.made_by?.name || fp.display_name,
       category: categoryOf(row),
-      connection: firstPartyConnection(fp.key, status),
+      connection: firstPartyConnection(via, status),
+      ...(via !== fp.key ? { shares: via } : {}),
       joined: false,
       locked: false,
       // `configured: false` is the deployment saying it has no OAuth app for
@@ -444,12 +463,14 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
  * returns to `/integrations?…` and the page reads that query to say how the
  * sign-in went.
  */
-export function connectorsRedirect({ search = '', hash = '' } = {}) {
+export function connectorsRedirect({ search = '', hash = '' } = {}, { from = null } = {}) {
   const ret = oauthReturn(search);
   if (!ret) return { pathname: '/account/connectors', search, hash };
   // D715 decision 3: a return here naming Mercury is crafted and never reaches the Mercury page, whose mount makes the audited read.
   // D840's sign-in returns to the Mercury page itself (`routes/mercury_oauth.ts`), never through here.
   if (ret.key === 'mercury') return { pathname: '/account/connectors', search: stripReturn(search, ret.strip), hash };
+  // D5810: a Microsoft sign-in begun on the Teams page (`takeSignInFrom`) returns to it.
+  if (ret.key === 'microsoft' && from === 'teams') return { pathname: connectorPagePath('teams'), search, hash };
   // D753 — a sign-in comes back to its own connector's page.
   return { pathname: connectorPagePath(ret.key), search, hash };
 }
@@ -733,12 +754,17 @@ export function flowBanner(view, name, { reason = '', banner = '' } = {}) {
   }
 }
 
+/** D5810: Microsoft Teams and Microsoft 365 are one Microsoft connection. */
+export const SHARED_DISCONNECT = 'This disconnects your Microsoft connection, which Microsoft Teams and Microsoft 365 share: calendar sync stops and Axal can no longer create Teams meetings for you. Events already in StudioOS stay.';
+
 /** What a disconnect does, said before the click; a member's Mercury in their role's words (D752). */
 export function disconnectNote(p, role = null) {
   if (isPersonalMercury(p)) return memberDisconnectNote(role);
   if (p?.first_party) {
     if (p.key === 'google') return 'Calendar and Gmail access stop, and "Continue with Google" sign-in is unlinked. Events already in StudioOS stay.';
     if (p.key === 'linkedin') return 'Sign in with LinkedIn is unlinked. Contacts you imported stay in your Network unless you also delete them below.';
+    // D5810: one Microsoft grant serves both pages, so either disconnect ends both.
+    if (p.key === 'teams' || p.key === 'microsoft') return SHARED_DISCONNECT;
     return 'Calendar sync stops. Events already in StudioOS stay.';
   }
   return 'Data already in StudioOS stays. The stored credentials are deleted.';

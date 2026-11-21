@@ -194,3 +194,125 @@ export function clientNote(rows, verb) {
   const name = only?.client_name || 'Client not named';
   return day && verb ? `${name}, ${verb} ${day}` : name;
 }
+
+/**
+ * #4831 (D4831): the Practice v2 chip row (PX-03), in canvas order. Each chip
+ * narrows the board to one set and carries that set's count; `All` narrows
+ * nothing. `Active` is every row under contract (signed or renewal due), the
+ * same set the Active tile counts, so the chip and the tile always agree.
+ */
+export const LANE_CHIPS = [
+  { key: 'active', test: (e) => SIGNED_LANES.has(String(e?.lane || '')) },
+  { key: 'renewal_due', test: (e) => e?.lane === 'renewal_due' },
+  { key: 'proposed', test: (e) => e?.lane === 'proposed' },
+  { key: 'ended', test: (e) => e?.lane === 'ended' },
+  { key: 'all', test: () => true },
+];
+
+/** The rows one chip shows. An unknown key shows everything, never nothing. */
+export function chipRows(rows, key) {
+  const chip = LANE_CHIPS.find((c) => c.key === key) || LANE_CHIPS[LANE_CHIPS.length - 1];
+  return (rows || []).filter(chip.test);
+}
+
+/** `{ active, renewal_due, proposed, ended, all }`, over the whole record. */
+export function chipCounts(rows) {
+  return Object.fromEntries(LANE_CHIPS.map((c) => [c.key, (rows || []).filter(c.test).length]));
+}
+
+/**
+ * The price line on a card and in the sheet. The store keeps an amount PER
+ * CYCLE and no billing period, so the line says "per cycle" rather than
+ * borrowing the canvas's "/ month" for a period nobody recorded. Equity has no
+ * cash amount by its nature; any other shape without one is "Price not
+ * recorded", never "$0".
+ */
+export function priceLine(e, money) {
+  if (e?.amount_cents == null) return e?.shape === 'equity' ? 'Equity' : 'Price not recorded';
+  const amount = money(e.amount_cents);
+  return e?.shape === 'per_call' ? `${amount} per call` : `${amount} per cycle`;
+}
+
+/** The scope line: what the advisor wrote, or the fact that nothing was. */
+export function scopeLine(e) {
+  return e?.scope_label || e?.scope_includes || 'Scope not recorded';
+}
+
+/**
+ * The sessions behind one engagement: the bookings made by its LINKED client
+ * account, live or done. A cancelled or declined request was not a session.
+ *
+ * `null` means it cannot be said. The bookings were not read, or the client
+ * is a name with no account, so nothing joins a booking to this contract.
+ * Never 0 in either case.
+ */
+export const SESSION_STATUSES = new Set(['pending', 'confirmed', 'completed']);
+export function sessionsFor(e, bookings) {
+  if (!Array.isArray(bookings) || !e?.founder_user_id) return null;
+  return bookings.filter((b) => b.client_user_id === e.founder_user_id && SESSION_STATUSES.has(b.status));
+}
+
+/** The work products filed under one engagement, or `null` when they were not read. */
+export function deliverablesFor(e, deliverables) {
+  if (!Array.isArray(deliverables)) return null;
+  return deliverables.filter((d) => d.engagement_id === e?.id);
+}
+
+/**
+ * "2 sessions · 3 deliverables", the card's activity line. A half that cannot
+ * be said says why, in words, instead of a count.
+ */
+export function activityLine(e, bookings, deliverables) {
+  const s = sessionsFor(e, bookings);
+  const d = deliverablesFor(e, deliverables);
+  const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const sessions = s ? plural(s.length, 'session')
+    : !Array.isArray(bookings) ? 'Sessions could not be read'
+      : 'Sessions need a linked client';
+  const work = d ? plural(d.length, 'deliverable') : 'Deliverables could not be read';
+  return `${sessions} · ${work}`;
+}
+
+/**
+ * #4684, as PX-03 draws it: the people this engagement's work has already been
+ * SENT to, by name, read from each sent version's own recipient. Changing the
+ * client link moves none of it, so the sheet warns before anyone relinks.
+ * Empty when nothing was sent; `null` when the deliverables were not read.
+ */
+export function priorRecipients(e, deliverables) {
+  const mine = deliverablesFor(e, deliverables);
+  if (!mine) return null;
+  const names = new Map();
+  for (const d of mine) {
+    for (const v of d.versions || []) {
+      if (v.sent_at && v.recipient_user_id != null && !names.has(v.recipient_user_id)) {
+        names.set(v.recipient_user_id, v.recipient_name || `Member #${v.recipient_user_id}`);
+      }
+    }
+  }
+  return [...names.values()];
+}
+
+/** The six tabs of the engagement sheet, in canvas order (PX-03b). */
+export const SHEET_TABS = ['Overview', 'Scope', 'Sessions', 'Delivery', 'Agreement', 'Activity'];
+
+/**
+ * A full calendar day for the sheet: `2026-08-01` → `1 Aug 2026`. Parsed from
+ * the string for the same reason as `shortDay`.
+ */
+export function longDay(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  const month = m && MONTHS[Number(m[2]) - 1];
+  return month ? `${Number(m[3])} ${month} ${m[1]}` : null;
+}
+
+/** The sheet's State line, which names the reason an ended row ended. */
+export function stateLine(e) {
+  const lane = LANE_LABEL[e?.lane] || 'Lane not recorded';
+  if (e?.lane === 'ended') {
+    const day = longDay(e?.ended_at);
+    const why = e?.outcome === 'ended' ? ` · ${endReasonLabel(e)}` : '';
+    return `${day ? `Ended ${day}` : 'Ended, date not recorded'}${why}`;
+  }
+  return e?.lane === 'renewal_due' ? 'Signed · renewal due' : lane;
+}

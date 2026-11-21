@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkGraph PR Conflicts and Reservations · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Platform · Infrastructure · #5580 · starts the HQ WorkGraph canvas (WG-01 onward)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · WorkGraph — claimed work, colliding pull requests and advisory integration order, for Super Admins</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Work in flight (/admin/workgraph/in-flight, proposed) reads the hourly advisory PR-overlap scan: which issues are claimed, by which slot and until when, which pull requests share paths or migration stamps, and whether the scan suggests Proceed, Coordinate, Wait or Serialize. It is advice only: nothing here blocks, labels, merges, releases a claim or overrides. It uses the Platform v2 HQ frame (emerald/neutral palette, ink primary, a word and a glyph for every status, a freshness line) and the Platform States chips (D5129). Every figure names the scan it counts. Zero, Not recorded, Not checked, Not measured, Unknown and Unreadable each have their own shape. Today the snapshot is only a GitHub Actions artifact: violet dashed ◇ tags mark what needs the ingest and read routes and the other backend work; amber ⚑ tags mark the two layout choices pending the owner.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 14:45 UTC (scan 14:31 UTC) · checked against main 6d7712c6d1 and open PR #5821 at 4f0a922 · bracketed issue and PR numbers, slots, SHAs, paths and agents are fictional samples</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="WorkGraph PR Conflicts and Reservations Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['WG-01', 'Work in flight · desktop 1440', 'Header with scan time and freshness, three tabs, the summary strip (each figure names the 14:31 UTC scan), the Work in flight table sorted by expiry with #[5601] expanded to its reasons, Lease, override and lifespan reading Not recorded, Refused and Notes side by side. Eadwyn opened for a Serialize insight proposes an integration batch: accept copies it, nothing is stored.', [F('WGR01', false, 2250)]],
+      ['WG-02', 'PR pairs · desktop 1440', 'The risk-class ladder and the one plain sentence that a class is not a merge verdict; seven pairs grouped by top folder, each with its integration owner Not recorded; pair 1 expanded to its hunk proof and the shared migration stamp. Eadwyn, asked, summarises the cloudflare-worker cluster.', [F('WGR02', false, 1330)]],
+      ['WG-03', 'PR evidence · desktop 1440', 'One row per open PR: merge status, required checks, CI queue delay and base age as four separate cells, never one score; draft and stale tags, changed-path count, Review delay Not recorded, Not measured and Unknown with their reasons.', [F('WGR03', false, 1160)]],
+      ['WG-04', 'Empty', 'Claims were read and none is held: a measured zero, with How work is claimed as the one action. PR pairs and evidence stay live. Also no overlapping PRs in this scan.', [F('WGR04', false, 900), C('WGR04B', 'PR pairs · no overlapping PRs', 1100, 260)]],
+      ['WG-05', 'States', 'Loading; every Not recorded with its reason; Not checked; claims not read; claims Unreadable (pairs and evidence still show); the snapshot Unreadable (nothing else shows, last good scan named); a Stale snapshot; a partial scan with notes and with cause not recorded (counts read at least); Refused for non-Super Admins; an Eadwyn draft kept while editing.', [C('WGR05A', 'Loading', 1100, 300), C('WGR05B', 'Not recorded', 1100, 560), C('WGR05C', 'Not checked', 1100, 260), F('WGR05D', 'Claims not read in this scan', 900), F('WGR05E', 'Claims Unreadable', 900), F('WGR05F', 'Snapshot Unreadable', 700), C('WGR05G', 'Snapshot Stale', 1100, 340), C('WGR05H', 'Partial scan · with notes', 1100, 380), C('WGR05I', 'Partial scan · cause not recorded', 1100, 330), F('WGR05J', 'Refused · not a Super Admin', 600), C('WGR05K', 'Eadwyn draft being edited', 380, 520)]],
+      ['WG-06', 'Phone 390', 'Header and freshness, the summary as 2×2 tiles, claims as cards with a Reasons disclosure, Refused and Notes collapsed, pairs as cards with a Paths disclosure, evidence as cards with four labelled lines, and Eadwyn as a bottom sheet. 44px targets; no table wider than the screen.', [P('WGR06A', 'Work in flight'), P('WGR06B', 'Work in flight · reasons open, Refused and Notes'), P('WGR06C', 'PR pairs'), P('WGR06D', 'PR evidence'), P('WGR06E', 'Eadwyn bottom sheet')]],
+      ['WG-07', 'Dark · desktop 1440', 'WG-01 on the dark tokens. Action chips, risk classes and the Not recorded, Not checked and Unreadable chips keep their words and shapes.', [F('WGR07', false, 2250)]],
+      ['WG-08', 'Spec', 'The four action rules in plain words (the highest rule found wins), the exclusive resources, the risk-class ladder, freshness, and the backend list.', [W('WGR08')]],
+      ['WG-09', 'Handoff', 'What was checked on main, what is reused, frontend only, requires engineering, the two choices pending the owner, and accessibility.', [W('WGR09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

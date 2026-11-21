@@ -1,5 +1,13 @@
 export interface Env {
   TIKTOK_APP_APPROVED?: string;
+  /** D5839: '1' once the owner's Google Cloud project serves Search Console sign-in. */
+  GOOGLE_SEARCH_CONSOLE_APPROVED?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
+  /** D5827: '1' once the owner's Typeform app is registered and a callback verified. */
+  TYPEFORM_APP_APPROVED?: string;
+  TYPEFORM_CLIENT_ID?: string;
+  TYPEFORM_CLIENT_SECRET?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
@@ -47,6 +55,8 @@ export interface Env {
   TELEGRAM_CHANNEL_BOT_USERNAME?: string;
   /** setWebhook's secret_token; Telegram echoes it in X-Telegram-Bot-Api-Secret-Token. */
   TELEGRAM_CHANNEL_WEBHOOK_SECRET?: string;
+  /** D5580 part 4: the bearer token the hourly pr-overlap job posts its WorkGraph snapshot with. Unset, the ingest refuses. */
+  WORKGRAPH_INGEST_TOKEN?: string;
   /** Meta app (Tech Provider) for WhatsApp Embedded Signup and the Cloud API webhook. */
   WHATSAPP_APP_ID?: string;
   /** Signs X-Hub-Signature-256 on every webhook delivery; exchanges signup codes. */
@@ -95,12 +105,17 @@ export interface Env {
   X_CLIENT_ID?: string;
   X_CLIENT_SECRET?: string;
   X_BEARER_TOKEN?: string;
+  // D2403 — the second HQ-owned "founders" X app (owner decision 2B): members' own X connections, never HQ's posting.
+  X_FOUNDERS_CLIENT_ID?: string;
+  X_FOUNDERS_CLIENT_SECRET?: string;
   X_DAILY_CAP?: string;
   STUDIOOS_ENV?: string;
   // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
   // Used by the boot guards in auth.ts to decide whether to throw on missing
   // secrets vs warn-and-fallback.
   ENVIRONMENT?: string;
+  /** Fixed recipient of the scheduled production HQ magic-link insert probe. */
+  MAGIC_INSERT_CANARY_EMAIL?: string;
   /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
   PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
@@ -192,6 +207,17 @@ export interface Env {
   // owner has registered https://axal.vc and https://app.axal.vc as
   // Authorized JavaScript origins on that client.
   GOOGLE_SIGNIN_POPUP?: string;
+  // D6957 — Sign in with Apple for the web (routes/auth_apple.ts). The
+  // Services ID is the OAuth client_id; the Team ID and Key ID sign the client
+  // secret with the private key (the .p8 file's contents, a wrangler secret).
+  // /api/auth/apple/config answers configured only when all four are set, and
+  // /login shows the Apple button only then. APPLE_SIGNIN_RETURN_BASE_URL
+  // overrides the host of the registered return URL (default PUBLIC_BASE_URL).
+  APPLE_SIGNIN_SERVICES_ID?: string;
+  APPLE_SIGNIN_TEAM_ID?: string;
+  APPLE_SIGNIN_KEY_ID?: string;
+  APPLE_SIGNIN_PRIVATE_KEY?: string;
+  APPLE_SIGNIN_RETURN_BASE_URL?: string;
   // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
   // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
   // spreadsheets scope never forces calendar users to re-consent. Resolution
@@ -309,6 +335,9 @@ export interface Env {
   // When any of the three is unset, /api/linkedin/oauth/start returns 503
   // and the UI hides the OAuth tab while still allowing the CSV-export
   // walkthrough to function.
+  /** #3725: Axal's Eventbrite app. Both unset keeps the Eventbrite syndication channel switched off. */
+  EVENTBRITE_CLIENT_ID?: string;
+  EVENTBRITE_CLIENT_SECRET?: string;
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
   LINKEDIN_REDIRECT_URI?: string;
@@ -368,6 +397,8 @@ export interface Env {
   TEAM_AGENTS_ENABLED?: string;
   /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
   AGENT_ENGINE?: string;
+  /** D5624 (#5624): `true` (with the agent engine on) turns on a team's Landing settings; anything else answers 404 `team_landing_off`. */
+  TEAM_LANDING?: string;
   /** D1528 (#3847, #3742 E3): `manual` (default) or `self_start`; `self_start` only after E3 and E5 merge (owner Q1 B). */
   AGENT_AUTONOMY?: string;
   /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
@@ -376,8 +407,21 @@ export interface Env {
   AGENT_SKILL_RUNTIME?: string;
   /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
   AGENT_INFERENCE_STUB?: string;
-  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
+  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. D7073: an engine run with none is refused `gateway_required`, and a value that cannot name a gateway refuses every run. */
   AGENT_AI_GATEWAY?: string;
+  /** D7073-p2 (#7073): the `agents` gateway's Run token, sent as `cf-aig-authorization` on the accounts' calls. A secret. Unset: engine runs are refused `accounts_unconfigured`. */
+  AGENT_AI_GATEWAY_TOKEN?: string;
+  /** D7073-p2: the stored-key aliases of the model accounts on the `agents` gateway, in order (never `default`). Unset skips the slot. */
+  AGENT_CLAUDE_ALIAS_1?: string;
+  AGENT_CLAUDE_ALIAS_2?: string;
+  AGENT_CLAUDE_ALIAS_3?: string;
+  AGENT_OPENAI_ALIAS?: string;
+  /** D7073-p2: the Claude accounts' model, a priced `PROVIDER_MODELS` id (`anthropic/claude-sonnet-5-5`). */
+  AGENT_CLAUDE_MODEL?: string;
+  /** D7073-p2: the OpenAI account's model, the review's own variable (`gpt-5.3-codex`); priced by the catalogue or AGENT_OPENAI_RATES. */
+  OPENAI_MODEL?: string;
+  /** D7073-p2: USD per 1M tokens for an OPENAI_MODEL the catalogue does not price, as JSON {tokens_in, tokens_cached, tokens_out}. */
+  AGENT_OPENAI_RATES?: string;
   /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
   AGENT_COMPUTE?: string;
   /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */
@@ -500,6 +544,9 @@ export interface Env {
   STREAM_API_TOKEN?: string;
   // #4176: verifies Stream's Webhook-Signature (owner step B).
   STREAM_WEBHOOK_SECRET?: string;
+  // D5585 part 3 (#5585): `preview` lets `drainReleaseEffects` deliver WorkGraph release effects through the real
+  // provider adapters. Unset (the default) it delivers nothing. Nothing schedules that drain yet.
+  WORK_GRAPH_RELEASE_DELIVERY?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
@@ -536,6 +583,10 @@ export interface Env {
   AI_GOVERNOR?: DurableObjectNamespace;
   // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
   DECK_REMOTE?: DurableObjectNamespace;
+  // D5581 part 2 (#5581): WorkGraph leases (`services/workGraphLeases.ts`). Optional: without it every lease call is refused `no_binding`.
+  WORK_GRAPH_LEASE?: DurableObjectNamespace;
+  /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
+  WORK_GRAPH_LEASES?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
@@ -672,6 +723,9 @@ export interface Env {
   AXAL_SECTION_SLACK_CHANNELS?: string;
   // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
   AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
+  // D5984: exactly 'enabled' lets section incidents file GitHub bugs through
+  // the ticket mirror's token and repository. Unset: no GitHub call is made.
+  AXAL_SECTION_INCIDENT_GITHUB?: string;
   // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
   // mirror the constants in services/slackBus.ts.
   SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub

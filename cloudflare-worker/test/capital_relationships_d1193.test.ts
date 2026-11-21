@@ -11,21 +11,18 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import raise from '../src/routes/cycle_raise.ts';
 import contacts from '../src/routes/contacts.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
-import { HAS_FIGURE, screenNoteProposals, activitySource, materialsRead } from '../src/services/capRelTabs.ts';
+import { HAS_FIGURE, screenNoteProposals, activitySource, materialsRead, screenPatternThemes } from '../src/services/capRelTabs.ts';
+import { objectionKey } from '../src/services/narrative/objections.ts';
 import { withGuard } from './_guard_stub.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
 const JWT_SECRET = 'unit-test-jwt-secret-d1193-0123456789';
 
 // 1 admin · 4 founder of 10 · 9 founder of 20 · 61, 62 verified investors · 63 an unverified one
@@ -334,4 +331,82 @@ test('accept-batch: one request, one result per proposal; a closed or foreign on
   for (const bad of [undefined, [], 'x', Array.from({ length: 51 }, () => step.uid)]) assert.equal((await call(f, OWNER, cr('proposals/accept-batch'), 'POST', { uids: bad })).status, 400);
   // Another member of this venture's founder-less side cannot accept the owner's proposals.
   assert.notEqual((await call(f, OTHER, cr('proposals/accept-batch', 20), 'POST', { uids: [move.uid] })).body?.applied, 1);
+});
+
+// ───────────────────────────────────────── CRL11: a pattern across feedback (#6080)
+
+const feedback = (f: any, rows: Array<[number, string]>) => {
+  const ins = f.db.prepare("INSERT INTO raise_prospect_feedback (prospect_id, objection, created_by, created_at) VALUES (?, ?, ?, ?)");
+  // Newest first, so F1 in the prompt is the first row given here.
+  rows.forEach(([prospect, words], i) => ins.run(prospect, words, OWNER, `2026-10-${String(20 - i).padStart(2, '0')} 09:00:00`));
+};
+const PATTERN_ANSWER = { themes: [
+  { title: 'Unclear enterprise buyer', summary: 'Two investors could not see who signs the first contract.', sources: ['F1', 'F2'] },
+  { title: 'One voice only', summary: 'Only one investor said this.', sources: ['F3'] },
+  { title: 'Round too big', summary: 'They asked for 5 million less.', sources: ['F1', 'F3'] },
+] };
+
+test('CRL11: the screen keeps a theme only with two investors\' sources from this read and no figure', () => {
+  const rows = [
+    { id: 11, prospect_id: 1, investor: 'Bluefern Capital', objection: 'Who buys this inside a bank?' },
+    { id: 12, prospect_id: 2, investor: 'Lumen Ventures', objection: 'The buyer is not named.' },
+    { id: 13, prospect_id: 1, investor: 'Bluefern Capital', objection: 'Also the buyer.' },
+  ];
+  const { themes, dropped } = screenPatternThemes({ themes: [
+    { title: 'Unclear buyer', summary: 'Nobody named the buyer.', sources: ['F1', 'F2'] },
+    { title: 'Same investor twice', summary: 'One fund said it twice.', sources: ['F1', 'F3'] },
+    { title: 'Invented source', summary: 'Cites a row that is not there.', sources: ['F1', 'F9'] },
+    { title: 'A figure', summary: 'They want $2m more.', sources: ['F1', 'F2'] },
+    { title: 'A number', summary: 'Said by 3 funds.', sources: ['F1', 'F2'] },
+  ] }, rows);
+  assert.deepEqual(themes.map((t) => t.title), ['Unclear buyer'], 'only the theme two investors raised, with no figure or digit');
+  assert.equal(dropped, 4);
+  assert.deepEqual(themes[0].sources.map((s) => [s.feedback_id, s.investor, s.words]), [[11, 'Bluefern Capital', 'Who buys this inside a bank?'], [12, 'Lumen Ventures', 'The buyer is not named.']],
+    'each source is the store\'s row, never the model\'s words');
+  assert.deepEqual(screenPatternThemes('not json', rows), { themes: [], dropped: 0 });
+});
+
+test('CRL11: with fewer than two investors\' feedback nothing runs and nothing is charged', async () => {
+  // Mutation checked: the investors < 2 test removed → one investor's two rows run the model here.
+  const f = fresh({ answer: PATTERN_ANSWER });
+  const none = await call(f, OWNER, cr('feedback-pattern'), 'POST', {});
+  assert.equal(none.status, 200, none.text);
+  assert.equal(none.body.state, 'too_few');
+  assert.match(none.body.detail, /at least two investors[\s\S]*Nothing was run/);
+  feedback(f, [[1, 'Who buys this inside a bank?'], [1, 'Also, who is the buyer?']]);
+  const one = await call(f, OWNER, cr('feedback-pattern'), 'POST', {});
+  assert.equal(one.body.state, 'too_few', 'two rows from one investor are not a pattern');
+  assert.equal(all(f, 'SELECT 1 FROM ai_usage_logs').length, 0, 'the model was never called');
+  assert.equal(f.prompts.length, 0);
+});
+
+test('CRL11: one run over this venture\'s feedback returns cited themes linked to the objections, and writes nothing', async () => {
+  // Mutation checked: feedbackPattern logging an activity row, or proposing a rail row, fails the "writes nothing" checks.
+  const f = fresh({ answer: PATTERN_ANSWER });
+  feedback(f, [[1, 'Who buys this inside a bank?'], [2, 'The enterprise buyer is not named.'], [3, 'Feels early for the size.'], [9, 'Another venture said this.']]);
+  const before = { logs: logs(f).length, rail: all(f, 'SELECT 1 FROM ai_rail_proposals').length };
+  const r = await call(f, OWNER, cr('feedback-pattern'), 'POST', {});
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.state, 'ok');
+  assert.equal(r.body.investors, 3, 'only this venture\'s investors are read');
+  assert.ok(!f.prompts.some((p) => p.includes('Another venture said this')), 'another venture\'s feedback never reaches the model');
+  assert.equal(all(f, "SELECT task, surface FROM ai_usage_logs WHERE guard_for IS NULL").map((x) => `${x.task}@${x.surface}`).join(), 'rail_write@/raise/capital-relationships', 'one metered run');
+  assert.deepEqual(r.body.themes.map((t: any) => t.title), ['Unclear enterprise buyer'], 'the single-voice and the figure themes are dropped');
+  assert.equal(r.body.dropped, 2);
+  const [theme] = r.body.themes;
+  assert.deepEqual(theme.sources.map((s: any) => s.investor), ['Bluefern Capital', 'Lumen Ventures']);
+  assert.deepEqual(theme.objection_keys.sort(), (await Promise.all(['Who buys this inside a bank?', 'The enterprise buyer is not named.'].map(objectionKey))).sort(),
+    'each source links to the Investor narrative objection its words already are');
+  assert.deepEqual({ logs: logs(f).length, rail: all(f, 'SELECT 1 FROM ai_rail_proposals').length }, before, 'nothing is saved');
+});
+
+test('CRL11: staff, another venture\'s founder and a refused run are each answered without a pattern', async () => {
+  const f = fresh({ answer: PATTERN_ANSWER });
+  feedback(f, [[1, 'Who buys this inside a bank?'], [2, 'The enterprise buyer is not named.']]);
+  assert.equal((await call(f, ADMIN, cr('feedback-pattern'), 'POST', {})).status, 403, 'staff read a summary, never the feedback');
+  assert.equal((await call(f, OTHER, cr('feedback-pattern'), 'POST', {})).status, 403, 'another venture\'s founder');
+  f.db.prepare('UPDATE ai_topup_accounts SET balance_microusd = 0 WHERE user_id = ?').run(OWNER);
+  const broke = await call(f, OWNER, cr('feedback-pattern'), 'POST', {});
+  assert.ok([402, 403].includes(broke.status), `out of tokens answers as every Eadwyn run here does (${broke.status}: ${broke.text})`);
+  assert.ok(!broke.body?.themes, 'no pattern without a run');
 });

@@ -296,8 +296,12 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
   // empty column. The root is the bucket board now; this expression is reached
   // only on a zone route, so the slug is never null and the ternary is gone.
   // The invariant the message names is unchanged: embedded, and the zone.
-  assert.match(dealsShell, /<InvestorDealsWorkspace embedded zone=\{zone\?\.slug\} \/>/,
-    'the Deals shell must pass embedded and the zone slug');
+  // #6152: and then the expression could not be reached at all. Every zone slug the shell config lists is in
+  // `ZONES`, so a zone route draws its own file and the fall-through to the old workspace was dead code. The
+  // Deals shell no longer mounts that workspace, which is the strongest form of "never two headings".
+  assert.doesNotMatch(dealsShell, /InvestorDealsWorkspace/, 'the Deals shell mounts the old workspace again');
+  const slugs = [...dealsShell.slice(dealsShell.indexOf('const ZONES = {'), dealsShell.indexOf('};', dealsShell.indexOf('const ZONES = {'))).matchAll(/^\s+(\w+): lazy/gm)].map((m) => m[1]);
+  assert.deepEqual(slugs, ['screening', 'commit', 'closing'], 'every Deals zone has its own file');
   assert.doesNotMatch(dealsShell, /scrollIntoView/,
     'the Deals shell scrolls to a section again instead of rendering only that section');
   // WAS a match on `const shows = (section) => !known || zone === section;`,
@@ -448,8 +452,8 @@ test('the investor full-bleed list covers every investor root and zone route', (
   const required = [...Object.values(OVERVIEWS), ...allZoneRoutes('investor')];
   assert.equal(Object.values(OVERVIEWS).length, 5, 'the investor shell no longer declares 5 roots');
   // 20 since D546 (#1080) added Geographies to the Research bucket; 19 since
-  // D1243 (#3256) retired Deals · Pipeline into Deal flow's table.
-  assert.equal(allZoneRoutes('investor').length, 19, 'the investor shell no longer declares 19 zones');
+  // D1243 (#3256) retired Deals · Pipeline. #6211 adds Portfolio Performance.
+  assert.equal(allZoneRoutes('investor').length, 20, 'the investor shell declares 20 zones');
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
     'these investor surfaces sit in the shell’s centred column instead of owning the page');
 
@@ -481,9 +485,11 @@ test('a failed read is never rendered as an empty one', () => {
   const network = codeOnly(read(`${investorDir}/InvestorNetworkWorkspace.jsx`));
   assert.match(network, /const detailFor = \(error, value, describe\)/,
     'the three section headings must read the error before the null');
-  for (const source of ['errors.relationships', 'errors.introductions', 'errors.organizations']) {
+  for (const source of ['errors.relationships', 'errors.introductions']) {
     assert.ok(network.includes(`detailFor(${source}`), `${source} is not consulted by its heading`);
   }
+  assert.match(network, /id="organizations" title="Organizations" detail=\{detailFor\(errors\.relationships, relationships,/,
+    'Organizations must use the error from the relationship read it shares with the book');
   assert.ok(!/'Loading propositions'|'Loading relationship records'|'Loading attributed context'/.test(network),
     'a heading still hard-codes a loading string a failed fetch can never leave');
   // And a fund with no LP count reads as absent, not as zero.

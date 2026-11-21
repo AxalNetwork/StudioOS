@@ -35,6 +35,7 @@ function fixture() {
   db.exec(baseline.match(/CREATE TABLE activity_logs \([\s\S]*?;/)![0]);
   db.exec(sql('migrations/213_research_library.sql'));
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
+  db.exec(sql('migrations/202611151315_6272_ask_history_cleared.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(sql('migrations/202611092035_research_projects.sql'));
   // The directories as their migrations declare them (the seed rows are not needed).
@@ -43,6 +44,7 @@ function fixture() {
   db.exec(sql('migrations/378_research_fund_directory_rebuild.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_directory \(.*?\);/)![0]);
   db.exec(sql('migrations/406_research_fund_sources.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_sources \([\s\S]*?\n\);/)![0]);
   db.exec(sql(MIGRATION));
+  db.exec(sql('migrations/202611180051_7177_research_comparison_request_id.sql'));
   db.exec("INSERT INTO users (id,email,name,role) VALUES (701,'owner@example.test','Owner','founder'),(702,'other@example.test','Other','founder')");
   db.exec(`INSERT INTO research_company_directory (uid,name,website,country,founded_year,sector,source_name,source_url,as_of,
       employee_count,employee_as_of,last_funding_amount,last_funding_currency,last_funding_date,last_funding_type,metrics_source_name,metrics_source_url,metrics_updated_at) VALUES
@@ -120,7 +122,8 @@ test('Add to research: directory rows only, owner-scoped, kept once, and a taken
   assert.deepEqual([again.body.added, again.body.already], [0, 1]);
   // Mutation checked: read funds from the raw table instead of the served ones → the taken-down fund is added.
   const withdrawn = await call(f, 'POST', `/${uid}/subjects`, { kind: 'fund', uids: ['gone-fund'] });
-  assert.deepEqual([withdrawn.status, withdrawn.body.detail, withdrawn.body.missing], [404, 'not_in_directory', ['gone-fund']]);
+  // D7167: a fund whose list was withdrawn is refused by name (410 source_withdrawn), not as missing.
+  assert.deepEqual([withdrawn.status, withdrawn.body.detail, withdrawn.body.withdrawn], [410, 'source_withdrawn', ['gone-fund']]);
   assert.equal((await call(f, 'POST', `/${uid}/subjects`, { kind: 'company', uids: ['q-nebula', 'nope'] })).status, 404, 'one unknown uid adds none');
   assert.equal((await call(f, 'POST', `/${uid}/subjects`, { kind: 'market', uids: ['q-nebula'] })).body.detail, 'invalid_kind');
   assert.equal((await call(f, 'POST', `/${uid}/subjects`, { kind: 'company', uids: ["x'; DROP TABLE users;--"] })).body.detail, 'invalid_uid');

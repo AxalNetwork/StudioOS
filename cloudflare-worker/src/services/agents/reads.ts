@@ -13,10 +13,13 @@
  *     JSON: what a person typed into a record is data, never instructions;
  *   - never answers an email or a numeric user id.
  *
- * Built: the project and company summaries, the team roster, and the four
- * cycles' records (their activity lines, D690). The others (cap table, data
- * room, research, network, compliance, and the connected tools Mercury,
- * Stripe, GitHub and Vercel) are not built yet and refuse `read_unavailable`.
+ * Built: the project and company summaries, the team roster, the four
+ * cycles' records (their activity lines, D690) and the typed records
+ * (Mercury balances, Stripe revenue, the cap table, board metrics, burn, the
+ * raise pipeline, transcripts and diligence), the data room's document text
+ * (D4667-p3) and a fund's recorded performance for one quarter (D4667-p4).
+ * Research, network, compliance, GitHub and Vercel are not built yet and
+ * refuse `read_unavailable`.
  *
  * D4667 (#4667) — EVIDENCE, NOT JUST DATA. A read says what it covers. A collection
  * carries `returned`, `total` and `omitted` (counted, not guessed: `total` is
@@ -35,6 +38,11 @@ import { atLeast, resolveAccess } from '../captableAccess';
 import { readRecord } from '../capTableRecord';
 import { heldLicences } from '../accountLicences';
 import { canWrite } from '../../routes/_founder_validate_helpers';
+import { liveFiles } from '../dataRoomTrash';
+import { fundGpScope, projectOwnerScope } from '../tenancyScope';
+import { userMeetsInvestorTier } from '../../middleware/requireInvestorTier';
+import { readFundPerformance } from '../fundPerformance';
+import { positionMarkIdSql } from '../portfolioValuation';
 
 export const READ_MAX = 8 * 1024;
 /**
@@ -43,7 +51,15 @@ export const READ_MAX = 8 * 1024;
  * default context passes none and reads the latest page, as before.
  */
 export type ReadPage = { after?: string | null; from?: string | null; to?: string | null };
-export type ReadContext = { scope: Scope; agent: AgentRow; projectId: number | null; page?: ReadPage };
+/**
+ * `document` (D4667-p3): the one data-room file a run explicitly selected, as `data_room_file:<uid>` or its bare uid.
+ * Only `data_room.index` reads it; with none, that read answers the room's index and no text.
+ */
+/**
+ * `fund` (D4667-p4): the one fund a run explicitly selected, as `vc_fund:<id>` or its bare id. Only `fund.performance`
+ * reads it; with none, that read answers the funds the sponsor runs and no figures.
+ */
+export type ReadContext = { scope: Scope; agent: AgentRow; projectId: number | null; page?: ReadPage; document?: string | null; fund?: string | null };
 export type ReadResult = { untrusted: true; data: unknown; truncated?: true; incomplete?: true; reason?: 'too_large' };
 
 /** What one collection in a read covers. `total` is null when it could not be counted. */
@@ -124,7 +140,10 @@ const withheld = (reason: string): Withheld => ({ withheld: true, reason });
 export const isWithheld = (v: unknown): v is Withheld => !!v && typeof v === 'object' && (v as Withheld).withheld === true;
 
 async function sponsorOf(env: Env, c: ReadContext) {
-  const id = Number((c.agent as AgentRow | undefined)?.sponsor_user_id);
+  return userAsCaller(env, Number((c.agent as AgentRow | undefined)?.sponsor_user_id));
+}
+
+async function userAsCaller(env: Env, id: number) {
   if (!Number.isSafeInteger(id) || id <= 0) return null;
   // As auth hydrates a caller: the row and the licences it holds, so a source's own rule sees the same person.
   const u = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(id).first<any>();
@@ -378,9 +397,281 @@ const TYPED_MORE: Partial<Record<string, Reader>> = {
   },
 };
 
+// ── The data room's document text (D4667-p3) ────────────────────────────────
+
+const FILE_UID = /^[a-f0-9]{32}$/;
+const PASSAGE_REF = /^data_room_passage:([a-f0-9]{32}):(\d{1,4})$/;
+/** The index lists at most this many files; one read of a document carries at most this many characters of text. */
+export const ROOM_FILE_LIMIT = 40;
+export const DOCUMENT_TEXT_BUDGET = 4_800;
+
+/** The file uid a run selected, from `data_room_file:<uid>` or a bare uid; null for anything else. */
+export function selectedDocument(v: unknown): string | null {
+  const s = typeof v === 'string' ? v.trim().replace(/^data_room_file:/, '') : '';
+  return FILE_UID.test(s) ? s : null;
+}
+
+/**
+ * The room's own rule for reading it whole (`routes/data_room.ts` `roomProject`): the venture's owner, through the
+ * tenancy scope, or an accepted co-founder. An admin reads a room only through an audited support read, and an
+ * investor through a grant's tier, folder and NDA gates, so neither reads it as an agent's sponsor.
+ */
+export async function roomReaderRole(env: Env, userId: number, projectId: number): Promise<'owner' | 'cofounder' | null> {
+  const who = await userAsCaller(env, userId);
+  if (!who || String(who.role).toLowerCase() === 'admin') return null;
+  const owner = projectOwnerScope(who, 'p');
+  const own = await env.DB.prepare(`SELECT p.id FROM projects p WHERE p.id = ? AND ${owner.sql}`).bind(projectId, ...owner.binds).first();
+  if (own) return 'owner';
+  const co = await env.DB.prepare(
+    `SELECT p.id FROM projects p
+       JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.status = 'accepted' AND pm.role = 'cofounder'
+      WHERE p.id = ? AND p.deleted_at IS NULL`,
+  ).bind(who.id, projectId).first().catch(() => null);
+  return co ? 'cofounder' : null;
+}
+
+/**
+ * Whether a file's text on record is its current version's. `read`: indexed after its last replacement. `not_read`:
+ * never indexed. `not_current`: replaced after it was indexed, so the text on record is an earlier version's.
+ * `no_text`: it holds no text the reader can read. `failed`: reading it to text failed. Both queries below spell it out
+ * (the `CASE`), and the current version's number: the versions kept on replacement are 1..n, so the current one is n + 1.
+ */
+export type TextState = 'read' | 'not_read' | 'not_current' | 'no_text' | 'failed';
+
+
+async function sha256Hex(text: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * `data_room.index` — the venture's data room, as its owner or a co-founder reads it (`roomReaderRole`).
+ *
+ * With no document selected it answers the room's index: each live file's reference, name, current version and
+ * whether its current version's text is on record, and no text at all (`document_status: 'not_selected'`).
+ *
+ * With one selected (`ReadContext.document`) it answers that one document only: its file uid, current version, a
+ * digest of that version's object and whole text on record, and its passages (D1478's, migration 765) in order,
+ * each with a stable reference, up to `DOCUMENT_TEXT_BUDGET` characters a read. `coverage` counts them all, and
+ * `page.next` continues after the last one returned (`page.after`). A passage is never cut. Text that is not the
+ * current version's is never supplied: such a document answers its state (`not_current`, `not_read`, `no_text`,
+ * `failed`) with no passages. A file outside this room, or in Trash, is `not_found`.
+ */
+async function dataRoomIndex(env: Env, c: ReadContext) {
+  if (!c.projectId) return null;
+  const who = await sponsorOf(env, c);
+  if (!who || !(await roomReaderRole(env, Number(who.id), c.projectId))) {
+    return withheld('Only the venture\'s founder and co-founders read its data room.');
+  }
+  const live = await liveFiles(env.DB, 'f');
+  if (c.document == null) {
+    const rows = (await env.DB.prepare(
+      `SELECT f.uid, f.name, f.updated_at, (SELECT COALESCE(MAX(v.version), 0) + 1 FROM data_room_file_versions v WHERE v.file_id = f.id) AS version,
+              CASE WHEN s.file_id IS NULL THEN 'not_read'
+                WHEN datetime(f.updated_at) > datetime(s.indexed_at) THEN 'not_current'
+                WHEN s.status = 'indexed' THEN 'read' ELSE s.status END AS text
+         FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
+        WHERE f.project_id = ?${live} ORDER BY f.updated_at DESC, f.id DESC LIMIT ?`,
+    ).bind(c.projectId, ROOM_FILE_LIMIT).all<{ uid: string; name: string; updated_at: string; version: number; text: TextState }>()).results ?? [];
+    const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM data_room_files f WHERE f.project_id = ?${live}`)
+      .bind(c.projectId).first<{ n: number }>().catch(() => null);
+    return {
+      document_status: 'not_selected', document: null,
+      files: rows.map((r) => ({ ref: `data_room_file:${r.uid}`, name: cut(r.name, 160), version: Number(r.version), text: r.text, updated_at: r.updated_at })),
+      coverage: coverageOf(rows.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null), source: 'data_room_files',
+    };
+  }
+  const uid = selectedDocument(c.document);
+  if (!uid) throw new ReadPageError('invalid_page');
+  const f = await env.DB.prepare(
+    `SELECT f.id, f.uid, f.name, f.r2_key, f.content_type, f.updated_at, s.indexed_at, (SELECT COALESCE(MAX(v.version), 0) + 1 FROM data_room_file_versions v WHERE v.file_id = f.id) AS version,
+            CASE WHEN s.file_id IS NULL THEN 'not_read'
+              WHEN datetime(f.updated_at) > datetime(s.indexed_at) THEN 'not_current'
+              WHEN s.status = 'indexed' THEN 'read' ELSE s.status END AS text
+       FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
+      WHERE f.uid = ? AND f.project_id = ?${live}`,
+  ).bind(uid, c.projectId).first<{ id: number; uid: string; name: string; r2_key: string; content_type: string | null; updated_at: string; indexed_at: string | null; version: number; text: TextState }>();
+  if (!f) return { document_status: 'not_found', document: null, source: 'data_room_files' };
+  const identity = { ref: `data_room_file:${f.uid}`, file_uid: f.uid, name: cut(f.name, 160), content_type: f.content_type ?? null, version: Number(f.version), updated_at: f.updated_at };
+  if (f.text !== 'read') return { document_status: f.text, document: { ...identity, passages: null }, source: 'data_room_files' };
+  // Every passage of the current version, in order: the digest covers the whole text, a page only part of it.
+  const all = (await env.DB.prepare('SELECT seq, text FROM data_room_passages WHERE file_id = ? AND project_id = ? ORDER BY seq')
+    .bind(f.id, c.projectId).all<{ seq: number; text: string }>()).results ?? [];
+  if (!all.length) return { document_status: 'not_read', document: { ...identity, passages: null }, source: 'data_room_files' };
+  let from = 0;
+  if (c.page?.after != null) {
+    const m = PASSAGE_REF.exec(String(c.page.after));
+    if (!m) throw new ReadPageError('invalid_page');
+    const at = all.findIndex((p) => Number(p.seq) === Number(m[2]));
+    if (m[1] !== f.uid || at < 0) throw new ReadPageError('unknown_cursor');
+    from = at + 1;
+  }
+  const passages: Array<{ ref: string; seq: number; text: string }> = [];
+  let used = 0;
+  for (const p of all.slice(from)) {
+    if (passages.length && used + p.text.length > DOCUMENT_TEXT_BUDGET) break;
+    passages.push({ ref: `data_room_passage:${f.uid}:${Number(p.seq)}`, seq: Number(p.seq), text: p.text });
+    used += p.text.length;
+  }
+  const digest = `sha256:${await sha256Hex([f.uid, f.r2_key, ...all.map((p) => p.text)].join('\n\u0000\n'))}`;
+  const more = from + passages.length < all.length;
+  return {
+    document_status: 'read',
+    document: {
+      ...identity, text_indexed_at: f.indexed_at, version_digest: digest, passages,
+      // The whole document's count: complete only when this read holds every passage from the first.
+      coverage: { ...coverageOf(passages.length, all.length), complete: from === 0 && !more, first: from },
+      page: { after: c.page?.after ?? null, next: more ? passages[passages.length - 1].ref : null },
+    },
+    source: 'data_room_passages',
+  };
+}
+
+// ── A fund's recorded performance (D4667-p4) ────────────────────────────────
+
+const FUND_REF = /^(?:vc_fund:)?([1-9][0-9]{0,11})$/;
+/** At most this many funds in the index, and this many rows of each collection of one quarter. */
+export const FUND_LIST_LIMIT = 40;
+export const FUND_ROWS_LIMIT = 200;
+
+/** The fund id a run selected, from `vc_fund:<id>` or a bare id; null for anything else. */
+export function selectedFund(v: unknown): number | null {
+  const m = typeof v === 'string' ? FUND_REF.exec(v.trim()) : null;
+  return m ? Number(m[1]) : null;
+}
+
+/** The last whole quarter ending on or before `day`: `{ quarter: '2026-Q3', from: '2026-07-01', to: '2026-09-30' }`. */
+export function quarterBefore(day: string) {
+  const y = Number(day.slice(0, 4)), q = Math.floor((Number(day.slice(5, 7)) - 1) / 3);
+  const thisEnd = new Date(Date.UTC(y, q * 3 + 3, 0)).toISOString().slice(0, 10);
+  const [yy, qq] = thisEnd === day ? [y, q] : q === 0 ? [y - 1, 3] : [y, q - 1];
+  const from = new Date(Date.UTC(yy, qq * 3, 1)).toISOString().slice(0, 10);
+  const to = new Date(Date.UTC(yy, qq * 3 + 3, 0)).toISOString().slice(0, 10);
+  return { quarter: `${yy}-Q${qq + 1}`, from, to };
+}
+
+/**
+ * The company a fund is read under: a company agent's own, a project agent's company. A fund is its GP's firm's
+ * (`vc_funds.company_id`, migration 195), so an agent with no company reads none.
+ */
+const companyOfScope = (s: Scope): number | null => (s.kind === 'company' ? s.id : s.company_id ?? null);
+
+/**
+ * `fund.performance` — one fund's recorded performance for one quarter, as its GP of record reads it.
+ *
+ * Who: the agent's sponsor, as `requireFundGp` admits a GP (`fundGpScope`: the GP of record, under the agent's
+ * company, on the institutional investor tier). An admin reads funds through audited admin acts and an LP through
+ * the LP portal, so neither reads one as an agent's sponsor: `withheld`. A fund the sponsor does not run under this
+ * company is `not_found`, the same answer as a fund that does not exist.
+ *
+ * With no fund selected it answers the funds the sponsor runs here, with no figures (`fund_status: 'not_selected'`).
+ *
+ * With one selected (`ReadContext.fund`) it answers the last whole quarter ending on or before `page.to` (default
+ * today), stated as `period`:
+ *   - `performance`: D627's `readFundPerformance` as of the quarter end, point in time (D1158) — the same formula as
+ *     fund performance and the benchmark offer, never a second one; a figure it cannot compute is null with its reason;
+ *   - `marks`: each position the fund held by the quarter end and its latest valuation on or before it, with the
+ *     valuation's date and its own reference; a position with none is `mark: null`, never its cost;
+ *   - `capital_calls` and `distributions`: those issued, or paid, in the quarter, each with its reference and date.
+ * Amounts are integer cents; no currency is recorded on a fund, so `currency` is null, never assumed. Each collection
+ * carries its coverage, counted apart from the rows returned.
+ */
+async function fundPerformance(env: Env, c: ReadContext) {
+  const who = await sponsorOf(env, c);
+  const companyId = companyOfScope(c.scope);
+  if (!who || String(who.role).toLowerCase() === 'admin' || !userMeetsInvestorTier(who, 'institutional')) {
+    return withheld('Only the fund\'s general partner of record, on the institutional tier, reads its performance.');
+  }
+  if (companyId === null) return withheld('A fund is read under the company that runs it, and this agent has no company.');
+  const scope = fundGpScope(who, companyId, 'f');
+  if (c.fund == null) {
+    const rows = (await env.DB.prepare(
+      `SELECT f.id, f.name, f.vintage_year, f.status FROM vc_funds f WHERE ${scope.sql} ORDER BY f.id LIMIT ?`,
+    ).bind(...scope.binds, FUND_LIST_LIMIT).all<{ id: number; name: string; vintage_year: number | null; status: string | null }>()).results ?? [];
+    const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM vc_funds f WHERE ${scope.sql}`).bind(...scope.binds).first<{ n: number }>().catch(() => null);
+    return {
+      fund_status: 'not_selected', fund: null,
+      funds: rows.map((f) => ({ ref: `vc_fund:${f.id}`, name: cut(f.name, 160), vintage_year: f.vintage_year ?? null, status: f.status ?? null })),
+      coverage: coverageOf(rows.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null), source: 'vc_funds',
+    };
+  }
+  const id = selectedFund(c.fund);
+  if (id === null) throw new ReadPageError('invalid_page');
+  const to = c.page?.to ?? new Date().toISOString().slice(0, 10);
+  if (!DAY.test(to)) throw new ReadPageError('invalid_page');
+  const f = await env.DB.prepare(`SELECT f.id, f.name, f.vintage_year, f.status FROM vc_funds f WHERE f.id = ? AND ${scope.sql}`)
+    .bind(id, ...scope.binds).first<{ id: number; name: string; vintage_year: number | null; status: string | null }>();
+  if (!f) return { fund_status: 'not_found', fund: null, source: 'vc_funds' };
+  const period = quarterBefore(to);
+  const count = async (sql: string, ...binds: unknown[]) => {
+    const r = await env.DB.prepare(sql).bind(...binds).first<{ n: number }>().catch(() => null);
+    return r && Number.isFinite(Number(r.n)) ? Number(r.n) : null;
+  };
+  // Positions held by the quarter end, each with its latest mark on or before it (D627's precedence).
+  const positions = (await env.DB.prepare(
+    `SELECT p.uid, pr.name AS company, p.round_name, v.uid AS mark_uid, v.value_cents, v.valuation_date, v.source
+       FROM portfolio_positions p
+       LEFT JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN fund_position_valuations v ON v.id = ${positionMarkIdSql('p.id')}
+      WHERE p.fund_id = ? AND COALESCE(substr(p.position_date, 1, 10), substr(p.created_at, 1, 10)) <= ? ORDER BY p.id LIMIT ?`,
+  ).bind(period.to, f.id, period.to, FUND_ROWS_LIMIT).all<any>()).results ?? [];
+  const positionsTotal = await count(`SELECT COUNT(*) AS n FROM portfolio_positions p WHERE p.fund_id = ? AND COALESCE(substr(p.position_date, 1, 10), substr(p.created_at, 1, 10)) <= ?`, f.id, period.to);
+  const marks = positions.map((p) => ({
+    ref: `portfolio_position:${p.uid}`, company: cut(p.company, 160), round: cut(p.round_name, 80),
+    mark: p.mark_uid ? {
+      ref: `fund_position_valuation:${p.mark_uid}`, value: Number(p.value_cents), unit: 'cents', currency: null,
+      valuation_date: p.valuation_date, source: cut(p.source, 200),
+      ...(String(p.valuation_date) < period.from ? { before_period: true } : {}),
+    } : null,
+  }));
+  // Calls issued in the quarter: the ledger's headers, and the legacy unnumbered LP lines, as D627 counts them.
+  // A legacy line with no `amount_cents` is converted from its dollar column by `centsOf` (D5373: one conversion here).
+  const calls = (await env.DB.prepare(
+    `SELECT 'fund_capital_call:' || uid AS ref, call_number, amount_cents, NULL AS amount_dollars, substr(created_at, 1, 10) AS at, due_date FROM fund_capital_calls
+      WHERE fund_id = ? AND substr(created_at, 1, 10) BETWEEN ? AND ?
+     UNION ALL
+     SELECT 'capital_call:' || c.uid, NULL, c.amount_cents, c.amount,
+            substr(c.created_at, 1, 10), c.due_date
+       FROM capital_calls c JOIN limited_partners lp ON lp.id = c.limited_partner_id
+      WHERE lp.fund_id = ? AND c.fund_call_id IS NULL AND substr(c.created_at, 1, 10) BETWEEN ? AND ?
+     ORDER BY at, ref LIMIT ?`,
+  ).bind(f.id, period.from, period.to, f.id, period.from, period.to, FUND_ROWS_LIMIT).all<any>()).results ?? [];
+  const callsTotal = await count(
+    `SELECT (SELECT COUNT(*) FROM fund_capital_calls WHERE fund_id = ? AND substr(created_at, 1, 10) BETWEEN ? AND ?)
+          + (SELECT COUNT(*) FROM capital_calls c JOIN limited_partners lp ON lp.id = c.limited_partner_id
+              WHERE lp.fund_id = ? AND c.fund_call_id IS NULL AND substr(c.created_at, 1, 10) BETWEEN ? AND ?) AS n`,
+    f.id, period.from, period.to, f.id, period.from, period.to);
+  const dists = (await env.DB.prepare(
+    `SELECT id, amount_cents, distribution_type, substr(distributed_at, 1, 10) AS at FROM fund_distributions
+      WHERE fund_id = ? AND status = 'paid' AND substr(distributed_at, 1, 10) BETWEEN ? AND ? ORDER BY distributed_at, id LIMIT ?`,
+  ).bind(f.id, period.from, period.to, FUND_ROWS_LIMIT).all<any>()).results ?? [];
+  const distsTotal = await count(
+    `SELECT COUNT(*) AS n FROM fund_distributions WHERE fund_id = ? AND status = 'paid' AND substr(distributed_at, 1, 10) BETWEEN ? AND ?`,
+    f.id, period.from, period.to);
+  const p = await readFundPerformance(env, f, period.to, { pointInTime: true });
+  return {
+    fund_status: 'read',
+    fund: { ref: `vc_fund:${f.id}`, name: cut(f.name, 160), vintage_year: f.vintage_year ?? null, status: f.status ?? null },
+    period, units: { money: 'cents', ratios: 'multiple', irr: 'annual rate' }, currency: null,
+    currency_note: 'No currency is recorded on a fund, its calls or its marks.',
+    performance: {
+      as_of: p.as_of, nav_basis: p.nav_basis, nav: p.nav_cents, paid_in: p.paid_in_cents, distributed: p.distributed_cents,
+      rvpi: p.rvpi, dpi: p.dpi, tvpi: p.tvpi, irr: p.irr, unavailable: p.unavailable,
+    },
+    marks, marks_coverage: coverageOf(marks.length, positionsTotal),
+    capital_calls: calls.map((r) => ({ ref: r.ref, call_number: r.call_number ?? null, amount: centsOf(r.amount_cents, r.amount_dollars), unit: 'cents', currency: null, at: r.at, due: r.due_date ?? null })),
+    capital_calls_coverage: coverageOf(calls.length, callsTotal),
+    distributions: dists.map((r) => ({ ref: `fund_distribution:${r.id}`, amount: Number(r.amount_cents), unit: 'cents', currency: null, type: r.distribution_type, at: r.at })),
+    distributions_coverage: coverageOf(dists.length, distsTotal),
+    source: 'vc_funds',
+  };
+}
+
 export const READERS: Partial<Record<string, Reader>> = {
   ...TYPED,
   ...TYPED_MORE,
+  'data_room.index': dataRoomIndex,
+  'fund.performance': fundPerformance,
   'project.summary': async (env, c) => {
     if (!c.projectId) return null;
     const p = await env.DB.prepare(
@@ -422,11 +713,11 @@ export const readAvailable = (key: string) => typeof READERS[key] === 'function'
  * What each built reader PROVIDES, so a skill that needs more is told so. The cycle readers answer the
  * latest activity summaries: not a typed ledger, a contract's text or a cohort's rows (#4667).
  */
-export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'company_profile' | 'roster' | 'activity_summaries' | 'typed_record'>> = Object.freeze({
+export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'company_profile' | 'roster' | 'activity_summaries' | 'typed_record' | 'document_text'>> = Object.freeze({
   'project.summary': 'project_profile', 'company.profile': 'company_profile', 'team.roster': 'roster',
   'mercury.balances': 'typed_record', 'stripe.revenue': 'typed_record', 'cap_table.read': 'typed_record',
   'grow.burn': 'typed_record', 'raise.pipeline': 'typed_record', 'validate.transcripts': 'typed_record', 'raise.diligence': 'typed_record',
-  'grow.board_metrics': 'typed_record',
+  'grow.board_metrics': 'typed_record', 'data_room.index': 'document_text', 'fund.performance': 'typed_record',
   'validate.records': 'activity_summaries', 'build.records': 'activity_summaries', 'raise.records': 'activity_summaries', 'grow.records': 'activity_summaries',
 });
 

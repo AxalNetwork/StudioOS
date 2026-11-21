@@ -22,8 +22,14 @@ export function readablePeriod(value) {
     && (value.period_start === null || typeof value.period_start === 'string') && (value.period_end === null || typeof value.period_end === 'string')
     && n && ['letter', 'outlook'].every(k => Array.isArray(n[k]) && n[k].every(p => typeof p === 'string'))
     && Array.isArray(n.developments) && n.developments.every(e => e && ['date', 'title', 'body'].every(k => typeof e[k] === 'string'))
-    && Array.isArray(n.subsequent) && n.subsequent.every(e => e && ['d', 'e'].every(k => typeof e[k] === 'string'));
+    && Array.isArray(n.subsequent) && n.subsequent.every(e => e && ['d', 'e'].every(k => typeof e[k] === 'string'))
+    && issuedFields(value);
 }
+// D6249: an issued period's frozen figures, issuer name and correcting period. A draft carries none of them.
+const optional = (v, ok) => v === undefined || v === null || ok(v);
+const issuedFields = (value) => optional(value.figures, f => typeof f === 'object' && !Array.isArray(f) && ['report_pack', 'issue_snapshot'].includes(f.source))
+  && (value.figures !== null || typeof value.figures_reason === 'string')
+  && optional(value.issued_by_name, s => typeof s === 'string') && optional(value.corrected_by_period_id, id => Number.isSafeInteger(id) && id > 0);
 export function useFundReport(fundId, periodId, corrects) {
   const { company } = useActiveCompany();
   const companyId = company?.id;

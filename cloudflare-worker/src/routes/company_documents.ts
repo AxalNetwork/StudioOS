@@ -36,6 +36,7 @@ import { requireAuth, canAccessFounderResource } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
 import { archivedRefusal, companyWriteDenial, isArchived, isSupportSession, viewerIsMember, type WriteDenial } from '../services/companyAccess';
+import { putRecord } from '../services/recordStore';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -185,7 +186,7 @@ export function sniffType(h: Uint8Array): string | null {
   if (h.length >= 8 && h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47 && h[4] === 0x0d && h[5] === 0x0a && h[6] === 0x1a && h[7] === 0x0a) return 'image/png';
   return null;
 }
-const ALLOWED_DECLARED = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']);
+export const ALLOWED_DECLARED = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']);
 
 r.post('/company/:uid/documents', async (c) => {
   try {
@@ -225,7 +226,9 @@ r.post('/company/:uid/documents', async (c) => {
     if (!files) return refuse(c, 503, { code: 'storage_unconfigured', message: 'Document storage is not configured on this deployment.' });
     const r2Key = `company-documents/${access.company.uid}/${crypto.randomUUID()}`;
     try {
-      await files.put(r2Key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { companyId: String(access.company.id), userId: String(user.id) } });
+      // D6651: a company document original is a record, written once.
+      const stored = await putRecord(files, r2Key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { companyId: String(access.company.id), userId: String(user.id) } });
+      if (!stored.ok) throw new Error('record_exists');
     } catch (e) {
       return refuse(c, 502, { code: 'storage_failed', message: 'The file could not be stored. Try again.', raw: e });
     }

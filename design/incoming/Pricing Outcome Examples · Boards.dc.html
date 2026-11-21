@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing Outcome Examples · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Pricing · /pricing · #5957 · continues StudioOS Pricing (PR-F1 … PR-S6) with PR-E and PR-C</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Pricing — worked examples of what a paid plan produces, and a phone comparison that fits the screen</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/pricing (?for=founder | investor | advisor | operating-partner | models), for visitors in the public site frame and for members in the app frame. Two new rows continue the StudioOS Pricing canvas and its grid: PR-E, a Founder-only section “What a paid plan produces” between the AI band and Compare plans (two labelled demonstrations tied to Validate + Build and Raise + Grow, How it connects, After the raise), and PR-C, the phone per-plan comparison with wrapping chips and worded cells. Every example is static copy written by Axal VC with bracketed sample data: Source facts, Eadwyn’s interpretation (Generated) and Limitations stay apart, and “See [plan name]” only scrolls to the plan card. Plan names, prices, features and comparison cells are main’s; no entitlement text changes. States follow Platform States (D5129). Violet dashed ◇ tags mark backend work (authorized evidence, #5957; investor research, #3701); amber ⚑ tags mark the owner’s picks, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Sample venture “Harbourline”], [Interviewee A–B], [Investor A], [Sample Co], [Customer name] and every bracketed figure are fictional; plan prices are the catalogue tiers on main, yearly prices are not drawn</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Pricing Outcome Examples Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PR-E1', 'Founder · outcome examples · desktop 1440 (visitor)', 'The Founder tab top to bottom in the public frame: hero, five tabs, Monthly/Yearly, Free, Validate + Build ($20 / month) and Raise + Grow ($100 / month), the AI band, then the new section: two Demonstration cards with Source facts, Eadwyn’s interpretation and Limitations, How it connects in four steps, and After the raise with the four Grow rows. Then Compare plans with its Storage group, Questions and the closing band. Beside it, the plan card after “See Validate + Build”: scrolled to and in focus.', [F('PRXE1', false, 4760), C('PRXE1B', 'After See Validate + Build', 1440, 640)]],
+      ['PR-E2', 'Example card anatomy', 'One example card at 1.5× with eight numbered parts: label chip, plan chip, title, Source facts, Eadwyn’s interpretation, the Generated mark, Limitations and the action. Beside it, the ◇ “Real, authorized evidence” variant with its permission line: not built, because nothing records authorized evidence.', [C('PRXE2', false, 1440, 1660)]],
+      ['PR-E3', 'Investor · desktop 1440', 'The four plans (Investor Basic $0, Investor Plus $50, Investor Pro $150, Institutional Custom), LP Access, the AI band and Compare plans with Storage. The traceable research example is drawn once, faded, under “held until Research v2 (#3701). Not built.” Beside it, the tab as built today: the AI band goes straight into Compare plans.', [F('PRXE3', false, 4480), C('PRXE3B', 'Investor as built today · section omitted', 1440, 1110)]],
+      ['PR-E4', 'Tabs with no example', 'Advisors, Operating Partners and Models as three strips. The section is omitted, not an empty frame. Main sells two plans on each role tab; Advisory Firm and Partner Firm are not on main.', [C('PRXE4', false, 1440, 1200)]],
+      ['PR-E5', 'States', 'The examples are static and stay in every plan state. Loading and Prices unavailable keep the examples directly under the skeleton or the box. Signed in on Free, Validate + Build and Raise + Grow, the in-plan lines follow “Your plan”; when the plan cannot be told nothing is marked. A Storage cell reading Not recorded beside a size and a dash. Refused does not apply; nothing saves.', [C('PRXE5A', '(a) Loading', 1440, 1590), C('PRXE5B', '(b) Prices unavailable', 1440, 1420), C('PRXE5C', '(c)–(f) Signed in', 1440, 940), C('PRXE5G', '(g) Storage · Not recorded', 1440, 500)]],
+      ['PR-E6', 'Tablet 768', 'Founder tab at 768: three plan cards, the example cards one per row with their three bands inside, How it connects two by two, After the raise, then Compare plans.', [C('PRXE6', false, 768, 4120)]],
+      ['PR-E7', 'Phone 390', 'Founder tab order: hero, tabs (wrapping), billing, the cards stacked, the AI band, the examples one card at a time with bands stacked, the strip as a vertical list, After the raise, Compare plans as PR-C1, Questions and the closing band. 44px targets; nothing wider than the screen.', [C('PRXE7', false, 390, 7240)]],
+      ['PR-E8', 'Dark · member app frame', 'PR-E1 for a signed-in founder on Free, in the app frame on the dark set: company/project switcher top-left, sidebar, Account menu and the Eadwyn rail, collapsed (it proposes nothing on /pricing). “Your plan” and “Current plan” on Free; both examples say “Not in your plan”. Chips, Generated mark and Limitations keep their words and shapes. No closing band for a member, as today.', [F('PRXE8', false, 4220)]],
+      ['PR-C1', 'Phone · Founder per-plan comparison', 'Under Compare plans: three chips, the selected one filled with a check; a two-column table, Feature and the selected plan, group heads Validate, Build, Raise, Grow and Storage (New). Cells read “Included” with a tick, “Not included” with a dash, or the count, size or phrase.', [C('PRXC1', false, 390, 1550)]],
+      ['PR-C2', 'Phone · Investor, four plans', 'The longest case: four chips on two rows, Investor Plus selected first for a visitor. Institutional selected: its header adds Custom and its Storage cell reads Negotiated. A plan the catalogue does not sell keeps its chip and its header adds Not offered yet.', [C('PRXC2', false, 390, 1540), C('PRXC2B', 'Institutional · Custom', 390, 820), C('PRXC2C', 'Investor Pro not offered', 390, 730)]],
+      ['PR-C3', 'Phone · selected and focus', 'Focus on an unselected chip (ring, no fill), the selected chip in focus (fill, check and ring), the selected chip not in focus. Arrows, Home and End move between chips (#4655). The audience tabs at 390, all five reachable and the selected one marked.', [C('PRXC3', false, 390, 910)]],
+      ['PR-C4', 'Reflow 320', 'PR-C1’s layout at 320 CSS pixels with the Investor chips: wrapping chips, wrapping feature names, the value column at 108px (never under 96). No horizontal scroll.', [C('PRXC4', false, 320, 1150)]],
+      ['PR-C5', 'Phone states', 'Loading (skeleton, no comparison), Prices unavailable (one box with Try again, no comparison), a member on Raise + Grow whose chip adds “Your plan” and is selected first, and a Storage cell reading Not recorded in words.', [C('PRXC5A', 'Loading', 390, 530), C('PRXC5B', 'Prices unavailable', 390, 390), C('PRXC5C', 'Member · Your plan', 390, 990), C('PRXC5D', 'Not recorded', 390, 500)]],
+      ['PR-C6', 'Phone dark · member', 'PR-C1 on the dark set for a member on Free, with the keyboard focus ring on Validate + Build visible against the dark surface.', [C('PRXC6', false, 390, 1150)]],
+      ['PR-H', 'Handoff', 'What was checked on main, what is preserved, frontend-only work, the two ◇ backend items, the owner’s picks and two differences between the brief and main, accessibility, and what is not drawn on purpose.', [W('PRXH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

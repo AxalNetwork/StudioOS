@@ -22,8 +22,11 @@ import ActivityTab, { RecentActivity } from './ActivityTab';
 import { AssignDialog, EndDialog } from './MentorDialogs';
 import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
+import { STATUS_WORD } from './catalogueModel';
+import { shellModules } from './genericProgramModel';
+import { Availability, Modules, OnRegistry, Settings } from './ProgramShellSections';
 import { MentorTabs } from './ProgramTabs';
-import { BlockFailed, CARD, Card, ChartCard, EYE, H2, LINK, Pill, Skeleton, SUB, Tile } from './parts';
+import { BlockFailed, CARD, Card, ChartCard, EYE, H2, LINK, Pill, Skeleton, SUB, Tile, Unread } from './parts';
 import { useMentorReads } from './useProgramReads';
 import {
   ENDED_WINDOW_LINE, FOUNDERS_WAIT, HIDDEN_LINE, MENTOR_ACTIVITY_GAP, NO_MENTORS, endedInWindow, hiddenFrom,
@@ -196,6 +199,20 @@ function MentorHowItRuns({ reads, superAdmin }) {
   return <PlaybookEditor program="mentor-cohorts" superAdmin={superAdmin} detail={reads.detail} fill={fill} testId="programs-mentor-how" />;
 }
 
+function MentorParticipation({ reads }) {
+  const sessions = sessionsFrom(reads.sessions);
+  return (
+    <Card title="Participation" testId="programs-mentor-participation">
+      {sessions.state === 'loading' ? <Skeleton lines={1} /> : null}
+      {sessions.state === 'unreadable' ? <BlockFailed what="Sessions booked with a mentor" onRetry={reads.reload} /> : null}
+      {sessions.state === 'ready' ? (
+        <p className={SUB}>{`${sessions.total.toLocaleString('en-US')} sessions booked with a mentor across the ${sessions.rows.length} newest cohorts`}</p>
+      ) : null}
+      <Unread word="Not recorded" reason="The sessions read does not count distinct people taking part." testId="programs-mentor-participation-unrecorded" />
+    </Card>
+  );
+}
+
 function MentorBody() {
   const { pathname } = useLocation();
   const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
@@ -213,12 +230,21 @@ function MentorBody() {
     <ProgramFrame
       detail={detail}
       program="mentor-cohorts"
+      status={isReady(detail.read) ? STATUS_WORD[detail.read.data?.program?.status] || null : null}
       superAdmin={superAdmin}
       actionsOnPhone={false}
       actions={<button type="button" onClick={() => open({ dialog: 'assign' })} className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-mentor-assign">Assign a mentor</button>}
       tabs={<MentorTabs />}
     >
-      {tab === 'overview' ? <MentorOverview reads={reads} phone={phone} open={open} /> : null}
+      {tab === 'overview' ? (
+        <>
+          <MentorOverview reads={reads} phone={phone} open={open} />
+          <Modules modules={shellModules('mentor-cohorts', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <MentorParticipation reads={reads} /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="mentor-cohorts" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
       {tab === 'how' ? <MentorHowItRuns reads={{ ...reads, detail }} superAdmin={superAdmin} /> : null}
       {tab === 'people' ? <AdvisorCohortAssignmentsBody embedded onChanged={reads.reload} refresh={writes} /> : null}
       {tab === 'activity' ? <ActivityTab program="mentor-cohorts" cycles={cycles} gap={MENTOR_ACTIVITY_GAP} testId="programs-mentor-activity" /> : null}

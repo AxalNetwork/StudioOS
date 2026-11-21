@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Directory Search · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · RS-17 · #7045 · brief 5 of 6 (#7040)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Companies — find companies, open a profile, and come back to the same filtered results</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Directory tab on /research/companies, continuing the Research v2 canvas (RS-01 to RS-12) as RS-17. Search, active filters, the filtered count and the results come first; whole-directory field counts move into a closed Directory coverage disclosure, and every count says which population it describes. Sorting by funding shows the funding total with its currency and explains that amounts are ordered only within one currency. The search, filters, sort, page and page size live in a shareable URL; the selection, scroll and focus stay in the member’s session, so Back, the breadcrumb and the tab switch return to the same investigation. Phone and tablet use cards with one company link each, a filter sheet and a selection sheet. The Directory and Saved analyses tabs, the research shell and the shared Eadwyn rail are unchanged. States follow Platform States (Unavailable on screen). Violet dashed ◇ tags mark Worker or measurement work; the amber ⚑ tag marks the owner decision on selection lifetime, with option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the 2,480-company directory, its coverage counts, every company, amount and person ([Halden Grid], [Orchard Data], [Priya N.] and the rest) are fictional sample values</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Directory Search Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-17-00', 'Journey and the two kinds of state', 'The prototype path (results → profile → returned), what a shared link carries versus what stays in the member’s session, and the annotation key.', [W('RCD00')]],
+      ['RS-17 A', 'Search and results · desktop 1440', 'Page 2 of Founded 2016 – 2024, sorted by funding total: search, sort and rows per page; filters whose counts say they are of the whole directory; active filters; “26–50 of 186 companies match”; the within-currency sort note; EUR and USD groups; one link per company with its checkbox apart; pager; the selection bar (2 selected across pages); Directory coverage closed below.', [F('RCD01', false, 2080)]],
+      ['RS-17 A · details', 'Coverage, filters, year range, funding order', 'Directory coverage expanded (of all 2,480 companies, freshness a dependency); the filter panel with its count scope and reset; a reversed year range with the inline message while the last valid results stay; the page where recorded funding ends and Not recorded sorts last.', [C('RCD01B', 'Directory coverage, expanded', 1160, 215), C('RCD01C', 'Filters and count scope', 1160, 305), C('RCD01D', 'Invalid year range · last valid results kept', 1160, 611), C('RCD01E', 'Funding sort · end of recorded amounts', 1160, 515)]],
+      ['RS-17 B', 'Return to the same results', 'Open [Halden Grid] from row 31, read the profile with “Back to results” naming page, filters, sort and selection, then return: query, filters, sort, page, size, selection, scroll and focus restored with a status line. A shared link opened by another member restores filters, sort and page but no selection.', [F('RCD02', 'Step 2 · profile', 800), F('RCD02B', 'Step 3 · returned, focus on the link', 2150), F('RCD02C', 'Shared link · another member', 1300), W('RCD02D')]],
+      ['RS-17 C · tablet', 'Tablet 768', 'Compact rows with a 44 px checkbox, the link, the sorted value with its currency and the row number; filters and sort open sheets; the selection bar stays in reach.', [C('RCD03', false, 768, 1024)]],
+      ['RS-17 C · phone', 'Phone 390', 'Result cards with one native company link each and the checkbox beside it; the filter sheet; the selection sheet with Remove per company; the profile with Back to results; the return with focus on the link; loading, true zero with filters to relax, and Unavailable with Retry.', [P('RCD04A', 'Results'), P('RCD04B', 'Filter sheet'), P('RCD04C', 'Selection sheet'), P('RCD04D', 'Profile · Back to results'), P('RCD04H', 'Returned · focus restored'), P('RCD04E', 'Loading'), P('RCD04F', 'True zero'), P('RCD04G', 'Unavailable · Retry')]],
+      ['RS-17 C · states', 'States on desktop', 'First read (no count), a later read that keeps the rows, true zero, Unavailable with Retry, Refused when signed out, and missing fields as Not recorded.', [C('RCD05', false, 1440, 901)]],
+      ['RS-17 D', 'Dark mode', 'The main desktop results and the phone results on the Research v2 dark tokens.', [F('RCD06', 'Desktop · dark', 2080), P('RCD06B', 'Phone · dark')]],
+      ['RS-17 E', 'Keyboard, focus and accessibility', 'Focus order, where focus goes on return, page change and errors, live regions, 44 px targets and reduced motion.', [W('RCD07')]],
+      ['RS-17 F', 'Handoff', 'What was checked on main, frontend-only changes, Worker and measurement dependencies, the owner decision, and reused components.', [W('RCD08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

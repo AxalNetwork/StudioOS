@@ -43,11 +43,11 @@ function ChartPanel({ title, note, legend, foot, alt, table, testId, children })
       aside={<button type="button" className={TAP_LINK} onClick={() => setAsTable((v) => !v)} data-testid={`${testId}-toggle`}>{asTable ? 'View as chart' : 'View as table'}</button>}>
       <div className="flex flex-col gap-2 px-4 py-3 sm:px-5">
         {note && <p className="m-0 text-[12.5px] text-zinc-700 dark:text-gray-200">{note}</p>}
-        {legend && !asTable && <div className="flex flex-wrap gap-3 text-[11px] text-axal-muted dark:text-gray-400">{legend}</div>}
+        {legend && !asTable && <div className="flex flex-wrap gap-3 text-[12px] text-axal-muted dark:text-gray-400">{legend}</div>}
         {asTable
           ? <div data-testid={`${testId}-table`}><ChartTable chart={{ table }} caption={title} /></div>
           : <div role="img" aria-label={alt}>{children}</div>}
-        {foot && <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-foot`}>{foot}</p>}
+        {foot && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-foot`}>{foot}</p>}
       </div>
     </Panel>
   );
@@ -114,7 +114,7 @@ function FundBlocks({ list, perf, history, positions, access, onMark, onMove }) 
           </ChartPanel>
         </div>
       )}
-      {charts?.truncated && <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">Only the latest quarters are drawn.</p>}
+      {charts?.truncated && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Only the latest quarters are drawn.</p>}
 
       {positions.status === 'loading' && <LoadingRows lines={3} />}
       {positions.status === 'unreadable' && <Unreadable what="The positions" claim="This is not a claim that the fund holds none." onRetry={positions.reload} />}
@@ -146,7 +146,7 @@ function PositionsTable({ positions, access, onMark, onMove }) {
     { key: 'source', label: 'Source', cell: (r) => r.source ?? '—' },
     { key: 'by', label: 'Recorded by', cell: (r) => r.recordedBy ?? '—' },
     { key: 'acts', label: '', align: 'right', cell: (r) => (
-      <FundActControl access={access} act="fund.valuation" testId={`fund-position-refused-${r.id}`} className="text-[11px] text-axal-muted dark:text-gray-400">
+      <FundActControl access={access} act="fund.valuation" testId={`fund-position-refused-${r.id}`} className="text-[12px] text-axal-muted dark:text-gray-400">
         <span className="inline-flex flex-wrap justify-end gap-2">
           <button type="button" className={TAP_LINK} onClick={() => onMark(r.raw)} data-testid={`fund-position-mark-${r.id}`}>Record a mark</button>
           <button type="button" className={TAP_LINK} onClick={() => onMove(r.raw)} data-testid={`fund-position-move-${r.id}`}>Move to another fund</button>
@@ -259,7 +259,7 @@ function MoveDialog({ apis, position, funds, fundId, onClose, onDone }) {
             <label key={o.key} className="flex min-h-[40px] items-center gap-2.5 rounded-axal-sm border border-axal-hairline px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:text-gray-100">
               <input type="radio" name="fund-move" checked={pick === o.key} onChange={() => setPick(o.key)} data-testid={`fund-move-${o.key}`} />
               <span className="flex-1">{o.label}</span>
-              {o.current && <span className="text-[11px] text-axal-muted dark:text-gray-400">Where it counts now</span>}
+              {o.current && <span className="text-[12px] text-axal-muted dark:text-gray-400">Where it counts now</span>}
             </label>
           ))}
         </div>

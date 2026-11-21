@@ -28,6 +28,7 @@
  * Every model run goes through the router as the member who pressed (D765:
  * rail page and option), charged at its price. Every statement is bound.
  */
+import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 import { run as aiRun } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
@@ -155,16 +156,18 @@ export async function indexFile(env: Env, deps: SearchDeps, projectId: number, f
 /** The room's files that have no index row, or were replaced after it. Bounded. */
 export async function filesToIndex(env: Env, projectId: number, limit = INDEX_BATCH): Promise<{ files: FileRow[]; remaining: number }> {
   // Both queries carry the same stale-file condition, written out so each query text is static.
+  // D6073 — a file in Trash is not indexed; its passages stay until it is purged.
+  const live = await liveFiles(env.DB, 'f');
   const rows = await env.DB.prepare(
     `SELECT f.id, f.uid, f.name, f.r2_key, f.content_type, f.size_bytes
        FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
-      WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))
+      WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))${live}
       ORDER BY f.id LIMIT ?`,
   ).bind(projectId, limit).all<FileRow>();
   const count = await env.DB.prepare(
     `SELECT COUNT(*) AS n
        FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
-      WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))`,
+      WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))${live}`,
   ).bind(projectId).first<{ n: number }>();
   const files = rows.results || [];
   return { files, remaining: Math.max(0, Number(count?.n ?? 0) - files.length) };
@@ -191,7 +194,7 @@ export async function searchRoom(env: Env, deps: SearchDeps, projectId: number, 
   const rows = await env.DB.prepare(
     `SELECT p.vector_id, p.text, p.file_id, f.uid AS file_uid, f.name AS file_name
        FROM data_room_passages p JOIN data_room_files f ON f.id = p.file_id AND f.project_id = p.project_id
-      WHERE p.project_id = ? AND p.vector_id IN (SELECT value FROM json_each(?))`,
+      WHERE p.project_id = ? AND p.vector_id IN (SELECT value FROM json_each(?))${await liveFiles(env.DB, 'f')}`,
   ).bind(projectId, JSON.stringify(ids)).all<{ vector_id: string; text: string; file_id: number; file_uid: string; file_name: string }>();
   const order = new Map(ids.map((id, i) => [id, i]));
   const kept = (rows.results || [])

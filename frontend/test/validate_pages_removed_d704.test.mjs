@@ -166,7 +166,8 @@ test('D704 test 5 (interviews): no tool, door or Lab link leads to the Interview
   const tools = route.slice(at, route.indexOf('\n  }),', at)); // Validate's block, to its closing line
   assert.doesNotMatch(tools, /'customer-research':/, 'Customer research has no tool link: its module is the tool');
   assert.doesNotMatch(tools, /\/validate\/interviews/);
-  assert.match(tools, /'market-intelligence': \(\) => \(\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}\)/, 'Market intelligence keeps its tool');
+  // D6010 (#6010): beside it, Size the market.
+  assert.match(tools, /\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}/, 'Market intelligence keeps its tool');
   assert.equal(FOUNDER_TOOLS.some((t) => t.path === '/validate/interviews' || t.aliases?.includes('/validate/interviews')), false, 'FOUNDER_TOOLS has no /validate/interviews');
   // `/build/discovery` was the third, until #2335 retired it.
   assert.ok(FOUNDER_TOOLS.some((t) => t.path === '/build/marketplace'), 'the other Customer research tools stay');
@@ -192,11 +193,12 @@ test('D704 test 5 (the door): the Validate chapter lists the modules, and its li
   for (const door of Object.values(DOORS)) {
     for (const i of door.live) assert.doesNotMatch(i.route, /^\/validate\/(interviews|pain-map|hypotheses)$/, `${i.t} links an old page`);
   }
-  // Validate's tools give no old path: only Market intelligence keeps a tool.
+  // Validate's tools give no old path. Demand signals now opens the landing-page builder.
   const route = readFileSync('frontend/src/pages/cycles/defs/validate.jsx', 'utf8'); // D5615: Validate's entry
   const at = route.indexOf('tools: toFnMap({');
   const tools = route.slice(at, route.indexOf('\n  }),', at));
-  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence']);
+  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence', 'demand-signals']);
+  assert.match(tools, /'demand-signals':.*\/build\/brand/);
 });
 
 /** Test 6's pattern: an old page path, not part of a longer path or name. */

@@ -19,8 +19,6 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -30,7 +28,6 @@ import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import dataRoom from '../src/routes/data_room.ts';
 import decks from '../src/routes/decks.ts';
 import { saveScenario } from '../src/services/capTableWrites.ts';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { FORMS, EDITS, formFor, editFor, initialValues, shareLinkUrl, validate } from '../../frontend/src/pages/cycles/forms.js';
@@ -38,7 +35,6 @@ import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 
 const FOUNDER = 10, OTHER = 20, PARTNER = 40, ADVISOR = 41, INVESTOR = 50;
 const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [OTHER]: 'founder', [PARTNER]: 'partner', [ADVISOR]: 'advisor', [INVESTOR]: 'investor' };
@@ -46,7 +42,6 @@ const P = 1, PB = 2;
 const UID = 'p-kestrel', UID_B = 'p-osprey';
 const B_DECK = 6, B_PROSPECT = 9, B_FOLDER = 'fo-b';
 
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
@@ -181,16 +176,18 @@ test('11: New version starts from the live deck with none saved, then from the n
   const { w } = writesAs(db);
   const form = formFor('raise', 'investor-narrative');
   // D909 (owner question 5 on #2454): the live wording is the Spin-Out deck's, offered to a Spin-Out venture only.
-  let { values, fields } = await opened(form, w);
-  assert.deepEqual(choices(fields, 'start_from'), ['blank'], 'not a Spin-Out venture: blank only');
+  let values;
+  let { fields } = await opened(form, w);
+  // D6069 (#6069): the venture's saved pitch deck v2 offers its words to any venture.
+  assert.deepEqual(choices(fields, 'start_from'), ['deck-2', 'blank'], 'not a Spin-Out venture: the deck\'s words and blank');
   db.prepare("INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (?, 'problem.framing', 'Books close by hand.', 0)").run(P);
   ({ values, fields } = await opened(form, w));
-  assert.deepEqual(choices(fields, 'start_from'), ['live', 'blank']);
+  assert.deepEqual(choices(fields, 'start_from'), ['live', 'deck-2', 'blank']);
   assert.equal(values.start_from, 'live', 'a Spin-Out venture with no saved version: the Spin-Out wording is chosen');
   const first = await form.submit(w, P, { ...values, one_liner: 'Kestrel finds the leak', why_now: 'Rules changed in 2026', ask: '$1.5M for 18 months' });
   assert.equal(first.version, 1);
   ({ values, fields } = await opened(form, w));
-  assert.deepEqual(choices(fields, 'start_from'), ['version-1', 'live', 'blank'], 'saved versions first, newest first');
+  assert.deepEqual(choices(fields, 'start_from'), ['version-1', 'live', 'deck-2', 'blank'], 'saved versions first, newest first');
   assert.equal(values.start_from, 'version-1');
   const second = await form.submit(w, P, { ...values, investor_type: 'angel', check_against: ['metrics'] });
   assert.equal(second.version, 2);

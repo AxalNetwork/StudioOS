@@ -43,20 +43,24 @@ const OBLIGATION_LOOK = {
   Received: ['is-ok', CircleCheck],
   Due: ['is-pending', Clock],
   'Not received': ['is-late', TriangleAlert],
+  Overdue: ['is-late', TriangleAlert],
   'Not recorded': ['is-none', CircleDashed],
   Unreadable: ['is-unreadable', SquareSlash],
 };
 
 /**
- * A reporting obligation for one period: Received, Due, Not received, Not
- * recorded or Unreadable. `compact` leaves the period out of the word, for a
+ * A reporting obligation for one period: Received, Due, Not received, Overdue
+ * (by N days, the Worker's, D6204), Not recorded or Unreadable. `compact` leaves the period out of the word, for a
  * table whose column header already names it (PF-02).
  */
 export function ObligationStatus({ reporting, compact = false }) {
   if (!reporting || reporting.state === 'loading') return <span className="pf-muted">Reading…</span>;
   const [cls, Icon] = OBLIGATION_LOOK[reporting.state] || OBLIGATION_LOOK['Not recorded'];
-  const label = !compact && reporting.period && ['Received', 'Due', 'Not received'].includes(reporting.state)
-    ? `${reporting.period} ${reporting.state.toLowerCase()}` : reporting.state;
+  // D6204: past its due day by the Worker's date, the word carries the days.
+  const word = reporting.state === 'Overdue' && Number.isFinite(reporting.overdueDays)
+    ? `Overdue by ${reporting.overdueDays} ${reporting.overdueDays === 1 ? 'day' : 'days'}` : reporting.state;
+  const label = !compact && reporting.period && ['Received', 'Due', 'Not received', 'Overdue'].includes(reporting.state)
+    ? `${reporting.period} ${word.charAt(0).toLowerCase()}${word.slice(1)}` : word;
   return (
     <span className={`pf-chip ${cls}`} title={reporting.reason || undefined} data-state={reporting.state}>
       <Icon size={11} aria-hidden="true" />{label}
@@ -102,6 +106,7 @@ export function FinancialMetric({ metric, onRetry }) {
       <small>{metric.label}</small>
       <b><MetricValue metric={metric} onRetry={onRetry} /></b>
       {why ? <em>{why}</em> : null}
+      {metric.chip ? <span className={`pf-chip is-${metric.chip.tone || 'late'}`} data-testid={`metric-${metric.key}-chip`}>{metric.chip.text}</span> : null}
     </div>
   );
 }
@@ -126,8 +131,10 @@ export function Skeleton({ rows = 3 }) {
  * The performance summary (`performanceOf`): NAV with mark coverage, the
  * multiples and flows with their definitions, the companies count, and the
  * basis strip. `methodologyTo` is where the strip's Methodology goes.
+ * `change` (D6207) is a node drawn under the hero NAV — the Overview's change
+ * since the last quarter-end — and is never drawn when the hero failed.
  */
-export function PerformanceSummary({ perf, onRetry, loading, methodologyTo = '/portfolio/performance' }) {
+export function PerformanceSummary({ perf, onRetry, loading, change = null, methodologyTo = '/portfolio/performance' }) {
   if (loading) return <section className="pf-card"><Skeleton rows={2} /></section>;
   const failed = perf.nav.state === 'unreadable';
   return (
@@ -140,6 +147,7 @@ export function PerformanceSummary({ perf, onRetry, loading, methodologyTo = '/p
         ) : (
           <>
             {perf.nav.state === 'not_recorded' ? <span className="pf-sub">{perf.nav.reason}</span> : null}
+            {change}
             {perf.coverage ? <span className="pf-sub" data-testid="portfolio-mark-coverage">{perf.coverage}</span> : null}
             {perf.atCost.map((t) => <span key={t} className="pf-sub">{t}.</span>)}
           </>

@@ -57,7 +57,6 @@ const GRID = codeOnly(read('frontend/src/pages/advisor/practice/sessionGrid.js')
 // #4715: the advisor router is advisors.ts plus the route modules it mounts.
 const WORKER = advisorRoutesSource();
 const API = read('frontend/src/lib/api.js');
-const FILTERS = read('frontend/src/workspaces/advisorZoneFilters.js');
 const ACTIONS = read('frontend/src/workspaces/advisorZoneActions.js');
 const CANVAS = read('design/canvases/integrated/Advisor Detail · Practice.dc.html');
 
@@ -346,21 +345,26 @@ test('narrowSlots serves each chip the page declares, and the wide views stay wi
   assert.equal(narrowSlots([{ id: 'n', taken: 1 }], 'past').length, 0);
 });
 
-test('the four chips the canvas draws are the four views the page can serve', () => {
+test('the four windows the canvas draws are the four the hours grid can serve', () => {
   // Read out of the canvas so a fifth chip appearing in the drawing fails here
   // rather than rendering as a dead pill.
   const drawn = DATA.slice(DATA.indexOf('s_views:'), DATA.indexOf(']', DATA.indexOf('s_views:')));
   const labels = [...drawn.matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(labels, ['Two weeks', 'Month', 'Past sessions', 'Unpaid held']);
 
-  const entry = FILTERS.slice(FILTERS.indexOf("'practice/sessions': ["));
-  const block = entry.slice(0, entry.indexOf('],'));
-  for (const label of labels) {
-    assert.ok(block.includes(`canvas: '${label}'`), `the chip row is missing '${label}'`);
-  }
-  const keys = [...block.matchAll(/key: '([a-z_]+)'/g)].map((m) => m[1]);
+  // #4832 (D4832): the zone's chip row is Practice v2's Upcoming · Past ·
+  // Cancelled over the sessions (read from the v2 canvas by
+  // `profile_zone_filters.test.mjs`), and PR4's four windows are the hours
+  // grid's own control, `HOURS_VIEWS`. `Past sessions` is drawn as `Past
+  // hours` there, because `Past` is now the sessions' own tab.
+  const at = PAGE.indexOf('const HOURS_VIEWS = [');
+  assert.ok(at >= 0, 'the page has no hours window control');
+  const block = PAGE.slice(at, PAGE.indexOf('];', at));
+  const rows = [...block.matchAll(/\['([a-z_]+)', '([^']+)'\]/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(rows.map(([, l]) => l), labels.map((l) => (l === 'Past sessions' ? 'Past hours' : l)));
+  const keys = rows.map(([k]) => k);
   assert.deepEqual(keys.slice().sort(), Object.keys(VIEW_DAYS).slice().sort(),
-    'every chip needs a window, and every window needs a chip');
+    'every window needs a span, and every span needs a window');
   // The page names each key itself. A key resolved one import away lets a chip
   // be declared live over a page that cannot serve it — `month` was exactly
   // that on the first draft, read out of `VIEW_DAYS[forView]`.
@@ -375,11 +379,12 @@ test('the two ops the canvas draws are handlers, not exports or promises', () =>
 
   const entry = ACTIONS.slice(ACTIONS.indexOf("'practice/sessions': ["));
   const block = entry.slice(0, entry.indexOf('],'));
-  assert.match(block, /label: 'Block a date range', kind: 'handler'/);
+  // #4832 (D4832): Practice v2 (PX-05) draws it as `Block time`, the same handler.
+  assert.match(block, /label: 'Block time', kind: 'handler', handler: 'blockRange', primary: true/);
   // NOT `kind: 'export'`. The builder's export kind emits CSV through
   // `exportView`; a calendar is .ics, and the two are not interchangeable.
   assert.match(block, /label: 'Export to calendar', kind: 'handler'/);
-  assert.equal(block.includes('unbuilt'), false, 'both ops are real on this page');
+  assert.equal(block.includes('unbuilt'), false, 'every op is real on this page');
   assert.equal(block.includes("kind: 'export'"), false);
 
   // And the page actually supplies both handlers it declares.
@@ -415,9 +420,14 @@ test('the three configuration cards the artboard draws are all present, with the
   ]) {
     assert.ok(ART.includes(`<span class="zt">${title}</span>`), `the canvas no longer draws ${title}`);
     assert.ok(ART.includes(`<span class="zs">${sub}</span>`), `the canvas no longer draws "${sub}"`);
-    assert.ok(P.includes(`>${title}</h3>`), `the page is missing the ${title} card`);
-    assert.ok(P.includes(`>${sub}</span>`), `the page is missing the "${sub}" sub-label`);
+    // #4832 (D4832): Practice v2 (PX-05) titles the first card `Availability`,
+    // under the Scheduling setup heading, and it is no longer "Configuration"
+    // beside the grid: the whole section is configuration.
+    const v2 = title === 'Availability rules' ? 'Availability' : title;
+    assert.ok(P.includes(`>${v2}</h3>`), `the page is missing the ${v2} card`);
+    if (v2 === title) assert.ok(P.includes(`>${sub}</span>`), `the page is missing the "${sub}" sub-label`);
   }
+  assert.ok(P.includes('>Scheduling setup</h2>'), 'the three cards sit under their own heading');
 });
 
 test('the slot card carries the two markers the artboard draws on it', () => {

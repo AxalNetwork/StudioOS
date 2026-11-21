@@ -133,7 +133,7 @@ export function strengthLabel(row) {
 }
 
 /** "Oct 20, 2026" from a stored date or timestamp; null when nothing parseable is stored. */
-function shortDate(value) {
+export function shortDate(value) {
   if (!value) return null;
   const s = String(value);
   const t = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00Z` : s).getTime();
@@ -159,4 +159,69 @@ export function followUp(row, now = Date.now()) {
 /** When the last reply was logged, or Not recorded. */
 export function lastNote(row) {
   return shortDate(row?.last_reply_at) || NOT_RECORDED;
+}
+
+/**
+ * #6259 — the investor tie's touch history and reminders, read back.
+ *
+ * The touch log (`GET /api/partnernet/relationships/:id/interactions`) and the
+ * reminders (`GET /api/partnernet/reminders?all=1`) were written by the page
+ * and never shown. These four helpers are what the page reads them through.
+ * They are the investor tie's (`partner_interactions`, `partner_reminders`,
+ * migration 338) — not #5310's Person Sheet, which is a different store.
+ */
+
+const stamp = (value) => {
+  if (!value) return Number.NaN;
+  const s = String(value);
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00Z` : s.replace(' ', 'T')).getTime();
+};
+
+/**
+ * The recorded touches, newest first: by when the touch happened, then by
+ * when it was recorded. The route already orders by `interacted_at DESC`; the
+ * page sorts again so the order does not rest on a query nobody here reads.
+ * A row with no parseable date sinks to the end rather than to the top.
+ */
+export function touchHistory(items) {
+  const rank = (value) => (Number.isFinite(stamp(value)) ? stamp(value) : -Infinity);
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => (
+    rank(b?.interacted_at) - rank(a?.interacted_at) || rank(b?.created_at) - rank(a?.created_at)
+  ));
+}
+
+/**
+ * Who recorded a touch. The route joins `users.name AS recorded_by_name`, and
+ * both people on an accepted tie already see each other's name in the book,
+ * so the name is shown. "You" for the reader's own; "The other person" only
+ * when the name is absent and the id is the other party's; otherwise Not
+ * recorded — never a guess at whose touch it was.
+ */
+export function touchRecorder(row, userId, otherId) {
+  const by = Number(row?.recorded_by);
+  if (Number.isFinite(by) && userId != null && by === Number(userId)) return 'You';
+  const name = String(row?.recorded_by_name ?? '').trim();
+  if (name) return name;
+  if (Number.isFinite(by) && otherId != null && by === Number(otherId)) return 'The other person';
+  return NOT_RECORDED;
+}
+
+/** The tie's open reminder: the earliest not-done one, or null. */
+export function openReminderFor(reminders, relationshipId) {
+  const open = (reminders || []).filter((r) => !Number(r?.done) && Number(r?.relationship_id) === Number(relationshipId));
+  if (!open.length) return null;
+  return open.reduce((first, r) => (String(r.remind_at) < String(first.remind_at) ? r : first));
+}
+
+/**
+ * The reminders view's two lists: upcoming (open, soonest first — a due one
+ * stays here until it is marked done) and done (most recently done first).
+ */
+export function reminderLists(reminders) {
+  const rows = Array.isArray(reminders) ? reminders : [];
+  const upcoming = rows.filter((r) => !Number(r?.done))
+    .sort((a, b) => String(a.remind_at).localeCompare(String(b.remind_at)));
+  const done = rows.filter((r) => Number(r?.done))
+    .sort((a, b) => String(b.done_at || '').localeCompare(String(a.done_at || '')));
+  return { upcoming, done };
 }

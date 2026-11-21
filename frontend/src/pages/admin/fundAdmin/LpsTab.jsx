@@ -80,9 +80,9 @@ export function LpsTab({ apis, access, funds }) {
             template="1.4fr .9fr .9fr 1fr 1fr 1fr 1fr 1fr .7fr .9fr .8fr .9fr 2.5rem"
             cols={[
               { key: 'lp', label: 'LP', cell: (r) => (
-                <Link to={lpHref(r.limited_partner_id, location.search)} className="block min-w-0" data-testid={`lps-open-${r.limited_partner_id}`}>
+                <Link to={lpHref(r.limited_partner_id, location.search)} className="block min-w-0 max-sm:flex max-sm:min-h-[44px] max-sm:flex-col max-sm:justify-center" data-testid={`lps-open-${r.limited_partner_id}`}>
                   <span className="block font-bold text-axal-ink dark:text-gray-100">{r.name || r.email || `LP ${r.limited_partner_id}`}</span>
-                  {r.email && <span className="block break-all text-[11px] text-axal-muted dark:text-gray-400">{r.email}</span>}
+                  {r.email && <span className="block break-all text-[12px] text-axal-muted dark:text-gray-400">{r.email}</span>}
                 </Link>) },
               { key: 'fund', label: 'Fund', cell: (r) => r.fund_name || NOT_RECORDED },
               { key: 'type', label: 'Type', cell: (r) => (r.lp_type ? lpTypeText(r.lp_type) : <Unrecorded reason={r.unavailable?.lp_type}>{NOT_RECORDED}</Unrecorded>) },
@@ -151,7 +151,7 @@ function TypeChart({ tally }) {
                     <span className={`text-right ${NUM} font-semibold text-zinc-700 dark:text-gray-200`}>{b.text}</span>
                   </div>
                 ))}
-                <div className="flex flex-wrap gap-4 pt-1 text-[11px] text-axal-muted dark:text-gray-400">
+                <div className="flex flex-wrap gap-4 pt-1 text-[12px] text-axal-muted dark:text-gray-400">
                   <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-axal-violet dark:bg-violet-400" />Commitment</span>
                   <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="box-border h-2.5 w-3.5 rounded-[3px] border border-dashed border-axal-muted dark:border-gray-500" />Type not recorded</span>
                 </div>

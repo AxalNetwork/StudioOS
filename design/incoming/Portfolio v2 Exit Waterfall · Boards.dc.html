@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 Exit Waterfall · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Portfolio · Exit Waterfall · #6220 · addendum to Portfolio v2 (replaces the PFA07 line)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Exit Waterfall — a modelling tool for a fund exit and a company exit, never a distribution</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Exit Waterfall (/portfolio/waterfall) inside the one Portfolio v2 frame (PF-01): crumb Account › Portfolio › Exit Waterfall, the Portfolio local navigation with no tab selected, and the one Eadwyn rail (#5130). It answers two separate questions, switched at the top: fund exit (how proceeds split between LPs and the GP, tier by tier) and company exit (what you receive before preferences). Every result is labelled Model · provisional · not a distribution. Carry comes from the fund’s terms; hurdle, years and catch-up are assumptions the fund does not record. The 1× / 2× / 3× chips are arithmetic on the recorded invested total, not proposals. Zero, Not recorded, Not computable and Unreadable never look alike (Platform States, D5129). Violet dashed ◇ tags mark backend work for #6220; amber ⚑ tags mark the owner’s pending pick (per-LP rows, with #4636). Tags are annotations, not product copy. Boards EW-01 to EW-15 use keys PEW01 to PEW15.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 14:32 UTC · checked against main 6d7712c6d1 (brief written on 45e7c55fa6) · Harbor Capital, Harbor Capital Fund I, its 12 LPs, Northwind Labs and every figure are fictional; base case exit $19,500,000 on $7,000,000 invested gives LPs $17,000,000 and the GP $2,500,000 · design only</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Portfolio v2 Exit Waterfall Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['EW-01', 'Fund exit · GP view', 'The GP of record on Harbor Capital Fund I. Question switch, fund picker, inputs with source and assumption chips, the five-tier bar with a legend naming each recipient, four figures with their definitions, the source line and the Loaded chip. One primary action: Save scenario. Eadwyn lists the engine’s assumption lines as sources; explanation and proposed exit values are ◇.', [F('PEW01', false, 1180)]],
+      ['EW-02', 'Fund exit · table view', 'The same result as a tier table with running totals and a totals row, then all 12 per-LP rows (payout = 1.7 × commitment at the base case). Export CSV and Print in the card head.', [F('PEW02', false, 1580)]],
+      ['EW-03', 'How this is worked out', 'Side sheet: where each input comes from, the definition of each tier, the multiple and the annualised return, what is not modelled, and a ◇ Eadwyn plain-words explanation with Accept as note / Edit / Discard.', [F('PEW03', false, 1120)]],
+      ['EW-04', 'Scenarios', 'The list beside the result: Saved by you, date, a Loaded chip. Save sheet (name required, 120 characters), load, changed since loaded with Save as new, and delete with confirmation. No rename (◇).', [F('PEW04', false, 1180), C('PEW04B', 'Save sheet · valid and missing name', 1240, 568), C('PEW04C', 'Changed since loaded · delete', 1240, 244)]],
+      ['EW-05', 'Compare two scenarios', 'Base case against Upside 3×, each as saved. Differences marked in the inputs; tiers, totals, multiple and annualised return with B − A. Different holding periods are side by side, never one series.', [F('PEW05', false, 1250)]],
+      ['EW-06', 'Fund exit · read-only investor', 'An LP of the fund (Okafor Family Trust). Inputs and result work the same; Save is replaced by the read-only line. Per-LP rows drawn as owner pick A: own row plus Other LPs · 11 · combined (◇ scoped response, ⚑ #4636). No scenario list.', [F('PEW06', false, 1340)]],
+      ['EW-07', 'Company exit', 'Northwind Labs, preselected from its Financials tab. Ownership 6.2% and $1,500,000 invested from recorded positions; the post-money chip is a recorded figure. Before preferences: 6.2% × $50,000,000 = $3,100,000, labelled not your payout. The payout after preferences is ◇ and not shared; Ask the founder opens the existing access request.', [F('PEW07', false, 900)]],
+      ['EW-08', 'Empty states', 'No fund (GP or admin, and LP), a fund with no LP rows, nothing invested (Not computable, never 0× or 0%), exit value $0 (0.00× is a computed value; the annualised return is Not computable), no scenarios, and company exit with no position.', [C('PEW08', false, 1440, 862)]],
+      ['EW-09', 'States', 'Loading; Not recorded (carry, ownership, post-money); Unreadable (fund list, model, scenarios, position); Refused (no investor licence, below the institutional tier, not the GP of record, someone else’s scenario); saving, saved and save failed.', [C('PEW09', false, 1440, 917)]],
+      ['EW-10', 'Export and print', 'The print sheet with the Model banner, inputs and their sources, tiers, totals, per-LP rows as the role allows, definitions and the not-modelled list. The CSV columns are listed.', [W('PEW10')]],
+      ['EW-11', 'Tablet 834', 'Inputs above, then the result; the rail collapses to the frame’s rail button; the tier bar stays full width; the per-LP table scrolls inside its card with the LP column fixed.', [C('PEW11', false, 834, 1660)]],
+      ['EW-12', 'Phone 390 · fund exit', 'Question switch, fund picker, exit value with presets, figures as tiles; the tier bar and tier cards; per-LP cards; terms and assumptions in a sheet; scenarios in a sheet. 44px targets, no table wider than the screen.', [P('PEW12A', false), P('PEW12B', 'Tiers and per-LP cards'), P('PEW12C', 'Terms and assumptions sheet'), P('PEW12D', 'Scenarios sheet')]],
+      ['EW-13', 'Phone 390 · company exit and compare', 'Company exit stacked, with the ◇ panel. Compare one scenario at a time with an A/B switch and a difference line per figure.', [P('PEW13A', false), P('PEW13B', 'Compare · A/B')]],
+      ['EW-14', 'Dark', 'EW-01 and EW-08 on the dark tokens, plus the phone. The tier bar keeps its labels and patterns; states keep their words and shapes.', [F('PEW14', false, 1000), C('PEW14B', 'Empty states · dark', 1440, 862), P('PEW14C', 'Phone · dark')]],
+      ['EW-15', 'Build notes', 'Checked on main, frontend only, backend required (◇), the owner’s picks (⚑, drawn as A), handoffs, accessibility and what is not modelled.', [W('PEW15')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

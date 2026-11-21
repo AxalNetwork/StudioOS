@@ -284,7 +284,9 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     let asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
 
-    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') }) : await gatherForm(c.env, projectId as number, asked);
+    // #6194: a deal note's "Draft a deal summary" asks for its own purpose; any other `draft` is ignored.
+    const purpose = table === 'deal_notes' && (input as { draft?: unknown }).draft === 'deal_summary' ? 'deal_summary' as const : undefined;
+    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id'), ...(purpose ? { purpose } : {}) }) : await gatherForm(c.env, projectId as number, asked);
     // #4046 (B2): a record that offers fewer fields than its form (a programme with two questions) asks only those, before any quote.
     if (gather.only) { const only = new Set(gather.only); asked = asked.filter((f) => only.has(f.field)); }
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
@@ -375,7 +377,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     }
     let budget: unknown = null;
     try { budget = await loadAiBudget(c.env, Number(user.id)); } catch { budget = null; }
-    events.push(sse('done', { proposals, dropped, usage_log_id: usageLogId, charged_microusd: charged, budget }));
+    events.push(sse('done', { proposals, dropped, usage_log_id: usageLogId, charged_microusd: charged, budget, ...(gather.sources ? { sources: gather.sources } : {}) }));
     return finish();
   });
 

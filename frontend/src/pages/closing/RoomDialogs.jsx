@@ -1,20 +1,25 @@
 /**
  * D1218 (#3215) — the room's drawers and dialogs: Review and sign (CP4), the
  * payment instructions (CP9), the receipt drawer (CP10), the cap-table
- * proposal (CP11) and the investor's match (CP2, CP20). Each change says what
+ * proposal (CP11), the investor's match (CP2, CP20) and the founder's receiving
+ * account (CP1, #6190). Each change says what
  * it changes before it changes it, and is the Worker's act: a refusal is drawn
  * as its own sentence. Nothing here moves money, and nothing here is a
  * browser pop-up.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../../lib/api';
 import { closingsApi } from '../../lib/api/closings';
+import { companyReceivingAccountsApi } from '../../lib/api/companyReceivingAccounts';
 import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
-import { Lightbox, Unrecorded } from '../../ui';
-import { BTN } from '../account/AccountCenter';
+import { Lightbox, Unrecorded, usePhoneWidth } from '../../ui';
+import { BTN, INPUT } from '../account/AccountCenter';
 import { Err } from './ClosingDialogs';
 import { closingHrefFor, moneyCents } from './deskModel';
-import { ROOM_WAITS, evidenceRows, signingRows } from './roomModel';
+import {
+  ACCOUNT_FIELDS, ACCOUNT_WORDS, accountBody, accountFieldOf, accountForm, isAccountConflict, PAY_WORDS, ROOM_WAITS, SIGN_WORDS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, signActions, signingRows,
+} from './roomModel';
 import Sheet from '../../ui/Sheet.jsx';
 
 const mutedText = 'm-0 text-[12.5px] text-gray-600 dark:text-gray-400';
@@ -37,6 +42,61 @@ function useAct() {
     try { await fn(); return true; } catch (e) { setError(refusal(e, fallback)); return false; } finally { setBusy(false); }
   };
   return { busy, error, run };
+}
+
+/** Saves a fetched file. The room's downloads go through the Worker, never a stored URL. */
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * D6197 (#6197): the viewer's own link again (by email, never shown here) and their executed copy. Each is the
+ * Worker's act on the viewer's own envelope; a refusal is drawn as the Worker's sentence.
+ */
+function SignActions({ envelope }) {
+  const { resend, download } = signActions(envelope);
+  const act = useAct();
+  const [sent, setSent] = useState(false);
+  const [dl, setDl] = useState({ busy: false, error: '' });
+  if (!resend && !download) return null;
+  const again = async () => {
+    setSent(false);
+    if (await act.run(() => closingsApi.resendSigningLink(resend), SIGN_WORDS.resendFailed)) setSent(true);
+  };
+  const save = async () => {
+    setDl({ busy: true, error: '' });
+    try {
+      const { blob, filename } = await closingsApi.signedCopyBlob(download);
+      saveBlob(blob, filename);
+      setDl({ busy: false, error: '' });
+    } catch (e) { setDl({ busy: false, error: refusal(e, SIGN_WORDS.downloadFailed) }); }
+  };
+  return (
+    <section className="flex flex-col gap-2" data-testid="closing-sign-actions">
+      {resend ? (
+        <>
+          <button type="button" className={`${BTN.ghost} min-h-[44px] w-fit max-sm:w-full`} disabled={act.busy} onClick={again} data-testid="closing-sign-resend">{act.busy ? SIGN_WORDS.resending : SIGN_WORDS.resend}</button>
+          {sent ? <p className="m-0 text-[12.5px]" role="status" data-testid="closing-sign-resent">{SIGN_WORDS.resent}</p> : null}
+          {act.error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="closing-sign-resend-refused">{act.error}</p> : null}
+          <p className={mutedText} data-testid="closing-sign-paper">{SIGN_WORDS.paper}</p>
+        </>
+      ) : null}
+      {download ? (
+        <>
+          <button type="button" className={`${BTN.ghost} min-h-[44px] w-fit max-sm:w-full`} disabled={dl.busy} onClick={save} data-testid="closing-sign-download">{dl.busy ? SIGN_WORDS.downloading : SIGN_WORDS.download}</button>
+          <p className={mutedText}>{SIGN_WORDS.copyNote}</p>
+          {dl.error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="closing-sign-download-refused">{dl.error}</p> : null}
+        </>
+      ) : null}
+    </section>
+  );
 }
 
 /** CP4: the paper's signing order, whose turn it is, and where the viewer signs. */
@@ -63,6 +123,7 @@ export function SignDrawer({ row, envelope, failed, viewer, company, onClose }) 
               {mine ? (
                 <p className="m-0 text-[13px] font-semibold" data-testid="closing-sign-yours">Your turn. The signing link was sent to you{mine.sentAt ? ` on ${mine.sentAt}` : ''}. You sign on the e-sign page it opens, which records your signature.</p>
               ) : null}
+              <SignActions envelope={envelope} />
               {rows.some((r) => r.state === 'Waiting for the Super Admin') ? <p className={mutedText}>A Super Admin countersigns for Axal, last.</p> : null}
               <section className="flex flex-col gap-1" data-testid="closing-sign-clause">
                 <span className={NOT_YET_PILL}>Not read here yet</span>
@@ -101,17 +162,116 @@ export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
   );
 }
 
-/** CP9: the warning first, then the instructions, which no mounted route serves yet (D1217, #3214). */
-export function PaymentDrawer({ company, amount, onClose }) {
+/**
+ * CP9 (D6189): the warning first, then the company's receiving account as the
+ * Worker reads it (D1217), masked. Revealing the full number asks first, names
+ * this line's commitment, and shows the number for the seconds the Worker
+ * returns, then masks it again. Each refusal prints the Worker's sentence.
+ */
+export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId, onClose }) {
+  const phone = usePhoneWidth();
+  const [tick, setTick] = useState(0);
+  const [read, setRead] = useState({ result: null, error: null, done: false });
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState(null);
+  const [full, setFull] = useState(null);
+  const [left, setLeft] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setRead({ result: null, error: null, done: false });
+    companyReceivingAccountsApi.read(projectId).then(
+      (result) => { if (live) setRead({ result, error: null, done: true }); },
+      (error) => { if (live) setRead({ result: null, error, done: true }); },
+    );
+    return () => { live = false; };
+  }, [projectId, tick]);
+  useEffect(() => {
+    if (!full) return undefined;
+    if (left <= 0) { setFull(null); return undefined; }
+    const t = setTimeout(() => setLeft((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [full, left]);
+  const state = read.done ? payState(read.result, read.error) : { kind: 'loading' };
+  const reveal = async () => {
+    setBusy(true); setRefused(null);
+    try {
+      let list;
+      try { list = await api.dealCommitments(dealId); } catch { setRefused({ kind: 'unreadable', text: PAY_WORDS.lineUnreadable, retry: true }); return; }
+      const uid = commitmentUidFor(list, commitmentId);
+      if (!uid) { setRefused({ kind: 'refused', text: PAY_WORDS.noLine, retry: false }); return; }
+      const reply = await companyReceivingAccountsApi.reveal(projectId, uid);
+      const seconds = revealSeconds(reply);
+      const number = typeof reply?.account?.account_number === 'string' ? reply.account.account_number : '';
+      if (seconds > 0 && number) { setFull(number); setLeft(seconds); }
+      else setRefused({ kind: 'unreadable', text: PAY_WORDS.unreadable, retry: true });
+    } catch (e) {
+      setRefused(revealRefusal(e));
+    } finally { setBusy(false); setAsking(false); }
+  };
+  const tap = phone ? 'min-h-[44px]' : '';
+  const rows = state.kind === 'ok' ? payRows(state.account, amount) : [];
   return (
     <Sheet label="Payment instructions" eyebrow="Pay" title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
-      footer={<Foot><button type="button" className={BTN.ghost} onClick={onClose}>Close</button></Foot>}>
+      footer={<Foot><button type="button" className={`${BTN.ghost} ${tap}`} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <Warning testId="closing-pay-warning">{PAY_WARNING(company)}</Warning>
-        <span className={NOT_YET_PILL}>Not read here yet</span>
-        <p className={mutedText} data-testid="closing-pay-wait">{ROOM_WAITS.instructions}</p>
-        <p className={mutedText}>When the account is read here, revealing its full number is recorded and shows for 30 seconds. A change to the account is announced to every investor with an unpaid line.</p>
+        {state.kind === 'loading' ? <p className={mutedText} data-testid="closing-pay-reading">Reading the company’s receiving account…</p> : null}
+        {state.kind === 'none' ? (
+          <section className="flex flex-col gap-1" data-testid="closing-pay-none">
+            <p className="m-0 text-[13px] font-semibold">{state.text}</p>
+            <p className={mutedText}>{PAY_WORDS.notRecordedNext}</p>
+          </section>
+        ) : null}
+        {state.kind === 'support' || state.kind === 'gone' ? <p className={mutedText} data-testid={`closing-pay-${state.kind}`}>{state.text}</p> : null}
+        {state.kind === 'unreadable' ? (
+          <section className="flex flex-col gap-2" data-testid="closing-pay-unreadable">
+            <p className="m-0 text-[13px] text-red-700 dark:text-red-300" role="alert">{state.text}</p>
+            <p className={mutedText}>{PAY_WORDS.unreadableClaim}</p>
+            <button type="button" className={`${BTN.ghost} w-fit ${tap}`} onClick={() => setTick((n) => n + 1)} data-testid="closing-pay-retry">Try again</button>
+          </section>
+        ) : null}
+        {state.kind === 'ok' ? (
+          <>
+            <dl className="m-0 flex flex-col" data-testid="closing-pay-rows">
+              {rows.map((r, i) => (
+                <div key={r.key} className={`grid grid-cols-[120px_minmax(0,1fr)] items-center gap-3 py-2 text-[13px] ${i ? 'border-t border-gray-100 dark:border-gray-800' : ''}`} data-testid={`closing-pay-${r.key}`}>
+                  <dt className="text-gray-500 dark:text-gray-400">{r.label}</dt>
+                  <dd className="m-0 flex min-w-0 flex-wrap items-center gap-2">
+                    {r.key === 'account' && full ? <span className="font-mono font-semibold" data-testid="closing-pay-full">{full}</span>
+                      : r.value ? <span className={r.mono ? 'font-mono break-all' : 'break-words'}>{r.value}</span> : <Unrecorded reason={`The company’s account carries no ${r.label.toLowerCase()}.`} />}
+                    {r.key === 'account' && full ? <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="closing-pay-hides">Hides in {left}s</span> : null}
+                    {r.key === 'account' && !full && commitmentId != null ? (
+                      <button type="button" className={`${BTN.link} ${tap}`} onClick={() => { setRefused(null); setAsking(true); }} disabled={busy} data-testid="closing-pay-reveal">Reveal full number</button>
+                    ) : null}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {refused ? (
+              <div className="flex flex-col gap-2" data-testid={`closing-pay-reveal-${refused.kind}`}>
+                <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert">{refused.text}</p>
+                {refused.retry ? <button type="button" className={`${BTN.ghost} w-fit ${tap}`} onClick={reveal} disabled={busy} data-testid="closing-pay-reveal-retry">Try again</button> : null}
+              </div>
+            ) : null}
+            <p className={mutedText} data-testid="closing-pay-note">{dayOf(state.account.created_at) ? `Set on ${dayOf(state.account.created_at)}. ` : ''}{PAY_WORDS.revealNote}</p>
+          </>
+        ) : null}
       </div>
+      {asking ? (
+        <Lightbox label="Reveal the full account number" title={PAY_WORDS.revealTitle} onClose={() => setAsking(false)} width={440} phone="sheet" testId="closing-pay-ask"
+          footer={(
+            <Foot>
+              <button type="button" className={`${BTN.ghost} ${tap}`} onClick={() => setAsking(false)} disabled={busy}>Cancel</button>
+              <button type="button" className={`${BTN.primary} ${tap}`} onClick={reveal} disabled={busy} data-testid="closing-pay-reveal-confirm">Reveal</button>
+            </Foot>
+          )}>
+          <div className="flex flex-col gap-2 px-5 py-4">
+            <p className="m-0 text-[13px]">{PAY_WORDS.revealRecorded}</p>
+            <p className={mutedText}>{PAY_WORDS.revealHides}</p>
+          </div>
+        </Lightbox>
+      ) : null}
     </Sheet>
   );
 }
@@ -139,6 +299,62 @@ export function CaptableDialog({ closing, view, rows, instrument, onClose, onDon
         <p className="m-0 text-[13px]">This comes from the signed paper and the received payments. Nothing changes until you accept. Dismissing records that you will not add them from this closing.</p>
         {!view.canDecide ? <p className={mutedText}>{view.text}</p> : null}
         <Err text={act.error} testId="closing-captable-error" />
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * #6190: the founder sets or changes the company's receiving account (D1217's
+ * PUT). It says first who is told, the account numbers are typed twice and
+ * never prefilled, each field refusal is the Worker's sentence under its
+ * field, and a revision conflict asks to reload. Nothing typed is logged.
+ */
+export function AccountDialog({ projectId, view, currency, onClose, onSaved, onReload }) {
+  const had = view.state === 'set';
+  const [form, setForm] = useState(() => accountForm(view, currency));
+  const [busy, setBusy] = useState(false);
+  const [fail, setFail] = useState(null);
+  const save = async () => {
+    setBusy(true); setFail(null);
+    try {
+      const result = await companyReceivingAccountsApi.save(projectId, accountBody(form, view.revision));
+      onSaved(result, had);
+    } catch (e) {
+      setFail({ field: accountFieldOf(e?.code), conflict: isAccountConflict(e), text: refusal(e, 'The account could not be saved. Try again.') });
+    } finally { setBusy(false); }
+  };
+  const set = (key) => (e) => { const value = e.target.value; setForm((f) => ({ ...f, [key]: value })); };
+  return (
+    <Sheet label={had ? 'Change the receiving account' : ACCOUNT_WORDS.set} eyebrow="Receiving account" title={had ? 'Change the receiving account' : ACCOUNT_WORDS.set}
+      onClose={onClose} width={560} phone="sheet" testId="closing-account-dialog"
+      footer={(
+        <Foot>
+          <button type="button" className={BTN.ghost} onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className={BTN.primary} onClick={save} disabled={busy || fail?.conflict} data-testid="closing-account-save">{busy ? 'Saving…' : 'Save the account'}</button>
+        </Foot>
+      )}>
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <Warning testId="closing-account-notice">{had ? ACCOUNT_WORDS.changeNotice : ACCOUNT_WORDS.firstNotice}</Warning>
+        {had ? <p className={mutedText}>The saved account ends {view.number}. Type the account number twice, even if it has not changed.</p> : null}
+        {ACCOUNT_FIELDS.map((f) => {
+          const wrong = fail?.field === f.key;
+          return (
+            <label key={f.key} className="flex flex-col gap-1 text-[12.5px] font-semibold">
+              {f.label}{f.hint ? <span className="font-normal text-gray-500 dark:text-gray-400">{f.hint}</span> : null}
+              <input className={`${INPUT} min-h-[44px]`} value={form[f.key]} onChange={set(f.key)} maxLength={f.max} aria-invalid={wrong || undefined}
+                autoComplete="off" spellCheck={false} inputMode={f.secret || f.digits ? 'numeric' : undefined} data-testid={`closing-account-${f.key}`} />
+              {wrong ? <Err text={fail.text} testId={`closing-account-error-${f.key}`} /> : null}
+            </label>
+          );
+        })}
+        {fail && !fail.field ? (
+          <div className="flex flex-col gap-2" data-testid="closing-account-error">
+            <Err text={fail.text} testId="closing-account-error-text" />
+            {fail.conflict ? <button type="button" className={`${BTN.ghost} min-h-[44px] w-fit max-sm:w-full`} onClick={onReload} data-testid="closing-account-reload">{ACCOUNT_WORDS.reload}</button> : null}
+          </div>
+        ) : null}
+        <p className={mutedText}>Nothing here moves money. After saving, the full account number is never shown here again.</p>
       </div>
     </Sheet>
   );

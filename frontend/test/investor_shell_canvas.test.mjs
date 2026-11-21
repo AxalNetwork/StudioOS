@@ -37,11 +37,12 @@ test('investor Deals zones match Pages · Investor Deals (ID2–ID4; ID1 Pipelin
   ]);
 });
 
-test('investor Portfolio zones match Pages · Investor Portfolio (IP1–IP3)', () => {
+test('investor Portfolio lists Performance between Reports and Value-add', () => {
   const portfolio = investor.rows.find((r) => r.label === 'Portfolio');
   assert.deepEqual(portfolio.zones.map((z) => [z.slug, archetypeLabel(z)]), [
     ['positions', 'LEDGER'],
     ['updates', 'FEED'],
+    ['performance', 'ANALYTICS'],
     ['value-add', 'FEED'],
   ]);
 });
@@ -90,9 +91,9 @@ test('investor accent stays indigo, not seam cyan', () => {
 });
 
 test('D1424 (#3700): each investor zone header fills the primary D1424 names, or none', async () => {
-  // The decision's per-zone table. Screening, Commit, Positions, Accounting,
-  // Reporting and the Network and Research zones other than Ask have no live
-  // first step; the Deals root's "Set your thesis" is drawn by DealFlow while
+  // The decision's per-zone table. Screening, Commit, Positions, Accounting
+  // and the Network and Research zones other than Ask have no live first step
+  // (Reporting gained one with #6230: New reporting period); the Deals root's "Set your thesis" is drawn by DealFlow while
   // no deal is in the flow, so it has no table row.
   const { INVESTOR_ZONE_ACTIONS } = await import('../src/workspaces/investorZoneActions.js');
   const primaries = Object.fromEntries(Object.entries(INVESTOR_ZONE_ACTIONS)
@@ -102,11 +103,14 @@ test('D1424 (#3700): each investor zone header fills the primary D1424 names, or
     'deals/closing': ['Record wire'],
     'funds/lps': ['Add LP'],
     'funds/calls': ['New call'],
+    'funds/reporting': ['New reporting period'],
     'portfolio/updates': ['Chase all overdue'],
     'portfolio/value-add': ['Log support'],
     'research/ask': ['New brief'],
+    // D7171 part 2 (D7036 RMD-08): the investor's Markets header leads with Edit thesis.
+    'research/markets': ['Edit thesis'],
   });
-  for (const none of ['deals/screening', 'deals/commit', 'portfolio/positions', 'funds/ledger', 'funds/reporting']) {
+  for (const none of ['deals/screening', 'deals/commit', 'portfolio/positions', 'funds/ledger']) {
     assert.ok(INVESTOR_ZONE_ACTIONS[none], `${none} left the table`);
   }
 });

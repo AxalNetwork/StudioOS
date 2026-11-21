@@ -163,9 +163,13 @@ export function flowRows(scope, { flow, deals }) {
     owner: f?.owner ? { id: Number(f.owner.user_id), name: f.owner.name || null, initials: initials(f.owner.name) } : null,
     enteredVia: f?.entered_via || null,
     enteredAt: f?.entered_at || null,
+    // D6425: the viewer's own invitation ('invited', 'interested', 'passed') or null. A pass answers an open one.
+    myInvitation: f?.my_invitation ?? null,
     daysInStage: f ? num(f.days_in_stage) : null,
     // D1241: the firm's note on its row, for the peek (DLS7).
     note: f?.note ?? null,
+    // D6148: the firm's pass on a passed row ({ reason, passed_at, revisit, revisit_at }), for when it comes back.
+    pass: f?.pass ?? null,
     // A door only where DEAL's rule holds (D1238 `can_open`); a listed round alone is never one.
     canOpen: !!f?.can_open,
   });
@@ -313,7 +317,7 @@ export const SORT_LAST = 'Unscored and locked deals sort last, whichever directi
 export const COLUMNS = Object.freeze([
   { id: 'stage', label: 'My stage' }, { id: 'round', label: 'Round' }, { id: 'ask', label: 'Ask' }, { id: 'scorecard', label: 'Scorecard' },
   ...SCOPE_KEYS.map((k) => ({ id: k, label: SCOPE_LABEL[k], scope: true })),
-  { id: 'fit', label: 'Fit to my thesis' }, { id: 'days', label: 'Days in stage' }, { id: 'owner', label: 'Owner' }, { id: 'entered', label: 'Entered' },
+  { id: 'fit', label: 'Fit to my thesis' }, { id: 'days', label: 'Days in stage' }, { id: 'owner', label: 'Owner' }, { id: 'entered', label: 'Entered via' },
 ]);
 export const DEFAULT_COLUMNS = Object.freeze(COLUMNS.map((c) => c.id));
 export const MAX_CARD_SCOPES = 3;
@@ -329,11 +333,55 @@ export function toggleCard(cards, key) {
 }
 
 /** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
-export const THESIS_PATH = '/account/security-privacy';
+export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
 
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 export const pagesFor = (n) => Math.max(1, Math.ceil(n / PAGE_SIZE));
+
+/**
+ * D4815 DX2 (#5901, board DE02) — the footer's page numbers: every page when
+ * there are seven or fewer, else the first, the last, and the current one with
+ * its neighbours, a gap ('…') standing for the pages between.
+ */
+export function pageNumbers(page, pages) {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+  const keep = new Set([1, pages, page - 1, page, page + 1].filter((n) => n >= 1 && n <= pages));
+  const out = [];
+  [...keep].sort((a, b) => a - b).forEach((n, i, all) => {
+    if (i && n - all[i - 1] > 1) out.push('…');
+    out.push(n);
+  });
+  return out;
+}
+
+/**
+ * D4815 DX2 (#5901, board DE02) — the table's quick preview of one row: only
+ * what the deal flow and the deal list already carry. DE02 also draws "what
+ * changed" and open diligence requests; no read the table holds carries them
+ * (#6173 owns the change-since-last-visit read), so the preview says so rather
+ * than inventing either. Each line is `{ label, text, muted }`.
+ */
+export const PREVIEW_NO_CHANGES = 'Not recorded yet: Deal flow does not read what changed since your last visit.';
+export function previewOf(row) {
+  const lines = [];
+  if (!row.inFlow) {
+    lines.push({ label: 'My stage', text: 'Not on your deals. Add it to your deal flow to track it here.', muted: true });
+  } else {
+    const days = daysWord(row.daysInStage);
+    lines.push({ label: 'My stage', text: days ? `${stageWord(row.stage)} · ${days} in this stage` : `${stageWord(row.stage)} · the stage’s start is not recorded`, muted: false });
+    lines.push(row.owner
+      ? { label: 'Owner', text: row.owner.name || 'Owner not named', muted: !row.owner.name }
+      : { label: 'Owner', text: 'Unassigned', muted: true });
+    if (row.enteredVia) {
+      const day = shortDayOf(row.enteredAt);
+      lines.push({ label: 'Entered via', text: day ? `${enteredWord(row.enteredVia)} · ${day}` : enteredWord(row.enteredVia), muted: false });
+    }
+    if (row.note) lines.push({ label: 'Your note', text: String(row.note), muted: false });
+  }
+  lines.push({ label: 'What changed', text: PREVIEW_NO_CHANGES, muted: true });
+  return lines;
+}
 
 // ---------------------------------------------------------------- settings: the address and a saved view
 
@@ -467,3 +515,39 @@ export function keepsLines({ view, scope, settings }) {
 }
 
 export const pickToggle = (picked, id) => (picked.includes(id) ? picked.filter((x) => x !== id) : picked.length >= MAX_COMPARE ? picked : [...picked, id]);
+
+/**
+ * D6425 (#6425): whether a pass on this row answers the viewer's own invitation, so the Pass dialog may say the
+ * studio is told. A row entered via an invitation that was a colleague's, or one already answered 'passed', is not.
+ */
+export const passAnswersInvitation = (row) => row?.myInvitation === 'invited' || row?.myInvitation === 'interested';
+
+// ---------------------------------------------------------------- Needs your attention (D4815 part 3, DX1)
+
+/**
+ * The strip's items, from reads the page already has a route for. DE01 draws
+ * three: "stale", "new" and "waiting on diligence". Only "new" has a field
+ * behind it, the inbox (`GET /api/deals/flow/inbox`, which DE17 names for this
+ * strip): every deal that reached the investor and is not yet in the flow.
+ * No read records a stale threshold (the flow carries `days_in_stage` and no
+ * rule for when it is stale) or what a deal in Diligence waits on, so those
+ * two are left out (D4815-p3), never guessed.
+ *
+ * `read` is `{ kind: 'loading' | 'unreadable' | 'ok', data }`. A failed read is
+ * `unreadable`, never a count of 0; a way in that could not be read is named,
+ * so a count from the rest reads as "at least".
+ */
+export function attentionOf(read, unreadWords = () => [], recorded) {
+  if (recorded?.kind === 'loading') return {kind:'loading',items:[],unread:[]};
+  if (recorded && (recorded.kind !== 'ok' || [recorded.data?.stale,recorded.data?.diligence].some(s=>s?.state==='unreadable'))) return {kind:'unreadable',items:[],unread:[]};
+  if (!read || read.kind === 'loading') return { kind: 'loading', items: [], unread: [] };
+  if (read.kind !== 'ok') return { kind: 'unreadable', items: [], unread: [] };
+  const deals = new Set((read.data?.items || []).map((i) => String(i.deal_id)));
+  const unread = unreadWords(read.data?.sources || {});
+  const items = deals.size ? [{ key: 'new', count: deals.size, word: `${deals.size} new`, label: `${deals.size} ${deals.size === 1 ? 'deal' : 'deals'} new for you` }] : [];
+  if (recorded?.kind === 'ok') for (const [key,word] of [['stale','stale'],['diligence','waiting on diligence']]) {
+    const source=recorded.data?.[key];
+    if(source?.state==='recorded'&&source.count>0)items.push({key,count:source.count,word:`${source.count} ${word}`,label:`${source.count} ${word}`});
+  }
+  return { kind: 'ok', items, unread };
+}

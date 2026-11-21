@@ -906,7 +906,8 @@ test('a failed invitations read is Unreadable with Try again, never "No partner 
     const view = await mounted('/admin/partner-invitations/invitations', worker({ invitations: () => { tries += 1; return down(); } }));
     try {
       assert.ok(view.has('partners-inv-read-unreadable'), 'the block says it could not read');
-      assert.equal(view.textOf('partners-inv-read-unreadable').replace('Try again', '').trim(), INVITATIONS_UNREADABLE);
+      // D5129 (Q2 = A): the shared Unreadable leads with the word Unavailable.
+      assert.equal(view.textOf('partners-inv-read-unreadable').replace('Try again', '').trim(), `Unavailable${INVITATIONS_UNREADABLE}`);
       assert.ok(!view.text().includes(EMPTY_TITLE), 'a failed list never says there are none');
       assert.ok(!view.has('partners-inv-first-use') && !view.has('partners-inv-table'));
       assert.ok(!view.has('partners-tab-invitations-count'), 'no count stands in for an unread list');
@@ -1364,7 +1365,8 @@ test('a deal record whose read could not be read offers Try again inside the dia
   let tries = 0;
   const view = await mounted('/admin/partner-invitations/deals/41', worker({ deals: { active: [deal(7)] }, dealReads: { 41: () => { tries += 1; return response({ error: 'down' }, 503); } } }));
   try {
-    assert.equal(view.textOf('partners-deal-read-unreadable').trim(), 'This deal could not be read. That is not a claim that it does not exist.Try again');
+    // D5129 (Q2 = A): the shared Unreadable leads with the word Unavailable.
+    assert.equal(view.textOf('partners-deal-read-unreadable').trim(), 'UnavailableThis deal could not be read. That is not a claim that it does not exist.Try again');
     assert.doesNotMatch(view.textOf('partners-deal-absent'), /There is no deal/, 'a failure is never "no such deal"');
     const before = tries;
     await view.press('Try again', 'partners-deal-absent');

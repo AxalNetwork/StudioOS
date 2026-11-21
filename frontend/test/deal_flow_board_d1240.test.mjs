@@ -7,6 +7,8 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/deal_flow_board_d1240.test.mjs
  */
 import test from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { waitUntil } from './_waitUntil.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
@@ -187,7 +189,9 @@ function harness({ phone = false } = {}) {
   const props = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
   const all = (re) => walk(container).filter((n) => re.test(props(n)['data-testid'] || ''));
-  const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+  const settle = async (ready = () => Boolean(byId('dealflow-toolbar')) && !all(/-loading$/).length && !walk(container).some(node => props(node)['aria-busy'] === true)) => {
+    await waitUntil(ready, { label: 'Deal flow observable state', advance: () => act(async () => { await nextTurn(); }), describe: () => text(container) });
+  };
   const ev = { preventDefault() {}, stopPropagation() {} };
   const click = async (id) => { const n = typeof id === 'string' ? byId(id) : id; assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick?.(ev); }); await settle(); };
   const change = async (id, value, key = 'value') => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onChange({ target: { [key]: value } }); }); await settle(); };
@@ -231,7 +235,7 @@ test('mounted board (DLS1): stages with counts and asks, cards with bands, fit a
   const s = stubs();
   try {
     await act(async () => t.root.render(page('/deals')));
-    await t.settle();
+    await t.settle(() => t.text(t.byId('dealflow-card-1-fit')) === '86 · High');
     assert.deepEqual(s.calls.find((c) => c[0] === 'batch'), ['batch', [1, 2, 3, 4]], 'the batch takes the rows’ deal ids');
     assert.match(t.text(t.byId('dealflow-col-diligence')), /^Diligence 1€1.5M in asks/);
     assert.equal(t.text(t.byId('dealflow-col-screening-asks')), '1 with none recorded');
@@ -311,7 +315,7 @@ test('mounted table (DLS2): every round, its stage or Add to my deal flow, sorta
     assert.equal(t.all(/^dealflow-row-/).length, 1);
     await t.click('dealflow-chips-clear');
     // Columns: untick Risk and its column goes.
-    await t.click('dealflow-columns');
+    await t.click('dealflow-view-settings');
     await t.change('dealflow-col-risk', false, 'checked');
     assert.match(t.text(t.byId('probe')), /cols=/);
     assert.equal(t.byId('dealflow-cell-1-risk'), undefined);
@@ -351,7 +355,7 @@ test('mounted filters (DLS4) and saved views (DLS5): Show writes the address, ch
     await t.click('dealflow-chips-clear');
     assert.equal(t.byId('dealflow-chips'), undefined);
     // A saved view applies its settings and its uid; a change marks it edited.
-    await t.click('dealflow-views');
+    await t.click('dealflow-view-settings');
     await t.click(t.all(/^dealflow-view-item$/)[0]);
     assert.match(t.text(t.byId('probe')), /view=table.*v=v1.*min_team=strong.*sort=market/);
     assert.equal(t.byId('dealflow-view-edited'), undefined);
@@ -362,7 +366,7 @@ test('mounted filters (DLS4) and saved views (DLS5): Show writes the address, ch
     const [, uid, version, body] = s.calls.find((c) => c[0] === 'vupdate');
     assert.deepEqual([uid, version, body.name, body.spec.sort.by, body.shared_with_firm], ['v1', 3, 'Strong team', 'team', false]);
     // Save as new: a name is required, and My firm needs a firm account.
-    await t.click('dealflow-views');
+    await t.click('dealflow-view-settings');
     await t.click('dealflow-views-save');
     assert.equal(t.props(t.byId('dealflow-save-view-go')).disabled, true);
     assert.equal(t.props(t.byId('dealflow-save-view-firm')).disabled, true);
@@ -392,7 +396,7 @@ test('mounted states (DLS13–DLS16): loading, unreadable, empty with its doors,
   const s = stubs({ 'dealFlowApi.flow': async () => flow() });
   try {
     await act(async () => t.root.render(page('/deals')));
-    await t.settle();
+    await t.settle(() => Boolean(t.byId('dealflow-board-loading')));
     assert.match(t.text(t.byId('dealflow-board-loading')), /Sourced.*Reading….*Closing.*Reading…/s);
     assert.ok(t.byId('dealflow-toolbar'), 'the toolbar renders at once');
     flow = async () => { throw Object.assign(new Error('down'), { status: 503 }); };
@@ -444,7 +448,8 @@ test('mounted phone (DLS18): the board one stage at a time with Move to, and the
     assert.deepEqual(s.calls.filter((c) => c[0] === 'update').at(-1), ['update', '1', { stage: 'commit' }]);
     await act(async () => t.root.render(page('/deals?view=table')));
     await t.settle();
-    assert.match(t.text(t.byId('dealflow-phone-row-1')), /Acme Robotics.*Diligence · Raising.*Team.*Strong/s);
+    // D5902 (DX3, DE03a): a row on the member's deals is the Deals v2 card, its stage and round as status tags.
+    assert.match(t.text(t.byId('dealflow-phone-row-1')), /Acme Robotics.*Diligence.*Raising.*Team.*Strong.*Fit to my thesis.*in stage.*Open.*Move to….*Compare/s);
   } finally { s.restore(); await t.close(); }
 });
 

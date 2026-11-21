@@ -254,7 +254,9 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on its c
   }
   // Both old addresses route through it, and ask for the once-only notice.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Navigate to=\{connectorsRedirect\(loc\)\} state=\{\{ connectorsMoved: true \}\} replace \/>/);
+  // D5810: plus the page a Microsoft sign-in began on (Teams), read once from this tab.
+  assert.match(app, /<Navigate to=\{connectorsRedirect\(loc, \{ from \}\)\} state=\{\{ connectorsMoved: true \}\} replace \/>/);
+  assert.match(app, /const \[from\] = useState\(\(\) => takeSignInFrom\(\)\);/);
   assert.match(app, /<Route path="\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
   assert.doesNotMatch(app, /<Route path="\/account\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
   // The section reads the return from the address it lands on, and strips it.

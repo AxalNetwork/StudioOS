@@ -1,0 +1,1387 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "Axal VC curated global fund directory",
+    "checked_on": "2026-11-18",
+    "published_url": "https://github.com/AxalNetwork/StudioOS/blob/main/attached_assets/research-global-funds-2026-11-18.json"
+  },
+  "methodology": "Independent primary-source review of manager identities, official websites and explicitly stated headquarters or base countries. Office lists, investment markets, fund domicile and administrator addresses are not assumed to be headquarters. Dates refer to verification, not a fund launch. Manager/platform discovery records do not assert a specific vehicle or current fundraising availability. No third-party directory or website prose is republished. Fields not evidenced are unrecorded.",
+  "country_additions": [
+    {
+      "code": "MY",
+      "name": "Malaysia",
+      "region": "Asia"
+    }
+  ],
+  "hq_overrides": [
+    {
+      "raw": "Hong Kong / Malaysia",
+      "targets": [
+        "HK",
+        "MY"
+      ]
+    }
+  ],
+  "funds": [
+    {
+      "uid": "axal-4dxventures",
+      "name": "4DX Ventures",
+      "website": "https://www.4dxventures.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "4dxventures"
+      ],
+      "hosts": [
+        "4dxventures.com"
+      ],
+      "source_url": "https://www.4dxventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.4dxventures.com/",
+        "https://www.4dxventures.com/about",
+        "https://www.4dxventures.com/privacy-policy"
+      ],
+      "notes": "Official website confirms technology investing and 4DX Ventures Management LLC as operator. Africa is investment market; retrieved manager pages do not establish HQ."
+    },
+    {
+      "uid": "axal-airtree",
+      "name": "Airtree",
+      "website": "https://www.airtree.vc/",
+      "hq": "Australia",
+      "hq_countries": [
+        "AU"
+      ],
+      "aliases": [
+        "airtree"
+      ],
+      "hosts": [
+        "airtree.vc"
+      ],
+      "source_url": "https://www.airtree.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.airtree.vc/"
+      ],
+      "notes": "Official footer explicitly labels Airtree HQ and gives Surry Hills NSW, Australia. New Zealand is an investment market, not the stated HQ."
+    },
+    {
+      "uid": "axal-andreessenhorowitz",
+      "name": "Andreessen Horowitz",
+      "website": "https://a16z.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "a16z",
+        "andreessenhorowitz"
+      ],
+      "hosts": [
+        "a16z.com"
+      ],
+      "source_url": "https://a16z.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://a16z.com/",
+        "https://a16z.com/about/",
+        "https://a16z.com/a16z-is-moving-to-the-cloud/",
+        "https://a16z.com/offices/"
+      ],
+      "notes": "Official about page confirms the venture firm and a16z alias. Ben Horowitz's 2022 operating-model announcement explicitly replaces physical headquarters with a virtual model; current office list spans multiple countries, so leave HQ unknown."
+    },
+    {
+      "uid": "axal-benchmark",
+      "name": "Benchmark",
+      "website": "https://www.benchmark.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "benchmark"
+      ],
+      "hosts": [
+        "benchmark.com"
+      ],
+      "source_url": "https://www.benchmark.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.benchmark.com/"
+      ],
+      "notes": "Official Benchmark site identifies San Francisco and Woodside addresses without a headquarters designation. Keep the verified manager URL; do not confuse this firm with Benchmark Electronics at bench.com."
+    },
+    {
+      "uid": "axal-bessemerventurepartners",
+      "name": "Bessemer Venture Partners",
+      "website": "https://www.bvp.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "bessemerventurepartners"
+      ],
+      "hosts": [
+        "bvp.com"
+      ],
+      "source_url": "https://www.bvp.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.bvp.com/",
+        "https://www.bvp.com/about"
+      ],
+      "notes": "Official history confirms Bessemer Venture Partners as the venture firm and describes separate offices in the United States, India, Tel Aviv and London. It does not identify all office countries as headquarters; HQ remains unknown."
+    },
+    {
+      "uid": "axal-blumeventures",
+      "name": "Blume Ventures",
+      "website": "https://blume.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "blumeventures"
+      ],
+      "hosts": [
+        "blume.vc"
+      ],
+      "source_url": "https://blume.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://blume.vc/",
+        "https://blume.vc/about",
+        "https://blume.vc/contact-us"
+      ],
+      "notes": "Official about page verifies Blume Ventures. Contact page identifies Mumbai registered offices and a Gujarat branch; registered office is not treated as proof of operational headquarters."
+    },
+    {
+      "uid": "axal-chirataeventures",
+      "name": "Chiratae Ventures",
+      "website": "https://chiratae.com/",
+      "hq": "India",
+      "hq_countries": [
+        "IN"
+      ],
+      "aliases": [
+        "chiratae",
+        "chirataeventures"
+      ],
+      "hosts": [
+        "chiratae.com"
+      ],
+      "source_url": "https://chiratae.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://chiratae.com/",
+        "https://www.chiratae.com/chiratae-ventures-honours-adobe-ceo-shantanu-narayen-infosys-founder-narayana-murthy-and-postman-ceo-and-founder-abhinav-asthana-with-the-patrick-j-mcgovern-awards/"
+      ],
+      "notes": "Official company announcement explicitly identifies Bangalore, India as headquarters. Current site confirms the Chiratae Ventures name."
+    },
+    {
+      "uid": "axal-eastventures",
+      "name": "East Ventures",
+      "website": "https://east.vc/",
+      "hq": "Indonesia / Singapore",
+      "hq_countries": [
+        "ID",
+        "SG"
+      ],
+      "aliases": [
+        "eastventures"
+      ],
+      "hosts": [
+        "east.vc"
+      ],
+      "source_url": "https://east.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://east.vc/",
+        "https://east.vc/news/insights/east-ventures-2021-recap"
+      ],
+      "notes": "Official annual recap explicitly states the team is headquartered in both Indonesia and Singapore; current official site verifies the continuing venture manager identity."
+    },
+    {
+      "uid": "axal-foundersfund",
+      "name": "Founders Fund",
+      "website": "https://foundersfund.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "foundersfund"
+      ],
+      "hosts": [
+        "foundersfund.com"
+      ],
+      "source_url": "https://foundersfund.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://foundersfund.com/",
+        "https://foundersfund.com/team/denny-lai/"
+      ],
+      "notes": "Official homepage identifies Founders Fund, LLC and the team page confirms investment partnership operations. No explicit headquarters country was found in reviewed manager-owned pages, so leave HQ unknown."
+    },
+    {
+      "uid": "axal-generalcatalyst",
+      "name": "General Catalyst",
+      "website": "https://www.generalcatalyst.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "generalcatalyst"
+      ],
+      "hosts": [
+        "generalcatalyst.com"
+      ],
+      "source_url": "https://www.generalcatalyst.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.generalcatalyst.com/",
+        "https://www.generalcatalyst.com/contact"
+      ],
+      "notes": "Official homepage verifies General Catalyst. Current contact page lists offices across the United States, United Kingdom, Germany and India without designating headquarters; HQ remains unknown."
+    },
+    {
+      "uid": "axal-globalbrain",
+      "name": "Global Brain",
+      "website": "https://globalbrains.com/en/",
+      "hq": "Japan",
+      "hq_countries": [
+        "JP"
+      ],
+      "aliases": [
+        "globalbrain"
+      ],
+      "hosts": [
+        "globalbrains.com"
+      ],
+      "source_url": "https://globalbrains.com/en/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://globalbrains.com/en/",
+        "https://globalbrains.com/en/offices"
+      ],
+      "notes": "Official site identifies Global Brain as an independent venture capital firm. The office page explicitly identifies Tokyo as headquarters and distinguishes overseas offices."
+    },
+    {
+      "uid": "axal-globalventures",
+      "name": "Global Ventures",
+      "website": "https://www.global.vc/",
+      "hq": "United Arab Emirates",
+      "hq_countries": [
+        "AE"
+      ],
+      "aliases": [
+        "globalventures"
+      ],
+      "hosts": [
+        "global.vc"
+      ],
+      "source_url": "https://www.global.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.global.vc/"
+      ],
+      "notes": "Search-indexed first-party homepage explicitly describes Global Ventures as a venture capital firm headquartered in Dubai. Direct page read returned no lines; search result supplied the first-party statement."
+    },
+    {
+      "uid": "axal-globiscapitalpartners",
+      "name": "GLOBIS Capital Partners",
+      "website": "https://www.globiscapital.co.jp/en",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "globis",
+        "globiscapitalpartners"
+      ],
+      "hosts": [
+        "globiscapital.co.jp"
+      ],
+      "source_url": "https://www.globiscapital.co.jp/en",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.globiscapital.co.jp/en",
+        "https://www.globiscapital.co.jp/en/company"
+      ],
+      "notes": "Use the manager's own site, not the GLOBIS education parent page. Company profile identifies GLOBIS CAPITAL PARTNERS Co., Ltd. and a Tokyo address; it does not explicitly designate headquarters."
+    },
+    {
+      "uid": "axal-gobipartners",
+      "name": "Gobi Partners",
+      "website": "https://www.gobi.vc/",
+      "hq": "Hong Kong / Malaysia",
+      "hq_countries": [
+        "HK",
+        "MY"
+      ],
+      "aliases": [
+        "gobipartners"
+      ],
+      "hosts": [
+        "gobi.vc"
+      ],
+      "source_url": "https://www.gobi.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.gobi.vc/",
+        "https://www.gobi.vc/contact"
+      ],
+      "notes": "Current homepage identifies the firm as based in Hong Kong and Kuala Lumpur. Replace generic Asia with the actual locations and use Gobi Partners identity, not invented Gobi Ventures."
+    },
+    {
+      "uid": "axal-goldengateventures",
+      "name": "Golden Gate Ventures",
+      "website": "https://www.goldengate.vc/",
+      "hq": "Singapore",
+      "hq_countries": [
+        "SG"
+      ],
+      "aliases": [
+        "goldengateventures"
+      ],
+      "hosts": [
+        "goldengate.vc"
+      ],
+      "source_url": "https://www.goldengate.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.goldengate.vc/"
+      ],
+      "notes": "Official homepage footer explicitly identifies the venture capital firm as Singapore-based and incorporated there; Southeast Asia is not a headquarters country."
+    },
+    {
+      "uid": "axal-greylock",
+      "name": "Greylock",
+      "website": "https://greylock.com/",
+      "hq": "United States",
+      "hq_countries": [
+        "US"
+      ],
+      "aliases": [
+        "greylock",
+        "greylockpartners"
+      ],
+      "hosts": [
+        "greylock.com"
+      ],
+      "source_url": "https://greylock.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://greylock.com/",
+        "https://medium.com/@greylockvc/our-next-fund-and-our-path-forward-fd26dec852bb",
+        "https://greylock.com/contact-us/"
+      ],
+      "notes": "Greylock's own 2014 article, signed by David Sze and Reid Hoffman, identifies relocation of headquarters to Silicon Valley. Current official contact page lists San Francisco and Menlo Park offices, consistent with United States country attribution."
+    },
+    {
+      "uid": "axal-hiventures",
+      "name": "Hi Ventures",
+      "website": "https://www.hi.vc/",
+      "hq": "Mexico",
+      "hq_countries": [
+        "MX"
+      ],
+      "aliases": [
+        "allvp",
+        "hiventures"
+      ],
+      "hosts": [
+        "allvp.com",
+        "hi.vc"
+      ],
+      "source_url": "https://www.hi.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.hi.vc/",
+        "https://allvp.com/",
+        "https://www.hi.vc/faq",
+        "https://www.hi.vc/brandguidelines"
+      ],
+      "notes": "ALLVP's own domain redirects to Hi Ventures. Official brand guidelines describe the manager as a Mexico City-based venture capital fund, establishing its Mexico base independently of investment markets. Use alias ALLVP in duplicate checks."
+    },
+    {
+      "uid": "axal-icehouseventures",
+      "name": "Icehouse Ventures",
+      "website": "https://www.icehouseventures.co.nz/",
+      "hq": "New Zealand",
+      "hq_countries": [
+        "NZ"
+      ],
+      "aliases": [
+        "icehouseventures"
+      ],
+      "hosts": [
+        "icehouseventures.co.nz"
+      ],
+      "source_url": "https://www.icehouseventures.co.nz/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.icehouseventures.co.nz/",
+        "https://jobs.icehouseventures.co.nz/companies/icehouse-ventures/jobs/66279981-investment-principal"
+      ],
+      "notes": "Optional additional manager with a verified New Zealand base: official homepage confirms VC firm and Auckland address; its own investment-principal posting explicitly says the team is based in Auckland. Check for existing directory manager or vehicle duplicate before insertion."
+    },
+    {
+      "uid": "axal-insightpartners",
+      "name": "Insight Partners",
+      "website": "https://www.insightpartners.com/",
+      "hq": "United States",
+      "hq_countries": [
+        "US"
+      ],
+      "aliases": [
+        "insightpartners"
+      ],
+      "hosts": [
+        "insightpartners.com"
+      ],
+      "source_url": "https://www.insightpartners.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.insightpartners.com/",
+        "https://www.insightpartners.com/contact/",
+        "https://www.insightpartners.com/about-us/media/"
+      ],
+      "notes": "Official contact page explicitly identifies New York headquarters; the current media page independently repeats New York City headquarters while distinguishing other leadership locations."
+    },
+    {
+      "uid": "axal-jafco",
+      "name": "JAFCO",
+      "website": "https://www.jafco.co.jp/english/",
+      "hq": "Japan",
+      "hq_countries": [
+        "JP"
+      ],
+      "aliases": [
+        "jafco",
+        "jafcocoltd",
+        "jafcogroup"
+      ],
+      "hosts": [
+        "jafco.co.jp"
+      ],
+      "source_url": "https://www.jafco.co.jp/english/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.jafco.co.jp/english/",
+        "https://www.jafco.co.jp/english/company/"
+      ],
+      "notes": "Current corporate profile names JAFCO Co., Ltd. rather than JAFCO Group and identifies its head office in Tokyo, Japan."
+    },
+    {
+      "uid": "axal-jungleventures",
+      "name": "Jungle Ventures",
+      "website": "https://www.jungle.vc/",
+      "hq": "Singapore",
+      "hq_countries": [
+        "SG"
+      ],
+      "aliases": [
+        "jungleventures"
+      ],
+      "hosts": [
+        "jungle.vc"
+      ],
+      "source_url": "https://www.jungle.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.jungle.vc/",
+        "https://www.jungle.vc/resources/we-have-a-billion-reasons-to-celebrate"
+      ],
+      "notes": "Official announcement identifies Singapore headquarters. India and Southeast Asia are investment markets; do not add India to the HQ field."
+    },
+    {
+      "uid": "axal-kalaaricapital",
+      "name": "Kalaari Capital",
+      "website": "https://kalaari.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "kalaari",
+        "kalaaricapital"
+      ],
+      "hosts": [
+        "kalaari.com"
+      ],
+      "source_url": "https://kalaari.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://kalaari.com/",
+        "https://kalaari.com/contact-us",
+        "https://kalaari.com/investor-relations"
+      ],
+      "notes": "Official site verifies Kalaari Capital; contact and investor-relations pages confirm Bangalore contact and registered office. No explicit headquarters designation found, so HQ remains unknown."
+    },
+    {
+      "uid": "axal-khoslaventures",
+      "name": "Khosla Ventures",
+      "website": "https://www.khoslaventures.com/",
+      "hq": "United States",
+      "hq_countries": [
+        "US"
+      ],
+      "aliases": [
+        "khoslaventures"
+      ],
+      "hosts": [
+        "khoslaventures.com"
+      ],
+      "source_url": "https://www.khoslaventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.khoslaventures.com/",
+        "https://www.khoslaventures.com/posts/harvard-business-review-reasons-for-long-term-optimism-about-technology-and-the-economy",
+        "https://jobs.khoslaventures.com/privacy-policy"
+      ],
+      "notes": "Official site republishes a profile identifying Khosla Ventures as based in Menlo Park, California. Current manager job-board privacy policy retains a Menlo Park registered address. The base-location statement is historical, not a newly announced headquarters move."
+    },
+    {
+      "uid": "axal-kimaventures",
+      "name": "Kima Ventures",
+      "website": "https://www.kimaventures.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "kima",
+        "kimaventures"
+      ],
+      "hosts": [
+        "kimaventures.com"
+      ],
+      "source_url": "https://www.kimaventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.kimaventures.com/"
+      ],
+      "notes": "Official site confirms Kima Ventures and its startup investment activity. No headquarters country appears in the reviewed official page; leave HQ unknown instead of importing a third-party directory's Paris assertion."
+    },
+    {
+      "uid": "axal-launchafricaventures",
+      "name": "Launch Africa Ventures",
+      "website": "https://www.launchafrica.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "launchafricaventures"
+      ],
+      "hosts": [
+        "launchafrica.vc"
+      ],
+      "source_url": "https://www.launchafrica.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.launchafrica.vc/"
+      ],
+      "notes": "Official homepage verifies pan-African VC and explicitly labels its primary office in Trianon, Mauritius. That office is care of fund administrator Apex Fund & Corporate Services. Preserve the primary-office evidence but leave HQ unknown because an administrator address does not establish the manager's headquarters. The primary-office address is care of a fund administrator; it is not recorded as operational HQ."
+    },
+    {
+      "uid": "axal-lightspeedventurepartners",
+      "name": "Lightspeed Venture Partners",
+      "website": "https://lsvp.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "lightspeedmanagementcompany",
+        "lightspeedventurepartners"
+      ],
+      "hosts": [
+        "lsvp.com"
+      ],
+      "source_url": "https://lsvp.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://lsvp.com/",
+        "https://lsvp.com/about/",
+        "https://lsvp.com/global-presence/"
+      ],
+      "notes": "Official site verifies Lightspeed Venture Partners but distinguishes LSVP's US, Europe and Israel offices from independent LSIP's India and Southeast Asia offices. Neither office geography nor the combined network is a headquarters designation."
+    },
+    {
+      "uid": "axal-mainsequence",
+      "name": "Main Sequence",
+      "website": "https://www.mseq.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "mainsequence"
+      ],
+      "hosts": [
+        "mseq.vc"
+      ],
+      "source_url": "https://www.mseq.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.mseq.vc/",
+        "https://www.mseq.vc/legal-notice-disclaimer"
+      ],
+      "notes": "Official website identifies Main Sequence, founded by CSIRO, and legal manager CSIRO Financial Services Pty Ltd. Proposed mainsequence.vc could not be fetched. HQ not explicitly stated; current contact page contains template placeholders, so do not rely on it for address."
+    },
+    {
+      "uid": "axal-monashees",
+      "name": "Monashees",
+      "website": "https://www.monashees.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "monashees"
+      ],
+      "hosts": [
+        "monashees.com",
+        "monashees.com.br"
+      ],
+      "source_url": "https://www.monashees.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.monashees.com/",
+        "https://www.monashees.com/contact",
+        "https://www.monashees.com/pdf/monashees-Global-Privacy-Policy.pdf"
+      ],
+      "notes": "Old monashees.com.br redirects to this canonical domain. Current manager site identifies a Brazilian VC with offices in Sao Paulo, Mexico City and San Francisco, without designating a headquarters. A search-indexed older official privacy PDF explicitly names Sao Paulo headquarters for Monashees Gestao de Investimentos Ltda, but its URL currently returns 404; it is recorded as historical evidence, not used for the current HQ field."
+    },
+    {
+      "uid": "axal-monkshillventures",
+      "name": "Monk's Hill Ventures",
+      "website": "https://www.monkshill.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "monkshillventures"
+      ],
+      "hosts": [
+        "monkshill.com"
+      ],
+      "source_url": "https://www.monkshill.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.monkshill.com/",
+        "https://www.monkshill.com/content-hub/mhv-names-susli-lie-as-partner",
+        "https://monkshill.com/privacy-policy"
+      ],
+      "notes": "Official site and announcement verify the venture manager. Singapore is its data-protection contact address; that alone does not establish headquarters, so HQ remains unknown."
+    },
+    {
+      "uid": "axal-nexusventurepartners",
+      "name": "Nexus Venture Partners",
+      "website": "https://www.nexusvp.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "nexusventurepartners"
+      ],
+      "hosts": [
+        "nexusvp.com"
+      ],
+      "source_url": "https://www.nexusvp.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.nexusvp.com/",
+        "https://www.nexusvp.com/privacy-policy"
+      ],
+      "notes": "Official site verifies the manager. Current privacy policy states it operates through separate entities in the United States and India; it does not designate one combined headquarters."
+    },
+    {
+      "uid": "axal-norrsken22",
+      "name": "Norrsken22",
+      "website": "https://www.norrsken22.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "norrsken22"
+      ],
+      "hosts": [
+        "norrsken22.com"
+      ],
+      "source_url": "https://www.norrsken22.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.norrsken22.com/",
+        "https://www.norrsken22.com/privacy-policy"
+      ],
+      "notes": "Official site confirms tech growth fund and general partners based in Kenya, Nigeria and South Africa. It does not designate headquarters; managing partner's Johannesburg location alone is insufficient. Privacy policy names N22 Africa Management AB, but that legal entity is not used to infer a headquarters country."
+    },
+    {
+      "uid": "axal-novastarventures",
+      "name": "Novastar Ventures",
+      "website": "https://www.novastarventures.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "novastarventures"
+      ],
+      "hosts": [
+        "novastarventures.com"
+      ],
+      "source_url": "https://www.novastarventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.novastarventures.com/",
+        "https://www.novastarventures.com/legal-notice/",
+        "https://www.novastarventures.com/sbi-holdings-and-novastar-form-us80-million-landmark-partnership-to-catalyze-japanese-investment-in-africa/"
+      ],
+      "notes": "Official website confirms venture capital investing in Africa. Its own SBI partnership announcement says it works from Lagos, Nairobi and London, without selecting a headquarters. Its issuer's UK registration and those office locations are not treated as headquarters evidence."
+    },
+    {
+      "uid": "axal-openspacecapital",
+      "name": "Openspace Capital",
+      "website": "https://www.openspacecapital.com/",
+      "hq": "Singapore",
+      "hq_countries": [
+        "SG"
+      ],
+      "aliases": [
+        "openspace",
+        "openspacecapital",
+        "openspaceventures"
+      ],
+      "hosts": [
+        "openspace.vc",
+        "openspacecapital.com"
+      ],
+      "source_url": "https://www.openspacecapital.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.openspacecapital.com/",
+        "https://www.openspacecapital.com/insights/openspace-ventures-closes-third-fund-at-hard-cap-of-us-200m",
+        "https://www.openspacecapital.com/contact-us"
+      ],
+      "notes": "openspace.vc redirects to the current Openspace Capital brand. Official fund announcement identifies the manager as Singapore-based; current contact page includes Singapore and five other regional offices."
+    },
+    {
+      "uid": "axal-ourcrowd",
+      "name": "OurCrowd",
+      "website": "https://www.ourcrowd.com/",
+      "hq": "Israel",
+      "hq_countries": [
+        "IL"
+      ],
+      "aliases": [
+        "ourcrowd"
+      ],
+      "hosts": [
+        "ourcrowd.com"
+      ],
+      "source_url": "https://www.ourcrowd.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.ourcrowd.com/",
+        "https://www.ourcrowd.com/startup-news/ourcrowd-press-media",
+        "https://es.ourcrowd.com/about/"
+      ],
+      "notes": "Official media page identifies Jerusalem as the firm's base; official Spanish about page explicitly identifies Jerusalem headquarters. Platform includes internal and third-party funds, so do not claim a single fund vintage or size."
+    },
+    {
+      "uid": "axal-peakxvpartners",
+      "name": "Peak XV Partners",
+      "website": "https://www.peakxv.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "peakxvpartners"
+      ],
+      "hosts": [
+        "peakxv.com"
+      ],
+      "source_url": "https://www.peakxv.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.peakxv.com/",
+        "https://www.peakxv.com/team/arnav-sahu"
+      ],
+      "notes": "Official site verifies Peak XV Partners. Its profile also confirms a San Francisco office; neither the homepage nor office reference establishes a single headquarters. Do not translate investment geography into HQ."
+    },
+    {
+      "uid": "axal-plugandplayventures",
+      "name": "Plug and Play Ventures",
+      "website": "https://www.plugandplaytechcenter.com/venture-capital/ventures-team",
+      "hq": "United States",
+      "hq_countries": [
+        "US"
+      ],
+      "aliases": [
+        "plugandplay",
+        "plugandplayventures"
+      ],
+      "hosts": [
+        "plugandplaytechcenter.com"
+      ],
+      "source_url": "https://www.plugandplaytechcenter.com/venture-capital/ventures-team",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.plugandplaytechcenter.com/venture-capital/ventures-team",
+        "https://www.plugandplaytechcenter.com/co-working/silicon-valley"
+      ],
+      "notes": "Original ventures path redirects to the venture team page, which verifies investing activity. Official locations page explicitly identifies Sunnyvale, California as global headquarters; replace Global in HQ."
+    },
+    {
+      "uid": "axal-radicalventures",
+      "name": "Radical Ventures",
+      "website": "https://radical.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "radicalventures"
+      ],
+      "hosts": [
+        "radical.vc"
+      ],
+      "source_url": "https://radical.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://radical.vc/",
+        "https://radical.vc/contact/"
+      ],
+      "notes": "Official site confirms investment manager. Contact page lists Toronto, San Francisco and London without designating HQ; proposed Canada-only claim is not established by these retrieved pages."
+    },
+    {
+      "uid": "axal-raedventures",
+      "name": "Raed Ventures",
+      "website": "https://raed.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "raedventures"
+      ],
+      "hosts": [
+        "raed.vc"
+      ],
+      "source_url": "https://raed.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://raed.vc/",
+        "https://raed.vc/about/",
+        "https://raed.vc/contact/",
+        "https://raed.vc/news/raed-ventures-led-seed-round-of-malaeb/"
+      ],
+      "notes": "Official site verifies venture investing. Current contact page lists Riyadh and Dubai without designating headquarters. A 2017 own-site article describes a Raed-led round with 'two other Saudi-based VCs'; this is indirect and historical, so it is not treated as a current firm-headquarters claim."
+    },
+    {
+      "uid": "axal-sawariventures",
+      "name": "Sawari Ventures",
+      "website": "https://sawariventures.com/",
+      "hq": "Egypt",
+      "hq_countries": [
+        "EG"
+      ],
+      "aliases": [
+        "sawariventures"
+      ],
+      "hosts": [
+        "sawariventures.com"
+      ],
+      "source_url": "https://sawariventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://sawariventures.com/",
+        "https://sawariventures.com/about-us/"
+      ],
+      "notes": "Optional replacement for redundant Partech Africa row: official manager website explicitly states venture capital firm based in Cairo, investing across North Africa. Check existing directory for duplicate manager or vehicles first."
+    },
+    {
+      "uid": "axal-shorooq",
+      "name": "Shorooq",
+      "website": "https://www.shorooq.com/",
+      "hq": "United Arab Emirates",
+      "hq_countries": [
+        "AE"
+      ],
+      "aliases": [
+        "shorooq",
+        "shorooqpartners"
+      ],
+      "hosts": [
+        "shorooq.com"
+      ],
+      "source_url": "https://www.shorooq.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.shorooq.com/",
+        "https://www.shorooq.com/perspectives/shorooq-and-presight-launch-a-100m-global-fund-to-accelerate-ai-innovation"
+      ],
+      "notes": "Current official branding is Shorooq; official 2025 fund announcement explicitly identifies Abu Dhabi headquarters. Terms retain Shorooq Partners as legal group name."
+    },
+    {
+      "uid": "axal-softbankvisionfund",
+      "name": "SoftBank Vision Fund",
+      "website": "https://visionfund.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "softbankvisionfund"
+      ],
+      "hosts": [
+        "visionfund.com"
+      ],
+      "source_url": "https://visionfund.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://visionfund.com/",
+        "https://visionfund.com/contact"
+      ],
+      "notes": "Official Vision Fund site confirms the investment platform. Contact page lists London, Silicon Valley and Tokyo as main offices without selecting one headquarters; leave HQ unknown."
+    },
+    {
+      "uid": "axal-squarepeg",
+      "name": "Square Peg",
+      "website": "https://www.squarepeg.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "squarepeg"
+      ],
+      "hosts": [
+        "squarepeg.vc"
+      ],
+      "source_url": "https://www.squarepeg.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.squarepeg.vc/",
+        "https://www.squarepeg.vc/our-story"
+      ],
+      "notes": "Official story identifies the venture capital firm and Australian origin. It does not designate a current headquarters; old Australia / Singapore / Israel value mixes locations and markets."
+    },
+    {
+      "uid": "axal-stv",
+      "name": "STV",
+      "website": "https://stv.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "stv"
+      ],
+      "hosts": [
+        "stv.vc"
+      ],
+      "source_url": "https://stv.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://stv.vc/",
+        "https://stv.vc/team",
+        "https://fellows.stv.vc/"
+      ],
+      "notes": "Official site verifies STV venture capital and growth equity manager. Its own internship page establishes a Riyadh program location, but this is not a firm-wide headquarters declaration. Proposed UID stvc does not normalize the displayed name."
+    },
+    {
+      "uid": "axal-valorcapitalgroup",
+      "name": "Valor Capital Group",
+      "website": "https://valorcapitalgroup.com/",
+      "hq": "United States",
+      "hq_countries": [
+        "US"
+      ],
+      "aliases": [
+        "valorcapitalgroup"
+      ],
+      "hosts": [
+        "valorcapitalgroup.com"
+      ],
+      "source_url": "https://valorcapitalgroup.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://valorcapitalgroup.com/",
+        "https://valorcapitalgroup.com/contact/",
+        "https://valorcapitalgroup.com/companies/"
+      ],
+      "notes": "Official companies page, in The Hive entry, explicitly describes Valor Capital Group as an NY-based firm. The manager's current contact page lists NYC and Sao Paulo offices. United States reflects the explicit firm-base description, not its Brazilian investment market."
+    },
+    {
+      "uid": "axal-vertexventuressoutheastasiaandindia",
+      "name": "Vertex Ventures Southeast Asia and India",
+      "website": "https://www.vertexventures.sg/",
+      "hq": "Singapore",
+      "hq_countries": [
+        "SG"
+      ],
+      "aliases": [
+        "vertexventuressea",
+        "vertexventuresseai",
+        "vertexventuressoutheastasiaandindia",
+        "vertexventuressoutheastasiaindia",
+        "vvseai"
+      ],
+      "hosts": [
+        "vertexventures.sg"
+      ],
+      "source_url": "https://www.vertexventures.sg/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.vertexventures.sg/",
+        "https://www.vertexventures.sg/news/vertex-ventures-southeast-asia-and-india-promotes-pui-yan-leung-and-kanika-mayar-to-partners/",
+        "https://www.vertexventures.sg/contact/"
+      ],
+      "notes": "Original vertexventures.com redirects to Vertex Ventures US at vvus.com, not the Singapore team. Use the separately identified Southeast Asia and India manager; its official announcement explicitly identifies Singapore headquarters and other local teams."
+    },
+    {
+      "uid": "axal-wamdacapital",
+      "name": "Wamda Capital",
+      "website": "https://wamdacapital.com/",
+      "hq": "United Arab Emirates",
+      "hq_countries": [
+        "AE"
+      ],
+      "aliases": [
+        "wamdacapital"
+      ],
+      "hosts": [
+        "wamdacapital.com"
+      ],
+      "source_url": "https://wamdacapital.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://wamdacapital.com/",
+        "https://wamdacapital.com/our-story/",
+        "https://wamdacapital.com/contact-us/",
+        "https://www.wamda.com/2017/03/modest-fashion-site-modanisa-closes-new-round"
+      ],
+      "notes": "Official manager site confirms Wamda Capital Fund I and current evergreen investing entity. Wamda's own 2017 Modanisa announcement explicitly describes its investment vehicle Wamda Capital as Dubai-based, corroborated by the manager's current Dubai contact address. Proposed wamda.com/capital is 404; use wamdacapital.com."
+    },
+    {
+      "uid": "axal-z47",
+      "name": "Z47",
+      "website": "https://www.z47.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "matrixpartnersindia",
+        "z47"
+      ],
+      "hosts": [
+        "z47.com"
+      ],
+      "source_url": "https://www.z47.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.z47.com/",
+        "https://www.z47.com/about",
+        "https://www.z47.com/newsletter/introducing-the-zero-to-infinity-newsletter",
+        "https://www.z47.com/contact"
+      ],
+      "notes": "Official newsletter confirms rebrand from Matrix Partners India to Z47. About page confirms the venture investor; offices or India focus are not sufficient evidence for a specific headquarters."
+    }
+  ],
+  "excluded": [
+    {
+      "uid": "500global",
+      "name": "500 Global",
+      "existing_uid": "500global",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "accel",
+      "name": "Accel",
+      "existing_uid": "accel-viii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "aleph",
+      "name": "Aleph",
+      "existing_uid": "aleph-iii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "antler",
+      "name": "Antler",
+      "existing_uid": "antlerelevate-ii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "atomico",
+      "name": "Atomico",
+      "existing_uid": "atomico-v",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "baldertoncapital",
+      "name": "Balderton Capital",
+      "existing_uid": "baldertoncapital-ix",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "blackbird",
+      "name": "Blackbird",
+      "existing_uid": "blackbirdventuresi",
+      "reason": "The existing Blackbird Ventures I vehicle covers the Australian manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.blackbird.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.blackbird.vc/",
+        "https://www.blackbird.vc/about-blackbird"
+      ]
+    },
+    {
+      "uid": "btoventures",
+      "name": "b2venture",
+      "existing_uid": "b2venture-v",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "byfounders",
+      "name": "byFounders",
+      "existing_uid": "byfounders-i",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "creandum",
+      "name": "Creandum",
+      "existing_uid": "creandum-vii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "earlybird",
+      "name": "Earlybird Venture Capital",
+      "existing_uid": "earlybird-viii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "eurazeo",
+      "name": "Eurazeo",
+      "existing_uid": "eurazeogrowth-iv",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "goldenventures",
+      "name": "Golden Ventures",
+      "existing_uid": "goldenventuresv",
+      "reason": "The existing Golden Ventures V vehicle covers this manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://golden.ventures/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://golden.ventures/",
+        "https://faq.golden.ventures/"
+      ]
+    },
+    {
+      "uid": "heartcorecapital",
+      "name": "Heartcore Capital",
+      "existing_uid": "heartcorecapital-v",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "henq",
+      "name": "henQ",
+      "existing_uid": "henq-iv",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "hvcapital",
+      "name": "HV Capital",
+      "existing_uid": "hvcapital-ix",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "indexventures",
+      "name": "Index Ventures",
+      "existing_uid": "indexventures-xii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "inoviacapital",
+      "name": "Inovia Capital",
+      "existing_uid": "inoviacapitalv",
+      "reason": "The existing iNovia Capital V vehicle covers this manager, also represented as iNovia IV. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.inovia.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.inovia.vc/",
+        "https://www.inovia.vc/inovia-conversations/inovia-discovery-fund-i-investing-in-emerging-managers-to-build-a-robust-funding-environment-for-canadian-tech-startups/"
+      ]
+    },
+    {
+      "uid": "insigniaventurespartners",
+      "name": "Insignia Ventures Partners",
+      "existing_uid": "insigniaventurepartnersi",
+      "reason": "The existing Insignia Venture Partners I vehicle covers this manager; the historical spelling omits the plural s. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.insignia.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.insignia.vc/",
+        "https://www.insignia.vc/about",
+        "https://www.insignia.vc/contact",
+        "https://www.insignia.vc/press/wovc"
+      ]
+    },
+    {
+      "uid": "inventure",
+      "name": "Inventure",
+      "existing_uid": "inventure-iv",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "kaszek",
+      "name": "Kaszek",
+      "existing_uid": "kaszekventuresiii",
+      "reason": "The existing Kaszek Ventures III vehicle covers this manager under its longer name. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.kaszek.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.kaszek.com/"
+      ]
+    },
+    {
+      "uid": "kindredcapital",
+      "name": "Kindred Capital",
+      "existing_uid": "kindredcapital-iii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "lakestar",
+      "name": "Lakestar",
+      "existing_uid": "lakestar-i",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "lifelineventures",
+      "name": "Lifeline Ventures",
+      "existing_uid": "lifelineventures-vi",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "localglobe",
+      "name": "LocalGlobe",
+      "existing_uid": "localglobe-x",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "magmaventurepartners",
+      "name": "Magma Venture Partners",
+      "existing_uid": "magmaiv",
+      "reason": "The existing Magma IV vehicle covers this Israeli manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.magmavc.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.magmavc.com/",
+        "https://www.magmavc.com/about/who-we-are.html",
+        "https://www.magmavc.com/contact-us.html"
+      ]
+    },
+    {
+      "uid": "northzone",
+      "name": "Northzone",
+      "existing_uid": "northzone-x",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "notioncapital",
+      "name": "Notion Capital",
+      "existing_uid": "notioncapital-v",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "octopusventures",
+      "name": "Octopus Ventures",
+      "existing_uid": "octopusventures",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "partech",
+      "name": "Partech",
+      "existing_uid": "partech-viii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "partechafrica",
+      "name": "Partech Africa",
+      "existing_uid": "partech-viii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "peakcapital",
+      "name": "Peak",
+      "existing_uid": "peak-v",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "pitangoventurecapital",
+      "name": "Pitango",
+      "existing_uid": "pitango-ii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "pointnine",
+      "name": "Point Nine",
+      "existing_uid": "pointninecapital-vi",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "projecta",
+      "name": "Project A",
+      "existing_uid": "projecta-iii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "realventures",
+      "name": "Real Ventures",
+      "existing_uid": "realventuresiv",
+      "reason": "The existing Real Ventures IV vehicle covers this manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://realventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://realventures.com/",
+        "https://realventures.com/contact/"
+      ]
+    },
+    {
+      "uid": "redalpine",
+      "name": "redalpine",
+      "existing_uid": "redalpineventures-vii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "seedcamp",
+      "name": "Seedcamp",
+      "existing_uid": "seedcamp-vii",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "sequoiacapital",
+      "name": "Sequoia Capital",
+      "existing_uid": "sequoiacapitalseedfundv",
+      "reason": "The existing Sequoia Capital Seed Fund V vehicle covers this manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://sequoiacap.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://sequoiacap.com/",
+        "https://sequoiacap.com/legal",
+        "https://sequoiacap.com/article/arc-americas-build-for-the-next-decade"
+      ]
+    },
+    {
+      "uid": "sosv",
+      "name": "SOSV",
+      "existing_uid": "sosvinvestmentsiii",
+      "reason": "The existing SOSV Investments III vehicle covers this manager; the official footer identifies SOSV Investments LLC as the owner of the SOSV trademarks. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://sosv.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://sosv.com/",
+        "https://sosv.com/sosv-announces-the-close-of-its-100m-select-fund-the-venture-investors-first-growth-stage-fund/",
+        "https://sosv.com/privacy-statement/",
+        "https://sosv.com/external-footer/"
+      ]
+    },
+    {
+      "uid": "speedinvest",
+      "name": "Speedinvest",
+      "existing_uid": "speedinvest-iv",
+      "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "tlcom",
+      "name": "TLCOM",
+      "existing_uid": "tideafricafundi",
+      "reason": "The existing TIDE Africa Fund I vehicle covers TLCOM; the manager explicitly identifies TIDE Africa Fund I as its first Africa-focused fund. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.tlcomcapital.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.tlcomcapital.com/",
+        "https://www.tlcomcapital.com/perspectives/the-signal-of-trust-introducing-tlcom",
+        "https://www.tlcomcapital.com/contact",
+        "https://www.tlcomcapital.com/perspectives/tlcom-closes-africas-largest-early-stage-vc-fund-at-154-million"
+      ]
+    },
+    {
+      "uid": "versiononeventures",
+      "name": "Version One Ventures",
+      "existing_uid": "versiononeventuresiii",
+      "reason": "The existing Version One Ventures III vehicle covers this manager, also represented as Version One IV. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://versionone.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://versionone.vc/",
+        "https://versionone.vc/people/"
+      ]
+    }
+  ]
+}

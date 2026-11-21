@@ -6,14 +6,14 @@
  * otherwise one sentence says who does it.
  */
 import React, { useEffect, useState } from 'react';
-import { dd } from '../../lib/api';
+import { Lightbox } from '../../ui';
 import { ddLifecycleApi } from '../../lib/api/ddLifecycle.js';
 import {
   LINK_LINE, MEMO_MAX, MEMO_PARTS, NOT_RECORDED, REQ_STATE_WORD, SOURCE_STATE_WORD, WHO, caseRefusal, conditionFlags, documentLists,
   fmtDay, icState, may, maySection, platformRows, reportRows, reqState, requestActions, requestTiles, sectionRow, teamRows, unstaffed,
 } from './ddCaseModel.js';
 import { dueOf } from './ddReviewModel.js';
-import { Block, DecisionStrip, Severity, Table, Td, Tile, CaseUnreadable, Who } from './DdCaseWork.jsx';
+import { Block, DecisionStrip, OpenLink, Severity, Table, Td, Tile, CaseUnreadable, Who } from './DdCaseWork.jsx';
 import { Note, btnCls, dangerCls, fieldCls, inputCls, muted, primaryCls } from './DdUi.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -25,6 +25,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const ACTION_LABEL = { review: 'Mark reviewed', remind: 'Send a reminder', due: 'Change due date', withdraw: 'Withdraw…' };
 
 export function RequestsTab({ data, open }) {
+  const [actionRequest, setActionRequest] = useState(null);
   const requests = data.requests || [];
   const writes = may(data, 'requests') && data.case.status !== 'archived';
   const sectionTitle = (id) => (data.sections || []).find((s) => Number(s.id) === Number(id))?.title || 'Case-wide';
@@ -47,7 +48,8 @@ export function RequestsTab({ data, open }) {
                   <Td>{Array.isArray(r.files) ? (r.files.length || 'None') : NOT_RECORDED}</Td>
                   <Td>{r.reminders ? (r.reminders.count ? `${r.reminders.count} · last ${fmtDay(r.reminders.last_at) || NOT_RECORDED}` : 'None') : NOT_RECORDED}</Td>
                   <Td>
-                    <div className="flex flex-wrap gap-1">
+                    {acts.length ? <button type="button" className={`${btnCls} md:hidden`} onClick={() => setActionRequest(r)}>Request actions</button> : null}
+                    <div className="hidden flex-wrap gap-1 md:flex">
                       {acts.map((a) => (
                         <button key={a} type="button" className={`${btnCls} h-8 px-2 text-[12px]`} onClick={() => open(`req-${a}`, { req: r })} data-testid={`dd-request-${r.id}-${a}`}>{ACTION_LABEL[a]}</button>
                       ))}
@@ -59,6 +61,18 @@ export function RequestsTab({ data, open }) {
           </Table>
         )}
       </Block>
+      {actionRequest ? (
+        <Lightbox label={actionRequest.title} title={actionRequest.title} phone="sheet" onClose={() => setActionRequest(null)} testId="dd-request-actions-sheet">
+          <div className="grid gap-2 p-4">
+            {requestActions(actionRequest).map((action) => (
+              <button key={action} type="button" className={btnCls} onClick={() => {
+                setActionRequest(null);
+                open(`req-${action}`, { req: actionRequest });
+              }}>{ACTION_LABEL[action]}</button>
+            ))}
+          </div>
+        </Lightbox>
+      ) : null}
     </div>
   );
 }
@@ -67,23 +81,6 @@ export function RequestsTab({ data, open }) {
  * Documents (DDL7)
  * ------------------------------------------------------------------ */
 
-function OpenLink({ uid, kind, id, name }) {
-  const [refused, setRefused] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
-    if (busy) return;
-    setBusy(true); setRefused(null);
-    try { const r = await dd.documentLink(uid, kind, id); if (r?.url) window.open(r.url, '_blank', 'noopener,noreferrer'); }
-    catch (e) { setRefused(caseRefusal(e, 'The file could not be opened.')); }
-    finally { setBusy(false); }
-  };
-  return (
-    <span className="flex flex-col">
-      <button type="button" className="w-fit text-left font-semibold text-violet-700 underline dark:text-violet-300" onClick={go} aria-label={`Open ${name}`}>{busy ? 'Opening…' : 'Open'}</button>
-      {refused ? <span role="alert" className="text-[12px] text-red-700 dark:text-red-300">{refused}</span> : null}
-    </span>
-  );
-}
 
 export function DocumentsTab({ uid, data, onRetry }) {
   const lists = documentLists(data);

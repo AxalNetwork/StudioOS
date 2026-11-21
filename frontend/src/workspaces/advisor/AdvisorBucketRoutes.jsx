@@ -17,6 +17,8 @@ const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
 const CohortsThisWeekZone = lazy(() => import('../../pages/advisor/cohorts/ThisWeekZone'));
 const CohortsOutcomesZone = lazy(() => import('../../pages/advisor/cohorts/OutcomesZone'));
+const PracticeOverview = lazy(() => import('../../pages/advisor/practice/PracticeOverview'));
+const PracticeRecordFocus = lazy(() => import('../../pages/advisor/practice/PracticeRecordFocus'));
 const PracticeOpportunitiesZone = lazy(() => import('../../pages/advisor/practice/OpportunitiesZone'));
 const PracticeEngagementsZone = lazy(() => import('../../pages/advisor/practice/EngagementsZone'));
 const PracticeDeliveryZone = lazy(() => import('../../pages/advisor/practice/DeliveryZone'));
@@ -272,6 +274,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     if (isRoot && prefix === '/cohorts') {
       return <Suspense fallback={<Loading />}><CohortsOverviewZone /></Suspense>;
     }
+    if (isRoot && prefix === '/practice') return <Suspense fallback={<Loading />}><PracticeOverview /></Suspense>;
     if (isRoot) {
       // `unbuilt` is derived from COPY — the same object each zone page
       // renders — so a card cannot describe a store the page denies having.
@@ -312,7 +315,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   // this same line under five different headings, so Profile, Services, Proof
   // and Thinking each told the reader how the market finds them.
   const INTRO = {
-    '/practice': 'One practice. What is coming in, what is committed, and what has been delivered.',
+    '/practice': 'What needs attention, what is committed, and what has moved.',
     // D4813: the canvas's own subtitle, on every Cohorts section.
     '/cohorts': 'Guide founders from milestones to outcomes.',
     '/expertise': 'How the market finds you, and what it finds when it does.',
@@ -342,6 +345,18 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   };
   const zoneHead = prefix === '/expertise' && !isRoot ? EXPERTISE_ZONE_HEAD[slug] : null;
 
+  /**
+   * #4833 part 4 (D4833-p4): a Practice zone's own line under its heading, from
+   * `Practice v2 Page.dc.html`'s `hdr(…)`. The heading stays the pill's label,
+   * which is the canvas's h1 for every Practice zone. Only Delivery is listed:
+   * the other zones still head their bodies themselves, and each is owned by
+   * its own issue, so they keep the bucket sentence until they move.
+   */
+  const PRACTICE_ZONE_HEAD = {
+    delivery: { sub: 'Work products sent to clients, with every version kept.' },
+  };
+  const practiceHead = prefix === '/practice' && !isRoot ? PRACTICE_ZONE_HEAD[slug] : null;
+
   // The Worker AI rail, absent from all fifteen of these routes until now: the
   // shell has taken a `rail` slot since the founder pass and this caller never
   // filled it, so every Practice, Cohorts and Expertise zone rendered with an
@@ -368,8 +383,8 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   const RAIL = {
     '/practice': {
       workspace: 'Practice',
-      stance: 'Manual practice record',
-      note: 'Opportunities, engagements, delivery, sessions and earnings read and write the stored advisory record. Nothing here writes a proposal, sends a message, or decides what a session was worth.',
+      stance: isRoot ? 'Your advisory practice' : 'Manual practice record',
+      note: isRoot ? 'Manage requests, engagements, sessions, delivery and recorded earnings.' : 'Opportunities, engagements, delivery, sessions and earnings read and write the stored advisory record. Nothing here writes a proposal, sends a message, or decides what a session was worth.',
       unavailable: [
         // "takes no cut" and "nothing on this bucket settles anything" were
         // both here, and 241 made the first false outright. The rail is
@@ -414,7 +429,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   const shell = (
     <WorkspaceShell
       role="advisor"
-      title={cohorts ? 'Cohorts' : (isRoot ? bucketTitle(bucket) : zoneHead?.h1)}
+      title={cohorts ? 'Cohorts' : (isRoot && prefix === '/practice' ? 'Run my advisory business' : isRoot ? bucketTitle(bucket) : zoneHead?.h1)}
       sectionNav={cohorts ? <CohortSectionNav /> : undefined}
       // #4834 (D4834): Practice v2's section row (PX-10): Overview first, the
       // canvas's order, one line that scrolls sideways on a phone.
@@ -424,7 +439,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       // attribute-only pattern missed. The shell fills that slot from
       // `ActiveCompanyContext`, so the badge names the company instead of
       // restating the rule.
-      intro={zoneHead?.sub || INTRO[prefix]}
+      intro={isRoot && prefix === '/practice' ? <span className="dark:text-gray-400">{INTRO[prefix]}</span> : zoneHead?.sub || practiceHead?.sub || INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
       rail={RAIL && (
         <WorkerRail
@@ -459,6 +474,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
           practice that is not the caller's. */}
       {preview && <AdvisorPreviewNotice />}
       {body}
+      {prefix === '/practice' && !isRoot && <Suspense fallback={null}><PracticeRecordFocus /></Suspense>}
       {!preview && prefix === '/practice' && slug === 'opportunities' && !isRoot && (
         <Card className="mt-4 p-4">
           <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">

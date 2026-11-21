@@ -164,7 +164,7 @@ test('the source: every shared header mounts HeaderAsk, and the pages that drew 
   for (const f of ['components/WorkspaceTabs.jsx', 'pages/admin/AdminTeam.jsx', 'pages/admin/AdminTelegram.jsx', 'pages/admin/contracts/ContractsDesk.jsx', 'pages/branch/BranchSettings.jsx',
     'pages/hq/AccountsPage.jsx', 'pages/hq/ContentPage.jsx', 'pages/hq/CreditRulesRegistryPage.jsx', 'pages/hq/HqBranchOverlay.jsx', 'pages/hq/HqFundsPage.jsx', 'pages/hq/HqHomePage.jsx',
     'pages/hq/HqSupportPage.jsx', 'pages/hq/MeetingBotsPage.jsx', 'pages/hq/MemberCreditsPage.jsx', 'pages/hq/PlatformPage.jsx', 'pages/hq/RevenuePage.jsx', 'pages/hq/ReviewQueuePage.jsx',
-    'pages/hq/SecurityPage.jsx', 'pages/hq/TrustObligationsPage.jsx', 'pages/founder/FounderNetworkDesk.jsx', 'pages/founder/FounderResearchDesk.jsx',
+    'pages/hq/security/SecurityConsole.jsx', 'pages/hq/TrustObligationsPage.jsx', 'pages/founder/FounderNetworkDesk.jsx', 'pages/founder/FounderResearchDesk.jsx',
     'pages/investor/InvestorResearchWorkspace.jsx', 'pages/raise/pitch/NewDeck.jsx', 'pages/raise/pitch/TemplatesGallery.jsx']) {
     assert.match(codeOnly(read(f)), /<HeaderAsk \/>/, f);
   }

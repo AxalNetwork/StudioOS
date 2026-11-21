@@ -1,6 +1,11 @@
-# `services/agents/skills/scenarios/` — qualification scenarios (#4588, D4588)
+# `services/agents/skills/scenarios/` — qualification scenarios (#4588, D4588; #5962, D5962)
 
-One pack per skill, `<slug>.json`, for the ten skills #4588 qualifies. Each
+One pack per skill, `<slug>.json`, in two named sets: the ten skills #4588
+qualifies (`FIRST_TEN_SLUGS`), and the three Startup Assessment node skills
+outside those ten that #5962 adds (`market-entry-brief`,
+`unit-economics-summary`, `roadmap-review-brief`; the fourth node skill,
+`legal-due-diligence-coordination`, is in the first ten). A new pack joins a
+named set in `skill_scenarios_4588.test.ts`, never `FIRST_TEN_SLUGS`. Each
 pack holds 5 to 10 scenarios chosen for that skill's failure modes: complete
 evidence, missing or stale inputs, contradictory records, a task-specific edge
 case and an instruction embedded in the evidence.
@@ -34,5 +39,8 @@ detail must name its `targets`.
 - **Identities are stable.** `case_id` is unique, starts with the slug, and keeps its meaning; changing a case's text bumps its `revision`. The stored case's identity is `<case_id>:r<revision>` (D5336). `name` is unique too, and is the stored case's name.
 - **Staged is not enforced.** An expectation no assertion can check yet goes in `staged`, with the reason.
 - **Imported as cases (D5336).** The generator embeds each scenario beside the skill's golden case; the seed adds it to the skill's draft as its own case when no live case has its identity, and never edits one. A skill holds at most 20 live cases, so a pack holds at most 19.
+
+The rubric's calibration items (`skillRubric.ts`, D4531 part 5) import the
+first ten packs by name; the #5962 packs are not among them (D5962 §4).
 
 `cloudflare-worker/test/skill_scenarios_4588.test.ts` and the CI gate (`scripts/check-skill-library.mjs`, rules in `skillScenarios.ts`) check all of this; `skill_case_identity_5336.test.ts` follows every scenario from this folder to a stored case.

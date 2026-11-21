@@ -126,7 +126,7 @@ test('rows with no store say so; the LPA reads the holdings', () => {
 });
 
 test('the page takes its onboarding status from the records, not the access ladder', () => {
-  const src = codeOnly(read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx'));
+  const src = codeOnly(read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx') + read('frontend/src/pages/investor/fund/FundOnboardingSection.jsx'));
   assert.match(src, /const status = onboardingStatus\(name, \{/);
   assert.doesNotMatch(src, /committed: 5, voting: 5/, 'the ladder-derived status is back');
   assert.match(src, /api\.kycStatus\(\)/);
@@ -142,7 +142,7 @@ test('a scheduled date that has passed says so', () => {
 });
 
 test('no page claims Parallel Markets, a countersignature it cannot see, or verified accreditation', () => {
-  const page = read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx');
+  const page = read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx') + read('frontend/src/pages/investor/fund/FundParticipationSection.jsx') + read('frontend/src/pages/investor/fund/FundOnboardingSection.jsx');
   assert.doesNotMatch(page, /Parallel Markets/);
   assert.doesNotMatch(page, /Committed = countersigned subscription/);
   assert.doesNotMatch(page, /activate once your commitment is countersigned/);
@@ -167,7 +167,8 @@ test('the section draws each fund\'s committed, called, due and uncalled, and it
   assert.match(html, /data-testid="commitment-totals"/, 'two funds, no totals row');
   assert.match(html, /data-testid="button-sign-lpa-101"/, 'an unsigned LPA offers a signature action');
   assert.doesNotMatch(html, /data-testid="button-sign-lpa-100"/, 'a signed LPA is offered for signing again');
-  assert.match(html, /Co-invest offers/);
+  // D6140 (#6140): the owner took co-invest offers and Ask the report out of the page.
+  assert.doesNotMatch(html, /Co-invest offers|Ask the report|commitment-not-built/);
 });
 
 test('a failed portal read is Unreadable, and a failed calls read is too', () => {
@@ -209,7 +210,9 @@ test('the artboard\'s My-commitment elements are on the section', () => {
     assert.ok(art.includes(el), `the artboard no longer draws ${el}`);
   }
   const src = read('frontend/src/pages/SpinoutLabLpCommitment.jsx');
-  for (const el of ['My commitment', ' called', ' due', ' uncalled', 'commitment-call-', 'Co-invest offers', 'Ask the report']) {
+  for (const el of ['My commitment', ' called', ' due', ' uncalled', 'commitment-call-']) {
     assert.ok(src.includes(el), `the section does not draw ${el}`);
   }
+  // D6140: the artboard still draws these two; the owner decided the page names neither.
+  for (const el of ['Co-invest offers', 'Ask the report']) assert.ok(!src.includes(el), `the section still names ${el}`);
 });

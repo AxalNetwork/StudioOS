@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { TrendingUp } from 'lucide-react';
 import { StatCard, Section, Chip, FilterChips, EmptyState } from './advisor/network/kit';
 import ErrorState from '../components/ErrorState';
 import Skeleton from '../components/Skeleton';
 import { fmtMultiple, fmtRate, Unrecorded } from '../lib/fundAnalytics';
 import { fundPerformanceApi } from '../lib/api/fundPerformance.js';
 import { titleCase as caseLabel } from '../lib/absence';
+import FundPerformanceShell from './investor/FundPerformanceShell';
 const titleCase = (s) => caseLabel(s) || 'Unknown';
 
 const money = (cents) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -53,10 +53,12 @@ export function FundPerformanceView({ items = [], loading = false, error = null,
       </Section>)}
   </div>;
 }
-export default function FundPerformancePage({ embedded = false }) {
-  const [state, setState] = useState({ items: [], loading: true, error: null });
+/** #6245 (owner: C): the page; its Fund chrome is `investor/FundPerformanceShell.jsx`. */
+export default function FundPerformancePage({ fundUnlocked = false, locked = false }) {
+  const [state, setState] = useState({ items: [], loading: !locked, error: null });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (locked) return undefined;
     let live = true;
     setState({ items: [], loading: true, error: null });
     fundPerformanceApi.list().then(data => {
@@ -64,8 +66,9 @@ export default function FundPerformancePage({ embedded = false }) {
       if (live) setState({ items: data.items, loading: false, error: null });
     }).catch(error => { if (live) setState({ items: [], loading: false, error: error?.message || 'Fund performance could not be read.' }); });
     return () => { live = false; };
-  }, [attempt]);
-  const content = <FundPerformanceView {...state} reload={() => setAttempt(n => n + 1)} />;
-  if (embedded) return content;
-  return <div className="p-6 max-w-7xl mx-auto"><div className="mb-6"><h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2"><TrendingUp className="w-6 h-6 text-violet-600" />Fund Performance</h1><p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Performance from recorded valuations and fund cash flows.</p></div>{content}</div>;
+  }, [attempt, locked]);
+  const reload = () => setAttempt(n => n + 1);
+  return <FundPerformanceShell fundUnlocked={fundUnlocked} locked={locked} state={state} reload={reload}>
+    <FundPerformanceView {...state} reload={reload} />
+  </FundPerformanceShell>;
 }

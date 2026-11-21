@@ -134,9 +134,10 @@ test('an unreadable graduate list is said as one, not as an empty queue', () => 
   assert.ok(out.includes('The graduate count could not be read'));
   assert.ok(!/0 awaiting/.test(out), 'a failed read printed an empty queue');
   // The states card's own row: the count is replaced by the failure, not by 0.
-  assert.match(out, /Awaiting issue\s*The graduate list could not be read/,
+  // D5129 (Q2 = A): the shared Unreadable leads with the word Unavailable.
+  assert.match(out, /Awaiting issue\s*Unavailable\s*The graduate list could not be read/,
     'the states card prints a number for a queue it could not read');
-  assert.match(kpiValue(board(failed), 'cert-kpi-eligible'), /^\s*The graduate count could not be read/,
+  assert.match(kpiValue(board(failed), 'cert-kpi-eligible'), /^\s*Unavailable\s*The graduate count could not be read/,
     'a failed read was called unrecorded, or given a number');
 });
 

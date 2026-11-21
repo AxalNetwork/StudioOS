@@ -1,0 +1,3 @@
+{
+  "await liveFiles(env.DB) @ services/capTableDocumentRead.ts": 1
+}

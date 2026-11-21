@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Fund Profile and Comparison · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds · #7032 · brief 2 of 5 · extends Research v2 (#3701)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Fund vehicle profile — the detail Sheet, the full profile, its sources and the project comparison</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/research/funds/catalog/:id, the directory detail Sheet over /research/funds?view=directory, and the fund view of /research/projects/:uid/comparisons. A founder deciding which specific vehicle could invest in their round checks one vehicle, its source and its dates, then saves it to their private shortlist, adds it to a research project or compares it there. Every material figure names its publisher and reported date, and the same chip appears in the Sheet, the profile and the comparison. Reported, Imported on and Source use reviewed are three dates. EUR and USD stay as reported; nothing is converted, summed, scored or ranked. Manager HQ is not investment geography. It reuses the Research v2 shell and the shared Sheet, the action names of brief 1, and the Platform States vocabulary (Unavailable on screen). Board ids are FND-P; component keys are RFP. Violet dashed ◇ tags mark backend work on #7032; amber ⚑ tags mark owner decisions, option A drawn. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · Dawn Capital Opp (€75m) and Fund V (€582m), Afore IV (US$185m) and their sources are committed directory data with their recorded publishers and dates; every bracketed name, project, fund and figure is fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds Fund Profile and Comparison Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FND-P00', 'Journey, routes and vocabulary', 'First-use and recovery paths with their routes, every board with its key, route, state and status, the vocabulary (vehicle, reported size, three dates, manager HQ, Not recorded, Unavailable, Withdrawn) and the annotation key.', [W('RFP00')]],
+      ['FND-P01', 'Detail Sheet', 'The shared Sheet over the directory: vehicle, manager, vintage and the dated, native-currency reported size first, then manager HQ, stated focus and the sourced fields that are Not recorded. One primary action: Save to shortlist. The two Dawn Capital vehicles share a manager, date and quarter and get two Sheets.', [F('RFP01', false, 900), C('RFP01B', 'Dawn Capital Opp and Fund V side by side', 1100, 1130)]],
+      ['FND-P02', 'Full vehicle profile', '/research/funds/catalog/:id. Back to results keeps the list context. The source card carries Reported, Imported on and Source use reviewed. The manager history lists vehicles with their labels; the size chart uses this vehicle alone. Afore IV shows native USD and a stated focus that is Not recorded.', [F('RFP02', 'Dawn Capital Opp · EUR', 1080), F('RFP02B', 'Afore IV · USD, focus not recorded', 1000)]],
+      ['FND-P03', 'Follow one figure', 'The same publisher and reported date in the Sheet, the profile and the comparison, the three dates, and what main shows today.', [C('RFP03', false, 1300, 545)]],
+      ['FND-P04', 'Save to shortlist', 'Not saved, saving, saved with the dossier link, already saved, shortlist unavailable and save failed.', [C('RFP04', false, 1300, 415)]],
+      ['FND-P05', 'Active project picker and result', 'Add to research project: active projects, existing membership, an archived project as read-only, New research project. Outcomes name the project and link to it.', [F('RFP05', false, 900), C('RFP05B', 'Outcomes and refusals', 1300, 410)]],
+      ['FND-P06', 'Comparison', 'The project comparison with two vehicles and one unknown value. EUR and USD visible per cell, each with its publisher and reported date. Compare in project adds to an existing comparison or a new one; a comparison at 6 refuses.', [F('RFP06', 'Dawn Capital Opp and Afore IV', 960), F('RFP06B', 'Compare in project · at the limit', 900)]],
+      ['FND-P07', 'Missing, unavailable and withdrawn', 'Loading, Unavailable with Retry, a missing record and a withdrawn source. A source withdrawn during the session clears the open Sheet and empties its comparison column, and says why.', [C('RFP07', false, 1400, 515), F('RFP07B', 'Withdrawn while the Sheet is open', 900), F('RFP07C', 'Withdrawn in a comparison', 1010)]],
+      ['FND-P08', 'Phone 390', 'Results with the detail bottom sheet, the profile with Save to shortlist in reach, the project picker, a six-fund comparison by attribute and by fund, and the withdrawn Sheet.', [P('RFP08A', 'Detail Sheet'), P('RFP08B', 'Full profile'), P('RFP08C', 'Project picker'), P('RFP08D', 'Six funds · by attribute'), P('RFP08E', 'Six funds · by fund'), P('RFP08F', 'Withdrawn')]],
+      ['FND-P09', 'Dark mode', 'The saved profile, the comparison and the phone Sheet with native USD on the dark tokens.', [F('RFP09', 'Profile · saved', 1080), F('RFP09B', 'Comparison', 900), P('RFP09C', 'Phone Sheet · Afore IV')]],
+      ['FND-P10', 'Keyboard, focus and announcements', 'The focus sequence of the Sheet, where focus returns when each panel closes, what is announced and how, the keyboard paths and the non-colour cues.', [W('RFP10')]],
+      ['FND-P11', 'Handoff', 'What was checked on main, the backend changes (vehicle ids, native currency, dated provenance, source-policy refresh, proposed fields, vehicle history), frontend-only work, owner decisions and what is preserved.', [W('RFPH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

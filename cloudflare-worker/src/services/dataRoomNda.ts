@@ -18,6 +18,7 @@
  * A ROOM THAT CANNOT BE READ IS null, never false: the deck then says
  * "Unreadable" rather than "Not required".
  */
+import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 import { tierAdmits } from './dataRoomAccess';
 
@@ -42,7 +43,7 @@ export function ndaChoiceInput(v: unknown): 0 | 1 | undefined {
 /** True when any file an investor can be admitted to is gated `nda`. Throws when the files cannot be read. */
 export async function roomGatesAskNda(env: Env, projectId: number, now: number = Date.now()): Promise<boolean> {
   const res: { success?: boolean; results?: { access_tier: string | null; access_expires_at: string | null }[] } = await env.DB.prepare(
-    "SELECT access_tier, access_expires_at FROM data_room_files WHERE project_id = ? AND visibility = 'nda'",
+    `SELECT access_tier, access_expires_at FROM data_room_files WHERE project_id = ? AND visibility = 'nda'${await liveFiles(env.DB)}`,
   ).bind(projectId).all();
   if (res.success === false || !Array.isArray(res.results)) throw new Error('Data room files unreadable');
   return res.results.some((f) => tierAdmits(f, true, now, null));

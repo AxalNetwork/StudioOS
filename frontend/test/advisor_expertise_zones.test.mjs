@@ -123,7 +123,9 @@ test('Visibility states what is not recorded on the zone itself, in the Worker\'
   // the zone draws it under "Profile views", "Not recorded", never a 0. The
   // card itself is gone: requests per link and opens are recorded.
   const zone = codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx'));
-  assert.match(zone, /api\.getMyAdvisorVisibility\(VISIBILITY_DAYS\)/);
+  // D4827: the window the advisor picks (7, 30 or 90 days, 30 by default) is what is read.
+  assert.match(zone, /api\.getMyAdvisorVisibility\(days\)/);
+  assert.match(zone, /readVisibilityPage = \(days = VISIBILITY_DAYS\) =>/);
   assert.match(zone, /Profile views<\/div>\s*<div className="mt-1\.5"><Unrecorded \/><\/div>\s*<div[^>]*>\{data\?\.views_note\}/,
     'profile views must be Not recorded with the Worker\'s sentence');
   assert.doesNotMatch(read('frontend/src/workspaces/noStoreCopy.js'), /no impression or profile-view counter anywhere in the product/,
@@ -170,9 +172,11 @@ test('an unpriced service is never rendered as free', () => {
   // "no price set" into "$0.00", which is a different claim entirely.
   assert.match(kit, /if \(cents == null\) return null;/);
 
-  const services = codeOnly(read('frontend/src/pages/advisor/expertise/ServicesZone.jsx'));
-  assert.match(services, /money\(row\.price_cents, row\.currency\) \?\? <Unrecorded \/>/,
-    'an absent price falls back to Not recorded, not to a zero');
+  // D4824: the card (ServiceCard.jsx) writes the price with its code, and an absent one says so.
+  const services = codeOnly(read('frontend/src/pages/advisor/expertise/ServiceCard.jsx'));
+  assert.match(services, /servicePrice\(row\.price_cents, row\.currency\);/);
+  assert.match(services, /\{price \?\? <span [^>]*>— No price set<\/span>\}/,
+    'an absent price reads No price set, not a zero');
   // Shared with the partner tree, which carries the same risk on different
   // column names (`amount_cents`, `floor_cents`, `hours_used`).
   assertAbsentIsNotZero('frontend/src/pages/advisor/expertise', ['price_cents']);

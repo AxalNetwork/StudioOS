@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Introductions Quarterly Ask · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Introductions · #7065 · NW3-intro-ask, continuing NW3.1 and NW3.3 of #6256 (#7062 brief 3 of 4)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Introductions — the quarterly investor ask, its receipt, and the founder’s answer</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An investor at /network/introductions asks Axal for an introduction to a founder or startup when no teammate knows them. It costs one quarterly ask, never an intro credit, and the cost, quarter and allowance are shown before the human send. These boards continue the approved Network canvas and investor addendum (#4799, #6256): the header, the four links, the request sheet (NW3.1), the decision layout (NW3.3), the Sheet, the NW5 state words and the one Eadwyn rail (#5130). Frames marked “On main today” show only what the Worker writes now: an ask is stored Pending and nothing moves it. The founder’s accept or decline, withdrawal with one returned slot, and the legacy resolution follow the owner’s decision A on #6261 and are drawn as implementation-dependent. A slot is shown as used, returned or being checked only from a server answer, never from a spinner. Keys carry the NIQ prefix; NW3-intro-ask ids are in the section titles. Violet dashed ◇ tags mark backend work, amber ⚑ tags the owner picks drawn as option A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Iris Chen], [Harbor Lane Capital], [Jules Avery], [Elm Studio] and every person, company and figure (Free tier, 3 asks a quarter, 1 of 3 left before the ask, receipt a7c4e2d0) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Introductions Quarterly Ask Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW3-intro-ask.0', 'Your asks · on main today', 'The Introductions page with the asks line and Your asks as GET /api/introductions returns them: target named only where visible (D6260), message or “No message was sent”, quarter, date, Pending. No Withdraw and no founder answer exist yet, so none is drawn.', [F('NIQ01', false, 900)]],
+      ['NW3-intro-ask.1', 'Choose the target and the path', 'Step 1 finds [Elm Studio]; step 2 finds no teammate, so the quarterly ask is offered as the fallback with the last-slot line. Beside it, a target a teammate knows: the team path, free, with no ask offered. Then a fund, a target not available to you, and a target whose eligibility could not be read.', [C('NIQ02', 'Steps 1 and 2, fallback and team path', 1400, 640), C('NIQ02B', 'Not eligible and could not be read', 1400, 420)]],
+      ['NW3-intro-ask.2', 'Confirm · the last slot', 'Step 3 of the request sheet: venture, receiving founder (shown because authorized), cost “1 quarterly ask”, quarter, 1 of 3 left now and 0 after, the last-ask notice, the message (kept on every recoverable error) and Eadwyn’s draft with its cost quoted first. One primary: Use 1 ask and send.', [F('NIQ03', false, 1000)]],
+      ['NW3-intro-ask.3', 'Sending, duplicates and recovery', 'Sending, a second click, a second tab, a failed save (no ask used), a lost response (slot being checked), and a retry that finds the same receipt. Then the 402 when no asks are left, an allowance that could not be read, and the four slot words.', [C('NIQ04', 'Six send states', 1400, 760), C('NIQ04B', 'Quota and slot words', 1400, 400)]],
+      ['NW3-intro-ask.4', 'Receipt', 'One durable receipt: id, time, venture, founder, cost, slot, status and message, the next steps (founder told, answer, NDA step) tagged backend, and who reads which fields: the founder never sees the investor’s allowance or other asks.', [F('NIQ05', false, 1060)]],
+      ['NW3-intro-ask.5', 'Founder decision and the NDA step', 'Implementation-dependent (#6261 A). The founder opens this exact ask from the notification, with Decline and Accept. Accept opens the existing Trust Center NDA step with a way back to the ask; it signs nothing and records no introduction. The investor sees the recorded answer.', [F('NIQ06', 'Founder opens the ask', 960), C('NIQ06B', 'After Accept and Decline', 1400, 470), F('NIQ06C', 'Trust Center NDA step', 760)]],
+      ['NW3-intro-ask.6', 'Withdrawal', 'Scope, Review, Result for an unanswered ask: Withdrawn, one slot returned once, 1 of 3 left. Then the race where the founder answered first, a previous-quarter withdrawal as its own result, and a withdrawal still being checked.', [C('NIQ07', 'Scope → Review → Result', 1400, 520), C('NIQ07B', 'Race, previous quarter, being checked', 1400, 460)]],
+      ['NW3-intro-ask.7', 'Legacy recovery', 'Asks paid before founders could answer. The member chooses for each one: send it now after reviewing what the founder will read, withdraw it, or keep it as a private record. Nobody is contacted automatically (⚑).', [F('NIQ08', 'Your asks with the resolve sheet', 1020), C('NIQ08B', 'Review, result, target not available', 1400, 560)]],
+      ['NW3-intro-ask.8', 'Reads, refusals and support', 'Loading, verified empty, optional fields missing, unavailable with Try again, refused for a non-investor and for someone else’s ask without disclosing it, the HQ support session read-only, Eadwyn’s quoted draft, and the kept message.', [C('NIQ09', false, 1400, 830)]],
+      ['NW3-intro-ask · tablet', 'Tablet 768', 'The confirm sheet over Introductions at 768; the rail collapses to the E in the top bar.', [C('NIQ10', false, 768, 1024)]],
+      ['NW3-intro-ask · phone', 'Phone 390', 'Fallback offer, the last-slot confirm, the lost response, the founder’s decision, withdraw review and the legacy list. 44px targets, sticky primary.', [P('NIQ11A', 'Fallback'), P('NIQ11B', 'Confirm'), P('NIQ11C', 'Lost response'), P('NIQ11D', 'Founder decision'), P('NIQ11E', 'Withdraw'), P('NIQ11F', 'Legacy asks')]],
+      ['NW3-intro-ask · dark', 'Dark', 'The confirm and the founder’s decision on the dark tokens; states keep their words and shapes.', [F('NIQ12', 'Confirm · dark', 1000), F('NIQ12B', 'Founder decision · dark', 960)]],
+      ['Index', 'Frame index and accessibility', 'Each frame’s actor, entry point, next action and data dependency; keyboard order, focus return and the announced results.', [W('NIQI')]],
+      ['Handoff', 'Handoff', 'Checked on main, existing components reused, backend required (◇), owner picks (⚑), frontend only, open questions.', [W('NIQH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -422,7 +422,7 @@ def google_callback(
     # browser that initiated it (we set a HttpOnly nonce cookie at /connect).
     cookie_nonce = request.cookies.get(_OAUTH_COOKIE)
     if not cookie_nonce or not secrets.compare_digest(cookie_nonce, nonce):
-        logger.warning("google callback nonce mismatch for user_id=%s", user_id)
+        logger.warning("google callback nonce mismatch")
         return RedirectResponse(failure + "&reason=csrf")
     user = session.get(User, user_id)
     if not user:

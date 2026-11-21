@@ -103,7 +103,7 @@ function freshDb(withColumn = true) {
       vote TEXT NOT NULL, rationale TEXT, created_at TEXT);
     CREATE TABLE ic_conditions (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, ic_decision_id INTEGER NOT NULL,
       body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL, created_at TEXT,
-      resolved_at TEXT, resolved_by INTEGER);
+      resolved_at TEXT, resolved_by INTEGER, owner_user_id INTEGER, owner_label TEXT);
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, company_id INTEGER NOT NULL,
       is_primary_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT);
     CREATE TABLE company_profiles (id INTEGER PRIMARY KEY, company_name TEXT, archived_at TEXT);
@@ -112,6 +112,7 @@ function freshDb(withColumn = true) {
   `);
   runMigration(db, '335_deal_transfers_and_closing_checklists.sql');
   if (withColumn) runMigration(db, '340_deal_transfer_company.sql');
+  runMigration(db, '202611161150_6889_deal_transfer_phone_verifier.sql'); // D6889: the reads name the phone verifier
   const u = db.prepare('INSERT INTO users (id, role, name) VALUES (?, ?, ?)');
   u.run(SOLO, 'admin', 'Sol Solo'); u.run(MULTI, 'admin', 'Mia Multi');
   u.run(LONE, 'admin', 'Lou Lone'); u.run(RIVAL, 'admin', 'Rex Rival');

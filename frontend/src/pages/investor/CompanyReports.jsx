@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react';
 import { reportingApi } from '../../lib/api/reporting';
-import { Lightbox, Unreadable, usePhoneWidth } from '../../ui';
+import { closingsApi } from '../../lib/api/closings';
+import { Unreadable, usePhoneWidth } from '../../ui';
+import { recordOf } from '../portfolio/reportAsk';
 import { CARD, H2, LINK, MUTED, Pill } from './PortfolioReports';
 import {
-  FIGURE_KEYS, HOLDING_NOTES, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
+  FIGURE_KEYS, HOLDING_NOTES, TERMS_COPY_WORDS, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
+  whatChangedSource, whatChangedText,
 } from './portfolioReportsModel';
 import Sheet from '../../ui/Sheet.jsx';
+import ReportPrintButton from '../cycles/reporting/printing/ReportPrintButton.jsx';
+import { figuresCsv, figuresCsvName } from './portfolioReportsModel';
 
 /**
  * D1061 (#2931) — the company page's blocks (RPT10, RPT11, RPT13): Figures as
  * five small multiples from the frozen figures of the reports received, the
  * Reports timeline with Read, Ask and Waive, Terms read only, the reader, and
- * the holding notes. Every change opens an in-page dialog that says what it
+ * the holding notes. D4817 part 9 (#5311): Ask and Waive are no longer
+ * dialogs here; the timeline hands the press to `onAct`, and the company
+ * Reports draws the Review, confirm and Receipt (`../portfolio/ReportAsk.jsx`). Every change opens an in-page dialog that says what it
  * changes; nothing here is a browser pop-up, and nothing names another
  * investor.
  *
@@ -85,6 +92,33 @@ function SmallChart({ s }) {
   );
 }
 
+/**
+ * D6224 (#6224): "Download figures (CSV)" — the reports already on the page,
+ * as a file built in the browser (no read). A failure says so and leaves the
+ * page as it was.
+ */
+function FiguresDownload({ reports }) {
+  const [failed, setFailed] = useState(false);
+  const download = () => {
+    setFailed(false);
+    try {
+      const blob = new Blob(['\uFEFF', figuresCsv(reports)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = figuresCsvName();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setFailed(true); }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="company-figures-download">
+      <button type="button" className={BTN} onClick={download} data-testid="button-download-figures">Download figures (CSV)</button>
+      <span className={MUTED}>Every figure as reported, with its source. A gap reads “Not recorded” with its reason.</span>
+      {failed ? <p role="alert" className="m-0 w-full text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-figures-download-failed">The figures could not be downloaded. Nothing on this page changed. Try again.</p> : null}
+    </div>
+  );
+}
+
 function FigureCard({ s }) {
   const [table, setTable] = useState(false);
   return (
@@ -104,8 +138,31 @@ function FigureCard({ s }) {
   );
 }
 
+/**
+ * D6222 (#6222): "Save as my note" on What changed. `onSave(body)` writes the
+ * note (the Overview's notes store) and throws on a refusal; the Overview then
+ * keeps the text in the Notes box with the reason. Only the investor reads it.
+ */
+function SaveChanges({ text, source, onSave }) {
+  const [state, setState] = useState('idle');
+  const save = async () => {
+    setState('saving');
+    try { await onSave({ body: text, ...(source || {}) }); setState('saved'); } catch { setState('failed'); }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="company-what-changed-save">
+      <button type="button" className={BTN} disabled={state === 'saving' || state === 'saved'} onClick={save} data-testid="button-save-what-changed">
+        {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved to your notes' : 'Save as my note'}
+      </button>
+      <span className={MUTED} data-testid="company-what-changed-save-status">
+        {state === 'saved' ? 'Saved to Your notes below. Only you can read it.' : state === 'failed' ? 'Not saved. The text is kept in Your notes below with the reason.' : 'Saved notes are private: the company and other investors never see them.'}
+      </span>
+    </div>
+  );
+}
+
 /** Figures (RPT10): read from the frozen figures of each report received (D1061), which records no open. */
-export function FiguresTab({ uid, periods }) {
+export function FiguresTab({ uid, periods, onSaveNote = null }) {
   const [state, setState] = useState({ status: 'loading', reports: [] });
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -131,6 +188,7 @@ export function FiguresTab({ uid, periods }) {
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block w-4 border-t border-dashed border-gray-400 dark:border-gray-500" />No figure in a report (dashed)</li>
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border-2 border-violet-600 dark:border-violet-400" />Corrected (ring)</li>
         </ul>
+        <FiguresDownload reports={state.reports} />
       </section>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="company-figure-grid">{FIGURE_KEYS.map((k) => <FigureCard key={k} s={seriesOf(state.reports, k)} />)}</div>
       <section className={CARD} data-testid="company-what-changed">
@@ -141,49 +199,9 @@ export function FiguresTab({ uid, periods }) {
             {changes.map((c) => <li key={c.key} className="text-[12.5px]"><b className="text-axal-ink dark:text-gray-100">{c.text}</b><div className="text-axal-muted dark:text-gray-400">{c.sub}</div></li>)}
           </ul>
         ) : <p className={MUTED} data-testid="company-what-changed-none">No figure changed between the last two reports you received, or only one has arrived.</p>}
-        <p className={MUTED} data-testid="company-what-changed-note">Saving this as your own note waits for a notes store; nothing here is saved or sent.</p>
+        {changes.length && onSaveNote ? <SaveChanges text={whatChangedText(changes)} source={whatChangedSource(state.reports)} onSave={onSaveNote} /> : null}
       </section>
     </div>
-  );
-}
-
-// ───────────────────────────────────────────────────────────── RPT11: Ask and Waive
-
-/** "Ask for this report": once per period, while it is late or missing. The company is told; nobody else sees it. */
-export function AskDialog({ company, row, onClose, onDone }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const go = async () => {
-    setBusy(true); setError('');
-    try { await reportingApi.ask(row.uid); onDone(); } catch (e) { setError(refusal(e, 'The request could not be sent. Try again.')); } finally { setBusy(false); }
-  };
-  return (
-    <Lightbox label="Ask for this report" title={`Ask ${company} for the ${row.title}?`} onClose={onClose} width={460} phone="sheet" testId="company-ask-dialog"
-      footer={<Foot><button type="button" className={BTN} onClick={onClose} disabled={busy}>Cancel</button><button type="button" className={PRIMARY} onClick={go} disabled={busy} data-testid="company-ask-confirm">Ask for this report</button></Foot>}>
-      <div className="flex flex-col gap-2 px-5 py-4">
-        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">The company is told that you asked. Nobody else sees your request.</p>
-        <p className={MUTED}>You can ask once per period.</p>
-        {error ? <p role="alert" className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-ask-error">{error}</p> : null}
-      </div>
-    </Lightbox>
-  );
-}
-
-/** "Waive this period": once. The record shows it waived by the investor. */
-export function WaiveDialog({ company, row, onClose, onDone }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const go = async () => {
-    setBusy(true); setError('');
-    try { await reportingApi.waive(row.uid); onDone(); } catch (e) { setError(refusal(e, 'The period could not be waived. Try again.')); } finally { setBusy(false); }
-  };
-  return (
-    <Lightbox label="Waive this period" title={`Waive ${row.period} for ${company}?`} onClose={onClose} width={460} phone="sheet" testId="company-waive-dialog"
-      footer={<Foot><button type="button" className={BTN} onClick={onClose} disabled={busy}>Back</button><button type="button" className={PRIMARY} onClick={go} disabled={busy} data-testid="company-waive-confirm">Waive</button></Foot>}>
-      <div className="flex flex-col gap-2 px-5 py-4">
-        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">The record shows it waived by you, and the company sees that on its desk. The period is no longer owed to you.</p>
-        <p className={MUTED}>It cannot be undone here.</p>
-        {error ? <p role="alert" className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-waive-error">{error}</p> : null}
-      </div>
-    </Lightbox>
   );
 }
 
@@ -216,7 +234,7 @@ export function ReportReader({ uid, company, onClose, row = null }) {
   // RPT21: on a phone the reader is a full-screen sheet with "‹ Reports" in place of the dialog's head.
   return (
     <Sheet label="Report" eyebrow={narrow ? undefined : `Report from ${company}`} title={narrow ? undefined : title} onClose={onClose} width={640} testId="company-reader"
-      footer={<Foot><button type="button" className={BTN} onClick={onClose}>Close</button></Foot>}>
+      footer={<Foot><ReportPrintButton report={r} company={company} reader className={BTN} /><button type="button" className={BTN} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         {narrow ? <SheetHead title={title} pill={row?.pill} line={`${row?.kind || 'Report'} from ${company}`} onBack={onClose} /> : null}
         {state.status === 'loading' ? <div className="h-3 w-48 animate-pulse rounded bg-axal-ground dark:bg-gray-800" aria-busy="true" /> : null}
@@ -280,7 +298,7 @@ export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
       <div className="flex flex-col gap-3 px-5 py-4">
         <SheetHead title={`${row.period} update`} pill={row.pill} line={`${row.kind} from ${company}`} onBack={onClose} />
         <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="company-sheet-due">{row.sub}</p>
-        {row.asked ? <p className={MUTED} data-testid="company-sheet-asked">You asked for this report. The company was told; nobody else sees it.</p> : null}
+        {row.record ? <p className={MUTED} data-testid="company-sheet-asked">{row.record}.{row.asked ? ' The company was told; nobody else sees it.' : ''}</p> : null}
         <p className={MUTED}>{row.canAsk ? 'You can ask once per period. The company sees your request; nobody else does.' : 'You can ask for a report once it is late.'}</p>
       </div>
     </Sheet>
@@ -289,8 +307,18 @@ export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
 
 // ───────────────────────────────────────────────────────────── RPT10r: the timeline
 
-export function Timeline({ company, onChanged }) {
-  const rows = timelineRows(company);
+/**
+ * The periods owed to you. `onAct(kind, uid)` opens Ask or Waive for a period
+ * (D4817 part 9); with no `onAct`, or `canAct` false, no action is drawn.
+ * Each row's record line (asked or waived, who and when) is the company read's.
+ */
+export function Timeline({ company, onChanged, onAct = null, canAct = true }) {
+  const raw = new Map((company?.periods || []).map((p) => [p.uid, p]));
+  const acting = Boolean(onAct) && canAct;
+  const rows = timelineRows(company).map((r) => ({
+    // canWaive also needs the holding's leave (`can_waive`: through an SPV, only its lead may; owner answer 2026-11-14).
+    ...r, record: recordOf(raw.get(r.uid))?.text || null, canAsk: acting && r.canAsk, canWaive: acting && r.canWaive && raw.get(r.uid)?.can_waive !== false,
+  }));
   const [open, setOpen] = useState(null);
   const narrow = usePhoneWidth(SHEET_QUERY);
   const name = company?.name || 'This company';
@@ -308,6 +336,7 @@ export function Timeline({ company, onChanged }) {
                 <span className="flex min-w-0 flex-col">
                   <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</span>
                   <span className="text-[12px] text-axal-muted dark:text-gray-400">{r.sub}</span>
+                  {r.record ? <span className="text-[12px] text-axal-ink dark:text-gray-100" data-testid={`company-period-record-${r.uid}`}>{r.record}</span> : null}
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1"><Pill pill={r.pill} />{r.asked ? <Pill pill={{ tone: 'neutral', text: 'Asked' }} /> : null}</span>
               </button>
@@ -321,27 +350,74 @@ export function Timeline({ company, onChanged }) {
               <div className="min-w-0">
                 <div className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</div>
                 <div className="text-[12px] text-axal-muted dark:text-gray-400">{r.sub}</div>
+                {r.record ? <div className="text-[12px] font-semibold text-axal-ink dark:text-gray-100" data-testid={`company-period-record-${r.uid}`}>{r.record}</div> : null}
                 <div className="mt-1 flex flex-wrap gap-1.5"><Pill pill={r.pill} />{r.asked ? <Pill pill={{ tone: 'neutral', text: 'Asked' }} /> : null}</div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {r.reportUid ? <button type="button" className={BTN} onClick={() => setOpen({ kind: 'read', row: r })} data-testid={`company-period-read-${r.uid}`}>Read</button> : null}
-                {r.canAsk ? <button type="button" className={BTN} onClick={() => setOpen({ kind: 'ask', row: r })} data-testid={`company-period-ask-${r.uid}`}>Ask for this report</button> : null}
-                {r.canWaive ? <button type="button" className={BTN} onClick={() => setOpen({ kind: 'waive', row: r })} data-testid={`company-period-waive-${r.uid}`}>Waive this period</button> : null}
+                {r.canAsk ? <button type="button" className={BTN} aria-haspopup="dialog" onClick={() => onAct('ask', r.uid)} data-testid={`company-period-ask-${r.uid}`}>Ask for this report</button> : null}
+                {r.canWaive ? <button type="button" className={BTN} aria-haspopup="dialog" onClick={() => onAct('waive', r.uid)} data-testid={`company-period-waive-${r.uid}`}>Waive this period</button> : null}
               </div>
             </li>
           ))}
         </ul>
       )}
-      <p className={MUTED}>You can ask once per period, once it is late. The company sees your request; nobody else does.</p>
+      <p className={MUTED}>{acting ? 'You can ask once per period, once it is late. The company sees your request; nobody else does.' : 'Asking and waiving are not available in this session.'}</p>
       {open?.kind === 'read' ? <ReportReader uid={open.row.reportUid} company={name} row={open.row} onClose={() => { setOpen(null); onChanged(); }} /> : null}
-      {open?.kind === 'period' ? <PeriodSheet company={name} row={open.row} onClose={() => setOpen(null)} onAsk={() => setOpen({ kind: 'ask', row: open.row })} onWaive={() => setOpen({ kind: 'waive', row: open.row })} /> : null}
-      {open?.kind === 'ask' ? <AskDialog company={name} row={open.row} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} /> : null}
-      {open?.kind === 'waive' ? <WaiveDialog company={name} row={open.row} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} /> : null}
+      {open?.kind === 'period' ? <PeriodSheet company={name} row={open.row} onClose={() => setOpen(null)} onAsk={() => { setOpen(null); onAct('ask', open.row.uid); }} onWaive={() => { setOpen(null); onAct('waive', open.row.uid); }} /> : null}
     </section>
   );
 }
 
 // ───────────────────────────────────────────────────────────── RPT10t: Terms
+
+/** D6223: hands a fetched blob to the browser as a file; the page itself never navigates. */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * D6223 (#6223): the duty's document pill. With a signed copy the caller may
+ * open, it downloads that copy through the existing scoped e-sign read
+ * (D6199's `signedCopyBlob`); otherwise it stays a plain pill and says why.
+ */
+function DutyDocument({ row }) {
+  const [state, setState] = useState('idle');
+  const text = `${row.document}${row.clause ? ` ${row.clause}` : ''}`;
+  if (row.copy.state !== 'available') {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Pill pill={{ tone: 'neutral', text }} testId={`company-term-doc-${row.uid}`} />
+        <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid={`company-term-copy-${row.uid}`}>{TERMS_COPY_WORDS[row.copy.state] || TERMS_COPY_WORDS.not_recorded}</span>
+      </span>
+    );
+  }
+  const download = async () => {
+    setState('pending');
+    try {
+      const { blob, filename } = await closingsApi.signedCopyBlob(row.copy.envelopeId);
+      saveBlob(blob, filename);
+      setState('idle');
+    } catch { setState('failed'); }
+  };
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <button type="button" disabled={state === 'pending'} onClick={download} data-testid={`company-term-doc-${row.uid}`}
+        aria-label={`Download your signed copy: ${text}`}
+        className="inline-flex min-h-[28px] w-fit items-center rounded-full border border-axal-violet/40 bg-white px-2 py-0.5 text-[11px] font-bold text-axal-violet underline hover:border-axal-violet disabled:opacity-50 max-sm:min-h-11 dark:border-violet-400/50 dark:bg-gray-900 dark:text-violet-300 dark:hover:border-violet-300">
+        {state === 'pending' ? 'Downloading…' : `${text} · Download signed copy`}
+      </button>
+      {state === 'failed' ? <span role="alert" className="text-[12px] text-amber-900 dark:text-amber-200" data-testid={`company-term-copy-${row.uid}`}>{TERMS_COPY_WORDS.failed}</span> : null}
+    </span>
+  );
+}
 
 export function TermsCard({ company }) {
   const rows = termsRows(company);
@@ -355,10 +431,10 @@ export function TermsCard({ company }) {
           <span className="text-[12px] text-axal-muted dark:text-gray-400">{[d.rule, d.figures].filter(Boolean).join(' · ')}</span>
           <span className="flex flex-wrap gap-1.5">
             <Pill pill={{ tone: d.signed ? 'ok' : 'neutral', text: d.signed ? 'Signed document' : 'From the closing’s template' }} />
-            <Pill pill={{ tone: 'neutral', text: `${d.document}${d.clause ? ` ${d.clause}` : ''}` }} />
             {d.defaulted ? <Pill pill={{ tone: 'late', text: 'Default, not in the paper' }} /> : null}
             {d.route ? <Pill pill={{ tone: 'neutral', text: d.route }} /> : null}
           </span>
+          <DutyDocument row={d} />
         </div>
       ))}
     </section>

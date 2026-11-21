@@ -133,7 +133,7 @@ test('the timeline, Terms and the reader’s words', () => {
   assert.equal(rows.find((r) => r.uid === 'pq3').canAsk, false, 'only a late or missing period is asked for');
   assert.equal(timelineRows({ ...ACME, periods: [{ ...ACME.periods[3], asked: true }] })[0].canAsk, false, 'once per period');
   const terms = termsRows(ACME, (k) => ({ mrr: 'MRR', customers: 'Customers' })[k]);
-  assert.deepEqual(terms[0], { uid: 'd-kpi', title: 'Quarterly KPI report', rule: '45 days after quarter end', figures: 'MRR, Customers', document: 'Investors’ Rights Agreement', clause: '§1.1(b)', signed: true, defaulted: true, route: 'Direct' });
+  assert.deepEqual(terms[0], { uid: 'd-kpi', title: 'Quarterly KPI report', rule: '45 days after quarter end', figures: 'MRR, Customers', document: 'Investors’ Rights Agreement', clause: '§1.1(b)', signed: true, defaulted: true, route: 'Direct', copy: { state: 'not_recorded', envelopeId: null } });
   assert.equal(terms[1].signed, false);
   const mods = readerModules(READER);
   assert.deepEqual(mods.groups.map((g) => [g.title, g.figures.map((f) => [f.label, f.value, f.source])]), [['Revenue and traction', [['MRR', '$44,100', 'Connector · Stripe'], ['Net burn', '$63,000', 'Connector · Mercury · shared by the founder']]]]);
@@ -179,7 +179,9 @@ async function mount(element, routes, url = '/') {
 const companyAt = (url, routes) => mount(h(Routes, null,
   h(Route, { path: '/portfolio/companies/:uid', element: h(PortfolioCompanyPage) }),
   h(Route, { path: '/portfolio/companies/:uid/reports', element: h(PortfolioCompanyPage) }),
-  h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) })), routes, url);
+  h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) }),
+  // D4817 part 6: the old Terms address is replaced by Financials, at Ownership & rights.
+  h(Route, { path: '/portfolio/companies/:uid/financials', element: h(PortfolioCompanyPage) })), routes, url);
 const COMPANY_ROUTES = (over = {}) => ({
   '/positions': POSITIONS,
   '/reporting/companies/p-abc': { ok: true, company: ACME },
@@ -221,7 +223,8 @@ test('mounted RPT10 Figures: five small multiples from the frozen figures, a das
     await v.click('company-figure-toggle-customers');
     assert.match(v.text('company-figure-table-customers'), /Q2 2026 Not recorded · Moving billing systems/);
     assert.match(v.text('company-what-changed'), /MRR \$31,200 → \$44,100.*Headcount 11 → 17.*The Sep 2026 report has not arrived/);
-    assert.match(v.text('company-what-changed-note'), /nothing here is saved or sent/);
+    // D6222 (#6222): the placeholder is gone; What changed is saved as the investor's own note (portfolio_company_notes_d6222).
+    assert.ok(!v.has('company-what-changed-note'));
     assert.ok(!v.asked.some((a) => a.path.startsWith('/reporting/reports/')), 'Figures never opens a report, so no open is recorded');
     assert.match(v.text('company-holding'), /Seed · Your holding: Seed · \$250,000 invested · since 12 Mar 2026 · Direct/);
   } finally { await v.close(); }
@@ -251,7 +254,8 @@ test('mounted RPT10r and RPT11: the timeline; Read opens the reader with each fi
   } finally { await v.close(); }
 });
 
-test('mounted RPT11: Ask and Waive each open an in-page dialog that says what it changes; nothing is posted before the press; a refusal is drawn', async () => {
+// D4817 part 9 (#5311) re-aimed this test: Ask and Waive open the addendum's Review (PFA04, PFA05) in place of RPT11's dialogs.
+test('mounted RPT11: Ask and Waive each open an in-page Review that says what it changes; nothing is posted before the confirm; a refusal is drawn', async () => {
   const posted = [];
   const routes = COMPANY_ROUTES({
     'POST /reporting/periods/pm9/ask': (p) => { posted.push(p); return { ok: true, asked: true }; },
@@ -260,27 +264,28 @@ test('mounted RPT11: Ask and Waive each open an in-page dialog that says what it
   const v = await companyAt('/portfolio/companies/p-abc/reports', routes);
   try {
     await v.click('company-period-ask-pm9');
-    assert.match(v.text('company-ask-dialog'), /Ask Acme Robotics for the Sep 2026 · Monthly financial statements\?.*The company is told.*Nobody else sees your request.*once per period/);
+    assert.match(v.text('report-review-ask'), /Ask Acme Robotics for its report.*Who is told.*founder team.*No other investor.*Sep 2026 · Monthly financial statements.*once per period/);
     assert.deepEqual(v.writes(), []);
-    await v.click('company-ask-confirm');
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask']);
+    await v.click('report-receipt-done');
     await v.click('company-period-waive-pm9');
-    assert.match(v.text('company-waive-dialog'), /Waive Sep 2026 for Acme Robotics\?.*waived by you/);
-    await v.click('company-waive-confirm');
+    assert.match(v.text('report-review-waive'), /Waive this reporting period.*waived by you/);
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask', '/reporting/periods/pm9/waive']);
   } finally { await v.close(); }
   const refused = await companyAt('/portfolio/companies/p-abc/reports', COMPANY_ROUTES({ 'POST /reporting/periods/pm9/ask': { __status: 409, detail: 'You already asked for this period’s report.' } }));
   try {
     await refused.click('company-period-ask-pm9');
-    await refused.click('company-ask-confirm');
-    assert.match(refused.text('company-ask-error'), /already asked/);
+    await refused.click('report-review-confirm');
+    assert.match(refused.text('report-review-error'), /already asked/);
   } finally { await refused.close(); }
 });
 
 test('mounted RPT10t and RPT13: Terms read only from the documents signed; a syndicate holding says only the lead waives', async () => {
   const v = await companyAt('/portfolio/companies/p-abc/terms', COMPANY_ROUTES());
   try {
-    assert.match(v.text('company-term-d-kpi'), /Quarterly KPI report.*45 days after quarter end.*Signed document.*Investors’ Rights Agreement §1\.1\(b\).*Default, not in the paper.*Direct/);
+    assert.match(v.text('company-term-d-kpi'), /Quarterly KPI report.*45 days after quarter end.*Signed document.*Default, not in the paper.*Direct.*Investors’ Rights Agreement §1\.1\(b\)/);
     assert.match(v.text('company-term-d-mon'), /From the closing’s template.*Term Sheet §2\.2/);
     assert.ok(!v.has('company-holding-note-direct'), 'a direct holding needs no note');
   } finally { await v.close(); }

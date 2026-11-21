@@ -1,4 +1,9 @@
-/** D1169 (#3082): the grown storage read, over the actual migrated schema. Synthetic rows only. */
+/**
+ * D1169 (#3082): the grown storage read, over the actual migrated schema. Synthetic rows only.
+ * The read's membership and each area's kind are held to the hand-written
+ * storage-area contract (`frontend/test/_storageAreasContract.mjs`, #5507,
+ * D5507); this file lists only the areas its fixture seeds.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -10,6 +15,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import usage from '../src/routes/usage.ts';
 import { STORAGE_KINDS, storageState } from '../src/services/storageUsage.ts';
 import { storagePlan } from '../src/services/storagePlans.ts';
+import { STORAGE_AREA_KEYS, STORAGE_AREA_KIND, STORAGE_KIND_ORDER } from '../../frontend/test/_storageAreasContract.mjs';
 
 const SECRET = 'synthetic-storage-read-secret-'.repeat(3);
 test.after(() => removeMigratedDatabases());
@@ -88,19 +94,14 @@ const area = (body: any, key: string) => body.areas.find((r: any) => r.key === k
 const kind = (body: any, key: string) => body.kinds.find((r: any) => r.key === key);
 const ok = (files: number, bytes: number) => ({ files, bytes, measured_bytes: bytes, unknown_size_files: 0, recorded: true });
 
-const OWNER_AREAS = {
+// The areas member 11's fixture seeds; every other contracted area reads as zero files.
+const OWNER_SEEDED: Record<string, ReturnType<typeof ok>> = {
   data_room: ok(3, 600), diligence_files: ok(1, 800), research_library: ok(1, 600),
   interview_recordings: ok(2, 900), data_room_versions: ok(1, 50), session_audio: ok(2, 220), deck_reviews: ok(2, 2100),
-  grow_voice_notes: ok(0, 0),
-  // D1580 part 2a: no kept rehearsal audio, so none is counted.
-  deck_rehearsals: ok(0, 0),
-  // D1590: no walkthrough takes, so none is counted.
-  deck_recordings: ok(0, 0),
   validate_evidence: ok(1, 210), build_proofs: ok(2, 450), grow_minutes: ok(1, 240), brand_files: ok(2, 60), csv_imports: ok(1, 45),
-  // D1411: no article of theirs, so no list is made and none is counted.
-  articles: ok(0, 0),
-  agent_compute: ok(0, 0),
 };
+// D1580 part 2a, D1590, D5332, D1411, D4557: no rehearsal audio, walkthrough take, voice note, article or agent result of theirs.
+const OWNER_AREAS = Object.fromEntries(STORAGE_AREA_KEYS.map((key: string) => [key, OWNER_SEEDED[key] ?? ok(0, 0)]));
 
 test('D1169: every member store counts, company files count to the company owner, and signed copies never count', async () => {
   const f = fixture();
@@ -111,7 +112,8 @@ test('D1169: every member store counts, company files count to the company owner
     const { kind: _k, key: _key, ...got } = area(body, key);
     assert.deepEqual(got, want, key);
   }
-  assert.deepEqual(new Set(body.areas.map((entry: any) => entry.key)), new Set(Object.keys(OWNER_AREAS)));
+  // #5507: the read returns exactly the contracted areas, each once.
+  assert.deepEqual(body.areas.map((entry: any) => entry.key).sort(), [...STORAGE_AREA_KEYS]);
   assert.deepEqual(body.areas.slice(0, 4).map((a: any) => a.key), ['data_room', 'diligence_files', 'research_library', 'interview_recordings']);
   assert.equal(body.total_bytes, 6275); assert.equal(body.measured_bytes, 6275);
   assert.equal(body.files, 19); assert.equal(body.unknown_size_files, 0);
@@ -169,13 +171,10 @@ test('D5332: Distribution voice notes count by venture; missing sizes stay unkno
 test('D1169: kinds group the areas in the canvas order and sum exactly', async () => {
   const { body } = await fixture().call(11);
   assert.deepEqual(body.kinds.map((k: any) => k.key), [...STORAGE_KINDS]);
-  assert.deepEqual(STORAGE_KINDS, ['data_room', 'documents', 'recordings', 'decks_exports', 'brand', 'other']);
+  assert.deepEqual(STORAGE_KINDS, [...STORAGE_KIND_ORDER]);
   const want: Record<string, [number, number]> = { data_room: [4, 650], documents: [6, 2300], recordings: [4, 1120], decks_exports: [2, 2100], brand: [2, 60], other: [1, 45] };
   for (const [key, [files, bytes]] of Object.entries(want)) assert.deepEqual(kind(body, key), { key, ...ok(files, bytes) }, key);
-  const kindOf: Record<string, string> = { data_room: 'data_room', data_room_versions: 'data_room', research_library: 'documents', validate_evidence: 'documents',
-    build_proofs: 'documents', grow_minutes: 'documents', diligence_files: 'documents', interview_recordings: 'recordings', session_audio: 'recordings', grow_voice_notes: 'recordings',
-    deck_reviews: 'decks_exports', deck_rehearsals: 'recordings', deck_recordings: 'recordings', brand_files: 'brand', csv_imports: 'other', articles: 'other', agent_compute: 'documents' };
-  for (const a of body.areas) assert.equal(a.kind, kindOf[a.key], a.key);
+  for (const a of body.areas) assert.equal(a.kind, STORAGE_AREA_KIND[a.key], a.key);
 });
 
 test('D1169: companies list every company with its ventures, then files tied to none; a forged deck project names nothing', async () => {

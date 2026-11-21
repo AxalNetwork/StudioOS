@@ -5,7 +5,7 @@
  * as `/admin/security?tab=<key>`. This list is the one place a workspace is
  * named: the desktop nav, the phone section select, the deep-link parser and
  * the keyboard order all read it. #4801 to #4803 replace a workspace's BODY
- * (the `workspaces` map in `SecurityPage.jsx`'s `SecurityConsole`); they do not add a second list.
+ * (the `workspaces` map in `SecurityConsole.jsx`); they do not add a second list.
  */
 export const SECURITY_TABS = Object.freeze([
   { key: 'overview', label: 'Overview', sub: 'What needs action, the evidence behind it, and the audit trail.' },

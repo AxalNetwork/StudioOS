@@ -2,7 +2,9 @@
  * D1097 (#2962, Vercel part 2) — Operating systems' Hosting block (VC1, VC5,
  * VC6a) and Solution design's "From Vercel · Runs on" (VC4a), drawn from the
  * Worker's own shapes (`services/vercel/hosting.ts`) with a stubbed fetch;
- * Vercel is never reached.
+ * Vercel is never reached. Owns Vercel's placement on Build and what its five
+ * lines mount; every module's full part list is the contract in
+ * build_parts_contract_5507.test.mjs (#5507, D5507).
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/vercel_hosting_d1097.test.mjs
  */
@@ -14,7 +16,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import HostingFromVercel, { day, healthLine, hostingView, reconnectSentence, stamp } from '../src/pages/cycles/HostingFromVercel.jsx';
 import RunsOnFromVercel, { runsOnView } from '../src/pages/cycles/RunsOnFromVercel.jsx';
-import { BUILD_PARTS, builtParts } from '../src/pages/cycles/buildParts.jsx';
+import MvpFromVercel from '../src/pages/cycles/MvpFromVercel.jsx';
+import RoadmapFromVercel from '../src/pages/cycles/RoadmapFromVercel.jsx';
+import CompanyFromVercel from '../src/pages/cycles/CompanyFromVercel.jsx';
+import { isBefore, modulesWith, partElement } from './_buildParts.mjs'; // #5507: Vercel's key only; the full list is build_parts_contract_5507's
 
 const h = React.createElement;
 const FACTS = { project: 'acme-web', domain: 'app.acme.example', framework: 'nextjs', runtime: 'Node 20.x', branch: 'main', repository: null, plan: 'Hobby',
@@ -53,12 +58,27 @@ test('the words: stamps in UTC, the reconnect sentence, each health line, and ea
   assert.deepEqual(runsOnView({ state: 'ok', items: null, total: 2 }), { state: 'members_only', total: 2, asOf: null });
 });
 
-test('buildParts: the two #2962 lines draw, and D5064 (#5064) mounts the other three Vercel tasks', () => {
-  assert.deepEqual(builtParts('operating-systems').map(([k]) => k), ['tools', 'vercel', 'posthog']);
-  // D1088 (#2953) draws From Notion after Runs on; D1093 (#2958) From Google between them.
-  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion']);
-  for (const slug of ['prototype-mvp', 'product-roadmap', 'company-creation']) {
-    assert.ok(BUILD_PARTS[slug].some(([k, r]) => k === 'vercel' && r !== null), `${slug}'s Vercel line draws (D5064)`);
+test('buildParts: Vercel\'s own placement on Build, and what each of its five lines mounts (D1097, D1098, D1099, D5064)', () => {
+  // #5507: each module's complete list is build_parts_contract_5507's (D5507). Here, only Vercel's key.
+  assert.deepEqual(modulesWith('vercel'), ['company-creation', 'operating-systems', 'product-roadmap', 'prototype-mvp', 'solution-design']);
+  assert.ok(isBefore('operating-systems', 'tools', 'vercel'), 'VC1: the Hosting block after Tools history');
+  assert.ok(isBefore('solution-design', 'github', 'vercel'), 'VC4a: Runs on under From GitHub');
+  assert.ok(isBefore('prototype-mvp', 'github', 'vercel') && isBefore('prototype-mvp', 'vercel', 'lovable'), 'VC2: the Live strip between From GitHub and From Lovable');
+  assert.ok(isBefore('product-roadmap', 'vercel', 'github'), 'VC3: the Deploys strip sits above GitHub\'s Releases strip');
+  assert.ok(isBefore('company-creation', 'github', 'vercel'), 'VC4b: Where production runs after From GitHub');
+  const reload = () => {};
+  const hosting = HOSTING(); const runtime = { state: 'empty', items: [] }; const vercel = { state: 'ok' };
+  const data = { parts: { tools: { hosting }, vercel_runtime: runtime, vercel } };
+  for (const [slug, Part, props] of [
+    ['operating-systems', HostingFromVercel, { hosting, projectId: 7, reload }],
+    ['solution-design', RunsOnFromVercel, { part: runtime, reload }],
+    ['prototype-mvp', MvpFromVercel, { vercel, reload }],
+    ['product-roadmap', RoadmapFromVercel, { vercel, reload }],
+    ['company-creation', CompanyFromVercel, { part: vercel, projectId: 7, reload }],
+  ]) {
+    const el = partElement(slug, 'vercel', data, { projectId: 7, reload });
+    assert.equal(el.type, Part, `${slug} mounts ${Part.name}`);
+    assert.deepEqual(el.props, props, slug);
   }
 });
 

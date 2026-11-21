@@ -23,6 +23,7 @@ import type { Env, User } from '../types';
 import { recomputePmf } from './scoring/pmfStore';
 import { WriterError, isoDateOrNull } from './validateWriters';
 import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
+import { deckVersionSlides, deckWords } from './narrative/deckWords';
 import { logCycleWrite, logCycleWriteStatement, type CycleModules } from './cycleActivity';
 import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
@@ -146,12 +147,13 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
 
 /** One-liner and The ask live in the version's own deck wording rows. */
 const WORD_FIELDS = { one_liner: { key: 'cover.thesis', max: 500 }, ask: { key: 'ask.title', max: 300 } } as const;
-export const START_FROM = ['live', 'version', 'blank'] as const;
+/** D6069: `deck` starts from a saved pitch deck version's words; `based_on_version` then holds that deck version. */
+export const START_FROM = ['live', 'version', 'blank', 'deck'] as const;
 /** Check against offers the deck and the metrics; the data room is not a check source. */
 export const CHECK_SOURCES = ['deck', 'metrics'] as const;
 
 type NarrativeFields = {
-  investorType?: unknown; basedOnVersion?: unknown; oneLiner?: unknown; whyNow?: unknown; ask?: unknown; checkAgainst?: unknown;
+  investorType?: unknown; basedOnVersion?: unknown; deckVersion?: unknown; oneLiner?: unknown; whyNow?: unknown; ask?: unknown; checkAgainst?: unknown;
 };
 
 /** A version number of this venture's, or a 404. */
@@ -198,7 +200,10 @@ export async function runCheck(env: Env, projectId: number, version: number): Pr
  * Save narrative version N for an investor type, with the deck version it
  * goes with. Start from is `live` (the default: the live deck wording,
  * version 0, as before), `version` (that version's rows; `based_on_version`
- * must be one of this venture's) or `blank` (nothing). One-liner and The ask
+ * must be one of this venture's), `blank` (nothing) or `deck` (D6069: the
+ * words of this venture's pitch deck version `deck_version`, by card title,
+ * `narrative/deckWords.ts`; the deck version is kept in `based_on_version`
+ * and the deck does not change). One-liner and The ask
  * then set the version's own `cover.thesis` and `ask.title` rows, Why now and
  * Check against go in `narrative_version_meta`, and the consistency check
  * runs on the result. A body with only `investor_type` (#1652's caller)
@@ -208,11 +213,21 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   const investorType = String(a.investorType ?? '');
   if (!(INVESTOR_TYPES as readonly string[]).includes(investorType)) throw new WriterError(400, 'Unknown investor type');
   const startFrom = a.startFrom === undefined || a.startFrom === null ? 'live' : String(a.startFrom);
-  if (!(START_FROM as readonly string[]).includes(startFrom)) throw new WriterError(400, 'start_from is live, version or blank');
+  if (!(START_FROM as readonly string[]).includes(startFrom)) throw new WriterError(400, 'start_from is live, version, blank or deck');
   await ensureSpinoutDeckOverridesSchema(env);
   let basedOn: number | null = null;
   if (startFrom === 'version') basedOn = await ownVersion(env, a.projectId, a.basedOnVersion, 'The version to start from');
   else if (a.basedOnVersion != null) throw new WriterError(400, 'based_on_version goes with start_from: version');
+  if (startFrom !== 'deck' && a.deckVersion != null) throw new WriterError(400, 'deck_version goes with start_from: deck');
+  // D6069: the deck version's words, read before anything is written; a version the venture never saved is a 404.
+  let fromDeck: Map<string, string> | null = null;
+  let startDeck: number | null = null;
+  if (startFrom === 'deck') {
+    startDeck = posInt(typeof a.deckVersion === 'string' && /^[1-9][0-9]{0,8}$/.test(a.deckVersion) ? Number(a.deckVersion) : a.deckVersion);
+    const slides = startDeck == null ? null : await deckVersionSlides(env, a.projectId, startDeck);
+    if (slides == null) throw new WriterError(404, 'The pitch deck version to start from not found');
+    fromDeck = deckWords(slides);
+  }
   const checkAgainst = checkSources(a.checkAgainst);
   const inherited = basedOn == null ? null : await env.DB.prepare(
     'SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?',
@@ -223,7 +238,7 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   const version = Number(max?.v ?? 0) + 1;
   // Saving words is not evidence that a deck reads this version.
   const deckVersion = null;
-  if (startFrom !== 'blank') {
+  if (startFrom === 'version' || startFrom === 'live') {
     await env.DB.prepare(
       `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
        SELECT project_id, field_key, value, ?, datetime('now'), ?, ?, ? FROM spinout_deck_overrides
@@ -237,19 +252,25 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   ).bind(a.projectId, VERSION_MARKER_KEY, investorType, a.userId, version, investorType, deckVersion).run();
   // D908 (#2692): a version started from another carries that version's sections, bindings and positioning overrides too.
   if (startFrom === 'version') await copyNarrativeStores(env, a.projectId, basedOn!, version, a.userId);
+  for (const [fieldKey, value] of fromDeck ?? []) {
+    await setWords(env, { projectId: a.projectId, userId: a.userId, version, investorType, deckVersion, fieldKey, value });
+  }
   for (const [field, spec] of Object.entries(WORD_FIELDS)) {
     const v = field === 'one_liner' ? a.oneLiner : a.ask;
     if (v === undefined) continue;
-    await setWords(env, { projectId: a.projectId, userId: a.userId, version, investorType, deckVersion, fieldKey: spec.key, value: trimOrNull(v, spec.max) });
+    const value = trimOrNull(v, spec.max);
+    // D6069: a field left empty keeps the deck's words; only words typed here replace them.
+    if (value == null && fromDeck?.has(spec.key)) continue;
+    await setWords(env, { projectId: a.projectId, userId: a.userId, version, investorType, deckVersion, fieldKey: spec.key, value });
   }
   await env.DB.prepare(
     `INSERT INTO narrative_version_meta (project_id, version, start_from, based_on_version, why_now, check_against_json, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(a.projectId, version, startFrom, basedOn, whyNow, checkAgainst === undefined ? inherited?.check_against_json ?? null : checkAgainst, a.userId).run();
+  ).bind(a.projectId, version, startFrom, startFrom === 'deck' ? startDeck : basedOn, whyNow, checkAgainst === undefined ? inherited?.check_against_json ?? null : checkAgainst, a.userId).run();
   const mismatches = await runCheck(env, a.projectId, version);
   const label = INVESTOR_TYPE_LABEL[investorType] ?? investorType;
   await logRaise(env, a.userId, a.projectId, 'investor-narrative', version, 'narrative_version_created',
-    `Version ${version} saved for ${label}${basedOn != null ? `, based on version ${basedOn}` : ''}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
+    `Version ${version} saved for ${label}${basedOn != null ? `, based on version ${basedOn}` : ''}${startDeck != null ? `, from pitch deck version ${startDeck}'s words` : ''}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
   return { version, mismatches };
 }
 
@@ -297,6 +318,10 @@ export async function updateNarrativeVersion(env: Env, a: { projectId: number; u
   }
   let basedOn: number | null | undefined;
   if (a.basedOnVersion !== undefined) {
+    // D6069: a version started from the deck keeps that deck version as where it started.
+    const start = await env.DB.prepare('SELECT start_from FROM narrative_version_meta WHERE project_id = ? AND version = ?')
+      .bind(a.projectId, version).first<{ start_from: string }>();
+    if (start?.start_from === 'deck') throw new WriterError(400, 'A version started from the pitch deck keeps its deck version');
     basedOn = a.basedOnVersion === null ? null : await ownVersion(env, a.projectId, a.basedOnVersion, 'The version to start from');
     if (basedOn != null && basedOn >= version) throw new WriterError(400, 'A version is based on an earlier one');
   }

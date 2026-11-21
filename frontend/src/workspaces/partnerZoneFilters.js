@@ -102,6 +102,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // and `Expired` read the first and the confusion the note warned about is a
 // distinction the schema now draws.
 
+// D6285: `/research/markets` mounts the market directory, which draws no chip
+// row; only the deleted, never-mounted `MarketZone` body read these keys.
+const MARKETS_DIRECTORY_HAS_NO_CHIPS =
+  'the market directory mounted at this route draws no chip row, so nothing narrows its readings by age; only the unmounted MarketZone body did';
+const MARKETS_DIRECTORY_HOVER = 'The market directory has no age filter yet.';
+
 export const PARTNER_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
   // FOUR OF FOUR, WHERE THIS ROW USED TO RUN ONE. `Unassigned first` and `By
@@ -111,7 +117,8 @@ export const PARTNER_ZONE_FILTERS = {
   //
   // `Going cold` IS SIXTY DAYS, AND THAT NUMBER IS THE ARTBOARD'S. `cold =
   // BOOK.filter(c => c.days !== null && c.days > 60)`, and its `cmpBody` says
-  // "going cold past 60 days" in as many words. `MarketZone`'s ninety is a
+  // "going cold past 60 days" in as many words. A market reading's ninety
+  // (`STALE_AT` in `pages/research/marketReadingRead.js`) is a
   // different question about a different object — how stale a price reading may
   // be before a proposal may not carry it — and transcribing one onto the other
   // is how two numbers become one.
@@ -236,20 +243,18 @@ export const PARTNER_ZONE_FILTERS = {
     },
   ],
 
-  // THE ONE OFFERS ZONE WHERE EVERY LABEL RUNS, out of one array rather than
-  // one column: each item carries `consents[]`, and the row already draws the
-  // same three states per consenter — `Agreed`, `Withdrawn`, `Not answered`.
-  //
-  // THERE IS A FOURTH REAL STATE THE CANVAS HAS NO WORD FOR: an unpublished
-  // item with NO consent row at all, where nobody has been asked. It falls
-  // under `All` and only `All`. Sweeping it into `Awaiting consent` would be
-  // the zone claiming a request was made, which is the same class of untruth
-  // as a filter that returns an empty set and calls it an answer.
+  // D4842 (#4842): OF-03's five chips (Offers v2), which replace the po4
+  // artboard's All, Published, Awaiting consent and Blocked. Each selects on
+  // the card's own consent label (`proofCards.js`), and each carries the
+  // page's own count. Superseded and never-asked items count under
+  // Self-stated, which is what they are until a client approves the wording;
+  // a client who declined counts under Withdrawn.
   'offers/proof': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Published', key: 'published' },
-    { canvas: 'Awaiting consent', key: 'awaiting' },
-    { canvas: 'Blocked', key: 'blocked' },
+    { canvas: 'All', label: 'All {n}', key: 'all' },
+    { canvas: 'Client approved', label: 'Client approved {n}', key: 'approved' },
+    { canvas: 'Approval requested', label: 'Approval requested {n}', key: 'requested' },
+    { canvas: 'Self-stated', label: 'Self-stated {n}', key: 'self_stated' },
+    { canvas: 'Withdrawn', label: 'Withdrawn {n}', key: 'withdrawn' },
   ],
 
   // ALL FOUR RUN, AND THE TWO REASONS THAT STOOD HERE MISREAD THEIR OWN
@@ -392,10 +397,16 @@ export const PARTNER_ZONE_FILTERS = {
   // `observed_at`, never from `updated_at`: the ingestion job stamps every row
   // it touches with one run timestamp, so that column cannot tell two signals
   // apart.
+  //
+  // D6285 — NOT LIVE, AND THEY HAD NOT BEEN SINCE D593. The three keys were
+  // implemented only by `MarketZone`, a body nothing mounted once the market
+  // directory replaced it; `ResearchWorkspace` hands `MarketDirectoryZone` no
+  // `zoneFilters`, so no chip was drawn. The test that called them live read
+  // the unmounted file. Prose until the directory narrows its readings by age.
   'research/markets': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Current', key: 'current' },
-    { canvas: 'Stale', key: 'stale' },
+    { canvas: 'All', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Current', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Stale', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
     {
       canvas: 'Attached to proposals',
       unbuilt: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names', hover: 'No row joins a signal to a proposal.',
@@ -455,14 +466,17 @@ export const PARTNER_ZONE_FILTERS = {
   // records a lead arriving through an investor or a referral, so this chip
   // selects the whole open list and says so rather than pretending to narrow.
   'pipeline/leads': [
-    { canvas: 'Open', key: 'open' },
+    // #5935 (D4838): the Pipeline v2 canvas's row (PP03) replaced the p1
+    // artboard's `Open · Strong fit · Warm intros · Passed · All sources`.
+    // Passed left the row because the passes are their own table below the
+    // list on every view; Warm intros left because every lead is a
+    // marketplace need, so it had always been prose. The rules are in
+    // `pages/partner/pipeline/leadsModel.js`.
+    { canvas: 'All', key: 'all' },
     { canvas: 'Strong fit', key: 'strong' },
-    {
-      canvas: 'Warm intros',
-      unbuilt: 'every lead here is a marketplace need — nothing records a lead arriving through an investor or a referral, so there is no second provenance to select', hover: 'Every lead here is a marketplace need; nothing records one arriving by referral or investor.',
-    },
-    { canvas: 'Passed', key: 'passed' },
-    { canvas: 'All sources', key: 'all' },
+    { canvas: 'Unscored', key: 'unscored' },
+    { canvas: 'Excluded', key: 'excluded' },
+    { canvas: 'Recent', key: 'recent' },
   ],
 
   // `Opened, unanswered` AND `Never opened` BOTH READ `quotes` AND BOTH ARE
@@ -515,15 +529,12 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Over scope', key: 'over' },
   ],
 
-  // THREE PERIODS AND A GROUPING, which is what an analytics chip row is. The
-  // quarters are relative to today rather than the canvas's `Q3 2026` — that
-  // date is when the artboard was drawn, and a page whose first chip named a
-  // fixed quarter would be wrong for every reader after it.
+  // The analytics read applies these windows to the decision date.
   'pipeline/analytics': [
     { canvas: 'Q3 2026', key: 'quarter', label: 'This quarter' },
     { canvas: 'Q2 2026', key: 'prev_quarter', label: 'Last quarter' },
     { canvas: 'Year to date', key: 'ytd' },
-    { canvas: 'By shape', key: 'shape' },
+    { canvas: 'By shape', key: 'all', label: 'All time' },
   ],
 };
 

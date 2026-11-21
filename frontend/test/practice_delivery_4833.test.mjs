@@ -4,7 +4,9 @@
  * (`design/incoming/Practice v2 Page.dc.html`, PX-06, D4874).
  *
  *   · cards carry the LATEST version's status: Draft, Sent, Opened, Accepted;
- *   · there is no Ready filter, because no Ready state is stored (D4874);
+ *   · Ready (part 2, D4833-p2) is a filter over #5316's stored mark (D5316):
+ *     it narrows on `ready_version`, counts `totals.ready`, and the latest
+ *     unsent version can be marked or cleared, sending nothing;
  *   · Add version needs a change note and a document link (no empty version);
  *   · Send asks first, naming the recipient and the version;
  *   · older versions are read-only and keep their own recipient and receipts;
@@ -27,8 +29,8 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import DeliveryZone from '../src/pages/advisor/practice/DeliveryZone.jsx';
 import {
-  DELIVERY_FILTERS, VERSION_STATUS_LABEL, cardReceiptLine, cardStatus, receiptLine, recipientNote,
-  sendConfirmation, statusCounts, versionStatus,
+  DELIVERY_FILTERS, VERSION_STATUS_LABEL, cardReceiptLine, cardStatus, isReadyItem, readyAction, readyLine,
+  readyMark, readyRefusal, receiptLine, recipientNote, sendConfirmation, statusCounts, versionStatus,
 } from '../src/pages/advisor/practice/deliveryTrail.js';
 import { ADVISOR_ZONE_FILTERS } from '../src/workspaces/advisorZoneFilters.js';
 
@@ -74,25 +76,86 @@ test('a card takes its LATEST version\'s status, from that version\'s own stamps
   assert.equal(cardStatus(PRICING), 'draft', 'an unsent v2 over an opened v1 is a draft');
   assert.equal(cardStatus(MEMO), 'accepted');
   assert.equal(cardStatus({ latest_version: null }), 'draft', 'no version yet is a draft');
-  assert.deepEqual(statusCounts([MEMO, PRICING, HIRING, BOARD]), { draft: 1, sent: 1, opened: 1, accepted: 1, all: 4 });
+  assert.deepEqual(statusCounts([MEMO, PRICING, HIRING, BOARD]), { draft: 1, ready: null, sent: 1, opened: 1, accepted: 1, all: 4 },
+    'with no totals the Ready count is unknown, never 0');
 });
 
-test('there is no Ready filter: the store records no Ready state (D4874)', () => {
-  // Mutation checked: adding 'ready' to DELIVERY_FILTERS, or a `{ canvas: 'Ready' }`
-  // row to the table, fails here.
-  assert.deepEqual(DELIVERY_FILTERS, ['draft', 'sent', 'opened', 'accepted', 'all']);
-  assert.ok(!Object.keys(VERSION_STATUS_LABEL).includes('ready'));
+test('Ready is a filter over the stored mark, in the canvas\'s order (D4833-p2, D5316)', () => {
+  // Mutation checked: dropping 'ready' from DELIVERY_FILTERS, or the `{ canvas: 'Ready' }`
+  // row from the table, fails here.
+  assert.deepEqual(DELIVERY_FILTERS, ['draft', 'ready', 'sent', 'opened', 'accepted', 'all']);
+  assert.equal(VERSION_STATUS_LABEL.ready, 'Ready');
   const row = ADVISOR_ZONE_FILTERS['practice/delivery'];
-  assert.deepEqual(row.map((r) => r.canvas), ['Draft', 'Sent', 'Opened', 'Accepted', 'All']);
+  assert.deepEqual(row.map((r) => r.canvas), ['Draft', 'Ready', 'Sent', 'Opened', 'Accepted', 'All']);
   assert.deepEqual(row.map((r) => r.key), DELIVERY_FILTERS);
-  // The canvas draws Ready, and marks it as not recorded: the omission is the canvas's own note.
+  // The canvas's own row, in its own order.
   const canvas = read('design/incoming/Practice v2 Page.dc.html');
   const section = canvas.slice(canvas.indexOf('const delivery = () =>'), canvas.indexOf('const delDetail'));
-  assert.match(section, /\['Ready'\]/);
-  assert.match(section, /“Ready” isn’t recorded today/);
-  assert.match(read('documentation/architecture/decisions/D4874.md'), /A deliverable Ready state/);
+  assert.match(section, /chips\(\[\['Draft', 1\], \['Ready'\], \['Sent', 1\], \['Opened', 1\], \['Accepted', 1\], \['All', 4\]\]/);
   const page = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
-  assert.ok(!/'ready'/.test(page), 'the page narrows on no ready key');
+  assert.match(page, /filter === 'ready'/, 'the page that mounts the chip narrows on its key');
+  // The stale copy is gone. #5961 (D4833-p3) took the "no file upload yet" half away
+  // when a version's document became a link or a stored file.
+  const src = read('frontend/src/pages/advisor/practice/DeliveryZone.jsx');
+  assert.doesNotMatch(src, /There is no Ready filter|There is no Ready state|no file upload/);
+  assert.match(src, /A version&rsquo;s document is a web link or a stored file/);
+});
+
+// A draft v2 marked ready by Ada, over a v1 that was opened.
+const READY = ITEM(5, [
+  V(2, { ready_at: '2026-11-09T10:00:00Z', ready_by_user_id: 90, ready_by_name: 'Ada' }),
+  V(1, { ...SENT, opened_at: '2026-10-28T10:00:00Z' }),
+], { title: 'Pricing memo', ready_version: 2 });
+
+test('a version marked ready and unsent is Ready; the count is the Worker\'s totals.ready', () => {
+  // Mutation checked: `versionStatus` ignoring `ready_at` leaves READY a Draft;
+  // counting Ready from the cards instead of `totals.ready` gives 1, not 3;
+  // a missing `totals.ready` read as 0 fails the null.
+  assert.equal(versionStatus(READY.latest_version), 'ready');
+  assert.equal(versionStatus({ ...READY.latest_version, sent_at: '2026-11-10T10:00:00Z' }), 'sent', 'a sent version is never Ready');
+  assert.equal(cardStatus(READY), 'ready');
+  assert.equal(isReadyItem(READY), true);
+  assert.equal(isReadyItem(PRICING), false);
+  assert.equal(statusCounts([READY, PRICING], { ready: 3 }).ready, 3, 'the whole set\'s count, not this page\'s');
+  assert.equal(statusCounts([READY, PRICING], { ready: 3 }).draft, 1, 'a Ready card is not also a Draft card');
+  assert.equal(statusCounts([READY], { work_products: 1 }).ready, null, 'not carried: unknown, never 0');
+  assert.equal(statusCounts([], { ready: 0 }).ready, 0);
+});
+
+test('who marked it and when is said; a name that does not read back is not invented', () => {
+  assert.deepEqual(Object.keys(readyMark(READY.latest_version)), ['day', 'by']);
+  assert.equal(readyMark(READY.latest_version).by, 'Ada');
+  assert.match(readyLine(READY.latest_version), /^Marked ready to send \w+ \d+ by Ada$/);
+  assert.equal(readyMark({ ...READY.latest_version, ready_by_name: null }).by, null);
+  assert.match(readyLine({ ...READY.latest_version, ready_by_name: null }), /^Marked ready to send \w+ \d+$/);
+  assert.equal(readyMark(V(1)), null, 'an unmarked version has no mark');
+  assert.equal(readyMark({ ...READY.latest_version, sent_at: 'x' }), null, 'a sent version carries no mark');
+});
+
+test('the Ready control: mark or clear the latest unsent version, said with its consequence', () => {
+  // Mutation checked: offering the control on a sent latest version, or enabling Mark
+  // on a version with no document, fails here.
+  const clear = readyAction(READY);
+  assert.equal(clear.kind, 'clear');
+  assert.equal(clear.label, 'Clear Ready');
+  assert.equal(clear.version, 2);
+  assert.match(clear.consequence, /v2 goes back to Draft\. Nothing is sent or deleted\./);
+  const mark = readyAction(PRICING);
+  assert.equal(mark.kind, 'mark');
+  assert.equal(mark.label, 'Mark v2 ready');
+  assert.equal(mark.enabled, true);
+  assert.match(mark.consequence, /Nothing is sent: the client sees nothing until you send it, and sending clears the mark\./);
+  assert.equal(readyAction(MEMO), null, 'a sent latest version cannot be marked or cleared');
+  assert.equal(readyAction(ITEM(9, [])), null, 'no version, no control');
+  const empty = readyAction(ITEM(9, [V(1, { link_url: null })]));
+  assert.equal(empty.enabled, false);
+  assert.match(empty.consequence, /no document, so it cannot be marked ready/);
+  assert.equal(readyAction(ITEM(9, [V(1, { link_url: null, document: 'file' })])).enabled, true, 'a stored file is content too');
+  // The Worker's refusals, as sentences.
+  assert.match(readyRefusal(Object.assign(new Error('x'), { status: 409, code: 'already_sent' }), 'v2'),
+    /^v2 has already been sent, so it can’t be marked ready or cleared\./);
+  assert.match(readyRefusal(Object.assign(new Error('x'), { status: 422, code: 'empty_version' }), 'v2'), /no document/);
+  assert.equal(readyRefusal(new Error('Server says no'), 'v2'), 'Server says no');
 });
 
 test('each version\'s receipt line is its own: recipient, opened and accepted', () => {
@@ -180,7 +243,7 @@ const base = (items) => (c) => {
   return json({});
 };
 
-test('mounted: four cards, each with the latest version\'s status; a chip narrows; no Ready chip', async () => {
+test('mounted: four cards, each with the latest version\'s status; a chip narrows', async () => {
   // Mutation checked: narrowing on the folded `i.state` instead of `cardStatus(i)`
   // puts Pricing model under Opened and leaves Draft empty.
   const m = await mount(base([MEMO, PRICING, HIRING, BOARD]));
@@ -189,8 +252,9 @@ test('mounted: four cards, each with the latest version\'s status; a chip narrow
       assert.equal(m.props(m.byTestId(`row-pr3-${id}`))['data-status'], status, `card ${id}`);
     }
     assert.match(m.textOf(m.byTestId('row-pr3-1')), /Q4 Strategy Memo.*Acme · Latest v3 · Sent/);
-    assert.equal(m.buttonWith(/^Ready/), undefined, 'no Ready chip');
-    assert.match(m.text(), /There is no Ready filter/);
+    assert.ok(m.buttonWith(/^Ready$/), 'the Ready chip, with no number: this read carried no totals.ready');
+    assert.doesNotMatch(m.text(), /There is no Ready filter|Ready 0/);
+    assert.match(m.text(), /Ready is your own mark on a draft that is ready to send\. It sends nothing; sending clears it\./);
     await m.press(/^Draft\s*1$/);
     assert.ok(m.byTestId('row-pr3-2'));
     for (const id of [1, 3, 4]) assert.equal(m.byTestId(`row-pr3-${id}`), undefined, `card ${id} is not a draft`);
@@ -239,7 +303,7 @@ test('mounted: a recipient account that no longer reads back, or was never recor
   } finally { await m.close(); }
 });
 
-test('mounted: Add version needs a change note AND a document link; nothing empty is posted', async () => {
+test('mounted: Add version needs a change note AND a document; nothing empty is posted', async () => {
   // Mutation checked: dropping the link rule from `attachmentBody` posts a note-only version.
   const m = await mount((c) => {
     if (c.path === '/api/advisors/me/deliverables/4/versions') return json({ uid: 'n', version: 3, ...c.body }, 201);
@@ -251,7 +315,8 @@ test('mounted: Add version needs a change note AND a document link; nothing empt
     assert.ok(m.byTestId('add-version-form-4'));
     assert.match(m.text(), /Add version v3/);
     assert.match(m.text(), /Change note · required/);
-    assert.match(m.text(), /Document link · required/);
+    // #5961 (D4833-p3): the canvas's three fields, in its order.
+    assert.match(m.text(), /Change note · required.*Document or URL · required.*Summary · optional/);
     assert.match(m.text(), /Save v3 as draft/);
     await m.submit('add-version-form-4');
     assert.equal(m.writes().length, 0, 'an empty version is refused');
@@ -314,4 +379,94 @@ test('mounted: post-session reviews render with zero work products, and when the
     assert.ok(down.byTestId('review-loop'), 'reviews stand when Delivery cannot be read');
     assert.ok(down.buttonWith(/Review this session/));
   } finally { await down.close(); }
+});
+
+// ---------------------------------------------------------------- Ready (part 2)
+
+const readyBase = (items, totals) => (c) => {
+  if (c.path === '/api/advisors/me/deliverables' && c.method === 'GET') {
+    const list = typeof items === 'function' ? items() : items;
+    return json({ items: list, totals: { work_products: list.length, ...totals } });
+  }
+  return base([])(c);
+};
+
+test('mounted: the Ready chip counts totals.ready and narrows to the marked work products', async () => {
+  // Mutation checked: the chip narrowing on `cardStatus(i) === 'draft'`, or the page
+  // counting Ready from its cards, fails here.
+  const m = await mount(readyBase([MEMO, PRICING, READY], { ready: 1 }));
+  try {
+    assert.equal(m.props(m.byTestId('row-pr3-5'))['data-status'], 'ready');
+    assert.match(m.textOf(m.byTestId('row-pr3-5')), /Ready/);
+    assert.match(m.textOf(m.byTestId('ready-line-pr3-5')), /^Marked ready to send \w+ \d+ by Ada$/);
+    assert.equal(m.byTestId('ready-line-pr3-2'), undefined, 'an unmarked draft says nothing about Ready');
+    await m.press(/^Ready\s*1$/);
+    assert.ok(m.byTestId('row-pr3-5'));
+    for (const id of [1, 2]) assert.equal(m.byTestId(`row-pr3-${id}`), undefined, `card ${id} is not ready`);
+    await m.press(/^Draft\s*1$/);
+    assert.ok(m.byTestId('row-pr3-2'));
+    assert.equal(m.byTestId('row-pr3-5'), undefined, 'a Ready card is not a Draft card');
+  } finally { await m.close(); }
+});
+
+test('mounted: the sheet says who marked it ready; Clear and Mark write the mark and send nothing', async () => {
+  // Mutation checked: Clear calling the mark route, or Mark calling the send route,
+  // fails the write list; dropping the ReadyMark line fails the "by Ada" match.
+  let items = [READY, PRICING];
+  const m = await mount((c) => {
+    if (c.path === '/api/advisors/me/deliverables/5/versions/2/ready' && c.method === 'DELETE') {
+      items = [{ ...READY, ready_version: null, latest_version: { ...READY.latest_version, ready_at: null, ready_by_user_id: null, ready_by_name: null },
+        versions: [{ ...READY.versions[0], ready_at: null, ready_by_user_id: null, ready_by_name: null }, READY.versions[1]] }, PRICING];
+      return json({ version: 2, ready_at: null });
+    }
+    if (c.path === '/api/advisors/me/deliverables/2/versions/2/ready' && c.method === 'POST') return json({ version: 2, ready_at: 'x' });
+    return readyBase(() => items, { ready: items.filter((i) => i.ready_version != null).length })(c);
+  });
+  try {
+    await m.pressId('open-pr3-5');
+    assert.match(m.textOf(m.byTestId('latest-ready-5')), /^Marked ready to send \w+ \d+ by Ada$/);
+    assert.match(m.textOf(m.byTestId('history-ready-5-v2')), /by Ada/);
+    assert.equal(m.byTestId('history-ready-5-v1'), undefined, 'a sent version carries no mark');
+    assert.equal(m.props(m.byTestId('ready-toggle-5'))['data-kind'], 'clear');
+    assert.match(m.textOf(m.byTestId('ready-consequence-5')), /v2 goes back to Draft\. Nothing is sent or deleted\./);
+    await m.pressId('ready-toggle-5');
+    assert.deepEqual(m.writes().map((c) => [c.method, c.path]), [['DELETE', '/api/advisors/me/deliverables/5/versions/2/ready']]);
+    assert.match(m.textOf(m.byTestId('ready-answer-5')), /v2 of “Pricing memo” is a draft again\. Nothing was sent\./);
+    assert.equal(m.props(m.byTestId('ready-toggle-5'))['data-kind'], 'mark', 'the sheet shows the cleared version');
+    assert.equal(m.byTestId('latest-ready-5'), undefined);
+    await m.pressId('deliverable-sheet-5-close');
+    await m.pressId('open-pr3-2');
+    assert.match(m.textOf(m.byTestId('ready-consequence-2')), /Marks v2 ready to send\. Nothing is sent/);
+    await m.pressId('ready-toggle-2');
+    assert.deepEqual(m.writes().map((c) => [c.method, c.path]).slice(1), [['POST', '/api/advisors/me/deliverables/2/versions/2/ready']]);
+    assert.ok(!m.writes().some((c) => c.path.endsWith('/send')), 'marking ready sends nothing');
+  } finally { await m.close(); }
+});
+
+test('mounted: a 409 already_sent is said in the sheet, the list is read again, and nothing pops up', async () => {
+  // Mutation checked: dropping the reload on 409 leaves the sheet showing the version
+  // as unsent; dropping `readyRefusal` shows the Worker's raw sentence instead.
+  let items = [PRICING];
+  let reads = 0;
+  const popups = [];
+  const prev = { alert: globalThis.alert, confirm: globalThis.confirm };
+  globalThis.alert = (...a) => { popups.push(a); }; globalThis.confirm = (...a) => { popups.push(a); return true; };
+  const m = await mount((c) => {
+    if (c.path === '/api/advisors/me/deliverables/2/versions/2/ready') {
+      items = [{ ...PRICING, latest_version: { ...PRICING.latest_version, ...SENT }, versions: [{ ...PRICING.versions[0], ...SENT }, PRICING.versions[1]] }];
+      return json({ detail: 'That version has already been sent, so it is not waiting to be sent.', code: 'already_sent' }, 409);
+    }
+    if (c.path === '/api/advisors/me/deliverables' && c.method === 'GET') reads += 1;
+    return readyBase(() => items, { ready: 0 })(c);
+  });
+  try {
+    await m.pressId('open-pr3-2');
+    const before = reads;
+    await m.pressId('ready-toggle-2');
+    assert.match(m.textOf(m.byTestId('ready-answer-2')), /^v2 has already been sent, so it can’t be marked ready or cleared\./);
+    assert.equal(m.props(m.byTestId('ready-answer-2')).role, 'alert');
+    assert.ok(reads > before, 'the list is read again');
+    assert.equal(m.byTestId('ready-toggle-2'), undefined, 'the sent version offers no Ready control');
+    assert.equal(popups.length, 0, 'no browser pop-up');
+  } finally { await m.close(); Object.assign(globalThis, prev); }
 });

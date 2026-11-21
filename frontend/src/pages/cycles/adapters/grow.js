@@ -21,6 +21,8 @@
  *   real output through every function.
  */
 
+import { kpiTargetCells } from '../kpiTargetCells.js';
+
 /**
  * The seven modules, as `services/growCycle.ts` lists them (`GROW_MODULES`);
  * `cycle_adapters_d661.test.ts` holds this to the Worker's own list.
@@ -99,13 +101,35 @@ function distribution(s) {
   // The funnel is drawn from its first recorded step: a funnel's bars are
   // shares of that step. A step before it that no store records (visits, as
   // D664 says) is listed with the read's own reason rather than drawn as an
-  // empty bar.
-  const steps = list(d.funnel).map((x) => ({ label: String(x?.stage ?? ''), value: num(x?.value) ? x.value : null, reason: x?.reason }));
+  // empty bar. A step the Worker marks `apart` (D6107: PostHog visits) is its
+  // own sourced value from another store: listed with its source and date,
+  // never a bar the sign-ups are a share of.
+  const all = list(d.funnel).map((x) => ({ label: String(x?.stage ?? ''), value: num(x?.value) ? x.value : null, reason: x?.reason, apart: x?.apart === true, source: x?.source, as_of: x?.as_of }));
+  const apart = all.filter((x) => x.apart && x.value != null);
+  const steps = all.filter((x) => !(x.apart && x.value != null));
   const first = steps.findIndex((x) => x.value != null);
   const before = first === -1 ? steps : steps.slice(0, first);
   if (first !== -1) out.push({ kind: 'funnel', steps: steps.slice(first).map(({ label, value }) => ({ label, value })) });
-  if (before.length) out.push({ kind: 'rows', items: before.map((x) => ({ label: x.label, value: typeof x.reason === 'string' && x.reason ? x.reason : 'Not recorded' })) });
+  const rows = [...apart.map((x) => ({ label: x.label, value: sourcedText(x) })),
+    ...before.map((x) => ({ label: x.label, value: typeof x.reason === 'string' && x.reason ? x.reason : 'Not recorded' }))];
+  // D5867: the month's TikTok reach, one line with its source and date. The Worker sends null when no video posted
+  // this month has a view count, and then there is no line: never 0. It is never a funnel step (a view is not a visit).
+  const t = obj(d.tiktok);
+  if (t && num(t.views) && num(t.posts) && t.posts > 0) {
+    const day = typeof t.as_of === 'string' && /^\d{4}-\d{2}-\d{2}/.test(t.as_of) ? t.as_of.slice(0, 10) : null;
+    const reach = `${Math.round(t.views).toLocaleString('en-US')} views across ${t.posts} post${t.posts === 1 ? '' : 's'}`;
+    rows.push({ label: 'TikTok reach this month', value: day ? `${reach} · From TikTok, as of ${day}` : `${reach} · From TikTok` });
+  }
+  if (rows.length) out.push({ kind: 'rows', items: rows });
   return out;
+}
+
+/** "1,240 · From PostHog · Site visits, as of 2026-11-14": the value with the source and date the Worker gave. */
+function sourcedText(x) {
+  const day = typeof x.as_of === 'string' && /^\d{4}-\d{2}-\d{2}/.test(x.as_of) ? x.as_of.slice(0, 10) : null;
+  const source = typeof x.source === 'string' && x.source ? x.source : null;
+  return [Math.round(x.value).toLocaleString('en-US'), source && day ? `${source}, as of ${day}` : source ?? (day ? `as of ${day}` : null)]
+    .filter(Boolean).join(' · ');
 }
 
 /** The cohorts the heat map draws, newest last, and the months each spans. */
@@ -292,21 +316,25 @@ const PARTNER_TYPE = { reseller: 'Reseller', integration: 'Integration', agency:
 const PARTNER_PILL = { talking: ['Talking', 'v3'], terms: ['Terms', 'v2'], signed: ['Signed', 'ok'], ended: ['Ended', 'grey'] };
 const MARKET_STATE = { considering: 'Considering', entering: 'Entering', served: 'Served', not_now: 'Not now' };
 const DECISION = { enter: 'Enter', not_yet: 'Not yet', exit: 'Exit' };
-const OBLIGATION_KIND = { governance: 'Governance', compliance: 'Compliance', risk: 'Risk', tax: 'Tax', other: 'Other' };
-const OBLIGATION_STATE = { scheduled: ['Scheduled', 'v2'], upcoming: ['Upcoming', 'v3'], draft: ['Draft', 'grey'], done: ['Done', 'ok'], not_set_up: ['Not set up', 'warn'] };
+const OBLIGATION_KIND = { governance: 'Governance', compliance: 'Compliance', risk: 'Risk', culture: 'Culture', tax: 'Tax', other: 'Other' };
+// D6122 (GR-21): Overdue and Snoozed carry a word, never a colour alone.
+const OBLIGATION_STATE = { overdue: ['Overdue', 'bad'], scheduled: ['Scheduled', 'v2'], upcoming: ['Upcoming', 'v3'], snoozed: ['Snoozed', 'grey'], draft: ['Draft', 'grey'], done: ['Done', 'ok'], not_set_up: ['Not set up', 'warn'] };
+const REPEATS = { once: 'Once', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 
 /** A KPI row's value: MRR is in dollars, a movement in cents, customers a count. */
 function kpiValue(r) {
   if (!num(r.value)) return reasonCell(r.reason) || null;
   if (r.unit === 'usd_cents') return usd(r.value);
-  if (r.kpi === 'MRR') return usd(r.value * 100);
+  if (r.kpi === 'MRR' || r.id === 'arr') return usd(r.value * 100);
+  // D6104: burn multiple, worked out from burn and the ledger.
+  if (r.unit === 'multiple') return `${Math.round(r.value * 100) / 100}×`;
   return r.value.toLocaleString('en-US');
 }
 
 function kpiChange(r) {
   if (!num(r.change_30d)) return null;
   if (r.change_30d === 0) return 'no change';
-  const size = r.kpi === 'MRR' ? usd(Math.abs(r.change_30d) * 100) : Math.abs(r.change_30d).toLocaleString('en-US');
+  const size = r.kpi === 'MRR' || r.id === 'arr' ? usd(Math.abs(r.change_30d) * 100) : Math.abs(r.change_30d).toLocaleString('en-US');
   return `${r.change_30d > 0 ? '▲' : '▼'} ${size}`;
 }
 
@@ -357,13 +385,14 @@ export const RECORDS = {
     sorts: [{ key: '-cac_cents', label: 'Highest CAC' }, { key: 'cac_cents', label: 'Lowest CAC' }, { key: 'name', label: 'Name' }],
   },
   'revenue-and-traction': {
-    keys: ['kpi', 'value', 'change', 'source', 'as_of'],
+    keys: ['kpi', 'value', 'change', 'source', 'as_of', 'target', 'vs_target'],
     row: (r, i) => ({ id: `kpi-${i}-${r.kpi}`, recordId: workerId(r.id), cells: {
       kpi: r.kpi ?? null,
       value: kpiValue(r),
       change: kpiChange(r),
       source: r.source ?? null,
       as_of: r.as_of ?? null,
+      ...kpiTargetCells(r),
     } }),
     filters: [],
     sorts: [],
@@ -407,14 +436,18 @@ export const RECORDS = {
     sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }],
   },
   'durable-company-building': {
-    keys: ['obligation', 'kind', 'due', 'owner', 'state'],
+    keys: ['obligation', 'kind', 'due', 'owner', 'state', 'repeats'],
     row: (r, i) => ({ id: r.id ?? `obligation-${i}`, recordId: workerId(r.id), cells: {
       obligation: r.title ?? null,
       kind: word(OBLIGATION_KIND, r.kind),
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
-      owner: r.owner_name ?? { text: 'No owner', tone: 'warn' },
+      // D6790: the picked team member, else a name typed before #6790 (`owner`, the Worker's one rule).
+      owner: r.owner ?? r.owner_name ?? { text: 'No owner named', tone: 'warn' },
       state: pill(OBLIGATION_STATE, r.status),
-    }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
+      // A repeat the store does not hold is Not recorded, never "Once".
+      repeats: word(REPEATS, r.repeats),
+    }, keys: { owner: (r.owner ?? r.owner_name) ? 'set' : 'none' },  // D6790: an ownerless row offers Pick owner
+    edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_user_id', 'owner', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
     filters: [{ key: 'status', label: 'State', options: options(OBLIGATION_STATE) }],
     sorts: [{ key: 'due_at', label: 'Due soonest' }, { key: '-due_at', label: 'Due latest' }],
   },

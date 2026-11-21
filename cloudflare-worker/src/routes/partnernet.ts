@@ -1,3 +1,5 @@
+import { networkTieCandidates } from '../services/networkTieCandidates';
+import { selectJwt } from '../auth';
 import { Hono } from 'hono';
 import { refuse } from '../util/refusal';
 import type { Env } from '../types';
@@ -430,19 +432,19 @@ async function checkRelRateLimit(env: Env, userId: number): Promise<boolean> {
  * the oldest link. Null when the read fails, so a caller can tell "not
  * readable" from "no company".
  */
-async function companiesOf(env: Env, ids: number[]): Promise<Map<number, string> | null> {
+async function companiesOf(env: Env, ids: number[]): Promise<Map<number, { name: string; uid: string | null }> | null> {
   const unique = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
-  const out = new Map<number, string>();
+  const out = new Map<number, { name: string; uid: string | null }>();
   if (!unique.length) return out;
   try {
     const { results } = await env.DB.prepare(
-      `SELECT l.user_id, cp.company_name FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
+      `SELECT l.user_id, cp.company_name, cp.uid AS company_uid FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
         WHERE l.user_id IN (SELECT value FROM json_each(?))
         ORDER BY l.user_id, l.is_primary_admin DESC, l.id ASC`,
-    ).bind(JSON.stringify(unique)).all<{ user_id: number; company_name: string }>();
+    ).bind(JSON.stringify(unique)).all<{ user_id: number; company_name: string; company_uid: string | null }>();
     for (const r of results || []) {
       const name = String(r.company_name ?? '').trim();
-      if (name && !out.has(Number(r.user_id))) out.set(Number(r.user_id), name);
+      if (name && !out.has(Number(r.user_id))) out.set(Number(r.user_id), { name, uid: r.company_uid ?? null });
     }
     return out;
   } catch (e) {
@@ -450,6 +452,16 @@ async function companiesOf(env: Env, ids: number[]): Promise<Map<number, string>
     return null;
   }
 }
+
+// D6636: browse only actual shared-resource participants, with no directory/email search.
+partnernet.get('/relationships/candidates',async c=>{
+ const user=await requireAuth(c);
+ if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot choose a member’s ties.'});
+ const after=Number(c.req.query('after')||0);
+ if(!Number.isSafeInteger(after)||after<0)return refuse(c,400,{code:'invalid_cursor',message:'Choose a valid candidate page.'});
+ try{await ensureSchema(c.env);return c.json(await networkTieCandidates(c.env,user.id,{after}));}
+ catch{return refuse(c,503,{code:'candidates_unreadable',message:'People you share a deal or data room with could not be read. Try again.'});}
+});
 
 partnernet.get('/relationships', async (c) => {
   const user = await requireAuth(c);
@@ -484,10 +496,13 @@ partnernet.get('/relationships', async (c) => {
     // A company read that fails says so (`companies_unreadable`) rather than
     // reading as "no company", and never takes the book down with it.
     const other = r.partner_a_id === user.id
-      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role, company: companyOf(r.partner_b_id) }
-      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role, company: companyOf(r.partner_a_id) };
+      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role }
+      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role };
+    const company = companyOf(other.id);
     return {
-      ...relationshipForParty(r, user.id), other, my_company: companyOf(user.id),
+      ...relationshipForParty(r, user.id),
+      other: { ...other, company: company?.name ?? null, company_profile_id: company?.uid ?? null },
+      my_company: companyOf(user.id)?.name ?? null,
       ...(companies ? {} : { companies_unreadable: true }),
     };
   });
@@ -506,11 +521,16 @@ partnernet.post('/relationships', async (c) => {
   await ensureSchema(c.env);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const otherId = parseInt(data?.partner_id);
+  const otherId = typeof data?.partner_id==='number' ? data.partner_id : typeof data?.partner_id==='string' && /^[1-9]\d*$/.test(data.partner_id) ? Number(data.partner_id) : NaN;
   const relType = String(data?.relationship_type || '');
-  if (!otherId || !REL_TYPES.has(relType)) return c.json({ error: `partner_id and valid relationship_type required (${[...REL_TYPES].join('|')})` }, 400);
+  if (!Number.isSafeInteger(otherId) || otherId<1 || !REL_TYPES.has(relType)) return c.json({ error: `partner_id and valid relationship_type required (${[...REL_TYPES].join('|')})` }, 400);
   if (otherId === user.id) return c.json({ error: 'Cannot create a relationship with yourself' }, 400);
 
+  if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot request a member’s tie.'});
+  try{
+    if(!(await networkTieCandidates(c.env,user.id,{target:otherId,sharedOnly:true,limit:1})).people.length)
+      return refuse(c,403,{code:'not_shared',message:'Choose someone you already share a deal or data room with.'});
+  }catch{return refuse(c,503,{code:'candidates_unreadable',message:'Shared people could not be checked. Nothing was requested.'});}
   const other: any = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(otherId).first();
   if (!other) return c.json({ error: 'Other partner not found' }, 404);
 

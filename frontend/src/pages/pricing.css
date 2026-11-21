@@ -142,6 +142,9 @@
 .axp-lead { font-weight: 700; font-size: 13.5px; margin-bottom: 10px; }
 .axp-feats, .axp-lp-feats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .axp-feats li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45; color: var(--p-ink-2); }
+/* D4653 part 3 (#4653): a founder card's limits, between its price and its button. */
+.axp-limits { list-style: none; margin: 16px 0 0; padding: 12px 0 0; border-top: 1px solid var(--p-line-2); display: flex; flex-direction: column; gap: 6px; }
+.axp-limits li { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.4; font-weight: 600; color: var(--p-ink); }
 .axp-tick { flex: none; display: inline-flex; color: var(--p-violet); margin-top: 2px; }
 .axp-dash { color: var(--p-faint); }
 .axp-pill {
@@ -209,6 +212,8 @@
   background: var(--p-card); color: var(--p-ink-2); border: 1px solid var(--p-line-3);
 }
 .axp-chip.is-on { background: #6d28d9; color: #fff; border-color: #6d28d9; }
+/* Keep selected focus visible inside the scrollable tab strips. */
+.axp-tab.is-on:focus-visible, .axp-chip.is-on:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
 .axp-phone { display: none; }
 
 /* ── Models ── */

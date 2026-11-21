@@ -127,6 +127,8 @@ test('D851: the request is Anthropic\'s Messages API; the key travels in x-api-k
   assert.equal(call.init.headers['anthropic-version'], ANTHROPIC_VERSION);
   assert.deepEqual(JSON.parse(call.init.body), { model: 'claude-sonnet-5-5', max_tokens: 2000, system: 'Be brief.', messages: [{ role: 'user', content: 'Summarise the call in one line.' }] });
   assert.ok(!call.init.body.includes(KEY), 'the key is not in the body');
+  // #6420: a caller's temperature is not sent; Claude Sonnet 5.5 answers a non-default one with a 400.
+  assert.ok(!('temperature' in JSON.parse(anthropic.build('claude-sonnet-5-5', { ...REQUEST, temperature: 0.3 }, KEY).body as string)));
   // Mutation checked: logging the request or writing it to the row puts the key here.
   assert.ok(!logged.some((l) => l.includes(KEY)), 'the key is never logged');
   assert.ok(!JSON.stringify(rows(w.db)).includes(KEY), 'the key is never written to the usage row');

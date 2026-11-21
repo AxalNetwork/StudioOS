@@ -2,19 +2,19 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
 import OfferPages from '../../../ui/OfferPages.jsx';
 import {
-  // `StatCard` went with the three tiles it drew: the strip is the artboard's
-  // own composition now, and `ProofTile` below is the tile that carries the
-  // artboard's note under each figure.
+  // D4842: no tile strip and no shelf. OF-03 is the result cards alone.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, NoPartnerProfile, isNoPartnerProfile,
+  Field, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument } from '../../../workspaces/canvasKit';
 import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import {
+  PROOF_CONSENT, PROOF_CHIP_OF, proofConsentKey, proofProvenance, proofHeadline, proofSecondAction, proofChipCounts,
+} from './proofCards.js';
 
 /**
  * Offers · Proof — `/offers/proof`.
@@ -92,9 +92,6 @@ const CONSENT_LABEL = {
   ask_again: 'Ask again',
   not_asked: 'Nobody asked',
 };
-const CONSENT_TONE = {
-  published: 'ok', awaiting: 'warn', withdrawn: 'danger', ask_again: 'warn', not_asked: 'neutral',
-};
 
 /**
  * D4672: one consent row's state in words, from the Worker's `state`. Every
@@ -109,17 +106,6 @@ export const CONSENT_ROW_PILL = Object.freeze({
   superseded: { tone: 'neutral', label: 'Superseded' },
   expired: { tone: 'neutral', label: 'Expired' },
 });
-
-/** The strip tile, in the anatomy the artboards share. */
-function ProofTile({ label, value, note }) {
-  return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1.5 font-mono text-[16px] font-extrabold tabular-nums tracking-tight text-axal-ink dark:text-gray-100">{value}</div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
-    </div>
-  );
-}
 
 function ConsentRow({ consent, onWithdraw, busy }) {
   const live = consent.state === 'confirmed';
@@ -245,93 +231,66 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
   );
 }
 
-function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issued }) {
+/**
+ * D4842 — ONE CARD PER RESULT, OUTCOME FIRST (OF-03). The order is the issue's:
+ * the outcome, the client and the work, the consent label, then who agreed and
+ * when, the engagement, and whether it is published. Edit, delete and the
+ * consent record sit behind View proof, so system detail never leads.
+ *
+ * A client-approved card has a solid green outline and a self-stated one a
+ * dashed outline (OF-10), and the label still says which in words.
+ */
+export function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issued }) {
+  const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(false);
   const [asking, setAsking] = useState(false);
   const [draft, setDraft] = useState(item);
   useEffect(() => { setDraft(item); }, [item]);
 
+  const key = proofConsentKey(consentState(item), item);
+  const label = PROOF_CONSENT[key];
+  const head = proofHeadline(item);
+  const lines = proofProvenance(key, item);
+  const second = proofSecondAction(key);
+  const outline = key === 'approved'
+    ? 'border-2 border-emerald-600 dark:border-emerald-500'
+    : key === 'self_stated' || key === 'superseded'
+      ? 'border border-dashed border-gray-400 dark:border-gray-500'
+      : 'border border-axal-hairline dark:border-gray-700';
+
   return (
-    <div className="rounded-xl border border-axal-hairline p-4 dark:border-gray-700">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-extrabold tracking-tight">{item.title}</span>
-            <Pill tone="neutral">{KIND_LABEL[item.kind] || item.kind}</Pill>
-            {/* Two states, drawn differently on purpose. "Published" and
-                "self-stated" are different evidence and must never render
-                alike — the second is the firm reporting a metric about itself,
-                and saying so is the whole job of this zone. */}
-            {item.is_published
-              ? <Pill tone="ok">Published with consent</Pill>
-              : <Pill tone="warn">Self-stated</Pill>}
-          </div>
-          <div className="mt-0.5 text-[11.5px] text-axal-faint">
-            {item.need_title
-              ? <>From {item.need_title}{item.founder_name ? ` · ${item.founder_name}` : ''}</>
-              : <Unrecorded>No engagement attached</Unrecorded>}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={ghostButtonClass} onClick={() => setEdit((v) => !v)}>
-            {edit ? 'Cancel' : 'Edit'}
-          </button>
-          <button type="button" className={ghostButtonClass} onClick={() => setAsking((v) => !v)}>
-            {asking ? 'Close' : 'Ask for consent'}
-          </button>
-        </div>
+    <article
+      className={`flex flex-col gap-2 rounded-xl bg-white p-4 dark:bg-gray-900 ${outline}`}
+      data-testid="proof-card" data-consent={key}
+    >
+      <h3 className="text-[16px] font-extrabold leading-snug tracking-tight text-axal-ink dark:text-gray-100">{head.outcome}</h3>
+      <div className="text-[13px] text-axal-muted dark:text-gray-300">
+        {head.client ? <b className="text-axal-ink dark:text-gray-100">{head.client}</b> : <Unrecorded>Client not named</Unrecorded>}
+        {head.context && <span> · {head.context}</span>}
+        <span className="text-axal-faint"> · {KIND_LABEL[item.kind] || item.kind}</span>
       </div>
-
-      {item.detail && (
-        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">{item.detail}</p>
-      )}
-      {item.outcome_note && (
-        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-          <span className="font-semibold">Result claimed: </span>{item.outcome_note}
-          {!item.is_published && (
-            <span className="text-axal-faint">
-              {' '}— the firm’s own account of it, with nothing confirming it yet.
-            </span>
-          )}
-        </p>
-      )}
-
-      {edit && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Title">
-              <input className={inputClass} value={draft.title || ''} maxLength={200}
-                onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-            </Field>
-            <Field label="Kind">
-              <select className={inputClass} value={draft.kind}
-                onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
-                {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className="mt-3 grid gap-3">
-            <Field label="What the work was">
-              <textarea className={inputClass} rows={3} value={draft.detail || ''} maxLength={4000}
-                onChange={(e) => setDraft({ ...draft, detail: e.target.value })} />
-            </Field>
-            <Field
-              label="Result claimed"
-              hint="Your account of the outcome. It stays a claim until a client confirms it."
-            >
-              <input className={inputClass} value={draft.outcome_note || ''} maxLength={1000}
-                onChange={(e) => setDraft({ ...draft, outcome_note: e.target.value })} />
-            </Field>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className={buttonClass} disabled={busy}
-              onClick={() => onSave(item, draft, () => setEdit(false))}>Save</button>
-            <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-              disabled={busy} onClick={() => onDelete(item)}>Delete</button>
-          </div>
-          <WriteNote note={scopedNote(note, `proof:${item.id}`)} busy={busy} />
-        </div>
-      )}
+      <span
+        className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-bold ${CONSENT_CHIP_CLASS[label.tone]}`}
+        data-testid="proof-consent"
+      >
+        <i aria-hidden="true" className="not-italic">{label.icon}</i>{label.label}
+      </span>
+      <p className="text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-300">
+        {lines.when}<br />{lines.engagement}
+      </p>
+      <p className="text-[12px] text-axal-faint">{label.line}</p>
+      <div className="mt-1 flex flex-wrap gap-2">
+        <button type="button" className={`${ghostButtonClass} min-h-[44px] md:min-h-0`} aria-expanded={open}
+          onClick={() => { setOpen((v) => !v); setAsking(false); }}>
+          {open ? 'Hide proof' : 'View proof'}
+        </button>
+        <button type="button" className={`${ghostButtonClass} min-h-[44px] md:min-h-0`}
+          onClick={() => {
+            if (second.opens === 'ask') { setAsking((v) => !v); setOpen(false); } else { setOpen(true); setAsking(false); }
+          }}>
+          {second.label}
+        </button>
+      </div>
 
       {asking && (
         <AskPanel
@@ -340,22 +299,86 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
         />
       )}
 
-      {item.consents.length > 0 && (
-        <div className="mt-3">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            Consent record
+      {open && (
+        <div className="mt-1 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid="proof-detail">
+          {item.detail && (
+            <p className="max-w-2xl text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-300">{item.detail}</p>
+          )}
+          {head.context && <p className="mt-1 text-[12px] text-axal-faint">Recorded as “{item.title}”.</p>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className={ghostButtonClass} onClick={() => setEdit((v) => !v)}>
+              {edit ? 'Cancel' : 'Edit'}
+            </button>
+            {key !== 'approved' && key !== 'requested' && (
+              <button type="button" className={ghostButtonClass} onClick={() => setAsking((v) => !v)}>
+                {asking ? 'Close' : 'Ask for consent'}
+              </button>
+            )}
           </div>
-          <div className="mt-1">
-            {item.consents.map((k) => (
-              <ConsentRow key={k.id} consent={k} busy={busy}
-                onWithdraw={(x) => onWithdraw(item, x)} />
-            ))}
-          </div>
+
+          {edit && (
+            <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Title">
+                  <input className={inputClass} value={draft.title || ''} maxLength={200}
+                    onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+                </Field>
+                <Field label="Kind">
+                  <select className={inputClass} value={draft.kind}
+                    onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
+                    {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="mt-3 grid gap-3">
+                <Field label="What the work was">
+                  <textarea className={inputClass} rows={3} value={draft.detail || ''} maxLength={4000}
+                    onChange={(e) => setDraft({ ...draft, detail: e.target.value })} />
+                </Field>
+                <Field
+                  label="Result claimed"
+                  hint="Your account of the outcome. It stays a claim until a client confirms it."
+                >
+                  <input className={inputClass} value={draft.outcome_note || ''} maxLength={1000}
+                    onChange={(e) => setDraft({ ...draft, outcome_note: e.target.value })} />
+                </Field>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className={buttonClass} disabled={busy}
+                  onClick={() => onSave(item, draft, () => setEdit(false))}>Save</button>
+                <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
+                  disabled={busy} onClick={() => onDelete(item)}>Delete</button>
+              </div>
+              <WriteNote note={scopedNote(note, `proof:${item.id}`)} busy={busy} />
+            </div>
+          )}
+
+          {item.consents.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+                Consent record
+              </div>
+              <div className="mt-1">
+                {item.consents.map((k) => (
+                  <ConsentRow key={k.id} consent={k} busy={busy}
+                    onWithdraw={(x) => onWithdraw(item, x)} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </article>
   );
 }
+
+/** The consent label's colours. The icon and the word carry the meaning; colour only repeats it. */
+const CONSENT_CHIP_CLASS = {
+  ok: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+  warn: 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+  neutral: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  danger: 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300',
+};
 
 /**
  * `Ask for consent`, the artboard's first op.
@@ -465,30 +488,21 @@ export default function PartnerProofZone() {
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
 
-  // The chips select on `consentState` — the same function the pill and the
-  // instrument's Consent column read, so no row can answer to two chips at
-  // once. `Blocked` is `withdrawn` here rather than the artboard's "engagement
-  // not complete": nothing links a proof item to an engagement's completion,
-  // and a consent taken back is the one state in this store that blocks
-  // publication for a reason other than an unanswered ask.
-  const visible = items.filter((item) => {
-    const state = consentState(item);
-    if (view === 'published') return state === 'published';
-    if (view === 'blocked') return state === 'withdrawn';
-    if (view === 'awaiting') return state === 'awaiting';
-    return true;
-  });
+  // D4842: the chips are OF-03's five (All, Client approved, Approval
+  // requested, Self-stated, Withdrawn), and they select on the card's own label
+  // (`proofConsentKey`, from `consentState`): the chip, the label and the
+  // export can never disagree about a row. Superseded counts under Self-stated
+  // and Declined under Withdrawn (`PROOF_CHIP_OF`).
+  const keyed = items.map((item) => ({ item, key: proofConsentKey(consentState(item), item) }));
+  const visible = keyed
+    .filter(({ key }) => view === 'all' || PROOF_CHIP_OF[key] === view)
+    .map(({ item }) => item);
+  const chipCounts = proofChipCounts(keyed.map(({ key }) => key));
 
-  // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE SHELF ══════════════
-  // Never over `visible`: a figure that changes because a chip was clicked is
-  // not reporting what its label claims.
+  // Counted over the whole page, never over `visible`: the draft band's foot
+  // says how many held items there are, whatever chip is selected.
   const awaiting = items.filter((i) => consentState(i) === 'awaiting');
   const blocked = items.filter((i) => consentState(i) === 'withdrawn');
-  // `Client-verified metrics` IS THE ZONE'S WHOLE ARGUMENT AS A NUMBER: a claim
-  // about a result that a client agreed to. A published item with no result
-  // claimed is not a verified metric, and a self-stated result is not one
-  // either — which is what the artboard's note "none self-reported" means.
-  const verified = items.filter((i) => i.is_published && i.outcome_note);
   // The artboard's `aiFoot` is "Three requests; each needs a human send." The
   // three is its own sample; the count here is this firm's held items, because
   // transcribing a figure out of an artboard is how a page comes to state a
@@ -504,7 +518,7 @@ export default function PartnerProofZone() {
   const handlers = {
     askConsent: () => { clearNote(); setAsking(true); },
   };
-  const rowActions = partnerZoneActions('offers/proof', { handlers, view: { header: ['Outcome', 'Kind', 'Provenance', 'Founder', 'Consent', 'What it says'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, CONSENT_LABEL[consentState(r)], r.outcome_note] } });
+  const rowActions = partnerZoneActions('offers/proof', { handlers, view: { header: ['Outcome', 'Kind', 'Provenance', 'Founder', 'Consent', 'What it says'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, PROOF_CONSENT[proofConsentKey(consentState(r), r)].label, r.outcome_note] } });
 
   // NOT AN EARLY RETURN ANY MORE. This was
   //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
@@ -535,7 +549,7 @@ export default function PartnerProofZone() {
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={unlinked ? [] : partnerZoneFilters('offers/proof', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('offers/proof', { value: view, onChange: setView, counts: chipCounts })}
         actions={rowActions}
       />
       {/* THE EDITOR IS NOT A CHILD OF `ZoneBody` (#4688): with no rows `ZoneBody`
@@ -586,16 +600,16 @@ export default function PartnerProofZone() {
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
+          /* OF03b: the empty state names the commercial outcome and offers one action. */
           <NothingYet
-            title="No proof is recorded yet"
+            title="Show founders why they should hire you"
             body={
-              'A case study or an outcome starts as your own account of the work. '
-              + 'It becomes proof when the client agrees to it being shown — and '
-              + 'until they do, this page will say which of the two it is.'
+              'Add a result from completed work. It starts as your own account, and '
+              + 'it is published once the client approves the wording.'
             }
             action={(
               <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
-                Add a case study
+                Add your first proof
               </button>
             )}
           />
@@ -603,76 +617,55 @@ export default function PartnerProofZone() {
       >
         <div className="space-y-6">
           <ZoneHeading
-            title="What the firm can show, and what it is only claiming"
-            blurb={
-              'Every item carries the engagement it came from and the client’s own '
-              + 'answer about publishing it. Consent is a gate rather than a '
-              + 'warning: an unconsented outcome has no published form to suppress.'
-            }
+            title="Proof"
+            blurb="Results from completed work. Client-approved results carry the most weight."
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
-                {adding ? 'Cancel' : 'Add an item'}
+              <button type="button" className={buttonClass} onClick={() => toggleAdding(!adding)}>
+                {adding ? 'Cancel' : '+ Add proof'}
               </button>
             )}
           />
 
-          {/* ══ THE `po4` STRIP ═════════════════════════════════════════════
-              `Published · Awaiting consent · Blocked · Client-verified
-              metrics`, all four counted from rows.
-
-              ONE NOTE IS NOT THE ARTBOARD'S, AND DELIBERATELY. Its `Published`
-              tile reads "live on the public profile" — there is no public
-              profile in this product, `Preview public page` is still prose for
-              exactly that reason, and repeating the artboard's note would have
-              the strip promise a page that does not exist. The note says what
-              published means here instead. */}
           {(d?.has_more || d?.page > 1) && (
-            <p className="text-sm text-axal-muted">Published counts all proof. The other figures and filters apply to this page.</p>
+            <p className="text-sm text-axal-muted">The filters and their counts apply to this page of proof.</p>
           )}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <ProofTile
-              label="Published"
-              value={String(d?.published_count ?? 0)}
-              note="a client agreed, and has not withdrawn"
-            />
-            <ProofTile label="Awaiting consent" value={String(awaiting.length)} note="asked, no answer" />
-            <ProofTile label="Blocked" value={String(blocked.length)} note="consent withdrawn" />
-            <ProofTile
-              label="Client-verified metrics"
-              value={String(verified.length)}
-              note="a result a client agreed to; self-stated ones are not counted"
-            />
-          </div>
 
-          <Instrument
-            testid="proof-shelf"
-            title="Outcome shelf"
-            meta="Seam-fed · consent gates publication"
-            cols="1.9fr 1.4fr 1.1fr 2fr"
-            head={['Outcome', 'Provenance', 'Consent', 'What it says']}
-            rows={visible.map((item) => {
-              const state = consentState(item);
-              return {
-                key: item.id,
-                cells: [
-                  { text: item.title, sub: KIND_LABEL[item.kind] || item.kind },
-                  // THE SEAM MARK IS EARNED PER ROW, not painted on every one.
-                  // The artboard's shelf is entirely seam-fed because every row
-                  // there came out of an engagement record; here an item can be
-                  // typed by hand, and one with nothing behind it is the single
-                  // most useful thing this column can say.
-                  item.need_title
-                    ? { text: item.need_title, sub: item.founder_name || undefined, seam: 'From engagement' }
-                    : { nr: true },
-                  { pill: CONSENT_LABEL[state], pillTone: CONSENT_TONE[state] },
-                  item.outcome_note
-                    ? { text: item.outcome_note, ...(state === 'published' ? {} : { gate: 'Not public' }) }
-                    : { nr: true },
-                ],
-              };
-            })}
-            note={'Consent is a gate rather than a warning: an unconsented outcome has no published form to suppress, so it simply is not one — and nothing on this page is a metric the firm reported about itself and marked confirmed. Two things this shelf says that the artboard\u2019s cannot. A row with no engagement behind it carries no seam mark and reads absent in Provenance: the artboard is entirely seam-fed because every row there came from an engagement record the client can see from their side, and an item typed by hand here has no such other side. And `Blocked` means a consent taken back rather than the artboard\u2019s incomplete engagement \u2014 nothing links a proof item to an engagement\u2019s completion, so a withdrawal is the one state in this store that blocks publication for a reason other than an unanswered ask.'}
-          />
+          {/* OF-03: the result cards, two across at desktop and one on a phone
+              (OF09b). A chip that finds nothing says which view it is, because
+              a bare empty grid reads as "you have no proof". */}
+          {items.length > 0 && visible.length === 0 && (
+            <p className="text-[12px] text-axal-muted">
+              No proof on this page is in this state. {d?.total ?? items.length} recorded in total.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2" data-testid="proof-grid">
+            {visible.map((item) => (
+              <ProofCard
+                key={item.id}
+                item={item}
+                busy={busy}
+                note={note}
+                issued={issued}
+                onSave={(it, draft, onSaved) => run(
+                  () => api.updatePartnerProof(it.id, {
+                    title: draft.title, kind: draft.kind,
+                    detail: draft.detail, outcome_note: draft.outcome_note,
+                  }),
+                  'Saved.', `proof:${it.id}`, onSaved,
+                )}
+                onDelete={(it) => run(
+                  () => api.deletePartnerProof(it.id),
+                  'Deleted.', `proof:${it.id}`,
+                )}
+                onAsk={ask}
+                onWithdraw={(it, k) => run(
+                  () => api.withdrawPartnerProofConsent(it.id, k.id),
+                  'Withdrawal recorded.', `proof:${it.id}`,
+                )}
+              />
+            ))}
+          </div>
+          <OfferPages label="Proof" result={d} busy={busy || state.loading} onPage={load} />
 
           <ZoneDraft
             surface="offers/proof"
@@ -684,46 +677,6 @@ export default function PartnerProofZone() {
             empty="A consent request per held outcome, naming the engagement, the specific claim, and where it would appear — for a person to send from the account that did the work."
             nothingToDraft="Every outcome is published, so there is nothing to ask for."
           />
-
-          <Section title="Proof">
-            {/* A narrowed view that finds nothing says which view it is, the way
-                `LibraryZone` does: a bare empty list under a selected chip reads
-                as "you have no proof", which is a different and much worse
-                claim than "none of it is in this state". */}
-            {items.length > 0 && visible.length === 0 && (
-              <p className="mb-3 text-[12px] text-axal-muted">
-                No item on this page is in this state. {d?.total ?? items.length} recorded in total.
-              </p>
-            )}
-            <div className="space-y-3">
-              {visible.map((item) => (
-                <ProofCard
-                  key={item.id}
-                  item={item}
-                  busy={busy}
-                  note={note}
-                  issued={issued}
-                  onSave={(it, draft, onSaved) => run(
-                    () => api.updatePartnerProof(it.id, {
-                      title: draft.title, kind: draft.kind,
-                      detail: draft.detail, outcome_note: draft.outcome_note,
-                    }),
-                    'Saved.', `proof:${it.id}`, onSaved,
-                  )}
-                  onDelete={(it) => run(
-                    () => api.deletePartnerProof(it.id),
-                    'Deleted.', `proof:${it.id}`,
-                  )}
-                  onAsk={ask}
-                  onWithdraw={(it, k) => run(
-                    () => api.withdrawPartnerProofConsent(it.id, k.id),
-                    'Withdrawal recorded.', `proof:${it.id}`,
-                  )}
-                />
-              ))}
-            </div>
-            <OfferPages label="Proof" result={d} busy={busy || state.loading} onPage={load} />
-          </Section>
 
           {asking && (
             <AskModal

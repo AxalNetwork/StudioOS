@@ -4,8 +4,9 @@
  *
  * THE ONE MODULE. Only this file reads or writes `validation_decisions`,
  * `validation_decision_evidence` and `validation_decision_commitments`
- * (migrations 211 and 464), and D4586's `validation_decision_method` and
- * `validation_decision_exclusions` (migration 202611091102). Every reader of "the current decision" calls
+ * (migrations 211 and 464), D4586's `validation_decision_method` and
+ * `validation_decision_exclusions` (migration 202611091102), and D6862's
+ * `validation_decision_shares` (migration 202611161140). Every reader of "the current decision" calls
  * `currentDecision`, so the old verdict page, the summary CSV and the new
  * module can never disagree about it. `services/records/owned.ts` may test
  * that an id is the venture's, and nothing else.
@@ -41,6 +42,7 @@ import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
 import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
+import { heldLicences } from './accountLicences';
 import { decisionEvidenceV2, sourceKey, type DecisionEvidence, type EvidenceRow, type Exclusion } from './validateMethodology';
 
 /**
@@ -131,10 +133,13 @@ const pivotHypothesisStatements: PivotStatements = (env, input) => [
 export class VerdictError extends Error {
   status: number;
   sentence: string;
-  constructor(status: number, sentence: string) {
+  /** D6862: the refusal's code, for the routes that answer one (decision shares, the evidence summary). */
+  code: string | null;
+  constructor(status: number, sentence: string, code: string | null = null) {
     super(sentence);
     this.status = status;
     this.sentence = sentence;
+    this.code = code;
   }
 }
 
@@ -447,6 +452,24 @@ export async function currentDecision(env: Env, projectId: number, scope: Scope)
       WHERE d.project_id = ? AND d.hypothesis_id IS ? AND d.state = 'given' AND d.superseded_at IS NULL
       ORDER BY d.decided_at DESC, d.id DESC LIMIT 1`,
   ).bind(projectId, scopeBind(scope)).first<DecisionRow>();
+}
+
+/**
+ * D6019 (#6019): every decision that rested on a piece of evidence, keyed by the
+ * evidence item's `id` (the `ref_id` a decision's evidence row stores), oldest
+ * first, given and withheld, current and superseded. The hypothesis-evidence
+ * CSV names them; it is gated by `canReadDecision` for that reason. A failed
+ * read throws: the caller refuses rather than exporting "no decision".
+ */
+export async function decisionCitations(env: Env, projectId: number): Promise<Array<{
+  ref_id: string; decision: string; state: string | null; decided_at: string | null; superseded_at: string | null;
+}>> {
+  const res = await env.DB.prepare(
+    `SELECT e.ref_id, d.decision, d.state, d.decided_at, d.superseded_at
+       FROM validation_decision_evidence e JOIN validation_decisions d ON d.id = e.decision_id
+      WHERE d.project_id = ? ORDER BY d.decided_at, d.id`,
+  ).bind(projectId).all<{ ref_id: string; decision: string; state: string | null; decided_at: string | null; superseded_at: string | null }>();
+  return res.results || [];
 }
 
 /**
@@ -974,5 +997,314 @@ export async function decisionRecords(ctx: Ctx, rq: RecordQuery): Promise<Record
     })),
     total: page.total, page: page.page, page_size: page.page_size,
     filters, sorts: DECISION_SORTS,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// D6862 (#6862, D6021 V17): the offered evidence, counted as a decision would
+// count it, for Eadwyn's read of the evidence before a decision is recorded.
+// ---------------------------------------------------------------------------
+
+export type OfferedCoverage = {
+  /** The checked items, in the order given, each with the reason it does not count (null: it counts). */
+  items: Array<EvidenceItem & { excluded: Exclusion | null }>;
+  coverage: DecisionEvidence;
+};
+
+/**
+ * The evidence keys a founder has checked for one scope, read from THIS
+ * venture's evidence (an unknown key is refused, as `recordDecision` refuses
+ * it) and counted by the same rule (`decisionEvidenceV2`), so the summary and
+ * the decision agree on what counts. Writes nothing.
+ */
+export async function offeredCoverage(
+  env: Env, projectId: number, scope: Scope, rawKeys: unknown,
+  { bar = DECISION_EVIDENCE_BAR, evidenceSource = evidenceFor }: { bar?: number; evidenceSource?: EvidenceSource } = {},
+): Promise<OfferedCoverage> {
+  const keys = evidenceKeys(rawKeys);
+  if (scope !== 'venture') {
+    const h = await env.DB.prepare('SELECT id FROM hypotheses WHERE id = ? AND project_id = ?').bind(scope, projectId).first();
+    if (!h) throw new VerdictError(404, 'Hypothesis not found.', 'hypothesis_not_found');
+  }
+  const byId = new Map((await evidenceSource(env, projectId)).map((it) => [it.id, it]));
+  const items: EvidenceItem[] = [];
+  for (const k of keys) {
+    const it = byId.get(k);
+    if (!it) throw new VerdictError(404, 'Evidence not found.', 'evidence_not_found');
+    items.push(it);
+  }
+  const rows: EvidenceRow[] = items.map((it) => ({
+    id: it.id, kind: String(it.kind || 'evidence') as EvidenceRow['kind'], ref_id: String(it.ref_id ?? it.id),
+    hypothesis_id: Number(it.hypothesis_id), direction: DIRECTIONS.has(it.direction) ? it.direction : 'supports',
+    ...(it.kind === 'experiment' ? { observed: it.observed === true } : {}),
+  }));
+  const coverage = decisionEvidenceV2(rows, scope, await interviewPeople(env, projectId, rows), bar);
+  const reasonOf = new Map<string, Exclusion>(coverage.excluded.map((x) => [x.id, x.reason]));
+  return { items: items.map((it) => ({ ...it, excluded: reasonOf.get(it.id) ?? null })), coverage };
+}
+
+// ---------------------------------------------------------------------------
+// D6862 (#6862, D6021 option B, owner answers Q1 B, Q2 A, Q3 A): a founder
+// shares ONE given decision with a named Operating Partner or investor of the
+// venture, who reads it on a read-only page. `validation_decision_shares`
+// (migration 202611161140) is read and written here only.
+//
+// THE RULE. A decision is read by the venture's own (`canReadDecision`), or by
+// a person holding an unrevoked share of THAT decision who is still one of the
+// venture's named Operating Partners or investors. A Withheld decision is
+// never shared: the grant refuses it and the read refuses it again. Every
+// refusal to a recipient is the same 403, whether the decision does not
+// exist, was never shared with them, was revoked, or is Withheld, so the read
+// tells nobody which decisions exist.
+// ---------------------------------------------------------------------------
+
+export type ShareKind = 'partner' | 'investor';
+export const MAX_SHARE_RECIPIENTS = 20;
+export const NOT_SHARED_SENTENCE = 'This decision was shared with named people only.';
+export const WITHHELD_SHARE_SENTENCE = 'A withheld decision cannot be shared.';
+
+export type ShareCandidate = { user_id: number; name: string; kind: ShareKind; shared: boolean };
+export type ShareRow = {
+  uid: string; recipient_user_id: number; recipient_name: string; recipient_kind: ShareKind;
+  include_reasoning: boolean; shared_by_name: string | null; shared_at: string; revoked_at: string | null;
+};
+
+type Person = { id: number; name: string | null; role: string; founder_id: number | null };
+
+/**
+ * The venture's named Operating Partners (an accepted `project_members` row
+ * and the partner licence) and investors (a dealroom seat on one of its deals,
+ * or an introduction to it, and the investor licence), active, and never one
+ * of the venture's own. A failed read throws.
+ */
+async function candidatePeople(env: Env, projectId: number): Promise<Array<{ user_id: number; name: string; kind: ShareKind }>> {
+  const project = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(projectId).first<{ founder_id: number | null }>();
+  if (!project) return [];
+  const [partners, investors] = await Promise.all([
+    env.DB.prepare(
+      `SELECT DISTINCT u.id, u.name, u.role, u.founder_id FROM project_members m JOIN users u ON u.id = m.user_id
+        WHERE m.project_id = ? AND m.status = 'accepted' AND u.is_active = 1 ORDER BY u.name, u.id`,
+    ).bind(projectId).all<Person>(),
+    env.DB.prepare(
+      `SELECT u.id, u.name, u.role, u.founder_id FROM users u
+        WHERE u.is_active = 1 AND u.id IN (
+          SELECT m.investor_user_id FROM investor_dealroom_members m JOIN deals d ON d.id = m.deal_id WHERE d.project_id = ?
+          UNION
+          SELECT i.investor_user_id FROM investor_introductions i WHERE i.project_id = ?)
+        ORDER BY u.name, u.id`,
+    ).bind(projectId, projectId).all<Person>(),
+  ]);
+  const own = (u: Person) => project.founder_id != null && u.founder_id != null && Number(u.founder_id) === Number(project.founder_id);
+  const out: Array<{ user_id: number; name: string; kind: ShareKind }> = [];
+  const seen = new Set<number>();
+  const groups: Array<[ShareKind, Person[]]> = [['partner', partners.results || []], ['investor', investors.results || []]];
+  for (const [kind, list] of groups) {
+    for (const u of list) {
+      if (own(u) || seen.has(Number(u.id))) continue;
+      const held = await heldLicences(env.DB, { id: Number(u.id), role: String(u.role ?? '') });
+      if (!held.includes(kind)) continue;
+      seen.add(Number(u.id));
+      out.push({ user_id: Number(u.id), name: u.name || `User ${u.id}`, kind });
+    }
+  }
+  return out;
+}
+
+type ShareableDecision = { id: number; decision: DecisionKind; state: DecisionState; hypothesis_id: number | null; hypothesis_code: string | null };
+
+/** One decision of the venture for sharing, or the refusal. */
+async function shareableDecision(env: Env, projectId: number, decisionId: unknown): Promise<ShareableDecision> {
+  const id = Number(decisionId);
+  if (!Number.isSafeInteger(id) || id < 1) throw new VerdictError(404, 'Decision not found.', 'decision_not_found');
+  const d = await env.DB.prepare(
+    `SELECT d.id, d.decision, d.state, d.hypothesis_id, h.code AS hypothesis_code FROM validation_decisions d
+       LEFT JOIN hypotheses h ON h.id = d.hypothesis_id WHERE d.project_id = ? AND d.id = ?`,
+  ).bind(projectId, id).first<ShareableDecision>();
+  if (!d) throw new VerdictError(404, 'Decision not found.', 'decision_not_found');
+  return { ...d, id: Number(d.id) };
+}
+
+const shareWords = (d: { decision: DecisionKind; hypothesis_id: number | null; hypothesis_code: string | null }) =>
+  `${KIND_WORD[d.decision]} for ${d.hypothesis_id == null ? 'the venture' : d.hypothesis_code ?? `H${d.hypothesis_id}`}`;
+
+/** Whether one decision of the venture may be shared: only a given one, never a Withheld one. */
+export async function decisionShareable(env: Env, projectId: number, decisionId: unknown): Promise<boolean> {
+  return (await shareableDecision(env, projectId, decisionId)).state === 'given';
+}
+
+/** The candidates for one decision, each marked when it already holds a live share. */
+export async function shareCandidates(env: Env, projectId: number, decisionId: unknown): Promise<ShareCandidate[]> {
+  const d = await shareableDecision(env, projectId, decisionId);
+  const live = await env.DB.prepare(
+    'SELECT recipient_user_id FROM validation_decision_shares WHERE decision_id = ? AND project_id = ? AND revoked_at IS NULL',
+  ).bind(d.id, projectId).all<{ recipient_user_id: number }>();
+  const shared = new Set((live.results || []).map((r) => Number(r.recipient_user_id)));
+  return (await candidatePeople(env, projectId)).map((c) => ({ ...c, shared: shared.has(c.user_id) }));
+}
+
+/** Every share of one decision, live and revoked, newest first. */
+export async function decisionShares(env: Env, projectId: number, decisionId: unknown): Promise<ShareRow[]> {
+  const d = await shareableDecision(env, projectId, decisionId);
+  const res = await env.DB.prepare(
+    `SELECT s.uid, s.recipient_user_id, r.name AS recipient_name, s.recipient_kind, s.include_reasoning,
+            b.name AS shared_by_name, s.shared_at, s.revoked_at
+       FROM validation_decision_shares s
+       JOIN users r ON r.id = s.recipient_user_id
+       LEFT JOIN users b ON b.id = s.shared_by
+      WHERE s.decision_id = ? AND s.project_id = ? ORDER BY s.id DESC`,
+  ).bind(d.id, projectId).all<Omit<ShareRow, 'include_reasoning'> & { include_reasoning: number }>();
+  return (res.results || []).map((r) => ({
+    ...r, recipient_user_id: Number(r.recipient_user_id), recipient_name: r.recipient_name || `User ${r.recipient_user_id}`,
+    include_reasoning: Number(r.include_reasoning) === 1,
+  }));
+}
+
+/**
+ * Share one given decision with named candidates. Only the venture's own may
+ * share (never an admin on their behalf). A recipient who already holds a live
+ * share is left as they are; each new share is logged under `validate.verdict`.
+ */
+export async function grantDecisionShares(
+  env: Env, user: User, project: ProjectRef, decisionId: unknown, input: { recipients?: unknown; include_reasoning?: unknown },
+): Promise<ShareRow[]> {
+  if (!ownsVenture(project, user)) throw new VerdictError(403, 'Only the venture’s founder can share a decision.', 'not_the_founder');
+  const d = await shareableDecision(env, project.id, decisionId);
+  if (d.state !== 'given') throw new VerdictError(409, WITHHELD_SHARE_SENTENCE, 'withheld_not_shareable');
+  const raw = input.recipients;
+  if (!Array.isArray(raw) || !raw.length || raw.length > MAX_SHARE_RECIPIENTS
+    || raw.some((r) => !Number.isSafeInteger(r) || (r as number) < 1)) {
+    throw new VerdictError(400, `Choose between 1 and ${MAX_SHARE_RECIPIENTS} people to share with.`, 'recipients_invalid');
+  }
+  if (input.include_reasoning !== undefined && typeof input.include_reasoning !== 'boolean') {
+    throw new VerdictError(400, 'include_reasoning must be true or false.', 'include_reasoning_invalid');
+  }
+  const includeReasoning = input.include_reasoning === true ? 1 : 0;
+  const candidates = new Map((await candidatePeople(env, project.id)).map((c) => [c.user_id, c]));
+  const chosen = [...new Set(raw as number[])].map((id) => candidates.get(id));
+  if (chosen.some((c) => !c)) {
+    throw new VerdictError(403, 'Share only with the venture’s named Operating Partners and investors.', 'not_a_candidate');
+  }
+  const words = shareWords(d);
+  const stmts: D1PreparedStatement[] = [];
+  for (const c of chosen as Array<{ user_id: number; name: string; kind: ShareKind }>) {
+    const uid = crypto.randomUUID();
+    stmts.push(env.DB.prepare(
+      `INSERT INTO validation_decision_shares (uid, project_id, decision_id, recipient_user_id, recipient_kind, include_reasoning, shared_by)
+       SELECT ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM validation_decision_shares WHERE decision_id = ? AND recipient_user_id = ? AND revoked_at IS NULL)`,
+    ).bind(uid, project.id, d.id, c.user_id, c.kind, includeReasoning, user.id ?? null, d.id, c.user_id));
+    // Logged only when this uid was written: a recipient who already held a live share logs nothing.
+    stmts.push(env.DB.prepare(
+      `INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor)
+       SELECT ?, ?, 'validate.verdict', ?, 'decision_shared', ?, ?
+        WHERE EXISTS (SELECT 1 FROM validation_decision_shares WHERE uid = ?)`,
+    ).bind(project.id, user.id ?? null, String(d.id),
+      `Shared ${words} with ${c.name}${includeReasoning ? ', reasoning included' : ''}`, `user:${user.id}`, uid));
+  }
+  await env.DB.batch(stmts);
+  return decisionShares(env, project.id, d.id);
+}
+
+/** Revoke one live share of one decision. Only the venture's own may revoke; logged under `validate.verdict`. */
+export async function revokeDecisionShare(
+  env: Env, user: User, project: ProjectRef, decisionId: unknown, shareUid: unknown,
+): Promise<ShareRow[]> {
+  if (!ownsVenture(project, user)) throw new VerdictError(403, 'Only the venture’s founder can revoke a share.', 'not_the_founder');
+  const d = await shareableDecision(env, project.id, decisionId);
+  const uid = typeof shareUid === 'string' ? shareUid.trim() : '';
+  const row = uid ? await env.DB.prepare(
+    `SELECT s.id, s.revoked_at, r.name AS recipient_name FROM validation_decision_shares s JOIN users r ON r.id = s.recipient_user_id
+      WHERE s.uid = ? AND s.decision_id = ? AND s.project_id = ?`,
+  ).bind(uid, d.id, project.id).first<{ id: number; revoked_at: string | null; recipient_name: string | null }>() : null;
+  if (!row) throw new VerdictError(404, 'Share not found.', 'share_not_found');
+  if (row.revoked_at) throw new VerdictError(409, 'This share is already revoked.', 'share_revoked');
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE validation_decision_shares SET revoked_at = datetime('now'), revoked_by = ?
+        WHERE id = ? AND revoked_at IS NULL`,
+    ).bind(user.id ?? null, row.id),
+    logCycleWriteStatement(env, {
+      ...verdictWrite(user, project.id, 'decision_share_revoked',
+        `Revoked ${row.recipient_name || 'a recipient'}’s access to ${shareWords(d)}`),
+      entityId: d.id,
+    }),
+  ]);
+  return decisionShares(env, project.id, d.id);
+}
+
+export type SharedDecision = {
+  decision_id: number; venture: string; decision: DecisionKind; for: string; decided_at: string; decided_by_name: string | null;
+  evidence_count: number;
+  evidence: Array<{ label: string; strength: string | null; direction: 'supports' | 'contradicts'; on_date: string | null }>;
+  excluded: Array<{ label: string; direction: 'supports' | 'contradicts'; reason: Exclusion }>;
+  method: DecisionMethod | null;
+  commitments: Array<{ text: string; owner_name: string | null; due_date: string | null; done_at: string | null }>;
+  /** Null unless the founder ticked Include reasoning for this share (Q3 A). */
+  reasoning: string | null;
+  reasoning_included: boolean;
+  shared_by_name: string | null;
+  shared_at: string;
+  /** The day a later decision replaced this one, and nothing about that decision. */
+  superseded_at: string | null;
+};
+
+/**
+ * The recipient's read of one shared decision (V20 A). Refused with one 403
+ * for every reason a recipient may not read it. No other decision, no
+ * hypothesis record, no interview and nothing about a later decision.
+ */
+export async function sharedDecisionFor(env: Env, user: User, decisionId: unknown): Promise<SharedDecision> {
+  const refused = () => new VerdictError(403, NOT_SHARED_SENTENCE, 'not_shared');
+  const id = Number(decisionId);
+  if (!Number.isSafeInteger(id) || id < 1 || user.id == null) throw refused();
+  const share = await env.DB.prepare(
+    `SELECT s.id, s.project_id, s.include_reasoning, s.shared_at, b.name AS shared_by_name, p.name AS venture
+       FROM validation_decision_shares s
+       JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+       LEFT JOIN users b ON b.id = s.shared_by
+      WHERE s.decision_id = ? AND s.recipient_user_id = ? AND s.revoked_at IS NULL
+      ORDER BY s.id DESC LIMIT 1`,
+  ).bind(id, user.id).first<{ id: number; project_id: number; include_reasoning: number; shared_at: string; shared_by_name: string | null; venture: string | null }>();
+  if (!share) throw refused();
+  const projectId = Number(share.project_id);
+  const d = await decisionById(env, projectId, id);
+  if (!d || d.state !== 'given') throw refused();
+  // Still one of the venture's named people: a partner removed from the venture, or an investor whose
+  // relationship ended or whose licence lapsed, reads nothing, whatever the share says.
+  if (!(await candidatePeople(env, projectId)).some((c) => c.user_id === Number(user.id))) throw refused();
+  const [{ method, excluded }, claim] = await Promise.all([
+    decisionMethod(env, d.id),
+    d.hypothesis_id == null ? Promise.resolve(null) : env.DB.prepare('SELECT code, claim FROM hypotheses WHERE id = ? AND project_id = ?')
+      .bind(d.hypothesis_id, projectId).first<{ code: string | null; claim: string | null }>(),
+  ]);
+  // The founder sees who opened it, once per recipient, on the decision's own activity.
+  try {
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor)
+       SELECT ?, ?, 'validate.verdict', ?, 'decision_share_opened', ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM activity_logs WHERE project_id = ? AND entity_type = 'validate.verdict'
+                            AND entity_id = ? AND action = 'decision_share_opened' AND user_id = ?)`,
+    ).bind(projectId, user.id, String(d.id), `A recipient opened the shared ${shareWords(d)}`,
+      `user:${user.id}`, projectId, String(d.id), user.id).run();
+  } catch (e) { console.warn('[verdict] share open log failed:', (e as Error)?.message); }
+  const includeReasoning = Number(share.include_reasoning) === 1;
+  return {
+    decision_id: d.id,
+    venture: share.venture || 'The venture',
+    decision: d.decision,
+    for: claim ? [claim.code, claim.claim].filter(Boolean).join(' · ') : 'The venture',
+    decided_at: d.decided_at,
+    decided_by_name: d.decided_by_name,
+    evidence_count: Number(d.evidence_count),
+    evidence: d.evidence.map((e) => ({ label: e.label, strength: e.strength, direction: e.direction, on_date: e.on_date })),
+    excluded: excluded.map((e) => ({ label: e.label, direction: e.direction, reason: e.reason })),
+    method,
+    commitments: d.commitments.map((m) => ({ text: m.text, owner_name: m.owner_name, due_date: m.due_date, done_at: m.done_at })),
+    reasoning: includeReasoning ? (String(d.reasoning ?? '').trim() || null) : null,
+    reasoning_included: includeReasoning,
+    shared_by_name: share.shared_by_name,
+    shared_at: share.shared_at,
+    superseded_at: d.superseded_at,
   };
 }

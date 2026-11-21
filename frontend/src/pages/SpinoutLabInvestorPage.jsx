@@ -25,9 +25,10 @@
 //    "Present" toggle; this page renders inside the authenticated app shell,
 //    so both are dropped and the design's nav CTAs live in the page header.
 // 2. LIVE FIGURES WHERE A SOURCE EXISTS. The hero proof tiles overlay
-//    GET /api/spinout-lab/fund-metrics (same merge, same fallback semantics as
-//    the LP workspace); everything else is the operator-maintained content in
-//    lib/spinoutInvestorContent.js, one auditable module.
+//    GET /api/spinout-lab/fund-metrics; copy is the content in
+//    lib/spinoutInvestorContent.js, one auditable module. Fund figures (D6137)
+//    come only from that read through lib/spinoutFundFigures.js: deployment is
+//    a committed LP's figure, and one with no record reads "Not recorded".
 // 3. HONEST COHORT SECTION. The design presents six named "live readings".
 //    No endpoint reports per-company cohort telemetry to investors, so that
 //    section renders as an explicitly-captioned illustrative composite —
@@ -35,16 +36,17 @@
 //    render verbatim.
 // 4. REAL DOCUMENT CTA. "Fund brief (PDF)" produces the actual brief via the
 //    same exportFundBriefPdf the workspace uses — not a decorative button.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, FileDown, Landmark, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
-import { spinoutLab } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
-import { fundModel, money } from '../lib/spinoutFundModel';
+import { lpWorkspaceCallToAction } from '../lib/spinoutFundModel';
+import { fundFigures, programFigures, LP_ONLY, NOT_RECORDED, UNREADABLE } from '../lib/spinoutFundFigures';
 import {
-  HERO, JOURNEY, STACK, WHY_NOW, EDGE, NETWORK, PROOF_STUDIO_STATIC,
-  COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER, FUND, PROGRAM,
+  HERO, JOURNEY, STACK, WHY_NOW, EDGE, NETWORK, PROOF_STUDIO,
+  COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER,
 } from '../lib/spinoutInvestorContent';
 
 /** The deeper LP workspace — the single destination every CTA points at. */
@@ -84,8 +86,12 @@ function SectionHead({ label, headline, sub }) {
 const btnPrimary = 'inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-6 py-3 text-sm font-extrabold text-white hover:bg-violet-800 transition-colors';
 const btnGhost = 'inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 px-6 py-3 text-sm font-bold text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
 
-/** "Fund brief (PDF)" — generates the real document via the shared renderer. */
-function FundBriefButton({ className }) {
+/**
+ * "Fund brief (PDF)" — generates the real document via the shared renderer,
+ * from the same /fund-metrics read this page drew (D6137), so the PDF prints
+ * the page's figures and a visitor's brief carries no LP figure.
+ */
+function FundBriefButton({ className, metrics }) {
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -94,7 +100,7 @@ function FundBriefButton({ className }) {
     setBusy(true); setErr('');
     try {
       const { exportFundBriefPdf } = await import('../lib/fundBriefPdf');
-      await exportFundBriefPdf({ recipient: { name: user?.name, email: user?.email } });
+      await exportFundBriefPdf({ recipient: { name: user?.name, email: user?.email }, metrics: metrics ?? null });
     } catch (e) {
       setErr(e?.message || 'Could not generate the fund brief.');
       reportError('SpinoutLabInvestorPage:brief', e);
@@ -116,65 +122,76 @@ function FundBriefButton({ className }) {
 /* --------------------------------------------------------------------- page */
 
 export default function SpinoutLabInvestorPage() {
-  // Live program/raise overlay — identical merge to the LP workspace: a block
-  // is used only when it answers `available: true`; a failed fetch or an
-  // unavailable block falls back to the operator-maintained model, and the
-  // provenance caption follows the same flag so this page never claims live
-  // telemetry it does not have.
+  const viewerId = useAuth()?.user?.id;
+  const [standing, setStanding] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (viewerId != null) {
+      Promise.allSettled([api.fundsLpPortal(), spinoutLab.lpApplication()])
+        .then(([portal, application]) => {
+          if (alive) setStanding({ viewerId, cta: lpWorkspaceCallToAction(portal, application) });
+        });
+    }
+    return () => { alive = false; };
+  }, [viewerId]);
+
+  const cta = standing?.viewerId === viewerId && standing ? standing.cta : lpWorkspaceCallToAction();
+  const workspaceHref = LP_WORKSPACE_PATH + cta.hash;
+
+  // Program figures come only from the read's program block (#5513, D5513-p2):
+  // there is no fixed track record behind them any more, so a figure the read
+  // does not carry reads "Not recorded" ("Unreadable" when the read failed).
+  // Fund figures have no fallback either (D6137).
   const [live, setLive] = useState(null);
+  const [readFailed, setReadFailed] = useState(false);
   useEffect(() => {
     let alive = true;
     spinoutLab.fundMetrics()
-      .then((r) => { if (alive) setLive(r); })
-      .catch(() => { if (alive) setLive(null); });
+      .then((r) => { if (alive) { setLive(r); setReadFailed(false); } })
+      .catch(() => { if (alive) { setLive(null); setReadFailed(true); } });
     return () => { alive = false; };
   }, []);
 
-  const M = useMemo(() => fundModel(), []);
   const liveProgram = live?.program?.available ? live.program : null;
-  const liveFund = live?.fund?.available ? live.fund : null;
+  const F = fundFigures(live);
+  // Before the read answers, figures read Not recorded rather than Unreadable.
+  const P = programFigures(live ?? (readFailed ? null : {}));
+  const missing = readFailed ? UNREADABLE : NOT_RECORDED;
 
-  const P = liveProgram
-    ? {
-      graduates: liveProgram.graduates,
-      onTimeIncorpPct: liveProgram.on_time_pct,
-      alumniRaisedM: liveProgram.alumni_raised != null ? liveProgram.alumni_raised / 1e6 : null,
-    }
-    : PROGRAM;
-
-  const committedM = liveFund && Number(liveFund.committed) > 0
-    ? Number(liveFund.committed) / 1e6
-    : FUND.committed;
-  const capacityM = Math.max(0, FUND.target - committedM);
+  // Capacity remaining is target minus committed, so it is a committed LP's
+  // figure: drawn only when the read carried the raise (D6137).
+  const capacity = F.raise && F.raise.recorded && F.target.recorded ? F.raise.capacity : null;
 
   const heroProof = [
-    { k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Across three completed cohorts' },
-    { k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Within the 28-day schedule' },
-    { k: 'Raised post-program', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'External capital, alumni companies' },
-    { k: 'Deployed by the fund', v: money.m(M.investedK), tone: 'violet', note: `${M.positions.length} positions held` },
+    { k: 'Graduates to date', v: P.graduates, tone: 'ink', note: 'Across completed cohorts' },
+    { k: 'Incorporated on time', v: P.onTime, tone: 'green', note: 'Incorporation ordered within the 28-day programme' },
+    { k: 'Raised post-program', v: P.alumni, tone: 'green', note: 'External capital, alumni companies' },
+    F.portfolio
+      ? { k: 'Deployed by the fund', v: F.portfolio.invested, tone: 'violet', note: `Positions held: ${F.portfolio.positions}` }
+      : { k: 'Deployed by the fund', v: '—', tone: 'violet', note: LP_ONLY },
   ];
 
-  // Studio throughput, tile by tile. Each takes the live value when
-  // /fund-metrics reports one and falls back to the operator-maintained figure
-  // in spinoutInvestorContent.js otherwise — per TILE, not per page, because
-  // the endpoint can measure some of these and not others (a null percentage
-  // there means "no denominator", never 0%). `liveNote` records which side a
-  // tile landed on so the caption below can count them honestly.
-  const pick = (liveValue, format, staticTile) => (liveValue != null
-    ? { ...staticTile, v: format(liveValue), live: true }
-    : { ...staticTile, live: false });
-  const staticBy = Object.fromEntries(PROOF_STUDIO_STATIC.map((t) => [t.key, t]));
-  const pctFmt = (n) => `${n}%`;
+  // Studio throughput, tile by tile: the live value when the program block
+  // reports one, else Not recorded. Per tile, because the endpoint can measure
+  // some of these and not others (a null percentage there means "no
+  // denominator", never 0%). `live` counts the tiles for the caption below.
+  const fmt = (unit, n) => (unit === 'days' ? `${n} days` : `${n}%`);
+  const tile = (t) => {
+    const n = liveProgram ? liveProgram[t.field] : null;
+    return n != null && Number.isFinite(Number(n))
+      ? { ...t, v: fmt(t.unit, Number(n)), live: true }
+      : { ...t, v: missing, live: false };
+  };
 
   const proofStudio = [
-    { key: 'graduates', k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Across completed cohorts', live: !!liveProgram },
-    pick(liveProgram?.incorporation_pct, pctFmt, staticBy.incorporation_rate),
-    { key: 'on_time', k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Inside the 28-day window', live: !!liveProgram && P.onTimeIncorpPct != null },
-    pick(liveProgram?.verified_discovery_pct, pctFmt, staticBy.verified_discovery),
-    pick(liveProgram?.revenue_proof_pct, pctFmt, staticBy.revenue_proof),
-    { key: 'alumni', k: 'Alumni follow-on', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'Raised externally post-program', live: !!liveProgram && P.alumniRaisedM != null },
-    pick(liveProgram?.formation_velocity_days, (n) => `${n} days`, staticBy.formation_velocity),
-    pick(liveProgram?.graduation_to_investment_pct, pctFmt, staticBy.graduation_investment),
+    { key: 'graduates', k: 'Graduates to date', v: P.graduates, tone: 'ink', note: 'Across completed cohorts', live: P.graduates !== NOT_RECORDED && P.graduates !== UNREADABLE },
+    tile(PROOF_STUDIO[0]),
+    { key: 'on_time', k: 'Incorporated on time', v: P.onTime, tone: 'green', note: 'Inside the 28-day window', live: P.onTimePct != null },
+    tile(PROOF_STUDIO[1]),
+    tile(PROOF_STUDIO[2]),
+    { key: 'alumni', k: 'Alumni follow-on', v: P.alumni, tone: 'green', note: 'Raised externally post-program', live: P.alumniRaisedM != null },
+    tile(PROOF_STUDIO[3]),
+    tile(PROOF_STUDIO[4]),
   ];
   const liveTiles = proofStudio.filter((t) => t.live).length;
 
@@ -193,8 +210,8 @@ export default function SpinoutLabInvestorPage() {
           </h1>
           <p className="mt-5 max-w-[600px] text-[15px] sm:text-[16px] leading-relaxed text-gray-600 dark:text-gray-300">{HERO.sub}</p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link to={LP_WORKSPACE_PATH} data-testid="link-review-fund-hero" className={btnPrimary}>Review the fund</Link>
-            <FundBriefButton className={btnGhost} />
+            <Link to={workspaceHref} data-testid="link-review-fund-hero" className={btnPrimary}>{cta.label ?? 'Review the fund'}</Link>
+            <FundBriefButton metrics={live} className={btnGhost} />
           </div>
 
           {/* studio proof strip */}
@@ -209,8 +226,8 @@ export default function SpinoutLabInvestorPage() {
           </div>
           <div className="mt-3 text-[11px] text-gray-400 dark:text-gray-500" data-testid="text-proof-provenance">
             {liveProgram
-              ? 'Program figures are live from platform records; fund deployment reflects the operator-maintained portfolio model.'
-              : 'Program and deployment figures are operator-maintained; live platform metrics substitute automatically when available.'}
+              ? 'Program figures are live from platform records; fund deployment comes from the fund’s position records, or reads Not recorded.'
+              : 'Program figures appear once platform records hold them, and read Not recorded until then; fund deployment comes from the fund’s position records, or reads Not recorded.'}
           </div>
         </div>
       </div>
@@ -351,15 +368,15 @@ export default function SpinoutLabInvestorPage() {
           {liveTiles === proofStudio.length
             ? 'All figures are live from platform records.'
             : liveTiles > 0
-              ? `${liveTiles} of ${proofStudio.length} figures are live from platform records; the rest are operator-maintained until the platform can measure them.`
-              : 'Figures are operator-maintained; live platform metrics substitute automatically as they become measurable.'}
+              ? `${liveTiles} of ${proofStudio.length} figures are live from platform records; the rest read Not recorded until the platform can measure them.`
+              : 'No figure is recorded yet; each appears here once platform records can measure it.'}
         </p>
         <div className={`${CARD} mt-5 flex flex-wrap items-center gap-3.5 px-5 py-4`}>
           <span className="min-w-[260px] flex-1 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
             Fund-level position — committed, called, deployed, portfolio marks, MOIC, and reserve — is maintained in the LP workspace and the quarterly reporting archive.
           </span>
-          <Link to={LP_WORKSPACE_PATH} data-testid="link-fund-position" className="inline-flex flex-none items-center gap-1.5 rounded-lg bg-violet-700 hover:bg-violet-800 px-4 py-2 text-[12.5px] font-bold text-white transition-colors">
-            See fund position <ArrowRight size={13} />
+          <Link to={workspaceHref} data-testid="link-fund-position" className="inline-flex flex-none items-center gap-1.5 rounded-lg bg-violet-700 hover:bg-violet-800 px-4 py-2 text-[12.5px] font-bold text-white transition-colors">
+            {cta.label ?? 'See fund position'} <ArrowRight size={13} />
           </Link>
         </div>
       </section>
@@ -417,10 +434,10 @@ export default function SpinoutLabInvestorPage() {
             <p className="m-0 text-[13.5px] leading-relaxed text-gray-700 dark:text-gray-300">
               This page explains why the pipeline is worth underwriting. Fund terms, the raise status, capital accounts, and the quarterly reporting archive are maintained in the LP workspace — one place, one source of truth.
             </p>
-            <Link to={LP_WORKSPACE_PATH} data-testid="link-open-workspace" className={`${btnPrimary} mt-5 w-full`}>
-              Open the LP workspace <ArrowRight size={14} />
+            <Link to={workspaceHref} data-testid="link-open-workspace" className={`${btnPrimary} mt-5 w-full`}>
+              {cta.label ?? 'Open the LP workspace'} <ArrowRight size={14} />
             </Link>
-            <FundBriefButton className={`${btnGhost} mt-2.5 w-full`} />
+            <FundBriefButton metrics={live} className={`${btnGhost} mt-2.5 w-full`} />
             <p className="m-0 mt-3.5 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">Full terms and capital account statements are available to approved LPs.</p>
           </div>
         </div>
@@ -431,15 +448,15 @@ export default function SpinoutLabInvestorPage() {
         <div className="relative overflow-hidden rounded-3xl border border-violet-300/40 dark:border-violet-800 bg-gradient-to-br from-violet-100/80 to-white dark:from-violet-950/50 dark:to-gray-900 px-7 py-11 sm:px-12">
           <div className="max-w-[660px]">
             <div className={`${LBL} mb-4 text-violet-700 dark:text-violet-400`}>
-              {FINAL_CTA.kicker} · ${capacityM.toFixed(1)}M capacity remaining
+              {FINAL_CTA.kicker}{capacity && ` · ${capacity} capacity remaining`}
             </div>
             <h2 className="m-0 text-[26px] sm:text-[34px] font-black leading-[1.14] tracking-[-.03em] text-gray-900 dark:text-gray-100">{FINAL_CTA.headline}</h2>
             <p className="mt-4 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-300">{FINAL_CTA.body}</p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link to={LP_WORKSPACE_PATH} data-testid="link-request-access" className={btnPrimary}>
-                <Landmark size={15} /> Request LP access
+              <Link to={workspaceHref} data-testid="link-request-access" className={btnPrimary}>
+                <Landmark size={15} /> {cta.label ?? 'Request LP access'}
               </Link>
-              <FundBriefButton className={btnGhost} />
+              <FundBriefButton metrics={live} className={btnGhost} />
             </div>
           </div>
         </div>

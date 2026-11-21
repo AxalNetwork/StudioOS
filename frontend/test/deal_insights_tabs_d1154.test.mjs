@@ -1,11 +1,11 @@
 // D1154 (#3059, part 6 of #2421) — the reading tabs Team (DL4), Market (DL5)
-// and Traction (DL6) on D1151's reads, with the sibling canvases' slots (DL24).
+// and Traction (DL6) on D1151's reads, with the scorecard rows and the
+// Evidence tab's link (DL24, D6168).
 //
 //   · no total score is drawn: coverage is a band per axis, never a number,
-//     and the scorecard rows are SCORING's slots;
+//     and the scorecard rows are the Scorecard tab's own (D6168);
 //   · a month not reported is a gap, never 0, and a recorded 0 stays 0;
-//   · a slot that fails to read says so in its own frame, and one failed
-//     block leaves the rest of the tab standing;
+//   · one failed block leaves the rest of the tab standing;
 //   · before the NDA only the company's basics show, with the way to the NDA.
 //
 // Run with:
@@ -19,9 +19,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
-import { WAITS } from '../src/pages/dealPageModel.js';
+import * as insightsModel from '../src/pages/deal/dealInsightsModel.js';
 import {
-  NOT_RECORDED, NOT_REPORTED, SLOTS, chartSummary, coverageView, figureText, insightState, personView, safeUrl, sizingView, slotOf, sourceText, tractionView,
+  EVIDENCE_LINK, NOT_RECORDED, NOT_REPORTED, SCORECARD_ROWS, TRACTION_TILES, chartSummary, coverageView, figureText, insightState, personView, safeUrl, sizingView, sourceText, tractionCsv, tractionSources, tractionView,
 } from '../src/pages/deal/dealInsightsModel.js';
 
 const h = React.createElement;
@@ -36,9 +36,9 @@ const MASKED_READ = { masked: true, reason: 'no_pairwise_nda', project: { name: 
 const TEAM = {
   masked: false,
   people: { state: 'recorded', data: [
-    { uid: 'u1', name: 'Ana Ruiz', role: 'founder', prior_roles: [{ title: 'Head of operations', company: 'Robo Co', start: '2019', end: '2024' }], archetype: { slug: 'builder', label: 'Builder' }, full_time_since: null, full_time_reason: 'Not recorded', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
-    { uid: 'u2', name: 'Ben Kim', role: 'cofounder', prior_roles: null, prior_roles_state: 'unreadable', archetype: null, full_time_since: null, full_time_reason: 'Not recorded', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
-    { uid: 'u3', name: 'Cy', role: 'member', prior_roles: [], archetype: null, full_time_since: null, full_time_reason: 'Not recorded', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
+    { uid: 'u1', name: 'Ana Ruiz', role: 'founder', prior_roles: [{ title: 'Head of operations', company: 'Robo Co', start: '2019', end: '2024' }], archetype: { slug: 'builder', label: 'Builder' } },
+    { uid: 'u2', name: 'Ben Kim', role: 'cofounder', prior_roles: null, prior_roles_state: 'unreadable', archetype: null },
+    { uid: 'u3', name: 'Cy', role: 'member', prior_roles: [], archetype: null },
   ] },
   coverage: { state: 'recorded', data: [
     { slug: 'product', label: 'Product', coverage_band: 'covered', reason: null },
@@ -46,6 +46,8 @@ const TEAM = {
     { slug: 'finance', label: 'Finance', coverage_band: 'gap', reason: null },
     { slug: 'legal', label: 'Legal and IP', coverage_band: null, reason: 'Not recorded for at least two published team members' },
   ] },
+  advisors: { state: 'recorded', data: { count: 2, roles: [{ role: 'Advisor', count: 2 }], source: 'Accepted project memberships' } },
+  founder_market_fit: { state: 'recorded', data: { groups: [{ area: 'Fundraising readiness', kind: 'skill-actions', source_label: 'recorded', count: 1, newest: '2026-10-01' }], partial: false } },
   values_band: { value: null, state: 'not_recorded', reason: 'No recorded consent to share a team values band' },
 };
 
@@ -81,6 +83,18 @@ const TRACTION = {
   evidence: { state: 'not_recorded', reason: 'Shared evidence is not available in this view yet' },
 };
 
+/** D6168: the deal's scorecard read, after the NDA: Team scored, Market not enough, Traction unreadable. */
+const sc = (scope, value, band, word) => ({ scope, state: 'scored', value, band, confidence_word: word, coverage: { present: 3, applies: 4 }, masked: false, review: null, inputs: [] });
+const SCORES = {
+  project_id: 7, deal_id: 4, locked: false, nda: true, model: '1.0',
+  scopes: [
+    sc('team', 62, 'Fair', 'Medium'), { scope: 'market', state: 'not_enough', masked: false, inputs: [] }, sc('pmf', 64, 'Fair', 'Medium'),
+    sc('technical', 55, 'Fair', 'Medium'), { scope: 'traction', state: 'unreadable', masked: false }, sc('financial', 58, 'Fair', 'Low'),
+    sc('risk', 51, 'Fair', 'Medium'), { scope: 'geographic', state: 'not_expected', masked: false, inputs: [] }, { scope: 'political', state: 'not_read', masked: false },
+    sc('governance', 81, 'Strong', 'High'), sc('legal_ip', 40, 'Weak', 'Low'),
+  ],
+};
+
 /* ------------------------------------------------------------------ *
  * The model
  * ------------------------------------------------------------------ */
@@ -96,7 +110,8 @@ test('a read is masked, unreadable or open; a masked read shows only the basics'
 test('a person as published: unreadable roles said, unpublished ones said, nothing invented', () => {
   const [a, b, c] = TEAM.people.data.map(personView);
   assert.deepEqual([a.name, a.initials, a.role, a.archetype, a.roles], ['Ana Ruiz', 'AR', 'Founder', 'Builder', { state: 'recorded', rows: ['Head of operations at Robo Co, 2019–2024'] }]);
-  assert.deepEqual([a.fullTime, a.fullTimeReason, a.fit, a.fitReason], [null, 'Not recorded', null, 'No published evidence recorded']);
+  assert.equal(Object.hasOwn(a, 'fullTime'), false);
+  assert.equal(Object.hasOwn(a, 'fit'), false);
   assert.deepEqual([b.role, b.roles.state, b.archetype], ['Co-founder', 'unreadable', null]);
   assert.deepEqual([c.role, c.roles.state], ['Team member', 'not_published']);
 });
@@ -138,7 +153,7 @@ test('traction: a month not reported is a gap in every series, never 0; a record
   assert.deepEqual([tile.customers.value, tile.customers.source], ['21', 'Typed · the founder’s own figure']);
   assert.deepEqual([tile.growth.value, tile.growth.reason], [null, 'Not shared in the last twelve months']);
   assert.deepEqual([tile.arr.value, tile.arr.reason], [null, 'No founder-shared ARR recorded; MRR is not annualised']);
-  assert.deepEqual([tile.nrr.value, tile.nrr.reason], [null, 'No founder-shared NRR recorded']);
+  assert.deepEqual([tile.net_retention.value, tile.net_retention.reason], [null, 'No founder-shared NRR recorded']);
   assert.equal(figureText(null, 'usd'), null);
   assert.equal(figureText(0, 'usd'), '$0');
   assert.equal(chartSummary('MRR by month', v.series.mrr).text, 'MRR by month: $10,000 in Nov 2025, $21,000 in Oct 2026. Jan 2026 was not reported.');
@@ -148,15 +163,14 @@ test('traction: a month not reported is a gap in every series, never 0; a record
   assert.equal(odd.series.mrr[0].value, null);
 });
 
-test('the sibling slots: each says its source; a slot fed by a failed read says so; none is a score', () => {
-  assert.equal(slotOf(SLOTS.evidence, { state: 'unreadable' }).state, 'unreadable');
-  assert.match(slotOf(SLOTS.evidence, { state: 'unreadable' }).line, /could not be read/);
-  assert.match(slotOf(SLOTS.evidence, TRACTION.evidence).line, /^Shared evidence is not available in this view yet\. /);
-  for (const s of [SLOTS.teamRow, SLOTS.marketRows, SLOTS.tractionRows]) {
-    assert.match(s.line, /This is not a score of zero\./);
-    assert.ok(!/\d/.test(s.line.replace(/#\d+/g, '')), 'a slot draws no number');
+test('D6168: each tab’s scorecard rows are v1 DL4, DL5 and DL6’s scopes; the evidence is a link that names no issue and no wait', () => {
+  assert.deepEqual(SCORECARD_ROWS, { team: ['team'], market: ['market', 'pmf', 'geographic', 'political'], traction: ['traction', 'financial'] });
+  assert.equal('SLOTS' in insightsModel, false, 'the waiting slots are gone');
+  assert.equal('slotOf' in insightsModel, false);
+  for (const w of Object.values(EVIDENCE_LINK)) {
+    assert.ok(!/#\d|\bD\d|lands?\b|landed|not available|yet\b/i.test(w), w);
+    assert.ok(!/\b0\b|advis/i.test(w), w);
   }
-  assert.deepEqual(Object.keys(WAITS), ['scorecard', 'evidence'], 'Team, Market and Traction no longer wait');
 });
 
 /* ------------------------------------------------------------------ *
@@ -165,6 +179,7 @@ test('the sibling slots: each says its source; a slot fed by a failed read says 
 
 function handler(reads) {
   return (url) => {
+    if (/\/api\/venture-scores\/deal\/4$/.test(url)) return reads.scores ? reads.scores() : response(SCORES);
     for (const [section, r] of Object.entries(reads)) {
       if (new RegExp(`/api/deals/4/${section}$`).test(url)) return typeof r === 'function' ? r() : r;
     }
@@ -211,20 +226,29 @@ async function mounted(url, reads) {
   };
 }
 
-test('Team: each person as published, coverage as bands with the gap named, values Not recorded, the Team row a slot', async () => {
+test('Team: each person as published, coverage as bands with the gap named, values Not recorded, the Team row from the scorecard', async () => {
   const v = await mounted('/deals/4/team', { team: response(TEAM) });
   try {
     assert.ok(v.requests.some((u) => /\/api\/deals\/4\/team$/.test(u)));
     assert.ok(v.textOf('deal-team-person-u1').includes('Head of operations at Robo Co, 2019–2024'));
     assert.ok(v.textOf('deal-team-person-u1').includes('Builder'));
     assert.match(v.textOf('deal-team-person-u2'), /could not be read\. That is not the same as none\./);
-    assert.ok(v.textOf('deal-team-person-u3').includes('Not published'));
+    // D6164 part 2 (DE23): the canvas's words for what a member did not publish.
+    assert.ok(v.textOf('deal-team-person-u3').includes('No prior roles published'));
+    assert.ok(v.textOf('deal-team-person-u3').includes('No archetype published'));
+    assert.doesNotMatch(v.textOf('deal-team-person-u1'), /Full time|Founder-market fit/);
+    assert.match(v.textOf('deal-team-fit'), /Recorded team actions.*1 shared.*Recorded/);
+    assert.match(v.textOf('deal-team-fit'), /Open the Evidence tab/);
+    assert.match(v.textOf('deal-team-advisors'), /2 accepted advisors.*Advisor.*2.*Accepted project memberships/);
     const coverage = v.textOf('deal-team-coverage');
     assert.ok(coverage.includes('Gaps: Finance.'));
     assert.ok(coverage.includes('Not recorded for at least two published team members'));
     assert.ok(!/\d/.test(coverage), 'coverage draws no number');
     assert.ok(v.textOf('deal-team-values').includes('No recorded consent to share a team values band'));
-    assert.ok(v.textOf('deal-slot-team-row').includes('This is not a score of zero.'));
+    // D6168: the Team row as the Scorecard tab draws it, with Open to its drawer there.
+    assert.equal(v.textOf('deal-team-scorecard-team').replace(/\s+/g, ' ').trim(), 'TeamFair· MediumValue 623 of 4 inputsOpen');
+    assert.equal(v.hrefOf('deal-team-scorecard-open-team'), '/deals/4/scorecard?scope=team');
+    assert.equal(v.requests.filter((u) => /\/api\/venture-scores\/deal\/4$/.test(u)).length, 1, 'one scorecard read for the tab');
     assert.ok(!v.ids().some((id) => id.startsWith('deal-wait-')));
   } finally { await v.close(); }
 });
@@ -259,7 +283,11 @@ test('Market: figures with their sources or why none, a recorded zero as $0, one
     assert.ok(v.ids().includes('deal-market-where-unreadable'), 'the failed block says so');
     assert.ok(v.textOf('deal-market-who').includes('Port operators'), 'the rest of the tab stands');
     assert.ok(v.textOf('deal-market-competitors').includes('Old Ledger'));
-    assert.match(v.textOf('deal-slot-market-evidence'), /could not be read/, 'a slot that fails to read says so in its frame');
+    // D6168: the evidence is one link away; this tab neither reads nor counts it, so no open is logged.
+    assert.equal(v.hrefOf('deal-market-evidence-link'), '/deals/4/evidence');
+    assert.ok(!v.requests.some((u) => /\/api\/deals\/4\/evidence/.test(u)), 'the evidence read is the Evidence tab\'s');
+    assert.deepEqual(v.ids().filter((id) => /^deal-market-scorecard-(team|market|pmf|technical|traction|financial|risk|geographic|political|governance|legal_ip)$/.test(id)),
+      ['deal-market-scorecard-market', 'deal-market-scorecard-pmf', 'deal-market-scorecard-geographic', 'deal-market-scorecard-political'], 'Market, Product-market fit, Geographic, Political and regulatory');
     assert.ok(v.textOf('deal-market-geography').includes('customer geographic distribution'));
     assert.ok(v.textOf('deal-market-sources').includes('Bad link'));
   } finally { await v.close(); }
@@ -277,8 +305,9 @@ test('Traction: the gap month drawn as a gap and tabled as Not reported, never $
     assert.ok(jan.includes(NOT_REPORTED) && !jan.includes('$0'));
     assert.ok(v.textOf('deal-traction-row-burn-2026-03').includes('$0'), 'a recorded zero is a zero');
     assert.ok(v.textOf('deal-traction-row-customers-2025-11').includes(NOT_REPORTED));
-    assert.ok(v.textOf('deal-slot-traction-evidence').includes('Shared evidence is not available in this view yet'));
-    assert.ok(v.textOf('deal-slot-traction-rows').includes('This is not a score of zero.'));
+    assert.equal(v.hrefOf('deal-traction-evidence-link'), '/deals/4/evidence');
+    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/(?:-(?:score|value|coverage|open|retry)-)|(?:-scorecard-(?:unreadable|masked)$)/.test(id)),
+      ['deal-traction-scorecard-traction', 'deal-traction-scorecard-financial'], 'Traction and Financial');
   } finally { await v.close(); }
 });
 
@@ -293,19 +322,89 @@ test('a failed read says Unreadable with Try again, and Try again reads again', 
   } finally { await v.close(); }
 });
 
-test('the history failing leaves the evidence slot and the scorecard rows standing', async () => {
+test('the history failing leaves the evidence link and the scorecard rows standing', async () => {
   const v = await mounted('/deals/4/traction', { traction: response({ ...TRACTION, history: { state: 'unreadable', reason: 'Unreadable. Try again.' } }) });
   try {
     assert.ok(v.ids().includes('deal-traction-history-unreadable'));
-    assert.ok(v.ids().includes('deal-slot-traction-evidence') && v.ids().includes('deal-slot-traction-rows'));
+    assert.ok(v.ids().includes('deal-traction-evidence') && v.ids().includes('deal-traction-scorecard'));
     assert.ok(!v.ids().some((id) => id.startsWith('deal-traction-tile-')));
   } finally { await v.close(); }
 });
 
 test('the wiring: the three tabs drawn from their own file, the reads through dealInsightsApi, no hex colours', () => {
   const page = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
-  for (const t of ['Team', 'Market', 'Traction']) assert.match(page, new RegExp(`\\{tab === '${t.toLowerCase()}' && <Deal${t} deal=\\{deal\\} />\\}`));
+  for (const t of ['Team', 'Market']) assert.match(page, new RegExp(`\\{tab === '${t.toLowerCase()}' && <Deal${t} deal=\\{deal\\} />\\}`));
+  // D6187: Traction also takes the viewer, for Ask the founder (only a diligence case's owner may send).
+  assert.match(page, /\{tab === 'traction' && <DealTraction deal=\{deal\} userId=\{user\?\.id\} \/>\}/);
   const tabs = readFileSync(new URL('../src/pages/deal/DealInsightTabs.jsx', import.meta.url), 'utf8');
   assert.ok(!/['"`]#[0-9a-f]{3,8}['"`]|\[#[0-9a-f]{3,8}\]/i.test(tabs), 'colours come from the tokens');
   assert.match(tabs, /dealInsightsApi\.team/);
+});
+
+
+// D6177 (#6177): the existing Traction route stays reachable during the eight-tab refactor.
+test('D6177: no reported month draws one canvas empty card and no tiles, charts or stale slots', async () => {
+  const empty = { ...TRACTION, history: { state: 'recorded', data: TRACTION.history.data.map(m => ({ month: m.month, state: 'not_reported', figures: [] })) } };
+  const v = await mounted('/deals/4/traction', { traction: response(empty) });
+  try {
+    assert.equal(v.ids().filter(id => id === 'deal-traction-empty').length, 1);
+    assert.equal(v.textOf('deal-traction-empty'), '○No traction reported yet.Figures appear once the founder reports them or connects a source.');
+    assert.ok(!v.ids().some(id => id.startsWith('deal-traction-chart-') || id.startsWith('deal-traction-tile-') || id.startsWith('deal-traction-evidence') || id.startsWith('deal-traction-scorecard')));
+    assert.ok(!v.ids().includes('deal-traction-csv'));
+  } finally { await v.close(); }
+});
+
+test('D6177: last shared is the newest reported month and charts name their own source/as-of', async () => {
+  const v = await mounted('/deals/4/traction', { traction: response(TRACTION) });
+  try {
+    assert.equal(v.textOf('deal-traction-last-shared'), 'Last shared: Oct 2026');
+    assert.match(v.textOf('deal-traction-source-mrr'), /From stripe.*As of 28 Oct 2026/);
+    assert.match(v.textOf('deal-traction-source-customers'), /Typed.*As of 28 Oct 2026/);
+  } finally { await v.close(); }
+  const view = tractionView({ ...TRACTION, history: { ...TRACTION.history, data: [...TRACTION.history.data].reverse() } });
+  assert.equal(view.lastShared, '2026-10');
+  assert.deepEqual(tractionSources([{ value: 0, source: 'typed' }, { value: null, source: 'unreadable', as_of: '2099-01-01' }]), ['Typed · the founder’s own figure · As of Not recorded']);
+});
+
+test('D6177: CSV keeps twelve rows per figure, Not reported gaps and an actual zero', () => {
+  const rows = tractionCsv(tractionView(TRACTION)).trim().split('\r\n').map(line => line.split(','));
+  assert.deepEqual(rows.shift(), ['month', 'figure', 'value', 'unit', 'source']);
+  for (const figure of TRACTION_TILES) assert.equal(rows.filter(row => row[1] === figure.label).length, 12);
+  for (const row of rows.filter(row => row[0] === '2026-01')) { assert.equal(row[2], 'Not reported'); assert.notEqual(row[2], '0'); }
+  assert.equal(rows.find(row => row[0] === '2026-03' && row[1] === 'Net burn')[2], '0');
+  const view = tractionView(TRACTION);
+  view.series.mrr[0] = { ...view.series.mrr[0], source: 'Source, "quoted"\nnext line' };
+  assert.ok(tractionCsv(view).includes('"Source, ""quoted""\nnext line"'));
+  view.series.mrr[0].source = '=1+1';
+  assert.ok(tractionCsv(view).includes(",'=1+1\r\n"));
+});
+
+test('D6177: Download CSV uses the existing read, creates the named file and releases its URL', async () => {
+  const v = await mounted('/deals/4/traction', { traction: response(TRACTION) });
+  const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL, element: document.createElement };
+  let blob, clicked, removed = false; const revoked = [];
+  URL.createObjectURL = b => { blob = b; return 'blob:synthetic'; };
+  URL.revokeObjectURL = u => revoked.push(u);
+  document.createElement = tag => {
+    const node = original.element.call(document, tag);
+    if (tag === 'a') { node.click = () => { clicked = { href: node.href, download: node.download }; }; node.remove = () => { node.parentNode?.removeChild(node); removed = true; }; }
+    return node;
+  };
+  try {
+    const requests = v.requests.length;
+    await v.click('Download CSV');
+    assert.deepEqual(clicked, { href: 'blob:synthetic', download: 'deal-4-traction.csv' });
+    assert.equal(blob.type, 'text/csv;charset=utf-8');
+    assert.equal(await blob.text(), tractionCsv(tractionView(TRACTION)));
+    assert.equal(v.requests.length, requests);
+    assert.ok(removed); assert.deepEqual(revoked, ['blob:synthetic']);
+  } finally { URL.createObjectURL = original.create; URL.revokeObjectURL = original.revoke; document.createElement = original.element; await v.close(); }
+});
+
+test('D6177: unreadable and NDA-masked reads never advertise an empty deal or CSV', async () => {
+  for (const data of [MASKED_READ, { ...TRACTION, history: { state: 'unreadable' } }]) {
+    const v = await mounted('/deals/4/traction', { traction: response(data) });
+    try { assert.ok(!v.ids().includes('deal-traction-empty')); assert.ok(!v.ids().includes('deal-traction-csv')); }
+    finally { await v.close(); }
+  }
 });

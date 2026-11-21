@@ -21,7 +21,7 @@ import revenue from '../src/routes/revenue.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { CARD_STATES, MIN_POINTS, figure, pageOf, seriesState, settleCard } from '../src/services/cycleCards.ts';
 import { billingPeriods, cohortRetention, computeMovements, movementGap, recomputeRevenueMovements, type LedgerRecurring } from '../src/services/revenueMovements.ts';
-import { nrrFromLedger, planMonth, readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
+import { nrrFromLedger, planMonth, readiness, teamCard, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
 import { landReply } from '../src/services/updateShare.ts';
 import { STRIPE_NO_CUSTOMER } from '../src/services/revenueLedger.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -143,9 +143,12 @@ async function fixture() {
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055'));
   db.exec(file('443'));
+  db.exec(file('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(file('462'));
+  db.exec(file('202611161128_6865')); // D6865: the feedback's contact link and origin
   db.exec(file('202611041912'));
   db.exec(file('507'));
+  db.exec(file('580'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(ADVISOR, 'founder', 20, 'Ada', 'ada@co.example');
@@ -226,6 +229,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
     (102,'legacy',7,1,'Legacy','2026-09','submitted','2026-09-15',NULL,NULL,NULL,'2026-09-15'),
     (103,'newer',7,1,'New sent','2026-09','submitted','2026-09-30','2026-09-30','2026-09-01','2026-09-30','2026-09-30'),
     (104,'draft',7,1,'Draft','2026-10','draft',NULL,NULL,NULL,NULL,'2026-10-10');
+    UPDATE portfolio_updates SET kind = 'report' WHERE id = 101;
     INSERT INTO update_recipients (update_id,audience,user_id,delivered_via,opened_at) VALUES
     (103,'investor',2,'notification','2026-10-01'),(103,'investor',NULL,NULL,NULL),
     (103,'team',1,'notification',NULL),(103,'network',3,'notification','2026-10-02');
@@ -236,7 +240,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
   const before = (f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n;
   const module = (await module_(f, 'durable-company-building')).body;
   const rows = module.parts.updates;
-  assert.deepEqual(rows.map((u: any) => u.uid), ['newer', 'legacy', 'older']);
+  assert.deepEqual(rows.map((u: any) => [u.uid, u.kind]), [['newer', 'update'], ['legacy', 'update'], ['older', 'report']]);
   assert.deepEqual(rows[0].sent_to, { investors: 2, team: 1, network: 1 });
   assert.deepEqual([rows[0].delivered, rows[0].opened, rows[0].asks, rows[0].replies, rows[0].asks_to_ask_again], [3, 2, 3, 1, 1]);
   assert.equal(rows[0].href, '/updates/newer');
@@ -422,7 +426,7 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const mod = await module_(f, 'durable-company-building');
   assert.equal(mod.status, 200);
   assert.deepEqual(mod.body.records.rows.find((r: any) => r.id === ob.body.id),
-    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
+    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, owner: null, owner_user_id: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
   const list = Object.fromEntries(mod.body.parts.checklist.map((i: any) => [i.key, i]));
   assert.deepEqual([list.section83b_filed.done, list.section83b_filed.source], [true, 'Spin-Out Lab']);
   assert.deepEqual([list.key_person_cover.done, list.key_person_cover.source], [true, 'manual']);
@@ -430,7 +434,7 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const card = (await overview(f)).body.cards.find((c: any) => c.slug === 'durable-company-building');
   // D840 part 3: a Mercury item counts only for a founder with Mercury; this one has none.
   const counted = DURABILITY_ITEMS.filter((i) => !i.mercury).length;
-  assert.deepEqual(card.series.checklist, { done: 2, total: counted, pct: Math.round((2 / counted) * 100) });
+  assert.deepEqual(card.series.checklist, { done: 2, total: counted, not_applicable: 0, pct: Math.round((2 / counted) * 100) });
   assert.equal(card.next.text, 'Give Board meeting an owner.');
   assert.ok(card.series.calendar.some((event: any) => event.title === 'Board meeting' && event.due === due));
   const patch = (body: any) => call(f, FOUNDER, 'PATCH', `/api/cycles/grow/obligations/${ob.body.id}`, { project: PID, ...body });
@@ -546,4 +550,61 @@ test('D969: a feedback row carries its roadmap item\'s id, so Edit feedback\'s c
   const of = (uid: string) => rows.find((r: any) => r.id === uid);
   assert.deepEqual([of(linked.body.uid).roadmap_item_ref, of(linked.body.uid).roadmap_item_label], ['12', 'CSV export']);
   assert.deepEqual([of(typed.body.uid).roadmap_item_ref, of(typed.body.uid).roadmap_item_label], [null, 'Sync'], 'a typed item has no id');
+});
+
+
+test('GR-08 combines the venture roster, its nearest plan period, open roles and recorded offer stages', async () => {
+  const f = await fixture();
+  f.db.exec(`INSERT INTO company_people (uid, company_id, name, person_type, status, start_date, created_by) VALUES
+    ('person-gr08', 70, 'Team member', 'employee', 'active', '2026-01-01', ${FOUNDER});
+    INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES
+    ('old-gr08', 70, '2026-08', 3, ${FOUNDER}), ('next-gr08', 70, 'Q4 2026', 4, ${FOUNDER});
+    INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status) VALUES
+    (5, 'published-gr08', ${FOUNDER}, ${PID}, 'Engineer', 'published'),
+    (6, 'draft-gr08', ${FOUNDER}, ${PID}, 'Designer', 'draft'),
+    (7, 'other-gr08', ${FOUNDER}, 999, 'Other role', 'published');
+    INSERT INTO job_applications (id, posting_id, email, stage, stage_changed_at) VALUES
+    (1, 5, 'a@x.example', 'offer', '2026-11-12'), (2, 6, 'b@x.example', 'offer', NULL), (3, 7, 'c@x.example', 'offer', '2026-11-12');`);
+  const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-11-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
+  assert.deepEqual((card.series as { talent: unknown }).talent, {
+    headcount: 1, plan: { period: '2026-12', target: 4 }, plan_reason: null, open_roles: 1, offers: 1,
+  });
+  const rows = (await module_(f, 'team-expansion')).body.records.rows;
+  assert.deepEqual(rows.map((row: any) => [row.id, row.in_offer]).sort(), [[5, 1], [6, 0]]);
+});
+
+test('GR-08 offer totals and listed roles use recorded stages, including draft roles, without trusting legacy defaults', async () => {
+  const f = await fixture();
+  try {
+    f.db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status) VALUES
+      (51, 'recorded-published', ${FOUNDER}, ${PID}, 'Published role', 'published'),
+      (52, 'recorded-draft', ${FOUNDER}, ${PID}, 'Draft role', 'draft');
+      INSERT INTO job_applications (id, posting_id, email, stage, stage_changed_at) VALUES
+      (51, 51, 'recorded-published@example.test', 'offer', '2026-11-12'),
+      (52, 52, 'recorded-draft@example.test', 'offer', '2026-11-12'),
+      (53, 51, 'legacy-a@example.test', 'offer', NULL),
+      (54, 51, 'legacy-b@example.test', 'offer', NULL);`);
+    const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-11-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
+    assert.equal(card.series.talent.offers, 2, 'the same listed roles contribute only their recorded offers');
+    assert.equal(card.series.talent.open_roles, 1, 'open-role inventory still excludes drafts');
+    const rows = (await module_(f, 'team-expansion')).body.records.rows;
+    assert.deepEqual(rows.map((r: any) => [r.id, r.in_offer]).sort(), [[51, 1], [52, 1]]);
+    assert.equal(card.series.roles_by_stage.find((r: any) => r.stage === 'applied').count, 2, 'legacy submitted applications retain their job-board status');
+  } finally { f.db.close(); }
+});
+
+test('GR-08 conflicting plan labels for the same month are unavailable in either row order', async () => {
+  for (const targets of [[4, 8], [8, 4]]) {
+    const f = await fixture();
+    try {
+      f.db.prepare('INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES (?, 70, ?, ?, ?)')
+        .run('quarter-conflict', 'Q4 2026', targets[0], FOUNDER);
+      f.db.prepare('INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES (?, 70, ?, ?, ?)')
+        .run('month-conflict', '2026-12', targets[1], FOUNDER);
+      const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-12-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
+      assert.equal(card.series.talent.plan, null, 'a conflicting target is never chosen by row order');
+      assert.match(card.series.talent.plan_reason, /conflicting hiring targets/i);
+      assert.equal(card.series.plan.at(-1), null, 'the chart also refuses the conflicting month');
+    } finally { f.db.close(); }
+  }
 });

@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+.bx-nav{display:flex;flex-direction:column;gap:2px;margin:2px 0 4px 18px;border-left:1px solid var(--hair);padding-left:6px}
+.bx-nav a{min-height:30px;font-size:12.5px;font-weight:600;color:var(--mu)!important;display:flex;align-items:center;padding:0 10px;border-radius:8px}
+.bx-nav a[aria-current=page]{background:var(--lav);color:var(--vt)!important;font-weight:800}
+.bx-nav .bx-sub{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px 2px}
+.bx-tabs{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.bx-tabs a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.bx-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.bx-tabs a span{font:600 10.5px var(--mo);margin-left:5px;color:var(--mu)}
+.bx-next{border:1.5px solid var(--lavE);background:var(--card);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 20px;align-items:center;position:relative;overflow:hidden}
+.bx-next:before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#7c3aed}
+.bx-next h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.bx-next .m{font:600 12.5px var(--mo);color:var(--mu)}
+.bx-next q{font-size:13px;color:var(--ink);font-style:italic}
+.bx-health{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.bx-health>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.bx-health>div:last-child{border-right:0}
+.bx-health small{font-size:11.5px;color:var(--mu)}
+.bx-health b{font:700 17px var(--mo)}
+.bx-health em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.bx-mods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx-mod{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.bx-mod b{font-size:13.5px}
+.bx-mod .v{font-size:12.5px}
+.bx-mod .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;font:500 11px var(--mo);color:var(--mu)}
+.bx-prop{border:1px solid var(--hair);border-radius:12px;background:var(--card);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) 220px;gap:0}
+.bx-prop>div{padding:14px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:7px}
+.bx-prop>div:last-child{border-right:0}
+.bx-prop h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.bx-lbl{font:700 9.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.bx-ev{display:flex;flex-direction:column;gap:5px}
+.bx-ev a{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 12.5px var(--sg);color:var(--ink)!important}
+.bx-ev a:after{content:'→';color:var(--vt)}
+.bx-sugg{border:1px dashed var(--lavE);background:var(--lav);border-radius:10px;padding:9px 11px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.bx-sugg .bx-row{display:flex;gap:6px}
+.bx-dec{display:flex;flex-direction:column;gap:6px}
+.bx-dec .btn{justify-content:center}
+.bx-acc{display:grid;grid-template-columns:minmax(0,1fr) 220px 160px 80px;gap:12px;align-items:center;padding:9px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-acc:first-child{border-top:0}
+.bx-chain{display:flex;flex-direction:column;gap:0}
+.bx-node{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;position:relative;padding-bottom:14px}
+.bx-node:before{content:'';position:absolute;left:10px;top:20px;bottom:0;width:2px;background:var(--hair2)}
+.bx-node:last-child:before{display:none}
+.bx-node i{width:22px;height:22px;border-radius:999px;border:2px solid #7c3aed;background:var(--card);display:grid;place-items:center;font:800 10px var(--mo);font-style:normal;color:var(--vt)}
+.bx-node .bx-c{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;background:var(--card);display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.bx-node .bx-c q{font-style:italic}
+.bx-node .bx-meta{display:flex;gap:8px;flex-wrap:wrap;font:500 11px var(--mo);color:var(--mu);align-items:center}
+.bx-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.bx-three>div{padding:12px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;position:relative}
+.bx-three>div:last-child{border-right:0}
+.bx-three b{font:700 20px var(--mo)}
+.bx-three small{font-size:12px;color:var(--mu)}
+.bx-stg{display:flex;gap:3px;align-items:center}
+.bx-stg i{width:18px;height:6px;border-radius:2px;background:var(--hair2);display:block}
+.bx-stg i.d{background:#7c3aed}
+.bx-stg i.n{background:transparent;border:1px dashed var(--hair2)}
+.bx-stg i.u{background:transparent;border:1.5px solid var(--neg)}
+.bx-trail li{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-trail li:first-child{border-top:0}
+.bx-trail .s{font-weight:800}
+.bx-kb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bx-kb>section{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.bx-kb h3{font:800 12px var(--sg);display:flex;justify-content:space-between}
+.bx-card{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.bx-card b{font-size:13px}
+.bx-card .bx-meta{font:500 10.5px var(--mo);color:var(--mu);display:flex;gap:6px;flex-wrap:wrap}
+.bx-fnd{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx-check li{display:grid;grid-template-columns:24px minmax(0,1.5fr) 110px 120px 130px 120px;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-check li:first-child{border-top:0}
+.bx-check .ic3{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;font:800 11px var(--sg)}
+.ic3.ok{background:var(--posBg);color:var(--pos)}.ic3.no{border:1.5px solid var(--hair2);color:var(--mu)}.ic3.at{background:var(--amBg);color:var(--amT)}
+.bx-dest{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.bx-dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px;font-size:12px;background:var(--card)}
+.bx-dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.bx-dest b{font-size:14px}
+.bx-frz{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12px}
+.bx-frz b{font-weight:700}
+.bx-auth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:760px}
+.bx-auth .bx-l{background:#18181b;color:#fff;padding:48px;display:flex;flex-direction:column;justify-content:space-between}
+.bx-auth main{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg)}
+.bx-authcard{width:420px;background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px}
+.bx-authcard .btn{min-height:44px;justify-content:center}
+.bx-cookie{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;gap:12px;align-items:center;font-size:12px}
+.bx-states{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.bx-tag{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);border:1px solid var(--hair);background:var(--raised);color:var(--mu);white-space:nowrap}
+.bx-tag.nr{border-style:dashed;background:transparent;font-style:italic;font-weight:600}
+.bx-tag.ne{border-color:transparent;background:transparent;color:var(--mu);font-weight:600}
+.bx-tag.ur{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.bx-tag.pr{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.bx-tag.at{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.bx-tag.ro{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.bx-tag.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.bx-tag.dn{color:#fff;background:var(--pos);border-color:var(--pos)}
+.mc>.bx-tag,.cd>.bx-tag,.bx-mod>.bx-tag{align-self:flex-start}
+.bx-check .bx-tag{justify-self:start}
+.cd>.ptag,.bd>.ptag{align-self:flex-start}
+.bx-states{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.cv .selb{background:var(--card);color:var(--ink)}
+.bx2-guide{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:28px 30px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.bx2-guide h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.bx2-guide p{font-size:13.5px;color:var(--mu);max-width:620px;line-height:1.55}
+.bx2-guide ol{display:flex;flex-direction:column;gap:6px;margin:4px 0 2px;padding-left:18px;list-style:decimal;font-size:13px}
+.bx2-src{border:1px solid var(--hair);border-radius:12px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.bx2-src>.hd2{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bx2-src>.hd2 b{font-size:12.5px}
+.bx2-src ul{display:flex;flex-direction:column}
+.bx2-src li{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx2-src li:first-child{border-top:0}
+.bx2-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx2-stage>div{display:flex;flex-direction:column;gap:8px}
+.bx2-stage .lab{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bx2-ask{border:1px solid var(--lavE);background:var(--lav);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.bx2-ask .q{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;border:1px solid var(--lavE);border-radius:9px;background:var(--card);font-size:12.5px;color:var(--mu)}
+.bx2-ask .chips2{display:flex;gap:6px;flex-wrap:wrap}
+.bx2-ask .chips2 button{min-height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--lavE);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.bx2-util{display:flex;gap:14px;align-items:center;font-size:12.5px;color:var(--mu);padding:8px 2px}
+.bx2-util a{font-weight:700}
+.bx2-priv{position:sticky;top:0;z-index:2;display:flex;gap:10px;align-items:center;padding:9px 14px;border-radius:10px;background:#7f1d1d;color:#fff;font-size:12.5px;font-weight:600}
+.bx2-priv b{font-weight:800}
+.bx2-sys li{display:grid;grid-template-columns:110px 150px 140px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx2-sys li:first-child{border-top:0}
+.bx2-nav{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.sp.eadx{align-items:stretch;padding:0;gap:0}
+.sh>.sp.eadx{max-width:none;width:340px!important}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1500px"}, "board": {"editor": "enum", "default": "BU01", "options": ["BU14d", "BU00", "BU01", "BU02", "BU03", "BU04", "BU05", "BU06", "BU07", "BU08", "BU09", "BU10", "BU11", "BU12", "BU13a", "BU13b", "BU13c", "BU13d", "BU14", "BU14t", "BU10b", "BU10c", "BU10d", "BU15", "BU15m", "BU16", "BU17", "BU18a", "BU18b", "BU18c", "BU19a", "BU19b", "BU20a", "BU20b", "BU20c", "BU21a", "BU21b", "BU22", "BU23", "BU24a", "BU24b"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'BU01';
+    const dark = B === 'BU14d';
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const PT = '<span class="ptag" title="Needs backend work">◇ Backend required</span>';
+    const PTn = (n) => '<span class="ptag" title="Tracked engineering issue">◇ ' + n + '</span>';
+
+    /* ---------- Build state language: six semantics, distinct weight ---------- */
+    const T = {
+      'Not recorded': ['nr', '○'], 'Not expected yet': ['ne', '–'], 'Could not be read': ['ur', '!'], Processing: ['pr', '◷'], 'Needs attention': ['at', '▲'], 'Read only': ['ro', '🔒︎'],
+      Done: ['ok', '✓'], Shipped: ['ok', '✓'], Connected: ['ok', '✓'], Stored: ['ok', '✓'], Accepted: ['ok', '✓'], Built: ['ok', '✓'], Live: ['ok', '✓'], Tested: ['dn', '✓'], Building: ['pr', '◐'], Planned: ['', '○'], Proposed: ['pr', '◇'], Failing: ['ur', '✕'], 'Not connected': ['nr', '○'], Missing: ['at', '▲'], 'Not required': ['ne', '–'], Blocked: ['at', '▲'], Sent: ['pr', '↗'], 'In progress': ['pr', '◐'], Supports: ['ok', '✓']
+    };
+    const tg = (s, label) => { const x = T[s] || ['', '•']; return '<span class="bx-tag ' + x[0] + '"><span aria-hidden="true">' + x[1] + '</span>' + (label || s) + '</span>'; };
+    const NR = tg('Not recorded');
+
+    /* ---------- shell (founder workspace) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const BNAV = [['Overview'], ['Plan'], ['Progress'], ['Tools'], ['sub', 'Modules'], ['Solution design'], ['Prototype / MVP'], ['Product roadmap'], ['Founding team'], ['Company creation'], ['Operating systems']];
+    const bnav = (cur) => '<nav class="bx-nav" aria-label="Build">' + J(BNAV.map(n => n[0] === 'sub' ? '<span class="bx-sub">' + n[1] + '</span>' : '<a href="#"' + (n[0] === cur ? ' aria-current="page"' : '') + '>' + n[0] + '</a>')) + '<a href="#" style="font-size:12px">Work board ↗</a></nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><div class="selb" style="font-size:12px"><span>Northline</span><span aria-hidden="true">▾</span></div></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Build' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Build' ? bnav(cur) : ''))) + '</nav></aside>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">GL</span></div></div>';
+    const rail = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Build" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; const w = o.w || 1440; return '<div class="cv" style="' + VARS + ';width:' + w + 'px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="sh" style="min-height:' + (o.h || 900) + 'px' + (w < 1000 ? ';grid-template-columns:0 minmax(0,1fr) 44px' : '') + '">' + (w < 1000 ? '<div></div>' : side(o.cur || 'Overview')) + '<div class="mn">' + top + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const tabs = (cur) => '';
+    const tabsT = (cur) => '<nav class="bx-tabs" aria-label="Build">' + J([['Overview', ''], ['Plan', '3'], ['Progress', '7'], ['Tools', '']].map(t => '<a href="#"' + (t[0] === cur ? ' aria-current="page"' : '') + '>' + t[0] + (t[1] ? '<span>' + t[1] + '</span>' : '') + '</a>')) + '</nav>';
+    const head = (title, purpose, cta, eyebrow) => '<header class="ph1"><div>' + (eyebrow ? '<span class="eye">' + eyebrow + '</span>' : '') + '<h1 style="margin-top:4px">' + title + '</h1><p>' + purpose + '</p></div><div class="acts">' + (cta ? '<button type="button" class="btn p">' + cta + '</button>' : '') + '</div></header>';
+    const mhead = (crumb, title, q, cta) => '<div class="crumb"><a href="#">Build</a>/<b>' + crumb + '</b></div><header class="ph1"><div><h1>' + title + '</h1><p>' + q + '</p></div><div class="acts">' + (cta || '') + '</div></header>';
+
+    /* ---------- BU01 overview ---------- */
+    const ATT = [['Needs attention', 'GitHub connection failing', 'Last good sync Thu 14:02 · token rejected', 'Reconnect GitHub'], ['Blocked', '2 must-haves blocked', 'Account setup · Data import', 'Open must-haves'], ['Needs attention', '83(b) election due in 8 days', 'Delaware · proof missing', 'Open filing'], ['Not recorded', 'MVP target not recorded on Roadmap', 'The overview uses the MVP date', 'Set target'], ['Processing', 'New Validate evidence changed the Build Plan', '2 new proposals from interview 9', 'Review 2 proposals']];
+    const attention = (n) => '<section class="cd"><div class="ch"><h2>Needs attention</h2><span class="sm">' + (n || 5) + ' · material blockers only</span></div><ol class="att">' + J(ATT.slice(0, n || 5).map(a => '<li style="grid-template-columns:150px minmax(0,1fr) auto"><span>' + tg(a[0]) + '</span><div><b style="font-size:13px">' + a[1] + '</b><div class="mu" style="font-size:12px">' + a[2] + '</div></div><a class="btn bsm" href="#">' + a[3] + '</a></li>')) + '</ol></section>';
+    const next = (compact) => '<section class="bx-next" aria-labelledby="nx"><div><span class="eye">Next</span><h2 id="nx" style="margin-top:2px">Ship the onboarding flow</h2><div class="m">3 of 7 must-haves complete · MVP target 18 Nov</div>' + (compact ? '' : '<q>Customer onboarding remains the largest validated pain.</q> <a href="#" class="cite" style="text-decoration:none">4 interviews</a>') + '</div><a class="btn p" href="#">Complete “Account setup” →</a></section>';
+    const health = () => '<section class="bx-health" aria-label="Build status">' + J([['Must-haves', '3 / 7', 'Prototype / MVP'], ['MVP target', '18 Nov', 'Product roadmap'], ['Roadmap shipped · Nov', '2', 'GitHub releases'], ['Systems working', '3 / 5', 'Operating systems']].map(h => '<div><small>' + h[0] + '</small><b>' + h[1] + '</b><em>' + h[2] + '</em></div>')) + '</section>';
+    const planPrev = () => '<section class="cd"><div class="ch"><h2>Build Plan</h2><span class="sm">12 accepted · 3 waiting for decision</span></div><ul class="rz">' + J([['One-day setup wizard', 'Feature · Prototype / MVP'], ['CSV import for existing accounts', 'Must-have · Prototype / MVP'], ['Test: concierge vs self-serve setup', 'Test · Solution design']].map(p => '<li><b>' + p[0] + '</b><small>' + p[1] + '</small>' + tg('Proposed', 'Waiting for you') + '</li>')) + '</ul><a class="btn t bsm" href="#" style="align-self:flex-start">Open Build Plan →</a></section>';
+    const MODS = [['Solution design', '6 features · 1 has no evidence link', 'Updated Tue', 'Link evidence'], ['Prototype / MVP', '3 / 7 must-haves · 2 blocked', 'GitHub · failing', 'Open must-haves'], ['Product roadmap', 'Now 3 · Next 4 · Later 6', 'GitHub releases · Thu', 'Open roadmap'], ['Founding team', '2 founders · vesting not recorded', 'Typed', 'Add vesting'], ['Company creation', '2 of 5 filed · 83(b) due in 8 days', 'Delaware', 'Open filings'], ['Operating systems', '3 working · accounting failing · payroll not connected', 'Mercury · HubSpot', 'Reconnect accounting']];
+    const mods = () => '<section style="display:flex;flex-direction:column;gap:10px"><div class="ch"><h2 style="font-size:15px;font-weight:800">Modules</h2></div><div class="bx-mods">' + J(MODS.map(m => '<article class="bx-mod"><b>' + m[0] + '</b><span class="v">' + m[1] + '</span><div class="f"><span>' + m[2] + '</span><a class="btn t bsm" href="#">' + m[3] + ' →</a></div></article>')) + '</div></section>';
+    const activity = () => '<section class="cd"><div class="ch"><h2>Tools & activity</h2><a class="btn t bsm" href="#">Tools →</a></div><ol class="feed">' + J([['Thu 14:02', 'GitHub', 'PR #41 merged · Account setup UI'], ['Thu 11:30', 'Vercel', 'Preview ready for PR #41'], ['Wed 16:10', 'You', 'Accepted “Bulk invite teammates”']].map(a => '<li style="grid-template-columns:96px 80px minmax(0,1fr)"><span class="w">' + a[0] + '</span><span class="w">' + a[1] + '</span><span>' + a[2] + '</span></li>')) + '</ol></section>';
+    const overview = () => head('Turn what you proved into a company.', 'Decide what to build, ship it, and keep the evidence attached.', '', 'Build') + tabs('Overview') + next() + health() + '<div class="g"><div style="grid-column:span 7">' + attention() + '</div><div style="grid-column:span 5">' + planPrev() + '</div></div>' + mods() + activity();
+
+    /* ---------- BU03 plan ---------- */
+    const PROPS = [
+      ['One-day setup wizard', 'Feature', ['4 customer interviews', 'Severe onboarding pain', 'Experiment #12 supported'], 'Prototype / MVP › Must-haves', 'One-day onboarding flow'],
+      ['CSV import for existing accounts', 'Must-have', ['3 interviews', 'Demand · 3 signals'], 'Prototype / MVP › Must-haves', null],
+      ['Test: concierge vs self-serve setup', 'Test', ['Experiment #12 supported'], 'Solution design › Risks', null]
+    ];
+    const prop = (p, i) => '<article class="bx-prop" aria-labelledby="pp' + i + '"><div><span class="bx-lbl">What</span><h3 id="pp' + i + '">' + p[0] + '</h3><span>' + tg('Proposed', p[1] + ' · Proposed') + '</span>' + (p[4] ? '<div class="bx-sugg"><b style="font-size:11.5px">Suggested wording</b><span>“' + p[4] + '”</span><div class="bx-row"><button type="button" class="btn bsm">Use wording</button><button type="button" class="btn t bsm">Ignore</button></div></div>' : '') + '</div>'
+      + '<div><span class="bx-lbl">Why · because</span><div class="bx-ev">' + J(p[2].map(e => '<a href="#">' + e + '</a>')) + '</div></div>'
+      + '<div><span class="bx-lbl">Decision</span><div class="bx-dec"><button type="button" class="btn p">Accept</button><button type="button" class="btn">Edit</button><button type="button" class="btn t">Dismiss</button></div><span class="raw">Lands in ' + p[3] + '</span></div></article>';
+    const plan = () => '<div class="crumb"><a href="#">Build</a>/<b>Plan</b></div>' + head('Build Plan', 'What Validate proved, turned into what to build. Nothing lands until you accept it.', '') + tabs('Plan')
+      + '<section class="cd" style="flex-direction:row;gap:20px;align-items:center;padding:12px 16px"><span class="eye">What Validate proved</span><span style="font-size:12.5px"><b>Severe onboarding pain</b> · 4 interviews</span><span style="font-size:12.5px"><b>Concierge setup</b> · supports</span><span style="font-size:12.5px"><b>Decision</b> · Proceed, 2 Nov</span><a href="#" class="btn t bsm" style="margin-left:auto">Open Validate →</a></section>'
+      + '<div class="ch"><h2 style="font-size:15px;font-weight:800">Waiting for your decision · 3</h2></div>' + J(PROPS.map(prop))
+      + '<section class="cd" style="padding:0;gap:0"><div class="ch" style="padding:10px 14px;border-bottom:1px solid var(--hair)"><h2>Accepted · 12</h2></div><div>' + J([['Bulk invite teammates', 'Must-have · Prototype / MVP', 'Accepted Wed'], ['Pricing page v1', 'Roadmap · Now', 'Accepted 3 Nov'], ['IP assignment for both founders', 'Formation step', 'Accepted 2 Nov']].map(a => '<div class="bx-acc"><b>' + a[0] + '</b><span class="raw">' + a[1] + '</span><span class="raw">' + a[2] + '</span><a class="btn bsm" href="#" aria-label="Open the record ' + a[0] + '">Open</a></div>')) + '</div></section>';
+    const evSheet = () => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="evh" style="width:520px"><div class="drh"><div class="tr"><span class="eye">Evidence</span><button type="button" class="ib" aria-label="Close evidence">✕</button></div><h2 id="evh">Evidence for “One-day setup wizard”</h2><div class="mt"><span class="mu">5 links · you can open all of them</span>' + PTn('#4602') + '</div></div><div class="drb"><ol class="bx-chain">'
+      + J([['V', 'Validate', 'Hypothesis: setup is the onboarding bottleneck', 'Typed', '12 Oct'], ['1', 'Customer interview · Recorded', '<i>“Setup takes two days.”</i>', 'Recorded', '18 Oct'], ['2', 'Problem discovery', 'Severe onboarding pain · 4 interviews', 'Typed', null], ['3', 'Experiment', 'Concierge setup · ' + tg('Supports'), 'Typed', '28 Oct'], ['4', 'Founder decision', 'Proceed', 'Recorded', '2 Nov'], ['B', 'Build Plan', '“One-day setup wizard”', 'Recorded', '3 Nov']].map(n => '<li class="bx-node"><i aria-hidden="true">' + n[0] + '</i><div class="bx-c"><b>' + n[1] + '</b><span>' + n[2] + '</span><div class="bx-meta"><span>' + n[3] + '</span><span>' + (n[4] || 'Date not recorded') + '</span><a href="#">Open record →</a></div></div></li>')) + '</ol></div><div class="drf"><p class="ln">Sources you can’t open show their kind only. Dates appear only where the record stores one.</p></div></aside>';
+
+    /* ---------- BU05 progress ---------- */
+    const ITEMS = [['One-day setup wizard', 'Prototype / MVP', 'Building', [1, 1, 1, 0, 'n', 0]], ['Bulk invite teammates', 'Prototype / MVP', 'Shipped', [1, 1, 1, 1, 'n', 1]], ['Pricing page v1', 'Product roadmap', 'Shipped', [1, 1, 1, 1, 1, 'x']], ['CSV import', 'Prototype / MVP', 'Building', [1, 1, 1, 0, 'n', 0]], ['IP assignment', 'Company creation', 'Planned', [1, 0, 0, 0, 'x', 'x']], ['Concierge vs self-serve test', 'Solution design', 'Shipped', [1, 0, 'x', 'x', 'x', 1]], ['Account recovery', 'Prototype / MVP', 'Not recorded', [1, 1, 'u', 'u', 'n', 'u']]];
+    const stg = (s) => '<span class="bx-stg" role="img" aria-label="Accepted, Sent, In progress, Built, Live, Tested">' + J(s.map(v => '<i class="' + (v === 1 ? 'd' : v === 'n' ? 'n' : v === 'u' ? 'u' : v === 'x' ? 'n' : '') + '"></i>')) + '</span>';
+    const progress = (sel) => '<div class="crumb"><a href="#">Build</a>/<b>Progress</b></div>' + head('Progress', '7 accepted items · 2 shipped · 3 building · 1 planned · 1 not recorded', '') + tabs('Progress')
+      + '<div class="bx-three" aria-label="Summary">' + J([['Planned', '1', 'Accepted, not started'], ['Building', '3', 'Sent or in progress'], ['Shipped / learned', '2', 'Built, live or tested']].map(t => '<div><small>' + t[0] + '</small><b>' + t[1] + '</b><small>' + t[2] + '</small></div>')) + '</div>'
+      + '<p class="raw">1 item’s stages are Not recorded: no connected tool reports them. It is not counted as incomplete.</p>'
+      + '<div class="tools"><div class="inp">⌕ Search items</div><button type="button" class="dd">Module ▾</button><button type="button" class="dd">Stage ▾</button><button type="button" class="dd">Tool ▾</button><button type="button" class="dd">Sort: recently changed ▾</button></div>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="etb"><thead><tr><th scope="col">Item</th><th scope="col">Module</th><th scope="col">Summary</th><th scope="col">Stages · Accepted → Sent → In progress → Built → Live → Tested</th><th scope="col"></th></tr></thead><tbody>'
+      + J(ITEMS.map((it, i) => '<tr' + (sel === i ? ' class="sel"' : '') + '><td><b>' + it[0] + '</b></td><td>' + it[1] + '</td><td>' + tg(it[2] === 'Shipped' ? 'Shipped' : it[2] === 'Building' ? 'Building' : it[2] === 'Planned' ? 'Planned' : 'Not recorded', it[2] === 'Shipped' && i === 5 ? 'Learned' : it[2]) + '</td><td>' + stg(it[3]) + '</td><td style="text-align:right"><button type="button" class="btn t bsm">Trail</button></td></tr>')) + '</tbody></table><div class="qft"><span>1–7 of 7</span><span class="raw">▮ done · ▯ dashed: not reported · ▯ red: could not be read</span></div></section>';
+    const trail = () => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="trh" style="width:540px"><div class="drh"><div class="tr"><span class="eye">Progress · Prototype / MVP</span><button type="button" class="ib" aria-label="Close trail">✕</button></div><h2 id="trh">One-day setup wizard</h2><div class="mt">' + tg('Building') + '<a href="#">Open the must-have →</a></div></div><div class="drb"><ol class="bx-trail">'
+      + J([['Accepted', 'By you · Build Plan', '3 Nov', tg('Accepted')], ['Sent', 'GitHub · issue text prepared, you submitted it', '3 Nov', tg('Sent')], ['In progress', 'Returned from GitHub · PR #44 links marker VB-0012', 'Thu', tg('In progress')], ['Built', 'Prototype / MVP · delivery status not Done', '—', tg('Planned', 'Not yet')], ['Live', 'No connected tool reports this stage.', '—', NR], ['Tested', 'Could not be read: experiments store did not answer.', '—', tg('Could not be read') + ' <button type="button" class="btn bsm">Try again</button>']].map(r => '<li><span class="s">' + r[0] + '</span><div>' + r[1] + '<div class="raw">' + r[2] + '</div></div><span>' + r[3] + '</span></li>')) + '</ol><p class="foot">Built and Tested are separate: a passed prototype test never marks the product built or live.</p></div></aside>';
+
+    /* ---------- modules ---------- */
+    const solution = () => mhead('Solution design', 'Solution design', 'Decide what you are building, and tie every feature to the evidence behind it.', '<button type="button" class="btn p">Link evidence to “Dark mode”</button>')
+      + '<div class="g"><section class="cd" style="grid-column:span 7"><div class="ch"><h2>Product brief</h2><button type="button" class="btn t bsm">Edit</button></div><p style="font-size:13px;line-height:1.55">Northline sets up a B2B workspace for a new customer in one day instead of two, with import and invites included.</p></section><section class="cd" style="grid-column:span 5"><div class="ch"><h2>Architecture · from GitHub</h2>' + tg('Failing', 'Sync failing') + '</div><p style="font-size:12.5px">Last good read Thu 14:02 · <b>northline/app</b> · TypeScript, Postgres</p><div class="ch"><h2 style="font-size:13px">Hosting · runs on</h2></div><p style="font-size:12.5px">Vercel · production ready 6 Nov</p></section></div>'
+      + '<section class="cd"><div class="ch"><h2>Features</h2><span class="sm">6 · 1 has no evidence link</span></div><div class="tools" style="gap:6px"><div class="chips" role="radiogroup" aria-label="Evidence link"><button type="button" role="radio" aria-checked="true">All<span>6</span></button><button type="button" role="radio" aria-checked="false">Pain linked<span>4</span></button><button type="button" role="radio" aria-checked="false">Hypothesis linked<span>1</span></button><button type="button" role="radio" aria-checked="false">No evidence link<span>1</span></button></div>' + PTn('#5067') + '</div><table class="tbl"><thead><tr><th>Feature</th><th>Evidence link</th><th>Impact</th><th>Effort</th></tr></thead><tbody>'
+      + '<tr><td><b>Instant workspace setup</b></td><td><a href="#" class="bx-tag ok" style="text-decoration:none">Pain · Setup takes two days →</a></td><td>High</td><td>Medium</td></tr>'
+      + '<tr><td><b>CSV import</b></td><td><a href="#" class="bx-tag ok" style="text-decoration:none">Hypothesis · Teams migrate in week 1 →</a></td><td>High</td><td>Medium</td></tr>'
+      + '<tr style="background:var(--amBg)"><td><b>Dark mode</b></td><td>' + tg('Needs attention', 'No evidence link') + ' <button type="button" class="btn bsm">Link evidence</button></td><td>' + NR + '</td><td>Low</td></tr></tbody></table><p class="foot">+ 3 more features, all pain linked. With 6 features, no search or sort is shown; they appear from 10.</p></section>'
+      + '<section class="cd"><div class="ch"><h2>Risks</h2></div><ul class="rz"><li><b>Customers may not trust auto-import</b><small>Test: concierge vs self-serve setup · Supports</small>' + tg('Tested') + '</li></ul></section>';
+    const MH = [['Account setup', 'Concierge test', 'Building', 'G. L.', '12 Nov', 'PR #44 open', 'Preview ready'], ['Bulk invite teammates', 'Usability · 5 users', 'Built + Tested', 'A. K.', '5 Nov', 'Merged #41', 'In production since 6 Nov'], ['Data import', '—', 'Blocked', 'A. K.', '14 Nov', 'No PR', null], ['One-day setup wizard', 'Not expected yet', 'Building', 'G. L.', '16 Nov', 'Could not be read', null]];
+    const mvp = () => mhead('Prototype / MVP', 'MVP', 'Ship the smallest product that tests what Validate proved · 3 / 7 must-haves complete · target 18 Nov', '<button type="button" class="btn p">Complete “Account setup”</button>')
+      + '<div class="prog" role="progressbar" aria-valuenow="3" aria-valuemin="0" aria-valuemax="7" aria-label="3 of 7 must-haves" style="height:10px"><i style="width:43%"></i></div>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="etb"><thead><tr><th>Must-have</th><th>Test</th><th>State</th><th>Owner</th><th>Due</th><th>GitHub</th><th>Vercel</th></tr></thead><tbody>'
+      + J(MH.map(m => '<tr><td><b>' + m[0] + '</b></td><td>' + (m[1] === 'Not expected yet' ? tg('Not expected yet') : m[1] === '—' ? NR : m[1]) + '</td><td>' + (m[2] === 'Built + Tested' ? tg('Built') + ' ' + tg('Tested') : m[2] === 'Blocked' ? tg('Blocked') : tg('Building')) + '</td><td>' + m[3] + '</td><td class="w">' + m[4] + '</td><td>' + (m[5] === 'Could not be read' ? tg('Could not be read') : m[5]) + '</td><td>' + (m[6] || NR) + '</td></tr>')) + '</tbody></table></section>'
+      + '<p class="foot">Built comes from the must-have’s delivery status; Tested from its experiment. “In production since” appears only when a ready production deploy’s commit equals the merge commit.</p>'
+      + mvpSources();
+    const KB = { Now: [['Account setup', 'Activation ≥ 60%', 'G. L.', '12 Nov', 'Milestone MVP']], Next: [['Data import', 'Theme: migration', 'A. K.', '20 Nov', null], ['Usage analytics', 'Theme: churn risk', null, null, null]], Later: [['SSO', 'Theme: enterprise', null, null, null]], Done: [['Pricing page v1', 'Signups', 'A. K.', '3 Nov', 'Release v0.3 · Live 4 Nov'], ['Bulk invite', 'Activation', 'A. K.', '5 Nov', 'Release v0.4']] };
+    const roadmap = () => mhead('Product roadmap', 'Product roadmap', 'Decide what ships now, next and later, and show what shipped.', '<a class="btn" href="#">Open Work board ↗</a>')
+      + '<section class="cd" style="flex-direction:row;align-items:center;gap:16px;padding:12px 16px"><b>Shipped this month · 2</b><span class="raw">Source: GitHub releases v0.3, v0.4</span></section>'
+      + '<div class="bx-kb">' + J(Object.keys(KB).map(k => '<section aria-label="' + k + '"><h3>' + k + '<span class="raw">' + KB[k].length + '</span></h3>' + J(KB[k].map(c => '<article class="bx-card"><b>' + c[0] + '</b><span>KPI · ' + c[1] + '</span><div class="bx-meta">' + [c[2] || 'Owner not recorded', c[3] || 'Target not recorded', c[4]].filter(Boolean).join(' · ') + '</div></article>')) + '</section>')) + '</div>';
+    const team = () => mhead('Founding team', 'Founding team', 'Agree who builds the company, and on what terms.', '<button type="button" class="btn p">Add vesting terms</button>')
+      + '<div class="bx-fnd">' + J([['Guillaume L.', 'CEO', '60%', null, 'Signed'], ['A. Kaya', 'CTO', '40%', null, null], ['Third founder', null, null, null, null]].map((f, i) => '<section class="cd" style="gap:8px' + (i === 2 ? ';border-style:dashed' : '') + '"><b style="font-size:15px">' + f[0] + '</b><dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>Role</dt><dd>' + (f[1] || NR) + '</dd><dt>Equity</dt><dd>' + (f[2] || NR) + '</dd><dt>Vesting</dt><dd>' + (f[3] || NR) + '</dd><dt>Agreement</dt><dd>' + (f[4] ? tg('Stored', f[4]) : NR) + '</dd></dl>' + (i === 1 ? '<span class="raw">GitHub · 64 commits in 30 days (supporting, visible to the team)</span>' : '') + '</section>')) + '</div><p class="foot">Equity totals 100% of what is recorded; vesting is not recorded for anyone, so the team is not shown as complete.</p>';
+    const CHK = [['ok', 'Incorporation filed', 'Delaware', '2 Oct', 'Done', 'Stored'], ['ok', 'EIN issued', 'US', '9 Oct', 'Done', 'Stored'], ['no', 'IP assignment', 'Delaware', 'Not recorded', 'Planned', 'Missing'], ['at', '83(b) election', 'US', '15 Nov · 8 days', 'Needs attention', 'Missing'], ['no', 'Annual report', 'Delaware', '14 Mar', 'Planned', 'Not required']];
+    const company = () => mhead('Company creation', 'Company creation', 'Get the company formed, then keep its filings current.', '<button type="button" class="btn p">Complete 83(b) election · due in 8 days</button>')
+      + '<div class="bx2-util"><span>Supporting tools</span><a href="#">Add another filing</a><a href="#">Legal documents</a><a href="#">E-signature</a></div>' + '<section class="cd"><ol class="bx-check"><li style="font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)"><span></span><span>Step</span><span>Jurisdiction</span><span>Due</span><span>Status</span><span>Proof</span></li>' + J(CHK.map(c => '<li><span class="ic3 ' + c[0] + '" aria-hidden="true">' + (c[0] === 'ok' ? '✓' : c[0] === 'at' ? '!' : '○') + '</span><b>' + c[1] + '</b><span>' + c[2] + '</span><span class="raw">' + c[3] + '</span>' + tg(c[4] === 'Done' ? 'Done' : c[4] === 'Planned' ? 'Planned' : 'Needs attention', c[4]) + tg(c[5]) + '</li>')) + '</ol></section>'
+      + '<section class="cd" style="max-width:620px;gap:10px" role="status"><div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Filing added</b><div>“83(b) election” was saved.</div></div></div><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Proof upload failed</b><div>The file didn’t upload. The filing is kept; retrying uploads to the same filing.</div></div><span class="bt"><button type="button" class="btn bsm">Retry proof upload</button></span></div>' + PTn('#4600') + '</section>';
+    const tools = () => '<div class="crumb"><a href="#">Build</a>/<b>Tools</b></div>' + head('Tools', 'The tools that feed Build with evidence. The one place to connect, repair or review them.', '') + tabs('Tools')
+      + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div>Company systems (bank, accounting, payroll, CRM, workspace) live in <a href="#">Operating systems › Systems</a>. Operating systems links here for its tools rather than keeping a second list.</div></div>'
+      + '<section class="cd"><div class="ch"><h2>Tools feeding Build</h2></div><table class="tbl"><thead><tr><th>Tool</th><th>State</th><th>Feeds</th><th>Last good sync</th><th></th></tr></thead><tbody>' + J([['GitHub', 'Failing', 'Must-haves, releases, architecture', 'Thu 14:02 · token rejected since Fri'], ['Vercel', 'Connected', 'Preview and production deploys', '14:20 today'], ['PostHog', 'Connected', 'Roadmap KPIs', '13:55 today'], ['Notion', 'Not connected', 'Send to… pages (copy or download)', '—'], ['Google Workspace', 'Connected', 'Team calendar, docs', '14:10 today'], ['Lovable', 'Connected', 'Draft UI and prompt history per must-have', '5 Nov']].map(r => '<tr' + (r[1] === 'Failing' ? ' style="background:var(--negBg)"' : '') + '><td><b>' + r[0] + '</b></td><td>' + tg(r[1]) + '</td><td>' + r[2] + '</td><td class="raw">' + r[3] + '</td><td style="text-align:right"><button type="button" class="btn bsm">' + (r[1] === 'Failing' ? 'Reconnect' : r[1] === 'Connected' ? 'Manage' : 'Connect') + '</button></td></tr>')) + '</tbody></table></section>';
+
+    /* ---------- send to ---------- */
+    const sstep = (n) => '<div class="flow5" aria-label="Step ' + n + ' of 4">' + J(['Choose work', 'Destination', 'Review', 'Open externally'].map((s, i) => '<span class="' + (i + 1 < n ? 'dn' : i + 1 === n ? 'on' : '') + '">' + (i + 1 < n ? '✓ ' : (i + 1) + ' · ') + s + '</span>')) + '</div>';
+    const dlg = (h, title, body, foot, w) => '<div role="dialog" aria-modal="true" aria-labelledby="' + h + '" style="width:' + (w || 720) + 'px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.18);display:flex;flex-direction:column"><div class="mdh"><h2 id="' + h + '">' + title + '</h2><button type="button" class="ib" aria-label="Close">✕</button></div><div class="mdb">' + body + '</div><div class="mdf">' + foot + '</div></div>';
+    const frz = '<div class="bx-frz"><span aria-hidden="true">🔒︎</span><b>GitHub</b> · <b>3 items</b> · repository <b class="mo">northline/app</b><span class="raw">Fixed while preparing</span></div>';
+    const send = (n) => n === 1 ? dlg('s1', 'Send to…', sstep(1) + '<fieldset style="border:0;padding:0;margin:0"><legend class="bx-lbl" style="margin-bottom:6px">Accepted items · nothing preselected · 1 chosen</legend><div class="rv">' + J([['One-day setup wizard', 'Feature'], ['CSV import for existing accounts', 'Must-have'], ['Account recovery', 'Must-have'], ['Pricing page v2', 'Roadmap']].map(x => '<label><input type="checkbox"><span></span><span><b>' + x[0] + '</b><br><small>' + x[1] + '</small></span><span></span></label>')).replace('<label><input type="checkbox">', '<label class="on"><input type="checkbox" checked>') + '</div></fieldset>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Choose destination</button>')
+      : n === 2 ? dlg('s2', 'Send to…', sstep(2) + '<div class="bx-dest" role="radiogroup" aria-label="Destination">' + J([['GitHub', 'Prepares one issue per item. You submit each in GitHub.', 'on'], ['Lovable', 'Prepares one prompt for all items. You open it in Lovable.', ''], ['Notion', 'Prepares one Markdown page per item to copy or download.', ''], ['Vercel', 'Opens Vercel’s import page for a repository. No text.', '']].map(d => '<label class="' + d[2] + '"><input type="radio" name="d"' + (d[2] ? ' checked' : '') + ' style="accent-color:#7c3aed"><b>' + d[0] + '</b><span class="mu">' + d[1] + '</span></label>')) + '</div><div class="fld"><label for="rp">Repository</label><div class="selb" id="rp"><span>northline/app</span><span aria-hidden="true">▾</span></div></div>', '<button type="button" class="btn">Back</button><button type="button" class="btn p">Review</button>')
+      : n === 3 ? dlg('s3', 'Review what will be prepared', sstep(3) + '<div class="bx-frz"><b>GitHub</b> · <b>3 items</b> · repository <b class="mo">northline/app</b><a href="#" style="margin-left:auto">Change</a></div>' + '<div class="code" style="max-height:200px;overflow:hidden">### One-day setup wizard\nWhy: 4 customer interviews · severe onboarding pain · experiment #12 supported\nLands in: Prototype / MVP › Must-haves\n\nAxal VC plan item VB-0012</div><div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Privacy check passed</b> · No names, emails or quotes detected.</div></div>', '<button type="button" class="btn">Back</button><button type="button" class="btn p">Prepare for GitHub</button>')
+        : dlg('s4', 'Prepared for GitHub', sstep(4) + frz + '<ul class="rz">' + J(['One-day setup wizard', 'CSV import for existing accounts', 'Account recovery'].map(x => '<li><b>' + x + '</b><small>New-issue link ready · you submit it in GitHub</small><a class="btn bsm" href="#">Open GitHub →</a></li>')) + '</ul><p class="foot">StudioOS sends nothing on its own. When an issue mentions its VB- marker, the GitHub feed links it back to the item.</p>', '<button type="button" class="btn">Copy all</button><button type="button" class="btn p">Done</button>');
+
+    /* ---------- states ---------- */
+    const box = (t, inner) => '<section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2></div>' + inner + '</section>';
+    const nt = (tone, ic, h, d, act) => '<div class="nt ' + tone + '"' + (tone === 'r' ? ' role="alert"' : '') + '><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + h + '</b>' + (d ? '<div>' + d + '</div>' : '') + (act ? '<button type="button" class="btn bsm" style="margin-top:6px">' + act + '</button>' : '') + '</div></div>';
+    const STATES = [
+      ['Loading', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px"><span class="sk" style="height:14px;width:55%"></span><span class="sk" style="height:14px;width:80%"></span></div><span class="raw">Announced: “Loading Build”</span>'],
+      ['Empty', nt('', '+', 'No features yet', 'Accept a Build Plan item or add the first feature.', 'Add the first feature')],
+      ['Not recorded', '<dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>MVP target</dt><dd>' + NR + '</dd></dl><span class="raw">Readable source, value absent</span>'],
+      ['Not expected yet', '<dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>Live</dt><dd>' + tg('Not expected yet') + '</dd></dl><span class="raw">Lighter weight: not a gap</span>'],
+      ['Could not be read', nt('r', '!', 'Roadmap could not be read', 'Other modules are unaffected.', 'Try again')],
+      ['Partial read failure', nt('a', '!', '5 of 6 modules read', 'Operating systems could not be read.', 'Retry')],
+      ['Read only', '<div style="display:flex;gap:8px;align-items:center">' + tg('Read only') + '<span style="font-size:12.5px">An advisor’s view: decisions are the founder’s</span></div>'],
+      ['Disconnected tool', nt('', '○', 'Notion is not connected', 'Send to… still prepares pages to copy.', 'Connect')],
+      ['Tool failing', nt('r', '✕', 'GitHub is failing', 'Last good sync Thu 14:02; data shown is from then.', 'Reconnect')],
+      ['AI assistance off', nt('', 'E', 'Eadwyn wording is off', 'Plans are prepared by rule; wording suggestions don’t appear.', '')],
+      ['Out of AI tokens', nt('a', '!', 'Out of AI tokens', 'Suggested wording paused. Decisions still work.', 'Add tokens')],
+      ['Partial write success', nt('a', '!', 'Accepted 2 of 3', '“Account recovery” didn’t land: the module was locked. The other 2 are in place.', 'Retry 1')],
+      ['Saved record + failed attachment', nt('g', '✓', 'Filing added', '') + nt('a', '!', 'Proof upload failed', 'Retry uploads to the same filing.', 'Retry proof upload')],
+      ['No matching filters', nt('', '0', 'No items match “import” in Company creation', 'Clear the module filter to see 2 items.', 'Clear filters')],
+      ['Stale response ignored', '<span class="raw">You switched to Northline Labs while a read for Northline was pending. The late answer was dropped; nothing from Northline appears here.</span>' + PTn('#4601')]
+    ];
+    const states = () => crop('<span class="eye">Responsive and system states · each says what happened and what to do</span><div class="bx-states">' + J(STATES.map(s => box(s[0], s[1]))) + '</div>', 1400);
+
+    /* ---------- mobile ---------- */
+    const phone = (title, body, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (sheet || '') + '</div></div>';
+    const mtabs = (cur) => '<nav class="bx-tabs" aria-label="Build" style="flex:none">' + J(['Overview', 'Plan', 'Progress', 'Tools'].map(t => '<a href="#" style="min-height:44px;display:flex;align-items:center;padding:0 10px"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const mOverview = () => phone('Build', '<div class="selb" style="min-height:44px"><span>Northline · Build</span><span aria-hidden="true">▾</span></div>' + mtabs('Overview') + '<section class="bx-next" style="grid-template-columns:1fr;padding:14px 16px"><span class="eye">Next</span><h2 style="font-size:19px">Ship the onboarding flow</h2><div class="m">3 of 7 must-haves · MVP 18 Nov</div><a class="btn p" href="#" style="min-height:48px">Complete “Account setup” →</a></section>'
+      + '<section class="cd" style="padding:12px 14px;gap:6px"><div class="ch"><h2>Needs attention</h2><span class="sm">5</span></div>' + J(ATT.slice(0, 3).map(a => '<button type="button" class="disc" style="min-height:52px"><b style="font-size:13px">' + a[1] + '</b><span>' + a[3] + '</span><i aria-hidden="true">›</i></button>')) + '</section>'
+      + '<button type="button" class="disc"><b>Build Plan</b><span>12 accepted · 3 waiting for decision</span><i aria-hidden="true">›</i></button>');
+    const mProgress = () => phone('Progress', mtabs('Progress') + '<div class="tools" style="flex-wrap:nowrap"><div class="inp" style="min-width:0;flex:1;min-height:44px">⌕ Search</div><button type="button" class="dd on" style="min-height:44px">Filters (2)</button><button type="button" class="dd" style="min-height:44px">Sort</button></div>' + J(ITEMS.slice(0, 3).map(it => '<div class="mc"><div class="r1"><b>' + it[0] + '</b></div><small>' + it[1] + '</small>' + tg(it[2] === 'Shipped' ? 'Shipped' : 'Building', it[2]) + stg(it[3]) + '</div>')),
+      '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fs" style="max-height:600px"><div class="grab" aria-hidden="true"></div><div style="padding:12px 18px 22px;display:flex;flex-direction:column;gap:12px"><h2 id="fs" style="font-size:17px;font-weight:800">Filters</h2>' + J([['Module', ['All', 'Prototype / MVP', 'Roadmap', 'Formation']], ['Stage', ['Any', 'Planned', 'Building', 'Shipped / learned']], ['Tool', ['Any', 'GitHub', 'Vercel']]].map(f => '<fieldset style="border:0;padding:0;margin:0"><legend class="bx-lbl" style="margin-bottom:6px">' + f[0] + '</legend><div class="chips" role="radiogroup">' + J(f[1].map((o, i) => '<button type="button" role="radio" aria-checked="' + (i === (f[0] === 'Module' ? 1 : f[0] === 'Stage' ? 2 : 0)) + '" style="min-height:40px">' + o + '</button>')) + '</div></fieldset>')) + '<button type="button" class="btn p" style="min-height:48px">Show 3 items</button></div></div>');
+    const mPlan = () => phone('Build Plan', mtabs('Plan') + '<section class="cd" style="padding:12px 14px;gap:8px"><span class="bx-lbl">What</span><b style="font-size:16px">One-day setup wizard</b>' + tg('Proposed', 'Feature · Proposed') + '<span class="bx-lbl" style="margin-top:4px">Why</span><div class="bx-ev">' + J(PROPS[0][2].map(e => '<a href="#" style="min-height:44px">' + e + '</a>')) + '</div><button type="button" class="btn p" style="min-height:48px">Accept</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn" style="min-height:44px">Edit</button><button type="button" class="btn" style="min-height:44px">Dismiss</button></div></section>');
+    const mTrail = () => phone('Trail', '<a class="btn t" href="#" style="min-height:44px;align-self:flex-start">‹ Progress</a><b style="font-size:17px">One-day setup wizard</b><ol class="bx-chain">' + J([['✓', 'Accepted', 'By you · 3 Nov'], ['✓', 'Sent', 'GitHub · 3 Nov'], ['◐', 'In progress', 'PR #44 · Thu'], ['○', 'Built', 'Not yet'], ['–', 'Live', 'Not recorded · no tool reports this'], ['!', 'Tested', 'Could not be read · Try again']].map(n => '<li class="bx-node"><i aria-hidden="true">' + n[0] + '</i><div class="bx-c"><b>' + n[1] + '</b><span>' + n[2] + '</span></div></li>')) + '</ol>');
+    const tablet = () => page(head('Turn what you proved into a company.', 'Decide what to build, ship it, and keep the evidence attached.', '', 'Build') + tabsT('Overview') + next(true) + health() + attention(3) + '<div class="bx-mods" style="grid-template-columns:1fr 1fr">' + J(MODS.slice(0, 4).map(m => '<article class="bx-mod"><b>' + m[0] + '</b><span class="v">' + m[1] + '</span><div class="f"><span>' + m[2] + '</span><a class="btn t bsm" href="#">' + m[3] + ' →</a></div></article>')) + '</div>', { w: 768, h: 1180 });
+
+    /* ---------- auth ---------- */
+    const authDesk = () => '<div class="cv" style="' + VARS + ';width:1280px"><div class="bx-auth"><div class="bx-l"><div style="display:flex;gap:8px;align-items:center;font-weight:800"><span class="logo" aria-hidden="true"></span>Axal VC</div><p style="font-size:22px;font-weight:700;line-height:1.35;max-width:420px">Build · Turn what you proved into a company.</p><span style="font-size:12px;color:#d4d4d8">Contrast checked: #ffffff on #18181b, 17.4:1</span></div><main aria-labelledby="sih"><div class="bx-authcard"><span class="raw">Page title: “Sign in · Build · Axal VC”</span><h1 id="sih" style="font-size:22px;font-weight:800">Sign in to continue to Build</h1><p style="font-size:13px;color:var(--mu)">You’ll return to your Build workspace after signing in.</p><div class="bx-frz"><span aria-hidden="true">↩︎</span>Returning to <b>Build › Plan</b> · <b>Northline</b></div><button type="button" class="btn">Continue with Google</button><button type="button" class="btn">Use a passkey or authenticator</button><div class="fld"><label for="em">Email</label><div class="ta" id="em" style="min-height:44px"></div></div><button type="button" class="btn p">Continue</button><a href="#" style="font-size:12.5px;min-height:44px;display:flex;align-items:center">Can’t sign in? Recover your account</a></div></main></div><div style="padding:0 20px 20px"><div class="bx-cookie" role="region" aria-label="Cookie choices"><span style="flex:1">Essential cookies only unless you choose otherwise.</span><button type="button" class="btn" style="min-height:44px">Essential only</button><button type="button" class="btn" style="min-height:44px">Choose…</button></div><p class="raw" style="margin-top:6px">The cookie bar sits below the sign-in card and never covers it.</p></div></div>';
+    const authPhone = () => phone('Sign in', '<main aria-labelledby="sip" style="display:flex;flex-direction:column;gap:10px"><h1 id="sip" style="font-size:20px;font-weight:800">Sign in to continue to Build</h1><p style="font-size:13px;color:var(--mu)">You’ll return to your Build workspace after signing in.</p><button type="button" class="btn" style="min-height:48px">Continue with Google</button><button type="button" class="btn" style="min-height:48px">Use a passkey or authenticator</button><button type="button" class="btn p" style="min-height:48px">Continue with email</button><a href="#" style="min-height:44px;display:flex;align-items:center;font-size:13px">Recover your account</a><a href="#" style="min-height:44px;display:flex;align-items:center;font-size:13px">Apply to Axal VC</a></main><div class="bx-cookie" role="region" aria-label="Cookie choices" style="flex-direction:column;align-items:stretch;margin-top:8px"><span>Essential cookies only unless you choose otherwise.</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn" style="min-height:44px">Essential only</button><button type="button" class="btn" style="min-height:44px">Choose…</button></div></div><p class="raw">In the page flow, after every sign-in control — never a modal over them.</p>');
+
+    /* ---------- docs ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const audit = () => dk('<h1>Audit, journey and information hierarchy</h1><p>Severity-ranked from the #4846 audit and the 7 Nov live-browser addendum. Observations marked <b>source</b> come from reading <code>main</code>; <b>live</b> were seen in the authenticated browser by the issue author. These boards are not a substitute for screenshot review or usability testing.</p>'
+      + tbl(['Sev', 'Finding', 'Basis', 'Board'], [['P1', 'Overview is module-first: six equal cards before any next action', 'source', 'BU01'], ['P1', 'Build Plan is not a first-class destination; phone cannot reach it directly', 'source', 'BU01 nav, BU03, BU10c'], ['P1', 'Proposal cards stack type, status, wording, original, evidence, destination and two action systems', 'source', 'BU03'], ['P1', '“Because” chips are metadata, not evidence you can open', 'source', 'BU04'], ['P1', 'Progress shows six stages as the only model', 'source', 'BU05, BU06'], ['P1', 'Saved filing + failed proof upload has no pattern; founders recreate the filing', 'source', 'BU11'], ['P1', 'Cookie dialog covers sign-in, passkey, recovery and Apply at 390×844', 'live', 'BU15'], ['P2', 'Phone Progress lacks search, filters and sort', 'source', 'BU10b'], ['P2', 'Accepted work opens the module, not the landed record', 'source', 'BU03'], ['P2', 'Send to… does not freeze provider, items and repository once preparing', 'source', 'BU13'], ['P2', 'All missing states carry the same visual weight', 'source', 'BU14'], ['P2', 'Custom radio chips lack arrow-key behaviour', 'source', 'BU16'], ['P2', 'Build deep link lost at sign-in; generic page title; no main landmark', 'live', 'BU15']])
+      + '<h2>8 Nov authenticated audit · project 12 · four routes verified</h2>' + tbl(['Sev', 'Finding (8 Nov, live)', 'Board'], [['P1', 'Connector states dominate core work; Solution design and MVP read as integration dashboards', 'BU07, BU08, BU18a'], ['P1', 'Empty modules show search, filters, sort and empty tables instead of one first action', 'BU18a, BU19a, BU19b, BU24a'], ['P1', 'Operating systems shows a company prerequisite plus five Not connected rows of Not recorded facts', 'BU20a, BU24b'], ['P1', 'System subtitle contradicts its state; Reconnect offered on every row', 'BU20b'], ['P1', 'Several equal-weight actions per page; no dominant next step', 'BU01, BU07, BU11, BU20b, BU23'], ['P1', 'Founder preview writes as Super Admin with no persistent warning', 'BU22'], ['P2', 'Eadwyn model names, per-token pricing and held usage shown inside module pages', 'BU21a, BU21b'], ['P2', 'Generic AI prompts (Monday plan, retro) on every module', 'BU21b'], ['P2', '“Linked” filter means pain only; hypothesis-linked rows look unlinked', 'BU07, BU18c'], ['P2', 'Tools listed twice: Build › Tools and Operating systems', 'BU12, BU20a–c'], ['P2', 'Lovable shown Not connected while FromLovable parts exist but are unmounted', 'BU08, BU12'], ['P2', 'Nested navigation: sidebar, Build tabs, module tabs and a module select', 'BU23'], ['P2', 'Module subtitles describe records, not founder outcomes', 'BU23'], ['P3', 'Workspace shows sync metadata it never records', 'BU20b']]) + '<p>Product roadmap and Founding team were source-audited only on 8 Nov; their boards change copy and dominant action, not layout.</p>'
+      + '<div class="cols"><div><h2>Journey · today</h2><p>Validate decision → plan prepared → proposals mixed with wording → accept → item lands in a module → founder finds it → Send to… → tool → back-in link → Progress shows six stages.</p></div><div><h2>Journey · proposed</h2><p>Overview names the next action → Plan shows What / Why / Decision → evidence opens in a sheet → Accept opens the exact record → Send to… in four frozen steps → Progress summarises Planned → Building → Shipped / learned, with the six-stage trail one tap away.</p></div></div>'
+      + '<h2>Hierarchy</h2><p><b>Overview · Plan · Progress · Tools</b>, then the six modules (Solution design, Prototype / MVP, Product roadmap, Founding team, Company creation, Operating systems). The platform Work board (This week, Board, Cadence, KPI entry in <code>shellConfig.js</code>) stays a link, not a duplicate.</p>');
+    const a11y = () => dk('<h1>Accessibility and interaction specification</h1>' + tbl(['Area', 'Specification'], [['Radio chips', 'Native <code>input type=radio</code> styled as chips inside a <code>fieldset</code> with a <code>legend</code>. Tab enters and leaves the group; arrow keys move and select; selected state also shown by a check mark and weight, not colour.'], ['Build tabs', 'Links with <code>aria-current="page"</code> (routes, not ARIA tabs). Plan is reachable in one tap on phone.'], ['Evidence chips', 'Links that open a modal sheet; focus moves to the sheet heading and returns to the chip on close.'], ['Progress stages', 'Each stage strip has an accessible name listing stage and state; the trail is an ordered list with text states.'], ['Status updates', 'Accept, Send to… and filing results announce through <code>role="status"</code>; failures through <code>role="alert"</code> tied to the action that failed.'], ['Send to…', 'A dialog that traps focus; the frozen summary is read before the content.'], ['Missing states', 'Not recorded (dashed), Not expected yet (plain, lighter), Could not be read (red, with Try again), Processing, Needs attention, Read only — each a word plus a symbol.'], ['Touch', '44px minimum on phone; primary actions 48px; sheets full height.'], ['Auth', 'Sign-in inside <code>main</code>; page title names Build; the cookie bar sits after sign-in controls in the reading order and never overlaps them; contrast verified in light and dark.']]));
+    const handoff = () => dk('<h1>Developer handoff</h1><p>Checked against <code>main</code> on 7 Nov 2026, re-checked 9 Nov for the 8 Nov audit follow-ups #5064–#5068 and UX packages #5076–#5078: <code>routes/build_plan.ts</code>, <code>build_plan_state.ts</code>, <code>cycle_build.ts</code>, <code>services/buildStates.ts</code> (D968), the evidence route (D1066), <code>buildHandoffs.ts</code> (D1068), <code>buildPlanState.ts</code> (D1067), <code>vercel/buildReads.ts</code> (D1098).</p>'
+      + tbl(['Change', 'Preserved capability', 'Backend', 'Verify'], [
+        ['8 Nov · Sources region on MVP: From Vercel and From Lovable', '<code>MvpFromVercel</code>, <code>FromLovable</code>, <code>RoadmapFromVercel</code>, <code>CompanyFromVercel</code> exist but their entries are null in <code>buildParts.jsx</code>', '#5064: mount them; no new route', 'Each source renders or fails on its own'],
+        ['8 Nov · Truthful system rows: one state drives subtitle and action', 'Operating systems systems read', '#5065: derive subtitle and action from systemState; Workspace has no sync timestamp', 'Connected never offers Reconnect'],
+        ['8 Nov · One company prerequisite; no system rows before a company is linked', 'Company link on the project', '#5066 / #5078: frontend gate; Company creation completeness', 'No “Not recorded” rows for an unlinked project'],
+        ['8 Nov · Evidence-link filter names its kind; measured zero stays 0', 'Feature evidence links; MVP test results', '#5067: “Linked” matches pain only, measured 0 currently becomes null, roadmap feedback LIMIT 20, dependency picker cap 200', 'Hypothesis-linked rows count as linked'],
+        ['8 Nov · Progressive list controls (search/filter/sort from 10 records)', 'Existing list reads', 'Frontend only (#5076)', '0, 3 and 24 records render the BU18 states'],
+        ['8 Nov · Eadwyn: module suggestions on page; model, pricing and usage in rail settings', 'Eadwyn ask, allowance and billing reads', 'Frontend (#5077); suggestions are static per module', 'No model or token price on a module page'],
+        ['8 Nov · Founder preview banner and Save as Super Admin confirmation', 'Preview mode; writes attributed to the acting user', 'Frontend gate on every write while previewing; no backend change', 'Every write in preview asks first'],
+        ['8 Nov · Operating systems › Systems · Cadence · Tools ↗; Build tabs removed', 'Cadence rituals; Build › Tools', '#5068: legacy cadence and tools entry points redirect', 'One home per ritual; one Tools list'],
+        ['Overview: next action, status strip, attention, plan preview, compact modules', '<code>GET /api/cycles/build/overview</code> module cards', 'Frontend; “next action” rule is new client logic over the overview read (#4603 for its cost)', 'Overview shows one CTA derived from state'],
+        ['Plan: What / Why / Decision; wording subordinate', 'Accept, edit, dismiss; Eadwyn wording (D1071)', 'Frontend', 'Wording accept never accepts the item'],
+        ['Evidence sheet', '<code>GET /api/cycles/build/evidence</code> returns a Build row’s trail (D1066), with the plan’s readers', '#4602: wire each chip to its exact record; frontend sheet', 'Each node opens its record or says why not'],
+        ['Accepted → open exact record', 'Landed table + record id on the item', '#4602 (frontend routing over existing ids)', 'Open lands on the record'],
+        ['Progress summary + trail', 'D968 stages: reported / not reported, sources, no guessed dates', '#4600 for summary accuracy', 'Unknown never counts as incomplete'],
+        ['Live for features', 'Vercel “In production since” only on SHA match (D1098)', 'No deploy feed for features: Live stays Not recorded', '—'],
+        ['Phone Progress search / filters / sort', 'Desktop list query', '#4602, #4603 (server paging)', 'Parity of results'],
+        ['Send to… four steps, frozen context', 'D1068 providers, server-built text, privacy lint, VB- markers', '#4601 for async context and clipboard errors', 'Result names the submitted provider, items, repo'],
+        ['Filing + proof partial success', 'Formation steps, proof under <code>build-proof/</code>', '#4600: keep the filing id, retry upload only', 'One filing after retry'],
+        ['Auth return to Build', 'Shared sign-in', 'Frontend: return path + project context; page title; main landmark', 'Lands on the same Build route']])
+      + '<p>Sample venture “Northline” and all names, dates and counts on these boards are sample data.</p>');
+
+
+    /* ---------- 8 Nov 2026 authenticated audit: revision boards ---------- */
+    const SRC = (title, rows, note) => '<section class="bx2-src" aria-label="' + title + '"><div class="hd2"><b>' + title + '</b>' + (note || '') + '</div><ul>' + J(rows.map(r => '<li><b>' + r[0] + '</b><span>' + r[1] + '</span>' + (r[2] || '') + '</li>')) + '</ul></section>';
+    const mvpSources = () => '<div class="ch" style="margin-top:4px"><h2 style="font-size:13.5px;font-weight:800">Sources · what the tools report for these must-haves</h2><a class="btn t bsm" href="#">Manage in Build › Tools →</a></div>'
+      + '<div class="g"><div style="grid-column:span 6">' + SRC('From Vercel', [['Account setup', 'Preview ready · commit 4f2a91c · 14:20 today', tg('Building', 'Preview')], ['Bulk invite teammates', 'Production since 6 Nov · commit matches merge #41', tg('Live')], ['Data import', 'No deploy recorded', NR]], PTn('#5064')) + '</div>'
+      + '<div style="grid-column:span 6">' + SRC('From Lovable', [['One-day setup wizard', 'Project “setup-wizard” · last generation 5 Nov', tg('Building', 'Draft UI')], ['Account setup', 'Prompt sent 3 Nov · not opened since', tg('Sent')]], PTn('#5064')) + '</div></div>'
+      + '<p class="raw">GitHub, Notion and PostHog sit in the same Sources region, in that order, each isolated so one failure doesn’t blank the others. Build in Lovable is an action inside From Lovable, never a page-header button.</p>';
+    const askBlock = (suggs) => '<section class="bx2-ask" aria-label="Ask Eadwyn about this module"><div class="ch"><b style="font-size:13px">Ask Eadwyn</b><span class="raw">Suggestions never run on their own</span></div><div class="q" role="textbox" aria-label="Ask about this module">Ask about this module…</div><div class="chips2">' + J(suggs.map(x => '<button type="button">' + x + '</button>')) + '</div></section>';
+    const SUGG = { solution: ['Which features have no evidence link?', 'Challenge the MVP scope', 'Draft a description for “CSV import”'], mvp: ['What is blocking “Data import”?', 'Which must-have should be next?', 'Draft a Lovable prompt for the setup wizard'], company: ['What is still outstanding to form the company?', 'Explain the 83(b) deadline', 'Prepare the IP assignment checklist'], systems: ['Which systems still need connecting?', 'What breaks if accounting stays disconnected?'], cadence: ['What slipped since the last retro?', 'Summarise last week for the review'] };
+
+    // BU18 · progressive complexity, Solution design at three sizes
+    const solEmpty = () => mhead('Solution design', 'Solution design', 'Decide what you are building, and tie every feature to the evidence behind it.', '')
+      + '<section class="bx2-guide" aria-labelledby="g1"><span class="eye">No features yet</span><h2 id="g1">Start with the feature your evidence argues for</h2><p>Validate found 2 pains and 1 supported hypothesis. Add the first feature and link it to one of them, so the MVP is built on what customers said.</p><ol><li>Add a feature</li><li>Link it to a pain or hypothesis</li><li>Mark the ones the MVP needs</li></ol><button type="button" class="btn p">Add first feature</button><a class="btn t bsm" href="#">Or accept the 3 waiting Build Plan items →</a></section>'
+      + askBlock(SUGG.solution) + '<p class="raw">At zero there is one action. No search, filters, sort, empty table or pagination; no connector states. Google and Notion appear under Sources once they hold something for this venture, or when one blocks a task.</p>';
+    const solFew = () => crop('<span class="eye">2 features · records, minimal controls</span><section class="cd"><div class="ch"><h2>Features</h2><button type="button" class="btn p bsm">Add feature</button></div><table class="tbl"><thead><tr><th>Feature</th><th>Evidence link</th><th>Impact</th></tr></thead><tbody><tr><td><b>Instant workspace setup</b></td><td><a href="#" class="bx-tag ok" style="text-decoration:none">Pain · Setup takes two days →</a></td><td>High</td></tr><tr style="background:var(--amBg)"><td><b>Dark mode</b></td><td>' + tg('Needs attention', 'No evidence link') + ' <button type="button" class="btn bsm">Link evidence</button></td><td>' + NR + '</td></tr></tbody></table></section><p class="raw">Below 10 records: no search, filter or sort, no range or pagination. The one Add sits on the list it adds to.</p>', 640);
+    const solMany = () => crop('<span class="eye">24 features · list controls appear</span><section class="cd" style="padding:0;gap:0"><div class="ch" style="padding:10px 14px"><h2>Features</h2><button type="button" class="btn p bsm">Add feature</button></div><div class="tools" style="padding:0 14px 10px"><div class="inp" style="min-width:200px">⌕ Search features</div><div class="chips" role="radiogroup" aria-label="Evidence link"><button type="button" role="radio" aria-checked="true">All<span>24</span></button><button type="button" role="radio" aria-checked="false">Pain linked<span>15</span></button><button type="button" role="radio" aria-checked="false">Hypothesis linked<span>6</span></button><button type="button" role="radio" aria-checked="false">No evidence link<span>3</span></button></div><button type="button" class="dd">Impact ▾</button></div><table class="etb"><thead><tr><th>Feature</th><th>Evidence link</th><th>Impact</th></tr></thead><tbody>' + J([['Instant workspace setup', 'Pain · Setup takes two days'], ['CSV import', 'Hypothesis · Teams migrate in week 1'], ['Role templates', 'Pain · Permissions confusing']].map(r => '<tr><td><b>' + r[0] + '</b></td><td><a href="#" class="bx-tag ok" style="text-decoration:none">' + r[1] + ' →</a></td><td>High</td></tr>')) + '</tbody></table><div class="qft"><span>1–3 of 24</span><span class="pb"><button type="button" aria-label="Previous page">‹</button><button type="button" aria-label="Next page">›</button></span></div></section><p class="raw">“Linked” is retired: the filter names its link kind, and the row and the filter use the same rule (#5067).</p>', 640);
+
+    // BU19 · Prototype / MVP and Company creation at zero
+    const mvpEmpty = () => mhead('Prototype / MVP', 'MVP', 'Ship the smallest product that tests what Validate proved.', '')
+      + '<section class="bx2-guide" aria-labelledby="g2"><span class="eye">No must-haves yet</span><h2 id="g2">Name the first thing the MVP must do</h2><p>A must-have is one capability the MVP can’t ship without, with the test that proves it. Start with the pain your first feature answers.</p><button type="button" class="btn p">Add first must-have</button></section>'
+      + askBlock(SUGG.mvp) + '<section class="bx2-src"><div class="hd2"><b>Sources</b><span class="raw">Nothing to show yet</span></div><p style="font-size:12.5px;color:var(--mu)">GitHub, Vercel and Lovable report here once a must-have exists. Building a first draft in Lovable is offered on the must-have, not on this page.</p></section>';
+    const companyEmpty = () => mhead('Company creation', 'Company creation', 'Get the company formed, then keep its filings current.', '')
+      + '<section class="bx2-guide" aria-labelledby="g3"><span class="eye">Not formed yet</span><h2 id="g3">Start formation</h2><p>Choose where the company is incorporated. Axal then lists the filings that follow (EIN, IP assignment, 83(b) elections) with their deadlines.</p><button type="button" class="btn p">Start formation</button></section>'
+      + '<div class="bx2-util"><span>Supporting tools</span><a href="#">Legal documents</a><a href="#">E-signature</a></div>' + askBlock(SUGG.company);
+
+    // BU20 · Operating systems: Systems · Cadence · Tools
+    const osTabs = (cur) => '<nav class="ptabs" aria-label="Operating systems"><a href="#"' + (cur === 'Systems' ? ' aria-current="page"' : '') + '>Systems</a><a href="#"' + (cur === 'Cadence' ? ' aria-current="page"' : '') + '>Cadence</a><a href="#">Tools ↗</a></nav>';
+    const osHead = (cta) => mhead('Operating systems', 'Operating systems', 'Run the company on connected systems and a weekly rhythm.', cta || '');
+    const osNoCo = () => osHead() + osTabs('Systems') + '<section class="bx2-guide" aria-labelledby="g4"><span class="eye">One step first</span><h2 id="g4">Link this project to its company</h2><p>Bank, accounting, payroll, CRM and workspace connect to a company, not a project. Once Northline’s company is linked, its five systems appear here with Connect on each.</p><button type="button" class="btn p">Link company</button><a class="btn t bsm" href="#">Form the company first in Company creation →</a></section>'
+      + '<p class="raw">Replaces one prerequisite notice plus five “Not connected” rows with Provider, Last sync and Used by all “Not recorded”. No system rows render until a company is linked.</p>' + PTn('#5078');
+    const SYS = [['Bank', 'Mercury', 'Connected', 'Synced 14:05 today', 'Manage'], ['Accounting', 'QuickBooks', 'Failing', 'Last good Thu 09:12 · token expired', 'Reconnect'], ['Payroll', '', 'Not connected', '', 'Connect'], ['CRM', 'HubSpot', 'Connected', 'Synced 13:40 today', 'Manage'], ['Workspace', 'Google Workspace', 'Connected', 'Capability · no sync recorded', 'Manage']];
+    const osSystems = () => osHead('<button type="button" class="btn p">Reconnect accounting</button>') + osTabs('Systems') + '<section class="cd"><div class="ch"><h2>Systems</h2><span class="sm">3 connected · 1 failing · 1 not connected</span></div><ol class="bx2-sys">' + J(SYS.map(r => '<li><b>' + r[0] + '</b><span>' + (r[1] || '<span class="mu">—</span>') + '</span>' + tg(r[2] === 'Disconnected' ? 'Failing' : r[2], r[2]) + '<span class="raw">' + (r[3] || 'Connect a provider to start') + '</span><button type="button" class="btn bsm' + (r[4] === 'Reconnect' ? ' p' : '') + '">' + r[4] + '</button></li>')) + '</ol><p class="raw">One state per row drives its subtitle and its action: Connected → Manage, Failing or Disconnected → Reconnect, Not connected → Connect. A Disconnected row (revoked by the provider) behaves like Failing. A not-connected row shows one line, not three “Not recorded” facts. Workspace is a capability and says it has no sync to report.</p>' + PTn('#5065') + '</section>';
+    const osCadence = () => osHead('<button type="button" class="btn p">Draft this Monday’s plan</button>') + osTabs('Cadence') + '<section class="cd"><div class="ch"><h2>This week</h2><span class="sm">w/c 9 Nov</span></div><ul class="rz"><li><b>Monday plan</b><small>Not drafted yet · due today</small>' + tg('Planned', 'To draft') + '</li><li><b>Weekly review</b><small>Thu 12 Nov</small>' + tg('Planned') + '</li><li><b>Friday retro</b><small>Last: 6 Nov · 3 actions carried</small>' + tg('Done') + '</li><li><b>Metric annotations</b><small>2 this week · signups dip on 4 Nov explained</small>' + tg('Done') + '</li></ul></section>' + askBlock(SUGG.cadence) + '<p class="raw">Cadence is the one home of the Monday plan, review, retro and annotations; the separate cadence screen redirects here. These rituals no longer appear on other modules.</p>';
+
+    // BU21 · Eadwyn on a module page vs the rail
+    const eadRail = '<aside class="sp eadx" aria-label="Eadwyn" style="min-width:0;overflow:hidden;box-sizing:border-box"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><b style="font-size:13.5px">Eadwyn · Solution design</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1"><div class="prm">' + J(SUGG.solution.map(x => '<button type="button">' + x + '</button>')) + '</div><div class="cs2"><span class="eye">Answer · Which features have no evidence link?</span><p style="font-size:12.5px;line-height:1.55">One: <b>Dark mode</b>. No pain or hypothesis from Validate mentions it.</p><a class="btn bsm" href="#" style="align-self:flex-start">Link evidence</a></div></div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px"><div class="inp" style="min-width:0;min-height:38px">Ask about Solution design…</div><button type="button" class="disc2" aria-expanded="true">AI settings ▴</button><dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>Model</dt><dd>Recommended</dd><dt>Allowance</dt><dd>41,200 of 100,000 this month</dd><dt>Billing</dt><dd><a href="#">Account › Billing and usage</a></dd></dl></div></aside>';
+    const pageR = (body, o) => page(body, o).replace('<aside class="sp" aria-label="Eadwyn">', '§').replace(/§[\s\S]*?<\/aside>/, eadRail).replace('<div class="sh" style="min-height:', '<div class="sh" style="grid-template-columns:196px minmax(0,1fr) 340px;min-height:');
+    const eadSugg = () => dk('<h1>Eadwyn by module · suggestions that fit the job</h1><p>Monday plans, retros and annotations appear only in Operating systems › Cadence. Model names, model descriptions, per-token pricing, the safety model, allowance, held usage and top-up balance live in the rail’s AI settings and Account › Billing, never in the page.</p>' + tbl(['Module', 'Suggested asks (never auto-run)'], [['Solution design', SUGG.solution.join(' · ')], ['Prototype / MVP', SUGG.mvp.join(' · ')], ['Product roadmap', 'What should move into Now? · Which items have no KPI?'], ['Founding team', 'Which founders lack vesting terms? · Summarise the equity split'], ['Company creation', SUGG.company.join(' · ')], ['Operating systems › Systems', SUGG.systems.join(' · ')], ['Operating systems › Cadence', SUGG.cadence.join(' · ')]]) + '<p>' + PTn('#5077') + '</p>');
+
+    // BU22 · founder-preview safety
+    const previewWrite = () => page('<div class="bx2-priv" role="status"><span aria-hidden="true">⚠</span><span><b>Super Admin preview of Northline’s Founder view.</b> Anything you save is written as you, Super Admin, into Northline’s records.</span><a href="#" style="color:#fecaca;margin-left:auto;font-weight:800">Exit preview</a></div>' + mhead('Company creation', 'Company creation', 'Get the company formed, then keep its filings current.', '<button type="button" class="btn p">Complete 83(b) election · due in 8 days</button>') + '<section class="cd" style="max-width:600px;margin:40px auto 0;border:1.5px solid #7f1d1d"><div class="ch"><h2>Save as Super Admin?</h2></div><p style="font-size:13px">You are previewing Northline as its founder would see it, but this filing will be recorded under <b>your</b> name, not the founder’s, and Northline will see it in its history.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p" style="background:#7f1d1d;border-color:#7f1d1d">Save as Super Admin</button></div></section>', { h: 760, cur: 'Company creation' });
+
+    // BU23 · navigation and copy
+    const navCopy = () => dk('<h1>Navigation and module copy</h1><div class="bx2-nav"><div><h2>Before (8 Nov live)</h2><p>Global sidebar → cycle navigation → Overview / Tools tabs → six module tabs → a module select. Tools reads as both a top-level Build view and part of Operating systems.</p></div><div><h2>After</h2><p>Sidebar: <b>Build</b> › Overview · Plan · Progress · Tools, then the six modules. Inside a module: its own sections only (Operating systems: Systems · Cadence · Tools ↗). No module tabs or module select inside pages; the sidebar is the one module switcher. <b>Tools</b> is one page; Operating systems links to it.</p></div></div>'
+      + tbl(['Module', 'Before (system-oriented)', 'After (founder outcome)'], [['Solution design', 'Records below; tabs above…', 'Decide what you are building, and tie every feature to the evidence behind it.'], ['Prototype / MVP', 'Must-have rows and connector parts', 'Ship the smallest product that tests what Validate proved.'], ['Product roadmap', 'Roadmap items by status', 'Decide what ships now, next and later, and show what shipped.'], ['Founding team', 'Founder records', 'Agree who builds the company, and on what terms.'], ['Company creation', 'Formation records and filings', 'Get the company formed, then keep its filings current.'], ['Operating systems', 'Systems, cadence and tool history', 'Run the company on connected systems and a weekly rhythm.']])
+      + '<h2>One dominant action per state</h2>' + tbl(['Module', 'Empty', 'In progress'], [['Solution design', 'Add first feature', 'Link evidence to the first feature without it · else Add feature, on the list'], ['Prototype / MVP', 'Add first must-have', 'The next blocked or due must-have'], ['Product roadmap', 'Add first item', 'Move the next item into Now'], ['Founding team', 'Add founder', 'Add vesting terms'], ['Company creation', 'Start formation', 'The nearest-deadline filing'], ['Operating systems', 'Link company', 'Connect or reconnect the first system that needs it']]) + '<p>' + PTn('#5076') + ' ' + PTn('#5068') + '</p>');
+
+    // BU24 · phone, empty module and no-company state
+    const mEmpty = () => phone('Solution design', '<p style="font-size:13px;color:var(--mu)">Decide what you are building, and tie every feature to the evidence behind it.</p><section class="bx2-guide" style="padding:18px"><span class="eye">No features yet</span><h2 style="font-size:17px">Start with the feature your evidence argues for</h2><button type="button" class="btn p" style="min-height:48px;align-self:stretch">Add first feature</button></section><button type="button" class="disc"><b>Ask Eadwyn</b><span>3 suggestions for this module</span><i aria-hidden="true">›</i></button>');
+    const mOs = () => phone('Operating systems', '<nav class="ptabs" aria-label="Operating systems" style="flex:none"><a href="#" aria-current="page">Systems</a><a href="#">Cadence</a><a href="#">Tools ↗</a></nav><section class="bx2-guide" style="padding:18px"><span class="eye">One step first</span><h2 style="font-size:17px">Link this project to its company</h2><p style="font-size:13px">Systems connect to a company. They appear once it is linked.</p><button type="button" class="btn p" style="min-height:48px;align-self:stretch">Link company</button></section>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'BU00') html = audit();
+    else if (B === 'BU01') html = page(overview(), { h: 1500 });
+    else if (B === 'BU02') html = mOverview();
+    else if (B === 'BU03') html = page(plan(), { h: 1250, cur: 'Plan' });
+    else if (B === 'BU04') html = page(plan(), { h: 1000, cur: 'Plan', overlay: evSheet() });
+    else if (B === 'BU05') html = page(progress(), { h: 900, cur: 'Progress' });
+    else if (B === 'BU06') html = page(progress(0), { h: 900, cur: 'Progress', overlay: trail() });
+    else if (B === 'BU07') html = page(solution(), { h: 980, cur: 'Solution design' });
+    else if (B === 'BU08') html = page(mvp(), { h: 900, cur: 'Prototype / MVP' });
+    else if (B === 'BU09') html = page(roadmap(), { h: 800, cur: 'Product roadmap' });
+    else if (B === 'BU10') html = page(team(), { h: 700, cur: 'Founding team' });
+    else if (B === 'BU11') html = page(company(), { h: 900, cur: 'Company creation' });
+    else if (B === 'BU12') html = page(tools(), { h: 1000, cur: 'Tools' });
+    else if (B === 'BU13a') html = crop(send(1), 760);
+    else if (B === 'BU13b') html = crop(send(2), 760);
+    else if (B === 'BU13c') html = crop(send(3), 760);
+    else if (B === 'BU13d') html = crop(send(4), 760);
+    else if (B === 'BU14') html = states();
+    else if (B === 'BU14t') html = tablet();
+    else if (B === 'BU14d') html = page(overview(), { h: 1500 });
+    else if (B === 'BU10b') html = mProgress();
+    else if (B === 'BU10c') html = mPlan();
+    else if (B === 'BU10d') html = mTrail();
+    else if (B === 'BU15') html = authDesk();
+    else if (B === 'BU15m') html = authPhone();
+    else if (B === 'BU16') html = a11y();
+    else if (B === 'BU17') html = handoff();
+    else if (B === 'BU18a') html = page(solEmpty(), { h: 820, cur: 'Solution design' });
+    else if (B === 'BU18b') html = solFew();
+    else if (B === 'BU18c') html = solMany();
+    else if (B === 'BU19a') html = page(mvpEmpty(), { h: 820, cur: 'Prototype / MVP' });
+    else if (B === 'BU19b') html = page(companyEmpty(), { h: 760, cur: 'Company creation' });
+    else if (B === 'BU20a') html = page(osNoCo(), { h: 700, cur: 'Operating systems' });
+    else if (B === 'BU20b') html = page(osSystems(), { h: 760, cur: 'Operating systems' });
+    else if (B === 'BU20c') html = page(osCadence(), { h: 820, cur: 'Operating systems' });
+    else if (B === 'BU21a') html = pageR(solution(), { h: 1000, cur: 'Solution design' });
+    else if (B === 'BU21b') html = eadSugg();
+    else if (B === 'BU22') html = previewWrite();
+    else if (B === 'BU23') html = navCopy();
+    else if (B === 'BU24a') html = mEmpty();
+    else if (B === 'BU24b') html = mOs();
+    else html = page(overview(), { h: 1500 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

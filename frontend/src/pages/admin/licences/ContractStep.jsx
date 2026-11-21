@@ -2,14 +2,109 @@
  * #4707 — the HQ licence page's contracts. Moved out of `AdminLicences.jsx`
  * unchanged when the page was split by domain; the comments below are the
  * original ones.
+ *
+ * D5920 (#5920, board L08) — the block now leads with the executed agreement
+ * (its agreement version and dates), then four stage cards (Ledger terms,
+ * Draft agreement, Sent for signature, Executed), then the version history.
+ * The rules are `agreementLifecycleModel.js`. A failed read is Unreadable with
+ * Try again. The draft's controls below (instantiate, complete the entity,
+ * send for signature) are unchanged.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useConsequenceSheet } from '../LicenceConsequenceSheet';
+import LicenceOutcomeCard, { useLicenceWrite } from '../LicenceOutcomeCard';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Unrecorded } from '../../../ui';
 import { Chip } from './licenceShared';
+import {
+  NOT_INSTRUMENTED, currentContract, executedAgreement, stageCards, versionDate, versionRows, versionState,
+} from './agreementLifecycleModel';
+
+const STATE_TONE = {
+  Executed: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-200 dark:border-green-900',
+  'Sent for signature': 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-200 dark:border-indigo-900',
+  Draft: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-900',
+  None: 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800',
+};
+const tone = (word) => STATE_TONE[word] || 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
+
+/** L08's lead: the executed agreement, or None. */
+function ExecutedLead({ contracts, licence }) {
+  const ex = executedAgreement(contracts);
+  return (
+    <section data-testid="licence-agreement-executed" className="rounded-lg border-[1.5px] border-gray-900 p-3 dark:border-gray-200">
+      <span className="block text-[10.5px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">Current agreement</span>
+      {ex ? (
+        <>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h3 className="m-0 text-[17px] font-extrabold text-gray-900 dark:text-gray-100">{ex.template_title} · Agreement v{ex.agreement_version}</h3>
+            <Chip tone={tone('Executed')}>{versionDate(ex)}</Chip>
+            <Link
+              to={ex.envelope_uid ? `/admin/contracts/agreements/doc/${encodeURIComponent(ex.envelope_uid)}` : `/admin/contracts?licence=${encodeURIComponent(licence.uid)}&agreement_type=territory_licence`}
+              className="ml-auto text-xs font-semibold text-indigo-700 hover:underline dark:text-indigo-300"
+            >
+              View agreement ›
+            </Link>
+          </div>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Template <code>{ex.template_slug}</code> v{ex.template_version}
+            {ex.body_sha256 ? <> · fingerprint <code>{String(ex.body_sha256).slice(0, 12)}</code></> : null}
+            {ex.sent_at ? ` · sent ${String(ex.sent_at).slice(0, 10)}` : ''}
+            {ex.superseded_at ? ` · a newer version is open and replaces it once executed` : ''}
+          </p>
+        </>
+      ) : (
+        <p className="mt-1 text-sm text-gray-700 dark:text-gray-300"><b>None.</b> No agreement has been executed for this licence.</p>
+      )}
+      <p className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="licence-agreement-terms-differ">
+        Whether the current terms differ from the executed agreement: {NOT_INSTRUMENTED}. No read compares the ledger terms with an agreement yet.
+      </p>
+    </section>
+  );
+}
+
+function StageCards({ contracts }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="licence-agreement-stages">
+      {stageCards(contracts).map((c) => (
+        <article key={c.label} className="flex flex-col gap-1 rounded-lg border border-gray-200 p-2.5 dark:border-gray-800" data-testid="licence-agreement-stage">
+          <span className="text-[10.5px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">{c.label}</span>
+          <span><Chip tone={tone(c.state)}>{c.state}</Chip></span>
+          <span className="text-xs text-gray-600 dark:text-gray-400">{c.line}</span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function VersionHistory({ contracts }) {
+  const rows = versionRows(contracts);
+  if (!rows.length) return null;
+  return (
+    <section data-testid="licence-contract-history" className="overflow-x-auto">
+      <h3 className="m-0 mb-1 text-sm font-bold text-gray-900 dark:text-gray-100">Versions</h3>
+      <table className="w-full border-collapse text-xs">
+        <thead><tr className="border-b border-gray-200 dark:border-gray-800">
+          {['Version', 'State', 'Date', 'Template'].map((h) => <th key={h} className="px-2 py-1.5 text-left text-[10.5px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.uid} className="border-b border-gray-100 last:border-0 dark:border-gray-800" data-testid="licence-contract-version">
+              <td className="px-2 py-1.5 font-mono text-gray-900 dark:text-gray-100">{r.version}</td>
+              <td className="px-2 py-1.5"><Chip tone={tone(r.state)}>{r.state}</Chip>{r.envelopeUnreadable ? <span className="ml-1 text-red-700 dark:text-red-300">· envelope Unreadable</span> : null}</td>
+              <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.date}</td>
+              <td className="px-2 py-1.5 font-mono text-gray-600 dark:text-gray-400">{r.template}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">A re-issue supersedes, it never overwrites.</p>
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------------ *
  * H3 step 5 — Contract                                                 *
@@ -65,19 +160,33 @@ function EntityCompletion({ licence, onSaved }) {
   );
 }
 
-export function ContractStep({ licence, onSaved }) {
+/**
+ * D4819 part 5 (#5931) — `GET /:uid/contract`, read once for this step and for New licence steps 5 and 6
+ * (`NewLicenceSteps.jsx`). `data` is null while reading and false when the read failed; `onData` sees each answer.
+ */
+export function useLicenceContract(uid, onData) {
   const [data, setData] = useState(null);
+  const seen = useRef(onData);
+  seen.current = onData;
+  const load = useCallback(() => {
+    api.licenceContract(uid)
+      .then((d) => { setData(d); seen.current?.(d); })
+      .catch((e) => { reportError('licence_contract_load_failed', e); setData(false); });
+  }, [uid]);
+  useEffect(load, [load]);
+  return { data, setData, load };
+}
+
+export function ContractStep({ licence, onSaved }) {
   const [slug, setSlug] = useState('');
+  const { data, setData, load } = useLicenceContract(licence.uid, (d) => setSlug((s) => s || d.templates?.[0]?.slug || ''));
   const [busy, setBusy] = useState(false);
-  const [sendBusy, setSendBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  const load = useCallback(() => {
-    api.licenceContract(licence.uid)
-      .then((d) => { setData(d); setSlug((s) => s || d.templates?.[0]?.slug || ''); })
-      .catch((e) => { reportError('licence_contract_load_failed', e); setData(false); });
-  }, [licence.uid]);
-  useEffect(load, [load]);
+  // D4819 part 21 (#5928): Send for signature asks in the one consequence sheet (L17) and reports in the L18 card.
+  const [sheet, ask] = useConsequenceSheet();
+  const write = useLicenceWrite({ onSettled: () => { load(); onSaved?.(); }, tag: 'licence_contract' });
+  const sendBusy = write.busy;
 
   async function instantiate() {
     setBusy(true); setErr(null);
@@ -86,33 +195,37 @@ export function ContractStep({ licence, onSaved }) {
     finally { setBusy(false); }
   }
 
-  if (data === false) return <p className="text-sm text-red-600">Could not load this licence&apos;s contracts.</p>;
+  const unreadable = (text) => (
+    <div role="alert" data-testid="licence-agreement-unreadable" className="flex flex-wrap items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+      <span><b>Unreadable.</b> {text} This is not a claim that none exists.</span>
+      <button type="button" onClick={() => { setData(null); load(); }} className="rounded-md border border-red-300 px-2 py-0.5 text-xs font-semibold dark:border-red-800">Try again</button>
+    </div>
+  );
+  if (data === false) return <div data-testid="licence-contract-step">{unreadable('This licence’s agreements could not be read.')}</div>;
   if (!data) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  const current = (data.contracts || []).find((k) => !k.superseded_at) || null;
-  const superseded = (data.contracts || []).filter((k) => k.superseded_at);
+  const contracts = data.contracts || [];
+  const current = currentContract(contracts);
+  const currentState = current ? versionState(current, executedAgreement(contracts)) : null;
 
   async function sendForSignature() {
     if (!current?.uid) return;
-    setSendBusy(true); setErr(null);
-    try {
-      await api.licenceContractSend(licence.uid, current.uid);
-      load();
-      onSaved?.();
-    } catch (e) {
-      reportError('licence_contract_send_failed', e);
-      setErr(e?.message || 'Could not send for signature.');
-    } finally { setSendBusy(false); }
+    setErr(null);
+    const out = await ask('sendAgreement', licence, { target: { label: current.template_title ? `${current.template_title} (template v${current.template_version})` : null } });
+    if (out) await write.run('sendAgreement', () => api.licenceContractSend(licence.uid, current.uid));
   }
 
   return (
     <div data-testid="licence-contract-step" className="space-y-4">
+      {sheet}
+      <LicenceOutcomeCard outcome={write.outcome} busy={write.busy} onReread={load} onDismiss={write.clear} testId="licence-contract-outcome" />
       {/* D5051 (L33): the first of the Agreement section's three blocks. */}
       <span className="block text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">1 · Territory licence agreement</span>
-      {!data.contracts_available && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          {data.contracts_reason}
-        </p>
+      {!data.contracts_available ? unreadable(data.contracts_reason || 'The licence’s agreements could not be read.') : (
+        <>
+          <ExecutedLead contracts={contracts} licence={licence} />
+          <StageCards contracts={contracts} />
+        </>
       )}
 
       {current ? (
@@ -120,12 +233,8 @@ export function ContractStep({ licence, onSaved }) {
           <div className="flex flex-wrap items-center gap-2">
             <FileText size={14} className="text-gray-500" />
             <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{current.template_title}</span>
-            <Chip tone="bg-gray-100 text-gray-600 border-gray-200">v{current.template_version}</Chip>
-            <Chip tone={current.status === 'signed'
-              ? 'bg-green-50 text-green-700 border-green-200'
-              : current.status === 'void'
-                ? 'bg-gray-100 text-gray-600 border-gray-200'
-                : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{current.status}</Chip>
+            <Chip tone="bg-gray-100 text-gray-600 border-gray-200">template v{current.template_version}</Chip>
+            <Chip tone={tone(currentState)}>v{current.agreement_version} · {currentState}</Chip>
             {/* D5051: the one canonical record in Contracts. A sent contract IS its envelope's row (D5050 §1);
                 an unsent one is a row of its own there, found by its licence. */}
             <Link
@@ -165,7 +274,7 @@ export function ContractStep({ licence, onSaved }) {
           {current.sent_at && (
             <p className="mt-1 text-xs text-gray-500">
               Sent {String(current.sent_at).slice(0, 10)}
-              {current.signed_at ? ` · signed ${String(current.signed_at).slice(0, 10)}` : ''}
+              {current.status === 'signed' && current.signed_at ? ` · executed ${String(current.signed_at).slice(0, 10)}` : ''}
             </p>
           )}
           <p className="mt-2 text-[11px] text-gray-500">
@@ -225,16 +334,7 @@ export function ContractStep({ licence, onSaved }) {
       )}
       {err && <p className="text-sm text-red-600">{err}</p>}
 
-      {superseded.length > 0 && (
-        <div className="text-xs text-gray-500">
-          {superseded.length} superseded {superseded.length === 1 ? 'contract' : 'contracts'} kept:
-          a re-issue supersedes, it never overwrites.
-          <span className="block" data-testid="licence-contract-history">
-            History: {[...(data.contracts || [])].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-              .map((k, i) => `v${i + 1} ${k.superseded_at ? 'superseded' : k.status}`).reverse().join(' · ')}
-          </span>
-        </div>
-      )}
+      {data.contracts_available ? <VersionHistory contracts={contracts} /> : null}
     </div>
   );
 }

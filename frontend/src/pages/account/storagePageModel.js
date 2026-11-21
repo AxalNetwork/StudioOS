@@ -281,6 +281,7 @@ export const AREA_PLACE = Object.freeze({
   research_library: ['the research library', '/research/library'],
   interview_recordings: ['the interview', '/validate/customer-research'],
   session_audio: ['the interview', '/validate/customer-research'],
+  grow_voice_notes: ['the sequence', '/grow/distribution/prospects'],
   deck_reviews: ['the deck review', '/raise/pitch/review'],
   deck_rehearsals: ['the rehearsal', '/raise/pitch/present'],
   deck_recordings: ['the walkthrough', '/raise/pitch/present'],

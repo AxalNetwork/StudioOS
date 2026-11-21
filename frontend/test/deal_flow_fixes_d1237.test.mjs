@@ -23,10 +23,12 @@ test('only an explicit readable deal is a door; membership and unknown access ne
   ];
   const html=renderToStaticMarkup(h(MemoryRouter,null,h(DealRoomsList,{dealsState:{loading:false,deals},quotaState:quota})));
   // D4815: a readable room is a door twice (its name and Open deal), to the same deal page.
-  assert.deepEqual([...new Set([...html.matchAll(/href="([^"]+)"/g)].map(m=>m[1]))],['/deals/2','/deals/3']);
+  // D6151: See plans (/pricing) is the allowance line's link, not a door to a deal.
+  assert.deepEqual([...new Set([...html.matchAll(/href="([^"]+)"/g)].map(m=>m[1]).filter(u=>u.startsWith('/deals/')))],['/deals/2','/deals/3']);
   for(const d of deals)assert.ok(html.includes(d.project_name));
-  assert.match(html,/An invitation or commitment is needed to open this deal\./);
-  assert.match(html,/Deal access could not be confirmed\./);
+  // D6151 (DE19): the access words.
+  assert.match(html,/Invitation needed/);
+  assert.match(html,/! Access unreadable/);
 });
 
 test('requesting opens the explanation first; Back writes nothing and confirmation writes once',async()=>{

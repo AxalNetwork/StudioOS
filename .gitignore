@@ -32,6 +32,12 @@ yarn-error.log*
 # Nothing reads it back; every script and test reads the fragments.
 documentation/architecture/route-map/ROUTE_MAP.combined.md
 
+# The R2 inventory (D6650, #6650): every R2 mutator call site and its class,
+# written by `node scripts/build-r2-inventory.mjs --write` from the Worker
+# source and the reviewed policy in documentation/operations/R2_INVENTORY.json.
+# Generated, so never committed (D5612): `--check` fails if it is tracked.
+documentation/operations/R2_INVENTORY.md
+
 # Vite / build output. `docs/` is NOT committed (D529): the Cloudflare Worker
 # serves it from its `[assets]` binding on both axal.vc and app.axal.vc, and
 # every job that needs it builds it from `frontend/` first — the deploy, the PR
@@ -148,3 +154,30 @@ agent-compute/worker-configuration.d.ts
 agent-compute/__pycache__/
 # D4594 part 3: hosted Stage A's throwaway Worker config, written and deleted by scripts/agent-stage-a.mjs.
 wrangler.s4594.*.toml
+# D4870 part 2: the gateway live check's throwaway Worker config, written and deleted by scripts/gateway-live-check.mjs.
+wrangler.s4870.*.toml
+
+# D5682 (#5682): the section reporting route coverage table is build output.
+# `node scripts/build-section-coverage.mjs --write` writes it; `--check` fails if it is committed again.
+documentation/architecture/SECTION_COVERAGE.md
+
+# D7741 (#7741): private research payloads never enter git. A pushed branch of
+# this repository is public, so these rules are the prevention; the check in
+# cloudflare-worker/test/private_payload_guard_7741.test.mjs reads the lines
+# below and fails on a tracked match, which is an incident (D7741), not a fix.
+# The exact names of the two delivered files (the import-package JSON and the
+# four-source capture archive) are not recorded anywhere; these lines cover
+# their described shape until the owner confirms them.
+*.private.*
+private-payloads/
+*import-package*.json
+*import_package*.json
+*four-source*
+*four_source*
+*4-source*
+*4_source*
+*capture*.zip
+*capture*.tar
+*capture*.tar.gz
+*capture*.tgz
+*capture*.7z

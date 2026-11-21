@@ -52,6 +52,15 @@ export const eventsApi = {
   coverDraw: (id, prompt) => request(`/events/${id}/cover/draw`, { method: 'POST', body: JSON.stringify({ prompt }) }),
   // PATCH /:id — edit (host or admin).
   update: (id, data) => request(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // #5871 (D5871, NE1): "Create the meeting for me". The same Save (POST / for a
+  // new event, PATCH /:id for a saved one) with `add_meet: true`: the Worker
+  // makes the Google Meet link on the host's own Google account inside the
+  // save and deletes it again if the save fails. The reply's event carries it
+  // as `location_url`; a refusal is `e.code` (`meet_not_connected`, …) and
+  // the Worker's own sentence.
+  saveWithMeet: (id, data) => (id
+    ? request(`/events/${id}`, { method: 'PATCH', body: JSON.stringify({ ...data, add_meet: true }) })
+    : request('/events', { method: 'POST', body: JSON.stringify({ ...data, add_meet: true }) })),
   // POST /:id/submit-review — founder "publish public" → pending_review.
   submitReview: (id) => request(`/events/${id}/submit-review`, { method: 'POST', body: JSON.stringify({}) }),
   // POST /:id/invitations — invite from network/connections or emails.

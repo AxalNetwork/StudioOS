@@ -16,7 +16,7 @@
  *   · "Activity", with "Show all";
  *   · "Actions", a danger action in red.
  */
-import { createContext, useContext } from 'react';
+import { createContext, Suspense, useContext } from 'react';
 import { PhoneRows } from '../../ui';
 import { isPlainClick } from './cycleModel.js';
 import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, toneOf } from './recordModel.js';
@@ -24,6 +24,7 @@ import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, t
 import { NR } from './CycleModulePage.jsx';
 import { RecordHeaderRow, useRecordHeader } from './RecordHeader.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
+import { sectionExtra } from './recordSectionExtras.js';
 const PILL = {
   v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
   v2: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
@@ -64,8 +65,8 @@ function runOf(action, { onLink, onForm, onWrite, onClient }) {
 }
 
 /** A group of phone rows inside the body's gutter: `PhoneRows` draws its own. */
-function PhoneGroup({ id, testid, label, rows }) {
-  return <section id={id} className="-mx-[22px] scroll-mt-[1rem]" data-testid={testid}><PhoneRows groups={[{ label, rows }]} /></section>;
+function PhoneGroup({ id, testid, label, rows, note }) {
+  return <section id={id} className="-mx-[22px] scroll-mt-[1rem]" data-testid={testid}><PhoneRows groups={[{ label, rows, note }]} /></section>;
 }
 const danger = (label) => <span className="text-red-700 dark:text-red-300">{label}</span>;
 
@@ -91,7 +92,8 @@ export function RecordActions({ actions = [], ...handlers }) {
   const phone = useRecordPhone();
   const { emailTo, onEmail } = useRecordHeader();
   if (phone) {
-    const rows = actions.filter((action) => dispatchOf(action)).map((action) => ({
+    // D6101: a `row_only` action (a KPI entry's Remove) runs from its section row alone.
+    const rows = actions.filter((action) => dispatchOf(action) && !action.row_only).map((action) => ({
       key: action.key, title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers),
     }));
     // D1454 (#3710): Email is one of the record's actions on a phone too, never a row of its own above the page.
@@ -99,7 +101,7 @@ export function RecordActions({ actions = [], ...handlers }) {
     return rows.length ? <PhoneGroup testid="record-actions" label="Actions" rows={rows} /> : null;
   }
   return <div className="flex flex-wrap items-center gap-1.5" data-testid="record-actions">
-    {actions.map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
+    {actions.filter((action) => !action.row_only).map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
   </div>;
 }
 
@@ -120,7 +122,7 @@ export function RecordFacts({ facts = [], declarations = new Map(), handlers = {
         : { key: index, title: fact.label, description: fact.reason || undefined, notRecorded: true, notRecordedReason: fact.reason || undefined };
     })} />;
   }
-  return <div className="grid auto-rows-fr grid-cols-1 gap-2.5 @[760px]/cycle:grid-cols-4" data-testid="record-facts">
+  return <div className={`grid auto-rows-fr grid-cols-1 gap-2.5 ${facts.length === 3 ? '@[760px]/cycle:grid-cols-3' : '@[760px]/cycle:grid-cols-4'}`} data-testid="record-facts">
     {facts.map((fact, index) => {
       const action = actionOf(fact);
       return <div key={index} className="flex h-full min-w-0 flex-col gap-1 rounded-xl border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-700 dark:bg-gray-900">
@@ -141,7 +143,10 @@ export function RecordPills({ pills = [] }) {
   })}</> : null;
 }
 
-export function RecordSection({ section, side = false, cycleName, moduleName, declarations = new Map(), ...handlers }) {
+export function RecordSection({ section, side = false, cycleName, moduleName, declarations = new Map(), record = null, ...handlers }) {
+  // D6862: a part this section draws below its rows (Verdict's Memo: who the decision is shared with).
+  const Extra = record ? sectionExtra(record, section) : null;
+  const extra = Extra ? <Suspense fallback={null}><Extra record={record} /></Suspense> : null;
   const action = rowAction(section.action, declarations);
   const rows = section.rows ?? [];
   if (useRecordPhone()) {
@@ -152,14 +157,20 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
       const right = row.c === '' ? {} : tone ? { pill: { label: text(row.c), tone: PILL_TONE[tone] || 'neutral' } } : { value: text(row.c) };
       const go = row.href ? (handlers.onLink ? { onClick: () => handlers.onLink({ kind: 'link', href: row.href }) } : { href: row.href })
         : own ? runOf(own, handlers) : {};
-      return { key: index, title: text(row.a), description: text(row.b) || undefined, ...right, ...go };
-    });
+      const main = { key: index, title: text(row.a), description: text(row.b) || undefined, ...right, ...go };
+      // D6113 (#6113): a row's further actions as their own rows beneath it, the row's text as their description.
+      const more = (row.actions ?? []).map((ref) => rowAction(ref, declarations)).filter(Boolean).map((extra, n) => ({
+        key: `${index}-${n}`, title: extra.tone === 'danger' ? danger(extra.label) : extra.label, description: text(row.a) || undefined, ...runOf(extra, handlers),
+      }));
+      return [main, ...more];
+    }).flat();
     if (!rows.length) phoneRows.push({ key: 'empty', title: section.empty ? section.empty : 'Nothing recorded here yet.', chevron: false });
     if (action) phoneRows.push({ key: 'action', title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers) });
     // D1082 (LV8a): an experiment's Build in Lovable below its group on the phone; the dialog is a full-height sheet there.
     const lovable = rows.map((raw) => rowView(raw)).filter((row) => row.lovable && (row.lovable.can_launch || row.lovable.opened_at));
     return <>
-      <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} />
+      <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} note={section.note} />
+      {extra}
       {lovable.map((row, index) => <div key={`lovable-${index}`} className="flex flex-col gap-1 text-[12.5px]" data-testid="record-lovable-row">
         <p className="m-0 text-axal-ink dark:text-gray-200">{text(row.a)}</p><BuildInLovable lovable={row.lovable} /></div>)}
     </>;
@@ -172,6 +183,9 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
     {rows.length === 0 ? <p className="px-4 py-3 text-[12.5px] text-axal-muted dark:text-gray-400">{section.empty || 'Nothing recorded here yet.'}</p> : rows.map((raw, index) => {
       const row = rowView(raw);
       const ownAction = rowAction(row.action, declarations);
+      // D6113 (#6113): the row's further actions, after its own.
+      const more = (row.actions ?? []).map((ref) => rowAction(ref, declarations)).filter(Boolean)
+        .map((extra) => <RecordAction key={extra.key} action={extra} quiet {...handlers} />);
       return <div key={index} className={side
         ? 'flex items-center justify-between gap-2.5 border-b border-axal-ground px-4 py-[9px] text-[12.5px] last:border-b-0 dark:border-gray-800'
         : 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] items-center gap-3 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 dark:border-gray-800'}>
@@ -182,11 +196,14 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
           {text(row.b)}
           {side && row.c !== '' && <span className="ml-2"><Status value={row.c} tone={row.tone} /></span>}
           {side && ownAction && <span className="ml-2"><RecordAction action={ownAction} quiet {...handlers} /></span>}
+          {side && more.map((node) => <span key={node.key} className="ml-2">{node}</span>)}
         </div>
-        {!side && <div className="flex items-center gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}
+        {!side && <div className="flex items-center gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}{more}
           {row.lovable && <BuildInLovable lovable={row.lovable} />}</div>}
       </div>;
     })}
+    {section.note && <p className="m-0 px-4 pb-3 pt-2 text-[12px] text-axal-muted dark:text-gray-400">{section.note}</p>}
+    {extra}
   </section>;
 }
 
@@ -223,9 +240,10 @@ function RecordNext({ next, declarations, handlers }) {
   </section>;
 }
 
+
 export default function RecordView({ record, activity, cycleName, moduleName, ...handlers }) {
   const declarations = declaredActions(record);
-  const context = { cycleName, moduleName, declarations, ...handlers };
+  const context = { cycleName, moduleName, declarations, record, ...handlers };
   if (useRecordPhone()) {
     const phoneActivity = activity ?? record.activity;
     return <div className="flex flex-col gap-[18px]" data-testid="record-view" data-phone="true">

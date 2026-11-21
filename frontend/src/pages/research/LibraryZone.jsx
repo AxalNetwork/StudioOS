@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Pill, Stat } from '../../ui';
 import { formatCost } from '../../ui/assistCost';
 import { api } from '../../lib/api';
@@ -13,7 +14,10 @@ import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { createRecordGate } from './recordGate.js';
 import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
-import { answerabilityOf, indexStateOf, rowProblem } from './researchStates.js';
+import {
+  UPLOAD_ACCEPT, answerabilityOf, filterLibrary, indexStateOf, isFiltered, libraryFiltersFrom,
+  libraryOptions, librarySearchFor, rowProblem, uploadRefusal,
+} from './researchStates.js';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -69,7 +73,27 @@ const KINDS = [
   { value: 'legal', label: 'Legal' },
   { value: 'playbook', label: 'My playbook' },
   { value: 'client', label: 'About a client' },
+  { value: 'diligence', label: 'Diligence' },
 ];
+/**
+ * D6282: the kinds each licence is offered. An investor has no clients and no
+ * playbook to reuse with them, so `My playbook` and `About a client` were two
+ * options that could not describe anything they hold; `Diligence` is theirs.
+ * Every other licence keeps exactly the six it had. A document already filed
+ * under a kind its licence is not offered keeps that kind in the edit list, so
+ * opening the editor never silently reclassifies it.
+ */
+const KINDS_BY_ROLE = {
+  investor: ['document', 'report', 'primary', 'legal', 'diligence'],
+};
+const DEFAULT_KINDS = ['document', 'report', 'primary', 'legal', 'playbook', 'client'];
+export function kindOptionsFor(role, current) {
+  const values = KINDS_BY_ROLE[role] || DEFAULT_KINDS;
+  const withCurrent = current && !values.includes(current) && KINDS.some((k) => k.value === current) ? [...values, current] : values;
+  return withCurrent.map((value) => KINDS.find((k) => k.value === value));
+}
+/** D6282: an investor's library holds no client's files, so its copy never mentions one. */
+export const hasClients = (role) => role !== 'investor';
 // The artboard tints kind as well as state, and the two must not read alike: a
 // kind is what a document IS and can never be wrong, so none of these is a
 // status colour. `seam` and `cite` are the two provenance tones `Pill` carries
@@ -157,7 +181,15 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // The zone header row's view, owned here because only this page has the rows.
   // `zoneFiltersByRole` decides WHICH views this licence is offered; the
   // predicate below is the same for all four, because it is the same store.
-  const [filter, setFilter] = useState('all');
+  //
+  // D6281: the view, the search and the four RS-06 filters live in the URL, so
+  // a reload or Back lands on the same list. Written in place (`replace`):
+  // typing a search adds no history entry per letter.
+  const [params, setParams] = useSearchParams();
+  const filters = libraryFiltersFrom(params);
+  const filter = filters.view;
+  const setFilters = (patch) => setParams((current) => librarySearchFor(current, patch), { replace: true });
+  const setFilter = (next) => setFilters({ view: typeof next === 'function' ? next(filter) : next });
   const [busy, setBusy] = useState(false);
   // D771 (#2097): `busy` also covers Remove, so an upload or a re-index names itself to the rail on its own.
   const [running, setRunning] = useState(null);
@@ -173,7 +205,8 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   const fileRef = useRef(null);
   const collectionRef = useRef(null);
   const [collectionState, setCollectionState] = useState({ loading: true, error: '', items: [] });
-  const [collectionUid, setCollectionUid] = useState('');
+  const collectionUid = filters.collection;
+  const setCollectionUid = (uid) => setFilters({ collection: uid });
   const [newCollectionOpen, setNewCollectionOpen] = useState(false);
   const loadCollections = useCallback(async () => {
     setCollectionState((current) => ({ ...current, loading: true, error: '' }));
@@ -254,10 +287,10 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
     return () => { live = false; };
   }, [wantsAsk, askTry]);
 
-  const upload = async (e) => {
-    e.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) { setNote({ ok: false, text: 'Choose a file first.' }); return; }
+  // D6281: the form and a dropped file send through one path. A dropped file
+  // is checked first (type and size, the Worker's own two rules) and refused
+  // with the reason, so nothing is sent that the Worker would turn away.
+  const sendFile = async (file) => {
     setBusy(true); setNote(null); setRunning('upload');
     try {
       const fd = new FormData();
@@ -275,6 +308,26 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
     } catch (err) {
       setNote({ ok: false, text: err?.message || 'That could not be uploaded. Nothing was saved.' });
     } finally { setBusy(false); setRunning(null); }
+  };
+  const upload = async (e) => {
+    e.preventDefault();
+    const file = fileRef.current?.files?.[0];
+    if (!file) { setNote({ ok: false, text: 'Choose a file first.' }); return; }
+    await sendFile(file);
+  };
+  const [dragging, setDragging] = useState(false);
+  const dropped = async (e) => {
+    e.preventDefault();
+    setDragging(false);
+    if (busy) return;
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length !== 1) {
+      setNote({ ok: false, text: files.length ? 'Drop one file at a time. Nothing was added.' : 'Nothing was dropped.' });
+      return;
+    }
+    const refused = uploadRefusal(files[0]);
+    if (refused) { setNote({ ok: false, text: `${refused} Nothing was sent.` }); return; }
+    await sendFile(files[0]);
   };
 
   const remove = async (uid) => {
@@ -307,12 +360,19 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // `chunk_count` alone, so a document that indexed once and later failed a
   // re-index still carries its old count while being unreadable to Ask. Reading
   // the number here would hide exactly the documents this view is for.
-  const visible = items.filter((d) => {
-    if (collectionUid && !collectionState.items.find((item) => item.uid === collectionUid)?.document_uids?.includes(d.uid)) return false;
-    if (['client', 'playbook', 'report', 'primary', 'legal'].includes(filter)) return d.kind === filter;
+  //
+  // D6281: the search and RS-06's four filters are `filterLibrary`
+  // (researchStates.js); the profile's chip view below stays here, where the
+  // zone-filter guard reads its keys.
+  const members = collectionState.items.find((item) => item.uid === collectionUid)?.document_uids || null;
+  const visible = filterLibrary(items, filters, members).filter((d) => {
+    if (['client', 'playbook', 'report', 'primary', 'legal', 'diligence'].includes(filter)) return d.kind === filter;
     if (filter === 'unindexed') return d.index_state !== 'indexed';
     return true;
   });
+  const options = libraryOptions(items);
+  const narrowed = isFiltered(filters);
+  const clearFilters = () => setFilters({ q: '', type: '', index: '', answerable: '', collection: '', view: 'all' });
   // Clicking the active chip clears it. Two of the four canvases carry no `All`
   // of their own, and adding one the artboard never drew is not this table's
   // call to make — so the chip that is on is also the way back off it.
@@ -409,24 +469,45 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
            field the rows show — not what is indexed. An indexed client share
            is indexed and is not answerable here, and this pill used to count
            it as both. */
-        action={payload && Number.isFinite(Number(payload.answerable)) ? (
-          <Pill tone={payload.not_answerable > 0 ? 'warn' : 'ok'}>
-            {payload.answerable} answerable
-            {payload.not_answerable > 0 ? ` · ${payload.not_answerable} not` : ''}
-          </Pill>
-        ) : null}
+        action={(
+          <div className="flex flex-wrap items-center gap-2">
+            {payload && Number.isFinite(Number(payload.answerable)) ? (
+              <Pill tone={payload.not_answerable > 0 ? 'warn' : 'ok'}>
+                {payload.answerable} answerable
+                {payload.not_answerable > 0 ? ` · ${payload.not_answerable} not` : ''}
+              </Pill>
+            ) : null}
+            {/* D6281 (D3701's header departure): Upload document is the
+                header's one primary action. It opens the same picker as the
+                upload card below, so there is still one upload path. */}
+            <button type="button" className={`${buttonClass} min-h-[44px] sm:min-h-0`} data-testid="library-upload-primary"
+              disabled={busy} onClick={() => fileRef.current?.click()}>
+              Upload document
+            </button>
+          </div>
+        )}
       />
 
       <Card className="p-4">
+        {/* RS-06: "Drop files here". A drop runs the same upload as the form,
+            with the kind and title chosen below; a file the Worker would
+            refuse is refused here first, with the reason. */}
+        <div data-testid="library-drop" aria-label="Drop a file to add it to your library"
+          className={`mb-3 rounded-xl border-[1.5px] border-dashed p-3.5 text-center text-[12.5px] text-axal-muted ${dragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-axal-hairline dark:border-gray-700'}`}
+          onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={dropped}>
+          Drop a file here · PDF, Word, PowerPoint, text, markdown or CSV, up to 20 MB
+        </div>
         <form onSubmit={upload}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="File" hint="PDF, Word, PowerPoint, text, markdown or CSV. Up to 20 MB.">
               <input ref={fileRef} type="file" className={inputClass}
-                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv" />
+                accept={UPLOAD_ACCEPT} />
             </Field>
             <Field label="What it is">
               <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
-                {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                {kindOptionsFor(role).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
               </select>
             </Field>
             <Field label="Title" hint="Leave blank to use the filename.">
@@ -492,6 +573,43 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           onSaved={loadCollections} />
       </div>
 
+      {/* D6281 (RS-06): Search documents, then Type, Index state, Answerable
+          in Ask and Collection. They narrow the list already read; the Worker
+          is not asked again. Each is a URL parameter. */}
+      {items.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-5" data-testid="library-filters" role="search">
+          <label className="text-[12px] sm:col-span-1">Search documents
+            <input type="search" className={inputClass} value={filters.q} placeholder="Title"
+              onChange={(e) => setFilters({ q: e.target.value })} />
+          </label>
+          <label className="text-[12px]">Type
+            <select className={inputClass} value={filters.type} onChange={(e) => setFilters({ type: e.target.value })}>
+              <option value="">Any type</option>
+              {options.type.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="text-[12px]">Index state
+            <select className={inputClass} value={filters.index} onChange={(e) => setFilters({ index: e.target.value })}>
+              <option value="">Any state</option>
+              {options.index.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="text-[12px]">Answerable in Ask
+            <select className={inputClass} value={filters.answerable} onChange={(e) => setFilters({ answerable: e.target.value })}>
+              <option value="">Either</option>
+              {options.answerable.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="text-[12px]">In collection
+            <select className={inputClass} value={filters.collection} disabled={collectionState.loading || !!collectionState.error}
+              onChange={(e) => setCollectionUid(e.target.value)}>
+              <option value="">{collectionState.error ? 'Collections unreadable' : 'Any collection'}</option>
+              {collectionState.items.map((c) => <option key={c.uid} value={c.uid}>{c.name}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+
       <ZoneBody
         loading={state.loading}
         error={state.error}
@@ -500,10 +618,26 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         empty={(
           <NothingYet
             title="Nothing in your library yet"
-            body="Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything and no client has opened a file to you, not that something failed to arrive."
+            body={hasClients(role)
+              ? 'Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything and no client has opened a file to you, not that something failed to arrive.'
+              : 'Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything, not that something failed to arrive.'}
           />
         )}
       >
+        {/* D6281: a narrowed list with nothing left says so and offers the way
+            back, rather than an empty table that reads like an empty library. */}
+        {narrowed && visible.length === 0 && (
+          <Card className="p-4" data-testid="library-no-match">
+            <p className="text-[13px] font-bold">No document matches</p>
+            <p className="mt-1 text-[12px] text-axal-muted">
+              {filters.collection && !members
+                ? 'The collection could not be read, so its documents cannot be listed.'
+                : `None of your ${items.length} ${items.length === 1 ? 'document matches' : 'documents match'} this search and these filters.`}
+            </p>
+            <button type="button" className={`${ghostButtonClass} mt-2 min-h-[44px] sm:min-h-0`} onClick={clearFilters}>Clear</button>
+          </Card>
+        )}
+        {(visible.length > 0 || !narrowed) && (<>
         {/* D3701 RS-10C: on a phone the rows are cards, each with both
             states and its Retry. The table below is for wider screens. */}
         <ul className="space-y-2.5 sm:hidden" data-testid="library-cards">
@@ -611,7 +745,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         would be a control that cannot act. */}
                     {d.source !== 'client' && d.read_only !== true && (
                       <>
-                        <DocumentMetadata document={d} onSaved={load} />
+                        <DocumentMetadata document={d} onSaved={load} role={role} />
                         {problem?.action === 'retry' ? null : (
                           <button
                             type="button" disabled={busy} onClick={() => reindex(d.uid)}
@@ -639,6 +773,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             : `Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
         />
         </div>
+        </>)}
 
         {/* THE ARTBOARD'S PAIR NOTE, and the only one in the Research set. It
             earns its place because the `In Ask` column above is meaningless
@@ -648,8 +783,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           What is indexed here is precisely what Ask can answer over. With an empty library
           Ask has no empty-state prose to fall back on — it can only report that nothing is
           indexed, which is why an unindexed document is a working gap rather than
-          housekeeping. A document a client opened to you is read-only: you can read it,
-          and changing it is not yours to do.
+          housekeeping.{hasClients(role) && ' A document a client opened to you is read-only: you can read it, and changing it is not yours to do.'}
         </PairNote>
 
         <ZoneDraft
@@ -672,7 +806,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           through one. What is still worth stating is the half a reader would
           otherwise get wrong: a shared document is listed and unreachable, and
           those are not a contradiction. */}
-      <StatedLimit title="What a shared document does and does not do">
+      {hasClients(role) && <StatedLimit title="What a shared document does and does not do">
         <p>
           A client can open one of their own files to you, through a grant they control and
           can revoke. It is listed here with their name on it, you can read it, and it is
@@ -688,13 +822,13 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           So an empty library means you have uploaded nothing and nobody has opened
           anything to you. It never means something was shared and failed to arrive.
         </p>
-      </StatedLimit>
+      </StatedLimit>}
     </div>
   );
 }
 
 /** D549: editing metadata never changes a shared client's row. */
-export function DocumentMetadata({ document, onSaved }) {
+export function DocumentMetadata({ document, onSaved, role = 'founder' }) {
   const [title, setTitle] = useState(document.title || '');
   const [kind, setKind] = useState(document.kind || 'document');
   const [year, setYear] = useState(document.source_year ?? '');
@@ -713,7 +847,7 @@ export function DocumentMetadata({ document, onSaved }) {
     <summary className="cursor-pointer">Edit title, kind or source year</summary>
     <form className="mt-2 space-y-2" onSubmit={save}>
       <label className="block">Title<input className={inputClass} value={title} maxLength={300} required disabled={busy} onChange={(event) => setTitle(event.target.value)} /></label>
-      <label className="block">Kind<select aria-label="Kind" className={inputClass} value={kind} disabled={busy} onChange={(event) => setKind(event.target.value)}>{KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <label className="block">Kind<select aria-label="Kind" className={inputClass} value={kind} disabled={busy} onChange={(event) => setKind(event.target.value)}>{kindOptionsFor(role, document.kind).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <label className="block">Source year<input className={inputClass} type="number" min={1000} max={new Date().getUTCFullYear() + 1} value={year} disabled={busy} onChange={(event) => setYear(event.target.value)} /></label>
       <span>{document.source_year == null ? 'Not recorded' : document.source_year}</span>
       <button className={buttonClass} type="submit" disabled={busy}>Save metadata</button>

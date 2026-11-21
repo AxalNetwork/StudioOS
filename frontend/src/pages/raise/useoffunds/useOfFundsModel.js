@@ -20,6 +20,7 @@
 
 // #4574 (H4): the addresses live in their own small file so a redirect can import them without this model.
 import { SLUG, HOME_PATH } from './useOfFundsPaths.js';
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 export { SLUG, HOME_PATH };
 export const TITLE = 'Use of funds';
 export const LINE = 'What the raise pays for, by section, and how long it lasts.';
@@ -39,12 +40,26 @@ const TAB_WORDS = new Set(TABS.filter((t) => t.path).map((t) => t.id));
 /** True when CycleRoute's record id under this module is a tab, not a section. */
 export const isUseOfFundsTab = (slug, id) => slug === SLUG && TAB_WORDS.has(String(id ?? ''));
 
-/** The query a tab keeps: the venture only. */
+/** The query a tab keeps: the venture only, in the one form (D5074, `ventureQuery.js`). */
 export function tabSearch(search = '') {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const project = from.get('project_id') || from.get('project');
-  return project && /^[1-9]\d*$/.test(project) ? `?project_id=${project}` : '';
+  return ventureSearch(ventureRef(search)?.id);
 }
+
+/**
+ * D5074 slice 5 (#5074): who the viewer is on Use of funds, from the plan read's `capabilities` alone
+ * (`cloudflare-worker/src/services/useOfFunds/capabilities.ts`, the map the Worker refuses writes from). `true`
+ * allows; no map, an unknown key or any other value allows nothing. The shape is the one the page has always read
+ * (`kind`, `can_write`, `mercury`), so each control keeps its words: `can_write` is `edit`, `mercury` is the
+ * founder's own Mercury figures, and `kind` is `admin` when the caller's changes are logged under an admin's name.
+ */
+export function uofViewer(capabilities) {
+  const caps = capabilities && typeof capabilities === 'object' ? capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  return { known: !!caps, kind: can('admin_logged') ? 'admin' : 'founder', can_write: can('edit'), mercury: can('mercury') };
+}
+
+/** The plan read's viewer, from its capability map (never the read's own `viewer` field or the account). */
+export const planViewer = (plan) => uofViewer(plan?.capabilities);
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
@@ -166,18 +181,45 @@ export function afterRaiseView(base) {
     sub: sourceText('Modelled', target ? `your target ${target}` : 'no target recorded') };
 }
 
+/**
+ * D6081 (#6081): Committed, from the round (UF1, RA-21). The plan read's `committed` block carries
+ * Capital relationships' commitments under that tool's access rules. Only a read figure is a figure:
+ * Unavailable and Refused say so, and Remaining is shown only beside a read Committed, never as $0.
+ */
+export function committedView(block) {
+  const v = block?.state === 'ok' ? block.value : null;
+  if (v) {
+    const value = money(v.counted_cents, v.currency);
+    const target = money(v.target_cents, v.currency);
+    const words = (v.statuses || []).map((x) => x.label).join(', ');
+    const missing = v.amount_not_recorded ? `${v.amount_not_recorded} with no amount` : null;
+    const sub = [target ? `of ${target}` : 'no target recorded', words || 'nothing counted yet', missing, 'from the round'].filter(Boolean).join(' · ');
+    let foot = null;
+    if (typeof v.remaining_cents === 'number') {
+      foot = `Target ${target} · committed ${value} · ${v.remaining_cents >= 0 ? `remaining ${money(v.remaining_cents, v.currency)}` : `over the target by ${money(-v.remaining_cents, v.currency)}`}`;
+    }
+    const footReason = foot ? null : v.amount_not_recorded ? 'Remaining is not shown: a counted commitment has no amount recorded.' : 'Remaining is not shown: the round records no target.';
+    const received = money(v.received_cents, v.currency);
+    return { state: 'ok', value, sub, foot, footReason, tie: `Committed ${value}${received ? ` · received ${received}` : ''}${words ? ` · ${words}` : ''}` };
+  }
+  const reason = block?.reason || 'The commitments could not be read, so Remaining is not shown. It is not $0.';
+  if (block?.state === 'not_recorded') return { state: 'not_recorded', value: null, sub: reason, href: block.href || null, link: 'Capital relationships › Commitments' };
+  if (block?.state === 'refused') return { state: 'refused', value: 'Refused', muted: true, sub: reason };
+  return { state: 'unavailable', value: 'Unavailable', muted: true, sub: reason };
+}
+
 /** The Home tiles (UF1): Raise, Runway today, Runway after the raise, Committed. */
 export function homeTiles(plan) {
   const base = baseOf(plan);
   const raise = raiseView(plan);
-  const today = runwayTodayView(plan?.runway_today, plan?.viewer);
+  const today = runwayTodayView(plan?.runway_today, planViewer(plan));
   const after = afterRaiseView(base);
+  const committed = committedView(plan?.committed);
   return [
     { key: 'raise', label: 'Raise', value: raise.value, sub: raise.sub },
     { key: 'today', label: 'Runway today', value: today.value, sub: today.sub, muted: today.state === 'founder_only' },
     { key: 'after', label: 'Runway after the raise', value: after.value, sub: after.sub },
-    // No read carries a round's commitments yet, so Committed says so rather than show a figure.
-    { key: 'committed', label: 'Committed', value: null, sub: 'Commitments are not read here yet.' },
+    { key: 'committed', label: 'Committed', value: committed.value, sub: committed.sub, muted: !!committed.muted, href: committed.href, link: committed.link },
   ];
 }
 
@@ -247,7 +289,7 @@ export function tiesRows(plan) {
   const raise = raiseView(plan);
   if (round) {
     rows.push({ key: 'round', eyebrow: 'Round', text: raise.value ? `The plan raises ${raise.value}` : 'No round size is recorded.',
-      sub: raise.value ? raise.sub : round.reason, pill: round.disagreements?.length ? '! Different raise' : raise.value ? '✓ Same raise' : null,
+      sub: committedView(plan?.committed).tie || (raise.value ? raise.sub : round.reason), pill: round.disagreements?.length ? '! Different raise' : raise.value ? '✓ Same raise' : null,
       tone: round.disagreements?.length ? 'amber' : 'green' });
   }
   const cap = plan?.ties?.cap_table;
@@ -265,6 +307,119 @@ export function tiesRows(plan) {
       tone: d.state === 'synced' ? 'green' : 'amber', href: d.href ? d.href.replace(/^\/raise\/pitch\?project=(\d+)$/, '/raise/pitch?project_id=$1') : null });
   } else if (deck?.state === 'unreadable') rows.push({ key: 'deck', eyebrow: 'Pitch deck', text: 'The pitch deck could not be read.', sub: null, pill: null });
   return rows;
+}
+
+/* ------------------------------------------------------------------ *
+ * D5081 (#5081; Raise v2 boards RA-14, RA-21) — the tool owns its Home:
+ * its frame, its one primary action, its dependencies marked from the
+ * plan read, runway recorded against modelled, the milestones funded and
+ * the first-use setup actions. Every mark comes from a block the plan
+ * read already carries; a dependency it does not read is not drawn.
+ * ------------------------------------------------------------------ */
+
+/** Home's frame (RA-21 A) and the tool's primary action (RA-14's table). */
+export const HOME_FRAME = 'What does this round buy us?';
+export const SET_ACTION = 'Set raise & allocation';
+
+/**
+ * The module header's primary action on Home, from Home's own plan read: Set raise & allocation, which opens
+ * Edit split. None while the plan is unread or unreadable, for a viewer who cannot write, or on first use, where
+ * the empty state's first action is the page's one primary (D5076's rule). Never Build your deck.
+ */
+export function homeAction(read) {
+  const plan = read && read.status !== 'unreadable' ? read.data : null;
+  if (!plan || !planViewer(plan).can_write || plan.base?.state !== 'ok' || planEmpty(plan)) return null;
+  return { label: SET_ACTION, dialog: 'split' };
+}
+
+/** The dependency marks (RA-21, RA-23's words). */
+export const MARK = { current: 'Current', stale: 'Stale', unavailable: 'Unavailable', not_linked: 'Not linked', founder_only: 'Founder only', refused: 'Refused' };
+const MARK_TONE = { current: 'green', stale: 'amber', unavailable: 'red', not_linked: 'dashed', founder_only: 'neutral', refused: 'neutral' };
+const dep = (key, eyebrow, mark, text, why = null, href = null) => ({ key, eyebrow, mark, word: MARK[mark], tone: MARK_TONE[mark], text, why, href });
+
+/**
+ * What this plan depends on (RA-21 A), each marked Current, Stale, Unavailable or Not linked from the plan read:
+ * the round (`round`), its commitments (`committed`), the cap table and the deck (`ties`) and Mercury
+ * (`runway_today.sources.mercury`). Stale means the record and this plan disagree, or the deck's Ask slide is not
+ * marked in sync; Unavailable means the block could not be read, never that nothing is there. Readiness and a
+ * hiring plan are not in the plan read, so they are not drawn (D5081 names them as Worker follow-ups).
+ */
+export function dependencyRows(plan) {
+  const rows = [];
+  const raise = raiseView(plan);
+  const round = plan?.round;
+  if (!round) rows.push(dep('round', 'Round', 'unavailable', 'The round could not be read.'));
+  else if (!round.chosen) rows.push(dep('round', 'Round', 'not_linked', 'No round size is recorded.', round.reason || null));
+  else if (round.disagreements?.length) rows.push(dep('round', 'Round', 'stale', `The plan raises ${raise.value}`, 'Recorded round sizes differ.'));
+  else rows.push(dep('round', 'Round', 'current', `The plan raises ${raise.value}`, raise.sub));
+
+  const c = committedView(plan?.committed);
+  if (c.state === 'ok') rows.push(dep('committed', 'Capital relationships', 'current', `Committed ${c.value}`, c.sub));
+  else if (c.state === 'not_recorded') rows.push(dep('committed', 'Capital relationships', 'not_linked', 'No active round holds commitments.', c.sub, c.href));
+  else if (c.state === 'refused') rows.push(dep('committed', 'Capital relationships', 'refused', 'Commitments are not read for you here.', c.sub));
+  else rows.push(dep('committed', 'Capital relationships', 'unavailable', 'Commitments could not be read.', c.sub));
+
+  const cap = plan?.ties?.cap_table;
+  if (cap?.state === 'ok' && cap.value) {
+    const r = cap.value.rounds?.find((x) => x.value != null);
+    const name = cap.value.name || 'Cap-table scenario';
+    if (!r) rows.push(dep('cap', 'Cap table', 'not_linked', name, 'The scenario records no round amount.', '/raise/cap-table'));
+    else if (raise.cents != null && r.value !== raise.cents) rows.push(dep('cap', 'Cap table', 'stale', `${name} raises ${money(r.value)}`, raise.value ? `This plan raises ${raise.value}.` : null, '/raise/cap-table'));
+    else rows.push(dep('cap', 'Cap table', 'current', `${name} raises ${money(r.value)}`, sourceText('Modelled'), '/raise/cap-table'));
+  } else if (cap?.state === 'ok') rows.push(dep('cap', 'Cap table', 'not_linked', 'No cap-table scenario is recorded.', null, '/raise/cap-table'));
+  else rows.push(dep('cap', 'Cap table', 'unavailable', 'The cap table could not be read.'));
+
+  const deck = plan?.ties?.deck;
+  const d = deck?.state === 'ok' ? deck.value : null;
+  const deckHref = d?.href ? d.href.replace(/^\/raise\/pitch\?project=(\d+)$/, '/raise/pitch?project_id=$1') : null;
+  if (d?.state === 'synced') rows.push(dep('deck', 'Pitch deck', 'current', `v${d.version} · Ask slide`, dayText(d.synced_at) ? `In sync since ${dayText(d.synced_at)}` : 'In sync', deckHref));
+  else if (d?.state === 'out_of_sync') rows.push(dep('deck', 'Pitch deck', 'stale', `v${d.version} · Ask slide`, 'The Ask slide is not marked in sync with this plan.', deckHref));
+  else if (d) rows.push(dep('deck', 'Pitch deck', 'not_linked', 'No pitch deck is recorded.', null, deckHref));
+  else rows.push(dep('deck', 'Pitch deck', 'unavailable', 'The pitch deck could not be read.'));
+
+  const rt = plan?.runway_today;
+  const m = rt?.sources?.mercury;
+  const fact = (rt?.candidates || []).find((x) => x.kind === 'mercury');
+  if (m?.state === 'founder_only') rows.push(dep('mercury', 'Mercury', 'founder_only', 'Balance and burn', 'Mercury figures are visible to the founder only.'));
+  else if (m?.state === 'unreadable' || !m) rows.push(dep('mercury', 'Mercury', 'unavailable', 'Mercury could not be read.'));
+  else if (fact) rows.push(dep('mercury', 'Mercury', 'current', 'Balance and burn', dayText(fact.as_of) ? `Read ${dayText(fact.as_of)}` : null));
+  else rows.push(dep('mercury', 'Mercury', 'not_linked', 'No Mercury balance and burn are recorded.', null, '/account/connectors/mercury'));
+  return rows;
+}
+
+/** Runway, recorded against modelled (RA-21 A): today from its measured source, after the raise from the model, and the target. */
+export function runwayRows(plan) {
+  const base = baseOf(plan);
+  const today = runwayTodayView(plan?.runway_today, planViewer(plan));
+  const after = afterRaiseView(base);
+  return [
+    { key: 'today', label: 'Today', tag: today.state === 'recorded' ? 'Recorded' : today.state === 'founder_only' ? 'Founder only' : null, value: today.state === 'founder_only' ? null : today.value, sub: today.sub },
+    { key: 'after', label: 'After the raise', tag: 'Modelled', value: after.value, sub: after.value ? 'If the plan holds.' : after.sub },
+    { key: 'target', label: 'Your target', tag: base?.target_runway_months ? base.source || 'Typed' : null, value: base?.target_runway_months ? monthsText(base.target_runway_months) : null, sub: base?.target_runway_months ? null : 'Set it in Set raise & allocation.' },
+  ];
+}
+
+/** Milestones funded (RA-21 A): each milestone, the section that pays for it, its date and the model's word for it. */
+export function milestonesFunded(base) {
+  const states = new Map((base?.model?.milestones?.value || []).map((m) => [String(m.id), m.state]));
+  return (base?.milestones || [])
+    .slice().sort((a, b) => String(a.due_on || '9999').localeCompare(String(b.due_on || '9999')))
+    .map((m) => ({ id: m.id, label: m.label || NOT_RECORDED, section: sectionOf(m.category_key)?.label || NOT_RECORDED, by: m.due_on || null, state: states.get(String(m.id)) || null }));
+}
+
+/**
+ * First use (RA-14, #5081): the analytics collapse to at most three set-up actions, each one the plan read can
+ * back. Set raise & allocation for a writer; Connect Mercury when no runway today is measured and Mercury is the
+ * viewer's own to connect; Open Commitments when no active round holds commitments.
+ */
+export function setupActions(plan) {
+  const out = [];
+  if (planViewer(plan).can_write) out.push({ key: 'split', text: SET_ACTION, act: 'split' });
+  const rt = plan?.runway_today;
+  if (!rt?.chosen && planViewer(plan).mercury !== false && rt?.sources?.mercury?.state !== 'founder_only') out.push({ key: 'mercury', text: 'Connect Mercury', href: '/account/connectors/mercury' });
+  const c = committedView(plan?.committed);
+  if (c.state === 'not_recorded' && c.href) out.push({ key: 'round', text: 'Open Commitments', href: c.href });
+  return out.slice(0, 3);
 }
 
 /** The round's sources and which one the plan uses (UF13). */
@@ -309,3 +464,64 @@ export function historyRows(items = []) {
 
 /** Two letters for an avatar, from a name. */
 export const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '·';
+
+/* ------------------------------------------------------------------ *
+ * D6083 (#6083) — the section sheet (UF4, UF21c) and Add a hire (UF6),
+ * inside the tool. The sheet has its own address: `?section=<key>` on
+ * whichever tab opened it, beside the venture, so it opens from Home,
+ * Allocation and Milestones, survives a reload and closes with Back. A
+ * tab link drops it (`tabSearch` keeps the venture only).
+ * ------------------------------------------------------------------ */
+
+export const SECTION_PARAM = 'section';
+
+/** The open section's key from a query string, or null for none or an unknown key. */
+export function sheetSectionFrom(search = '') {
+  const key = new URLSearchParams(String(search || '').replace(/^\?/, '')).get(SECTION_PARAM);
+  return sectionOf(key) ? key : null;
+}
+
+/** The same query with the section sheet opened on `key`, or closed when `key` is null. Every other part is kept. */
+export function sectionSheetSearch(search = '', key = null) {
+  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  if (key && sectionOf(key)) q.set(SECTION_PARAM, key); else q.delete(SECTION_PARAM);
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+/**
+ * What the section sheet draws: the section's row (share, amount, a month), its
+ * milestones by month, its hires by start, what the hires cost against the
+ * amount, and the planned share against Mercury's measured one. `mercury` is
+ * the module read's Mercury part, the founder's alone (D1174); with none the
+ * actual share is null and the sheet says why.
+ */
+export function sectionSheet(base, key, mercury = null, months = 3) {
+  const s = sectionOf(key);
+  if (!s) return null;
+  const hireItems = base?.hires?.state === 'ok' ? base.hires.items : null;
+  const row = sectionRows(base, hireItems).find((r) => r.key === key);
+  const milestones = (base?.milestones || []).filter((m) => m.category_key === key)
+    .sort((a, b) => String(a.due_on || '9999').localeCompare(String(b.due_on || '9999')));
+  const hires = hireItems ? hireItems.filter((h) => h.category_key === key)
+    .sort((a, b) => String(a.start_month || '9999').localeCompare(String(b.start_month || '9999'))) : null;
+  const actual = mercury ? planVsActual(base, mercury, months).rows.find((r) => r.key === key) : null;
+  return { ...row, milestoneItems: milestones, hireItems: hires, actual: actual?.actual ?? null, asOf: mercury?.as_of || null, months };
+}
+
+/** The Add a hire body (UF6), or the sentence that says what to fix. An empty cost stays missing, never 0. */
+export function hireBody({ role, section, starts, cost, currency = 'usd' }) {
+  const r = String(role ?? '').trim();
+  if (!r) return { error: 'Name the role.' };
+  if (!sectionOf(section)) return { error: 'Choose the section it is paid from.' };
+  const from = String(starts ?? '').trim();
+  if (from && !/^\d{4}-(0[1-9]|1[0-2])$/.test(from)) return { error: 'A month is written like 2027-03.' };
+  const cur = String(currency || 'usd').trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(cur)) return { error: 'A currency is a three-letter code.' };
+  // The cost is read in the chosen currency's own minor units, never through USD's.
+  const typed = String(cost ?? '').trim().replace(/[$€£,\s]/g, '');
+  const parsed = typed === '' ? null : /^\d{1,13}(\.\d{1,3})?$/.test(typed) ? parseMinor(typed, cur.toUpperCase()) : { ok: false };
+  if (parsed && !parsed.ok) return { error: 'Write the cost a year as a number, like 140,000.' };
+  const cents = parsed ? parsed.minor : null;
+  return { body: { role: r, category_key: section, start_month: from || null, annual_cents: cents, currency: cur } };
+}

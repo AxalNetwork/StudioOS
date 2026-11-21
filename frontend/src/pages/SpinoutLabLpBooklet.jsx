@@ -503,7 +503,7 @@ export function SubscriptionBooklet() {
   }
 
   return (
-    <section className={`${CARD} px-6 py-5`} data-testid="lp-subscription-booklet">
+    <section id="subscription-booklet" className={`${CARD} scroll-mt-20 px-6 py-5`} data-testid="lp-subscription-booklet">
       <h2 className="mb-3 text-sm font-bold text-gray-900 dark:text-gray-100">{T.section}</h2>
       {content}
     </section>

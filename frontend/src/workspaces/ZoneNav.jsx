@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { ACCENT, zonePath as shellZonePath, zoneForPath } from './shellConfig';
 import { LensNavLink } from './lens';
 import { projectSearch } from '../pages/cycles/founderToolNavigation';
+import ZoneNavMore from './ZoneNavMore';
 
 /** A zone's route; the Overview item of an opt-in `row` (#4834) is the bucket root. */
 const zonePath = (bucket, zone) => (zone.to || (zone.root ? bucket.prefix : shellZonePath(bucket, zone)));
@@ -49,18 +50,31 @@ const zonePath = (bucket, zone) => (zone.to || (zone.root ? bucket.prefix : shel
  * first under that label, current on the root; `row.order` is the canvas's
  * slug order; `row.scroll` keeps the row on one line that scrolls sideways
  * below 1024px instead of wrapping, with 44px targets there.
- *
- * D4817 part 1 (#5311): `row.extra` adds items that are routes of the bucket
- * without being zones of it (`{ slug, label, to }`), placed by `row.order`.
- * Portfolio's local navigation names Performance beside its three zones, and
- * Performance is not a sidebar zone; nothing else passes it.
  */
-export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '', row = null }) {
+/**
+ * #6232: `carry` adds query values every pill keeps (`{ fund: 12 }` on the Fund
+ * overview, so each zone opens on the chosen fund). Without it the pills carry
+ * the project, as before.
+ */
+export function zoneSearch(search, carry) {
+  const base = projectSearch(search);
+  const extra = Object.entries(carry || {}).filter(([, v]) => v != null && v !== '');
+  if (!extra.length) return base;
+  const q = new URLSearchParams(base.replace(/^\?/, ''));
+  for (const [k, v] of extra) q.set(k, String(v));
+  return `?${q.toString()}`;
+}
+
+export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '', row: rowProp = null, carry = null }) {
   const location = useLocation();
+  const search = zoneSearch(location.search, carry);
   if (!bucket || !bucket.zones?.length) return null;
+  // D4828 (EX-04): a bucket may declare its own row (Expertise, `shellConfig.js`); `row.more` folds below 1024px.
+  const row = rowProp || bucket.row || null;
+  const more = new Set(Array.isArray(row?.more) ? row.more : []);
 
   const accent = ACCENT[role] || ACCENT.founder;
-  const zones = row?.extra?.length ? [...bucket.zones, ...row.extra] : bucket.zones;
+  const { zones } = bucket;
   const active = activeSlug === undefined
     ? zoneForPath(bucket, location.pathname)
     : (activeSlug === null ? null : zones.find((z) => z.slug === activeSlug) || null);
@@ -75,7 +89,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
   const zonePill = (zone) => (
     <Pill
       key={zone.slug}
-      to={`${zonePath(bucket, zone)}${projectSearch(location.search)}`}
+      to={`${zonePath(bucket, zone)}${search}`}
       on={zone.slug === active?.slug}
       testid={`link-zone-${zone.slug}`}
       accent={accent}
@@ -102,7 +116,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
         className={`flex flex-wrap items-end gap-x-4 gap-y-2 ${className}`}
         data-testid="zone-nav-grouped"
       >
-        <Pill to={`${bucket.prefix}${projectSearch(location.search)}`} end on={activeSlug === null} testid="link-zone-overview" accent={accent}>
+        <Pill to={`${bucket.prefix}${search}`} end on={activeSlug === null} testid="link-zone-overview" accent={accent}>
           Overview
         </Pill>
         {groups.map((g) => (
@@ -118,18 +132,13 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
     );
   }
 
-  return (
-    <nav
-      aria-label={`${bucket.label} sections`}
-      data-testid={scroll ? 'zone-nav-scroll' : undefined}
-      className={`flex gap-1.5 ${scroll ? 'flex-nowrap overflow-x-auto pb-1 [scrollbar-width:thin] lg:flex-wrap lg:overflow-visible lg:pb-0' : 'flex-wrap'} ${className}`}
-    >
-      {items.map((zone) => {
+  const rowClass = `flex gap-1.5 ${scroll ? 'flex-nowrap overflow-x-auto pb-1 [scrollbar-width:thin] lg:flex-wrap lg:overflow-visible lg:pb-0' : 'flex-wrap'}`;
+  const pills = items.map((zone) => {
         const on = zone.root ? active === null : zone.slug === active?.slug;
         return (
           <LensNavLink
             key={zone.slug}
-            to={`${zonePath(bucket, zone)}${projectSearch(location.search)}`}
+            to={`${zonePath(bucket, zone)}${search}`}
             // D4817 part 3: the root item matches its own address only. Without
             // `end`, NavLink also matched it under every route of the bucket and
             // set aria-current="page" on Overview beside the current item.
@@ -147,7 +156,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             // D593: the current pill takes the role's dark pair — `tintDark`
             // ground, `deepDark` ink — where it used to keep its light tint, a
             // pale lozenge on the dark ground that the canvases never drew.
-            className={`inline-flex ${scroll ? 'min-h-[44px] shrink-0 whitespace-nowrap lg:min-h-0 ' : ''}items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
+            className={`${more.has(zone.slug) ? 'hidden lg:inline-flex' : 'inline-flex'} ${scroll ? 'min-h-[44px] shrink-0 whitespace-nowrap lg:min-h-0 ' : ''}items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
             style={{
               fontWeight: on ? 700 : 600,
               '--zn-ink': on ? accent.deep : '#615c6e',
@@ -166,7 +175,23 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             {zone.label}
           </LensNavLink>
         );
-      })}
+      });
+  if (more.size) {
+    const folded = items.filter((z) => more.has(z.slug)).map((z) => ({ ...z, to: `${zonePath(bucket, z)}${search}` }));
+    return (
+      <ZoneNavMore label={`${bucket.label} sections`} items={folded} active={active?.slug ?? null} accent={accent}
+        rowClass={rowClass} className={className} scrollTestid={scroll ? 'zone-nav-scroll' : undefined}>
+        {pills}
+      </ZoneNavMore>
+    );
+  }
+  return (
+    <nav
+      aria-label={`${bucket.label} sections`}
+      data-testid={scroll ? 'zone-nav-scroll' : undefined}
+      className={`${rowClass} ${className}`}
+    >
+      {pills}
     </nav>
   );
 }

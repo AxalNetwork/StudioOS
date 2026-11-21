@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences v2 New Licence Steps · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Licences · v2 addendum · New licence steps · #5930</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">New licence — the five steps around L21: legal entity, commercial terms, administrators, agreement and the issue review</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">This addendum continues Licences v2 (L00–L22, D4819) and its Licences and Contracts addendum (L23–L40), numbering on from L41; it does not fork them. It uses L21’s step frame exactly: “Issue a licence”, “Step n of 6 · <step>”, the 240px step list and one step card with Back and Continue at the bottom right. Step 1 creates the licence as a Draft in the ledger; every later step saves to that draft; only Issue makes it Active. Nothing issues, sends or grants by itself: money terms, the brand kit and appointing an administrator each ask for an authenticator code first, and a pending signature never blocks issuing. Every value has a Worker route on main, so there are no ◇ backend tags; amber ⚑ tags mark the four owner questions, drawn as option A. None, Not recorded and Unavailable are never drawn as 0. The Eadwyn rail (#5130) is the shared rail: it proposes, and fills or saves nothing.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 10:40 UTC · checked against main 6d7712c6d1 · Helvetic Ventures SA, WL-CH-001, [Sample Admin], the templates and every figure (EUR 120,000, 12.5%, 24 seats) are fictional samples, not suggested terms</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Licences v2 New Licence Steps Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['L41', 'New licence · Step 1 Legal entity', '“Who receives this licence?”: reference, legal entity, brand name (defaults to the legal name), kind as two radio cards, and the three optional fields the agreement needs. Create draft and continue creates WL-CH-001 as a Draft that grants nothing. The second frame is the same step after the draft exists: reference and kind fixed, and a white-label Brand kit block with hex values beside each swatch, saved with an authenticator code.', [F('LNS41', false, 980), F('LNS41B', 'After the draft exists · white-label', 1030)]],
+      ['L42', 'New licence · Step 3 Commercial terms', 'Seats per type with a total (24 across 4 types), then fee and currency, revenue share and token split as percentages (stored as basis points), term, start and renewal dates, and a required reason. The card says the money terms ask for a fresh code before the button is pressed; seats save without one. Eadwyn proposes the renewal date from start and term, with Accept, Edit and Discard. No pricing recommendation.', [F('LNS42', false, 1020)]],
+      ['L43', 'New licence · Step 4 Administrators', 'The appointed list (name, email, Principal or Delegate, account role, active), then Appoint: an existing account’s email, the role and a recorded reason of 10+ characters, with an authenticator code. Appointing makes that account an admin of the studio. Optional for issuing; Skip for now.', [F('LNS43', false, 860)]],
+      ['L44', 'New licence · Step 5 Agreement', 'The master templates at their current version, with Counsel review pending, Legal review required and No text yet. The generated draft shows template and version, short hash, Draft, the text and its unfilled fields with where each is set. Eadwyn names what is still unfilled and fills nothing. Coming back later shows the contract without its text, because only Generate returns it.', [F('LNS44', false, 1140), C('LNS44B', 'Coming back later', 940, 324), C('LNS44C', 'Before generating', 940, 359)]],
+      ['L45', 'New licence · Step 6 Issue review', 'Every value from steps 1 to 5 grouped by step with Edit. Blank optional values read Not recorded. Then L17’s four questions, What still blocks issuing from the platform’s own list, and Issue licence as the one primary action. Eadwyn offers a plain-words summary that is not saved. The crop is the blocked review, with each blocker linked to its step.', [F('LNS45', false, 1770), C('LNS45B', 'Blocked · Issue licence off', 1040, 226)]],
+      ['L46', 'New licence · step states', 'Empty steps; field errors on their own line in the Worker’s words; Not recorded in the review; Unreadable reads with Try again and the entered values kept; Refused (not a Super Admin, or no authenticator session); the verification sheet; the terms conflict with who changed them; Generate refused; saving, save failed and loading.', [C('LNS46A', 'Empty', 1440, 886), C('LNS46B', 'Field errors', 1440, 703), C('LNS46C', 'Not recorded', 1440, 491), C('LNS46D', 'Unreadable', 1440, 313), C('LNS46E', 'Refused', 1140, 251), F('LNS46F', 'Verification · step 3', 1000), C('LNS46G', 'Conflict · step 3', 1040, 272), C('LNS46H', 'Generate refused', 1140, 143), C('LNS46I', 'Saving, save failed, loading', 1440, 266)]],
+      ['L47', 'New licence · Issue refused and outcomes', 'The Worker’s refusal on Issue, in its words: blocked with its list linked to steps, a licence that is no longer a draft, and a licence that changed mid-request, each with every value kept. Outcomes use L18: issued with no branch yet, issued and copied, issued at HQ with the branch copy pending (partial, retried automatically) and outcome unknown. Issue opens Overview (L03) with the outcome banner. Leaving the flow keeps the Draft.', [F('LNS47', 'Refused · blocked', 1380), C('LNS47B', 'Other refusals', 1140, 143), C('LNS47C', 'Outcomes', 1440, 228), F('LNS47D', 'After Issue · Overview with the outcome banner', 640), F('LNS47E', 'Leave New licence?', 860)]],
+      ['L48', 'Phone 390 · New licence', 'Steps 1, 3 and 6 at 390. The step list becomes a top line with a Steps sheet; fields stack; seats become four rows; review groups collapse; the verification sheet is full height; the primary action is pinned; targets are 44px.', [P('LNS48A', 'Step 1'), P('LNS48B', 'Step 3'), P('LNS48C', 'Step 6'), P('LNS48D', 'Steps sheet'), P('LNS48E', 'Verification')]],
+      ['L49', 'Dark · desktop 1440', 'L45 on the dark tokens (#0B1220, #111827, #E5E7EB, #A78BFA), with L46’s field errors, Unreadable and Refused. The states keep their words and glyphs.', [F('LNS49', false, 1330), C('LNS49B', 'Field errors', 1440, 703), C('LNS49C', 'Unreadable', 1440, 313), C('LNS49D', 'Refused', 1140, 251)]],
+      ['HO', 'Backend fit and handoff · L41–L49', 'Each step’s route on main, its write bar and the frontend work; what is preserved from Licences v2; build notes (step 3 is two writes; the branch copy has no manual retry); accessibility; the four owner questions; and the board-id clash with #5955.', [W('LNSHO')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

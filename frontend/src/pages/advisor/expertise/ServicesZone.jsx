@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, MoreRows, NothingYet, Pill, SaveNote, StaleNote, Unrecorded, ZoneBody, ZoneHeading,
+  Field, MoreRows, NothingYet, SaveNote, StaleNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, refusalText,
 } from './kit';
 import { SERVICE_LIMITS, SUPPORTED_CURRENCIES } from '../../../lib/advisorLimits';
+import { overLimitKeys, overLimitLine } from './feedback';
+
+/** D4828: each limited field's label, for the sentence a blocked save shows. */
+export const SERVICE_LIMIT_LABELS = { title: 'Title', duration_note: 'Duration', scope: 'What it covers' };
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -17,9 +20,10 @@ import { usePagedList } from './pages';
 const readServicesPage = (page) => api.listMyAdvisorServices(page);
 import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 import {
-  SERVICE_BOOKABLE, SERVICE_FAILED, SERVICE_NOT_PUBLIC, SERVICE_STATES, SESSIONS_PATH, serviceDraftOf, serviceEditBody,
-  serviceRemoveLines, serviceStateLabel,
+  SERVICE_BOOKABLE, SERVICE_FAILED, SERVICE_NOT_PUBLIC, SESSIONS_PATH, serviceDraftOf, serviceEditBody,
+  serviceRemoveLines, publicationCounts,
 } from './expertiseModel';
+import ServiceCard from './ServiceCard';
 
 /**
  * Expertise · Services — what you sell, and what you charge for it.
@@ -57,6 +61,14 @@ import {
  * on the Worker's refusal code (`refusalText`), never the error's own text.
  * Opening a row's edit form moves focus to its Title; closing it returns focus
  * to the button that opened it.
+ *
+ * D4824 (#4824, EX-06 / EX-07): a card shows the publication state the Worker
+ * stores — Draft, Published or Hidden (D5315 part 3) — with one action to move
+ * it (Publish, Hide, Publish again) and an Undo that puts the previous state
+ * back. Active / Inactive is no longer a control here: the Worker moves it with
+ * the publication state, and two state dials on one card is what #4824 asked to
+ * remove. Preview opens the public profile, where only Published services show.
+ * Booking stays with Practice › Sessions (#4832); the card links there read-only.
  */
 
 const KINDS = [
@@ -90,6 +102,15 @@ export default function ServicesZone() {
   const editTitleRef = useRef(null);
   const rowButtons = useRef({});
   const [returnFocus, setReturnFocus] = useState(null);
+  // D4824: the last publication change, so its Undo can put the previous state back.
+  const [undo, setUndo] = useState(null);
+  // The public profile's address, for Preview. A read that fails leaves Preview off rather than guessing a link.
+  const [uid, setUid] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.getMyAdvisor?.().then((p) => { if (live) setUid(p?.uid || null); }, () => {});
+    return () => { live = false; };
+  }, []);
   const claim = (id) => {
     if (pendingRef.current.has(id)) return false;
     pendingRef.current.add(id);
@@ -127,6 +148,9 @@ export default function ServicesZone() {
     setNote(null);
     const title = draft.title.trim();
     if (!title) { setNote({ ok: false, text: 'A service needs a title.' }); return; }
+    // D4828 (EX-16): over a limit blocks the add; nothing is cut.
+    const overAdd = overLimitKeys(draft, SERVICE_LIMITS);
+    if (overAdd.length) { setNote({ ok: false, text: overLimitLine(overAdd, SERVICE_LIMIT_LABELS) }); return; }
     // Parsed here so a typo is a sentence rather than a 400 from the worker.
     const parsed = dollarsToCents(draft.price);
     if (parsed.error) { setNote({ ok: false, text: parsed.error }); return; }
@@ -151,18 +175,32 @@ export default function ServicesZone() {
     }
   };
 
-  const toggleActive = async (row) => {
+  // D4824: move a service's publication state. `undoOf` is the state to go back
+  // to; an Undo is itself a move, and offers no Undo of its own.
+  const setPublication = async (row, to, done, undoOf = null) => {
     if (!claim(row.id)) return;
     setNote(null);
+    setUndo(null);
     try {
-      await api.updateMyAdvisorService(row.id, { is_active: !row.is_active });
-      setNote({ ok: true, text: `“${row.title}” is now ${row.is_active ? 'inactive' : 'active'}.` });
+      await api.updateMyAdvisorService(row.id, { publication_state: to });
+      // With an Undo the toast says it, once; an Undo itself is said in the note.
+      if (undoOf) setUndo({ id: row.id, title: row.title, to: undoOf, done });
+      else setNote({ ok: true, text: `“${row.title}” is ${done}.` });
       await list.refresh();
     } catch (err) {
-      setNote({ ok: false, text: refusalText(err, SERVICE_FAILED.state) });
+      setNote({ ok: false, text: refusalText(err, SERVICE_FAILED.publish) });
     } finally {
       release(row.id);
     }
+  };
+  const undoLast = () => {
+    if (!undo) return;
+    const { id, title, to } = undo;
+    const back = to === 'published' ? 'published on your public profile again'
+      : to === 'hidden' ? 'hidden from your public profile again' : 'back to Draft';
+    // The row as it now stands, so a title edited since is the one said.
+    const row = state.items.find((r) => r.id === id) || { id, title };
+    setPublication(row, to, back);
   };
 
   const startEdit = (row) => { setEditing(row.id); setEditDraft(serviceDraftOf(row)); setEditNote(null); };
@@ -172,6 +210,8 @@ export default function ServicesZone() {
   };
   const saveEdit = async (e, row) => {
     e.preventDefault();
+    const overEdit = overLimitKeys(editDraft, SERVICE_LIMITS);
+    if (overEdit.length) { setEditNote({ ok: false, text: overLimitLine(overEdit, SERVICE_LIMIT_LABELS) }); return; }
     const parsed = dollarsToCents(editDraft.price);
     if (parsed.error) { setEditNote({ ok: false, text: parsed.error }); return; }
     const { body, error } = serviceEditBody(row, editDraft, parsed.cents);
@@ -263,6 +303,8 @@ export default function ServicesZone() {
     : null;
 
   const shown = view === 'all' ? state.items : state.items.filter((r) => r.kind === view);
+  const pubCounts = publicationCounts(list.res, state.items);
+  const previewPath = uid ? `/advisors/${encodeURIComponent(uid)}` : null;
 
   const empty = (
     <NothingYet
@@ -291,9 +333,9 @@ export default function ServicesZone() {
             { label: 'Unpriced', value: String(counts?.unpriced ?? unpriced.length), note: (counts?.unpriced ?? unpriced.length) ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-muted">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -310,8 +352,8 @@ export default function ServicesZone() {
         </p>
         <FillFormBar fill={fill} />
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="advisor-service-add">
-          <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
-            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title" maxLength={SERVICE_LIMITS.title}
+          <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }} limit={SERVICE_LIMITS.title}>
+            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title"
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               placeholder="Fractional CTO day" />
           </Field>
@@ -332,19 +374,19 @@ export default function ServicesZone() {
               {SUPPORTED_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Duration" hint="In your own words.">
-            <input className={inputClass} value={draft.duration_note} maxLength={SERVICE_LIMITS.duration_note}
+          <Field label="Duration" hint="In your own words." limit={SERVICE_LIMITS.duration_note}>
+            <input className={inputClass} value={draft.duration_note} data-testid="advisor-service-duration"
               onChange={(e) => setDraft({ ...draft, duration_note: e.target.value })}
               placeholder="One day, on site" />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="What it covers" fill={{ ctl: fill, name: 'scope', value: draft.scope }}>
-              <textarea rows={2} className={inputClass} value={draft.scope} maxLength={SERVICE_LIMITS.scope}
+            <Field label="What it covers" fill={{ ctl: fill, name: 'scope', value: draft.scope }} limit={SERVICE_LIMITS.scope}>
+              <textarea rows={2} className={inputClass} value={draft.scope} data-testid="advisor-service-scope"
                 onChange={(e) => setDraft({ ...draft, scope: e.target.value })} />
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <button type="submit" className={buttonClass} disabled={busy}>
+            <button type="submit" className={`${buttonClass} w-full sm:w-auto`} disabled={busy || overLimitKeys(draft, SERVICE_LIMITS).length > 0} data-testid="advisor-service-add-submit">
               {busy ? 'Adding…' : 'Add service'}
             </button>
             <SaveNote note={note} testid="advisor-services-note" />
@@ -358,62 +400,35 @@ export default function ServicesZone() {
         filters={advisorZoneFilters('expertise/services', { value: view, onChange: setView })}
         actions={advisorZoneActions('expertise/services', { handlers: { focusAddForm }, view: { header: ['Service', 'Kind', 'Active', 'Price (minor units)', 'Currency', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.currency, r.units_sold] } })}
       />
-      <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+      <ZoneBody loading={state.loading} error={state.error} onRetry={load} what="Your services"
         notice={<StaleNote error={list.refreshError} onRetry={list.refresh} testid="advisor-services-stale" />}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
           <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
-        <div className="space-y-3">
+        <p className="mb-2 text-[12px] text-axal-muted" data-testid="advisor-services-publication-counts">
+          {`${pubCounts.published} published · ${pubCounts.draft} draft · ${pubCounts.hidden} hidden`}
+        </p>
+        <UndoNote text={undo?.done ? `“${state.items.find((r) => r.id === undo?.id)?.title ?? undo?.title}” is ${undo?.done}.` : null}
+          busy={pending.has(undo?.id)} onUndo={undoLast} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((row) => (
-            <Card key={row.id} padding="md">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[13px] font-extrabold">{row.title}</span>
-                    <Pill tone="neutral">{KINDS.find(([k]) => k === row.kind)?.[1] || row.kind}</Pill>
-                    {!row.is_active && <Pill tone="neutral">{serviceStateLabel(row)}</Pill>}
-                  </div>
-                  {row.duration_note && (
-                    <div className="mt-0.5 text-[11.5px] text-axal-faint">{row.duration_note}</div>
-                  )}
-                  {row.scope && (
-                    <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{row.scope}</p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-[15px] font-extrabold tabular-nums">
-                    {money(row.price_cents, row.currency) ?? <Unrecorded />}
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" className={ghostButtonClass} onClick={() => (editing === row.id ? stopEdit() : startEdit(row))}
-                      ref={(n) => { rowButtons.current[`edit-${row.id}`] = n; }}
-                      aria-expanded={editing === row.id} aria-label={`${editing === row.id ? 'Close' : 'Edit'} ${row.title}`}
-                      data-testid={`advisor-service-edit-${row.id}`}>
-                      {editing === row.id ? 'Close' : 'Edit'}
-                    </button>
-                    <button type="button" className={ghostButtonClass} onClick={() => toggleActive(row)}
-                      disabled={pending.has(row.id)} aria-label={`${row.is_active ? 'Mark inactive' : 'Mark active'}: ${row.title}`}
-                      data-testid={`advisor-service-state-${row.id}`}>
-                      {row.is_active ? 'Mark inactive' : 'Mark active'}
-                    </button>
-                    <button type="button" className={ghostButtonClass} onClick={() => setConfirming(confirming === row.id ? null : row.id)}
-                      ref={(n) => { rowButtons.current[`remove-${row.id}`] = n; }}
-                      aria-expanded={confirming === row.id}
-                      aria-label={`Remove ${row.title}`} data-testid={`advisor-service-remove-${row.id}`}>
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <ServiceCard key={row.id} row={row}
+              wide={editing === row.id || confirming === row.id}
+              editing={editing === row.id} confirming={confirming === row.id}
+              busy={pending.has(row.id)} previewPath={previewPath}
+              buttonRef={(key, n) => { rowButtons.current[`${key}-${row.id}`] = n; }}
+              onEdit={() => (editing === row.id ? stopEdit() : startEdit(row))}
+              onPublication={(action, from) => setPublication(row, action.to, action.done, from)}
+              onAskRemove={() => setConfirming(confirming === row.id ? null : row.id)}>
               {confirming === row.id ? (
                 <ConfirmRemove row={row} busy={pending.has(row.id)} onKeep={() => keep(row)} onRemove={() => remove(row)} />
               ) : null}
               {editing === row.id ? (
                 <form onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); stopEdit(); } }} onSubmit={(e) => saveEdit(e, row)} className="mt-3 grid grid-cols-1 gap-3 border-t border-axal-hairline pt-3 sm:grid-cols-2 dark:border-gray-700"
                   data-testid={`advisor-service-form-${row.id}`}>
-                  <Field label="Title">
-                    <input ref={editTitleRef} className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title" maxLength={SERVICE_LIMITS.title}
+                  <Field label="Title" limit={SERVICE_LIMITS.title}>
+                    <input ref={editTitleRef} className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title"
                       onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} />
                   </Field>
                   <Field label="Kind">
@@ -433,25 +448,18 @@ export default function ServicesZone() {
                         .map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </Field>
-                  <Field label="Duration">
-                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration" maxLength={SERVICE_LIMITS.duration_note}
+                  <Field label="Duration" limit={SERVICE_LIMITS.duration_note}>
+                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration"
                       onChange={(e) => setEditDraft({ ...editDraft, duration_note: e.target.value })} />
                   </Field>
-                  <Field label="State" hint={SERVICE_STATES.find((x) => x.id === editDraft.is_active)?.hint}>
-                    <select className={inputClass} value={editDraft.is_active ? 'active' : 'inactive'} data-testid="advisor-service-edit-state"
-                      onChange={(e) => setEditDraft({ ...editDraft, is_active: e.target.value === 'active' })}>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </Field>
                   <div className="sm:col-span-2">
-                    <Field label="What it covers">
-                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope" maxLength={SERVICE_LIMITS.scope}
+                    <Field label="What it covers" limit={SERVICE_LIMITS.scope}>
+                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope"
                         onChange={(e) => setEditDraft({ ...editDraft, scope: e.target.value })} />
                     </Field>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-                    <button type="submit" className={buttonClass} disabled={saving} data-testid="advisor-service-edit-save">
+                    <button type="submit" className={buttonClass} disabled={saving || overLimitKeys(editDraft, SERVICE_LIMITS).length > 0} data-testid="advisor-service-edit-save">
                       {saving ? 'Saving…' : 'Save changes'}
                     </button>
                     <button type="button" className={ghostButtonClass} onClick={stopEdit}>Cancel</button>
@@ -459,10 +467,12 @@ export default function ServicesZone() {
                   </div>
                 </form>
               ) : null}
-            </Card>
+            </ServiceCard>
           ))}
+        </div>
+        <div className="space-y-3">
           <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-services-more" />
-          <p className="text-[11px] leading-relaxed text-axal-faint">
+          <p className="text-[11px] leading-relaxed text-axal-muted">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a
             guess wearing the shape of a number.
@@ -497,6 +507,31 @@ function ConfirmRemove({ row, busy, onKeep, onRemove }) {
           {busy ? 'Removing…' : 'Remove'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * D4824 (EX-06): the toast after a publication change, with its Undo. It sits
+ * in the page, not over it, so it is never in the way of the next card, and
+ * stays until the next change replaces it.
+ */
+function UndoNote({ text, busy, onUndo }) {
+  // The live region is always mounted (D4711): a region that arrives with its
+  // text is not announced.
+  return (
+    <div role="status" aria-live="polite" data-testid="advisor-service-undo">
+      {text ? (
+        <div className="mb-3 inline-flex flex-wrap items-center gap-3 rounded-[10px] border border-axal-hairline bg-white px-3 py-1 text-[12px] font-semibold shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          <span aria-hidden="true" className="text-emerald-700 dark:text-emerald-300">✓</span>
+          <span>{text}</span>
+          <button type="button" onClick={onUndo} disabled={busy} data-testid="advisor-service-undo-button"
+            aria-label={`Undo: ${text}`}
+            className="min-h-[44px] px-2 font-bold text-emerald-700 underline disabled:opacity-50 dark:text-emerald-300">
+            Undo
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -7,9 +7,9 @@ import { RouteErrorBoundary } from '../src/components/RouteErrorBoundary.jsx';
 import { setCaptureProbe } from '../src/lib/captureGuard.js';
 
 const chunk = new Error('Failed to fetch dynamically imported module');
-const boundary = (error = chunk) => {
+const boundary = (error = chunk, reloading = false) => {
   const b = new RouteErrorBoundary({});
-  b.state = { error, reloading: false, caughtAt: 0 };
+  b.state = { error, reloading, caughtAt: 0 };
   return b;
 };
 const html = (b) => renderToStaticMarkup(React.createElement(MemoryRouter, null, b.render()));
@@ -17,7 +17,7 @@ const html = (b) => renderToStaticMarkup(React.createElement(MemoryRouter, null,
 test('recording chunk card keeps recording and Studio reachable through SPA links, even with an automatic reload queued', () => {
   setCaptureProbe(() => true);
   try {
-    const b = boundary(); b.state.reloading = true;
+    const b = boundary(chunk, true);
     const out = html(b);
     assert.match(out, /A new version is ready\. This page reloads when your recording ends\./);
     assert.match(out, /href="\/validate\/record\/live"[^>]*>Return to recording/);

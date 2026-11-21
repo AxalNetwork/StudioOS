@@ -87,7 +87,7 @@ const HOUSE_RULES = [
   'frontend/src/lib/api.js', // no method without a mounted Worker route
   'cloudflare-worker/sql/migrations/', // a migration is a new file
   'Not recorded', // no store: say so, and why
-  'Unreadable', // a failed read is never zero
+  'Unavailable', // a failed read is never zero (the screen word since D5129, Q2 = A)
   'Eadwyn', // the AI's name, and its banned words
   'logAdminAction', // the actor is recorded …
   'activity_logs', // … through one of the two

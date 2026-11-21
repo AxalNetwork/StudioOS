@@ -20,22 +20,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createElement as h } from 'react';
+import { act, createElement as h, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
   JOIN_NOTE, quotaLine, quotaFullLine, transferRefusal, amountToCents, centsMoney,
-  REFERENCE_STATUS, NOT_AVAILABLE_YET, SYNDICATE_CLOSE_CONFIRM,
+  REFERENCE_PILLS, REFERENCE_STATUS, REFERENCE_SUMMARY, SYNDICATE_CLOSE_CONFIRM,
 } from '../src/components/deals/dealRoomCopy.js';
 import { QuotaLine, JoinLeaveButton } from '../src/components/deals/DealRoomJoin.jsx';
 import { DealRoomsList } from '../src/components/deals/DealRoomsPanel.jsx';
 import { InvitationsList } from '../src/components/deals/DealInvitationsTab.jsx';
 import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
-import { ReferencesView, editableStatuses } from '../src/components/deals/DealReferencesTab.jsx';
+import DealReferencesTab, { ReferencesView, editableStatuses, canSummarise, referencePills } from '../src/components/deals/DealReferencesTab.jsx';
 import { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
 import { dealTabsFor } from '../src/pages/dealPageModel.js';
+import { DEFAULT_REFERENCE_CONSENT } from '../src/lib/referenceConsent.js';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { api } from '../src/lib/api.js';
+import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext';
+import { mountContracts } from './_contracts_dom.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(`../src/${rel}`, import.meta.url)), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -89,26 +93,31 @@ test('a join refused by a full quota says so inline and names the plan that rais
 test('dr-pipeline: each live deal with Join or Leave, the quota, and what joining does', () => {
   const markup = html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: DEALS }, quotaState: ok(QUOTA_OK) }));
   const t = renderedText(markup);
-  assert.match(t, /3 of 5 deal rooms/);
+  // D6151 (DE20): the allowance line in the canvas's words.
+  assert.match(t, /3 of 5 rooms used/);
   assert.ok(t.includes(JOIN_NOTE), 'the join note is drawn');
   assert.match(JOIN_NOTE, /Only an invited or committed investor can read them\./);
   assert.equal((markup.match(/data-testid="dr-pipeline-row"/g) || []).length, 2, 'a passed deal is not offered');
-  assert.match(t, /Acme\s*Diligence\s*Invitation requested\s*Logistics\s*·\s*\$1,500,000\s*Open deal\s*Leave/);
+  // D6151 (DE19): venture and sector, company status, my process, round, invitation, access.
+  assert.match(t, /Acme\s*Logistics\s*co\s*Active[\s\S]*?\$1,500,000[\s\S]*?Invitation requested[\s\S]*?Open deal\s*Leave the room request/);
   // D4815: a room the investor may already open offers Open deal, not a request for what they have.
-  assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Open deal/);
+  assert.match(t, /Birch\s*Fintech\s*co\s*Scored[\s\S]*?— Ask not recorded[\s\S]*?Open deal/);
 
   const refused = DEALS.map((d) => (d.id === 2 ? { ...d, can_read: false } : d));
   const full = renderedText(html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: refused }, quotaState: ok(QUOTA_FULL_PRO) })));
-  assert.match(full, /Birch[\s\S]*Request an invitation\s*Your Professional plan is full/);
+  // D6151 (DE20): the full allowance says so at the top, naming the next plan, and Request stays on the row.
+  assert.match(full, /Allowance full\s*You are in 5 of 5 rooms on the Professional plan\./);
+  assert.match(full, /Birch[\s\S]*Request an invitation/);
 });
 
 test('dr-pipeline states: loading, empty, and an unreadable list that is never an empty one', () => {
   const st = (dealsState) => text(h(DealRoomsList, { dealsState, quotaState: ok(QUOTA_OK), onRetryDeals: () => {} }));
-  assert.match(st({ loading: true, error: false, deals: null }), /Loading the pipeline…/);
-  assert.match(st({ loading: false, error: false, deals: [] }), /No deal is open to join yet\./);
+  // D6151 (DE21, DE22): the canvas's loading and empty words.
+  assert.match(st({ loading: true, error: false, deals: null }), /Loading live deals…/);
+  assert.match(st({ loading: false, error: false, deals: [] }), /No live deals right now\./);
   const unread = st({ loading: false, error: true, deals: null });
-  assert.match(unread, /Unreadable\. The pipeline could not be read just now\. Try again/);
-  assert.doesNotMatch(unread, /No deal is open to join yet/);
+  assert.match(unread, /UnavailableLive deals could not be read\. That is not the same as having none\. Try again/);  // D5129 (Q2 = A): the shared chip says Unavailable
+  assert.doesNotMatch(unread, /No live deals right now/);
 });
 
 // ── dr-invites ─────────────────────────────────────────────────────────────
@@ -125,7 +134,7 @@ test('dr-invites: name, email, status, the message, the email asked for, invited
   assert.match(t, /Pam Passed\s*Passed/);
   assert.match(t, /^Invite an investor/);
   const unread = text(h(InvitationsList, { state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
-  assert.match(unread, /^Unreadable\. Invitations could not be read just now\. Try again$/);
+  assert.match(unread, /^UnavailableInvitations could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable
   assert.match(text(h(InvitationsList, { state: { loading: false, error: false, rows: [] } })), /Nobody has been invited into this room yet\./);
 });
 
@@ -183,7 +192,7 @@ test('dr-transfers: the amount is cents, and a bad amount is refused before it i
   assert.match(code, /if \(!Number\.isFinite\(cents\)\) \{ setRefusal\(transferRefusal\(\{ code: 'transfer_amount_invalid' \}\)\); return; \}/);
   assert.match(code, /amount_cents: cents,/);
   const unread = text(h(TransfersView, { dealId: 1, state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
-  assert.match(unread, /^Unreadable\. Transfers could not be read just now\. Try again$/);
+  assert.match(unread, /^UnavailableTransfers could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable
 });
 
 // ── sp-references ──────────────────────────────────────────────────────────
@@ -193,20 +202,179 @@ const REFS = [
   { id: 2, reference_name: 'Rob Recorded', reference_email: null, reference_role: null, relationship: null, scheduled_at: null, consent_given: false, consent_given_at: null, status: 'recorded', notes: null },
 ];
 
-test('sp-references: each check, and its recording, transcript and summary read "Not available yet"', () => {
-  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
+test('sp-references (D6183): each check with its notes and summary state; no recording or transcript row', () => {
+  const rows = [
+    { ...REFS[0], notes: 'Asked about hiring. Says the founder hires slowly and well, and kept every senior hire.' },
+    REFS[1],
+    { id: 3, reference_name: 'Sam Summarised', reference_email: null, reference_role: null, relationship: null, scheduled_at: null, consent_given: true, consent_given_at: '2026-10-12T09:00:00Z', status: 'summarized',
+      notes: 'Long notes from the call about how the founder handled a hard quarter and a lost customer.', summarized_at: '2026-10-15T10:00:00Z',
+      summary: { summary: 'The founder handled a hard quarter calmly.', strengths: ['Calm under pressure'], concerns: ['Lost a key customer'] }, summary_stale: true },
+  ];
+  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows } }));
   const t = renderedText(markup);
-  assert.match(t, /Rita Reference\s*Scheduled\s*rita@example\.test · CTO · Former manager\s*Asked about hiring\s*Scheduled\s*14 Oct 2026, 15:00\s*Consent\s*Given 12 Oct 2026, 09:00\s*Recording\s*Not available yet\s*Transcript\s*Not available yet\s*Summary\s*Not available yet/);
-  assert.match(t, /Rob Recorded\s*Recorded\s*No email, role or relationship recorded\s*Scheduled\s*Not recorded: no time has been set\.\s*Consent\s*Not recorded: consent is not yet given\./);
-  assert.equal((markup.match(new RegExp(`>${NOT_AVAILABLE_YET}<`, 'g')) || []).length, 6, 'three per check');
+  assert.match(t, /Rita Reference\s*Scheduled\s*rita@example\.test · CTO · Former manager\s*Asked about hiring\.[\s\S]*?✓ Consent given\s*▤ Notes kept\s*Scheduled\s*14 Oct 2026, 15:00\s*Consent\s*Given 12 Oct 2026, 09:00\s*Summary\s*Not recorded: not summarised yet\./);
+  assert.match(t, /Rob Recorded\s*Recorded\s*No email, role or relationship recorded\s*◷ Consent asked\s*Scheduled\s*Not recorded: no time has been set\.\s*Consent\s*Not recorded: consent is not yet given\.\s*Summary\s*Not recorded: write notes from the call first\./);
+  assert.doesNotMatch(t, /Recording|Transcript|Not available yet/, 'no row for an artefact the owner chose not to build');
+  assert.match(t, new RegExp(REFERENCE_SUMMARY.lead));
+  // The button: where the notes are long enough and there is no summary, or it is out of date.
+  assert.equal((t.match(/Summarise notes/g) || []).length, 1, 'Rita: notes, no summary');
+  assert.equal((t.match(/Summarise again/g) || []).length, 1, 'Sam: the notes changed after the summary');
+  assert.match(t, /Eadwyn’s summary of your notes\s*The founder handled a hard quarter calmly\.\s*Strengths\s*Calm under pressure\s*Concerns\s*Lost a key customer/);
+  assert.match(t, /The notes changed after this summary\./);
   assert.match(t, /Schedule a reference/);
-  assert.match(t, /Record consent/, 'consent can be recorded where it is missing');
   assert.equal((t.match(/Record consent/g) || []).length, 1);
-  assert.equal((t.match(/Delete/g) || []).length, 2);
-  // No control that can only fail: the Worker 501s all three.
+  assert.equal((t.match(/Delete/g) || []).length, 3);
   const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
-  assert.doesNotMatch(code, /uploadReferenceRecording|transcribeReference|summarizeReference|getReferenceRecordingUrl/);
+  assert.doesNotMatch(code, /uploadReferenceRecording|transcribeReference|getReferenceRecordingUrl/);
+  assert.match(code, /summarizeReference/);
+  assert.equal(canSummarise({ notes: 'short' }), false);
   assert.equal(REFERENCE_STATUS.summarized, 'Summarised');
+});
+
+test('sp-references (D6182): the canvas pills and the D6735 firm visibility line', () => {
+  assert.deepEqual(referencePills(REFS[0]).map((p) => p.text), ['Consent given', 'Notes kept']);
+  assert.deepEqual(referencePills(REFS[1]).map((p) => p.text), ['Consent asked'], 'no notes, no Notes kept');
+  assert.deepEqual(referencePills({ ...REFS[1], notes: '   ' }).map((p) => p.text), ['Consent asked'], 'blank notes are not notes');
+  assert.deepEqual(REFERENCE_PILLS, { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' });
+  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
+  assert.equal((markup.match(/data-testid="dr-reference-pill-consent"/g) || []).length, 2);
+  assert.equal((markup.match(/data-testid="dr-reference-pill-notes"/g) || []).length, 1);
+  assert.match(renderedText(markup), /^Reference calls\s*Schedule a reference\s*Reference checks on the founders\./);
+  assert.match(renderedText(markup), /Only your firm sees these\. Platform admins can also access them\./);
+});
+
+test('D6735: switching firms removes the previous firm’s references and reads the new context', async () => {
+  const original = api.listReferences;
+  let reads = 0;
+  let switchFirm;
+  let finishSecondRead;
+  api.listReferences = async () => {
+    reads += 1;
+    if (reads === 1) return REFS;
+    return new Promise((resolve) => { finishSecondRead = resolve; });
+  };
+  function TestFirm() {
+    const [id, setId] = useState(10);
+    switchFirm = setId;
+    return h(ActiveCompanyContext.Provider, { value: { company: { id } } }, h(DealReferencesTab, { dealId: 1 }));
+  }
+  const view = await mountContracts(h(TestFirm));
+  try {
+    assert.match(view.text(), /Rita Reference/);
+    await act(async () => { switchFirm(20); });
+    assert.equal(reads, 2);
+    assert.doesNotMatch(view.text(), /Rita Reference/);
+    await act(async () => { finishSecondRead([{ ...REFS[0], reference_name: 'New firm reference' }]); });
+    assert.match(view.text(), /New firm reference/);
+  } finally {
+    await view.unmount();
+    api.listReferences = original;
+  }
+});
+
+test('sp-references (D6182): the deal page\'s card, axal tokens, 44 px targets at phone width, no hex colours', () => {
+  const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
+  assert.match(code, /import \{ CARD, SUB, H3 \} from '\.\.\/\.\.\/pages\/deal\/DealFrame';/);
+  assert.match(code, /<section className=\{`\$\{CARD\} flex flex-col gap-2\.5 p-4`\} data-testid="dr-references-card">/);
+  assert.doesNotMatch(code, /#[0-9a-fA-F]{3,8}\b/, 'no hex colour');
+  const grays = code.match(/[\w:/[\]-]*\bgray-\d+[\w/]*/g) || [];
+  assert.ok(grays.length > 0);
+  assert.deepEqual(grays.filter((c) => !c.startsWith('dark:')), [], 'a gray class only as a dark: pair');
+  assert.doesNotMatch(code, /BTN\.|INPUT\b|StatusPill/, 'not the D630 gray kit buttons, inputs or pills');
+  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
+  for (const id of ['dr-reference-cta', 'dr-reference-edit', 'dr-reference-consent-open', 'dr-reference-delete-open']) {
+    const tag = markup.match(new RegExp(`<button[^>]*data-testid="${id}"`));
+    assert.ok(tag, id);
+    assert.match(tag[0], /min-h-\[44px\]/, `${id} is 44 px to touch`);
+  }
+});
+
+const by = (v, id) => v.nodes().find((n) => v.props(n)?.['data-testid'] === id);
+const press = async (v, id) => {
+  const n = by(v, id); assert.ok(n, `missing ${id}`);
+  assert.equal(Boolean(v.props(n).disabled), false, `${id} is enabled`);
+  await act(async () => { await v.props(n).onClick({ stopPropagation() {}, preventDefault() {} }); });
+};
+const settle = () => act(async () => { await new Promise((r) => setImmediate(r)); });
+
+test('sp-references (D6183): a summary refusal is shown and a successful retry refreshes the card', async () => {
+  const original = api.summarizeReference;
+  const calls = [];
+  let changed = 0;
+  let refuse = true;
+  api.summarizeReference = async (id) => {
+    calls.push(id);
+    if (refuse) throw new Error('Synthetic summary refusal');
+  };
+  const rows = [{ ...REFS[0], notes: 'The reference gave a detailed account of the founder’s hiring decisions.' }];
+  const view = await mountContracts(h(ReferencesView, {
+    dealId: 1, state: { loading: false, error: false, rows }, onChanged: () => { changed += 1; },
+  }));
+  try {
+    await press(view, 'dr-reference-summarise');
+    assert.ok(by(view, 'dr-reference-summary-error'));
+    assert.match(view.text(), /Synthetic summary refusal/);
+    assert.equal(changed, 0);
+
+    refuse = false;
+    await press(view, 'dr-reference-summarise');
+    assert.equal(by(view, 'dr-reference-summary-error'), undefined);
+    assert.deepEqual(calls, [1, 1]);
+    assert.equal(changed, 1);
+  } finally {
+    api.summarizeReference = original;
+    await view.unmount();
+  }
+});
+
+for (const [kind, method, open, row, line] of [
+  ['delete', 'deleteReference', 'dr-reference-delete-open', REFS[0], /Delete the reference from Rita Reference\?\s*The check, its consent and its notes are removed from this deal for everyone who reads it\. This cannot be undone\./],
+  ['consent', 'captureReferenceConsent', 'dr-reference-consent-open', REFS[1], /Record Rob Recorded’s consent\?\s*This records that Rob Recorded agreed to the reference call, now, with you as the person who recorded it\./],
+]) {
+  test(`sp-references (D6182): ${kind} opens a dialog first; Back writes nothing; a refusal stays in it; confirm writes once`, async () => {
+    const original = api[method]; const calls = []; let changed = 0; let refuse = true;
+    api[method] = async (...args) => { calls.push(args); if (refuse) throw new Error('Synthetic refusal'); return { ok: true }; };
+    const v = await mountContracts(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS }, onChanged: () => { changed += 1; } }));
+    try {
+      const dialog = `dr-reference-${kind}-dialog`;
+      assert.equal(by(v, dialog), undefined);
+      await press(v, open);
+      assert.deepEqual(calls, [], 'opening the dialog writes nothing');
+      assert.ok(by(v, dialog));
+      assert.match(v.text(), line);
+      assert.equal(v.text().includes(DEFAULT_REFERENCE_CONSENT), kind === 'consent');
+      // Cancel.
+      await press(v, `dr-reference-${kind}-back`);
+      assert.deepEqual(calls, []); assert.equal(changed, 0); assert.equal(by(v, dialog), undefined);
+      // Refusal: the dialog stays, with the refusal inside it.
+      await press(v, open); await press(v, `dr-reference-${kind}-confirm`); await settle();
+      assert.equal(calls.length, 1); assert.equal(changed, 0);
+      assert.ok(by(v, dialog), 'a refusal keeps the dialog open');
+      const refusal = by(v, `dr-reference-${kind}-refusal`);
+      assert.ok(refusal, 'the refusal is drawn inside the dialog');
+      assert.match(v.text(), /Synthetic refusal/);
+      // Confirm.
+      refuse = false;
+      await press(v, `dr-reference-${kind}-confirm`); await settle();
+      assert.equal(calls.length, 2); assert.equal(changed, 1);
+      assert.equal(by(v, dialog), undefined, 'a confirmed change closes the dialog');
+      assert.deepEqual(calls[1], kind === 'delete' ? [row.id] : [row.id, { consent_given: true }]);
+    } finally { await v.unmount(); api[method] = original; }
+  });
+}
+
+test('sp-references (D6182): no one-click destructive action, the writes are made only from the dialog', () => {
+  const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
+  assert.equal((code.match(/api\.deleteReference\(/g) || []).length, 1);
+  assert.equal((code.match(/api\.captureReferenceConsent\(/g) || []).length, 1);
+  const dialog = code.slice(code.indexOf('export function ReferenceConfirm'), code.indexOf('export function editableStatuses'));
+  assert.match(dialog, /api\.deleteReference\(row\.id\)/);
+  assert.match(dialog, /api\.captureReferenceConsent\(row\.id, \{ consent_given: true \}\)/);
+  assert.match(dialog, /<Lightbox /, 'the shared Lightbox');
+  assert.match(code, /onClick=\{\(\) => setConfirm\(\{ kind: 'delete', row: r \}\)\}/);
+  assert.match(code, /onClick=\{\(\) => setConfirm\(\{ kind: 'consent', row: r \}\)\}/);
+  const asking = renderedText(html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS }, initialConfirm: { kind: 'delete', row: REFS[0] } })));
+  assert.match(asking, /Delete the reference from Rita Reference\?[\s\S]*Keep it\s*Delete/);
 });
 
 test('sp-references: an edit cannot claim a recording that cannot exist', () => {
@@ -218,7 +386,7 @@ test('sp-references: an edit cannot claim a recording that cannot exist', () => 
 test('sp-references states', () => {
   assert.match(text(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: [] } })), /No reference has been scheduled\.\s*Schedule a reference/);
   const unread = text(h(ReferencesView, { dealId: 1, state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
-  assert.match(unread, /Unreadable\. References could not be read just now\. Try again$/);
+  assert.match(unread, /UnavailableReferences could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable
   assert.doesNotMatch(unread, /No reference has been scheduled/);
   assert.match(text(h(ReferencesView, { dealId: 1, state: { loading: true, error: false, rows: null } })), /Loading references…/);
 });

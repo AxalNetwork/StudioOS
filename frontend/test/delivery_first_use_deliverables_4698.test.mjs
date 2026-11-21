@@ -96,6 +96,8 @@ test('a refused edit keeps the open editor and its values; a confirmed one close
     await view.settle();
     await view.press('Edit');
     await view.type('Title', 'Renamed');
+    // #4709: the row is sent, so renaming it is a correction and carries a reason.
+    await view.type('Why is it being corrected', 'The title had a typo.');
     await view.press('Save');
     await view.settle();
     assert.equal(view.valueOf('Title'), 'Renamed', 'the typed title is still in the open editor');
@@ -123,6 +125,7 @@ test('saving one row does not unmount or reset an unrelated open editor while th
     // Rows are ordered oldest-first with ties kept; both editors are open.
     await view.type('Title', 'Draft in row A', 0);
     await view.type('Title', 'Draft in row B', 1);
+    await view.type('Why is it being corrected', 'Renamed', 1);
     await view.press('Save', 1);
     await view.settle();
     assert.equal(reads, 2, 'the save triggered a refetch');

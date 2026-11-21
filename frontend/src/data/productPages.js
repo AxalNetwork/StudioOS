@@ -85,7 +85,7 @@ export const PRODUCT_PAGES = {
     meta: {
       title: 'For Founders',
       description:
-        'Everything you need to go from idea to funded — a startup workspace, pitch deck builder, venture-readiness scoring, and warm investor intros on the Axal VC network.',
+        'A founder workspace for customer interviews, your pitch deck and venture scoring.',
     },
     accent: {
       badge: 'bg-violet-100 border-violet-300 text-violet-700',
@@ -130,11 +130,6 @@ export const PRODUCT_PAGES = {
         icon: 'Gauge',
         title: 'Venture-readiness scoring',
         body: 'Score your venture against the same diligence rubric investors use, with evidence-confidence on every dimension.',
-      },
-      {
-        icon: 'Handshake',
-        title: 'Warm investor intros',
-        body: 'Qualified founders get introduced to investors on the network under a three-way NDA — not cold email.',
       },
     ],
     liveFeatures: [
@@ -479,7 +474,7 @@ export const PRODUCT_PAGES = {
         price: '$99',
         period: '/ month',
         highlight: true,
-        tagline: 'Inbound demand on tap',
+        tagline: 'Manage client work from proposal to delivery',
         badge: 'More reach & insight',
         blurb: 'For partners who want inbound demand on tap.',
         cta: { label: 'Start 14-day trial', to: '/register?lane=partner&plan=pro' },

@@ -140,6 +140,26 @@ export function partnerTiles(read) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Participation (D5888, PG03a's shell section)
+ * ------------------------------------------------------------------ */
+
+export const PARTNERS_INTRODUCING_UNRECORDED = 'The summary counts partners and introductions, not which partners made them, so how many partners introduced someone this quarter is not recorded. It is not the same as nobody.';
+
+/**
+ * D5888 (#5888): Participation on the program's own summary, the read Overview already makes. The partners taking
+ * part are the active partners it counts, and the introductions they made this quarter are its figure. Which
+ * partners made those introductions it does not carry, so that reads "Not recorded" with its reason, never a 0.
+ */
+export function partnerParticipationTiles(read) {
+  const [active, , intros] = partnerTiles(read);
+  return [
+    { ...active, key: 'participation-partners', label: 'Partners taking part' },
+    { ...intros, key: 'participation-intros', label: 'Introductions this quarter' },
+    { key: 'participation-introducing', label: 'Partners who introduced someone', state: 'placeholder', word: NOT_RECORDED, reason: PARTNERS_INTRODUCING_UNRECORDED },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
  * The two charts (`dc:396-397`)
  * ------------------------------------------------------------------ */
 

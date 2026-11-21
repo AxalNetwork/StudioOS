@@ -8,6 +8,11 @@
  * (`api.raiseProspects`), the materials read and the caller's own drafts;
  * Activity its read. Every value nobody recorded reads "Not recorded", never
  * 0, and a commitment with no status is never counted.
+ *
+ * D7513 (#7513, RAC22C): a typed line recorded from a call's response keeps
+ * that call (`line.call`, from `raise_prospects.round_call_uid`); the row names
+ * it with its uid, and `?recorded=<prospect>` (the call page's link) marks the
+ * moved line and says what was recorded, from the read alone.
  */
 import { NO_STATUS, PASSED, STAGE_LABEL, centsText } from './capRelModel';
 
@@ -143,11 +148,38 @@ export function commitmentRows(read, f = {}) {
         source_label: l.source_label || words.source?.[l.source] || 'Not recorded',
         on: day(l.on),
         counted: !!l.counted && l.key === inv.chosen?.key,
+        call: l.call && l.call.uid ? { uid: String(l.call.uid), name: String(l.call.name || '') } : null,
         why: l.why_not_counted || (l.counted && l.key !== inv.chosen?.key ? 'Counted once, by this investor’s strongest line.' : null),
       });
     }
   }
   return rows.filter((r) => (!f.status || r.status === f.status) && (!q || r.investor.toLowerCase().includes(q)));
+}
+
+/** The prospect `?recorded=` names, or null for anything that is not a positive id. */
+export function recordedParam(search = '') {
+  const v = new URLSearchParams(search).get('recorded');
+  return v && /^[1-9]\d{0,9}$/.test(v) ? Number(v) : null;
+}
+
+/** True for the moved line: the named prospect's typed line that keeps a call. */
+export const isMovedRow = (row, prospectId) => prospectId != null && row.prospect_id === prospectId && !!row.call;
+
+/**
+ * RAC22C's notice: what the call page recorded, read back from the commitments
+ * read (never from the address): the named prospect's typed line that keeps a
+ * call. Null when the read holds no such line.
+ */
+export function recordedNotice(read, prospectId) {
+  if (prospectId == null) return null;
+  const inv = (read?.investors || []).find((i) => i.prospect_id === prospectId);
+  const l = (inv?.lines || []).find((x) => x.source === 'typed' && x.call?.uid);
+  if (!l) return null;
+  const words = read?.words?.status || {};
+  return {
+    text: `Recorded as ${l.status_label || words[l.status] || NO_STATUS} · ${l.cents == null ? 'Not recorded' : centsText(l.cents, l.currency)} · ${inv.name}`,
+    call: { uid: String(l.call.uid), name: String(l.call.name || '') },
+  };
 }
 
 /** A source of the read that did not answer, with why, so a gap is never read as none. */
@@ -258,4 +290,30 @@ export function activityCsv(items = []) {
   };
   const head = ['When (UTC)', 'Who', 'What', 'Investor', 'Source'];
   return [head, ...items.map((i) => [i.at, i.who, i.what, i.investor?.name ?? '', i.source_label])].map((r) => r.map(cell).join(',')).join('\n');
+}
+
+/**
+ * CRL11 (#6080): the feedback-pattern run's answer, for the panel. `too_few` says how much is recorded; `ok` lists up
+ * to three themes, each with its sources (the investor and the words) and the Investor narrative objection its words
+ * already are, as a link (read only). A theme with fewer than two sources is not drawn: the Worker keeps none, and the
+ * page never shows one as a pattern.
+ */
+export function patternView(answer, objectionHref) {
+  if (!answer || typeof answer !== 'object') return { state: 'unreadable', themes: [] };
+  if (answer.state === 'too_few') {
+    return { state: 'too_few', themes: [], line: answer.detail || 'A pattern needs feedback from at least two investors. Nothing was run.' };
+  }
+  const themes = (Array.isArray(answer.themes) ? answer.themes : [])
+    .filter((t) => t && typeof t.title === 'string' && Array.isArray(t.sources) && t.sources.length >= 2)
+    .slice(0, 3)
+    .map((t, i) => ({
+      key: `${i}:${t.title}`,
+      title: t.title,
+      summary: typeof t.summary === 'string' ? t.summary : '',
+      sources: t.sources.map((s) => ({ key: String(s.feedback_id), investor: s.investor || 'An investor', words: String(s.words || '') })),
+      objection: Array.isArray(t.objection_keys) && t.objection_keys.length ? { href: objectionHref(t.objection_keys[0]), count: t.objection_keys.length } : null,
+    }));
+  return { state: themes.length ? 'ok' : 'none', themes,
+    line: themes.length ? (answer.basis || 'Read from the feedback recorded on each investor. Nothing here is saved.')
+      : 'Eadwyn found nothing several investors said in common. Each investor’s feedback is on their record.' };
 }

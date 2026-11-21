@@ -12,12 +12,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { securityRaw } from './_securitySource.mjs';
 import { buildOverview } from '../src/pages/hq/security/overviewModel.js';
 import { remainingOf, openState, dueDayOf } from '../src/pages/hq/security/privacyModel.js';
 
-const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CLOCK = { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' };
 const row = (days_left, deadline_at = '2026-02-28T23:59:59.999Z') => ({
   id: 1, email: 'subject@example.test', kind: 'erasure', requested_at: '2026-01-31 10:00:00',
@@ -36,7 +34,7 @@ test('the due day is "due today", the next day is overdue, and nothing reads "0d
 });
 
 test('the classic list says "due today" on the due day, and names the rule rather than a day count', () => {
-  const page = read('frontend/src/pages/hq/SecurityPage.jsx');
+  const page = securityRaw();
   assert.match(page, /d\.days_left === 0 \? 'due today'/, 'the due day reads "0d left" again');
   assert.doesNotMatch(page, /clock_days/, 'a reader still expects a fixed day count');
   assert.match(page, /data\.dsr\?\.clock\?\.label/, 'the zone no longer names the rule from the payload');

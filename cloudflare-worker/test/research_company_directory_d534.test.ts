@@ -213,8 +213,10 @@ test('the company: each metric with its source and as-of date, or Not recorded',
   assert.equal(acme.status, 200);
   assert.equal(acme.body.item.name, 'Acme Robotics');
   const m = acme.body.metrics;
-  assert.deepEqual([m.funding_total.value, m.funding_total.currency, m.funding_total.status, m.funding_total.source_name, m.funding_total.as_of],
-    [50_000_000, 'USD', 'recorded', 'Company filings', '2026-09-30']);
+  // D7180: funding total records no observation date, so as_of is null; the
+  // record's update date is updated_on, never borrowed as the observation.
+  assert.deepEqual([m.funding_total.value, m.funding_total.currency, m.funding_total.status, m.funding_total.source_name, m.funding_total.as_of, m.funding_total.updated_on],
+    [50_000_000, 'USD', 'recorded', 'Company filings', null, '2026-09-30']);
   assert.deepEqual([m.headcount.value, m.headcount.as_of], [120, '2026-06-01'], 'headcount carries its own as-of');
   assert.deepEqual([m.revenue.value, m.revenue.status, m.revenue.reason], [null, 'not_recorded', 'Not recorded'], 'never a zero');
   assert.equal((await get(db, '/company-directory/nope')).status, 404);

@@ -27,11 +27,12 @@
  * `onClose`, so it cannot navigate or close whatever is open by then. The
  * completion belongs to the form instance that sent it.
  */
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Lightbox from '../../ui/Lightbox.jsx';
 import { MODULES } from './modules.js';
 import { CYCLES, safeHref } from './cycleModel.js';
 import { validate } from './forms.js';
+import { formAssistant } from './formAssistants.js';
 import FillSheet from '../../ui/FillSheet.jsx';
 import { FillFormTrigger, FillMark, FillTrigger } from '../../ui/FillMark.jsx';
 import { fillsApi } from '../../lib/api/fills.js';
@@ -205,7 +206,7 @@ function FieldHead({ fill, name, label, value, busy, children }) {
 /** What stays live behind an open form: the AIRail and the Ask panel (`data-sheet-keep`, D1317's own mark). */
 export const FORM_KEEP = Object.freeze(['[data-sheet-keep]']);
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null, focusField = null }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
@@ -234,6 +235,12 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [done, setDone] = useState(null);
   const [copied, setCopied] = useState(false);
   const fields = useMemo(() => formFields(base, loaded, current), [base, loaded, current]);
+  // #6030: an Edit opened for one field (Link evidence) moves focus to it once the fields are drawn.
+  useEffect(() => {
+    if (!focusField || !loaded || typeof document === 'undefined') return;
+    const el = document.getElementById(`${id}-${focusField}`) || document.getElementById(`${id}-${focusField}-0`);
+    if (el && typeof el.focus === 'function') { el.focus(); el.scrollIntoView?.({ block: 'center' }); }
+  }, [focusField, loaded, id]);
   // A T box with `search` offers what `onSearch` finds for its text, each
   // match under its `group`'s label; a pick fills the box and is sent under
   // its own `into` (else `search.into`) while the box still holds it.
@@ -330,6 +337,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const cycleKey = String(cycle ?? '').toLowerCase();
   const name = moduleName || MODULES[cycleKey]?.find((module) => module.slug === slug)?.name;
   const eyebrow = [CYCLES[cycleKey]?.name || cycle, name].filter(Boolean).join(' · ');
+  const Assistant = formAssistant(cycleKey, slug, base.key);
   const save = async (event) => {
     event.preventDefault();
     if (saving.current || !loaded || done || blocked || readOnly) return;
@@ -395,7 +403,9 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
           {fillable ? <FillFormTrigger aiOff={!!fill.aiOff || sourcesOnly} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
         </div> : null}
         {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly || (!!partial && field.name !== partial.only)} search={finder} fill={fillCtl} />)}
-        {loaded && !readOnly && renderAssistant?.({ fields, values, setValue, busy })}
+        {loaded && !readOnly && (renderAssistant ? renderAssistant({ fields, values, setValue, busy })
+          // D6862: a form's own panel (Record a decision's evidence and Eadwyn's read), when the page passes none.
+          : Assistant ? <Suspense fallback={null}><Assistant fields={fields} values={values} setValue={setValue} busy={busy} search={search} /></Suspense> : null)}
       </>}
     </form>}
     {fillOpen && fill && !readOnly ? <FillSheet page={fill.page} form={fill.form} project={fill.project} record={fill.record ? { id: fill.record } : null} title={cleanFormCopy(base.title || 'this form').toLowerCase()}

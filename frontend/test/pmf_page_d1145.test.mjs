@@ -231,11 +231,10 @@ test('5. the page: the tiles, the ten inputs, an input lightbox, the gaps filter
     assert.match(t.textOf('pmf-pivot'), /After the pivot on 3 Jun 2026/);
     assert.ok(t.requests.some((u) => /\/cycles\/raise\/pmf\/history\?project=3&limit=200$/.test(u)), 'the history is read for this venture');
     assert.equal(t.count('pmf-history-chart'), 1);
-    assert.equal(t.count('pmf-gap'), 3);
-    await t.click(t.one('pmf-gaps-kit'));
-    assert.deepEqual(t.all('pmf-gap').map((n) => t.props(n)['data-scope']), ['kit']);
-    await t.click(t.one('pmf-gaps-pmf'));
-    assert.equal(t.count('pmf-gap'), 2);
+    // D6049 (#6049, RA-16): the section's gaps are Product-market fit's own; a raise kit gap is its
+    // area's action in the areas table (`readiness_hierarchy_6049.test.mjs`), so there is no filter.
+    assert.deepEqual(t.all('pmf-gap').map((n) => t.props(n)['data-scope']), ['pmf', 'pmf']);
+    assert.equal(t.count('pmf-gaps-kit'), 0);
     assert.equal(t.count('pmf-input-lightbox'), 0);
     const claims = t.all('pmf-input-row').find((n) => t.props(n)['data-key'] === 'claims_supported');
     await t.click(t.all('pmf-input-open')[t.all('pmf-input-row').indexOf(claims)]);

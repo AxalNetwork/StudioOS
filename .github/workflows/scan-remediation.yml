@@ -1,0 +1,66 @@
+name: Remediate code scanning alerts
+
+on:
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      alert:
+        description: 'One Code Scanning alert number (leave empty for a backlog sweep)'
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  reconcile:
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: studioos-code-scanning-remediation
+      cancel-in-progress: false
+    environment:
+      name: scan-remediation
+      deployment: false
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+      security-events: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Select GitHub credential
+        id: credential
+        env:
+          APP_ID_CONFIGURED: ${{ secrets.SCAN_REMEDIATION_APP_ID != '' }}
+          APP_KEY_CONFIGURED: ${{ secrets.SCAN_REMEDIATION_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [[ "$APP_ID_CONFIGURED" != "$APP_KEY_CONFIGURED" ]]; then
+            echo "::error::Configure both scan-remediation App secrets or remove both to use the workflow token."
+            exit 1
+          fi
+          echo "app=$APP_ID_CONFIGURED" >> "$GITHUB_OUTPUT"
+      - name: Get repository installation token
+        if: steps.credential.outputs.app == 'true'
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.SCAN_REMEDIATION_APP_ID }}
+          private-key: ${{ secrets.SCAN_REMEDIATION_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: read
+          permission-security-events: read
+      - name: Reconcile Code Scanning alerts
+        env:
+          SCAN_ALERT: ${{ inputs.alert }}
+          SCAN_REMEDIATION_BOT_LOGIN: ${{ steps.app.outputs.app-slug && format('{0}[bot]', steps.app.outputs.app-slug) || 'github-actions[bot]' }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+        run: node scripts/scan-remediation/run.mjs

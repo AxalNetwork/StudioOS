@@ -101,24 +101,28 @@ test('D5352: a survey-feedback retry after the target write reuses the proposal-
   assert.deepEqual({ ...decided }, { status: 'accepted', target_ref: `product_feedback:${target.uid}` });
 });
 
-test('product retention by first-seen week lands apart from revenue retention and churn', async () => {
-  const { env, db } = await fixture();
+test('D6319: product retention keeps the saved insight interval and reaches the venture’s Grow read', async () => {
+  const { env, db, fake } = await fixture();
   const m = await track(env, { integrationId: PH, projectId: P, userId: FOUNDER, insight: { short_id: 'Ret12345', name: 'Week-4 retention' }, role: 'retention', module: 'revenue_and_traction' });
   const users = await track(env, { integrationId: PH, projectId: P, userId: FOUNDER, insight: { short_id: 'Wau12345', name: 'Weekly active users' }, role: 'active_users', module: 'revenue_and_traction' });
   const reads: any = new Proxy({}, { get: (_t, k: string) => async () => (k === 'runInsight' ? { results: [
     { date: '2026-09-28T00:00:00Z', values: [{ count: 200 }, { count: 84 }, { count: 62 }] },
     { date: '2026-10-05T00:00:00Z', values: [{ count: 180 }, { count: 70 }, {}] },
     { date: 'not a date', values: [{ count: 5 }] },
-  ] } : []) });
+  ] } : k === 'insight' ? { definition: { kind: 'InsightVizNode', source: { kind: 'RetentionQuery', retentionFilter: { period: 'Week' } } } } : []) });
   const r = await syncGrow(env, reads, { integrationId: PH, projectId: P, userId: FOUNDER, today: '2026-10-31' });
   assert.equal(r.partial, false);
   const f = db.prepare('SELECT module, value, value_json FROM posthog_metric_facts WHERE fact_key = ?').get(`retention:${m.uid}`) as any;
   assert.equal(f.module, 'revenue_and_traction');
   assert.equal(f.value, null, 'a cohort table is not one number');
-  assert.deepEqual(JSON.parse(f.value_json).cohorts, [
+  const expected = { interval: 'week', cohorts: [
     { week: '2026-09-28', size: 200, pct: [42, 31] },
     { week: '2026-10-05', size: 180, pct: [38.9, null] },
-  ]);
+  ] };
+  assert.deepEqual(JSON.parse(f.value_json), expected);
+  const read = await call(appFor(fake), env, COFOUNDER, 'GET', `/api/cycles/grow/posthog?project=${P}&module=revenue_and_traction`);
+  assert.equal(read.status, 200);
+  assert.deepEqual(read.body.facts.find((fact: any) => fact.fact_key === `retention:${m.uid}`)?.data, expected);
   assert.equal(n(db, 'SELECT COUNT(*) AS n FROM project_metrics WHERE monthly_churn_pct IS NOT NULL'), 0, 'never written to churn');
   assert.equal(n(db, 'SELECT COUNT(*) AS n FROM posthog_metric_facts WHERE fact_key = ?', `retention:${users.uid}`), 0, 'only a retention metric has cohorts');
 });
@@ -133,6 +137,18 @@ test('the venture\'s team alone reads Grow\'s PostHog; a PostHog KPI row offers 
   const rec = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/records/grow.ts'), 'utf8');
   assert.match(rec, /if \(!DERIVED\.has\(id\) && !id\.startsWith\('posthog-'\)\) \{/);
   assert.match(rec, /'From PostHog\. This figure comes from PostHog\.'/);
+});
+
+test('D6319: the twelve newest valid cohorts survive either provider order', () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({
+    date: `2026-09-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+    values: [100, i, null],
+  }));
+  const expected = rows.slice(8).map((r) => r.date.slice(0, 10));
+  const mixed = [...rows.filter((_, i) => i % 2), ...rows.filter((_, i) => i % 2 === 0).reverse()];
+  for (const ordered of [rows, [...rows].reverse(), mixed]) {
+    assert.deepEqual(cohortsOf({ results: [...ordered, { date: '2026-10-01', values: [0] }] }).map((r) => r.week), expected);
+  }
 });
 
 test('the parsers: cohorts never invent a 0; a survey score is PostHog\'s own', () => {

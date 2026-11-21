@@ -63,11 +63,18 @@ test('2. on the local D1 every Build read answers exactly as on node:sqlite, and
  * 100 records after the fix; before it the two pages read 558 and 684 and the overview 1,408.
  */
 const BUDGET: Array<[string, number]> = [
-  // The connector catalogue adds one row per provider: TikTok (#5291), then Facebook (#5292).
-  [`/api/cycles/build/overview?project=${PROJECT}`, 1309],
-  [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 307],
+  // The connector catalogue adds one row per provider: TikTok (#5291), then Facebook (#5292), then Search Console (D5839), then Typeform (D5827).
+  // D6031 (#6031): +2 on each Prototype read for the dominant action's blocked and next-due lookups (each
+  // LIMIT 1 on an index), and +1 on the page for the test sessions of its 25 must-haves (none seeded here).
+  // #6027 (D6027): +1 on each Prototype read for the overdue count's probe of D6031's `idx_mvp_features_must_due`
+  // (no must-have is dated here); the overview's plan preview reads 0 rows (no plan here).
+  // Combined merge: the connector read plus D6027 overdue probe measure 1313 rows on local D1; Typeform
+  // (D5827) after Search Console (D5839) adds one catalogue row, 1314; the X founders connector (D2403) adds
+  // one more, 1315.
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1315],
+  [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 311],
   [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
-  [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 308],
+  [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 311],
   [`/api/cycles/build/modules/product-roadmap?filter=column%3Anow&project=${PROJECT}`, 507],
 ];
 

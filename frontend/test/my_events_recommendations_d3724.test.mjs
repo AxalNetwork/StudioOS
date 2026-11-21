@@ -36,6 +36,8 @@ test('the row\'s state: every answer is named, and none is "empty" unless the Wo
   assert.equal(rowState({ status: 'ready', data: { available: true, value: { enabled: true } } }).kind, 'error', 'a reply with no list is not an empty list');
   assert.equal(rowState(ready([], { signals: { interests: 'not_recorded', goals: 'not_recorded' } })).line, FEW_LINE);
   assert.equal(rowState(ready([], { signals: { interests: 'read' } })).line, EMPTY_LINE);
+  assert.equal(rowState(ready([], { signals: { interests: 'unreadable' } })).line, ERROR_LINE);
+  assert.equal(rowState(ready([], { signals: { interests: 'read', goals: 'unreadable' } })).line, ERROR_LINE);
   assert.equal(rowState(ready(EV)).kind, 'ready');
 });
 
@@ -53,6 +55,9 @@ test('reasons are the stored words; a missing figure is Not recorded, never 0', 
   assert.equal(explainQuoteLine(null), 'Price not recorded');
   assert.equal(explainQuoteLine({ microusd: 40000 }), 'Costs $0.04 from your AI tokens');
   assert.equal(registerState({ registration_eligible: false }, true).line, 'Not open to Explorers');
+  assert.equal(registerState({ registration_eligible: { eligible: true } }).kind, 'open');
+  assert.equal(registerState({ registration_eligible: { eligible: false } }).kind, 'closed');
+  assert.equal(registerState({ registration_eligible: { eligible: null } }).kind, 'unknown');
   assert.equal(registerState({}).line, 'Eligibility not recorded');
   assert.equal(registerState({ registration_eligible: true, full: true }).line, 'Join the waitlist');
   assert.equal(checkPrefs({ goals: 'x'.repeat(501) }).error, GOALS_TOO_LONG);

@@ -17,7 +17,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { EvidenceSummary, InvestorEvidence, SharedEvidence } from '../src/pages/cycles/evidence/InvestorEvidence.jsx';
-import { coverageTile, figureOf, investorView, kindWord, recordDay, refusalOf, sourceLine } from '../src/pages/cycles/evidence/evidenceModel.js';
+import { STAFF_READ_LINE, coverageTile, figureOf, investorView, kindWord, recordDay, refusalOf, sourceLine } from '../src/pages/cycles/evidence/evidenceModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -119,6 +119,21 @@ test('a refused read in words: the founder pointed to their own view, an outside
   assert.match(refusalOf(err(500)).line, /not the same as none/);
 });
 
+test('D6167: staff are never told to open the founder’s Raise › Evidence; the founder still is', () => {
+  // Mutation checked: drop the staff guard in refusalOf → an Admin on an older Worker gets the founder line here.
+  for (const role of ['admin', 'partner']) {
+    for (const e of [err(403, 'investor_only'), err(403, 'evidence_closed'), err(403)]) {
+      const r = refusalOf(e, role);
+      assert.equal(r.kind, 'closed', role);
+      assert.doesNotMatch(r.line, /Raise › Evidence|your evidence/, role);
+    }
+    assert.equal(refusalOf(err(503, 'unreadable'), role).kind, 'unreadable', 'a failure is still a failure for staff');
+  }
+  assert.equal(refusalOf(err(403, 'investor_only'), 'founder').kind, 'founder');
+  assert.equal(refusalOf(err(403, 'evidence_closed'), 'investor').kind, 'closed');
+  assert.match(STAFF_READ_LINE, /as staff/);
+});
+
 // ---------------------------------------------------------------- the block
 
 test('VR8: before the NDA the block draws coverage tiles and the lock line, and no value at all', () => {
@@ -187,14 +202,20 @@ test('the deal page: the investor reads by the deal; the founder is pointed to R
     assert.equal(f.textOf('evidence-refused'), 'This is the investor’s view. You read your evidence in Raise › Evidence.');
     assert.match(f.all(), /Open Raise › Evidence/);
   } finally { await f.close(); }
-  calls.length = 0;
-  const u = await mounted(h(EvidenceSummary, { dealId: 42, api: api([err(503, 'unreadable'), BEFORE()]) }));
+  // D6167: a staff read says it is the investor's view, read as staff; a refused staff read never points to Raise.
+  const s = await mounted(h(EvidenceSummary, { dealId: 42, role: 'admin', api: api([AFTER({ reader: 'staff' })]) }));
   try {
-    assert.match(u.textOf('evidence-refused'), /not the same as none/);
-    await u.click('evidence-unreadable-retry');
-    assert.deepEqual(calls, [42, 42]);
-    assert.equal(u.attr('evidence-summary', 'data-stage'), 'before');
-  } finally { await u.close(); }
+    assert.equal(s.textOf('evidence-staff-read'), STAFF_READ_LINE);
+    assert.equal(s.attr('evidence-summary', 'data-stage'), 'after');
+  } finally { await s.close(); }
+  const sr = await mounted(h(EvidenceSummary, { dealId: 42, role: 'partner', api: api([err(403, 'investor_only')]) }));
+  try {
+    assert.doesNotMatch(sr.all(), /Raise › Evidence/);
+    assert.equal(sr.attr('evidence-summary', 'data-stage'), 'refused-closed');
+  } finally { await sr.close(); }
+  const iv = await mounted(h(EvidenceSummary, { dealId: 42, role: 'investor', api: api([AFTER()]) }));
+  try { assert.equal(iv.has('evidence-staff-read'), false); } finally { await iv.close(); }
+  // A failed deal read, and its Try again, are D6164's (`deal_evidence_6164.test.mjs`).
 });
 
 test('the diligence room: the shared read by the venture; a refusal draws nothing, since the room already says what is open', async () => {
@@ -211,7 +232,7 @@ test('the diligence room: the shared read by the venture; a refusal draws nothin
 test('the wiring: deal tab, round call, diligence room; no ui index; no pop-up, no hex, dark pairs; the Worker serves all three reads', () => {
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
   assert.ok(deal.includes("import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';"));
-  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}"));
+  assert.match(deal, /tab === 'evidence' && <EvidenceSummary[^>]*ndaHref=\{isInvestor \? tabHref\(deal.id, 'documents'\) : null\}/);
   const call = read('frontend/src/pages/founder/RoundCallPage.jsx');
   assert.ok(call.includes('<InvestorEvidence read={d.evidence??null} company={company} onRetry={on.retry}/>'));
   assert.ok(call.indexOf('<InvestorEvidence') > call.indexOf('export function InvestorCallView'), 'only on the investor’s view of a call');
@@ -229,3 +250,5 @@ test('the wiring: deal tab, round call, diligence room; no ui index; no pop-up, 
   assert.match(read('cloudflare-worker/src/services/roundCalls.ts'), /investorEvidence\(env,call\.project_id,investor\.id\)/);
   assert.match(read('documentation/architecture/decisions/D1268.md'), /## D1268/);
 });
+
+// #6174's deal-only filters, claims line and hand-offs moved to the deal's own Evidence tab (D6164): `deal_evidence_6164.test.mjs`.

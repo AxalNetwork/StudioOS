@@ -6,10 +6,10 @@
 // (`POST /api/advisors/me/slots`, `POST /api/advisors/bookings/:id/...`).
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Pill } from '../../../ui';
+import { Card, Pill, Unrecorded } from '../../../ui';
 import { api } from '../../../lib/api';
 import { Field, SaveNote, ZoneHeading, buttonClass, ghostButtonClass, inputClass } from '../expertise/kit';
-import { formatDateTime } from '../advisory/kit';
+import { moneyState, offerText, priceClass, sessionsFor, whenLine } from './sessionFeed';
 import { slotBody } from './practiceTools';
 
 const TAP = 'min-h-[44px] sm:min-h-0';
@@ -83,26 +83,42 @@ const STATUS_LABEL = {
 };
 const STATUS_TONE = {
   confirmed: 'neutral', completed: 'ok', no_show: 'warn', cancelled: 'neutral',
+  pending: 'warn', requested: 'warn',
 };
-const CLOSED = ['completed', 'no_show', 'cancelled'];
+const PRICE_TONE = { unpriced: 'warn', included: 'neutral', free: 'neutral', priced: 'ok' };
+
+// #4832 (D4832): each tab's empty state says what the tab is for.
+const EMPTY = {
+  upcoming: 'No upcoming sessions. Share your booking link, or accept a request on Opportunities, and the next one appears here.',
+  past: 'No session has passed yet. A session moves here once its time is over, or once you close it as held or a no-show.',
+  cancelled: 'Nothing has been cancelled or declined.',
+};
 
 /**
- * Close the loop on a booking: confirmed sessions take Session held / No-show /
- * Cancel (the last two ask for a reason in the page), and closed ones are the
- * history, with where a held session is reviewed. Accepting a request stays on
- * Opportunities, which is mounted and holds Accept / Decline.
+ * #4832 (D4832): THE OPERATIONAL FEED — one card per booking under the tab the
+ * page chose (Upcoming / Past / Cancelled, `sessionFeed.js`). A card names the
+ * client, the topic, the time, its status, the offer it was booked on and its
+ * recorded price, with Open (the page's `renderOpen`, which holds the price
+ * record) and, on a confirmed session, Complete / No-show / Cancel session.
+ *
+ * The lifecycle itself is unchanged from #4687/#4692/#4712: only a confirmed
+ * session can be closed, a cancel needs a reason because the founder is told,
+ * and a 409 means the session moved, so the panel offers the reload. Accepting
+ * a request stays on Opportunities, which holds Accept / Decline.
  */
-export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
+export function SessionLifecyclePanel({ bookings, loading, onChanged, tab = 'upcoming', now, renderOpen }) {
   const [busy, setBusy] = useState(0);
   const [asking, setAsking] = useState(null); // { id, action }
   const [reason, setReason] = useState('');
   const [note, setNote] = useState(null);
+  const [opened, setOpened] = useState(null);
   // #4692: set when the worker answered 409 — this panel is behind the booking.
   const [stale, setStale] = useState(false);
 
-  const confirmed = bookings.filter((b) => b.status === 'confirmed');
+  const at = Number.isFinite(now) ? now : Date.now();
+  const shown = sessionsFor(bookings, tab, at);
   const awaiting = bookings.filter((b) => b.awaitingDecision).length;
-  const history = bookings.filter((b) => CLOSED.includes(b.status));
+  const closable = (b) => b.status === 'confirmed';
 
   const run = async (b, action) => {
     // #4712: a cancel needs a reason, because the founder is told why.
@@ -142,14 +158,12 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
     await onChanged?.();
   };
 
-  const who = (b) => b.counterpartyName || 'Requester not recorded';
+  const who = (b) => b.counterpartyName || 'Client not recorded';
+  const statusLabel = (b) => (b.status === 'cancelled' && b.advisor_decision === 'declined'
+    ? 'Declined' : (STATUS_LABEL[b.status] || b.status || 'Status not recorded'));
 
   return (
-    <Card padding="md" id="session-lifecycle" className="scroll-mt-24" data-testid="session-lifecycle">
-      <ZoneHeading
-        title="Run your sessions"
-        blurb="Close each confirmed session once its hour has passed. History and reviews follow from what you record here."
-      />
+    <div id="session-lifecycle" className="scroll-mt-24" data-testid="session-lifecycle">
       {awaiting > 0 && (
         <p className="mb-2 text-[12px] text-amber-700 dark:text-amber-300">
           {awaiting} {awaiting === 1 ? 'request is' : 'requests are'} waiting on you.{' '}
@@ -161,70 +175,93 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
         <button type="button" data-testid="lifecycle-reload" className={`${buttonClass} ${TAP} mt-2`}
           onClick={reload}>Reload these sessions</button>
       )}
-      {loading ? null : confirmed.length === 0 ? (
-        <p className="text-[12.5px] leading-relaxed text-axal-muted">
-          No confirmed session is waiting to be closed. Accept a request on Opportunities and it appears here.
+      {loading ? null : shown.length === 0 ? (
+        <p className="rounded-[10px] border border-dashed border-axal-hairline p-3 text-[12.5px] leading-relaxed text-axal-muted dark:border-gray-700"
+          data-testid={`sessions-empty-${tab}`}>
+          {EMPTY[tab] || EMPTY.upcoming}
         </p>
       ) : (
-        <ul className="space-y-2">{confirmed.map((b) => (
-          <li key={b.id} data-testid={`lifecycle-${b.id}`}
-            className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <strong className="text-[13px] font-extrabold tracking-tight">{b.topic || 'Session'}</strong>
-                <p className="mt-0.5 text-[11.5px] text-axal-faint">
-                  {who(b)}{b.startsAt ? ` · ${formatDateTime(b.startsAt)}` : ' · time not recorded'}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={`${buttonClass} ${TAP}`} disabled={busy === b.id}
-                  onClick={() => run(b, 'complete')}>Session held</button>
-                <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy === b.id}
-                  onClick={() => { setAsking({ id: b.id, action: 'no-show' }); setReason(''); }}>No-show</button>
-                <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy === b.id}
-                  onClick={() => { setAsking({ id: b.id, action: 'cancel' }); setReason(''); }}>Cancel session</button>
-              </div>
-            </div>
-            {asking?.id === b.id && (
-              <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
-                <Field label={asking.action === 'cancel' ? 'Why you are cancelling' : 'Note on the no-show'}
-                  hint={asking.action === 'cancel' ? 'Required. The founder is told.' : 'Optional. Stored on the booking.'}>
-                  <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)}
-                    aria-required={asking.action === 'cancel' || undefined} data-testid={`lifecycle-note-${b.id}`} />
-                </Field>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" className={`${buttonClass} ${TAP}`} disabled={busy === b.id}
-                    onClick={() => run(b, asking.action)}>
-                    {asking.action === 'cancel' ? 'Confirm cancellation' : 'Record no-show'}
-                  </button>
-                  <button type="button" className={`${ghostButtonClass} ${TAP}`} onClick={() => setAsking(null)}>Keep session</button>
+        <ul className="space-y-2.5">{shown.map((b) => {
+          const when = whenLine(b, at);
+          const price = priceClass(b);
+          const paid = moneyState(b);
+          const offer = offerText(b);
+          return (
+            <li key={b.id} data-testid={`session-card-${b.id}`}
+              className="rounded-[12px] border border-axal-hairline bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11.5px] font-bold tabular-nums text-axal-muted dark:text-gray-300">
+                    {when ?? <Unrecorded>Time not recorded</Unrecorded>}
+                  </div>
+                  <p className="mt-0.5 break-words text-[13.5px] leading-snug">
+                    <strong className="font-extrabold tracking-tight">{who(b)}</strong>
+                    <span className="text-axal-muted dark:text-gray-300"> · {b.topic || 'Session'}</span>
+                  </p>
+                  <p className="mt-1 break-words text-[11.5px] leading-relaxed text-axal-faint" data-testid={`session-terms-${b.id}`}>
+                    {offer ?? <Unrecorded reason="This booking was made before its terms were copied onto it.">Session type not recorded</Unrecorded>}
+                    {' · '}{price.detail}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <Pill tone={PRICE_TONE[price.key]}>{price.label}</Pill>
+                    {paid && <Pill tone={paid.tone}>{paid.label}</Pill>}
+                  </div>
                 </div>
+                <span className="shrink-0" data-testid={`session-status-${b.id}`}>
+                  <Pill tone={STATUS_TONE[b.status] || 'neutral'}>{statusLabel(b)}</Pill>
+                </span>
               </div>
-            )}
-          </li>
-        ))}</ul>
-      )}
-
-      {!loading && history.length > 0 && (
-        <div className="mt-4" data-testid="session-history">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">History</div>
-          <ul className="mt-2 space-y-1.5">{history.map((b) => (
-            <li key={b.id} data-testid={`history-${b.id}`}
-              className="flex flex-wrap items-center justify-between gap-2 text-[12px]">
-              <span className="min-w-0">
-                <strong className="font-semibold">{b.topic || 'Session'}</strong>
-                <span className="text-axal-faint">{` · ${who(b)}${b.startsAt ? ` · ${formatDateTime(b.startsAt)}` : ''}`}</span>
-              </span>
-              <span className="flex items-center gap-2">
-                <Pill tone={STATUS_TONE[b.status] || 'neutral'}>{STATUS_LABEL[b.status] || b.status}</Pill>
-                {b.status === 'completed' && (
-                  <Link to="/practice/delivery" className="text-emerald-700 underline dark:text-emerald-300">Review it</Link>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {renderOpen && (
+                  <button type="button" className={`${ghostButtonClass} ${TAP}`} aria-expanded={opened === b.id}
+                    data-testid={`session-open-${b.id}`} onClick={() => setOpened(opened === b.id ? null : b.id)}>
+                    {opened === b.id ? 'Close' : 'Open'}
+                  </button>
                 )}
-              </span>
+                {closable(b) && (
+                  <>
+                    <button type="button" className={`${buttonClass} ${TAP}`} disabled={busy === b.id}
+                      onClick={() => run(b, 'complete')}>Complete</button>
+                    <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy === b.id}
+                      onClick={() => { setAsking({ id: b.id, action: 'no-show' }); setReason(''); }}>No-show</button>
+                    <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy === b.id}
+                      onClick={() => { setAsking({ id: b.id, action: 'cancel' }); setReason(''); }}>Cancel session</button>
+                  </>
+                )}
+                {b.status === 'completed' && (
+                  <Link to="/practice/delivery" className={`${ghostButtonClass} ${TAP} inline-flex items-center`}>Review it</Link>
+                )}
+              </div>
+              {asking?.id === b.id && (
+                <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+                  <Field label={asking.action === 'cancel' ? 'Why you are cancelling' : 'Note on the no-show'}
+                    hint={asking.action === 'cancel' ? 'Required. The founder is told.' : 'Optional. Stored on the booking.'}>
+                    <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)}
+                      aria-required={asking.action === 'cancel' || undefined} data-testid={`lifecycle-note-${b.id}`} />
+                  </Field>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" className={`${buttonClass} ${TAP}`} disabled={busy === b.id}
+                      onClick={() => run(b, asking.action)}>
+                      {asking.action === 'cancel' ? 'Confirm cancellation' : 'Record no-show'}
+                    </button>
+                    <button type="button" className={`${ghostButtonClass} ${TAP}`} onClick={() => setAsking(null)}>Keep session</button>
+                  </div>
+                </div>
+              )}
+              {renderOpen && opened === b.id && (
+                <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid={`session-detail-${b.id}`}>
+                  {renderOpen(b)}
+                </div>
+              )}
             </li>
-          ))}</ul>
-        </div>
+          );
+        })}</ul>
       )}
-    </Card>
+      {tab === 'past' && (
+        <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="past-means">
+          Past means sessions whose time has passed, or that you closed as held or a no-show. It is not a longer window of upcoming ones.
+        </p>
+      )}
+    </div>
   );
 }

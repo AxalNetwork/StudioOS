@@ -26,7 +26,7 @@ import { useLightboxPage } from './Lightbox';
  * keeps its sub as its first line; the frame flows with the page instead of
  * filling a fixed box. Steps, banner, body and footer are unchanged.
  */
-export const primary = 'inline-flex items-center justify-center rounded-[9px] bg-violet-600 px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-violet-700 disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400';
+export const primary = 'inline-flex items-center justify-center rounded-[9px] bg-violet-600 px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-violet-700 disabled:opacity-50 dark:bg-violet-600 dark:hover:bg-violet-700';
 export const ghost = 'inline-flex items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 export const danger = 'inline-flex items-center justify-center rounded-[9px] border border-red-300 bg-white px-3.5 py-2 text-[12.5px] font-bold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40';
 

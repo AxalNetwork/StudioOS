@@ -94,7 +94,7 @@ export function NewCallDialog({ apis, access, fund, summary = null, onClose, onI
             <label className={LABEL}>Amount ($)<input className={`${INPUT} mt-1 ${NUM}`} inputMode="decimal" value={form.amount} onChange={set('amount')} disabled={busy} data-testid="calls-new-amount" /></label>
             <label className={LABEL}>Due date · required
               <input className={`${INPUT} mt-1`} type="date" value={form.due} onChange={set('due')} disabled={busy} data-testid="calls-new-due" />
-              <span className="mt-1 block text-[11px] font-normal text-axal-muted dark:text-gray-400">Never filled in for you.</span>
+              <span className="mt-1 block text-[12px] font-normal text-axal-muted dark:text-gray-400">Never filled in for you.</span>
             </label>
             <label className={LABEL}>Note<input className={`${INPUT} mt-1`} value={form.purpose} maxLength={500} onChange={set('purpose')} disabled={busy} placeholder="Optional" data-testid="calls-new-purpose" /></label>
             <Err text={error} testId="calls-new-error" />
@@ -248,7 +248,7 @@ export function CallNoticesDialog({ apis, access, call, onClose }) {
       testId="calls-notices-dialog" onClose={onClose} width={540}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Page size">
-          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">Page size</span>
+          <span className="text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-muted">Page size</span>
           {PAGE_SIZES.map((p) => (
             <button key={p.key} type="button" role="radio" aria-checked={page === p.key} className={page === p.key ? BTN.primary : BTN.ghost}
               onClick={() => { setPage(p.key); setDone(null); }} disabled={busy} data-testid={`calls-notices-page-${p.key}`}>{p.label}</button>
@@ -259,7 +259,7 @@ export function CallNoticesDialog({ apis, access, call, onClose }) {
             <div key={l.line_id} className="flex items-center justify-between gap-3 py-2" data-testid={`calls-notice-${l.line_id}`}>
               <div className="min-w-0">
                 <div className="text-[13px] font-bold">{`Notice · ${names.get(Number(l.line_id)) || 'Name not recorded'}`}</div>
-                {l.refusal && <div className="text-[11.5px] text-red-700 dark:text-red-300" data-testid={`calls-notice-refused-${l.line_id}`}>{refusedNotice(l.refusal)}</div>}
+                {l.refusal && <div className="text-[12px] text-red-700 dark:text-red-300" data-testid={`calls-notice-refused-${l.line_id}`}>{refusedNotice(l.refusal)}</div>}
               </div>
               <div className={`text-[12px] font-semibold ${NUM}`}>{l.figures ? money(l.figures.amount_cents) : 'No figures'}</div>
             </div>

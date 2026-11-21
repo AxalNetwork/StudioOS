@@ -14,12 +14,16 @@
  * changes, and for a gate, an end date, a move or a folder's NDA, which
  * investors gain or lose the file. Nothing is changed by a browser pop-up.
  *
- * NOTHING HERE IS A ZERO FOR A MISSING VALUE. Storage left, a Trash and the
- * last ninety days have no store yet; each says so.
+ * NOTHING HERE IS A ZERO FOR A MISSING VALUE. The last ninety days have no
+ * store yet, and say so; Trash (D6073) is its own read, and a figure it does
+ * not hold reads Not recorded. Storage left is Usage › Storage's own
+ * read (D6074): a figure it could not read is Unreadable, one it does not
+ * hold is Not recorded, never 0.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { accessNow, grantIsActive, noAccessReason, tierOf } from '../dataRoomRead.js';
 import { day } from './dataRoomModel.js';
+import { COMPARE_HREF, COMPARE_PLANS, OPEN_STORAGE, READ_FAILED, STAFF_FOOT, STORAGE_HREF, allowanceView, storageSize } from '../../account/storagePageModel.js';
 
 export const MAX_UPLOAD_MB = 20;
 export const ENDING_SOON_DAYS = 14;
@@ -181,7 +185,7 @@ export function folderChoices(room) {
 
 const many = (files) => (files.length === 1 ? files[0].name : `${files.length} files`);
 
-export const OWNER_ONLY = 'Only the venture’s owner changes a gate or removes a file. You can still move, rename and match files.';
+export const OWNER_ONLY = 'Only the venture’s owner changes a gate or removes a file. You can still move, rename and match files, and restore from Trash.';
 
 /** Moving keeps each file's own gate; a grant limited to folders may gain or lose it. */
 export function moveCopy(room, files, folderUid, now = Date.now()) {
@@ -222,16 +226,74 @@ export function matchCopy(files, label) {
 }
 
 /**
- * Remove. There is no Trash yet: owner question 8 chose a 30-day Trash, and no
- * store keeps a removed file, so the dialog says the file goes now.
+ * Remove (DR28, D6073): the files go to Trash for 30 days (owner answer 8 of
+ * D1101). Investors stop seeing them at once; Restore brings each back with its
+ * folder, gate and versions until the day named here.
  */
-export function removeCopy(files, earlier = null) {
+export const TRASH_DAYS = 30;
+export function removeCopy(files, earlier = null, { room = null, now = Date.now() } = {}) {
   const versions = earlier == null ? ' and every earlier version' : earlier ? ` and its ${earlier} earlier version${earlier === 1 ? '' : 's'}` : '';
+  const them = files.length === 1 ? 'it' : 'them';
+  const byId = folderIndex(room);
+  const folders = [...new Set(files.map((f) => byId.get(Number(f.folder_id))?.name || 'Top level'))];
   return {
     title: `Remove ${many(files)}?`,
-    body: `Remove ${many(files)}${versions}? Investors stop seeing ${files.length === 1 ? 'it' : 'them'} now. Copies already saved are not recalled.`,
-    trash: 'There is no Trash yet. The owner chose a 30-day Trash (question 8), but nothing keeps a removed file today, so this deletes it.',
-    action: 'Remove',
+    body: `Moves ${many(files)}${versions} to Trash for ${TRASH_DAYS} days. Investors stop seeing ${them} now. Copies already saved are not recalled.`,
+    facts: [
+      { k: 'Folder', v: folders.length === 1 ? folders[0] : `${folders.length} folders` },
+      { k: 'Restorable until', v: day(new Date(now + TRASH_DAYS * DAY_MS).toISOString()) },
+    ],
+    trash: `Restore brings ${them} back with ${files.length === 1 ? 'its' : 'their'} folder, gate and versions. After ${TRASH_DAYS} days ${them === 'it' ? 'it is' : 'they are'} deleted for good.`,
+    action: 'Move to Trash',
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Trash (DR28, D6073)
+ * ------------------------------------------------------------------ */
+
+export const TRASH_NOTE = `Removed files stay here for ${TRASH_DAYS} days, then they are deleted. Investors cannot see them.`;
+export const TRASH_EMPTY = { title: 'Trash is empty.', sub: `Removed files stay here for ${TRASH_DAYS} days.` };
+export const TRASH_UNREADABLE = 'Trash could not be read. Files still work. Nothing in Trash was changed.';
+export const DRIVE_TRASH = 'Restoring keeps it here; Google Drive will not copy it again. Until you restore it, a copy you deleted stays deleted, even when Google’s file changes.';
+
+/** The foot under the list: what Restore keeps, and who deletes now. */
+export const trashFoot = (canDeleteNow) => 'Restore brings back the file’s folder, gate, tier, versions and checklist match. A file whose folder was deleted returns to Top level and says so. '
+  + (canDeleteNow ? 'Only you, the room’s owner, can Delete now.' : 'Co-founders restore; only the room’s owner can Delete now.');
+
+/** The Trash read as rows. A day, a remover or days left nobody recorded says so. */
+export function trashRows(read) {
+  return (read?.items || []).map((t) => ({
+    uid: t.uid, name: t.name,
+    folder: t.folder || 'Top level',
+    returns: t.folder_gone ? 'returns to Top level' : '',
+    removed: t.removed_at ? day(t.removed_at) : NOT_RECORDED,
+    by: t.removed_by_name || NOT_RECORDED,
+    left: Number.isSafeInteger(t.days_left) ? `${t.days_left} day${t.days_left === 1 ? '' : 's'} left` : NOT_RECORDED,
+    days: Number.isSafeInteger(t.days_left) ? t.days_left : null,
+    versions: Number.isSafeInteger(t.earlier_versions) ? t.earlier_versions : null,
+    drive: t.source_ref === 'google_drive',
+  }));
+}
+
+/** The line after a Restore: where the file is now. */
+export const restoredLine = (name, out) => (out?.returned_to_top_level
+  ? `${name} is back, at the top level: its folder was deleted.`
+  : `${name} is back in its folder, with its gate and versions.`);
+/** A Restore that did not go through: the file is still in Trash. */
+export const restoreFailed = (row) => `Restore did not go through. ${row.name} is still in Trash${row.days == null ? '' : ` with ${row.left}`}.`;
+
+/** Delete now, in two steps (Scope, then Review), and the result line. */
+export function deleteNowCopy(row) {
+  const v = row.versions == null ? 'Its earlier versions go with it.' : row.versions ? `Its ${row.versions} earlier version${row.versions === 1 ? '' : 's'} go${row.versions === 1 ? 'es' : ''} with it.` : 'It has no earlier version.';
+  return {
+    scope: { title: `Delete ${row.name} now?`, body: `Delete now: ${row.name} from Trash. One file. ${v}`, action: 'Continue' },
+    review: {
+      title: `Delete ${row.name} now?`,
+      body: `This cannot be undone. The file and its versions are deleted now${row.days == null ? '' : ` instead of in ${row.days} day${row.days === 1 ? '' : 's'}`}. Restore will no longer be offered.`,
+      action: 'Delete now',
+    },
+    done: (left) => `Deleted. ${row.name} and its versions are gone.${Number.isSafeInteger(left) ? ` Trash holds ${left} file${left === 1 ? '' : 's'}.` : ''}`,
   };
 }
 
@@ -287,7 +349,7 @@ export function deleteFolderCopy(room, folder, now = Date.now()) {
 /** A picked file's place in the queue: waiting, or refused before sending. */
 export function queueEntry(file, i) {
   const big = file.size > MAX_UPLOAD_MB * 1024 * 1024;
-  return { key: `${i}-${file.name}`, name: file.name, size: sizeText(file.size), state: big ? 'refused' : 'waiting', why: big ? `Refused: larger than ${MAX_UPLOAD_MB} MB` : '' };
+  return { key: `${i}-${file.name}`, name: file.name, size: sizeText(file.size), bytes: Number(file.size), state: big ? 'refused' : 'waiting', why: big ? `Refused: larger than ${MAX_UPLOAD_MB} MB` : '' };
 }
 export const QUEUE_WORDS = { waiting: '○ Waiting', sending: '⇪ Sending', done: '✓ In the room', refused: '✕ Refused' };
 
@@ -314,15 +376,85 @@ export function sizeText(bytes) {
 }
 
 /**
- * DR4s, storage: no store totals a plan's limit or the earlier versions, so
- * the page says what it can count (the current files) and what it cannot.
+ * The room's own count: what its current files hold. Earlier versions are not
+ * in the room read, so they are not totalled here; the plan's total, which
+ * counts them, is `uploadStorage` below.
  */
 export function storageLine(room) {
   const sizes = (room?.files || []).map((f) => f.size_bytes);
   const known = sizes.filter((s) => s != null && Number.isFinite(Number(s)));
   const total = known.reduce((t, s) => t + Number(s), 0);
   const counted = known.length === sizes.length ? sizeText(total) : `${sizeText(total)} over the ${known.length} of ${sizes.length} files whose size is recorded`;
-  return `Current files: ${counted}. Earlier versions are not totalled here. What your plan holds, and what is left, is on Usage › Storage. Each file can be up to ${MAX_UPLOAD_MB} MB.`;
+  return `This room’s current files: ${counted}. Earlier versions are not totalled here. Each file can be up to ${MAX_UPLOAD_MB} MB.`;
+}
+
+/**
+ * D6074 (#6074) — DR4s and DR23 on Upload: storage used and left on the plan
+ * these files count to, from the same read as Usage › Storage
+ * (`usageApi.storage`, D642 as D1169 grew it), through that page's own
+ * `allowanceView`, so the two never disagree. `read` is `{ status: 'loading' }`,
+ * `{ status: 'ready', data }` or `{ status: 'error' }`.
+ *
+ * A data room file counts to the venture's owner (D1170 §2). The read is the
+ * caller's own plan, and its `companies[].ventures` lists the ventures whose
+ * files count to the caller, so a room not in that list counts to someone
+ * else's plan and no figure of the caller's is drawn for it.
+ *
+ * Only a `meter` view, a figure measured against an allowance, can refuse a
+ * queue (`queueStorage`). Unreadable, Not recorded, staff and another
+ * member's plan never block: the Worker's own refusal at upload (D1170/D1171)
+ * still answers for those.
+ *
+ * Near the limit is the Worker's own `state` (`near_80`, `near_95`: 80% and
+ * 95% of the allowance, `storageState` in `services/storageUsage.ts`), the
+ * same that draws Usage › Storage's "Near your limit" pill and notice.
+ */
+const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
+export const STORAGE_UNREADABLE = `Storage left: Unreadable. ${READ_FAILED} You can still add files.`;
+export function uploadStorage(read, projectUid) {
+  if (!read || read.status === 'loading') return { mode: 'loading', line: 'Reading your storage…' };
+  const s = read.status === 'ready' && read.data && typeof read.data === 'object' ? read.data : null;
+  const unreadable = { mode: 'unreadable', line: STORAGE_UNREADABLE };
+  const v = s ? allowanceView(s, null) : null;
+  if (!v) return unreadable;
+  // Staff pass the Worker's guard whoever's room it is (D1170 §1).
+  if (v.mode === 'staff') return { mode: 'none', line: `Storage left: Not recorded. ${STAFF_FOOT}` };
+  if (!Array.isArray(s.companies)) return unreadable; // whose plan this is could not be read
+  const ours = s.companies.some((c) => (Array.isArray(c?.ventures) ? c.ventures : []).some((x) => x?.uid && x.uid === projectUid));
+  if (!ours) return { mode: 'elsewhere', line: 'Files added here count to the company owner’s storage, which is not shown to you. If it is full, the room refuses a file when it is sent.' };
+  if (v.mode === 'unread' || s.plan_recorded === false) return unreadable;
+  if (v.mode !== 'meter') return { mode: 'none', line: `Storage left: Not recorded. ${v.reason}` };
+  const used = s.measured_bytes;
+  const allowance = s.allowance_bytes;
+  const near = v.state === 'near_80' || v.state === 'near_95';
+  const full = used >= allowance;
+  return {
+    mode: 'meter', used, allowance, left: Math.max(0, allowance - used),
+    line: `Storage: ${v.used} of ${v.allowance} used · ${v.side}.${v.pending ? ` ${v.pending}` : ''}`,
+    tone: full ? 'red' : near ? 'amber' : 'muted',
+    // DR23: the amber line, in the canvas's words, with its one door.
+    near: near ? { text: `Your files use ${v.used} of ${v.allowance}. Versions count too.`, link: { label: OPEN_STORAGE, to: STORAGE_HREF } } : null,
+  };
+}
+
+/**
+ * DR4s, before anything is sent: the waiting files' total against what is
+ * left, by the Worker's own rule (`assertStorageRoom`: used plus the file
+ * passes the allowance, or nothing is left for an empty file). Null when the
+ * queue fits, or when the figure is not a meter. The refusal has the shape
+ * `StorageRefusal` draws, with the doors to Usage › Storage and the plans.
+ */
+export function queueStorage(view, queue) {
+  if (view?.mode !== 'meter') return null;
+  const waiting = (queue || []).filter((x) => x?.state === 'waiting');
+  if (!waiting.length) return null;
+  const need = waiting.reduce((t, x) => t + (isCount(x.bytes) ? x.bytes : 0), 0);
+  if (view.used + need <= view.allowance && !(need === 0 && view.used >= view.allowance)) return null;
+  const n = waiting.length;
+  const text = view.left === 0
+    ? 'Storage full. Nothing new can be stored until you free up space or change plan. Everything you stored stays.'
+    : `${n === 1 ? 'This file needs' : `These ${n} files need`} ${storageSize(need)}. You have ${storageSize(view.left)} left on your plan. Nothing was sent; remove ${n === 1 ? 'it' : 'some'} or make room first.`;
+  return { text, yours: true, full: view.left === 0, need, links: [{ label: OPEN_STORAGE, to: STORAGE_HREF }, { label: COMPARE_PLANS, to: COMPARE_HREF }] };
 }
 
 /* ------------------------------------------------------------------ *

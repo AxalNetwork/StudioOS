@@ -39,6 +39,8 @@ const ROLE: Record<number, string> = { 1: 'admin', 2: 'investor', 3: 'investor',
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'reference_checks', 'user_company_links', 'company_profiles']) db.exec(ddl(t));
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
+  db.exec(readFileSync(new URL('../sql/migrations/202611152241_6735_reference_check_firm.sql', import.meta.url), 'utf8'));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, `User ${id}`, `u${id}@example.test`);
   db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${FOUNDER}`);
@@ -66,11 +68,13 @@ const app = (() => {
   return a;
 })();
 
-async function call(db: DatabaseSync, who: number, method: string, path: string, body?: unknown) {
+async function call(db: DatabaseSync, who: number, method: string, path: string, body?: unknown, firm?: number) {
   const tok = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const headers = new Headers({ Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' });
+  if (firm) headers.set('X-Company-Id', String(firm));
   const res = await app.fetch(new Request(`http://x${path.startsWith('@') ? path.slice(1) : '/api/references'+path}`, {
-    method, headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+    method, headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   }), { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
   const text = await res.text();
@@ -78,7 +82,6 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
   try { json = JSON.parse(text); } catch { /* not JSON */ }
   return { status: res.status, body: json, text };
 }
-const count = (db: DatabaseSync) => (db.prepare('SELECT COUNT(*) AS n FROM reference_checks').get() as any).n;
 
 
 test('internal deal fields are staff-only and zip is retired', async () => {
@@ -112,8 +115,11 @@ test('commitments: investor own rows; founder, admin and partner all rows, never
 test('reference edits/deletion require author or admin even on a readable deal',async()=>{
   const db=freshDb();
   try {
+    db.exec(readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8'));
+    db.exec("UPDATE reference_checks SET company_id = 10 WHERE id = 101");
+    db.prepare('INSERT INTO user_company_links (uid, user_id, company_id) VALUES (?, ?, 10)').run('firm-colleague', INV_COMMITTED);
     for(const method of ['PATCH','DELETE']) {
-      assert.equal((await call(db,INV_COMMITTED,method,'/101',{notes:'private'})).status,403);
+      assert.equal((await call(db,INV_COMMITTED,method,'/101',{notes:'private'},10)).status,403);
       assert.equal((await call(db,FOUNDER,method,'/101',{})).status,403);
       assert.equal((await call(db,PARTNER,method,'/101',{})).status,403);
       for(const who of [7,8]) assert.equal((await call(db,who,method,'/101',{})).status,403);
@@ -132,7 +138,7 @@ test('syndicate roster: creator/member/admin only; no member emails',async()=>{
       const r=await call(db,who,'GET','@/api/networkfx/syndicates/1');
       const allowed=[ADMIN,INV_INVITED,INV_COMMITTED].includes(who);
       assert.equal(r.status,allowed?200:403,r.text);
-      if(allowed) {assert.equal(r.body.members.length,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
+      if(allowed) {assert.equal(r.body.members.length,who===INV_INVITED?1:0);assert.equal(r.body.member_count,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
     }
   } finally {db.close();}
 });
@@ -142,7 +148,7 @@ test('deal detail and list both apply the shared serializer; recommendations sel
  // D4631: both apply it by the caller's staff licence (admin, or the partner licence), not their primary role.
  // D4631 part 2: the list strips its internal audience key first, then serializes by the staff licence.
  assert.match(source,/map\(\(\{ row_founder_id: _founder, \.\.\.row \}\) => serializeDeal\(row, isDealStaff\(user\) \? 'admin' : 'member'\)\)/);
- assert.match(source,/const deal = serializeDeal\(rows\[0\], isDealStaff\(user\) \? 'admin' : 'member'\)/);
+ assert.match(source,/const \{ profile_uid:[^\n]+, \.\.\.row \} = rows\[0\];\n  const deal = serializeDeal\(row, isDealStaff\(user\) \? 'admin' : 'member'\)/);
  const net=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/routes/networkfx.ts'),'utf8');
  const recs=net.slice(net.indexOf("networkfx.post('/syndicates/:id/recommendations'"),net.indexOf('// MARKETPLACE'));
  assert.doesNotMatch(recs,/u\.email/);

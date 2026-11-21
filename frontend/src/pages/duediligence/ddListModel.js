@@ -11,7 +11,7 @@
  * month before the first recorded decision is "Not recorded", drawn as a
  * dashed hairline, never an empty column.
  */
-import { bandWord, decisionWord } from './ddModel.js';
+import { bandWord, decisionWord, DECISION_WORD } from './ddModel.js';
 
 export const READING = 'Reading…';
 export const UNREADABLE = 'Unreadable';
@@ -434,4 +434,33 @@ export function templateBody(depth, current, draft) {
     depth,
     sections: draft.map((s) => ({ key: s.key, weight: Math.round(Number(s.weight) * 100) / 100, blocking: Boolean(s.blocking), items: items.get(s.key) || [] })),
   };
+}
+
+
+/** D6292: the address owns Cases filters, stage, search, sort and paging. */
+export function readCasesSearch(search) {
+  const params = new URLSearchParams(search);
+  const filters = {};
+  const choices = { subject_type: SUBJECT_TYPES.map(x => x.key), risk_band: ['green', 'yellow', 'amber', 'red', 'none'],
+    template: Object.keys(DEPTH_WORD), decision: [...Object.keys(DECISION_WORD), 'none'] };
+  for (const [key, values] of Object.entries(choices)) if (values.includes(params.get(key))) filters[key] = params.get(key);
+  const positive = value => /^[1-9]\d*$/.test(value || '') && Number.isSafeInteger(Number(value));
+  if (positive(params.get('lead'))) filters.lead = params.get('lead');
+  if (params.get('past_target') === '1') filters.past_target = '1';
+  const page = positive(params.get('page')) && Number(params.get('page')) <= 1000000 ? Number(params.get('page')) : 1;
+  const pageSize = PAGE_SIZES.includes(Number(params.get('page_size'))) ? Number(params.get('page_size')) : 10;
+  return { filters, stage: Object.hasOwn(STAGE_WORD, params.get('stage')) ? params.get('stage') : '',
+    q: (params.get('q') || '').trim().slice(0, 200), sort: SORTS.some(x => x.key === params.get('sort')) ? params.get('sort') : 'opened', page, pageSize };
+}
+
+/** Preserve unrelated address parameters when a Cases control changes. */
+export function writeCasesSearch(search, state) {
+  const params = new URLSearchParams(search);
+  for (const key of [...FILTER_KEYS, 'stage', 'q', 'sort', 'page', 'page_size']) params.delete(key);
+  const query = listQuery(state);
+  for (const [key, value] of Object.entries(query)) {
+    if ((key === 'sort' && value === 'opened') || (key === 'page' && value === 1) || (key === 'page_size' && value === 10)) continue;
+    params.set(key, String(value));
+  }
+  const next = params.toString(); return next ? `?${next}` : '';
 }

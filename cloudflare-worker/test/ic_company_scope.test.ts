@@ -123,6 +123,13 @@ function freshDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(ic_decision_id, user_id)
     );
+    -- D6143: the voting roster (migration 202611180056_6143); empty, so every decision here has none.
+    CREATE TABLE ic_decision_voters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL, added_by INTEGER NOT NULL,
+      added_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(ic_decision_id, user_id)
+    );
     CREATE TABLE decision_journal_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, owner_user_id INTEGER,
       project_id INTEGER, deal_id INTEGER, ic_decision_id INTEGER,
@@ -137,7 +144,7 @@ function freshDb() {
       ic_decision_id INTEGER NOT NULL, body TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      resolved_at TEXT, resolved_by INTEGER
+      resolved_at TEXT, resolved_by INTEGER, owner_user_id INTEGER, owner_label TEXT
     );
     CREATE TABLE ic_meetings (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
@@ -286,6 +293,14 @@ const OUTSIDER_MATRIX: Array<{
     why: 'resolving another firm’s condition travels the decision scope: the uid is real and the answer is still 404',
   },
   {
+    route: '/:uid/roster', method: 'GET', path: `/${DEC_A}/roster`, expect: 404,
+    why: 'D6143: who may vote on another firm’s decision is that firm’s record',
+  },
+  {
+    route: '/:uid/roster', method: 'PUT', path: `/${DEC_A}/roster`, expect: 404, body: { user_ids: [1] },
+    why: 'D6143: setting another firm’s roster travels the decision scope, so 404 before any check',
+  },
+  {
     route: '/meetings/:uid/minutes', method: 'PATCH', path: '/meetings/mtg-not-theirs/minutes', expect: 404,
     body: { minutes: 'the room concluded…' },
     why: 'minutes are written on a meeting the caller organised; an unknown uid is a 404',
@@ -344,7 +359,7 @@ test('every endpoint under /api/ic is in the outsider matrix', () => {
     [...declared].filter((k) => !covered.has(k as string)).sort(), [],
     'an /api/ic endpoint has no outsider assertion',
   );
-  assert.equal(covered.size, 10, 'the matrix itself must not shrink silently');
+  assert.equal(covered.size, 12, 'the matrix itself must not shrink silently');
 });
 
 // ---------------------------------------------------------------------------

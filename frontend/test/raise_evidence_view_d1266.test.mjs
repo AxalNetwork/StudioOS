@@ -14,6 +14,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { EvidenceBody } from '../src/pages/cycles/evidence/RaiseEvidence.jsx';
 import { ShareDialog, SharedView } from '../src/pages/cycles/evidence/EvidenceReview.jsx';
+import { OpensCard } from '../src/pages/cycles/evidence/EvidenceView.jsx';
 import { viewOf } from '../src/pages/cycles/evidence/evidenceModel.js';
 import {
   ACCEPT_ALL_CAP, acceptAllOffer, acceptAllPlan, claimTitle, claimWhere, countOf, coverageByArea, day, figure, filterClaims,
@@ -230,7 +231,9 @@ test('VR13–VR15: empty, loading, an error that is not the same as none, and on
   empty.opens = { state: 'recorded', count: 0, investors: 0, rows: [] };
   const e = body({ state: ready(empty) });
   assert.ok(e.includes('Nothing backs your Raise yet.') && e.includes('href="/validate/record?project_id=7"'));
-  assert.ok(e.includes('No investor has opened your evidence yet.'));
+  // D6048 (#6048): an empty read is RA-15's first use, so no zero-filled tile or card is drawn around it.
+  assert.ok(!e.includes('data-testid="evidence-tiles"') && !e.includes('data-testid="evidence-opens"'), 'no zero-filled dashboard');
+  assert.ok(html(h(OpensCard, { read: { opens: empty.opens } })).includes('No investor has opened your evidence yet.'));
   assert.ok(body({ state: { status: 'loading' } }).includes('data-testid="evidence-loading"'));
   const err = body({ state: { status: 'error', message: '' } });
   assert.ok(err.includes('Your evidence could not be read.') && err.includes('That is not the same as having none.') && err.includes('Try again'));

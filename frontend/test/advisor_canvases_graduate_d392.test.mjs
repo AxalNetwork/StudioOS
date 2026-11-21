@@ -137,7 +137,8 @@ test('D392: Services, Proof and Thinking narrow the list they draw, and export i
     ['ThinkingZone.jsx', 'expertise/thinking'],
   ]) {
     const src = read(`frontend/src/pages/advisor/expertise/${file}`);
-    assert.match(src, new RegExp(`advisorZoneFilters\\('${zone.replace('/', '\\/')}', \\{ value: view, onChange: setView \\}\\)`), file);
+    // D4826 part 2: Thinking also hands the chips the Worker's whole-shelf counts.
+    assert.match(src, new RegExp(`advisorZoneFilters\\('${zone.replace('/', '\\/')}', \\{ value: view, onChange: setView(, counts: chipCounts)? \\}\\)`), file);
     // Filtered inline, or looked up from lists the page already filtered.
     assert.match(src, /const shown = [^;]*(\.filter\(|_VIEWS\[view\])/, `${file} narrows`);
     assert.match(src, /shown\.map\(/, `${file} draws the narrowed list`);
@@ -147,14 +148,16 @@ test('D392: Services, Proof and Thinking narrow the list they draw, and export i
   assert.match(proof, /PROOF_VIEWS = \{ attested: attested, awaiting: awaiting, self: selfStated \}/,
     'the chips are the strip\'s own three counts');
   const thinking = read('frontend/src/pages/advisor/expertise/ThinkingZone.jsx');
-  assert.match(thinking, /draft: \(a\) => a\.status !== 'published'/, 'Drafts is what the shelf labels Draft');
+  // D4826 part 2: the chips are EX-11's, each a set of the shelf's own states.
+  assert.match(thinking, /const shown = items\.filter\(\(a\) => inThinkingView\(a, view\)\)/, 'a chip collects the states its set names');
 });
 
 test('D392: the chips a store cannot serve say what is missing', () => {
   const unbuilt = Object.entries(ADVISOR_ZONE_FILTERS)
     .filter(([z]) => z.startsWith('expertise/'))
     .flatMap(([z, rows]) => rows.filter((r) => r.unbuilt).map((r) => `${z} · ${r.canvas}`));
-  assert.deepEqual(unbuilt, ['expertise/profile · Public preview', 'expertise/thinking · Essays']);
+  // D4826 part 2: EX-11 dropped `Essays`, which named a kind no article records.
+  assert.deepEqual(unbuilt, ['expertise/profile · Public preview']);
 });
 
 test('D392: no Expertise figure is a typed zero or a bare dash', () => {

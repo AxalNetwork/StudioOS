@@ -135,9 +135,10 @@ test('"Send to Problem slide" is a link to the slide, never a button that sends'
   // the pain themes ALREADY feed the deck's slide 2, since `pain_groups` is
   // curated for exactly that. A button that "sends" would be a control over a
   // pipe that already runs. Since D704 the op lives on Problem discovery's
-  // section (#1659), which validate_sections_d697 test 2 renders.
+  // section (#1659), which validate_sections_d697 test 2 renders. It carries
+  // the venture (#6005), so a founder with two ventures opens the right deck.
   const sections = codeOnly(read('frontend/src/pages/cycles/ValidateSections.jsx'));
-  assert.match(sections, /<Link to="\/raise\/pitch\/edit" title=\{PROBLEM_SLIDE_NOTE\}[^>]*>Open the Problem slide<\/Link>/,
+  assert.match(sections, /<Link to=\{`\/raise\/pitch\/edit\$\{ventureSearch\(projectId\)\}`\} title=\{PROBLEM_SLIDE_NOTE\}[^>]*>Open the Problem slide<\/Link>/,
     'the Problem slide op is no longer a link to the deck');
   assert.doesNotMatch(sections, /Send to Problem slide/, 'the canvas verb is back on a control, and the control does not send');
   assert.doesNotMatch(sections, /<button[^>]*>[^<]*Problem slide/, 'a "send" button over a feed that is already live must not ship');
