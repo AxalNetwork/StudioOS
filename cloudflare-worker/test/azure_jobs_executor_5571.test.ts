@@ -27,8 +27,11 @@ const azureSpec = (patch = {}) => specFixture({ allowed_providers: ['azure'], ..
 
 /** A synthetic ARM endpoint for one job. `next` overrides the following start/stop answer. */
 function reservationStore(): AzureStartReservations {
-  const keys = new Set<string>();
-  return { async reserve(key) { if (keys.has(key)) return false; keys.add(key); return true; } };
+  const keys = new Map<string, 'pending' | 'refused'>();
+  return {
+    async reserve(key) { const prior = keys.get(key); if (prior) return prior; keys.set(key, 'pending'); return 'acquired'; },
+    async refuse(key) { assert.equal(keys.get(key), 'pending'); keys.set(key, 'refused'); },
+  };
 }
 const executor = (args: { config: AzureJobsConfig; transport: { request(req: ArmRequest): Promise<ArmResponse> }; starts?: AzureStartReservations }) =>
   createAzureJobsExecutor({ ...args, starts: args.starts ?? reservationStore() });
@@ -177,6 +180,7 @@ test('quota, revoked identity, a missing execution and cross-region refs are ref
     arm.faults.start = status;
     const r = await ex.create(azureSpec({ execution_generation: status }));
     refused(r, code);
+    refused(await ex.create(azureSpec({ execution_generation: status })), 'start_generation_refused');
     assert.doesNotMatch(JSON.stringify(r), /synthetic provider text/);
   }
   const ref = value(await ex.create(azureSpec())).ref;
@@ -227,7 +231,7 @@ test('concurrent adapters and retries before list visibility issue at most one s
 test('a failed reservation sends no start, including a store that committed before losing its reply', async () => {
   const arm = fakeArm(), store = reservationStore();
   let fail = true;
-  const starts = { async reserve(key: string) { const won = await store.reserve(key); if (fail) { fail = false; throw new Error('lost reply'); } return won; } };
+  const starts = { async reserve(key: string) { const won = await store.reserve(key); if (fail) { fail = false; throw new Error('lost reply'); } return won; }, refuse: (key: string) => store.refuse(key) };
   refused(await executor({ config: config(), transport: arm.transport, starts }).create(azureSpec()), 'start_reservation_unavailable');
   assert.equal(value(await executor({ config: config(), transport: arm.transport, starts }).create(azureSpec())).state, 'unknown');
   assert.equal(arm.starts(), 0);
@@ -250,4 +254,20 @@ test('an unlocated stop stays ambiguous and can stop the execution after it beco
   visible = true;
   assert.equal(value(await ex.terminate(ref)).state, 'cancelling');
   assert.equal(value(await ex.get(ref)).state, 'cancelled');
+});
+
+
+test('provider timeout remains ambiguous while a definite refusal requires a new generation', async () => {
+  const arm = fakeArm(), starts = reservationStore();
+  const args = { config: config(), transport: arm.transport, starts };
+  arm.faults.start = 408;
+  assert.equal(value(await executor(args).create(azureSpec())).failure_code, 'start_ambiguous');
+  assert.equal(value(await executor(args).create(azureSpec())).failure_code, 'start_ambiguous');
+  assert.equal(arm.starts(), 1);
+  arm.faults.start = 429;
+  refused(await executor(args).create(azureSpec({ execution_generation: 2 })), 'provider_quota');
+  refused(await executor(args).create(azureSpec({ execution_generation: 2 })), 'start_generation_refused');
+  assert.equal(arm.starts(), 2);
+  assert.equal(value(await executor(args).create(azureSpec({ execution_generation: 3 }))).state, 'provisioning');
+  assert.equal(arm.starts(), 3);
 });
