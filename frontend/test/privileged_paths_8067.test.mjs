@@ -131,6 +131,8 @@ test('pr:privileged is declared, and set by a job that runs no repository code',
   assert.match(label, /head\.repo\.full_name == github\.repository/, 'a fork is skipped');
   assert.match(label, /--add-label 'pr:privileged'/);
   assert.match(label, /--remove-label 'pr:privileged'/);
+  // Before labels-sync has created the label on main, the job warns and passes rather than failing the PR.
+  assert.match(label, /gh api "repos\/\$GH_REPO\/labels\/pr%3Aprivileged" --silent[\s\S]*::warning::[\s\S]*exit 0\n[\s\S]*has=\$\(gh pr view/);
   const policy = wf.slice(0, wf.indexOf('\n  label:\n'));
   assert.match(policy, /privileged=true\n/, 'unreadable is privileged');
   assert.match(policy, /r\.privileged\.length === 0 \? 0 : 1/, 'false only on a classification that names none');

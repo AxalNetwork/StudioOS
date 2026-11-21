@@ -87,6 +87,11 @@ jobs:
         shell: bash
         run: |
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
+          # labels-sync.yml creates the label once labels.yml reaches main; until then there is nothing to set.
+          if ! gh api "repos/$GH_REPO/labels/pr%3Aprivileged" --silent 2>/dev/null; then
+            echo "::warning::The pr:privileged label does not exist yet (labels-sync creates it from .github/labels.yml on main); privileged=$PRIVILEGED"
+            exit 0
+          fi
           has=$(gh pr view "$PR_NUMBER" --json labels --jq '[.labels[].name] | index("pr:privileged") != null')
           if [[ "$PRIVILEGED" == true && "$has" != true ]]; then
             gh pr edit "$PR_NUMBER" --add-label 'pr:privileged'
