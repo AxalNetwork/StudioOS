@@ -100,18 +100,6 @@ function noPrivateKeys(text: string) {
   assert.ok(!/@example\.test/.test(text), 'an email address');
   assert.ok(!/"(user_id|assignee_user_id|created_by|created_by_user_id|actor_user_id)"\s*:/.test(text), 'a numeric user id key');
 }
-/** A live CFO on the company, through part 1's own route. */
-async function cfo(w: W, scope = CO) {
-  const r = await call(w, scope === CO ? EDITOR : PROJECT_OWNER, 'POST', `${scope}/agents`, { role_key: 'cfo', first_name: 'Carla', last_name: 'Cash', model_id: MODEL, monthly_cap_microusd: 5_000_000 });
-  assert.equal(r.status, 201, r.text);
-  return r.body.agent.uid as string;
-}
-const task = async (w: W, body: Record<string, unknown>, scope = CO, who = EDITOR) => {
-  const r = await call(w, who, 'POST', `${scope}/tasks`, body);
-  assert.equal(r.status, 201, r.text);
-  return r.body.task;
-};
-
 
 const goal = async (w: W, scope = CO, who = EDITOR) => {
   const r = await call(w, who, 'POST', `${scope}/goals`, { title: 'Close the seed round' });
