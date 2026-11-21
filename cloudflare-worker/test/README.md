@@ -1,5 +1,7 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
+
 `research_global_funds_7326.test.ts` replays the worldwide manager import over
 the real fund migrations and through directory reads: preserves historical
 rows, reports, saved references, UID redirects and source reviews; suppresses
