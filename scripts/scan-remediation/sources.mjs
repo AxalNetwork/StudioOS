@@ -22,11 +22,12 @@ export const codeScanning = {
     alert.most_recent_instance?.ref === 'refs/heads/' + defaultBranch && alert.most_recent_instance.state === 'fixed',
 }
 
-function newSource({ key, name, urlPart, list, get, open, resolved, rule, handling, closure }) {
+function newSource({ key, name, urlPart, titles, list, get, open, resolved, rule, handling, closure }) {
   const prefix = '[' + name + '] Remediate alert #'
   return {
     key, name, urlPart, list, get, open, resolved, rule,
-    titles: new RegExp('^' + prefix.replace(/[[\]]/g, '\\$&') + '([1-9]\\d*)$'),
+    // A literal pattern per source (no regex is built from a string); the test checks it matches title().
+    titles,
     title: number => prefix + number,
     marker: number => '<!-- studioos-scan-remediation:' + key + ':' + number + ' -->',
     search: number => 'is:issue in:title "' + name + '" "alert #' + number + '"',
@@ -57,6 +58,7 @@ export const dependabot = newSource({
   key: 'dependabot',
   name: 'Dependabot',
   urlPart: 'dependabot',
+  titles: /^\[Dependabot\] Remediate alert #([1-9]\d*)$/,
   list: '/dependabot/alerts?state=open',
   get: number => '/dependabot/alerts/' + number,
   open: alert => alert?.state === 'open',
@@ -75,6 +77,7 @@ export const secretScanning = newSource({
   key: 'secret-scanning',
   name: 'Secret Scanning',
   urlPart: 'secret-scanning',
+  titles: /^\[Secret Scanning\] Remediate alert #([1-9]\d*)$/,
   list: '/secret-scanning/alerts?state=open&hide_secret=true',
   get: number => '/secret-scanning/alerts/' + number + '?hide_secret=true',
   open: alert => alert?.state === 'open',

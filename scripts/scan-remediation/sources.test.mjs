@@ -48,7 +48,10 @@ function fakeGitHub({ dependabotAlerts = [], secretAlerts = [], forbid = [] } = 
     if (!issue) throw Error('Unexpected request: ' + method + ' ' + path)
     if (method === 'GET' && !m[2]) return Response.json(issue)
     if (method === 'PATCH' && !m[2]) {
-      Object.assign(issue, body, body.state === 'closed' ? { closed_by: { login: options.botLogin } } : {})
+      // The reconciler only ever PATCHes a tracker's state and reason.
+      issue.state = body.state
+      if (body.state_reason) issue.state_reason = body.state_reason
+      if (body.state === 'closed') issue.closed_by = { login: options.botLogin }
       return Response.json(issue)
     }
     if (m[2] === '/labels' && method === 'POST') {
@@ -170,5 +173,9 @@ test('the three sources never share a title or a marker', () => {
   assert.equal(new Set(sources.map(s => s.marker(1))).size, 3)
   for (const s of sources) for (const other of sources) {
     assert.equal(s.titles.test(other.title(1)), s === other, `${s.name} does not claim ${other.name}'s tasks`)
+  }
+  for (const s of sources) {
+    assert.equal(Number(s.titles.exec(s.title(4321))?.[1]), 4321, `${s.name}'s pattern reads its own title`)
+    assert.equal(s.titles.test(s.title(4321) + ' (copy)'), false)
   }
 })
