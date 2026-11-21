@@ -59,7 +59,8 @@ test('D6318: PostHog announces partial, unread-only and completed syncs from the
 test('D6318: Mercury reports its transaction limit and keeps the status through the module refresh', async (t) => {
   const counts = { metric_months: 0, facts: 2, invoice_credits: 1, partner_proposals: 0, partial: true };
   const module = { card: { name: 'Durable company-building', state: 'active' }, records: { rows: [], cols: [] },
-    parts: { from_mercury: { state: 'not_recorded', can_sync: true } } };
+    // D6122 part 2: the Worker's `parts.can_write` says this viewer writes Company (cash is the team's alone).
+    parts: { can_write: true, from_mercury: { state: 'not_recorded', can_sync: true } } };
   const refresh = Promise.withResolvers();
   let moduleReads = 0;
   t.mock.method(globalThis, 'fetch', async (u) => {
