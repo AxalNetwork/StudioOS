@@ -256,6 +256,16 @@ function main(argv) {
   return runPart({ commands: part.commands, env: { ...env, CI_FAILURE_PART: part.name }, root, sh, continueIndependent: part.name === REST });
 }
 
+/** D5505: Actions PR runs identify the head while GITHUB_SHA identifies the tested merge. */
+export function reportHeadSha(env = process.env) {
+  let head = env.GITHUB_SHA;
+  if (env.GITHUB_EVENT_NAME === 'pull_request') {
+    try { head = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')).pull_request?.head?.sha; }
+    catch { return null; }
+  }
+  return /^[a-f0-9]{40}$/.test(head || '') ? head : null;
+}
+
 /**
  * Run one part's commands in order; the first that fails ends the part with its exit status. Under merge_group a
  * failed node:test command may retry its listed flaky tests once (D6464), and a failure that stands publishes its
@@ -264,6 +274,7 @@ function main(argv) {
 export function runPart({ commands, env = process.env, root = process.cwd(), sh, log = console.log, error = console.error,
   flakyList = () => readFlakyList(root), changedFiles = () => queueChangedFiles(root, env), continueIndependent = false }) {
   const event = env.GITHUB_EVENT_NAME;
+  const headSha = reportHeadSha(env);
   const reports = [];
   let firstStatus = 0;
   const record = (path, status) => {
@@ -273,10 +284,10 @@ export function runPart({ commands, env = process.env, root = process.cwd(), sh,
       const end = rows.at(-1);
       reports.push(failureReport({ failures: status ? rows.filter(r => r.file) : [], files: end?.files || [],
         complete: end?.end === true && end.complete === true && [0, 1].includes(status), status,
-        testedSha: env.GITHUB_SHA, baseSha: env.CI_FAILURE_BASE, runId: env.GITHUB_RUN_ID,
+        testedSha: env.GITHUB_SHA, headSha, baseSha: env.CI_FAILURE_BASE, runId: env.GITHUB_RUN_ID,
         attempt: env.GITHUB_RUN_ATTEMPT, part: env.CI_FAILURE_PART }));
     } catch {
-      reports.push(failureReport({ status, complete: false, testedSha: env.GITHUB_SHA, runId: env.GITHUB_RUN_ID,
+      reports.push(failureReport({ status, complete: false, testedSha: env.GITHUB_SHA, headSha, runId: env.GITHUB_RUN_ID,
         attempt: env.GITHUB_RUN_ATTEMPT, part: env.CI_FAILURE_PART }));
     }
     publish();
@@ -310,7 +321,7 @@ export function runPart({ commands, env = process.env, root = process.cwd(), sh,
     if (guards) {
       try {
         guardRows = guardReports(JSON.parse(readFileSync(guardOutput, 'utf8')), {
-          testedSha: env.GITHUB_SHA, baseSha: env.CI_FAILURE_BASE, runId: env.GITHUB_RUN_ID,
+          testedSha: env.GITHUB_SHA, headSha, baseSha: env.CI_FAILURE_BASE, runId: env.GITHUB_RUN_ID,
           attempt: env.GITHUB_RUN_ATTEMPT, part: env.CI_FAILURE_PART,
         }, r.status, JSON.parse(readFileSync(resolve(root, 'scripts/guard-commands.json'), 'utf8')).filter(g => g.full !== false));
         reports.push(...guardRows); publish();

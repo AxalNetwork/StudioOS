@@ -28,6 +28,7 @@ export function failureReport({ failures = [], files = [], ...meta } = {}) {
     return row;
   });
   return { version: 1, scope: meta.scope === 'guards' || failures.some(f => f.kind === 'guard') || meta.coverageIds?.length ? 'guards' : 'tests', testedSha: /^[a-f0-9]{40}$/.test(meta.testedSha || '') ? meta.testedSha : null,
+    headSha: /^[a-f0-9]{40}$/.test(meta.headSha || '') ? meta.headSha : null,
     baseSha: /^[a-f0-9]{40}$/.test(meta.baseSha || '') ? meta.baseSha : null,
     runId: /^\d+$/.test(String(meta.runId)) ? String(meta.runId) : null,
     attempt: /^\d+$/.test(String(meta.attempt)) ? String(meta.attempt) : null,

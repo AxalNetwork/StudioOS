@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guardReports, compareEvidence, identity, failureReport, renderEvidence } from './ciFailures.mjs';
-import { runPart } from '../test-drift-parts.mjs';
+import { runPart, reportHeadSha } from '../test-drift-parts.mjs';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -79,4 +79,17 @@ test('guard coverage cannot be mistaken for execution of a node:test in the same
   const current = failureReport({ ...meta, complete: true, status: 1, files: ['scripts/first.mjs'], failures: [{ file: 'scripts/first.mjs', test: 'new test' }] });
   assert.equal(base[0].scope, 'guards'); assert.equal(failureReport(base[0]).scope, 'guards');
   assert.equal(compareEvidence({ current: [current], base, baseSha: sha }).verdict, 'main_health_unknown');
+});
+
+test('producer records the frozen PR head independently of GITHUB_SHA and refuses an unreadable event', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'guards5505-head-')), path = join(dir, 'event.json');
+  const head = 'b'.repeat(40), merge = 'c'.repeat(40);
+  try {
+    writeFileSync(path, JSON.stringify({ pull_request: { head: { sha: head } } }));
+    const env = { GITHUB_EVENT_NAME: 'pull_request', GITHUB_SHA: merge, GITHUB_EVENT_PATH: path };
+    assert.equal(reportHeadSha(env), head);
+    writeFileSync(path, '{bad json'); assert.equal(reportHeadSha(env), null);
+    assert.equal(reportHeadSha({ GITHUB_EVENT_NAME: 'push', GITHUB_SHA: merge }), merge);
+    assert.equal(failureReport({ headSha: head, testedSha: merge }).headSha, head);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
