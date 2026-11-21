@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { parse as yaml } from 'yaml';
 import { fixture, REPO, PREFIX, EXEC, SOURCE, config, claims, token, options, unlock, submission, plan } from './ci_capacity_fixture_7909.mjs';
 import { capacityInventoryClient, capacityGithubClient } from '../../merge-control/src/ciCapacityGithub.ts';
 import { SqlCapacityStore } from '../../merge-control/src/ciCapacity.ts';
@@ -274,14 +276,14 @@ test('D7909 default metadata reader fixes origin, refuses redirects and bounds a
  await assert.rejects(capacitySubmission(env),/response_bound/);
 });
 
-for(const proof of ['missing','export_failure'])test(`D7909 ${proof} result never becomes aggregate success`,async t=>{
+for(const proof of ['missing','export_failure','export_incomplete'])test(`D7909 ${proof} result never becomes aggregate success`,async t=>{
  const f=fixture(t,{callbackResults:true});t.mock.method(globalThis,'fetch',f.fetcher);await unlock(f);
  await submitCapacity(submission(),{...options(f.clientFetch),enabled:true,plan});await f.tick();await f.tick();
  const store=new SqlCapacityStore(f.storage),attempts=store.get(submission().requestId).shards.map(s=>s.attempts[0]);
  f.result('success');
- if(proof==='export_failure')for(const a of attempts){
+ if(proof!=='missing')for(const a of attempts){
   const {phase,cancelDeadline,reason,...receipt}=a;
-  assert.equal((await reportExecutionResult(receipt,{testStep:'success',executionOutcome:'export_failure',cleanupConfirmed:true,exportComplete:false},
+  assert.equal((await reportExecutionResult(receipt,{testStep:'success',executionOutcome:proof==='export_failure'?'export_failure':'completed',cleanupConfirmed:true,exportComplete:false},
    {...options(f.clientFetch),oidcToken:async()=>token({...claims(a.childRunId),check_run_id:String(a.childRunId+1000),runner_environment:'github-hosted'})})).accepted,true);
  }
  f.restart();await f.tick();assert.notEqual(f.checks[0].conclusion,'success');
@@ -295,4 +297,37 @@ test('D7909 pilot configuration refuses included billing and full-suite publicat
   await assert.rejects(submitCapacity(submission(),{...options(f.clientFetch),enabled:true,plan}),/unavailable/);
  }
  assert.equal(f.children.size,0);assert.equal(f.checks.length,0);
+});
+
+test('D7909 literal pinned caller leaves the ordinary hosted graph and queue matrix independent',()=>{
+ const base=yaml(execFileSync('git',['show','270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0:.github/workflows/ci.yml'],{encoding:'utf8'}));
+ const current=yaml(readFileSync('.github/workflows/ci.yml','utf8')),caller=current.jobs['capacity-submit'];
+ assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@6dc3ca3650e13996521f3e69a18672c9b9dcc9c1');
+ assert.equal(caller.needs,'plan');assert.equal(caller.permissions['id-token'],'write');
+ for(const guard of ["github.event_name == 'push'","github.event_name != 'merge_group'","vars.CI_CAPACITY_ENABLED == 'true'","github.repository == 'AxalNetwork/StudioOS'","needs.plan.outputs.capacity_submission != ''"])assert.ok(caller.if.includes(guard),guard);
+ for(const [name,job] of Object.entries(base.jobs)){
+  if(name==='plan')continue;
+  assert.deepEqual(current.jobs[name],job,`ordinary hosted job ${name} must stay unchanged`);
+ }
+ assert.equal(current.jobs.plan.steps.find(s=>s.id==='capacity')['continue-on-error'],true);
+ assert.equal(caller.with.submission,'${{ needs.plan.outputs.capacity_submission }}');
+ assert.equal(caller.with.executor_sha,'${{ vars.CI_CAPACITY_EXECUTOR_SHA }}');
+ const pinned=yaml(execFileSync('git',['show','6dc3ca3650e13996521f3e69a18672c9b9dcc9c1:.github/workflows/capacity-planner.yml'],{encoding:'utf8'}));
+ assert.deepEqual(pinned,yaml(readFileSync('.github/workflows/capacity-planner.yml','utf8')),'the literal pin must contain the exact prepared planner');
+ const config=readFileSync('wrangler.merge-control.toml','utf8');
+ assert.match(config,/CAPACITY_ENABLED = "false"/);assert.match(config,/CAPACITY_PUBLICATION = "pilot"/);assert.match(config,/CAPACITY_CONFIG = ""/);
+});
+
+test('D7909 older owned generation can report a sticky failure but cannot report replacement success',async t=>{
+ const f=fixture(t,{callbackResults:true});t.mock.method(globalThis,'fetch',f.fetcher);await unlock(f);
+ await submitCapacity(submission(),{...options(f.clientFetch),enabled:true,plan});await f.tick();await f.tick();
+ const store=new SqlCapacityStore(f.storage),request=store.get(submission().requestId),shard=request.shards[0],a=shard.attempts[0];
+ const receipt=await f.control().fetch(new Request('https://capacity.invalid/capacity/receipt',{method:'POST',headers:{authorization:'Bearer '+token(claims(a.childRunId))},body:JSON.stringify({requestId:a.requestId,shard:a.logicalShard,generation:1,profile:'hosted'})})).then(r=>r.json()).then(r=>r.receipt);
+ // Explicit persisted historical-generation fixture, not a real dispatch/fallback observation.
+ a.phase='cancelled';shard.generation=2;shard.attempts.push({...a,generation:2,childRunId:999,phase:'queued'});store.save(request);
+ const send=value=>reportExecutionResult(receipt,value,{...options(f.clientFetch),oidcToken:async()=>token({...claims(a.childRunId),check_run_id:String(a.childRunId+1000),runner_environment:'github-hosted'})});
+ await assert.rejects(send({testStep:'success',executionOutcome:'completed',cleanupConfirmed:true,exportComplete:true}),/unavailable/);
+ assert.equal(f.storage.sql.exec('SELECT COUNT(*) AS n FROM capacity_execution_results').toArray()[0].n,0);
+ assert.equal((await send({testStep:'failure',executionOutcome:'completed',cleanupConfirmed:true,exportComplete:true})).accepted,true);
+ const after=store.get(a.requestId);assert.equal(after.shards[0].attempts[0].verifiedTestFailure,true);assert.equal(after.evidenceConflict,true);
 });

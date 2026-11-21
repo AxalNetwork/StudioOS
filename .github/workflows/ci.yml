@@ -218,6 +218,21 @@ jobs:
           CAPACITY_PLAN_FILE: ${{ github.workspace }}/suite-plan.json
         run: node scripts/ci/capacity-submission.mjs
 
+  # D7909: default-off, main-push pilot only. No ordinary job depends on this submission.
+  capacity-submit:
+    name: capacity pilot submission
+    needs: plan
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && github.event_name == 'push' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && needs.plan.outputs.capacity_submission != '' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    # Exact local preparation pin; publication and activation remain held under #5719.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@6dc3ca3650e13996521f3e69a18672c9b9dcc9c1
+    with:
+      submission: ${{ needs.plan.outputs.capacity_submission }}
+      executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+
   suite:
     name: suite (${{ matrix.part }})
     needs: [verified, plan]

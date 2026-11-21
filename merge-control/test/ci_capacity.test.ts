@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { CiCapacity, SqlCapacityStore, CAPACITY_RETENTION_MS } from '../src/ciCapacity.ts';
 import type { CapacityPorts } from '../src/ciCapacity.ts';
 import {
-  CI_CAPACITY_BUDGETS, activeAttempt, aggregateCapacity, receiptMatches, selectPools, submissionMatches, validateCapacityPolicy,
+  CI_CAPACITY_BUDGETS, CapacityDispatchRefused, activeAttempt, aggregateCapacity, receiptMatches, selectPools, submissionMatches, validateCapacityPolicy,
 } from '../src/lib/ciCapacityPolicy.ts';
 import type {
   CapacityInventory, CapacityPolicy, ChildObservation, CiAttempt,
@@ -708,4 +708,26 @@ test('D7909 discovered moving-main child is quarantined, persisted before cancel
  assert.equal(f.cancelled.length,1);assert.equal(await c.receipt(s.requestId,a.logicalShard,999,1),null);
  await f.create().tick();assert.equal(f.attempt(a.logicalShard).generation,1);
  assert.equal(f.dispatched.filter(row=>row.logicalShard===a.logicalShard).length,1);
+});
+
+test('D7909 definitive unsent dispatch ends safely while ambiguous send never redispatches',async t=>{
+ for(const definitive of [true,false]){
+  const f=fixture(t,{maxExternalWorkerShards:0,maxIncludedWorkerShards:0}),c=f.create();let calls=0;
+  f.ports.dispatch=async()=>{calls++;throw definitive?new CapacityDispatchRefused('preflight'):Error('ambiguous send');};
+  await c.submit(input());await c.tick();
+  assert.equal(calls,definitive?1:6);assert.equal(f.attempt('worker-1-of-6').phase,definitive?'failed':'dispatch_unknown');
+  if(definitive)assert.equal(f.get().shards.slice(1).every(s=>activeAttempt(s).childRunId===null),true);
+  await f.create().tick();assert.equal(calls,definitive?1:6);
+ }
+});
+
+test('D7909 quarantined revision supplies no test truth; independent no-test cleanup can end it',async t=>{
+ const f=fixture(t),c=f.create();f.state.dispatchDown=true;await c.submit(input());await c.tick();
+ f.state.dispatchDown=false;f.state.discovered={childRunId:999,rejectedWorkflowSha:'d'.repeat(40)};await c.tick();
+ const a=f.attempt('worker-1-of-6');
+ f.outcomes.set(999,f.observation(a,{testStep:'failure',conclusion:'failure',jobConclusion:'failure',cleanupConfirmed:true}));
+ assert.equal(await c.reconcileChild(input().requestId,999),false);assert.notEqual(c.status(input().requestId)?.status,'failure');
+ f.outcomes.set(999,f.observation(a,{testStep:'not_run',conclusion:'cancelled',jobConclusion:'cancelled',cleanupConfirmed:true,startedAt:null}));
+ assert.equal(await c.reconcileChild(input().requestId,999),true);assert.equal(f.attempt(a.logicalShard).phase,'cancelled');
+ assert.equal(f.attempt(a.logicalShard).verifiedTestFailure,undefined);
 });
