@@ -49,6 +49,8 @@ export const LABELS = Object.freeze({
   resolved: 'bot:resolved',
   // #6476 owner addition: the keeper's own hand-back. `conflict` is only the PR-list indicator now (D6476-p5).
   keeperTried: 'bot:keeper-tried',
+  // #6476 (D6476-p4): the ejection handler's add-only record that it handed a stranded removal back. Never removed.
+  handedBack: 'bot:handed-back',
 });
 export const REPAIR_BRANCH_PREFIX = 'repair/';
 export const STICKY_MARKER = '<!-- landing-bot -->';
