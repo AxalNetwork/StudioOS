@@ -36,7 +36,7 @@ import { refuse } from '../util/refusal';
 import { notify } from '../services/notify';
 import {
   DECLINE_REASON_MIN, NOTE_MAX, REASON_MAX, TESTER_STATUSES, TRANSITIONS, applyTransition, isAdminAccount, isRoleWord, isTesterStatus, isYesNo, listTesters,
-  messageFor, readTester, reapplyAfter, testerDetail, type TesterAction,
+  messageFor, readTester, reapplyAfter, testerBoardSummary, testerDetail, type TesterAction,
 } from '../services/productTesters';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -57,15 +57,33 @@ r.get('/', async (c) => {
   if (role && !isRoleWord(role)) return refuse(c, 400, { code: 'unknown_role', message: 'Role is a role name, such as founder or investor.' });
   const availability = c.req.query('availability_given');
   const inProgramme = c.req.query('in_programme');
-  for (const [name, v] of [['availability_given', availability], ['in_programme', inProgramme]] as const) {
+  const verified = c.req.query('email_verified');
+  const consent = c.req.query('email_consent');
+  const q = c.req.query('q');
+  const sort = c.req.query('sort');
+  if ((q?.length ?? 0) > 200 || (sort && !['waiting', 'newest', 'name'].includes(sort))) {
+    return refuse(c, 400, { code: 'bad_filter', message: 'Use a search of up to 200 characters and a supported sort.' });
+  }
+  for (const [name, v] of [['availability_given', availability], ['in_programme', inProgramme],
+    ['email_verified', verified], ['email_consent', consent]] as const) {
     if (v && !isYesNo(v)) return refuse(c, 400, { code: 'bad_filter', message: `${name} is yes or no.` });
   }
   try {
     return c.json(await listTesters(c.env, {
-      status, role, availability_given: availability, in_programme: inProgramme, page: c.req.query('page'), page_size: c.req.query('page_size'),
+      status, role, availability_given: availability, in_programme: inProgramme, q, sort, email_verified: verified, email_consent: consent,
+      page: c.req.query('page'), page_size: c.req.query('page_size'),
     }));
   } catch (e) {
     return refuse(c, 503, { code: 'product_testers_unreadable', message: 'The product testers could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+r.get('/summary', async (c) => {
+  await requireAdmin(c);
+  try {
+    return c.json(await testerBoardSummary(c.env));
+  } catch (e) {
+    return refuse(c, 503, { code: 'tester_summary_unreadable', message: 'The product tester counts could not be read.', raw: e });
   }
 });
 

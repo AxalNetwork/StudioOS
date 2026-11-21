@@ -5,7 +5,9 @@ import { mkdtempSync,writeFileSync,readFileSync,existsSync,symlinkSync,rmSync } 
 import { tmpdir } from 'node:os';
 import { join,resolve } from 'node:path';
 import {spawnSync} from 'node:child_process';
-import YAML from 'yaml';
+import {createRequire} from 'node:module';
+// Match the workflow inventory: CI installs the Worker's YAML parser, not a frontend copy.
+const YAML=createRequire(new URL('../../cloudflare-worker/package.json',import.meta.url))('yaml');
 const script=resolve('scripts/dr-drill-cleanup.sh');
 function fixture(name,fail=false){
  const dir=mkdtempSync(join(tmpdir(),'dr-cleanup-7917-')),file=join(dir,'owned.db'),log=join(dir,'calls');

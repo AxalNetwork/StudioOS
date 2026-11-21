@@ -29,8 +29,10 @@ const query = (pairs) => {
 };
 
 export const approvalBoardsApi = {
-  testers: ({ status, inProgramme, page, pageSize, signal } = {}) =>
-    request(`/admin/product-testers${query({ status, in_programme: inProgramme, page, page_size: pageSize })}`, { signal }),
+  testerSummary: ({ signal } = {}) => request('/admin/product-testers/summary', { signal }),
+  testers: ({ status, inProgramme, role, q, verified, consent, sort, page, pageSize, signal } = {}) =>
+    request(`/admin/product-testers${query({ status, in_programme: inProgramme, role, q,
+      email_verified: verified, email_consent: consent, sort, page, page_size: pageSize })}`, { signal }),
   tester: (id) => request(`/admin/product-testers/${enc(id)}`),
   decideTester: (id, action, { note, reason } = {}) => {
     const body = { note: note || null, reason: reason || null };
@@ -41,6 +43,7 @@ export const approvalBoardsApi = {
     if (action === 'remove') return post(`/admin/product-testers/${enc(id)}/remove`, body);
     throw new Error(`Unknown tester decision: ${action}`);
   },
+  pitchSummary: ({ signal } = {}) => request('/comarketing/admin/queue/summary', { signal }),
   pitches: (status, { limit = 25, offset = 0, signal } = {}) => request(`/comarketing/admin/queue${query({ status, limit, offset })}`, { signal }),
   pitch: (uid) => request(`/comarketing/admin/pitches/${enc(uid)}`),
   decidePitch: (uid, action, { notes, publishedUrl } = {}) => {
@@ -49,7 +52,8 @@ export const approvalBoardsApi = {
     if (action === 'publish') return post(`/comarketing/admin/pitches/${enc(uid)}/publish`, { published_url: publishedUrl, notes: notes || null });
     throw new Error(`Unknown pitch decision: ${action}`);
   },
-  experts: ({ state = 'all', limit = 200, offset = 0, signal } = {}) => request(`/wellbeing/admin/experts${query({ state, limit, offset })}`, { signal }),
+  expertSummary: ({ signal } = {}) => request('/wellbeing/admin/experts/summary', { signal }),
+  experts: ({ state = 'all', tab, limit = 200, offset = 0, signal } = {}) => request(`/wellbeing/admin/experts${query({ state, board_tab: tab, limit, offset })}`, { signal }),
   expert: (uid) => request(`/wellbeing/admin/experts/${enc(uid)}/review`),
   verifyExpert: (uid, verified, version) => post(`/wellbeing/admin/experts/${enc(uid)}/verify`, verified
     ? { verified: true, credentials_checked: true, expected_version: version }
