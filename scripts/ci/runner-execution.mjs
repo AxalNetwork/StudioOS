@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** D7886 (#7886): exact-plan Worker execution, immutable event context, scoped cleanup and real child-result truth. */
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { availableParallelism, totalmem } from 'node:os';
 import { EXECUTION_BUDGETS } from './runner-admission.mjs';
@@ -150,51 +150,113 @@ export async function withCancellation(body,{signals=process}={}){
  finally{signals.removeListener('SIGINT',cancel);signals.removeListener('SIGTERM',cancel);}
 }
 
-/** The exact container this run owns, recorded before start so the workflow's cleanup step can remove it after process loss. */
-export const containerRecordPath=paths=>join(paths.temp,'container-owner.json');
-const EXIT={execution_cancelled:130,execution_timed_out:124};
+/** Cleanup needs enough lease left for exact inspect+rm (two 30s engine calls); export must leave it. */
+const REMOVAL_RESERVE_MS=60000;
 
-/** Create, re-admit against the live container, run interruptibly, and remove the exact container on every path. */
-export async function runInContainer({job,executionIsolation,admit,current,paths,planPath,signal,log=console.error}){
- need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function','container_profile_mismatch');
- const record=containerRecordPath(paths);
- job.onOwned=owned=>writeFileSync(record,JSON.stringify(owned)+'\n',{mode:0o600,flag:'wx'});
- let code=1;
- try{
-  need(!signal?.aborted,'execution_cancelled');
-  job.create(current.identity,{source:paths.source,plan:planPath});
-  need(!signal?.aborted,'execution_cancelled');
-  const live=await admit(executionIsolation);
-  need(live?.allowed===true&&JSON.stringify(live.identity)===JSON.stringify(current.identity),'receipt_superseded_before_execution');
-  await job.runCandidateInterruptible({receipt:current.identity,admitted:live,signal});
-  code=0;
- }catch(error){
-  const reason=signal?.aborted?'execution_cancelled':error?.message;
-  code=EXIT[reason]??1;log(`container_execution_${code===0?'ok':'failed'}: ${/^[a-z_]+$/.test(reason??'')?reason:'unexpected'}`);
- }finally{
-  try{job.cleanup(current.identity);if(job.owned===null)rmSync(record,{force:true});}
-  catch{log('container_cleanup_failed: the record stays for the cleanup step');code=code||1;}
- }
- return code;
+/**
+ * Proposed supervisor exit (D8010): a real nonzero TEST exit first; then cancelled 130, timed out 124; zero only
+ * for an observed test success whose removal was verified and whose export (when configured) completed. An
+ * install, infrastructure, export or cleanup failure is never reported as a test failure, and never as success.
+ */
+export function classifyOutcome({install,test,exported,cleanup,infrastructure,aborted}){
+ const realTestFailure=test?.status==='failure'&&Number.isSafeInteger(test.exitCode)&&test.exitCode>0;
+ const statuses=[install?.status,test?.status];
+ const cancelled=statuses.includes('cancelled')||(aborted&&!realTestFailure&&test?.status!=='success');
+ const timedOut=statuses.includes('timed_out');
+ const testPassed=test?.status==='success';
+ const exportOk=['complete','not_configured'].includes(exported?.state);
+ const cleanupOk=['complete','none'].includes(cleanup?.state);
+ const result=realTestFailure?'test_failure':cancelled?'cancelled':timedOut?'timed_out'
+  :infrastructure?'infrastructure':install&&install.status!=='success'?'install_failure'
+  :testPassed&&!cleanupOk?'cleanup_failure':testPassed&&!exportOk?'export_failure':testPassed?'success':'unknown';
+ const code=realTestFailure?test.exitCode:cancelled?130:timedOut?124:result==='success'?0:1;
+ return {result,code};
 }
 
-/** Workflow cleanup: remove a container a lost supervisor left behind, by its exact record only, then this run's files. */
-export async function recoverOwned(paths,{recover}){
- const record=containerRecordPath(paths);let text=null;
- try{text=readFileSync(record,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
- if(text===null)return 'none';
- const outcome=recover(JSON.parse(text));rmSync(record,{force:true});return outcome;
+/**
+ * The supervisor owns the whole lifecycle: create, live re-admission, install, test, capture, bounded export,
+ * then verified exact-ID removal. Ownership evidence is written to the durable store before start and removed
+ * only once the engine reports the exact container gone; any failed or uncertain removal keeps it.
+ */
+export async function runInContainer({job,executionIsolation,admit,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null}){
+ need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function'&&store,'container_profile_mismatch');
+ const identity=current.identity;
+ let record=null,infrastructure=null,install=null,test=null,exported={state:exporter?'not_run':'not_configured'},cleanup={state:'none'};
+ job.onOwned=owned=>{store.write(owned);record=owned;};
+ try{
+  if(!signal?.aborted){
+   job.create(identity,{source:paths.source,plan:planPath});
+   if(!signal?.aborted){
+    const live=await admit(executionIsolation);
+    if(!(live?.allowed===true&&JSON.stringify(live.identity)===JSON.stringify(identity)))infrastructure='receipt_superseded_or_isolation_refused';
+    else{
+     install=await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'install'});
+     test=install.status==='success'?await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'test'})
+      :{phase:'test',status:'not_run',exitCode:null,signal:null};
+    }
+   }
+  }
+ }catch(error){infrastructure=/^[a-z_]+$/.test(error?.message??'')?error.message:'unexpected';}
+ // Capture/export while the container still exists, only inside the lease and never eating the removal reserve.
+ if(exporter&&record&&job.owned){
+  if(identity.executionDeadline-now()<=REMOVAL_RESERVE_MS)exported={state:'skipped_no_budget'};
+  else{try{exported=await exporter({receipt:identity,container:{id:record.id,owner:record.owner},observedTest:test,signal,deadline:identity.executionDeadline-REMOVAL_RESERVE_MS});}
+   catch{exported={state:'failed'};}}
+ }
+ if(record){
+  try{
+   job.cleanup(identity);
+   if(job.verifyRemoved(record)){store.remove(record.owner);cleanup={state:'complete'};}
+   else cleanup={state:'unverified',retained:true};
+  }catch{cleanup={state:'failed',retained:true};}
+ }
+ const outcome=classifyOutcome({install,test,exported,cleanup,infrastructure,aborted:Boolean(signal?.aborted)});
+ log(JSON.stringify({component:'runner-executor',event:'container_outcome',result:outcome.result,supervisorExit:outcome.code,install,test,export:exported,cleanup,infrastructure}));
+ if(output)output({result:outcome.result,test_exit:test?.exitCode??'',cleanup:cleanup.state,export:exported.state});
+ return outcome.code;
+}
+
+/**
+ * Exact recovery from the durable store: remove the recorded container only while the engine still reports its
+ * ID, label and name, and delete the record only once the engine reports it gone. A record whose recovery fails
+ * or stays uncertain is kept for a later attempt. `select` limits which records this caller may act on.
+ */
+export async function recoverRetained(store,{recover,verifyRemoved,select=()=>true,log=console.error}){
+ const results=[];
+ for(const record of store.list()){
+  if(record.invalid){results.push({record:record.invalid,state:'invalid_retained'});continue;}
+  if(!select(record))continue;
+  try{
+   const outcome=recover(record);
+   if(outcome==='removed'||outcome==='absent'){
+    if(verifyRemoved(record)){store.remove(record.owner);results.push({owner:record.owner,state:outcome});}
+    else results.push({owner:record.owner,state:'unverified_retained'});
+   }else results.push({owner:record.owner,state:'unknown_retained'});
+  }catch{results.push({owner:record.owner,state:'failed_retained'});}
+ }
+ if(results.length)log(JSON.stringify({component:'runner-executor',event:'container_recovery',results}));
+ return results;
 }
 
 /** A reviewed adapter may be supplied by trusted code; no environment/request field injects receipt JSON as authority. */
 export async function main(mode,env=process.env,dependencies={}){
  const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT});
- if(mode==='prepare'){prepareOwned(paths);return 0;}
+ if(mode==='prepare'){
+  // A container a lost or failed earlier run left on this host is recovered exactly before new work; a record
+  // that still cannot be recovered is kept, and does not block this run's own preparation.
+  if(dependencies.store)await recoverRetained(dependencies.store,dependencies);
+  prepareOwned(paths);return 0;
+ }
  if(mode==='cleanup'){
-  // Recovery failure must not leave this run's files; it still fails the step so the leftover is visible.
-  let failure=null;
-  if(dependencies.recover){try{await recoverOwned(paths,dependencies);}catch(error){failure=error;}}
-  cleanupOwned(paths);if(failure)throw failure;return 0;
+  // This run's own records only. Its files are removed either way; a retained record fails the step visibly.
+  const prefix=`${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}-`;
+  let retained=[];
+  if(dependencies.store){
+   try{retained=(await recoverRetained(dependencies.store,{...dependencies,select:r=>r.owner.startsWith(prefix)})).filter(r=>/retained$/.test(r.state));}
+   catch{retained=[{state:'store_unreadable_retained'}];}
+  }
+  cleanupOwned(paths);
+  need(retained.length===0,'container_recovery_retained');return 0;
  }
  need(mode==='verify-plan'||mode==='run','invalid_execution_mode');
  const initial=JSON.parse(env.ADMITTED_JSON??'null');
@@ -202,7 +264,7 @@ export async function main(mode,env=process.env,dependencies={}){
  const {admitRunnerJob,githubReadApi}=await import('./runner-admission.mjs');
  const request={requestId:initial.identity.requestId,generation:initial.identity.generation,shard:initial.identity.logicalShard,profile:initial.identity.profile};
  const context={repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??'.github/workflows/runner-executor.yml',childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT};
- const {job:_job,executionIsolation:_exec,admissionIsolation,...admission}=dependencies;
+ const {job:_job,executionIsolation:_exec,admissionIsolation,store:_s,exporter:_e,recover:_r,verifyRemoved:_v,...admission}=dependencies;
  const readReceipt=()=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),verifyIsolation:admissionIsolation,...admission,context,phase:'execute',signal:AbortSignal.timeout(60000)});
  const current=await readReceipt();need(current.allowed&&JSON.stringify(current.identity)===JSON.stringify(initial.identity),'receipt_superseded_before_execution');
  const sqlite=await import('node:sqlite');
@@ -222,8 +284,9 @@ export async function main(mode,env=process.env,dependencies={}){
  return await withCancellation(async signal=>{
   if(dependencies.job){
    // Linux self-hosted: installs and tests both run inside the per-run container; nothing candidate-controlled runs on the host.
-   const {job,executionIsolation,admissionIsolation:_pre,...rest}=dependencies;
-   return runInContainer({job,executionIsolation,current,paths,planPath,signal,
+   const {job,executionIsolation,admissionIsolation:_pre,store:_store,exporter:_exporter,...rest}=dependencies;
+   return runInContainer({job,executionIsolation,current,paths,planPath,signal,store:dependencies.store,exporter:dependencies.exporter??null,
+    output:env.GITHUB_OUTPUT?values=>appendFileSync(env.GITHUB_OUTPUT,Object.entries(values).map(([k,v])=>`${k}=${v}\n`).join('')):null,
     admit:verifyIsolation=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation,context,phase:'execute',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])})});
   }
   const result=await executeShard({admitted:current,paths,testDriver:join(paths.source,'scripts','test-drift-parts.mjs'),planPath,readReceipt,signal});return result.code;
@@ -237,9 +300,14 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
    const { trustedAuthority }=await import('./executor-authority.mjs');
    dependencies={...await trustedAuthority(process.env),...(isolationFor(JSON.parse(process.env.ADMITTED_JSON??'null')?.identity?.profile)??{})};
   }
-  if(mode==='cleanup'){
+  if(mode==='run'&&dependencies.job){
+   const { recoveryStore }=await import('./runners/recovery-store.mjs');
+   dependencies.store=recoveryStore({create:true});
+  }
+  if(mode==='cleanup'||mode==='prepare'){
    const { JobContainer }=await import('./runners/job-container.mjs');
-   dependencies={recover:record=>JobContainer.recover(record)};
+   const { recoveryStore }=await import('./runners/recovery-store.mjs');
+   dependencies={store:recoveryStore(),recover:record=>JobContainer.recover(record),verifyRemoved:record=>JobContainer.isRemoved(record)};
   }
   process.exitCode=await main(mode,process.env,dependencies);}catch{console.error('runner_execution_denied_or_failed');process.exitCode=1;}
 }
