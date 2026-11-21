@@ -23,9 +23,11 @@
  */
 import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdtempSync, cpSync, symlinkSync, rmSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -267,9 +269,40 @@ test('Capital relationships: a failed prospects read still says the read failed'
  * process, filtered to the tests that must then fail. Rebinding the modules in
  * memory is not enough: the refusal travels from a tool's own read, through
  * `CycleRoute`, into the module page, so only a real import of the mutated
- * tree exercises it. The source is restored in a `finally`.
+ * tree exercises it.
+ *
+ * The mutations are made in a copy of `frontend/src` and `frontend/test` in a
+ * temporary directory, never in the checkout: the suite runs test files in
+ * parallel, and a broken line written to the real `CycleRoute.jsx` was read by
+ * whichever other file imported it in that window and failed there. The copy is
+ * made once, its `node_modules` link to the checkout's, and each mutation is
+ * still restored in a `finally` so the next one starts from the source.
  */
-const SELF = new URL(import.meta.url).pathname;
+const REPO = process.cwd();
+let sandbox = null;
+/** The temporary tree the mutations are made in, made on first use. */
+function sandboxRoot() {
+  if (sandbox) return sandbox;
+  const root = mkdtempSync(join(tmpdir(), 'd5079-'));
+  // Everything but `frontend/src` and `frontend/test` is a link to the checkout (the frontend imports
+  // Worker modules too); the two copied trees are where every guarded file lives.
+  const COPIED = new Set(['frontend/src', 'frontend/test']);
+  const link = (dir) => {
+    mkdirSync(join(root, dir), { recursive: true });
+    for (const name of readdirSync(join(REPO, dir))) {
+      const rel = dir ? `${dir}/${name}` : name;
+      if (rel === '.git') continue;
+      if (COPIED.has(rel)) cpSync(join(REPO, rel), join(root, rel), { recursive: true });
+      else if (rel === 'frontend') link(rel);
+      else symlinkSync(join(REPO, rel), join(root, rel));
+    }
+  };
+  link('');
+  sandbox = root;
+  return root;
+}
+after(() => { if (sandbox) rmSync(sandbox, { recursive: true, force: true }); });
+const SELF = relative(REPO, new URL(import.meta.url).pathname);
 function childEnv() {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.startsWith('NODE_TEST')) delete env[key];
@@ -277,7 +310,7 @@ function childEnv() {
 }
 const run = (pattern) => spawnSync(process.execPath,
   ['--import', './frontend/test/_deck-loader.mjs', '--test', '--test-name-pattern', pattern, SELF],
-  { cwd: process.cwd(), encoding: 'utf8', timeout: 240000, maxBuffer: 8 * 1024 * 1024, env: { ...childEnv(), D5079_SKIP_MUTATIONS: '1' } });
+  { cwd: sandboxRoot(), encoding: 'utf8', timeout: 240000, maxBuffer: 8 * 1024 * 1024, env: { ...childEnv(), D5079_SKIP_MUTATIONS: '1' } });
 
 const CHECKS = [
   { name: 'a refused tool read makes the page refuse', file: 'frontend/src/pages/cycles/CycleRoute.jsx',
@@ -328,15 +361,19 @@ if (!process.env.D5079_SKIP_MUTATIONS) {
   });
 
   for (const check of CHECKS) test(`Mutation and restoration: ${check.name}`, () => {
-    const original = readFileSync(check.file, 'utf8');
+    const checkout = readFileSync(check.file, 'utf8');
+    const file = resolve(sandboxRoot(), check.file);
+    const original = readFileSync(file, 'utf8');
+    assert.equal(original, checkout, `the copy of ${check.file} is not the checkout's`);
     assert.ok(original.includes(check.before), `mutation_target_missing: ${check.name}`);
     assert.equal(original.split(check.before).length - 1, 1, `mutation target is not unique: ${check.name}`);
     let result;
     try {
-      writeFileSync(check.file, original.replace(check.before, check.after));
+      writeFileSync(file, original.replace(check.before, check.after));
       result = run(check.pattern);
-    } finally { writeFileSync(check.file, original); }
+    } finally { writeFileSync(file, original); }
     assert.notEqual(result.status, 0, `the mutation went unnoticed by "${check.pattern}": ${(result.stdout || '').slice(-1800)}`);
-    assert.equal(readFileSync(check.file, 'utf8'), original, 'the source was not restored');
+    assert.equal(readFileSync(file, 'utf8'), original, 'the copy was not restored');
+    assert.equal(readFileSync(check.file, 'utf8'), checkout, 'the checkout was written to');
   });
 }

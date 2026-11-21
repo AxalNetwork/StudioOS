@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Organizations People First · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Organizations · #7680 · part of #7675 · extends #7051–#7054 and #6257</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Organizations led by the people who work there, how each affiliation is known, and who a request actually reaches</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Organizations as context for finding the right person. Rows and detail lead with recorded people, roles and source-backed affiliations (current, former, status not recorded, in review), counted as distinct people with separate denominators for source rows, current affiliates and your own or your team’s recorded relationships. A firm and its fund are separate records; namesakes stay apart; aliases and merges go through a steward. Every person opens the one Person Sheet from #7676 with the chosen affiliation as context, and Request introduction names a person, or asks for help identifying one. Drawn on the approved Network shell (#4799, #6256) and the landed Organizations canvases (#7051–#7054), with Platform States (D5129) and the Eadwyn rail (#5130). Violet dashed ◇ tags mark backend work (#7672 canonical organization and affiliation model, proposed); amber ⚑ tags mark owner picks drawn to option A. Keys carry the NPO prefix.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · [Lena Sato], [Hugo Brandt], [Northstar Capital] and every person, organization, list, domain and figure (1,284 organizations, 5 people counted at [Northstar Capital] + 1 in review) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Organizations People First Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NPO-01', 'Directory · people first', 'Founder [Lena Sato] in the shared directory. Three scopes with their own totals: Shared directory 1,284, My relationships 41, Team paths 9. Each row: type, where, sourced mandate, distinct people by status and a few named people with roles; Your relationships only where a record exists. [Northstar Capital] open in place with its 6 people. A fund points to its manager; [Corran Ventures] honestly has no people.', [F('NPO01', false, 1900)]],
+      ['NPO-02', 'Search explains the match', '“northstar” matches 3 organizations and 1 person, each with its reason (name, affiliation, accepted alias). A possible alias in review is kept separate and does not match by alias.', [C('NPO02', false, 1400, 625)]],
+      ['NPO-03', 'Organization detail · identity and people', '[Northstar Capital]: People first, by status, with role, dates, evidence and last checked; the claim in review is shown and not counted. Identity: website, aliases, merged record, the fund it manages. Counting card keeps each denominator apart. The firm’s mandate stays on the firm.', [F('NPO03', false, 1440)]],
+      ['NPO-04', 'Firm and fund', '[Northstar Capital Fund II] is a vehicle with its own id, managed by [Northstar Capital] on evidence. People are recorded on the manager; a fund is never a recipient.', [C('NPO04', false, 1400, 381)]],
+      ['NPO-05', 'Namesakes, unresolved text and aliases', 'Two [Harbor Seed] firms told apart by website, city and founding year. A company typed on a private project contact stays unresolved and private. A possible alias waits for a steward (⚑ drawn to A: no automatic merge).', [C('NPO05', false, 1400, 650)]],
+      ['NPO-06', 'Affiliations', 'One person with two current affiliations and a primary display; a former partner kept as history; status not recorded and undated; stale with its age; two conflicting current claims held for review. First seen is never a start date.', [C('NPO06', false, 1400, 594)]],
+      ['NPO-07', 'Person Sheet with organization context', '[Hugo Brandt] opened from [Northstar Capital]: the same person id as Relationships and Introductions, the selected affiliation marked, both current affiliations, list membership apart from role. Private area for [Lena Sato]: no own relationship, a team path through [Dev Varma] with evidence and actor; his notes stay his.', [F('NPO07', false, 1440)]],
+      ['NPO-08', 'One person, three viewers', 'Founder, investor and advisor open the same profile; only the private area changes. The investor sees her own contact record; the advisor sees none and is offered a private record, not a zero.', [C('NPO08', false, 1400, 1058)]],
+      ['NPO-09', 'Request introduction · named person', 'Review step of the role-neutral request: person id plus organization context, path through a teammate, nothing reaches [Hugo Brandt] from this step. Then the receipt and what it proves.', [F('NPO09', 'Review', 1440), C('NPO09B', 'Receipt', 1400, 391)]],
+      ['NPO-10', 'No people recorded · help identify', '[Corran Ventures], imported from an NFX Signal list: no people, no verified website (cited, not filled in), manager-only in Research. Help identify the right person keeps the firm as context; a proposed person is reviewed before any request.', [F('NPO10', false, 1080), C('NPO10B', 'Help identify', 1400, 463)]],
+      ['NPO-11', 'Corrections · member', 'Suggest a title update with public evidence, preview what changes in the shared profile versus private notes, then pending, published with history, or declined with a reason.', [C('NPO11', false, 1400, 558)]],
+      ['NPO-12', 'Steward review', 'The steward queue in Admin console: possible alias, conflicting claims, a title update and a text-name match. Keep separate is the primary; a merge goes Scope → Review → Result and keeps links, introductions and history.', [F('NPO12', false, 900)]],
+      ['NPO-13', 'Into Research', 'Person → chosen affiliation → canonical firm → Research record. An existing match, a pending duplicate, a retired id that redirects, and a newly staged manager-only firm with unknown size and vintage. View in Research and back to people.', [C('NPO13', false, 1400, 491)]],
+      ['NPO-14', 'Prototype · organization to receipt and back', 'Filter to firms and open [Northstar Capital]’s people, open [Hugo Brandt] (NPO-07), request (NPO-09), then back with filter, open row and focus restored and announced. Deep link, sign-in and merged-id returns.', [F('NPO14A', '1 · Filter and open people', 1600), F('NPO14B', '2 · Back after the request', 1600), C('NPO14C', '3 · Deep links', 1400, 267)]],
+      ['NPO-15', 'States', 'Directory: loading, true empty, no results, unreadable count, first-load failure, later-page failure, one source unavailable, conflicting source, restricted and refused. Organization and affiliation: no people, missing facts, stale, merged redirect, correction pending and published, save failed and already saved, request not applicable.', [C('NPO15', 'Directory and counts', 1400, 686), C('NPO15B', 'Organization and affiliation', 1400, 560)]],
+      ['NPO-16', 'Reads and contracts', 'Each proposed read or write, what it feeds, what happens if it fails, and the issue that owns it.', [C('NPO16', false, 1400, 453)]],
+      ['NPO-17', 'Phone 390', 'Search with a people disclosure, organization people as cards with Load more, the full-height Person Sheet with Request introduction reachable, no people recorded, and dark with a later-page failure. 44 px targets.', [P('NPO17A', 'Directory · search'), P('NPO17B', 'People at an organization'), P('NPO17C', 'Person Sheet'), P('NPO17D', 'No people recorded'), P('NPO17E', 'Dark · page 2 failed')]],
+      ['NPO-18', 'Tablet 768', 'Directory reflowed to three columns with filters in one menu; organization people as a three-column table.', [C('NPO18', 'Directory', 768, 1024), C('NPO18B', 'Organization', 768, 1024)]],
+      ['NPO-19', 'Dark', 'The directory and the Person Sheet on the dark tokens; status, type and source marks keep their words and shapes.', [F('NPO19', 'Directory', 1900), F('NPO19B', 'Person Sheet', 1440)]],
+      ['NPO-20', 'Keyboard, focus and announcements', 'Tab order, disclosure buttons, sheet focus trap and return, announced counts and results, glyph-plus-word statuses, no horizontal overflow.', [C('NPO20', false, 1400, 495)]],
+      ['Handoff', 'Identity, affiliation and permissions handoff', 'Checked on main, preserved, backend required (◇ #7672, #7674, #7676, #7678, #7673, #7679, #7681), frontend only, the one owner pick and what is open.', [W('NPOH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

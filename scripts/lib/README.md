@@ -118,3 +118,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
 | `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
 | `runnerSupervisor.test.mjs` | D7889: ephemeral enrollment, credential inheritance and eligibility-first drain actions; kept outside the Merge Control import boundary. |
+| `ciFailures.mjs` | D5502: bounded test identities, safe reproductions and exact-base evidence attribution. |
+| `ciFailureReporter.mjs` | D5502: node:test JSONL evidence beside TAP without assertion values or stacks. |
+| `ciFailureCollector.mjs` | D5502: bounded Actions artifact reads, archive validation and tested-base comparison. |
+| `ciFailures.test.mjs` | D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. |

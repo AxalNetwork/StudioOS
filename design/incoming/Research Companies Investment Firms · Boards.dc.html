@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Investment Firms · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · #7809 page 4 · addendum to RS-18 A and the Research Funds boards of #7738</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Investment firms — tell an adviser, a firm and a fund vehicle apart, reach the firm behind a vehicle, and save a set of results in one step</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Boards RCF-00 to RCF-09 add to the company profile (RS-18 A, D7046), the fund directory (RFD-08, RFD-09, RFD-14) and the vehicle profile (FND-P12 to FND-P17) of #7738, which are cited and not redrawn; only what is new is marked with a dashed outline. A role (investment firm, registered investment adviser) comes from the organization record and is printed apart from a record kind (fund vehicle, manager). The organization page lists roles, sourced relationships and linked records, each opening its own profile, and shows a statement only under the record it is stated for. The directory gains an Organisation type filter, a statement of the manager on a vehicle row and a selection saved to the shortlist in one all-or-nothing step, then My funds (FND-S01). No fit score, rank or conversion; absent fund facts read Not recorded with their reason, as #7738 words them. States follow Platform States (Unavailable on screen). Violet dashed ◇ tags name the issue that builds the backend; the amber ⚑ tag marks owner question 1 (the organization page address, option A drawn, not for build until answered). Eadwyn proposes nothing on these boards.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · the people, organizations, funds, sources, figures and dates are fictional and bracketed; no row is a real record</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="10">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Investment Firms Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RCF-00', 'Journey and vocabulary', 'Adviser, investment firm and fund vehicle in one sentence each; role and record kind printed apart; headquarters against investment geography; the FND-P15 money names, the #7738 absent-fact words, dates and action names, cited.', [C('RCF00', false, 1440, 980)]],
+      ['RCF-01', 'Organization page', 'Roles with source and date; relationships with source, place in the source and date; linked records each with its kind, opening its own profile; mandate facts under the record they are stated for; Investments Not recorded. Drawn to question 1 option A, not for build until answered.', [F('RCF01', false, 2280), C('RCF01B', 'Description · shown only if #7740 allows it', 1200, 520)]],
+      ['RCF-02', 'Adviser role on a company profile and the fund lists rule', 'RS-18 A with the role block, its warning sentence and Open organization for a reader Funds admits; the landed Funds section with the two K0 lines. An Advisor sees the block and no link.', [F('RCF02', false, 1080), C('RCF02B', 'What an Advisor sees', 1300, 760)]],
+      ['RCF-03', 'Vehicle profile · the Managed by link', 'FND-P12 cited as the starting state; the manager line becomes a link to the organization page, and the other vehicles come through the sourced relationship. Every state of the line.', [F('RCF03', false, 1320), C('RCF03B', 'The Managed by line in each state', 1300, 520)]],
+      ['RCF-04', 'Fund directory · Organisation type and a statement of the manager', 'RFD-08 and RFD-09 cited; one more filter with counts, chip, address and Back; “Stated for the manager” on a vehicle row, under the vehicle’s own facts.', [F('RCF04', false, 1440), C('RCF04B', 'Organisation type open, address and Back', 1300, 640)]],
+      ['RCF-05', 'Select across pages and Save to shortlist in one step', 'A checkbox column on the RFD-09 rows, the selection bar with the limit stated first, Review selection with Remove, and the all-or-nothing outcomes: Saved and Already saved, a withdrawn record refused by name, Outcome unknown with Check save status.', [F('RCF05', false, 1400), F('RCF05B', 'Review selection', 1000), C('RCF05C', 'The outcomes', 1440, 800)]],
+      ['RCF-06', 'States', 'Loading, empty (no vehicle, no result, nothing selected), Not recorded per fact, Unavailable three ways, Not found, Refused, source withdrawn; saving and save failed for the bulk save.', [C('RCF06', false, 1440, 1080), C('RCF06B', 'Saving and save failed', 1300, 380)]],
+      ['RCF-07', 'Tablet 768 and phone 390', 'The organization page as stacked sections; the role block on the profile card; Organisation type as one more row of the RFD-14 filter sheet; the selection as a bottom bar. 44px targets.', [C('RCF07T', 'Tablet 768 · organization page', 768, 1700), P('RCF07A', 'Organization page'), P('RCF07B', 'Role block on the profile'), P('RCF07C', 'Filter sheet'), P('RCF07D', 'Selection bottom bar')]],
+      ['RCF-08', 'Dark', 'RCF-01 and RCF-05 on the dark tokens, and the phone organization page; states keep their words and shapes.', [F('RCF08', 'RCF-01 dark', 2280), F('RCF08B', 'RCF-05 dark', 1080), P('RCF08P', 'Phone dark')]],
+      ['RCF-09', 'Keyboard, focus and handoff', 'Focus order for each new block, where focus returns, live announcements; then what main does today, each ◇ line with its issue, question 1 at option A, frontend only and the BUILD ISSUES line.', [W('RCF09'), W('RCF09B')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
