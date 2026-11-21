@@ -7,8 +7,10 @@ import Sheet from '../ui/Sheet.jsx';
 import WriteFlow from './portfolio/WriteFlow.jsx';
 import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
 import MarkRequestQueue from './portfolio/MarkRequestQueue.jsx';
+import RightsAdmin from './portfolio/RightsAdmin.jsx';
 import { markRequestsApi } from '../lib/api/markRequests';
 import { answeringLine, answeredWords } from './portfolio/markRequestModel';
+import { BasisProposal } from './portfolio/MarkDrafts.jsx';
 
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
@@ -34,6 +36,8 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   // whether saving the mark answered it ('answered' | 'failed' | null).
   const [answering, setAnswering] = useState(null);
   const [answerOutcome, setAnswerOutcome] = useState(null);
+  // D6909 part 4 (PRM22): Eadwyn's accepted basis, source and day, seeding the mark's Prepare.
+  const [seed, setSeed] = useState(null);
   const [closeAsked, setCloseAsked] = useState(false);
   // D6205 part 2: investors' requests for the company the sheet is about, read
   // on their own so a failed read says so instead of hiding the sheet. The mark
@@ -150,7 +154,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   };
   // Record a mark… on a queue row: the company's sheet, with the mark's flow already open.
   const recordFromQueue = async (row) => {
-    setAnswering(row); setAnswerOutcome(null);
+    setAnswering(row); setAnswerOutcome(null); setSeed(null);
     await openDetail(row.projectUid);
     setFlow((cur) => ({ kind: 'mark', n: (cur?.n || 0) + 1 }));
   };
@@ -160,7 +164,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
     try { await markRequestsApi.answer(req.uid, answer); }
     finally { loadRequests(detail?.project?.uid); loadQueue(); }
   };
-  const openFlow = (kind) => { setAnswering(null); setAnswerOutcome(null); setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 })); };
+  const openFlow = (kind) => { setAnswering(null); setAnswerOutcome(null); setSeed(null); setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 })); };
   // The page's clock, read when a draft opens: the flow's model reads none.
   const today = () => new Date().toISOString().slice(0, 10);
   const closeSheet = () => { if (flow) setCloseAsked(true); else setDetail(null); };
@@ -332,9 +336,13 @@ export default function PortfolioPositionsPage({ embedded = false }) {
             )}
             {isAdmin && (
               flow?.kind === 'mark' ? (
+                <>
+                {answering ? <BasisProposal key={`basis-${answering.uid}`} requestUid={answering.uid} requester={answering.requester} company={answering.company}
+                  onAccept={(next) => { setSeed(next); setFlow((cur) => ({ kind: 'mark', n: (cur?.n || 0) + 1 })); }} /> : null}
                 <WriteFlow key={`mark-${flow.n}`} kind="mark" detail={detail} today={today()} save={saveMark} reread={rereadDetail}
-                  onSaved={onMarkSaved} onClose={() => { setFlow(null); setAnswering(null); setAnswerOutcome(null); }} closeAsked={closeAsked} onCloseAnswered={closeAnswered}
-                  context={answeringLine(answering)} receiptNote={answeredWords(answerOutcome, answering)} />
+                  onSaved={onMarkSaved} onClose={() => { setFlow(null); setAnswering(null); setAnswerOutcome(null); setSeed(null); }} closeAsked={closeAsked} onCloseAnswered={closeAnswered}
+                  context={answeringLine(answering)} receiptNote={answeredWords(answerOutcome, answering)} seed={seed} />
+                </>
               ) : (
                 <button type="button" onClick={() => openFlow('mark')} disabled={Boolean(flow)} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
                   Record a mark
@@ -378,6 +386,8 @@ export default function PortfolioPositionsPage({ embedded = false }) {
               <MarkRequestsAdmin companyName={detail.project?.name || 'this company'} read={requests} marks={detail.marks || []}
                 justRecorded={justRecorded} onAnswer={answerRequest} onRetry={() => loadRequests(detail.project?.uid)} />
             )}
+            {/* D6868 (#6868): investors' rights from the signed documents, and their requests to record one. */}
+            {isAdmin && detail.project?.uid ? <RightsAdmin key={detail.project.uid} projectUid={detail.project.uid} companyName={detail.project?.name || 'this company'} /> : null}
           </div>
         </Sheet>
       )}

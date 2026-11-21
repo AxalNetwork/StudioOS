@@ -19,7 +19,12 @@
  *   run      #3727's `agentRun` with `taskId`, the run uid (`agent:<uid>`,
  *            `agent:<uid>:run`) and the hold `agent.<role_key>`; a session's
  *            task also names its saved skill and version (D4534,
- *            `sessionSkill`), refused `skill_unavailable` when unreadable. A retried
+ *            `sessionSkill`), refused `skill_unavailable` when unreadable.
+ *            D4667-p2: a skill of the first ten is checked first
+ *            (`skillEvidenceForRun`, over the reads this context holds),
+ *            and `skill_not_ready` ends the run before `agentRun`: no hold
+ *            and no charge. A step that already proposed is not checked
+ *            again; its retry answers that proposal. A retried
  *            run step is answered by E2's idempotency: the same proposal, or
  *            `step_lost` with nothing more charged. `spend_limit`, `ai_paused`
  *            and `agent_cap_reached` pause the agent; `gateway_limit` sets the
@@ -42,12 +47,15 @@
  * not retry them; a throw is a transient error, retried 3 times.
  */
 import type { Env, User } from '../types';
-import { agentRun as realAgentRun, PROMPT_MAX, type AgentRunInput, type AgentRunResult } from '../services/agents/agentRun';
+import { agentRun as realAgentRun, PROMPT_MAX, runKeyOf, type AgentRunInput, type AgentRunResult } from '../services/agents/agentRun';
+import { railByRunKey } from '../services/railProposals';
+import { skillEvidenceForRun, skillSlugOf } from '../services/agents/skillEvidence';
 import { moduleOf } from '../services/agents/catalogue';
 import { logCycleWrite, type CycleWrite } from '../services/cycleActivity';
 import { readOne, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
-import { canRead, effectiveBook, scopeOfAgent, type AgentRow } from '../services/agents/teams';
+import { canRead, effectiveBook, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
+import type { Rules } from '../services/agents/catalogue';
 import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
 import { sessionBlock, sessionSkill } from '../services/agents/sessions';
 import {
@@ -145,7 +153,14 @@ export async function load(d: LoopDeps, uid: string): Promise<StepOut> {
 
 // ── context ─────────────────────────────────────────────────────────────────
 
-export type Built = { ok: true; prompt: string; reads: string[]; notes: number; omitted: string[] } | { ok: false; status: string; refusal: string; summary: string; pause?: PauseReason };
+/**
+ * D4667-p2: `scope`, `rules` and `projectId` are what the context read under; `bound` the read keys its prompt holds.
+ * D4667-p3: `document` the data-room document its session works on (`data_room_file:<uid>`), else null.
+ */
+export type Built = {
+  ok: true; prompt: string; reads: string[]; notes: number; omitted: string[];
+  scope: Scope; rules: Rules; projectId: number | null; bound: string[]; document: string | null;
+} | { ok: false; status: string; refusal: string; summary: string; pause?: PauseReason };
 
 /** The prompt, built from D1 alone. Every read is wrapped as data. */
 export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
@@ -179,7 +194,12 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const { rules } = await effectiveBook(d.env, s, l.agent.role_key);
   const missing = rules.reads.find((k) => typeof d.readers[k] !== 'function');
   if (missing) return { ok: false, status: 'refused', refusal: 'read_unavailable', summary: `The read ${missing} is not available yet.` };
-  const rc: ReadContext = { scope: s, agent: l.agent, projectId };
+  // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
+  const session = await sessionBlock(d.env, l.task);
+  // D4667-p3: a session on one data-room document reads that document's text; the reader checks the room's rule again.
+  const target = session?.target as { kind?: string; id?: string } | null | undefined;
+  const document = target?.kind === 'document' && typeof target.id === 'string' ? `data_room_file:${target.id}` : null;
+  const rc: ReadContext = { scope: s, agent: l.agent, projectId, document };
   const reads: { key: string; block: string }[] = [];
   for (const key of rules.reads) {
     const r = await readOne(d.env, key, rc, d.readers);
@@ -198,8 +218,6 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
   const handTo = await handsOffTo(d.env, l.agent);
   const handoff = await handoffBlockFor(d.env, l.task);
-  // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
-  const session = await sessionBlock(d.env, l.task);
   const head = [
     `Task: ${l.task.title}`,
     l.task.detail ? `Detail: ${l.task.detail}` : '',
@@ -222,7 +240,7 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
     else omitted.push(names[i]);
   });
   if (omitted.length) prompt += `\nLeft out for length: ${omitted.join(', ')}.`;
-  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted };
+  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: rules.reads.filter((k) => !omitted.includes(k)), document };
 }
 
 export async function context(d: LoopDeps, uid: string): Promise<StepOut> {
@@ -271,9 +289,21 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   // D4534: a session's run names its saved skill and version, so it passes the same skill gates a manual run does.
   const sk = await sessionSkill(d.env, l.task);
   if (sk.kind === 'refused') return end(d, l, 'run', 'refused', sk.code, sk.message);
+  // D4667-p2: the skill's evidence, over the reads this context holds, before agentRun holds or charges anything.
+  // A step that already proposed is answered by agentRun's replay, never checked again.
+  let readiness: AgentRunInput['readiness'] = null;
+  if (sk.kind === 'skill' && !(await railByRunKey(d.env, l.agent.sponsor_user_id, runKeyOf(uid)))) {
+    const slug = await skillSlugOf(d.env, sk.uid);
+    const checked = await skillEvidenceForRun(d.env, {
+      agent: l.agent, scope: b.scope, rules: b.rules, slug, projectId: b.projectId, bound: b.bound, document: b.document, readers: d.readers, now: d.now().getTime(),
+    });
+    if (!checked.ok) return end(d, l, 'run', 'refused', checked.code, checked.message);
+    if (slug) readiness = { slug, limits: checked.evidence?.limits ?? [] };
+  }
   const r = await d.agentRun(d.env, {
     agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid, engine: true,
     ...(sk.kind === 'skill' ? { skill: sk.uid, skillVersion: sk.version } : {}),
+    ...(readiness ? { readiness } : {}),
   });
   if (r.ok) {
     await markRun(d.env, uid, 'run', { status: 'done', summary: r.replayed ? 'Ran before; the same proposal stands.' : 'Wrote a proposal.' },

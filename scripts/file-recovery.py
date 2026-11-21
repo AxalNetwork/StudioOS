@@ -76,6 +76,7 @@ class AwsStore:
             raise ValueError('A valid Cloudflare account reference is required.')
         self.endpoint = f'https://{account}.r2.cloudflarestorage.com'
         self.source, self.destination = source, destination
+        self.last_modified = {}
 
     def command(self, *args):
         bucket = args[args.index('--bucket') + 1]
@@ -100,6 +101,7 @@ class AwsStore:
                 args.extend(['--continuation-token', token])
             page = self.command(*args)
             for item in page.get('Contents', []):
+                self.last_modified[item['Key']] = item.get('LastModified')
                 yield item['Key'], item['ETag']
             if not page.get('IsTruncated'):
                 break
@@ -143,7 +145,18 @@ def snapshot(store, registry, run_id=None):
                 raise ValueError('Archive verification failed; no complete snapshot was recorded.')
             entries.append({'key': key, 'archive': archive, 'sha256': digest, 'size': len(data),
                             'retention_basis': record_class['retention_basis']})
+    times = [getattr(store, 'last_modified', {}).get(entry['key']) for entry in entries]
+    newest = None
+    try:
+        if times and all(times):
+            newest = max(datetime.fromisoformat(value.replace('Z', '+00:00')) for value in times)
+            if newest.tzinfo is None:
+                newest = None
+    except (AttributeError, TypeError, ValueError):
+        newest = None
     manifest = {'version': 1, 'run_id': run_id, 'at': datetime.now(timezone.utc).isoformat(),
+                'newest_key_at': newest.isoformat() if newest else None,
+                'newest_key_at_status': 'recorded' if newest else 'unavailable' if entries else 'not_recorded',
                 'registry_sha256': sha(json.dumps(registry, sort_keys=True).encode()), 'entries': entries}
     encoded = json.dumps(manifest, sort_keys=True).encode()
     key = prefix + 'manifest.json'
@@ -186,24 +199,68 @@ def verify_live_lock(account):
     token = os.environ.get('CLOUDFLARE_API_TOKEN')
     if not token:
         raise ValueError('Control-plane access is required to verify retention.')
+    if not re.fullmatch('[a-f0-9]{32}', account or ''):
+        raise ValueError('A valid Cloudflare account reference is required.')
     request = Request(f'https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/studioos-backups/lock',
                       headers={'Authorization': 'Bearer ' + token})
-    with urlopen(request, timeout=30) as response:
+    # The URL is a fixed https:// Cloudflare API address; only the 32-hex account checked above varies, so no
+    # file:// or other scheme can reach urlopen.
+    with urlopen(request, timeout=30) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         result = json.load(response)
     if not result.get('success') or not lock_covers(result.get('result', {}).get('rules', [])):
         raise ValueError('A verified seven-year archive-prefix bucket lock is required before copying.')
 
 
+def write_private(path, data):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    with os.fdopen(fd, 'wb') as out:
+        out.write(data)
+
+
+class BundleStore:
+    """Stage only verified archive writes for a credential-isolated independent-copy step."""
+    def __init__(self, store, path):
+        self.store, self.path = store, Path(path)
+        self.path.mkdir(mode=0o700, exist_ok=False)
+        self.last_modified = store.last_modified
+
+    def list(self, prefix):
+        return self.store.list(prefix)
+
+    def get(self, key, **kwargs):
+        return self.store.get(key, **kwargs)
+
+    def put(self, key, data):
+        if not re.fullmatch(r'files-recovery/[a-f0-9-]{36}/(?:manifest\.json|objects/[a-f0-9]{64}/[a-f0-9]{64})', key):
+            raise ValueError('Invalid staged archive reference.')
+        self.store.put(key, data)
+        target = self.path / key
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        write_private(target, data)
+
+
+def receipt(manifest):
+    return {'outcome': 'verified', 'snapshot_id': manifest['run_id'],
+            'object_count': len(manifest['entries']), 'byte_count': sum(e['size'] for e in manifest['entries']),
+            'newest_key_at': manifest.get('newest_key_at'), 'newest_key_at_status': manifest.get('newest_key_at_status', 'unavailable')}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', required=True, help='Approved #6650 registry JSON; no default personal-file prefixes')
+    parser.add_argument('--bundle-dir', help='Fresh private staging directory; never uploaded as a workflow artifact')
+    parser.add_argument('--receipt', help='Private metadata-only result for heartbeat generation')
     args = parser.parse_args()
     registry = json.loads(Path(args.registry).read_text())
     approved_classes(registry)
     account = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '')
     store = AwsStore(account)
     verify_live_lock(account)
+    if args.bundle_dir:
+        store = BundleStore(store, args.bundle_dir)
     manifest = snapshot(store, registry)
+    if args.receipt:
+        write_private(args.receipt, json.dumps(receipt(manifest)).encode())
     print(json.dumps({'outcome': 'verified', 'objects': len(manifest['entries']), 'snapshot': manifest['run_id']}))
 
 

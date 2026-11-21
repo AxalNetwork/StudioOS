@@ -23,13 +23,17 @@ import {
   runCompetitorAnalysis,
   collectCandidateCrawl,
   sourceKind,
+  evidenceOf,
+  isSubjectMatch,
   type AnalysisInputs,
+  type AnalysisSubject,
+  type Evidence,
   type AnalysisResult,
   type Candidate,
   type AnalysisOutput,
 } from '../services/competitorAnalysis';
 import { fetchPage } from '../services/webFetch';
-import { linkCandidatesToDirectory } from '../services/competitorDirectoryLink';
+import { linkCandidatesToDirectory, hostOf } from '../services/competitorDirectoryLink';
 import { refuse } from '../util/refusal';
 import type { Context } from 'hono';
 
@@ -66,6 +70,78 @@ function inputsFromProject(project: Record<string, unknown>): AnalysisInputs {
     depth: 'quick',
     nudge: '',
   };
+}
+
+/**
+ * D7175: the directory company a run is about. The uid is checked against a
+ * fixed character set before it reaches SQL (bound there regardless). Null
+ * when none was sent (a custom market); a refusal when it names no company or
+ * the directory could not be read, because a run must not start on a subject
+ * nobody could look up.
+ */
+const SUBJECT_UID_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
+type SubjectRow = { uid: string; name: string; website: string | null; source_name: string | null; as_of: string | null; website_verified_at: string | null };
+
+async function readSubjectRow(env: Env, uid: string): Promise<SubjectRow | null> {
+  return await env.DB.prepare(
+    'SELECT uid, name, website, source_name, as_of, website_verified_at FROM research_company_directory WHERE uid = ?',
+  ).bind(uid).first<SubjectRow>();
+}
+
+export async function subjectFor(env: Env, raw: unknown): Promise<
+  { subject: AnalysisSubject | null } | { refusal: { status: 400 | 404 | 503; error: string; message: string } }
+> {
+  if (raw == null || raw === '') return { subject: null };
+  const uid = String(raw);
+  if (!SUBJECT_UID_RE.test(uid)) return { refusal: { status: 400, error: 'subject_uid_invalid', message: 'That company id is not one the directory uses.' } };
+  let row: SubjectRow | null;
+  try {
+    row = await readSubjectRow(env, uid);
+  } catch {
+    return { refusal: { status: 503, error: 'subject_unavailable', message: 'The company record could not be read. Try again, or run on a custom market.' } };
+  }
+  if (!row) return { refusal: { status: 404, error: 'subject_not_found', message: 'That company is not in the directory.' } };
+  return { subject: { uid: row.uid, name: String(row.name || ''), domain: hostOf(row.website) } };
+}
+
+/**
+ * D7175: the evidence status of each listed analysis, from three grouped reads
+ * (candidates, sources, outputs). Null for a run that is not complete.
+ */
+async function listEvidence(env: Env, rows: Array<Record<string, unknown>>): Promise<Map<string, Evidence>> {
+  const ids = rows.filter((r) => r.status === 'complete').map((r) => String(r.id));
+  const out = new Map<string, Evidence>();
+  if (!ids.length) return out;
+  const list = JSON.stringify(ids);
+  const [cands, srcs, outs] = await Promise.all([
+    env.DB.prepare('SELECT analysis_id, COUNT(*) AS n FROM competitor_candidates WHERE analysis_id IN (SELECT value FROM json_each(?)) GROUP BY analysis_id')
+      .bind(list).all<{ analysis_id: string; n: number }>(),
+    env.DB.prepare('SELECT analysis_id, id, status FROM competitor_sources WHERE analysis_id IN (SELECT value FROM json_each(?))')
+      .bind(list).all<{ analysis_id: string; id: string; status: number | null }>(),
+    env.DB.prepare('SELECT analysis_id, output_json FROM competitor_analysis_outputs WHERE analysis_id IN (SELECT value FROM json_each(?))')
+      .bind(list).all<{ analysis_id: string; output_json: string }>(),
+  ]);
+  const count = new Map((cands.results || []).map((r) => [String(r.analysis_id), Number(r.n) || 0]));
+  const sourcesOf = new Map<string, Array<{ id: string; status: number | null }>>();
+  for (const r of srcs.results || []) sourcesOf.set(String(r.analysis_id), [...(sourcesOf.get(String(r.analysis_id)) || []), r]);
+  const outputOf = new Map((outs.results || []).map((r) => [String(r.analysis_id), safeParse(r.output_json, {}) as { findings?: Array<{ source_ids?: unknown }> }]));
+  for (const id of ids) {
+    out.set(id, evidenceOf({ candidates: new Array(count.get(id) || 0), sources: sourcesOf.get(id) || [], output: outputOf.get(id) || {} }));
+  }
+  return out;
+}
+
+/** D7175: the listed subjects' names, or null for each when the directory could not be read. */
+async function subjectNames(env: Env, rows: Array<Record<string, unknown>>): Promise<Map<string, string> | null> {
+  const uids = [...new Set(rows.map((r) => r.subject_uid).filter((u): u is string => typeof u === 'string' && !!u))];
+  if (!uids.length) return new Map();
+  try {
+    const res = await env.DB.prepare('SELECT uid, name FROM research_company_directory WHERE uid IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(uids)).all<{ uid: string; name: string }>();
+    return new Map((res.results || []).map((r) => [String(r.uid), String(r.name)]));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -163,9 +239,11 @@ export async function persistResult(env: Env, analysisId: string, result: Analys
       JSON.stringify(c.scores), c.summary ?? null, JSON.stringify(c.details), c.origin, c.position,
     ));
   }
+  // D7175 records a read that failed as a row too (its status says so); a run
+  // fetched or tried it, so it is 'fetched' (D7176) and the next run replaces it.
   for (const src of result.sources) {
     stmts.push(db.prepare(
-      'INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      "INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fetched')",
     ).bind(src.id, analysisId, src.candidate_id ? (idOf.get(src.candidate_id) ?? src.candidate_id) : null, src.url, src.kind, src.title ?? null, src.status, src.fetched_at ?? null));
   }
   for (const g of result.signals) {
@@ -210,6 +288,11 @@ async function loadAnalysis(env: Env, userId: number, id: string): Promise<Recor
     signals,
     output: safeParse((outRows[0] || {}).output_json, {}),
     output_edited: !!(outRows[0] || {}).edited,
+    // D7175: the subject company, and the evidence the stored rows support.
+    subject_uid: a.subject_uid ?? null,
+    evidence: a.status === 'complete'
+      ? evidenceOf({ candidates, sources, output: safeParse((outRows[0] || {}).output_json, {}) as { findings?: Array<{ source_ids?: unknown }> } })
+      : null,
     // D7176: the saved version and which generated sections the person edited, and when.
     version: Number((outRows[0] || {}).version ?? 1) || 1,
     sections_edited: safeParse((outRows[0] || {}).sections_edited_json, {}),
@@ -497,15 +580,26 @@ competitors.post('/analyze', async (c) => {
     return c.json({ error: 'market_required', message: 'A market / industry is required to run the analysis.' }, 400);
   }
 
+  // D7175: the subject company, read from the directory, rides in the inputs
+  // (so a re-run keeps it out of the candidates) and on its own column.
+  const found = await subjectFor(c.env, body.subject_uid);
+  if ('refusal' in found) {
+    return c.json({ error: found.refusal.error, message: found.refusal.message }, found.refusal.status);
+  }
+  if (found.subject) inputs = { ...inputs, subject: found.subject };
+
   const id = crypto.randomUUID();
   const title = (typeof body.title === 'string' && body.title.trim()) || inputs.market.slice(0, 80);
   await sql`INSERT INTO competitor_analyses (id, user_id, project_id, mode, title, inputs_json, status, created_at, updated_at)
     VALUES (${id}, ${user.id}, ${projectId}, ${mode}, ${title}, ${JSON.stringify(inputs)}, 'running', ${nowIso()}, ${nowIso()})`;
+  if (found.subject) await sql`UPDATE competitor_analyses SET subject_uid = ${found.subject.uid} WHERE id = ${id}`;
 
   try {
     // D778 part 9: the press's page and option win; the record is the analysis this route made.
     const rail = railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.analyze }, analysisRecord(id));
     const result = await runCompetitorAnalysis(c.env, user.id, id, inputs, rail);
+    // D7175 part 2 (RS-13 B3): the save is the run's last step, with its time.
+    if (Array.isArray(result.output.run_steps)) result.output.run_steps.push({ step: 'saved', at: nowIso() });
     await persistResult(c.env, id, result);
     await sql`UPDATE competitor_analyses SET status = 'complete', updated_at = ${nowIso()} WHERE id = ${id}`;
     const full = await loadAnalysis(c.env, user.id, id);
@@ -522,9 +616,19 @@ competitors.get('/', async (c) => {
   const user = await requireAuth(c);
   await ensureCompetitorSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, project_id, mode, title, status, edited, created_at, updated_at
+  const rows = await sql`SELECT id, project_id, mode, title, status, edited, created_at, updated_at, subject_uid
     FROM competitor_analyses WHERE user_id = ${user.id} ORDER BY updated_at DESC LIMIT 100`;
-  return c.json({ analyses: rows });
+  // D7175: each row's subject and evidence status. A failed directory read
+  // leaves the subject's name null and says so; it never hides the list.
+  const [evidence, names] = await Promise.all([listEvidence(c.env, rows), subjectNames(c.env, rows)]);
+  return c.json({
+    analyses: rows.map((r) => ({
+      ...r,
+      subject_name: r.subject_uid ? (names?.get(String(r.subject_uid)) ?? null) : null,
+      evidence: evidence.get(String(r.id)) ?? null,
+    })),
+    subject_names: names ? 'ok' : 'unreadable',
+  });
 });
 
 // GET /api/competitors/:id — full analysis.
@@ -599,6 +703,10 @@ competitors.post('/:id/candidates', async (c) => {
   // see that file's header for what a second copy of it would have got wrong
   // (`position`, and the `edited = 1` that stops a re-run deleting manual rows).
   const inputs = safeParse(analysis.inputs_json, {}) as AnalysisInputs;
+  // D7175: self-match protection on the hand-typed row too.
+  if (isSubjectMatch(inputs.subject, { name: body.name, url: body.url })) {
+    return c.json({ error: 'subject_not_candidate', message: 'The subject of this analysis cannot be its own competitor.' }, 400);
+  }
   await insertManualCandidate(c.env, user.id, id, inputs, {
     name: body.name,
     url: typeof body.url === 'string' ? body.url : undefined,
@@ -987,11 +1095,13 @@ competitors.get('/:id/export', async (c) => {
   const full = picked.record;
   const versionHeader = { 'X-Analysis-Version': String(full.version ?? loaded.version) };
   const format = (c.req.query('format') || 'json').toLowerCase();
+  // D7175: the export names the subject as the directory records it now.
+  const subject = await exportSubject(c.env, full);
   if (format === 'md' || format === 'markdown') {
-    const md = renderMarkdown(full);
+    const md = renderMarkdown(full, subject);
     return new Response(md, { headers: { 'content-type': 'text/markdown; charset=utf-8', ...versionHeader } });
   }
-  return c.json(full, 200, versionHeader);
+  return c.json({ ...full, subject }, 200, versionHeader);
 });
 
 /** The record at `version`: the current one when it names no other, else the kept copy (D7176). */
@@ -1010,18 +1120,105 @@ async function recordAtVersion(
   if (!snap) {
     return { status: 404, refusal: { code: 'version_not_found', message: `Version ${n} of this analysis is not on record.` } };
   }
-  return { record: { ...snap, id: current.id, version: n } };
+  // D7175: the subject is fixed for an analysis, so a copy kept before the
+  // subject was recorded on it names the current one; its evidence is that
+  // copy's own, worked out from its rows when the copy does not carry it.
+  const record: Record<string, unknown> = { ...snap, id: current.id, version: n };
+  if (!('subject_uid' in snap)) record.subject_uid = current.subject_uid ?? null;
+  if (!('evidence' in snap)) {
+    record.evidence = snap.status === 'complete'
+      ? evidenceOf({
+        candidates: Array.isArray(snap.candidates) ? snap.candidates : [],
+        sources: (Array.isArray(snap.sources) ? snap.sources : []) as Array<{ id: string; status: number | null }>,
+        output: (snap.output || {}) as { findings?: Array<{ source_ids?: unknown }> },
+      })
+      : null;
+  }
+  return { record };
 }
 
-function renderMarkdown(a: Record<string, unknown>): string {
+type ExportSubject = { uid: string; name: string | null; website: string | null; website_verified_at: string | null; read: 'ok' | 'not_found' | 'unreadable' } | null;
+
+async function exportSubject(env: Env, full: Record<string, unknown>): Promise<ExportSubject> {
+  const uid = typeof full.subject_uid === 'string' && full.subject_uid ? full.subject_uid : null;
+  if (!uid) return null;
+  try {
+    const row = await readSubjectRow(env, uid);
+    if (!row) return { uid, name: null, website: null, website_verified_at: null, read: 'not_found' };
+    return { uid, name: row.name, website: row.website, website_verified_at: row.website_verified_at ?? null, read: 'ok' };
+  } catch {
+    return { uid, name: null, website: null, website_verified_at: null, read: 'unreadable' };
+  }
+}
+
+/** D7175: the Evidence line's words, one vocabulary with the page and the list. */
+const EVIDENCE_WORDS: Record<string, string> = {
+  supported: 'Supported', partial: 'Partial', insufficient: 'Insufficient evidence',
+  no_candidates: 'No candidates', unavailable: 'Sources unavailable',
+};
+
+/** D7175: the Subject and Evidence lines at the head of the Markdown export. */
+export function subjectAndEvidenceLines(subject: ExportSubject, evidence: Evidence | null, status: unknown): string[] {
+  const lines: string[] = [];
+  if (!subject) lines.push('Subject: None · custom market');
+  else if (subject.read !== 'ok') lines.push(`Subject: ${subject.uid} · the company record ${subject.read === 'not_found' ? 'is not in the directory' : 'could not be read'}`);
+  else {
+    const site = subject.website
+      ? `${hostOf(subject.website) || subject.website} · website ${subject.website_verified_at ? `verified ${String(subject.website_verified_at).slice(0, 10)}` : 'not verified'}`
+      : 'website not recorded';
+    lines.push(`Subject: ${subject.name} (${subject.uid}) · ${site}`);
+  }
+  if (!evidence) lines.push(`Evidence: Not recorded · the run is ${String(status || 'not complete')}`);
+  else {
+    const counts = evidence.status === 'insufficient' || evidence.status === 'no_candidates'
+      ? `${evidence.sources_fetched} sources · ${evidence.candidates} candidates`
+      : `${evidence.sources_fetched} of ${evidence.sources_tried} sources fetched`;
+    lines.push(`Evidence: ${EVIDENCE_WORDS[evidence.status] || evidence.status} · ${counts}`);
+  }
+  return lines;
+}
+
+function renderMarkdown(a: Record<string, unknown>, subject: ExportSubject = null): string {
   const out = (a.output || {}) as Partial<AnalysisOutput>;
   const cands = (a.candidates || []) as Array<Record<string, unknown>>;
   const inputs = (a.inputs || {}) as AnalysisInputs;
+  const evidence = (a.evidence || null) as Evidence | null;
+  // D7175: fetched sources numbered as the page and the findings cite them.
+  const fetched = ((a.sources || []) as Array<Record<string, unknown>>).filter((s) => {
+    const n = Number(s.status);
+    return n >= 200 && n < 400;
+  });
+  const numberOf = new Map(fetched.map((s, i) => [String(s.id), i + 1]));
+  const cites = (ids: unknown) => (Array.isArray(ids) ? ids : []).map((id) => numberOf.get(String(id))).filter(Boolean).map((n) => `[${n}]`).join('');
   const lines: string[] = [];
   lines.push(`# Competitor Analysis — ${a.title || inputs.market || ''}`);
   lines.push('');
   lines.push(`_Generated ${a.updated_at || ''} · mode: ${a.mode} · depth: ${inputs.depth || 'quick'}_`);
   lines.push('');
+  lines.push(...subjectAndEvidenceLines(subject, evidence, a.status));
+  lines.push('');
+  if (evidence?.status === 'insufficient') {
+    lines.push('This run found no companies and read no sources.');
+    lines.push('No market gaps, classifications or wedge are stated.');
+    lines.push('');
+  }
+  const findings = Array.isArray(out.findings) ? out.findings : [];
+  const facts = findings.filter((f) => f.kind !== 'interpretation');
+  const interpretation = findings.filter((f) => f.kind === 'interpretation');
+  if (facts.length) {
+    lines.push('## Findings (each cites a source)');
+    for (const f of facts) lines.push(`- ${f.text} ${cites(f.source_ids) || '(no source in this run)'}`);
+    lines.push('');
+  }
+  if (interpretation.length) {
+    lines.push('## Interpretation');
+    for (const f of interpretation) lines.push(`- ${f.text} ${cites(f.source_ids) || '(no source in this run)'}`);
+    lines.push('');
+  }
+  for (const x of Array.isArray(out.excluded) ? out.excluded : []) {
+    lines.push(`Excluded from candidates: ${x.name}${x.domain ? ` · ${x.domain}` : ''} — the subject.`);
+    lines.push('');
+  }
   if (out.market_summary) {
     lines.push('## Market summary');
     lines.push(out.market_summary);
@@ -1058,7 +1255,8 @@ function renderMarkdown(a: Record<string, unknown>): string {
     lines.push('');
   }
   if (out.next_actions?.length) {
-    lines.push('## Recommended next actions');
+    // D7175: the run's next steps are questions, not findings.
+    lines.push('## Suggested research questions (not findings)');
     for (const n of out.next_actions) lines.push(`- ${n}`);
     lines.push('');
   }
@@ -1072,7 +1270,11 @@ function renderMarkdown(a: Record<string, unknown>): string {
   if (out.notes) {
     lines.push('## Notes');
     lines.push(out.notes);
+    lines.push('');
   }
+  lines.push('## Sources');
+  if (!fetched.length) lines.push('None.');
+  for (const s of fetched) lines.push(`[${numberOf.get(String(s.id))}] ${s.url} · ${s.kind || 'page'} · fetched ${String(s.fetched_at || '').slice(0, 10)}`);
   return lines.join('\n');
 }
 

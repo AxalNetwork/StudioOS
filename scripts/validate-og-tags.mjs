@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { OG_ROUTES, ogTagsFor, SITE_URL } from '../frontend/src/lib/ogRegistry.js';
+import { programOgRoutes } from './lib/programCatalog.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -145,15 +146,17 @@ function checkProductCopyDrift() {
   }
 }
 
-function main() {
+async function main() {
   if (!fs.existsSync(DIR)) {
     console.error(`No build output at ${path.relative(ROOT, DIR)}. Run the frontend build first.`);
     process.exit(1);
   }
 
   const imageUsage = new Map();
+  // D6966 (#6966): each program presentation's own page, from its map entry.
+  const routes = [...OG_ROUTES, ...(await programOgRoutes())];
 
-  for (const route of OG_ROUTES) {
+  for (const route of routes) {
     const file = routeFile(route.path);
     const rel = path.relative(ROOT, file);
 
@@ -162,7 +165,7 @@ function main() {
       continue;
     }
     const html = fs.readFileSync(file, 'utf8');
-    const expected = ogTagsFor(route.path);
+    const expected = ogTagsFor(route.path, route.overrides);
 
     // --- required tags present and matching the registry --------------------
     const checks = [
@@ -258,7 +261,7 @@ function main() {
     }
   }
   const distinct = new Set([...imageUsage.keys()]).size;
-  if (OG_ROUTES.length > 1 && distinct === 1) {
+  if (routes.length > 1 && distinct === 1) {
     fail('sitewide', 'every route resolves to the SAME og:image — this is the bug this check exists to prevent');
   }
 
@@ -273,9 +276,12 @@ function main() {
     process.exit(1);
   }
   console.log(
-    `OG validation passed — ${OG_ROUTES.length} routes, ${distinct} distinct cards, ` +
+    `OG validation passed — ${routes.length} routes, ${distinct} distinct cards, ` +
       `${warnings.length} warning(s).`,
   );
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

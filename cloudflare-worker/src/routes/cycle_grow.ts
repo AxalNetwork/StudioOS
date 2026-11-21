@@ -145,7 +145,7 @@ import {
 import { facebookPageGrants } from '../integrations/providers/facebook';
 import { facebookReads } from '../services/facebook/insights';
 import {
-  FACEBOOK_SLUGS, SENTENCES as FACEBOOK_SENTENCES, deleteFacebookFact, facebookPart as facebookModulePart, linkOf as facebookLinkOf,
+  FACEBOOK_SLUGS, SENTENCES as FACEBOOK_SENTENCES, acceptFacebookProposal, dismissFacebookProposal, deleteFacebookFact, facebookPart as facebookModulePart, linkOf as facebookLinkOf,
   linkPage as linkFacebookPage, syncFacebook, unlinkPage as unlinkFacebookPage, type FacebookSlug,
 } from '../services/facebook/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
@@ -343,8 +343,9 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     const q = await env.DB.prepare(
       `SELECT p.id, p.title, p.team, p.target_start, p.status,
               (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id) AS applicants,
-              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND a.stage = 'interview') AS in_interview
-         FROM job_postings p WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'published', 'rejected') ORDER BY p.id DESC`,
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND (CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END) = 'interview') AS in_interview,
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND (CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END) = 'offer') AS in_offer
+         FROM job_postings p WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'open', 'published', 'rejected') ORDER BY p.id DESC`,
     ).bind(projectId).all<Row>();
     const rows = (q.results || []).map((p) => ({ ...p, state: LABEL[String(p.status)] ?? p.status }));
     return { cols: ['Role', 'Team', 'Applicants', 'In interview', 'Target start'], rows,
@@ -1226,6 +1227,10 @@ export const FACEBOOK_REFUSALS: Record<string, string> = {
   facebook_unreadable: 'Facebook could not be read. Nothing changed; try again.',
   bad_page: 'Say which Page: a Page id, or null to unlink.',
   fact_not_found: 'That figure is not on this venture.',
+  proposal_not_found: 'That proposal is not for this venture’s linked Facebook Page.',
+  proposal_decided: 'That proposal has already been decided. Reload to see its status.',
+  unknown_channel: 'Choose a channel of this venture.',
+  wrong_source: 'Choose the channel whose UTM source is facebook, or accept without choosing one to create it.',
 };
 
 const facebookReadRefusal = (e: ConnectRefusal): FacebookRefused =>
@@ -1306,6 +1311,48 @@ r.delete('/facebook/facts/:id', facebook(async (c, user) => {
   if (!slug) throw new FacebookRefused(404, 'fact_not_found');
   await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: 'grow_facebook_fact_deleted', summary: 'Facebook figure deleted' });
   return c.json({ ok: true, id });
+}));
+
+// D5860: the member whose active Facebook connection serves this venture, as for Sync and Beehiiv.
+async function facebookDecisionContext(c: C, user: User) {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await facebookRow(c, user, pid);
+  const link = await facebookLinkOf(c.env, pid);
+  if (!link) throw new FacebookRefused(409, 'facebook_page_not_linked');
+  if (link.integration_id !== Number(row.id)) throw new FacebookRefused(409, 'venture_served');
+  const id = Number(param(c, 'id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new FacebookRefused(404, 'proposal_not_found');
+  return { b, pid, id, link };
+}
+
+const FACEBOOK_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'proposal_not_found'], decided: [409, 'proposal_decided'],
+  unknown_channel: [404, 'unknown_channel'], wrong_source: [400, 'wrong_source'],
+};
+
+r.post('/facebook/proposals/:id/accept', facebook(async (c, user) => {
+  const { b, pid, id, link } = await facebookDecisionContext(c, user);
+  if (b.growth_channel_uid != null && (typeof b.growth_channel_uid !== 'string' || !b.growth_channel_uid.trim())) {
+    throw new FacebookRefused(400, 'unknown_channel');
+  }
+  const create = async () => (await addChannel(c.env, pid, user, {
+    name: (link.page_name || 'Facebook').slice(0, 120), utm_source: 'facebook', kind: 'organic',
+  })).uid;
+  const out = await acceptFacebookProposal(c.env, pid, id, user.id, link, b.growth_channel_uid ?? null, create);
+  if (out !== 'ok') throw new FacebookRefused(...FACEBOOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id,
+    action: 'grow_facebook_channel_accepted', summary: 'Facebook Page linked to a Distribution channel' });
+  return c.json({ ok: true, id, state: 'accepted' });
+}));
+
+r.post('/facebook/proposals/:id/dismiss', facebook(async (c, user) => {
+  const { pid, id, link } = await facebookDecisionContext(c, user);
+  const out = await dismissFacebookProposal(c.env, pid, id, user.id, link);
+  if (out !== 'ok') throw new FacebookRefused(...FACEBOOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id,
+    action: 'grow_facebook_channel_dismissed', summary: 'Facebook channel proposal dismissed' });
+  return c.json({ ok: true, id, state: 'dismissed' });
 }));
 
 export default r;

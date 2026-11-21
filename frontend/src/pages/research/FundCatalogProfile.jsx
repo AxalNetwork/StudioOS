@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { api } from '../../lib/api';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
+import { researchMyFundsApi } from '../../lib/api/researchMyFunds.js';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { NotRecorded, SourceCard, UnreadableBadge } from './FundDirectory';
 import { ProposedFields, SourceChip, SourceDatesCard, StateChip, VehicleHistory } from './FundProvenance.jsx';
@@ -44,6 +45,11 @@ import { ACTIONS, UNAVAILABLE, day, managedLine, reportedSize, rereadBeforeActio
  * the Sheet was opened from (D7166: and names the row, so the directory can
  * focus it); a direct visit links to the Fund directory. A failed read reads
  * "Unavailable".
+ *
+ * YOUR ENTRY IS FOUND BY CATALOGUE UID (D7168), never by name. "Atlas A-I"
+ * and "Atlas AI" normalise to the same letters, and the name match opened one
+ * dossier for both vehicles. The page asks the Worker for the one entry linked
+ * to this vehicle (`?catalogue_uid=`), whatever page of My funds holds it.
  */
 
 /** The page's state after a failed read. A 410 keeps the removed list and why (D597). */
@@ -228,12 +234,14 @@ export default function FundCatalogProfile({ role = 'founder' }) {
   useEffect(() => { load(); }, [load]);
 
   // D7167: the shortlist row for THIS vehicle, matched on its directory uid.
+  // D7168: asked of the Worker by `catalogue_uid`, so the row is found
+  // whatever page of My funds holds it (the list pages at 50).
   const uid = fund.data?.item?.uid || (fund.data ? id : null);
   useEffect(() => {
     if (!uid) return undefined;
     let alive = true;
     setList({ loading: true, error: null, existing: null });
-    api.research.funds()
+    researchMyFundsApi.list({ catalogue_uid: uid, limit: 1 })
       .then((r) => { if (alive) setList({ loading: false, error: null, existing: shortlistMatch(r.items, uid) }); })
       .catch((e) => { if (alive) setList({ loading: false, error: e?.message || UNAVAILABLE, existing: null }); });
     return () => { alive = false; };

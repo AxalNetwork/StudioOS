@@ -50,6 +50,7 @@ already on GitHub is not repeated, even if the local ledger is lost.
 ## Before you run `--go`
 
 - An open `[alert] main is red`, `[alert] the Actions queue is backed up` or `[alert] merge queue stalled` (AGENTS.md § Red main) does not block issue edits, but do not dispatch workflows.
+- An open `[alert] future-clock tests failing` is a main repair due before the break date on it (D7124). Check that a slot task exists for each failing test and file one if not: open the run linked on the alert (its `Latest failing run` line), read the names, files, parts and reproduce command from the run summary of the `future clock (report)` job, and put them in the task, not on the alert (D5663 keeps names off it). Due before the break date.
 - More than 50 closes or 200 new issues in one run: show the owner the dry run first.
 - Never post a security finding on a public issue. A flaw goes to the owner privately (draft security advisory).
 

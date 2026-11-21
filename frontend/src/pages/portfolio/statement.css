@@ -50,9 +50,28 @@
 .pst-actions,.pst-empty{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .pst-actions{flex-direction:row;flex-wrap:wrap}
 .pst-empty p{margin:0;font-size:13px;line-height:1.5}
+/* D6888 (#6888): Eadwyn's covering-note proposal. Desktop (PF-13a): Portfolio's
+   rail slot, a 320px column beside the sheet, inside the dialog. Phone 390
+   (PF-13h): a collapsible card in the sheet, between the preview and what the
+   PDF holds. */
+.pst-rail{display:flex;flex-direction:column;gap:10px;min-width:0}
+.pst-rail-head{display:flex;align-items:center;gap:8px;font-size:13px}
+.pst-rail-head i{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--pf-lav);border:1px solid var(--pf-lavE);color:var(--pf-vt);font:800 11px var(--font-mono,ui-monospace,monospace);font-style:normal}
+.pst-rail-head small{font-size:11px;font-weight:600;color:var(--pf-mu)}
+.pst-rail-toggle{display:none}
+@media (min-width:641px){
+  .pst-layer.has-rail .pst-sheet{margin-right:320px}
+  .pst-rail{position:fixed;top:0;right:0;bottom:0;width:320px;box-sizing:border-box;overflow:auto;padding:16px;background:var(--pf-card);color:var(--pf-ink);border-left:1px solid var(--pf-hair)}
+}
 @media (max-width:640px){
   .pst-sheet{width:100%;border-left:0}
   .pst-cards{grid-template-columns:minmax(0,1fr)}
   .pst-date,.pst-check,.pst-sheet .pf-btn,.pst-sheet .pf-icon-button{min-height:44px}
   .pst-foot .pf-btn{flex:1;justify-content:center}
+  .pst-rail{border:1px solid var(--pf-lavE);border-radius:10px;background:var(--pf-lav);padding:0}
+  .pst-rail-head{display:none}
+  .pst-rail-toggle{display:flex;align-items:center;gap:6px;width:100%;min-height:44px;padding:0 12px;border:0;background:transparent;color:var(--pf-vt);font-family:inherit;font-size:13px;font-weight:700;text-align:left;cursor:pointer}
+  .pst-rail-toggle:focus-visible{outline:2px solid var(--pf-vi);outline-offset:-2px}
+  .pst-rail:not(.is-open) .pst-rail-body{display:none}
+  .pst-rail-body{padding:0 8px 8px}
 }

@@ -20,6 +20,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { PhoneCards } from '../src/pages/investor/dealflow/FlowTable.jsx';
 import { PhoneBoard } from '../src/pages/investor/dealflow/FlowBoard.jsx';
 import { flowRows, scoresOf } from '../src/pages/investor/dealflow/flowModel.js';
+import { tagHolding } from './_tagHolding.mjs';
 
 const read = (p) => readFileSync(p, 'utf8');
 const h = React.createElement;
@@ -27,7 +28,7 @@ const DIR = 'frontend/src/pages/investor/dealflow/';
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, '’').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 /** The element carrying `data-testid="id"`, with its markup up to the next sibling of the same tag. */
-const tagOf = (s, id) => (new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(s) || [null])[0];
+const tagOf = (s, id) => tagHolding(s, `data-testid="${id}"`, (t) => /^<[a-z]/.test(t)) || null;
 
 const entry = (o) => ({
   uid: `u${o.deal_id}`, deal_id: 1, venture: 'Acme Robotics', sector: 'Robotics', round_status: 'active', stage: 'screening',

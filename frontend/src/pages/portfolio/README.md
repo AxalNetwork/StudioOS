@@ -29,8 +29,8 @@ D4817 part 2 (canvas PF-02) draws Positions
 (`../investor/InvestorPortfolioPositions.jsx` at `/portfolio/positions`) in
 the same frame (`tab="positions"`). It adds to the model, not a second one: a
 position's mark kind (`markOf`: marked, none, unusable), one basis vocabulary
-(`basisLabel`), the date mark age is measured at (`markReference`, never the
-browser clock), the register's rows, counts and total, one company's mark
+(`basisLabel`), the date mark age is measured at (`markReference`: the positions
+read's own `today` since D6226, never the browser clock), the register's rows, counts and total, one company's mark
 history, and the attention rules with their evidence (`attentionRulesOf`).
 Decision notes: `documentation/architecture/decisions/D4817-p2.md`.
 
@@ -174,5 +174,7 @@ proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
 Discard, and "Eadwyn is unavailable. The statement does not need it." when
 Eadwyn is off), and `coverNoteModel.js` holds its words and what each answer
 reads as. It drafts on the press from the statement's own figures for the date
-and keeps nothing. The Statement sheet mounts it after #6867. Decision notes:
-`documentation/architecture/decisions/D6888.md`.
+and keeps nothing. The Statement sheet mounts it in its rail for the chosen
+date, and Edit ticks "Include as a cover note" with the proposal in that box.
+Decision notes: `documentation/architecture/decisions/D6888.md` and
+`documentation/architecture/decisions/D6888-p1.md`.

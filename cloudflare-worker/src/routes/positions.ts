@@ -29,7 +29,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { logAdminAction } from '../services/adminAudit';
-import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { mapError, nowIso, newUid, todayIso } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
   periodComplete, periodCounts, reportDue, REPORT_DUE_DEFAULT_DAYS,
@@ -284,6 +284,8 @@ r.get('/', async (c) => {
       items,
       scope: scope.held == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE,
       fund_scope: gpScopeStatement(scope),
+      /** D6226: the Worker's UTC date, so the page ages a mark without the browser clock. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -456,6 +458,9 @@ r.get('/analytics', async (c) => {
       // returned on every read, explicit or not.
       as_of_default: readAt.slice(0, 10),
       read_at: readAt,
+      // D6226: the Worker's UTC date, whatever `as_of` was asked; mark age is
+      // measured at it. Taken from the same clock read as `read_at` (D6207).
+      today: readAt.slice(0, 10),
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
       /** D4644: positions whose recorded mark could not be used, and why not. */
@@ -652,15 +657,25 @@ r.get('/:projectUid', async (c) => {
           WHERE project_id = ?
             AND (? IS NULL OR fund_id IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY as_of_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
       c.env.DB.prepare(
         `SELECT uid, distribution_date, amount, kind, note
            FROM portfolio_distributions
           WHERE project_id = ?
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY distribution_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
     ]);
+    // #5847: a failed marks or distributions read is Unreadable, never an
+    // empty history, "None recorded" or $0. The page reads a refused read as
+    // Unreadable (`readOf`); an empty but successful read is still [].
+    const unread = markRows.results == null ? 'marks' : distRows.results == null ? 'distributions' : null;
+    if (unread) {
+      const reason = unread === 'marks'
+        ? "Unreadable — this company's valuation marks could not be read. Try again."
+        : "Unreadable — this company's distributions could not be read. Try again.";
+      return c.json({ available: false, source: unread, detail: reason, reason }, 503);
+    }
     const marks = markRows.results || [];
     const invested = (rounds.results || []).reduce((a: number, x: any) => a + (Number(x.invested_amount) || 0), 0);
     const roll = rollUpPosition(invested, marks.length > 0 ? Number(marks[0].fmv) : null);
@@ -676,6 +691,8 @@ r.get('/:projectUid', async (c) => {
         latest_mark_as_of: marks.length > 0 ? marks[0].as_of_date : null,
         latest_mark_basis: marks.length > 0 ? marks[0].basis : null,
       },
+      /** D6226: the Worker's UTC date, so the latest mark's age is measured against it. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });

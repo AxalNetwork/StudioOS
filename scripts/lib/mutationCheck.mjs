@@ -154,8 +154,8 @@ export function isFileEntry(name, testPath) {
 
 /** TAP's summary counts (`# pass 3`, `# fail 1`), or null when it has none. */
 export function tapCounts(tap) {
-  const get = (k) => { const m = new RegExp(`^# ${k} (\\d+)$`, 'm').exec(String(tap)); return m ? Number(m[1]) : null; };
-  const pass = get('pass'); const fail = get('fail');
+  const count = (m) => (m ? Number(m[1]) : null);
+  const pass = count(/^# pass (\d+)$/m.exec(String(tap))); const fail = count(/^# fail (\d+)$/m.exec(String(tap)));
   return pass === null && fail === null ? null : { pass: pass ?? 0, fail: fail ?? 0 };
 }
 

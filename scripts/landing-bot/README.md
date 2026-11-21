@@ -12,11 +12,14 @@ its data, passes it in, and does only what these functions allow.
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
 | `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
+| `refresh-rules.mjs` | The serial refresh's pure rules (#6478): which PRs inherited main's failure, how many the window allows, and the one-at-a-time loop that stops at a breaker. |
+| `refresh.mjs` | The serial refresh's entry point (`plan`, `apply`): update-branch with the App token, else the keeper's runner merge. |
 | `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
 | `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
 | `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
 | `resolve-rules.mjs` | The conflict resolver's rules (#6475), pure: `gate()` and `afterStage()` before any model call, `checkResolution()` (both sides' added lines kept, no test dropped, no skip added, only the conflicted files), the verify commands and today's reservations. |
 | `resolve.mjs` | The conflict resolver's entry point (`plan`, `apply`): stages the merge, builds the model task, then re-checks the patch and the resolution with main's code and pushes a normal merge commit, or hands back. |
+| `mainRepair.mjs` | Main repair (#6477): the pure decision (`confirmRed()`, `ownership()`, `choose()`), the patch and revert checks, and the entry point (`plan`, `claim`, `apply`) that takes the repair issue and opens one `main-repair` PR, or steps aside. |
 | `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
@@ -157,3 +160,72 @@ ejection, then:
   - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
+## The serial refresh
+
+`.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green
+and an older one in the last 20 was red. It picks open, non-draft PRs whose latest CI run on their current head
+failed, and that `verdictFor()` calls `inherited_main_failure` against that red run. Then, one at a time:
+- **Before each PR,** it re-reads the mode, `bot:off`, the head and `breakers('refresh')`, which includes the
+  queued-runs limit. A breaker stops the run at once.
+- **The update** is GitHub's update-branch with `expected_head_sha`. If that refuses the App token, it uses the
+  branch keeper's runner merge instead.
+- **A conflict** is labelled `conflict` for the keeper and not retried.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_REFRESH_PER_WINDOW` | PRs refreshed per window. Unset is 0. |
+| `LANDING_BOT_REFRESH_WINDOW_MIN` | The window in minutes. Unset is 0, which refreshes nothing. |
+
+Each run reserves its refreshes in an artifact before it makes any, and counts the window's reservations.
+
+## Main repair
+
+`.github/workflows/landing-bot-main-repair.yml` (#6477, D6477) sweeps every 10 minutes, or runs by dispatch. The #4571
+guard admits `workflow_run` only for pull-request runs, so the trigger gate is applied to the run data instead: main's
+newest completed push run of CI, from this repository, failed. D5398 is one repair for a red main, so the bot never
+works beside a session. Four jobs:
+
+- **`plan`** (`landing-bot` environment, a read-only token, an App token that reads metadata only). It calls no model
+  and writes nothing on GitHub. It stops quietly when:
+  - main's newest push run is green, cancelled or unreadable;
+  - `verdictFor()` calls the failure infrastructure;
+  - `[alert] the Actions queue is backed up` is open;
+  - no repair issue is open yet. The issue is `[alert] main is red` from the alert workflow, else D6387's
+    CI-on-main issue, written by a trusted author.
+
+  When the issue has a `claim/<n>` ref (expired or not), `state:in-progress`, `needs-session`, a linked open PR, or
+  any open PR is labelled `main-repair` or on a `repair/main-` branch, the decision is one comment.
+
+  Otherwise it triages the red run with `../lib/redCiTriage.mjs`: the failing jobs, tests and reproduce commands, the
+  first red push and its files. Then it decides:
+  - **`repair`:** `attempts()` (2 per failure fingerprint, job plus test, whatever the commit), `budget()` (model runs
+    and repair PRs today) and a usable failing command all allow a model.
+  - **`revert`:** they do not.
+
+  Before the model is called, it reserves the attempt and today's run as artifacts.
+- **`claim`** (`landing-bot`, the App token with contents and issues write) posts the comment and stops. Or it claims
+  the issue with `../claim.mjs` as `bot`/`landing-bot`/`main-repair-<run id>` and labels it `state:in-progress`. A
+  claim it loses means it steps aside.
+- **`repair`** is the model runner on `main`. Its files are the suspected commit's and the failure's, each clearing
+  `pathGuard()`. It verifies with the installs, `npm run test:types` and the failing command. It has no GitHub write.
+- **`apply`** (`landing-bot`, the App token, no model key, scripts from main, no repository code run):
+  1. Re-reads main and the open PRs. A green main or a repair PR that appeared releases the claim and stops.
+  2. Re-checks the patch with `checkPatch()`, `pathGuard()` and main's `merge-policy.mjs`. It refuses any change to
+     an existing test, the failing test, a guard script, a baseline, an allowlist, a migration or a protected path.
+  3. If the model did not pass or the patch is refused, it tries a plain revert of the first red commit. The revert
+     needs one parent, a clean apply, no migration and no protected path.
+  4. Pushes its own `repair/main-<short sha>` branch, never forced and never main.
+  5. Opens ONE PR labelled `main-repair`, with `Part of #<issue>` and the suspected commit named. Then it releases the
+     claim and labels the issue `state:review`.
+  6. Anything else is one comment, the claim released and `needs-session`.
+
+**The owner lands every repair PR.** No bot queues or merges one. The keeper, the resolver and red-PR repair skip
+`repair/` branches (`eligible()`). The feeder holds `Landing-Bot-Kind: main-repair` commits.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_DAILY_MODEL_RUNS` | Model runs per UTC day, counted from this workflow's reservations. Unset is 0: revert only. |
+| `LANDING_BOT_DAILY_PUSHES` | Repair PRs per UTC day, counted from `repair/main-` PRs opened today. Unset is 0: comment only. |
+
+Tests: `frontend/test/landing_bot_main_repair_6477.test.mjs`.
+

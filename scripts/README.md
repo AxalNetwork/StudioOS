@@ -8,8 +8,9 @@
 | `npm run build` | `build-frontend.mjs` — compiles the SPA into `docs/`, prerenders public routes, and prunes old hashed assets on a retention window. **Always build through this, never a bare `vite build`**: that empties `docs/` and deletes the retained assets and the hand-maintained changelogs living there. |
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
-| `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. D5973: also writes one classified row per merge-group candidate to `$CI_SCORECARD_ROWS`. |
+| `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. D5973: also writes one classified row per merge-group candidate to `$CI_SCORECARD_ROWS`. D6479: the landing section's reads, under their own cap. |
 | `actions-concurrency.mjs` | #6462: read-only report of effective Actions concurrency. Rebuilds jobs executing per minute over a window (default 24 h) from every run's job timestamps: the effective ceiling (the level executing sat at while jobs queued), peak, the highest level held for 10 minutes, share of time at the ceiling, queued jobs per minute, slot-minutes per workflow and per event (draft vs ready PRs from each PR's timeline), whether phantom queued runs ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches. #6676: also a merge-candidate table (`merge_group` runs of `ci.yml`: minutes from run creation to the first job with a runner and to the first `landing gate` result, p50/p90 by UTC hour). GET requests only, capped (`--cap`, `--reserve`); prints how much of the window it covered. `--save`/`--load` re-render without the API. Logic in `lib/actionsConcurrency.mjs`. |
+| `dr-drill-cleanup.sh` | D7917: bounded workflow fallback deletes only the database recorded for this Actions run/attempt, retaining ownership on failure. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
@@ -102,6 +103,7 @@ represents a bug that reached production once:
 | `release-rollback-class.mjs` | D7151: report-only release step that records, before any write, whether the release could be rolled back automatically (`auto`, `auto-additive`, `manual`), the reasons and the rollback target, into the release evidence and job summary. Always exits 0. Rules in `lib/rollbackClass.mjs`. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 | `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
+| `ci/` | CI evidence, provider boundaries and verified tool acquisition; see its README. |
 
 ## The one rule that needed a linter
 
@@ -227,6 +229,7 @@ pull.
 | `build-route-registry.mjs` | Not an importer: #4105. Checks every `mount` export under `cloudflare-worker/src/routes/` and writes `cloudflare-worker/src/routes/_registry.ts`, the list `index.ts` mounts without a line per router. The registry is gitignored, never committed (D5612); `build-generated.mjs` runs this. `--check` exits 1 when a descriptor is unsound, the generator is not deterministic, or git tracks the registry; `route_registry_4105.test.ts` runs the same checks. Rules in `lib/routeRegistry.mjs`. |
 | `build-generated.mjs` | Not an importer: D5612 (#5612). Runs `build-route-registry.mjs`, `build-api-index.mjs` and `build-skill-library.mjs`, which write the three generated modules that are gitignored and never committed (and, since D4574 H3, the skill library's entries asset, `frontend/public/skill-library/`, gitignored too). Node built-ins only, so it runs before `npm ci`; `build-frontend.mjs`, the `pre*` npm hooks, `test-drift-parts.mjs` and each CI job that runs `tsc`, `node --test`, `wrangler` or `vite` run it first (`frontend/test/generated_before_build_5612.test.mjs`). `--check` runs each generator's `--check`. |
 | `build-rail-matrix.mjs` | Not an importer: D764 (#2089). Writes `cloudflare-worker/src/services/ai/railMatrix.json`, one row per canvas page (its kind and router task; since #4313 part 3 no model list, as each page lists its kind's job), from the owner's canvas tables (`design/incoming/airail-every-page-data/canvas.json`) and `lib/railMatrixOverrides.json`. Since D764 PR 3 it also writes one row per option registered in `frontend/src/lib/railOptions/`, with its kind's models. It refuses inputs that break D720 §5's rules, held on each canvas kind's list and every option row. `--check` exits 1 when the committed file is not its output; `rail_matrix_d764.test.ts` runs the same comparison. |
+| `import-global-research-funds.py` | D7326: deterministic additive worldwide manager import from the dated primary-source evidence manifest. `--check` verifies the committed migration; served manager aliases/hosts, explicitly recorded vehicle-number suffixes and retired UIDs suppress duplicates, while existing data and source verdicts remain intact. |
 | `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). `parse_shai` reads the third list from a CSV with that sheet's shape; `fixtures/shai-goldman-sample.csv` is the fixture. Those rows are US cents under the list's own name (1A) and are not written into migration 378. Since D7166 (#7166) the EuroTech list is keyed by vehicle (manager plus fund number) and `eurotech-migration STEM` writes its re-import as a new migration; run with no argument it refuses, because 378 is applied. |
 
 ## Subfolders
@@ -322,6 +325,7 @@ each row on its own mutation.
 | `remote-latency.mjs` | D1581 (#3828): the staging test that the phone remote advances Present within 300 ms. It pairs a deck, joins as the phone, and times each step from the request to the frame on Present's socket. It needs `STUDIOOS_BASE`, `STUDIOOS_TOKEN` and a deck id; exits 1 at 300 ms or more. Not in CI. |
 | `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
 | `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
+| `landing-list.mjs` | D6469: the owner's landing list. Default: open non-draft PRs with every required check green on the head, tiered by `merge-policy.mjs`, T2 and model-changed (`bot:resolved`, `main-repair`) first, in the overlap report's order; `--history[=N]` reports the T0/T1/T2 share over the last N (300) merged PRs and the T2 rules matched most; `--sticky [--dry-run]` edits one sticky issue body in place (the hourly `pr-overlap.yml` step). Never labels, merges or queues. |
 
 D5676: `check-tail-archive.mjs` is an external authenticated metadata-only observer check; query/process fallback belongs to the shared independent monitor owner.
 
@@ -331,6 +335,8 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `future-clock-producer.mjs` | D5663: attempt-bound future-clock TAP and exit manifests. |
 
 | `future-clock-report.mjs` | D5663: trusted same-attempt producer evidence verification. |
+
+| `future-clock-changed.mjs` | D7124: a PR's added or edited test files under libfaketime at +7d and +9d 11h (ci.yml, `suite (rest)` on non-draft PRs); fails on a test that fails ahead and passes today. `--offset +7d <file>` reproduces one. |
 
 | `health-alert-episodes.mjs` | D5663: paginated health episodes with persistent transition delivery intents. |
 
@@ -342,10 +348,17 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
+| `check-record-writes.mjs` | D6651: fails on a put or delete of a `record` R2 prefix outside `cloudflare-worker/src/services/recordStore.ts` (writes) and `cloudflare-worker/src/services/recordErasure.ts` (deletes); baseline `record-writes-baseline.json` started empty. |
 
 | `file-recovery.py` | D6428: approved-class-only, lock-verified R2 snapshots and suppression-required restore primitive; live activation waits for counsel/#6650/#6654. |
 | `file-recovery-drill.py` | D6428: synthetic-only archive/source-loss/restore/suppression drill, with no provider access. |
 | `file_recovery_6428_test.py` | D6428: synthetic registry, lock duration, archive immutability, corruption, copy failure and suppression regressions. |
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |
+| `check-production-credentials.mjs` | D7145 checks each workflow job against the production credential inventory and enforces its environment. |
+| `verify-production-environment.mjs` | D7145 release preflight that requires the exact main-only production deployment policy before credentials are used. |
+| `import-global-funds.py` | D7325: offline validator and duplicate-safe SQL generator for primary-source fund-manager research; `--check` verifies the committed migration. |
 
 | `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |
+
+| `file-recovery-independent.py` | D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof. |
+| `file_recovery_6653_test.py` | D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats. |

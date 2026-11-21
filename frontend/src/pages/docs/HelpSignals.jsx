@@ -22,7 +22,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { helpCenterApi } from '../../lib/api/helpCenter';
 import { reportError } from '../../lib/log';
-import { guideReviewFor, contentReviewItems } from './guideGovernance';
+import { guideReviewFor, guideVerificationFor, staleWord, contentReviewItems, staleRuleSentence } from './guideGovernance';
 import { guideLinkFlags, linkFlagLine, searchMissesView } from './v2/helpV2';
 import {
   MISSING_MAX, POPULAR_ASKED, POPULAR_DAYS, adminFeedbackView, answeredLine, feedbackFrom, guideHref,
@@ -405,8 +405,8 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll, sections = []
                       <td className={`py-2 pr-3 ${NUM} text-gray-700 dark:text-gray-300`}>{g.yes}</td>
                       <td className={`py-2 pr-3 ${NUM} font-bold text-gray-900 dark:text-gray-100`}>{g.no}</td>
                       <td className="py-2 pr-3 text-gray-700 dark:text-gray-300">{guideReviewFor(g.anchor).owner}</td>
-                      <td className="py-2 pr-3 text-gray-700 dark:text-gray-300">{guideReviewFor(g.anchor).status}</td>
-                      <td className="py-2 font-mono text-[11px] text-gray-500 dark:text-gray-400" data-testid="help-answers-flags">{flags(g.anchor)} · stale not recorded</td>
+                      <td className="py-2 pr-3 text-gray-700 dark:text-gray-300">{guideVerificationFor(g.anchor).line}</td>
+                      <td className="py-2 font-mono text-[11px] text-gray-500 dark:text-gray-400" data-testid="help-answers-flags">{flags(g.anchor)} · {staleWord(guideVerificationFor(g.anchor))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -416,13 +416,13 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll, sections = []
               {guides.map((g) => (
                 <li key={g.anchor} className="border-b border-gray-100 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="help-answers-card">
                   <b className="block text-[13px] text-gray-900 dark:text-gray-100">{g.title}</b>
-                  <span className="block font-mono text-[11px] text-gray-500 dark:text-gray-400">{g.yes} yes · {g.no} no · {guideReviewFor(g.anchor).owner} · {guideReviewFor(g.anchor).status}</span>
-                  <span className="block font-mono text-[11px] text-gray-500 dark:text-gray-400">{flags(g.anchor)} · stale not recorded</span>
+                  <span className="block font-mono text-[11px] text-gray-500 dark:text-gray-400">{g.yes} yes · {g.no} no · {guideReviewFor(g.anchor).owner} · {guideVerificationFor(g.anchor).line}</span>
+                  <span className="block font-mono text-[11px] text-gray-500 dark:text-gray-400">{flags(g.anchor)} · {staleWord(guideVerificationFor(g.anchor))}</span>
                 </li>
               ))}
             </ul>
             <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Broken links are checked against the guides as written. Stale needs a first verified date, which no guide has yet.
+              Broken links are checked against the guides as written. {staleRuleSentence()}
             </p>
           </section>
 

@@ -197,7 +197,9 @@ test('5. the writes are logged through logGrowWrite, counts only', async () => {
   await decide(v, proposals(v.db)[0].id, 'dismiss');
   assert.deepEqual(activity(v.db, 'grow_tiktok_channel_dismissed').map((a: any) => a.details), ['TikTok channel proposal dismissed']);
 
-  const logged = JSON.stringify([lines, w.db.prepare('SELECT * FROM activity_logs').all()]);
+  // A new channel's uid is 32 random hex characters, which hold one of the figures below about once in 800 runs
+  // (the merge queue saw "6543" in one on 2026-11-19); the uid is not a figure, so it is masked before the check.
+  const logged = JSON.stringify([lines, w.db.prepare('SELECT * FROM activity_logs').all()]).replace(/\b[0-9a-f]{32}\b/g, '<uid>');
   for (const never of ['4321', '8765', '6543', 'Demo reel', OPEN_ID, 'tok-61']) assert.ok(!logged.includes(never), `a log holds ${never}`);
 });
 

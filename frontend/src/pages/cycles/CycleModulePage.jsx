@@ -1,3 +1,4 @@
+import BuildFacts from './BuildFacts.jsx';
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
@@ -416,6 +417,7 @@ export default function CycleModulePage({
             {interviewLine && <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
 
           </section>
+          <BuildFacts cycle={cycle} slug={slug} data={data} status={status} />
           {doors}
           {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
           {aboveRecords}
