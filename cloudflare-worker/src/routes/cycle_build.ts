@@ -915,10 +915,14 @@ async function foundingFacts(env: Env, p: Project, founders: any[], pool: {pct:n
     read('SELECT id,name,ownership_pct FROM cap_table_holders WHERE project_id=?'),
     read('SELECT id,title,team,target_start,status FROM job_postings WHERE project_id=? ORDER BY id DESC'),
   ]);
-  const known = holders!=null && holders.every(h=>h.ownership_pct!=null) && pool.pct!=null;
+  // Recorded pool percentages include granted options; legacy holder percentages
+  // do not identify that overlap. Do not subtract both as disjoint shares.
+  const known = holders!=null && holders.every(h=>h.ownership_pct!=null) && pool.pct!=null && pool.source !== 'record';
+  const remainder = known ? Math.round((100-holders!.reduce((n,h)=>n+Number(h.ownership_pct),0)-pool.pct!)*100)/100 : null;
+  const valid = remainder != null && remainder >= 0 && remainder <= 100;
   return { option_pool_pct:pool.pct, option_pool_source:pool.source,
-    unallocated_pct:known?Math.round((100-holders!.reduce((n,h)=>n+Number(h.ownership_pct),0)-pool.pct!)*100)/100:null,
-    unallocated_reason:known?null:holders==null?'Holder percentages unavailable.':'Every holder percentage and the option pool must be recorded.',
+    unallocated_pct:valid?remainder:null,
+    unallocated_reason:valid?null:pool.source==='record'?'Recorded pool includes granted options; its overlap with holder percentages is not recorded.':known?'Holder and pool percentages exceed 100%.':holders==null?'Holder percentages unavailable.':'Every holder percentage and the option pool must be recorded.',
     other_holders:holders?.filter(h=>!founders.some(f=>f.id===h.id)).map(h=>({name:h.name,equity:h.ownership_pct}))??null,
     signatures:null, agreement_reason:'The latest document status is recorded; individual party signatures are not stored. A signed-of-total count is not recorded.',
     hiring: hiring==null?{state:'unreadable',rows:null}:{state:'ok',rows:hiring},

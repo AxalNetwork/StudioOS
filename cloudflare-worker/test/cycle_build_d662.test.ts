@@ -65,7 +65,7 @@ async function call(env: any, path: string, user = 1, method = 'GET', body?: unk
     .sign(new TextEncoder().encode(JWT_SECRET));
   const response = await app.request(path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, env);
-  return { status: response.status, body: await response.json() as any };
+  return { status: response.status, body: response.headers.get('content-type')?.includes('text/csv') ? await response.text() : await response.json() as any };
 }
 
 test('missing MVP target date is not_recorded, not zero days; status transition records completion', async () => {
@@ -338,10 +338,21 @@ test('BD31: 83(b) is scoped to the holder and venture, and unknown signatures st
  assert.equal(own.status,200);const f=own.body.facts.founders[0];
  assert.equal(f.filing.text,'Due 2026-12-01');assert.equal(f.filing.href,'/build/company-creation/step-81?project=101');
  assert.equal(own.body.records.rows[0].cells.filing.href,f.filing.href);
+ const csv=await call(env,'/api/cycles/build/modules/founding-team/export?project=101');
+ assert.equal(csv.status,200);assert.match(csv.body,/Synthetic founder/);assert.match(csv.body,/Due 2026-12-01/);assert.doesNotMatch(csv.body,/\[object Object\]/);
  assert.equal(own.body.facts.signatures,null);assert.match(own.body.facts.agreement_reason,/individual party signatures are not stored/);
  assert.equal(own.body.facts.unallocated_pct,null,'an unrecorded option pool does not become zero');
  db.exec("UPDATE formation_steps SET state='done' WHERE id=81");
  assert.equal((await call(env,'/api/cycles/build/modules/founding-team?project=101')).body.facts.founders[0].filing.text,'Filed');
  db.exec('DROP TABLE formation_steps');
  const failed=await call(env,'/api/cycles/build/modules/founding-team?project=101');assert.equal(failed.body.facts.founders[0].filing.text,'Unavailable');assert.equal(failed.body.records.rows[0].cells.founder,'Synthetic founder');
+});
+
+test('BD31: an inconsistent modelled split remains unknown instead of negative', async()=>{
+ const {db,env}=fixture();
+ db.exec("INSERT INTO cap_table_holders(user_id,project_id,name,shares,ownership_pct,founder_role) VALUES(1,101,'Synthetic founder',100,95,'CEO'); INSERT INTO cap_table_scenarios(project_id,inputs_json) VALUES(101,'{\"option_pool_pct\":10}');");
+ const r=await call(env,'/api/cycles/build/modules/founding-team?project=101');
+ assert.equal(r.body.facts.unallocated_pct,null);
+ assert.match(r.body.facts.unallocated_reason,/exceed 100/);
+ db.close();
 });
