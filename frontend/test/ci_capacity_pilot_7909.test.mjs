@@ -299,22 +299,43 @@ test('D7909 pilot configuration refuses included billing and full-suite publicat
  assert.equal(f.children.size,0);assert.equal(f.checks.length,0);
 });
 
+// The CI suite checks out one commit, so `git show <sha>:<path>` cannot read the D7909 base. Each ordinary job of
+// 270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0:.github/workflows/ci.yml (every job but plan) is recorded as the first 16
+// hex of sha256(JSON.stringify(yaml.parse(…).jobs[name])); the pin is checked by blob id. Neither needs history.
+const BASE_JOB_DIGESTS={
+  "frontend":'e2884e1ba35220b8',
+  "worker":'338f2e46f9af2c9f',
+  "verified":'671cbb73f43df103',
+  "suite":'27bb0fe24483da04',
+  "test-deps":'584ab84cbc836df0',
+  "fast":'066a8e32945222c9',
+  "landing":'bea23ba6bac95c0c',
+  "gate":'8dc0dedfdbe09d02',
+  "selection-shadow":'41ac4055f5a3c941',
+  "classify":'d594dedf4e520c73',
+  "visual":'1f9c9388b1772b0d',
+  "drift":'d870bd539b8eced2',
+  "og-tags":'e7c2cfaf81226e04',
+  "dev-backend":'82b39cdcaa1e275a',
+  "digest":'bca3f4d9522fd6c1'
+};
+const jobDigest=job=>createHash('sha256').update(JSON.stringify(job)).digest('hex').slice(0,16);
+
 test('D7909 literal pinned caller leaves the ordinary hosted graph and queue matrix independent',()=>{
- const base=yaml(execFileSync('git',['show','270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0:.github/workflows/ci.yml'],{encoding:'utf8'}));
  const current=yaml(readFileSync('.github/workflows/ci.yml','utf8')),caller=current.jobs['capacity-submit'];
  assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@19927c8960ec01377ff25d6d5a081ae8db080df5');
  assert.equal(caller.needs,'plan');assert.equal(caller.permissions['id-token'],'write');
  for(const guard of ["github.event_name == 'push'","github.event_name != 'merge_group'","vars.CI_CAPACITY_ENABLED == 'true'","github.repository == 'AxalNetwork/StudioOS'","needs.plan.outputs.capacity_submission != ''"])assert.ok(caller.if.includes(guard),guard);
- for(const [name,job] of Object.entries(base.jobs)){
-  if(name==='plan')continue;
-  assert.deepEqual(current.jobs[name],job,`ordinary hosted job ${name} must stay unchanged`);
+ for(const [name,digest] of Object.entries(BASE_JOB_DIGESTS)){
+  assert.ok(current.jobs[name],`ordinary hosted job ${name} must still exist`);
+  assert.equal(jobDigest(current.jobs[name]),digest,`ordinary hosted job ${name} must stay unchanged`);
  }
  assert.equal(current.jobs.plan.steps.find(s=>s.id==='capacity')['continue-on-error'],true);
  assert.equal(caller.with.submission,'${{ needs.plan.outputs.capacity_submission }}');
  assert.equal(caller.with.executor_sha,'${{ vars.CI_CAPACITY_EXECUTOR_SHA }}');
  assert.equal(caller.with.child_workflow_sha,'${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}');
- const pinned=yaml(execFileSync('git',['show','19927c8960ec01377ff25d6d5a081ae8db080df5:.github/workflows/capacity-planner.yml'],{encoding:'utf8'}));
- assert.deepEqual(pinned,yaml(readFileSync('.github/workflows/capacity-planner.yml','utf8')),'the literal pin must contain the exact prepared planner');
+ // 4f7dfaca… is `git rev-parse 19927c8960ec01377ff25d6d5a081ae8db080df5:.github/workflows/capacity-planner.yml`.
+ assert.equal(execFileSync('git',['hash-object','.github/workflows/capacity-planner.yml'],{encoding:'utf8'}).trim(),'4f7dfaca48403d2d0b9cc9e83403ebca48525a8d','the literal pin must contain the exact prepared planner');
  const config=readFileSync('wrangler.merge-control.toml','utf8');
  assert.match(config,/CAPACITY_ENABLED = "false"/);assert.match(config,/CAPACITY_PUBLICATION = "pilot"/);assert.match(config,/CAPACITY_CONFIG = ""/);
 });
