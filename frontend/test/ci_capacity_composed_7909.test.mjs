@@ -39,7 +39,7 @@ function engineFixture(exit=0){
   if(args[0]==='create'){
    const owner=value('--label').split('=')[1];info={Id:CID,Name:'/studioos-job-'+owner,Image:POLICY.image,State:{Running:true,Pid:123},Config:{User:value('--user'),Labels:{'vc.axal.studioos.job':owner},Entrypoint:[value('--entrypoint')],Cmd:args.slice(-2),Env:all('--env')},HostConfig:{Privileged:false,Init:true,ReadonlyRootfs:true,CapDrop:['ALL'],CapAdd:null,SecurityOpt:['no-new-privileges'],PidMode:'',IpcMode:'private',CgroupnsMode:'private',NetworkMode:'bridge',PortBindings:{},Devices:[],DeviceRequests:null,VolumesFrom:null,ExtraHosts:null,Links:null,PidsLimit:256,Memory:4294967296,NanoCpus:2e9,Tmpfs:Object.fromEntries(all('--tmpfs').map(v=>[v.slice(0,v.indexOf(':')),v.slice(v.indexOf(':')+1)]))},Mounts:all('--mount').map(v=>({Type:'bind',Source:/src=([^,]+)/.exec(v)[1],Destination:/dst=([^,]+)/.exec(v)[1],RW:false,Propagation:'rprivate'}))};if(control.loseCreateAck)throw Error('fixture create acknowledgement lost');return CID+'\n';
   }
-  if(args[0]==='inspect'){if(removed)throw Error('No such object: '+CID);return JSON.stringify([info]);}
+  if(args[0]==='inspect'){if(removed)throw Error('No such object: '+CID);return JSON.stringify([control.intentConflict&&args.includes('--type')?{...info,Name:'/foreign-container'}:info]);}
   if(args[0]==='rm'){if(control.failRemoval)throw Error('fixture unavailable');removed=true;return '';}
   if(args[0]==='exec'&&args.includes('-e'))return 'readable';
   if(args[0]==='exec'&&args.includes('/usr/local/bin/node'))return '22.23.3\n';
@@ -67,7 +67,7 @@ async function setup(t,{exit=0,lost=false,cleanupFailure=false,long=false,skipEx
  const e=engineFixture(exit);e.control.failRemoval=cleanupFailure;if(long)e.control.onTestExit=()=>t.mock.timers.setTime(startedAt+24*60_000);if(skipExport)e.control.onTestExit=()=>t.mock.timers.setTime(new SqlCapacityStore(f.storage).get(s.requestId).shards[0].attempts[0].executionDeadline-59_000);
  const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:100,childAttempt:1});
  const store=recoveryStore({root:join(root,'ownership'),create:true}),results=resultStore(join(root,'results'),100);let reports=0;
- const ports={authority,store,results,isolation:{job:e.job,admissionIsolation:async()=>true,executionIsolation:containerIsolationAdapter(e.job)},recover:r=>JobContainer.recover(r,{engine:e.engine}),verifyRemoved:r=>JobContainer.isRemoved(r,{engine:e.engine}),
+ const ports={authority,store,results,isolation:{job:e.job,admissionIsolation:async()=>true,executionIsolation:containerIsolationAdapter(e.job)},recover:r=>JobContainer.recover(r,{engine:e.engine}),verifyRemoved:r=>JobContainer.isRemoved(r,{engine:e.engine}),recoverIntent:i=>JobContainer.recoverIntent(i,{engine:e.engine}),
   exporter:createTraceExporter({stagingRoot:join(paths.temp,'trace-export'),engine:e.engine,spawnCopy:e.spawnCopy}),report:async(receipt,result)=>{transcript.push({at:Date.now(),kind:'result'});reports++;const answer=await client.reportExecutionResult(receipt,result,{...options(f.clientFetch),oidcToken:async()=>signed()});if(lost&&reports===1)throw Error('fixture acknowledgement lost');return answer;}};
  await bridge('prepare',env,ports);fs.symlinkSync(process.cwd(),paths.source,'dir');fs.mkdirSync(join(paths.temp,'parent-plan'));fs.writeFileSync(join(paths.temp,'parent-plan','suite-plan.json'),bytes);
  assert.equal(await bridge('admit',env,ports),0);env.ADMITTED_JSON=fs.readFileSync(env.GITHUB_OUTPUT,'utf8').split('\n').find(l=>l.startsWith('admitted_json=')).slice(14);
@@ -134,12 +134,12 @@ test('D7909 genuine test failure is durable and delivered when S09 skips export 
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
 });
 
-test('D7909 ambiguously created resource cannot become cleanup proof or release a reservation',async t=>{
- const x=await setup(t);x.e.control.loseCreateAck=true;
- assert.equal(await bridge('run',x.env,x.ports),1);assert.equal(x.e.control.starts,0);assert.equal(x.store.list().length,0);
+test('D7909 conflicting ambiguous creation retains its durable intent without cleanup proof',async t=>{
+ const x=await setup(t);x.e.control.loseCreateAck=true;x.e.control.intentConflict=true;
+ assert.equal(await bridge('run',x.env,x.ports),1);assert.equal(x.e.control.starts,0);assert.equal(x.store.list().length,1);assert.ok(x.store.list()[0].intent);
  const row=x.results.read();assert.equal(row.removed,false);assert.equal(row.container,null);assert.equal(row.result.cleanupConfirmed,false);assert.equal(row.result.testStep,'unknown');
  assert.equal(x.e.control.calls.filter(args=>args[0]==='rm').length,0);
- await bridge('cleanup',x.env,x.ports);assert.notEqual(x.results.read(),null,'acknowledgement cannot retire uncertain creation');
+ await assert.rejects(bridge('cleanup',x.env,x.ports),/recovery_retained/);assert.notEqual(x.results.read(),null,'acknowledgement cannot retire uncertain creation');
  x.f.result('failure');await x.f.tick();const a=new SqlCapacityStore(x.f.storage).get(x.s.requestId).shards[0].attempts[0];assert.equal(a.generation,1);assert.ok(['cancelling','cancellation_unknown'].includes(a.phase));
 });
 
@@ -150,7 +150,7 @@ test('D7909 observed negative truth survives a supervisor-loss boundary before t
   const admitted=JSON.parse(env.ADMITTED_JSON),receipt=admitted.identity,context={repository:REPO,executorSha:EXEC,childWorkflowSha:EXEC,childRunId:100,childAttempt:1};
   await deps.readReceipt({request:{requestId:receipt.requestId,shard:receipt.logicalShard,generation:1,profile:'linux-x64'},context,phase:'execute'});
   const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:100,childAttempt:1});
-  deps.job.onOwned=r=>deps.store.write(r);deps.job.create(receipt,{source:paths.source,plan:join(paths.temp,'suite-plan.json')});
+  deps.job.onOwned=r=>deps.store.write(r);await deps.job.create(receipt,{source:paths.source,plan:join(paths.temp,'suite-plan.json')});
   assert.equal((await deps.job.runCandidateInterruptible({receipt,admitted,phase:'test'})).exitCode,9);
   throw Error('fixture supervisor lost before output');
  };
@@ -181,4 +181,13 @@ test('D7909 an unacknowledged failure journal blocks a second Run before the aut
  assert.equal(x.results.read().result.testStep,'failure');assert.equal(x.f.storage.sql.exec('SELECT COUNT(*) AS n FROM capacity_execution_results').toArray()[0].n,0);
  await assert.rejects(bridge('run',x.env,x.ports),/already_recorded/);assert.equal(x.e.control.starts,2);
  assert.equal(x.results.read().result.testStep,'failure');
+});
+
+
+test('D7909 lost create acknowledgement may confirm cleanup only through exact reconciliation and removal',async t=>{
+ const x=await setup(t);x.e.control.loseCreateAck=true;
+ assert.equal(await bridge('run',x.env,x.ports),1);assert.equal(x.e.control.starts,0);
+ const row=x.results.read();assert.equal(row.container.id,CID);assert.equal(row.removed,true);assert.equal(row.result.cleanupConfirmed,true);assert.notEqual(row.result.testStep,'success');
+ assert.equal(x.e.control.calls.filter(args=>args[0]==='rm').length,1);assert.equal(x.store.list().length,0);
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
 });

@@ -74,14 +74,14 @@ export async function main(mode,env=process.env,ports={}){
   need(value?.accepted===true,'result_delivery_unacknowledged');record.ack=JSON.stringify(record.result);save();
  };
  const verifyRemoved=ports.verifyRemoved??(owned=>JobContainer.isRemoved(owned));
- const removed=owned=>{
-  const proof=verifyRemoved(owned);
+ const removed=async owned=>{
+  const proof=await verifyRemoved(owned);
   if(proof===true&&record?.container?.id===owned.id&&record.container.owner===owned.owner){record.removed=true;if(record.result)record.result.cleanupConfirmed=true;save();}
   return proof;
  };
  const executeMode=ports.execute??execute;
  if(mode==='prepare'||mode==='cleanup'){
-  let failure;try{await executeMode(mode,env,{store,recover:ports.recover??(owned=>JobContainer.recover(owned)),verifyRemoved:removed});}catch(e){failure=e;}
+  let failure;try{await executeMode(mode,env,{store,recover:ports.recover??(owned=>JobContainer.recover(owned)),verifyRemoved:removed,recoverIntent:ports.recoverIntent??(intent=>JobContainer.recoverIntent(intent))});}catch(e){failure=e;}
   // Retry only this job's retained outcome, never mint another job's OIDC or convert absence into cleanup proof.
   if(mode==='cleanup')try{await report();}catch(e){failure??=e;}
   if(failure)throw failure;if(mode==='cleanup')state.retire?.();return 0;
