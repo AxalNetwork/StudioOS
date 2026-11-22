@@ -174,9 +174,15 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
       if (!m) continue;
       const n = Number(m[2]);
       if (m[1] === 'signal') {
-        const s = await env.DB.prepare('SELECT kind, amount_cents, currency, signal_date FROM demand_signals WHERE id = ? AND project_id = ?')
-          .bind(n, projectId).first<{ kind: string; amount_cents: number | null; currency: string | null; signal_date: string | null }>();
+        const s = await env.DB.prepare('SELECT kind, amount_cents, currency, signal_date, source_kind, status FROM demand_signals WHERE id = ? AND project_id = ?')
+          .bind(n, projectId).first<{ kind: string; amount_cents: number | null; currency: string | null; signal_date: string | null; source_kind: string; status: string }>();
         if (!s) continue;
+        if (s.source_kind === 'typeform') {
+          if (!['confirmed', 'counted'].includes(s.status)) continue;
+          const reviewed = await env.DB.prepare("SELECT id FROM typeform_reviews WHERE signal_id = ? AND project_id = ? AND status = 'confirmed'")
+            .bind(n, projectId).first();
+          if (!reviewed) continue;
+        }
         label = [SIGNAL_KIND[s.kind] || s.kind, money(s.amount_cents, s.currency)].filter(Boolean).join(' · ');
         date = s.signal_date ?? date;
       } else if (m[1] === 'revenue') {

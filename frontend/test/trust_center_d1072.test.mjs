@@ -41,7 +41,7 @@ test('every fact is checked as Not recorded, every gap says why, and nothing cla
   assert.deepEqual(RESPONSE_TIMES[0], ['Critical', '4 business hours', 'every 24 hours', '7 days']);
   // #7002: the status words moved to lib/statusSummary.js, shared with /status (status_trust_7002.test.mjs).
   const docs = documentRows({ terms: 'July 8, 2026', privacy: null, risk: 'March 31, 2026' });
-  assert.deepEqual(docs.map((d) => d.updated), ['July 8, 2026', null, 'March 31, 2026', null, null]);
+  assert.deepEqual(docs.map((d) => d.updated), ['8 Jul 2026', null, '31 Mar 2026', null, null]);
   assert.equal(docs.find((d) => d.name === 'Data Processing Addendum').to, null, 'not published, not linked');
 });
 

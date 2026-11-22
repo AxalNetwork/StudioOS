@@ -124,16 +124,25 @@ export function adminOnlyAnchors(sections = SECTIONS) {
   return anchors;
 }
 
+// Shared by both search indexes and the reading-time estimate.
+export function guideBodyText(sub) {
+  return [
+    sub?.overview,
+    ...(sub?.beforeYouStart || []),
+    ...(sub?.howto || []),
+    ...(sub?.recoveryRows || []).flatMap(({ status, action }) => [status, action]),
+    ...(sub?.tips || []),
+    ...(sub?.pitfalls || []),
+  ].filter(Boolean).join(' \n ');
+}
+
 export function buildSearchIndex() {
   const records = [];
   for (const section of SECTIONS) {
     for (const sub of section.subsections) {
       const text = [
         sub.title,
-        sub.overview || '',
-        ...(sub.howto || []),
-        ...(sub.tips || []),
-        ...(sub.pitfalls || []),
+        guideBodyText(sub),
       ].join(' \n ');
       records.push({
         sectionId: section.id,

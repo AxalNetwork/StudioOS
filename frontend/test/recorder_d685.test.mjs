@@ -132,7 +132,7 @@ test('#1587 a Start the Worker refuses is said in its words, never as a denied m
   assert.equal(ringMode(layers(st)), 'paused');
   // Another refusal: its words, and no recording to return to.
   assert.deepEqual(startRefused(Object.assign(new Error('Record consent first.'), { status: 409, code: 'consent_required', data: { session_id: 88 } })), { text: 'Record consent first.', sessionId: null });
-  assert.deepEqual(startRefused({}), { text: 'The recording could not start.', sessionId: null });
+  assert.deepEqual(startRefused({}), { text: 'The recording could not start. Return to the session and try again.', sessionId: null });
   // A refused microphone is still the microphone's card.
   const b2 = fakeBrowser({ micDenied: true });
   const r2 = createRecorder({ api: fakeApi().api, browser: b2.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });

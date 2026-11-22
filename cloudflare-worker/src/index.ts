@@ -1884,16 +1884,12 @@ import { pruneCardBlobs } from './services/decks/cardBlobs';
 // existence-checked + try/catch so a partially-migrated prod DB can never abort
 // the boot path.
 const ADVISOR_SCHEMA_READY = new WeakMap<object, boolean>();
-const ADVISOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureAdvisorSchema(env: Env): Promise<void> {
   const key = bindingKey(env);
   if (ADVISOR_SCHEMA_READY.get(key)) return;
-  // See ensureInvestorSchema: concurrent first requests must not race the
-  // live-DDL migration path against each other, and the coalescing is per
-  // database so two bindings cannot share one rebuild.
-  const pending = ADVISOR_SCHEMA_IN_FLIGHT.get(key);
-  if (pending) return pending;
-  const started = (async () => {
+  // D7587: keep only completed readiness across requests. An in-flight D1
+  // promise belongs to its creating request and can be stranded when that
+  // request ends; another request must run its own idempotent safety net.
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
@@ -1946,12 +1942,7 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     if (advisorRebuildOk) ADVISOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
-  } finally {
-    ADVISOR_SCHEMA_IN_FLIGHT.delete(key);
   }
-  })();
-  ADVISOR_SCHEMA_IN_FLIGHT.set(key, started);
-  return started;
 }
 
 /**

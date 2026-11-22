@@ -151,6 +151,14 @@ export interface Env {
   // D452 — git ref or deploy id stamped at provision/deploy time; branch health
   // returns it so HQ can persist `licence_deployments.last_version` on read.
   WORKER_DEPLOY_VERSION?: string;
+  // D8073 — the build's UTC time, stamped beside WORKER_DEPLOY_VERSION at
+  // deploy (`--var WORKER_BUILT_AT:<iso>`). Unset, /api/public/version says so.
+  WORKER_BUILT_AT?: string;
+  // D8073 — the `[version_metadata]` binding (Cloudflare's own id for the
+  // running Worker version). Proposed on #8069; absent, version_id is null.
+  CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
+  /** D8073: the bearer token the production deploy job records a deploy with. Unset, the record refuses. */
+  DEPLOY_RECORD_TOKEN?: string;
   // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
   // generates it per deployment, puts the plaintext here and writes its SHA-256
   // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
@@ -403,6 +411,8 @@ export interface Env {
   AGENT_AUTONOMY?: string;
   /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
   AGENT_RUNTIME?: string;
+  /** D7077 (#7077): JSON model id → agent runs the queue may start a minute (`"*"` for any other model), shared fairly across teams (`src/agents/modelBudget.ts`). Unset = no limit. */
+  AGENT_MODEL_RPM?: string;
   /** D4555 (#4555): `cloudflare_sdk` selects the Agent Skills SDK adapter on the run path, read only when ENVIRONMENT is `preview` (`skillEngineOf`). Declared nowhere in wrangler.toml. */
   AGENT_SKILL_RUNTIME?: string;
   /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */

@@ -146,3 +146,28 @@ public point-in-time).
 - `#dev` on Slack for code questions.
 - `#ops` on Slack for the budget alert.
 - Open an issue with the `lfs` label for policy questions.
+
+## Local guard preflight (D5505)
+
+Install the locked root, frontend and Worker dependencies first (`npm ci`,
+`npm ci --prefix frontend`, `npm ci --prefix cloudflare-worker`). Run
+`npm run test:guards:preflight` for decision headings, migration identities,
+runtime DDL, the auth inventory and undefined symbols. It builds generated
+modules first; it does not need a built SPA. A local Node 22 run on
+21 November 2026 passed in **50.1 seconds** (36.4 seconds runtime DDL,
+10.6 seconds undefined symbols); this is a measurement, not a time limit.
+This advisory subset never replaces CI's complete guards or test suite.
+
+The full path is `npm run build`, then `npm run test:guards`. The build is a
+prerequisite for checks reading `docs/`; missing build output is a failure,
+never a passing zero. The runner executes every independent guard, reports
+blocked prerequisites explicitly, and exits nonzero if any guard fails,
+is blocked or is interrupted. Generation is the catalog's first recorded
+prerequisite rather than an npm pre-hook that would hide the other results.
+Commands, flags and order live only in `scripts/guard-commands.json`.
+
+`guard-results.json` and `preflight-results.json` are ignored local metadata,
+without captured assertion values, stacks or log tails. Reproduce one guard
+with `node scripts/run-guards.mjs --guard <id>` (its prerequisites run too).
+A voluntary pre-push hook can invoke `npm run test:guards:preflight`; installing
+such a hook is optional and does not change the full CI gate.

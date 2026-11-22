@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { INTERNAL_SECRETS, isolationMatrix, preflight } from '../../scripts/lib/previewIsolation.mjs';
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 
 const REAL = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 
@@ -127,7 +128,7 @@ test('the real wrangler.toml: preview declares no production identity; its place
   assert.deepEqual(unsafeOf(prodShared), ['ai_gateway:CF_AI_GATEWAY_SLUG_ADVISOR:shared']);
   // The CLI agrees, and is part of test:guards.
   assert.match(execFileSync('node', ['scripts/check-preview-isolation.mjs', '--static'], { cwd: new URL('../../', import.meta.url), encoding: 'utf8' }), /declares no production identity/);
-  assert.match(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'), /check-preview-isolation\.mjs --static/);
+  assert.match(guardChain, /check-preview-isolation\.mjs --static/);
 });
 
 test('a fully observed, separate preview is isolated; the same config without an observation is unverified', () => {

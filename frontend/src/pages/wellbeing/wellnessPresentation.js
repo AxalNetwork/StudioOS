@@ -6,15 +6,15 @@
  * session or journal entry, and `frontend/test/wellness_presentation_d7121.test.mjs`
  * fails the build if it starts to.
  *
- * Owner-pending items (D7121 § Pending the owner) are held at their most
- * conservative value here, and each is one field to change once answered:
+ * The owner's answers (2026-11-20, D7121-p2.md), each one field here:
  *   - `availability` is `proposed`, the registry's wording (migration
  *     `202611171541_7116_wellness_program.sql`: status proposed, member access
- *     not_open), i.e. board PGW02B; `elig` draws PGW02A.
- *   - `edition` is null and `pdfPublished` false: the five-slide deck waits on
- *     the approved wording and edition date, so the page links no PDF yet. A
- *     link to a file that is not in `frontend/public/` would be answered by the
- *     SPA fallback with HTML, not a PDF.
+ *     not_open), i.e. board PGW02B (Q1 A); `elig` would draw PGW02A.
+ *   - `edition` and `pdfPublished`: the five-slide deck is committed
+ *     (`wellnessDeck.js`, built by `scripts/build-wellness-brief.mjs`), so both
+ *     Download PDF controls link it (Q2 A). `pdfPublished` must agree with the
+ *     file on disk: a link to a file that is not in `frontend/public/` would be
+ *     answered by the SPA fallback with HTML, not a PDF.
  */
 
 /** Where the public way in lives today. The kit's `/programs` index is #6966's. */
@@ -29,8 +29,10 @@ export const WELLNESS_PRESENTATION = Object.freeze({
   host: 'axal.vc',
   pdf: '/program-briefs/axal-vc-wellness-v1.pdf',
   pdfFile: 'frontend/public/program-briefs/axal-vc-wellness-v1.pdf',
-  pdfPublished: false,
-  edition: null,
+  // Owner, 2026-11-20 (#7121, Q2 A): edition 1 is dated November 2026, built from the canvas's
+  // wording, which is approved in review (as for #6966–#6975). D7121-p2.md.
+  pdfPublished: true,
+  edition: 'Edition 1 · November 2026',
   slides: 5,
   availability: 'proposed',
   /** The private workspace, reached only through sign-in; never the shared link. */
@@ -164,7 +166,7 @@ export const NEXT = {
   title: 'Two doors, and the story to take with you.',
   acts: [
     { who: 'Founders and Administrators', label: 'Open Wellbeing →', kind: 'open', note: 'Signed in, your own workspace: this week’s check-in, your bookings and the directory.' },
-    { who: 'Studio operators and presenters', label: `See ${PROGRAMS_INDEX.label}`, kind: 'index', note: 'Share this page. It shows no one’s check-ins or bookings.' },
+    { who: 'Studio operators and presenters', label: `See ${PROGRAMS_INDEX.label}`, kind: 'index', note: 'Share this page or the PDF. Neither shows anyone’s check-ins or bookings.' },
   ],
   take: (slides) => `Take it with you: the same story as a ${slides}-slide PDF, for a meeting or to send on.`,
 };
