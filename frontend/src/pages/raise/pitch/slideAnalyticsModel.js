@@ -137,3 +137,115 @@ export function nextStepsOf(row) {
   // The same address the pipeline's "Open the full record" uses (CapRelPipeline, `recordHref`).
   return { ok: true, prospectId: id, name, href: recordHref('raise', CAPREL_SLUG, id) };
 }
+
+// ── D6062 (#6062, Pitch Studio v2 PS-08): four kinds of nothing ────────────────
+
+/**
+ * PS-08 C: the four ways an analytics figure can be empty, never drawn alike.
+ * Each has its own word and its own sentence; only a measured zero shows a 0.
+ *
+ *   tracking_off   the link's "Time per slide" is off: the Worker stored visit
+ *                  counts only (`cards: null`, `read_seconds: null`)
+ *   unreadable     the read failed; nothing is known either way. The screen
+ *                  word is "Unavailable" (D5129, owner's answer A to #5129 Q2)
+ *   measured_zero  counted, and the count is 0: the link exists and nobody
+ *                  opened it, or nobody reached the ask on a timed link
+ *   not_recorded   nothing stores this value: no reading time was counted, the
+ *                  version has no ask card, or no store exists yet
+ *
+ * Nothing here infers that a viewer is reading now: every figure is what the
+ * Worker counted, with the time it was counted.
+ */
+export const ABSENCE_KINDS = Object.freeze(['tracking_off', 'unreadable', 'measured_zero', 'not_recorded']);
+export const ABSENCE = Object.freeze({
+  tracking_off: Object.freeze({ word: 'Tracking off', line: `${CONSENT_OFF} Turn it on for future visits; past visits stay untimed.` }),
+  unreadable: Object.freeze({ word: 'Unavailable', line: `${VIEWS_UNREAD} Not zero: the read failed.` }),
+  measured_zero: Object.freeze({ word: 'Measured zero', line: 'Measured: the link exists and nobody has opened it.' }),
+  not_recorded: Object.freeze({ word: 'Not recorded', line: 'Nothing stores this yet.' }),
+});
+export const NOT_OPENED = 'Not opened yet';
+export const NO_READ_TIME = 'No reading time was counted on these visits.';
+export const NO_ASK_CARD = 'This version has no card read as the ask, so reaching it cannot be counted.';
+export const ASK_NOT_REACHED = 'Measured: no visit counted time on the ask card.';
+export const JOURNEY_NOTE = 'Each line is a visit the link counted, with the time it was counted. It does not say anyone is reading now.';
+export const TIME_PER_CARD_NOTE = '"Not read" means the card was never on screen while timing was on, not zero seconds.';
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A figure in one state: `{ kind, value?, sub?, why? }`; `kind` is 'value', 'none' or one of ABSENCE_KINDS. */
+const fig = (kind, extra = {}) => Object.freeze({ kind, ...extra });
+
+/** The failed read, for every figure of a surface at once. */
+export const unreadableFigure = () => fig('unreadable', { why: ABSENCE.unreadable.line });
+
+/**
+ * PS-08 B's four tiles for one investor link, from the link read
+ * (`GET …/investor-links/:shareId/analytics`). `answer` is the read's value,
+ * or null when the read failed (every figure is then unreadable).
+ */
+export function investorFigures(answer) {
+  if (!answer || typeof answer !== 'object') {
+    return { visits: unreadableFigure(), time: unreadableFigure(), ask: unreadableFigure() };
+  }
+  const views = answer.views == null || !Number.isFinite(Number(answer.views)) ? null : Number(answer.views);
+  const off = answer.time_per_slide === false;
+
+  let visits;
+  if (views == null) visits = fig('not_recorded', { why: ABSENCE.not_recorded.line });
+  else if (views === 0) visits = fig('measured_zero', { value: '0', why: ABSENCE.measured_zero.line });
+  else visits = fig('value', { value: String(views), sub: views === 1 ? 'First visit only' : plural(views - 1, 'revisit') });
+
+  let time;
+  if (off) time = fig('tracking_off', { why: ABSENCE.tracking_off.line });
+  else if (views === 0) time = fig('none', { value: NOT_OPENED });
+  else if (durationWords(answer.read_seconds)) time = fig('value', { value: durationWords(answer.read_seconds), sub: 'Time per slide on' });
+  else time = fig('not_recorded', { why: NO_READ_TIME });
+
+  const reached = (Array.isArray(answer.timeline) ? answer.timeline : []).find((e) => e?.kind === 'reached_ask');
+  let ask;
+  if (off) ask = fig('tracking_off', { why: ABSENCE.tracking_off.line });
+  else if (!answer.ask_card_uid) ask = fig('not_recorded', { why: NO_ASK_CARD });
+  // The store keeps the ask card's last counted heartbeat, not the first: "by" that time.
+  else if (reached) ask = fig('value', { value: 'Yes', sub: `by ${stampWords(reached.at)}` });
+  else if (views === 0) ask = fig('none', { value: NOT_OPENED });
+  else ask = fig('measured_zero', { value: 'Not yet', why: ASK_NOT_REACHED });
+
+  return { visits, time, ask };
+}
+
+/** PS-08 B's "Time per card": `barsOf` with each card's place, for horizontal bars. */
+export const cardRows = (answer) => barsOf(answer).map((b, i) => ({
+  ...b,
+  n: Number.isFinite(Number(answer.cards[i]?.index)) ? Number(answer.cards[i].index) + 1 : i + 1,
+  read: b.label !== NOT_READ,
+}));
+
+/**
+ * PS-08 B's journey: the link's creation and withdrawal (from the links read's
+ * row) around the visit timeline (from the analytics read), oldest first. A
+ * reaction or comment is not drawn here: that read is proposal 9's.
+ */
+export function journeyRows(answer, row) {
+  const out = [];
+  if (row?.created_at) out.push({ key: 'created', at: stampWords(row.created_at), words: 'Link created', sort: parseAt(row.created_at)?.getTime() ?? 0, kind: 'created' });
+  (Array.isArray(answer?.timeline) ? answer.timeline : []).forEach((e, i) => {
+    out.push({ key: `${e.kind}-${e.view_id ?? 'x'}-${i}`, at: stampWords(e.at), words: TIMELINE_WORDS[e.kind] || e.kind, sort: parseAt(e.at)?.getTime() ?? 0, kind: e.kind });
+  });
+  const gone = answer?.withdrawn_at ?? row?.withdrawn_at;
+  if (gone) out.push({ key: 'withdrawn', at: stampWords(gone), words: 'Link withdrawn', sort: parseAt(gone)?.getTime() ?? Number.MAX_SAFE_INTEGER, kind: 'withdrawn' });
+  // Stable: events at the same minute keep the order the reads gave them.
+  return out.map((r, i) => ({ ...r, i })).sort((a, b) => a.sort - b.sort || a.i - b.i).map(({ sort, i, ...r }) => r);
+}
+
+/**
+ * PS-08 B's "the newer version she hasn't been sent": from the changes-since
+ * read (`GET /api/decks/:id/changes-since`) that the links table already makes.
+ * Null on the current version, or before that read answers.
+ */
+export function newerVersionOf(since, name = 'This investor') {
+  if (!since || since.latest || !since.current?.version || since.since?.version == null) return null;
+  return {
+    chip: `v${since.current.version} differs`,
+    line: `${name}'s link opens v${since.since.version}. v${since.current.version} is the current version; this link does not show it.`,
+  };
+}
