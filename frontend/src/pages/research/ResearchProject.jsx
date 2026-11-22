@@ -36,7 +36,7 @@ import { ProjectFindings, RecentFindingsCard } from './ProjectFindings.jsx';
 import { researchProjectFindingsApi } from '../../lib/api/researchProjectFindings.js';
 import { findingsBadge } from './researchFindings.js';
 import { ProjectComparisons } from './ProjectComparisons.jsx';
-import ProjectBrief from './ProjectBrief.jsx';
+import ProjectBrief, { useBriefDraft } from './ProjectBrief.jsx';
 import ResearchContext from './ResearchContext.jsx';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { researchProjectBriefsApi } from '../../lib/api/researchProjectBriefs.js';
@@ -356,6 +356,8 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
   // Part 3: the comparisons are read once for the tab and its badge.
   const [compared, retryCompared] = useProjectRead(() => researchProjectComparisonsApi.list(uid), `${uid}:${version}`);
   const [brief, retryBrief] = useProjectRead(() => researchProjectBriefsApi.read(uid), `${uid}:${version}`);
+  // D7816: the brief's draft is held here, for the open project, so a tab switch keeps it and a save refreshes it.
+  const briefDraft = useBriefDraft(uid, brief);
   const [adding, setAdding] = useState(() => new URLSearchParams(location.search).get('add') === '1');
   const [archiving, setArchiving] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -425,7 +427,7 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
             {tab === 'evidence' ? <Evidence data={data} archived={archived} adding={adding} setAdding={setAdding} onChanged={reload} /> : null}
             {tab === 'findings' ? <ProjectFindings projectUid={item.uid} read={findings} retry={retryFindings} archived={archived} onChanged={reload} /> : null}
             {tab === 'comparisons' ? <ProjectComparisons projectUid={item.uid} read={compared} retry={retryCompared} archived={archived} onChanged={reload} /> : null}
-            {tab === 'brief' ? <ProjectBrief uid={item.uid} read={brief} retry={retryBrief} archived={archived} /> : null}
+            {tab === 'brief' ? <ProjectBrief read={brief} retry={retryBrief} archived={archived} draft={briefDraft} /> : null}
             {tab === 'overview' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
             {archiving ? <ArchiveDialog data={data} onClose={() => setArchiving(false)} onArchived={() => navigate('/research/projects')} /> : null}
           </>

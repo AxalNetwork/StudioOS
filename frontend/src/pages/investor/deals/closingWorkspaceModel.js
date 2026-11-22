@@ -15,6 +15,8 @@
  * Every state is a word with a glyph, never colour alone. A read that failed
  * says Unavailable (D5129) and never stands in as zero or as "nothing holds it".
  */
+import { NOT_RECORDED, text } from '../../../lib/absence.js';
+
 /** A read's three states. `ok(value)` carries any value (an object, a list, or null for "none applied"). */
 export const LOADING = Object.freeze({ state: 'loading' });
 export const UNREADABLE = Object.freeze({ state: 'unreadable' });
@@ -182,6 +184,42 @@ export function transferHold(gateRead, canRecord) {
   return { state: 'held_hidden', enabled: false, count: null, reason: 'An open condition on a decision you cannot see holds this. Ask the Investment committee chair.' };
 }
 
+/**
+ * The Phone verified cell (DX19): Yes with who confirmed it by phone, Yes
+ * with the verifier not recorded (a transfer recorded before D6889, or with
+ * no one named), or No. Never the recorder's name standing in.
+ */
+export function phoneCell(row) {
+  if (!row.phoneVerified) return { key: 'none', word: 'No', glyph: '–', by: null };
+  return { key: 'done', word: 'Yes', glyph: '✓', by: text(row.phoneVerifiedBy) };
+}
+
+/**
+ * The Record transfer dialog's body (D6889): the verifier is sent only when
+ * the transfer is phone-verified and one was picked, as the Admin's integer
+ * user id. The Worker checks that it names an Admin and refuses otherwise.
+ */
+export function transferBody(form) {
+  const body = {
+    amount_cents: form.cents,
+    reference: form.reference || null,
+    phone_verified: !!form.phoneVerified,
+    note: form.note || null,
+  };
+  const by = Number(form.phoneVerifiedBy);
+  if (form.phoneVerified && Number.isSafeInteger(by) && by > 0) body.phone_verified_by = by;
+  return body;
+}
+
+/** The Admins a verifier is picked from, by name; the caller first as "You". */
+export function verifierOptions(admins, me) {
+  const list = (Array.isArray(admins) ? admins : [])
+    .filter((u) => u && u.role === 'admin' && u.is_active !== false && u.is_active !== 0)
+    .map((u) => ({ id: Number(u.id), label: Number(u.id) === Number(me?.id) ? `You · ${text(u.name, u.email || NOT_RECORDED)}` : text(u.name, u.email || NOT_RECORDED) }))
+    .filter((o) => Number.isSafeInteger(o.id) && o.id > 0);
+  return list.sort((a, b) => (a.id === Number(me?.id) ? -1 : b.id === Number(me?.id) ? 1 : a.label.localeCompare(b.label)));
+}
+
 /** The deal's transfers, newest first, and the all-time total that says what it counts. */
 export function transferRows(read) {
   if (!isReady(read)) return read && read.state === 'unreadable' ? { state: 'unreadable' } : { state: 'loading' };
@@ -190,6 +228,9 @@ export function transferRows(read) {
     cents: Number(t.amount_cents) || 0,
     reference: t.reference || null,
     phoneVerified: !!t.phone_verified,
+    // D6889: who confirmed the wire instructions by phone, when it was
+    // verified and someone was named; null reads "Not recorded".
+    phoneVerifiedBy: t.phone_verified ? (String(t.phone_verified_by_name ?? '').trim() || null) : null,
     recordedBy: t.recorded_by_name || null,
     at: ymd(t.recorded_at) || null,
     firm: t.company_name || null,
@@ -219,8 +260,9 @@ const CLOSING_EVENT_WORD = {
 /**
  * Every recorded change on the deal, newest first: checklist moves (with
  * their actor), transfers (with who recorded them), paper sent and executed
- * (from the signing record), and closing events. A closing event's actor has
- * no name in the read yet, so it says "Name not shown yet".
+ * (from the signing record), and closing events. A closing event's actor is
+ * the read's `actor_name` (D6889); an account gone or unnamed reads
+ * "Not recorded", never another name.
  */
 export function auditRows({ events, transfers, paper, closing }) {
   const rows = [];
@@ -243,7 +285,7 @@ export function auditRows({ events, transfers, paper, closing }) {
   }
   if (isReady(closing) && closing.value && Array.isArray(closing.value.events)) {
     for (const ev of closing.value.events) {
-      rows.push({ at: ev.created_at || '', kind: 'Closing', what: CLOSING_EVENT_WORD[ev.event] || String(ev.event || '').replace(/_/g, ' '), who: null, whoNote: 'Name not shown yet' });
+      rows.push({ at: ev.created_at || '', kind: 'Closing', what: CLOSING_EVENT_WORD[ev.event] || String(ev.event || '').replace(/_/g, ' '), who: String(ev.actor_name ?? '').trim() || null, whoNote: NOT_RECORDED });
     }
   }
   rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
@@ -297,6 +339,58 @@ export function closeRules(closing) {
   ];
   const unmet = rules.filter((r) => !r.met).length;
   return { state: 'open', rules, unmet, canClose: unmet === 0 };
+}
+
+// ---------------------------------------------------------------------------
+// After close (DX23 A) — Record in Portfolio: each received line, In Portfolio or not.
+// ---------------------------------------------------------------------------
+
+/** When a line's money was received: its live receiving evidence, accepted or recorded. */
+function receivedOn(line) {
+  const ev = (Array.isArray(line?.evidence) ? line.evidence : [])
+    .filter((e) => e && e.side === 'receiving' && !e.withdrawn_at)
+    .map((e) => ymd(e.accepted_at || e.created_at))
+    .filter(Boolean)
+    .sort();
+  return ev.length ? ev[ev.length - 1] : null;
+}
+
+/**
+ * The after-close Portfolio table (D6889 item 3). Shown only on a closed
+ * closing, and only when the read carried `in_portfolio` (an admin or the
+ * founder; an investor's read has neither field, so nothing is drawn). Each
+ * received line says In Portfolio or Not in Portfolio; only an admin's read
+ * carries `portfolio_position_uid`, so only an admin gets the position. A
+ * line is never matched to a position by name or amount: the Worker's
+ * `closing_line_uid` link is the only answer.
+ */
+export function portfolioRows(closing) {
+  if (!closing || closing.status !== 'closed') return { state: 'hidden', rows: [] };
+  const lines = (Array.isArray(closing.lines) ? closing.lines : []).filter((l) => l && l.status === 'received');
+  if (!lines.some((l) => typeof l.in_portfolio === 'boolean')) return { state: 'hidden', rows: [] };
+  const rows = lines.map((l) => {
+    const position = l.in_portfolio === true ? (String(l.portfolio_position_uid ?? '').trim() || null) : null;
+    return {
+      uid: l.uid,
+      name: text(l.investor_name),
+      route: l.route || null,
+      cents: Number(l.amount_cents) || 0,
+      received: receivedOn(l),
+      inPortfolio: l.in_portfolio === true,
+      positionUid: position,
+      status: l.in_portfolio === true
+        ? { key: 'done', word: 'In Portfolio', glyph: '✓' }
+        : { key: 'none', word: 'Not in Portfolio', glyph: '○' },
+    };
+  });
+  return { state: 'ready', rows, inPortfolio: rows.filter((r) => r.inPortfolio).length };
+}
+
+/** The Portfolio company page for the closing's venture, from the positions list (admin); null when not found. */
+export function companyHref(positions, projectId) {
+  const list = Array.isArray(positions) ? positions : Array.isArray(positions?.items) ? positions.items : [];
+  const hit = list.find((p) => Number(p?.project_id) === Number(projectId) && p?.project?.uid);
+  return hit ? `/portfolio/companies/${encodeURIComponent(hit.project.uid)}` : null;
 }
 
 // ---------------------------------------------------------------------------

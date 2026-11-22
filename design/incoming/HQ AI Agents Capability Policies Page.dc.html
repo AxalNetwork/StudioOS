@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Capability Policies · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* SAP · #8070 capability policies. Boards use the HQ AI Agents inline styles (copied into sap.js); no extra classes. */
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1300px"}, "board": {"editor": "enum", "default": "SA10", "options": ["SA10", "SA10B", "SA11", "SA11B", "SA11C", "SA12", "SA12B", "SA12C", "SA12D", "SA12E", "SA13", "SA13B", "SA14", "SA14B", "SAPH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SA10';
+    const dark = /^SA14/.test(B);
+    const SG = "font-family:'Space Grotesk',system-ui,sans-serif";
+    const M = "font-family:'Roboto Mono',ui-monospace,monospace";
+    const V = dark ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', body: '#d1d5db', mut: '#9ca3af', faint: '#6b7280', line: '#374151', line2: '#4b5563', vio: '#a78bfa', vbtn: '#7c3aed', vdeep: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.42)', pos: '#34d399', posT: 'rgba(52,211,153,.13)', neg: '#f87171', negT: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.45)', ambF: 'rgba(252,211,77,.13)', ambE: 'rgba(252,211,77,.45)', ambT: '#fcd34d', sk: '#1f2937', hq: '#be123c' } : { bg: '#f4f3f7', card: '#ffffff', raised: '#faf9fc', ink: '#18181b', body: '#3f3a47', mut: '#6b6577', faint: '#a1a1aa', line: '#ececf1', line2: '#e2dfe8', vio: '#7c3aed', vbtn: '#7c3aed', vdeep: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posT: '#ecfdf5', neg: '#b91c1c', negT: '#fef2f2', negE: '#fecaca', ambF: '#fef3c7', ambE: '#fcd34d', ambT: '#92400e', sk: '#ececf1', hq: '#881337' };
+    const VARS = Object.keys(V).map(k => '--' + k + ':' + V[k]).join(';');
+    const SV = (d, s) => `<svg width="${s || 16}" height="${s || 16}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;display:block">${d}</svg>`;
+    const ICO = { search: SV('<circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path>'), bell: SV('<path d="M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11zM6.5 14a1.5 1.5 0 0 0 3 0"></path>'), check: SV('<path d="M3 8.5l3 3 7-7"></path>', 14), plus: SV('<path d="M8 3v10M3 8h10"></path>'), more: SV('<circle cx="3.5" cy="8" r="1" fill="currentColor"></circle><circle cx="8" cy="8" r="1" fill="currentColor"></circle><circle cx="12.5" cy="8" r="1" fill="currentColor"></circle>'), x: SV('<path d="M4 4l8 8M12 4l-8 8"></path>'), lock: SV('<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path>', 13), warn: SV('<path d="M8 2.5l6 10.5H2z"></path><path d="M8 6.5v3M8 11.2v.1"></path>', 14), info: SV('<circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.2v3.6M8 5.2v.1"></path>', 14), grip: SV('<circle cx="6" cy="4" r="1" fill="currentColor"></circle><circle cx="10" cy="4" r="1" fill="currentColor"></circle><circle cx="6" cy="8" r="1" fill="currentColor"></circle><circle cx="10" cy="8" r="1" fill="currentColor"></circle><circle cx="6" cy="12" r="1" fill="currentColor"></circle><circle cx="10" cy="12" r="1" fill="currentColor"></circle>'), down: SV('<path d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10"></path>'), grid: SV('<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"></rect><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"></rect><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"></rect><rect x="9" y="9" width="4.5" height="4.5" rx="1"></rect>'), rows: SV('<path d="M2.5 4h11M2.5 8h11M2.5 12h11"></path>'), pause: SV('<path d="M6 3.5v9M10 3.5v9"></path>'), upload: SV('<path d="M8 11V3M4.5 6.5L8 3l3.5 3.5M3 13.5h10"></path>') };
+    const EB = (t, c) => `<span style="${M};font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:${c || 'var(--mut)'}">${t}</span>`;
+    const BTN = `display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 14px;border-radius:9px;${SG};font-size:13px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box;`;
+    const bP = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--vbtn);background:var(--vbtn);color:#fff;${x || ''}">${t}</button>`;
+    const bS = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--line2);background:var(--card);color:var(--ink);${x || ''}">${t}</button>`;
+    const bG = (t, x) => `<button type="button" style="${BTN}border:1px solid transparent;background:transparent;color:var(--body);${x || ''}">${t}</button>`;
+    const bD = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--negE);background:var(--card);color:var(--neg);${x || ''}">${t}</button>`;
+    const bDF = (t, x) => `<button type="button" style="${BTN}border:1px solid #b91c1c;background:#b91c1c;color:#fff;${x || ''}">${t}</button>`;
+    const bX = (t, why, x) => `<button type="button" disabled title="${why || ''}" style="${BTN}border:1px solid var(--line2);background:var(--raised);color:var(--mut);cursor:not-allowed;${x || ''}">${t}</button>`;
+    const SM = 'min-height:32px;padding:0 11px;font-size:12.5px;';
+    const LNK = (t, x) => `<a href="#" style="color:var(--vio);font-weight:600;text-decoration:none;${x || ''}">${t}</a>`;
+    const NR = (why, x) => `<span${why ? ` title="${why}"` : ''} style="font-style:italic;color:var(--mut);${SG};${x || ''}">Not recorded</span>`;
+    const SK = (w, h, x) => `<span aria-hidden="true" style="display:block;width:${typeof w === 'number' ? w + 'px' : w};height:${h}px;border-radius:5px;background:var(--sk);${x || ''}"></span>`;
+    const PILL = (t, k) => { const S = { off: ['var(--posT)', 'var(--posT)', 'var(--pos)'], pub: ['var(--posT)', 'var(--posT)', 'var(--pos)'], draft: ['var(--raised)', 'var(--line2)', 'var(--body)'], rev: ['var(--lav)', 'var(--lavE)', 'var(--vdeep)'], wait: ['var(--ambF)', 'var(--ambE)', 'var(--ambT)'], hid: ['transparent', 'var(--line2)', 'var(--mut)'], neg: ['var(--negT)', 'var(--negE)', 'var(--neg)'], hq: ['var(--hq)', 'var(--hq)', '#ffffff'] }[k || 'draft']; return `<span style="display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:1px 9px;border-radius:999px;background:${S[0]};border:1px solid ${S[1]};color:${S[2]};font-size:12px;font-weight:600;white-space:nowrap;box-sizing:border-box;line-height:1.3">${k === 'hq' ? '' : '<span aria-hidden="true" style="width:6px;height:6px;border-radius:999px;background:currentColor;display:block;flex:none"></span>'}${t}</span>`; };
+    const CHIP = (t, on, x) => `<span style="display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 11px;border-radius:999px;border:1px solid ${on ? 'var(--lavE)' : 'var(--line2)'};background:${on ? 'var(--lav)' : 'var(--card)'};color:${on ? 'var(--vdeep)' : 'var(--body)'};font-size:12.5px;font-weight:${on ? 700 : 500};white-space:nowrap;box-sizing:border-box;${x || ''}">${t}</span>`;
+    const TAG = (t, x) => `<span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--line2);font-size:11.5px;color:var(--body);white-space:nowrap;box-sizing:border-box;${x || ''}">${t}</span>`;
+    const PAV = (ini, s) => `<span aria-hidden="true" style="width:${s || 24}px;height:${s || 24}px;flex:none;border-radius:999px;background:var(--raised);border:1px solid var(--line2);display:grid;place-items:center;font-size:${Math.round((s || 24) * 0.36)}px;font-weight:800;color:var(--body);box-sizing:border-box">${ini}</span>`;
+    const MARK = `<span title="AI agent" style="display:inline-flex;align-items:center;gap:4px;min-height:18px;padding:0 6px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);color:var(--vdeep);font-size:10.5px;font-weight:700;white-space:nowrap;box-sizing:border-box"><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" style="display:block"><path d="M5 0L6.1 3.9L10 5L6.1 6.1L5 10L3.9 6.1L0 5L3.9 3.9Z" fill="currentColor"></path></svg>AI agent</span>`;
+    const N = (x) => Number(x).toLocaleString('en-US');
+    const APPH = (o) => { o = o || {}; return `<div style="height:56px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line);box-sizing:border-box"><div style="display:flex;align-items:center;gap:9px;width:208px;flex:none"><img src="/axal-mark.png" alt="" style="width:26px;height:26px;display:block;border-radius:6px;object-fit:contain"><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span>${PILL('HQ', 'hq')}</div><div style="flex:1;max-width:440px;height:36px;border-radius:9px;border:1px solid var(--line2);background:var(--bg);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mut);font-size:13px;box-sizing:border-box">${ICO.search}Search HQ</div><div style="margin-left:auto;display:flex;align-items:center;gap:6px"><button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.bell}</button><button type="button" aria-label="Account menu" style="display:flex;align-items:center;gap:6px;height:36px;padding:0 4px;border:none;background:transparent;color:var(--body);cursor:pointer">${PAV('IC', 30)}<span aria-hidden="true">▾</span></button></div></div>`; };
+    const SROWS = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'AI agents', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const SB = () => `<nav aria-label="HQ" style="width:232px;flex:none;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:1px;padding:12px;box-sizing:border-box"><span style="padding:4px 10px 8px">${EB('HQ')}</span>${SROWS.map(r => `<a href="#"${r === 'AI agents' ? ' aria-current="page"' : ''} style="display:flex;align-items:center;min-height:34px;padding:0 10px;border-radius:9px;font-size:13.5px;font-weight:${r === 'AI agents' ? 700 : 500};color:${r === 'AI agents' ? 'var(--vdeep)' : 'var(--body)'};background:${r === 'AI agents' ? 'var(--lav)' : 'transparent'};text-decoration:none">${r}</a>`).join('')}</nav>`;
+    const KILLB = `<div role="status" style="flex:none;display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--ambF);border-bottom:1px solid var(--ambE);color:var(--ambT);font-size:13px;line-height:1.45"><span>${ICO.pause}</span><span style="flex:1"><b>All AI agents are paused across the platform</b> since [24 Oct 2026, 10:12] by [Admin Name]. Reason: “[Model provider incident]”. Teams can still read and decide proposals.</span>${bS('Resume all AI agents…', SM)}</div>`;
+    const ROB = `<div role="status" style="flex:none;display:flex;align-items:center;gap:10px;padding:9px 20px;background:var(--raised);border-bottom:1px solid var(--line2);color:var(--body);font-size:13px"><span style="color:var(--mut)">${ICO.lock}</span><span><b>Read only.</b> You are an HQ admin without super-admin rights. Every edit is switched off and says why.</span></div>`;
+    const SHELL = (main, o) => { o = o || {}; return `<div style="display:flex;flex-direction:column;${o.h ? 'height:' + o.h + 'px' : 'min-height:900px'}">${APPH()}${o.kill ? KILLB : ''}${o.ro ? ROB : ''}<div style="flex:1;display:flex;min-height:0">${SB()}<main style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;position:relative;background:var(--bg)">${main}</main>${o.side || ''}</div></div>`; };
+    const TABL = [['Overview', null], ['Roster', 16], ['Skills library', 80], ['Operations', null]];
+    const SUBS = { 'Skills library': [['From Axal', 80], ['Company skills', 23]], Operations: [['Runs', null], ['Spend', null], ['Policies', null], ['Audit', null]] };
+    const HDR = (tab, o) => { o = o || {}; const sub = SUBS[tab]; return `<header style="flex:none;padding:22px 28px 0;display:flex;flex-direction:column"><div style="display:flex;align-items:flex-start;gap:16px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><nav aria-label="Breadcrumb">${EB('HQ › AI agents' + (o.crumb ? ' › ' + o.crumb : ''))}</nav><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1.2">${o.title || 'AI agents'}</h1>${o.pill || ''}</div><p style="margin:0;font-size:13px;line-height:1.5;color:var(--mut);max-width:720px">${o.line || 'The agents and skills every team is offered, the caps and models they run on, and how they are used. Every change is logged with your name and a reason.'}</p></div><div style="display:flex;align-items:center;gap:8px;flex:none;padding-top:4px">${o.acts || ''}</div></div>${o.notabs ? '' : `<nav aria-label="AI agents" style="display:flex;gap:22px;margin-top:16px;border-bottom:1px solid var(--line)">${TABL.map(([t, n]) => `<a href="#"${t === tab ? ' aria-current="page"' : ''} style="display:inline-flex;align-items:center;gap:7px;min-height:40px;font-size:13.5px;font-weight:${t === tab ? 700 : 600};color:${t === tab ? 'var(--ink)' : 'var(--mut)'};border-bottom:2px solid ${t === tab ? 'var(--vio)' : 'transparent'};margin-bottom:-1px;text-decoration:none">${t}${n != null ? `<span style="${M};font-size:11.5px;font-weight:500;color:var(--mut)">${n}</span>` : ''}</a>`).join('')}</nav>`}${sub ? `<nav aria-label="${tab}" style="display:flex;gap:6px;margin-top:12px">${sub.map(([t, n]) => `<a href="#"${t === o.sub ? ' aria-current="page"' : ''} style="display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 12px;border-radius:999px;border:1px solid ${t === o.sub ? 'var(--lavE)' : 'var(--line2)'};background:${t === o.sub ? 'var(--lav)' : 'var(--card)'};color:${t === o.sub ? 'var(--vdeep)' : 'var(--body)'};font-size:12.5px;font-weight:${t === o.sub ? 700 : 500};text-decoration:none;box-sizing:border-box">${t}${n != null ? `<span style="${M};font-size:11px;color:var(--mut)">${n}</span>` : ''}</a>`).join('')}</nav>` : ''}</header>`; };
+    const BODY = (h, x) => `<div style="flex:1;min-height:0;overflow:hidden;padding:18px 28px 24px;display:flex;flex-direction:column;gap:14px;${x || ''}">${h}</div>`;
+    const CARD = (title, h, o) => { o = o || {}; return `<section aria-label="${o.al || title}" style="background:var(--card);border:1px solid ${o.err ? 'var(--negE)' : 'var(--line)'};border-radius:12px;padding:${o.pad || '16px 18px'};display:flex;flex-direction:column;gap:12px;min-width:0;box-sizing:border-box;${o.x || ''}">${title ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em">${title}</h2>${o.meta ? `<span style="font-size:12px;color:var(--mut)">${o.meta}</span>` : ''}<span style="margin-left:auto;display:flex;gap:8px;align-items:center">${o.right || ''}</span></div>` : ''}${h}</section>`; };
+    const TBL = (cols, heads, rows, o) => { o = o || {}; const al = (i) => (o.num || []).includes(i) ? 'text-align:right;justify-content:flex-end;' : ''; return `<div role="table" aria-label="${o.al || 'Table'}" style="flex:none;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden"><div role="row" style="position:sticky;top:0;z-index:1;display:grid;grid-template-columns:${cols};gap:12px;align-items:center;padding:9px 14px;background:var(--raised);border-bottom:1px solid var(--line)">${heads.map((h, i) => `<span role="columnheader" style="${M};font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:4px;${al(i)}">${h}</span>`).join('')}</div>${rows.map((r, j) => `<div role="row" style="display:grid;grid-template-columns:${cols};gap:12px;align-items:center;padding:${o.py || 10}px 14px;${j ? 'border-top:1px solid var(--line);' : ''}${(o.hl || []).includes(j) ? 'background:var(--lav);' : ''}">${r.map((c, i) => `<span role="cell" style="min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--body);${al(i)}">${c}</span>`).join('')}</div>`).join('')}${o.foot ? `<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--mut)">${o.foot}</div>` : ''}</div>`; };
+    const PAGER = (t) => `<span style="${M}">${t}</span>${bX('Previous', 'This is the first page', SM)}${bS('Next', SM)}`;
+    const MONO = (t, x) => `<span style="${M};font-size:12.5px;color:var(--ink);${x || ''}">${t}</span>`;
+    const MOREB = (al) => `<button type="button" aria-label="${al}" style="width:32px;height:32px;border-radius:7px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.more}</button>`;
+    const TILE = (e, val, sub, o) => { o = o || {}; return `<div style="background:var(--card);border:1px solid ${o.err ? 'var(--negE)' : 'var(--line)'};border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:5px;min-width:0;box-sizing:border-box">${EB(e)}<span style="${M};font-size:${o.small ? 18 : 24}px;font-weight:600;color:var(--ink);line-height:1.2">${val}</span>${sub ? `<span style="font-size:12px;line-height:1.4;color:${o.subc || 'var(--mut)'}">${sub}</span>` : ''}</div>`; };
+    const SEARCH = (t, w) => `<div style="width:${w || 260}px;height:36px;border-radius:7px;border:1px solid var(--line2);background:var(--card);display:flex;align-items:center;gap:8px;padding:0 11px;color:var(--mut);font-size:13px;box-sizing:border-box">${ICO.search}${t}</div>`;
+    const LBL = (t, req) => `<span style="font-size:12.5px;font-weight:700;color:var(--ink)">${t}${req ? '<span style="color:var(--mut);font-weight:500"> · required</span>' : ''}</span>`;
+    const INP = (val, x, mono, ph, dis) => `<div style="min-height:38px;box-sizing:border-box;border:1px solid var(--line2);border-radius:7px;background:${dis ? 'var(--raised)' : 'var(--card)'};display:flex;align-items:center;gap:8px;padding:0 11px;font-size:13px;color:${val ? (dis ? 'var(--mut)' : 'var(--ink)') : 'var(--faint)'};${mono ? M + ';font-size:12.5px;' : ''}${x || ''}">${val || ph || ''}</div>`;
+    const TA = (t, h, ph) => `<div style="min-height:${h || 76}px;box-sizing:border-box;border:1px solid var(--line2);border-radius:7px;background:var(--card);padding:9px 11px;font-size:13px;line-height:1.55;color:${t ? 'var(--ink)' : 'var(--faint)'}">${t || ph || ''}</div>`;
+    const FLD = (lab, ctrl, hint, req) => `<div style="display:flex;flex-direction:column;gap:7px;min-width:0">${LBL(lab, req)}${ctrl}${hint ? `<span style="font-size:12px;color:var(--mut);line-height:1.45">${hint}</span>` : ''}</div>`;
+    const CBX = (t, on, x) => `<span role="checkbox" aria-checked="${!!on}" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--body);${x || ''}"><span aria-hidden="true" style="width:16px;height:16px;flex:none;border-radius:4px;box-sizing:border-box;display:grid;place-items:center;color:#fff;${on ? 'background:var(--vbtn);border:1px solid var(--vbtn)' : 'background:var(--card);border:1.5px solid var(--line2)'}">${on ? ICO.check : ''}</span>${t}</span>`;
+    const SHEET = (title, sub, body, foot, w) => `<aside role="dialog" aria-label="${title}" style="width:${w || 520}px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;box-shadow:-12px 0 32px rgba(24,24,27,.08)"><div style="flex:none;display:flex;align-items:flex-start;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line)"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:17px;font-weight:800;letter-spacing:-0.02em">${title}</span>${sub ? `<span style="font-size:12.5px;color:var(--mut)">${sub}</span>` : ''}</div><button type="button" aria-label="Close" style="width:32px;height:32px;border-radius:7px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.x}</button></div><div style="flex:1;min-height:0;overflow:hidden;padding:18px 20px;display:flex;flex-direction:column;gap:16px">${body}</div>${foot ? `<div style="flex:none;display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line)">${foot}</div>` : ''}</aside>`;
+    const DLG = (t, ps, btns, w, extra) => `<div role="dialog" aria-label="${t}" style="width:${w || 480}px;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.16);padding:22px 24px;display:flex;flex-direction:column;gap:12px"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em;line-height:1.3">${t}</h2>${ps.map(p => `<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">${p}</p>`).join('')}${extra || ''}<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">${btns}</div></div>`;
+    const REASON = (ph) => FLD('Reason', TA('', 64, ph || 'Why are you making this change?'), 'Logged in Audit with your name, the time, and before and after.', true);
+    const NOTE = (t, k) => `<div role="note" style="display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:10px;font-size:12.5px;line-height:1.5;${k === 'amb' ? 'background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT)' : k === 'neg' ? 'background:var(--negT);border:1px solid var(--negE);color:var(--neg)' : 'background:var(--raised);border:1px solid var(--line);color:var(--body)'}"><span style="margin-top:2px;flex:none">${k === 'amb' || k === 'neg' ? ICO.warn : ICO.info}</span><span>${t}</span></div>`;
+    const DIM = (inner) => `<div style="position:relative;padding:40px 30px;display:flex;gap:28px;justify-content:center;align-items:flex-start;background:var(--bg)">${inner}</div>`;
+
+    /* ---------- SAP · #8070 capability policies (continues HQ AI Agents SA0–SA9) ---------- */
+    const J = (a) => a.join('');
+    const GS = (d) => `<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12" style="flex:none;display:block">${d}</svg>`;
+    const GL = {
+      nr: GS('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: GS('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      rf: GS('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      prov: GS('<path d="M6 1.2L10.8 6 6 10.8 1.2 6z" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      re: GS('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const STC = (k, label) => {
+      const S = {
+        nr: ['color:var(--mut);background:transparent;border:1.5px dotted var(--line2)', GL.nr, 'Not recorded'],
+        un: ['color:var(--ink);background:var(--card);border:1.5px dashed var(--line2)', `<span style="color:var(--neg);display:flex">${GL.un}</span>`, 'Unreadable'],
+        rf: ['color:var(--ink);background:var(--raised);border:1px solid var(--ink)', GL.rf, 'Refused'],
+        prov: ['color:var(--mut);background:transparent;border:1.5px dashed var(--line2);font-style:italic', GL.prov, 'Provisional']
+      }[k];
+      return `<span style="display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;${SG};font-size:11px;font-weight:700;line-height:1.6;white-space:nowrap;box-sizing:border-box;${S[0]}">${S[1]}${label || S[2]}</span>`;
+    };
+    const RETRY = (t) => `<button type="button" style="display:inline-flex;align-items:center;gap:5px;${SG};font-size:12.5px;font-weight:700;color:var(--vio);background:transparent;border:0;padding:4px 6px;border-radius:6px;cursor:pointer">${GL.re}${t || 'Try again'}</button>`;
+    const ENG = (t) => `<span style="display:inline-flex;align-items:center;${M};font-size:10.5px;font-weight:700;color:var(--vio);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px;white-space:nowrap;line-height:1.5">◇ ${t || '#8070'}</span>`;
+    const OWN = (t) => `<span style="display:inline-flex;align-items:center;${M};font-size:10.5px;font-weight:700;color:var(--ambT);background:var(--ambF);border:1px dashed var(--ambE);border-radius:6px;padding:1px 6px;white-space:nowrap;line-height:1.5">⚑ ${t}</span>`;
+    const CODE = (t, x) => `<code style="${M};font-size:12px;color:var(--ink);background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:0 5px;white-space:nowrap;${x || ''}">${t}</code>`;
+
+    /* ---------- the catalogue: 25 names, 20 grantable, 5 locked (#8070 Goal) ---------- */
+    const DOM = [
+      ['research', [['read', 0], ['write', 0]]],
+      ['company', [['read', 0], ['write', 0]]],
+      ['fund', [['read', 0]]],
+      ['relationships', [['read', 0], ['request-introduction', 0]]],
+      ['code', [['read', 0], ['branch', 0], ['commit', 0], ['pr', 0], ['merge', 1]]],
+      ['deploy', [['preview', 0], ['staging', 0], ['production', 1]]],
+      ['cloud', [['read', 0], ['write', 1]]],
+      ['finance', [['read', 0], ['execute', 1]]],
+      ['legal', [['read', 0], ['draft', 0]]],
+      ['email', [['read', 0], ['draft', 0], ['send', 1]]],
+      ['web', [['search', 0]]]
+    ];
+    /* the platform ceiling for November 2026: two grantable names are not offered */
+    const OFF = ['relationships.request-introduction', 'deploy.staging'];
+    const AG = [
+      { n: '[Market Researcher]', ini: 'MR', role: 'Research', st: 'Active', g: ['research.read', 'research.write', 'company.read', 'fund.read', 'web.search'], rf: ['capability_missing', '20 Nov, 14:06', 'run 4C1A-77E2'] },
+      { n: '[Competitor Analyst]', ini: 'CA', role: 'Research', st: 'Active', g: ['research.read', 'company.read', 'web.search'], rf: null },
+      { n: '[Pitch Writer]', ini: 'PW', role: 'Fundraising', st: 'Active', g: ['research.read', 'company.read', 'fund.read', 'email.draft'], rf: ['capability_ungrantable', '19 Nov, 10:31', 'run 9B20-1D4F'] },
+      { n: '[Data Room Clerk]', ini: 'DR', role: 'Legal ops', st: 'Paused', g: ['company.read', 'finance.read', 'legal.read'], rf: null },
+      { n: '[SEO Agent]', ini: 'SE', role: 'Marketing', st: 'Active', g: ['research.read', 'company.read', 'web.search'], rf: ['daily_limit', '17 Nov, 09:12', 'run 1A88-C3E0'] },
+      { n: '[Finance Assistant]', ini: 'FA', role: 'Finance', st: 'Active', g: ['company.read', 'fund.read', 'finance.read'], rf: ['capability_ungrantable', '18 Nov, 17:52', 'run 2E7D-08A3'] },
+      { n: '[Frontend Builder]', ini: 'FB', role: 'Engineering', st: 'Active', g: ['code.read', 'code.branch', 'code.commit', 'code.pr', 'deploy.preview'], rf: ['capability_missing', '21 Nov, 08:40', 'run 7F3A-21C9'] },
+      { n: '[Security Reviewer]', ini: 'SR', role: 'Engineering', st: 'Paused', g: ['code.read', 'cloud.read'], rf: null }
+    ];
+    const GRANTS = AG.reduce((s, a) => s + a.g.length, 0); /* 28 */
+    const GRANTABLE = J(DOM.map(([d, acts]) => acts.filter(x => !x[1]).map(() => 'x').join(''))).length; /* 20 */
+    const OFFERED = GRANTABLE - OFF.length; /* 18 */
+    const SUMLINE = `<b style="color:var(--ink)">${AG.length} agents</b> in [Northwind Labs] · <b style="color:var(--ink)">${GRANTS} grants</b> held now · <b style="color:var(--ink)">${OFFERED} of ${GRANTABLE}</b> grantable capabilities offered in November 2026 ${ENG()} · <b style="color:var(--ink)">5 locked</b> for every agent`;
+
+    /* ---------- cells ---------- */
+    const BOX = 'width:26px;height:26px;border-radius:7px;box-sizing:border-box;display:grid;place-items:center;flex:none;';
+    const CELL = (k, al, sel) => {
+      const ring = sel ? 'outline:2px solid var(--vio);outline-offset:3px;' : '';
+      if (k === 'g') return `<button type="button" aria-label="${al}: granted" style="${BOX}${ring}padding:0;cursor:pointer;background:var(--lav);border:1px solid var(--lavE);color:var(--vdeep)">${ICO.check}</button>`;
+      if (k === 'n') return `<button type="button" aria-label="${al}: not granted" style="${BOX}${ring}padding:0;cursor:pointer;background:var(--card);border:1.5px solid var(--line2)"></button>`;
+      if (k === 'l') return `<span role="img" aria-label="${al}: locked, no one can grant it" style="${BOX}background:var(--raised);border:1px solid var(--line);color:var(--mut)">${ICO.lock}</span>`;
+      if (k === 'o') return `<span role="img" aria-label="${al}: not offered this month" style="${BOX}border:1.5px dotted var(--line2);color:var(--mut);${M};font-size:11px">–</span>`;
+      if (k === 'on') return `<span role="img" aria-label="${al}: offered this month" style="${M};font-size:11px;font-weight:600;color:var(--pos);display:inline-flex;align-items:center;gap:2px">${ICO.check}On</span>`;
+      if (k === 'off') return `<span role="img" aria-label="${al}: not offered this month" style="${BOX}width:34px;border:1.5px dotted var(--line2);color:var(--mut);${M};font-size:10.5px;font-weight:600">Off</span>`;
+      if (k === 'sk') return SK(22, 22, 'border-radius:6px');
+      return '';
+    };
+    const LEGEND = `<div role="note" aria-label="Key" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--body)">${[['g', 'Granted'], ['n', 'Not granted'], ['l', 'Locked · a person does it, never an agent'], ['o', 'Not offered this month']].map(([k, t]) => `<span style="display:inline-flex;align-items:center;gap:7px">${CELL(k, t)}${t}</span>`).join('')}<span style="display:inline-flex;align-items:center;gap:7px"><span style="${M};font-size:11.5px;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:1px 6px">1/2</span>Collapsed domain · granted of grantable</span></div>`;
+
+    /* ---------- the matrix ---------- */
+    const MX = (o) => {
+      o = o || {};
+      const exp = o.exp || [];
+      const wa = o.wa || 280, wc = o.wc || 46, wd = o.wd || 52;
+      const cols = [];
+      DOM.forEach(([d, acts]) => { if (exp.includes(d)) acts.forEach(([a, l], i) => cols.push({ t: 'c', d, a, l, id: d + '.' + a, w: wc, first: i === 0 })); else cols.push({ t: 'd', d, acts, w: wd, first: true }); });
+      const tpl = wa + 'px ' + cols.map(c => c.w + 'px').join(' ');
+      const W0 = wa + cols.reduce((s, c) => s + c.w, 0);
+      const bl = (c) => c.first ? 'border-left:1px solid var(--line);' : '';
+      const ROW = (inner, x) => `<div role="row" style="display:grid;grid-template-columns:${tpl};align-items:stretch;${x || ''}">${inner}</div>`;
+      const hc = (t, x) => `<span role="columnheader" style="display:flex;align-items:center;${M};font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);${x || ''}">${t}</span>`;
+      const r1 = ROW(hc('Agent · role · last refusal', 'padding:0 14px;grid-row:span 1') + J(DOM.map(([d, acts]) => exp.includes(d)
+        ? `<button type="button" aria-expanded="true" aria-label="Collapse ${d}" style="grid-column:span ${acts.length};display:flex;align-items:center;gap:5px;min-height:30px;padding:0 8px;border:0;border-left:1px solid var(--line);background:transparent;${SG};font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden">▾ ${d}</button>`
+        : `<button type="button" aria-expanded="false" aria-label="Expand ${d}" style="display:flex;align-items:center;justify-content:center;min-height:30px;padding:0;border:0;border-left:1px solid var(--line);background:transparent;${SG};font-size:12px;font-weight:700;color:var(--mut);cursor:pointer">▸</button>`)), 'background:var(--raised);border-bottom:1px solid var(--line)');
+      const vt = (t, x) => `<span style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;${x || ''}">${t}</span>`;
+      const r2 = ROW(`<span style="display:flex;align-items:flex-end;padding:0 14px 10px;font-size:12px;color:var(--mut)">${o.load ? 'Reading…' : 'Select a cell to grant or revoke'}</span>` + J(cols.map(c => c.t === 'c'
+        ? `<span role="columnheader" style="display:flex;align-items:flex-end;justify-content:center;padding:8px 0;${bl(c)}${M};font-size:11px;font-weight:600;color:${c.l ? 'var(--mut)' : 'var(--ink)'}">${vt(c.a + (c.l ? ' · locked' : '') + (OFF.includes(c.id) ? ' · off' : ''))}</span>`
+        : `<span role="columnheader" style="display:flex;align-items:flex-end;justify-content:center;padding:8px 0;${bl(c)}${SG};font-size:11.5px;font-weight:700;color:var(--body)">${vt(c.d + `<span style="${M};font-weight:500;color:var(--mut)"> · ${c.acts.length}</span>`)}</span>`)), 'height:118px;background:var(--raised);border-bottom:1px solid var(--line)');
+      const cellWrap = (c, h) => `<span role="cell" style="display:flex;align-items:center;justify-content:center;${bl(c)}">${h}</span>`;
+      const cnt = (t) => `<span style="${M};font-size:11.5px;color:var(--ink)">${t}</span>`;
+      /* ceiling row */
+      const ceil = ROW(`<span role="rowheader" style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:10px 14px"><b style="font-size:12.5px;color:var(--ink)">Platform offers · Nov 2026</b><span style="display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--mut)">The ceiling for every agent ${ENG()}</span></span>` + J(cols.map(c => {
+        if (o.load) return cellWrap(c, CELL('sk'));
+        if (c.t === 'c') return cellWrap(c, c.l ? CELL('l', c.id) : OFF.includes(c.id) ? CELL('off', c.id) : CELL('on', c.id));
+        const gr = c.acts.filter(x => !x[1]).map(x => c.d + '.' + x[0]); const on = gr.filter(x => !OFF.includes(x)).length;
+        return cellWrap(c, cnt(on + '/' + gr.length));
+      })), 'background:var(--raised);border-bottom:1px solid var(--line);min-height:56px');
+      let body;
+      if (o.unread) {
+        body = `<div role="row" style="padding:28px 24px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;border-top:1px solid var(--line)">${STC('un')}<b style="font-size:14px;color:var(--ink)">The agents could not be read.</b><span style="font-size:13px;color:var(--body);max-width:620px;line-height:1.5">This is not a claim that there are none. The platform ceiling above was read and still works; grants and revokes wait until the agents are back. Tried 21 Nov 2026, 15:42 UTC.</span>${RETRY()}</div>`;
+      } else {
+        body = J(AG.filter(a => !o.only || o.only.includes(a.n)).map(a0 => o.empty && a0.rf && a0.rf[0].indexOf('capability') === 0 ? Object.assign({}, a0, { rf: null }) : a0).map((a, ai) => {
+          const head = o.load
+            ? `<span role="rowheader" style="display:flex;align-items:center;gap:10px;padding:10px 14px">${SK(30, 30, 'border-radius:999px')}<span style="display:flex;flex-direction:column;gap:6px;flex:1">${SK('60%', 11)}${SK('85%', 9)}</span></span>`
+            : `<span role="rowheader" style="display:flex;align-items:center;gap:10px;padding:9px 14px;min-width:0">${PAV(a.ini, 30)}<span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="display:flex;align-items:center;gap:6px;min-width:0"><b style="font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.n}</b>${a.st === 'Paused' ? PILL('Paused', 'wait') : ''}</span><span style="font-size:11.5px;color:var(--mut);white-space:nowrap">${a.role}</span>${a.rf ? `<span style="display:flex;align-items:center;gap:5px;white-space:nowrap"><a href="#" title="Last refusal ${a.rf[1]} · open ${a.rf[2]} in Audit" style="${M};font-size:11px;color:var(--vio);font-weight:600;text-decoration:none">${a.rf[0]} ›</a>${o.short ? '' : `<span style="${M};font-size:11px;color:var(--mut)">${a.rf[1].split(',')[0]}</span>`}</span>` : `<span style="font-size:11.5px;color:var(--mut)">Last refusal: None</span>`}</span></span>`;
+          return ROW(head + J(cols.map(c => {
+            if (o.load) return cellWrap(c, CELL('sk'));
+            if (c.t === 'c') {
+              const al = a.n + ', ' + c.id;
+              if (c.l) return cellWrap(c, CELL('l', al));
+              const has = !o.empty && a.g.includes(c.id);
+              if (OFF.includes(c.id) && !has) return cellWrap(c, CELL('o', al));
+              return cellWrap(c, CELL(has ? 'g' : 'n', al, o.sel && o.sel[0] === a.n && o.sel[1] === c.id));
+            }
+            if (o.empty) return cellWrap(c, CELL('n', a.n + ', ' + c.d + ': nothing granted'));
+            const gr = c.acts.filter(x => !x[1]).map(x => c.d + '.' + x[0]); const n = o.empty ? 0 : gr.filter(x => a.g.includes(x)).length;
+            return cellWrap(c, `<button type="button" aria-label="${a.n}, ${c.d}: ${n} of ${gr.length} granted. Expand ${c.d}" style="border:1px solid ${n ? 'var(--lavE)' : 'var(--line)'};background:${n ? 'var(--lav)' : 'transparent'};border-radius:6px;padding:2px 5px;cursor:pointer;${M};font-size:11.5px;color:${n ? 'var(--vdeep)' : 'var(--mut)'};white-space:nowrap">${n}/${gr.length}</button>`);
+          })), `border-top:1px solid var(--line);min-height:${o.load ? 54 : 62}px;${o.sel && o.sel[0] === a.n ? 'background:var(--lav);' : ''}`);
+        }));
+      }
+      return `<div role="grid" aria-label="Capabilities by agent" style="flex:none;width:${W0}px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden">${r1}${r2}${ceil}${body}</div>`;
+    };
+
+    /* ---------- page pieces ---------- */
+    const SEG = (on) => `<div role="tablist" aria-label="Policies" style="display:inline-flex;align-self:flex-start;gap:2px;padding:3px;border-radius:10px;border:1px solid var(--line2);background:var(--card)">${['Platform settings', 'Capabilities'].map(t => `<a href="#" role="tab" aria-selected="${t === on}" style="display:inline-flex;align-items:center;min-height:30px;padding:0 12px;border-radius:7px;font-size:12.5px;font-weight:${t === on ? 700 : 500};color:${t === on ? 'var(--vdeep)' : 'var(--body)'};background:${t === on ? 'var(--lav)' : 'transparent'};text-decoration:none">${t}</a>`).join('')}</div>`;
+    const TOOLBAR = (o) => { o = o || {}; return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${SEARCH('Search agents', 220)}${CHIP('Team: [Northwind Labs] ▾', true)}${CHIP('Role: all ▾')}${CHIP('Status: Active, Paused ▾', true)}<span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:12.5px">${LNK('Expand all')}${LNK('Collapse all')}</span></div>`; };
+    const PHDR = (o) => { o = o || {}; return HDR('Operations', Object.assign({ sub: 'Policies', line: 'What each agent may do, capability by capability. Every grant or revoke takes a reason and lands in Audit. A revoke applies from the agent’s next run.', acts: bP(ICO.plus + 'Grant a capability…') }, o)); };
+    const RAILC = `<aside aria-label="Eadwyn" style="width:48px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px 0;box-sizing:border-box"><button type="button" aria-label="Expand Eadwyn" aria-expanded="false" style="width:32px;height:32px;border-radius:9px;border:0;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;cursor:pointer;padding:0">E</button><span aria-hidden="true" style="writing-mode:vertical-rl;transform:rotate(180deg);${M};font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Ask about capability policies</span></aside>`;
+    const PROP = `<div style="border:1.5px dashed var(--line2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:9px;background:var(--raised)"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px">${EB('Proposal · revoke')}${STC('prov')}</div><p style="margin:0;font-size:13px;line-height:1.5;color:var(--ink)"><b>Revoke ${CODE('email.draft')} from [Pitch Writer].</b> No run used it in the last 30 days; the last use was 18 Oct 2026, 34 days ago.<sup>1</sup></p><ol style="margin:0;padding:0 0 0 2px;list-style:none;font-size:11.5px;color:var(--mut);line-height:1.5"><li><sup>1</sup> Capability checks · [Pitch Writer] · 22 Oct to 21 Nov 2026 · 0 uses of email.draft</li></ol><span>${ENG('#8070 · last use per capability')}</span><div style="display:flex;gap:6px;flex-wrap:wrap">${bS('Accept', SM)}${bS('Edit', SM)}${bG('Discard', SM)}</div><span style="font-size:11.5px;color:var(--mut);line-height:1.45">Accept opens the revoke panel with this reason filled in. Nothing is revoked until you press Revoke.</span></div>`;
+    const RAIL = `<aside aria-label="Eadwyn" style="width:320px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;box-sizing:border-box"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)"><span style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:14px">Eadwyn</b><span style="font-size:12px;color:var(--mut)">· Capability policies</span></span><button type="button" aria-label="Collapse Eadwyn" aria-expanded="true" style="width:32px;height:32px;border-radius:7px;border:0;background:transparent;color:var(--body);cursor:pointer;font-size:15px">›</button></div><div style="flex:1;min-height:0;overflow:hidden;padding:14px;display:flex;flex-direction:column;gap:10px">${EB('For this page')}${['Which grants were not used in 30 days?', 'Why was [Frontend Builder]’s last run refused?', 'Compare [Pitch Writer] with its role'].map(t => `<button type="button" style="${BTN}justify-content:flex-start;min-height:36px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-weight:500;font-size:12.5px;white-space:normal;text-align:left;line-height:1.35;padding:6px 12px">${t}</button>`).join('')}${PROP}<span style="font-size:11.5px;color:var(--mut);line-height:1.45">Eadwyn proposes; it cannot grant, revoke or change the ceiling.</span></div><div style="padding:12px 14px;border-top:1px solid var(--line)">${INP('', '', false, 'Ask about capability policies…')}</div></aside>`;
+
+    const MAINP = (mx, o) => { o = o || {}; return PHDR(o.hdr) + BODY(SEG('Capabilities') + TOOLBAR() + `<div style="display:flex;flex-direction:column;gap:10px"><span style="font-size:12.5px;color:var(--body);display:flex;align-items:center;gap:4px;flex-wrap:wrap">${o.sum || SUMLINE}</span>${LEGEND}</div>` + (o.pre || '') + mx + (o.post || '')); };
+    const PAGE2 = (main, side, h) => SHELL(main, { h, side });
+
+    /* ---------- the grant panel ---------- */
+    const KV = (k, v) => `<div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:10px;align-items:baseline;font-size:13px"><span style="color:var(--mut);font-size:12.5px">${k}</span><span style="color:var(--ink);min-width:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;line-height:1.5">${v}</span></div>`;
+    const CNT = (n) => `<span style="${M};font-size:11.5px;color:var(--mut);white-space:nowrap;flex:none">${n} / 200</span>`;
+    const REAS = (txt, n, x) => `<div style="display:flex;flex-direction:column;gap:7px">${LBL('Reason', true)}${TA(txt, 72, 'Why are you making this change?')}<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--mut)"><span>10 to 200 characters. Logged in Audit with your name and the time.</span>${CNT(n)}</div>${x || ''}</div>`;
+    const EFFECT = `<div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--body);line-height:1.5"><span style="margin-top:2px;flex:none;color:var(--mut)">${ICO.info}</span><span>Applies from the agent’s next run. Runs already going finish under the capabilities they started with. ${OWN('Q2 · A')}</span></div>`;
+    const GRANTP = (o) => {
+      o = o || {};
+      const st = o.state; /* undefined | 'saving' | 'failed' | 'refused' */
+      const reason = 'Comparables need the fund lists for the [Q4 landscape] report.';
+      const body = `<div style="display:flex;align-items:center;gap:10px">${PAV('CA', 36)}<div style="display:flex;flex-direction:column;gap:2px"><b style="font-size:14px;color:var(--ink)">[Competitor Analyst]</b><span style="font-size:12.5px;color:var(--mut)">Research · Active · sponsor [Maya Ruiz] · [Northwind Labs]</span></div></div>`
+        + `<div style="display:flex;flex-direction:column;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:10px">${KV('Capability', CODE('fund.read') + `<span style="font-size:12.5px;color:var(--mut)">fund · read</span>`)}${KV('What it allows', 'Read the fund records the agent’s team can already see: profile, positions and reports. It changes nothing. ' + ENG())}${KV('Platform offers', CELL('on', 'fund.read') + `<span style="font-size:12.5px;color:var(--mut)">November 2026</span> ` + ENG())}${KV('Now', '<b>Not granted</b>')}${KV('Last change', `Revoked by [Iris Chen] · <span style="${M};font-size:12px">30 Oct 2026, 09:05</span><span style="font-size:12.5px;color:var(--mut)">“Pilot ended; not needed until the Q4 report.” Granted before by [Iris Chen] on <span style="${M};font-size:12px">2 Oct 2026</span>.</span> ` + ENG())}${KV('Last refusal', 'None · no refused run for this agent')}</div>`
+        + CBX('Apply to the Research role: [Competitor Analyst] and [Market Researcher] (who already has it)', false, 'align-items:flex-start;line-height:1.45') + `<span style="margin-top:-8px">${OWN('Q1 · A · per agent, with apply to role')}</span>`
+        + REAS(reason, reason.length, st === 'failed' ? NOTE('<b>Could not save.</b> Nothing changed and your reason is kept. Press Grant fund.read to try again.', 'neg') : st === 'refused' ? NOTE('<b>The Worker refused this grant.</b> ' + CODE('capability_not_offered') + ' The platform stopped offering this capability at 15:38 UTC, after you opened the panel. Your reason is kept. ' + ENG('#8070 · code name proposed'), 'neg') : '')
+        + EFFECT;
+      const foot = st === 'saving' ? bG('Cancel') + bX('Granting…', 'Saving') : st === 'refused' ? bG('Close') + bX('Grant fund.read', 'Not offered this month') : bG('Cancel') + bP('Grant fund.read');
+      return SHEET('Grant fund.read', 'HQ › AI agents › Policies › Capabilities', body, foot, 480);
+    };
+    const REVOKEP = () => {
+      const reason = 'Unused for 34 days. Eadwyn proposal, edited: drafts now go through the sponsor.';
+      const body = `<div style="display:flex;align-items:center;gap:10px">${PAV('PW', 36)}<div style="display:flex;flex-direction:column;gap:2px"><b style="font-size:14px;color:var(--ink)">[Pitch Writer]</b><span style="font-size:12.5px;color:var(--mut)">Fundraising · Active · sponsor [Maya Ruiz] · [Northwind Labs]</span></div></div>`
+        + `<div style="display:flex;flex-direction:column;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:10px">${KV('Capability', CODE('email.draft') + `<span style="font-size:12.5px;color:var(--mut)">email · draft</span>`)}${KV('What it allows', 'Draft an email for a person to review. It never sends; email.send is locked. ' + ENG())}${KV('Now', `<b>Granted</b> by [Iris Chen] · <span style="${M};font-size:12px">6 Oct 2026, 15:42</span> ` + ENG())}${KV('Last used', `<span style="${M};font-size:12px">18 Oct 2026</span> · 34 days ago ` + ENG('#8070 · last use'))}${KV('Last refusal', `${CODE('capability_ungrantable')}<span style="${M};font-size:12px">19 Nov 2026, 10:31</span>${LNK('Open run in Audit ›', 'font-size:12.5px')}`)}</div>`
+        + NOTE('From Eadwyn’s proposal. You edited the reason.', '')
+        + REAS(reason, reason.length)
+        + EFFECT
+        + `<div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--negE);border-radius:10px"><b style="font-size:13px;color:var(--ink)">Review</b><span style="font-size:12.5px;color:var(--body);line-height:1.5">[Pitch Writer] keeps research.read, company.read and fund.read. Its next run that asks to draft an email is refused with ${CODE('capability_missing')}. You can grant it again at any time.</span></div>`;
+      return SHEET('Revoke email.draft', 'HQ › AI agents › Policies › Capabilities', body, bG('Cancel') + bDF('Revoke email.draft'), 480);
+    };
+    const LOCKP = `<div style="display:flex;flex-direction:column;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:10px">${KV('Capability', CODE('code.merge') + ICO.lock)}${KV('Now', '<b>Locked</b> · no one can grant it')}${KV('Why', 'A person merges. code.merge, deploy.production, cloud.write, finance.execute and email.send exist as names and are never grantable to an agent.')}${KV('If asked', 'The Worker refuses the run with ' + CODE('capability_ungrantable') + ' ' + ENG())}</div>`;
+    const OVER = (sheet) => `<div style="position:absolute;left:0;right:0;top:56px;bottom:0;background:rgba(24,24,27,.22);display:flex;justify-content:flex-end">${sheet}</div>`;
+
+    /* ---------- phone 390 ---------- */
+    const PTOP = (t) => `<div style="height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px;background:var(--card);border-bottom:1px solid var(--line)"><button type="button" aria-label="Menu" style="width:44px;height:44px;border:none;background:transparent;color:var(--ink);font-size:18px;cursor:pointer">☰</button><span style="flex:1;font-size:16px;font-weight:800;letter-spacing:-0.02em">${t}</span>${PILL('HQ', 'hq')}<button type="button" aria-label="Ask Eadwyn" style="width:44px;height:44px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer"><span style="display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span></button></div>`;
+    const PCARD = (a) => `<a href="#" style="flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 14px;min-height:44px;background:var(--card);border:1px solid var(--line);border-radius:12px;text-decoration:none;color:inherit"><span style="display:flex;align-items:center;gap:10px">${PAV(a.ini, 32)}<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="display:flex;align-items:center;gap:6px"><b style="font-size:14px;color:var(--ink)">${a.n}</b>${a.st === 'Paused' ? PILL('Paused', 'wait') : ''}</span><span style="font-size:12px;color:var(--mut)">${a.role} · ${a.g.length} granted</span></span><span aria-hidden="true" style="color:var(--mut);font-size:18px">›</span></span><span style="display:flex;flex-wrap:wrap;gap:5px">${a.g.map(g => `<span style="display:inline-flex;align-items:center;gap:3px;min-height:24px;padding:0 7px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);color:var(--vdeep);${M};font-size:11px">${ICO.check}${g}</span>`).join('')}</span><span style="font-size:11.5px;color:var(--mut)">${a.rf ? `Last refusal <span style="${M}">${a.rf[0]}</span> · <span style="${M}">${a.rf[1]}</span>` : 'Last refusal: None'}</span></a>`;
+    const PH1 = `<div style="display:flex;flex-direction:column;height:844px;background:var(--bg)">${PTOP('Capabilities')}<div style="flex:1;overflow:hidden;padding:12px 16px;display:flex;flex-direction:column;gap:10px"><nav aria-label="Breadcrumb">${EB('AI agents › Operations › Policies')}</nav><div style="display:flex;gap:6px;overflow:hidden">${CHIP('[Northwind Labs] ▾', true, 'min-height:36px')}${CHIP('Role ▾', false, 'min-height:36px')}${CHIP('Active, Paused ▾', true, 'min-height:36px')}</div><span style="font-size:12px;color:var(--body);line-height:1.45"><b style="color:var(--ink)">${AG.length} agents</b> · <b style="color:var(--ink)">${GRANTS} grants</b> now · ${OFFERED} of ${GRANTABLE} offered in Nov 2026 ${ENG()}</span>${J(AG.slice(0, 3).map(PCARD))}<span style="font-size:12px;color:var(--mut);text-align:center">5 more agents below</span></div><div style="flex:none;padding:10px 16px 18px;background:var(--card);border-top:1px solid var(--line)">${bP(ICO.plus + 'Grant a capability…', 'width:100%;min-height:44px')}</div></div>`;
+    const PH2 = `<div style="display:flex;flex-direction:column;height:844px;background:var(--bg);position:relative">${PTOP('Capabilities')}<div style="flex:1;padding:12px 16px;opacity:.35">${PCARD(AG[1])}</div><div role="dialog" aria-label="Grant fund.read" style="position:absolute;left:0;right:0;bottom:0;top:120px;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--line);box-shadow:0 -12px 32px rgba(24,24,27,.14);display:flex;flex-direction:column"><span aria-hidden="true" style="width:40px;height:4px;border-radius:999px;background:var(--line2);margin:8px auto 2px;display:block"></span><div style="display:flex;align-items:center;gap:8px;padding:6px 8px 10px 16px;border-bottom:1px solid var(--line)"><b style="flex:1;font-size:16px">Grant fund.read</b><button type="button" aria-label="Close" style="width:44px;height:44px;border:0;background:transparent;color:var(--body);display:grid;place-items:center">${ICO.x}</button></div><div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:12px"><span style="font-size:13px;color:var(--ink)"><b>[Competitor Analyst]</b> · Research · Active</span><span style="font-size:13px;line-height:1.5;color:var(--body)">${CODE('fund.read')} Read the fund records the agent’s team can already see. It changes nothing. ${ENG()}</span><span style="font-size:12.5px;color:var(--mut);line-height:1.5">Offered in Nov 2026 · not granted now · revoked by [Iris Chen] on <span style="${M}">30 Oct 2026</span> ${ENG()}</span>${CBX('Apply to the Research role', false, 'min-height:44px')}${REAS('Comparables need the fund lists for the [Q4 landscape] report.', 62)}<span style="font-size:12px;color:var(--mut);line-height:1.45">Applies from the next run; live runs finish. ${OWN('Q2 · A')}</span></div><div style="display:flex;flex-direction:column;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--line)">${bP('Grant fund.read', 'width:100%;min-height:44px')}${bG('Cancel', 'width:100%;min-height:44px')}</div></div></div>`;
+
+    /* ---------- handoff (wide doc) ---------- */
+    const H2 = (t) => `<h2 style="margin:18px 0 6px;font-size:15px;font-weight:800;letter-spacing:-0.01em;color:var(--ink)">${t}</h2>`;
+    const UL = (xs) => `<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:12.5px;line-height:1.5;color:var(--body)">${xs.map(x => `<li>${x}</li>`).join('')}</ul>`;
+    const HANDOFF = `<div style="padding:28px 32px;background:var(--card);display:flex;flex-direction:column;gap:4px">${EB('SAP-H · Handoff · #8070 · continues HQ AI Agents SA0–SA9 (D4137) · decision file D4137-p&lt;k&gt;.md')}<h1 style="margin:4px 0 2px;font-size:22px;font-weight:800;letter-spacing:-0.02em">Capability policies · SA10 to SA14</h1><p style="margin:0;font-size:13px;line-height:1.55;color:var(--body);max-width:1060px">The matrix lives at /hq/ai-agents/operations/policies as a second view of the Policies tab (Platform settings · Capabilities); Platform settings is SA6 unchanged. Super admin only. Checked against main <span style="${M}">270cdf4a2a</span>. People, agents, runs and dates are fictional.</p>`
+      + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">`
+      + `<div>${H2('Checked on main')}${UL([
+        `<span style="${M}">routes/admin_ai_agents_policy.ts</span>: GET / and PUT models, caps, capacity, tools; POST locks, pause, resume. Super admin (<span style="${M}">requireSuperAdmin</span>, write bar). No capability route, no ceiling per capability.`,
+        `<span style="${M}">routes/admin_ai_agents_roster.ts</span>: GET /roster returns the 16 personas (offered · hidden · retired), not deployed agents.`,
+        `<span style="${M}">sql/migrations/712_team_agents.sql</span>: deployed agents with <span style="${M}">status</span> active · paused · removed and a sponsor. The matrix rows are these; the board uses their words (Active, Paused; Removed behind the filter).`,
+        `<span style="${M}">728_agent_engine.sql</span>: <span style="${M}">agent_task_runs.refusal</span> holds a code only (≤ 64 chars), never the capability. Read by <span style="${M}">GET /api/agent-engine/runs/:uid</span> and the HQ run detail.`,
+        `<span style="${M}">202611161330_5567_agent_authz_revisions.sql</span>: the revision pattern a grant or revoke bumps.`,
+        `<span style="${M}">frontend/src/pages/hq/aiAgents/Operations.jsx</span> (Policies) and <span style="${M}">refusals.js</span>: reasons are 10 to 500 characters today.`,
+        `No <span style="${M}">agent_capabilities</span>, <span style="${M}">capability_catalog</span>, <span style="${M}">agentCapabilities.ts</span> or <span style="${M}">capability_missing</span> anywhere on main.`])}`
+      + `${H2('Requires engineering ◇ #8070')}${UL([
+        `Migration <span style="${M}">…_8070_agent_capabilities.sql</span>: <span style="${M}">agent_capabilities</span>, <span style="${M}">capability_catalog</span> (the one sentence per name), the ceiling on <span style="${M}">ai_agent_policy</span>.`,
+        `<span style="${M}">GET /api/admin/ai-agents/policy/capabilities</span>: agents (from team_agents) × grants with by and when, the ceiling, the last change per cell.`,
+        `Grant and revoke routes, audited, bumping <span style="${M}">agent_authz_revisions</span>; refusals <span style="${M}">capability_missing</span>, <span style="${M}">capability_ungrantable</span>; <span style="${M}">capability_not_offered</span> is a proposed name.`,
+        `The capability named in a refusal, and the last use per capability (Eadwyn’s 30-day proposal, “Last used”). Without them those lines read Not recorded.`])}</div>`
+      + `<div>${H2('Pending the owner ⚑ (option A drawn)')}${UL([
+        `Q1 · per agent, with “Apply to role” (A), or per role only (B). Drawn: a checkbox in the panel.`,
+        `Q2 · a revoke applies at the next run and live runs finish (A), or halts live runs (B). Drawn: the line under every panel.`,
+        `Reason length: the brief says ≤ 200; HQ takes 10 to 500 today. Drawn: 10 to 200.`])}`
+      + `${H2('Frontend only')}${UL([
+        `The Platform settings · Capabilities switch, domain collapse, filters (team, role, status) and the legend.`,
+        `Cells are buttons with a name: “[Pitch Writer], email.draft: granted”. Locked and not-offered cells are images, not buttons. Arrow keys move in the grid; collapse buttons carry aria-expanded.`,
+        `Phone 390: cards with granted chips, a bottom sheet, every target 44 px.`,
+        `States: Loading, Not recorded (no grant yet), Unreadable (ceiling still works), Refused, Saving and Could not save (text kept).`])}`
+      + `${H2('Handoffs')}${UL([
+        `A last-refusal code opens the run in HQ › AI agents › Operations › Audit, carrying the run id (SA8).`,
+        `#8071 Execution budgets (SAB, SA15–SA19) at Operations › Spend: the same eight agents and figures.`,
+        `#8080 Registry (SAR, SA20–SA24) at Roster › Registry: each agent’s detail links here for its capabilities.`])}</div></div></div>`;
+
+    /* ---------- boards ---------- */
+    const ROOT = (w, h, inner) => `<div style="${VARS};width:${w}px;${h ? 'height:' + h + 'px;' : ''}box-sizing:border-box;overflow:hidden;position:relative;background:var(--bg);color:var(--ink);${SG};font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased">${inner}</div>`;
+    const EXP10 = ['research', 'company', 'fund', 'code', 'web'];
+    const SA10 = (h) => PAGE2(MAINP(MX({ exp: EXP10 })), RAILC, h);
+    let html;
+    if (B === 'SA10') html = ROOT(1440, 1300, SA10(1300));
+    else if (B === 'SA10B') html = ROOT(1440, 1380, PAGE2(MAINP(MX({ exp: ['email'], wa: 236, wd: 40, wc: 44, short: 1 }), { hdr: { acts: '' } }), RAIL, 1380));
+    else if (B === 'SA11') html = ROOT(1440, 1300, SHELL(MAINP(MX({ exp: EXP10, sel: ['[Competitor Analyst]', 'fund.read'] })), { h: 1300, side: RAILC }) + OVER(GRANTP()));
+    else if (B === 'SA11B') html = ROOT(520, 0, `<div style="display:flex;height:1100px;background:var(--bg);justify-content:flex-end">${REVOKEP()}</div>`);
+    else if (B === 'SA11C') html = ROOT(1040, 0, `<div style="display:flex;gap:28px;padding:28px;background:var(--bg);align-items:flex-start"><div style="width:480px;display:flex;flex-direction:column;gap:10px">${EB('A locked cell · the panel explains, nothing to press')}<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px"><b style="font-size:15px">code.merge · [Frontend Builder]</b>${LOCKP}<div style="display:flex;justify-content:flex-end;gap:8px">${bG('Close')}${bX('Grant', 'Locked: a person merges')}</div></div></div><div style="width:480px;display:flex;flex-direction:column;gap:10px">${EB('A refusal from the Worker, inline with its code')}<div style="height:1010px;display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--line)">${GRANTP({ state: 'refused' }).replace('box-shadow:-12px 0 32px rgba(24,24,27,.08)', 'box-shadow:none;border-left:0')}</div></div></div>`);
+    else if (B === 'SA12') html = ROOT(1440, 1000, SHELL(MAINP(MX({ exp: EXP10, load: 1 }), { sum: `${SK(520, 12)}`, hdr: { acts: bX(ICO.plus + 'Grant a capability…', 'Reading the agents') } }), { h: 1000, side: RAILC }));
+    else if (B === 'SA12B') html = ROOT(1440, 1300, SHELL(MAINP(MX({ exp: EXP10, empty: 1 }), { sum: `<b style="color:var(--ink)">${AG.length} agents</b> in [Northwind Labs] · grants ${STC('nr')} no capability has been granted to any agent yet ${ENG()} · ${OFFERED} of ${GRANTABLE} offered in November 2026`, hdr: {} }), { h: 1300, side: RAILC }));
+    else if (B === 'SA12C') html = ROOT(1440, 900, SHELL(MAINP(MX({ exp: EXP10, unread: 1 }), { sum: `Agents ${STC('un')} · ${OFFERED} of ${GRANTABLE} grantable capabilities offered in November 2026 ${ENG()}`, hdr: { acts: bX(ICO.plus + 'Grant a capability…', 'The agents could not be read') } }), { h: 900, side: RAILC }));
+    else if (B === 'SA12D') html = ROOT(1440, 760, SHELL(PHDR({ acts: '' }) + BODY(SEG('Capabilities') + `<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 24px;display:flex;flex-direction:column;align-items:flex-start;gap:8px">${STC('rf')}<b style="font-size:15px;color:var(--ink)">Capability policies are shown to super admins only.</b><span style="font-size:13px;color:var(--body);max-width:640px;line-height:1.55">Nothing of the matrix is drawn, because the read was refused. That is not a claim that no capability is granted. A super admin can give you access: [Iris Chen].</span>${LNK('How HQ access is granted ›', 'font-size:13px;margin-top:4px')}</div>`), { h: 760, side: RAILC }));
+    else if (B === 'SA12E') html = ROOT(1040, 0, `<div style="display:flex;gap:28px;padding:28px;background:var(--bg);align-items:flex-start">${[['Saving · the button says what is happening', 'saving'], ['Could not save · the panel keeps its text', 'failed']].map(([t, s]) => `<div style="width:480px;display:flex;flex-direction:column;gap:10px">${EB(t)}<div style="height:${s === 'failed' ? 960 : 880}px;display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--line)">${GRANTP({ state: s }).replace('box-shadow:-12px 0 32px rgba(24,24,27,.08)', 'box-shadow:none;border-left:0')}</div></div>`).join('')}</div>`);
+    else if (B === 'SA13') html = ROOT(390, 844, PH1);
+    else if (B === 'SA13B') html = ROOT(390, 844, PH2);
+    else if (B === 'SA14') html = ROOT(1440, 1300, SA10(1300));
+    else if (B === 'SA14B') html = ROOT(1440, 1300, SHELL(MAINP(MX({ exp: EXP10, sel: ['[Competitor Analyst]', 'fund.read'] })), { h: 1300, side: RAILC }) + OVER(GRANTP()));
+    else if (B === 'SAPH') html = ROOT(1200, 0, HANDOFF);
+    else html = ROOT(1440, 1300, SA10(1300));
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
