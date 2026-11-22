@@ -190,11 +190,32 @@ export function planLine(steps, total, today) {
 }
 
 /**
+ * D8255: a country's governance and AML context from the stored indices, one line per source, each with its
+ * publisher, edition and as-of day. A country an edition holds no figure for is Not recorded, never a 0; a list
+ * edition that does not name the country says so; a failed read is Unavailable.
+ */
+export function indexLines(name, read) {
+  if (read == null) return [{ state: 'not_recorded', label: `Governance and AML indices for ${name}`, reason: 'Not sent with this record.' }];
+  const lines = Array.isArray(read.lines) ? read.lines : null;
+  if (!lines) return [{ state: 'unavailable', label: `Governance and AML indices for ${name}`, reason: 'They could not be read.' }];
+  return lines.map((l) => {
+    const who = `${str(l.publisher)} ${l.key === 'wgi' ? 'governance indicators' : 'high-risk list'}${str(l.edition) ? ` ${str(l.edition)}` : ''}`;
+    if (l.state === 'ok' && Array.isArray(l.values) && l.values.length) {
+      const parts = l.values.map((v) => `${str(v.label).replace(/, percentile rank$/, '')} ${v.value}`).join(' · ');
+      return { state: 'value', label: `${who}, ${name}: ${parts}${l.key === 'wgi' ? ' (percentile rank, 0 to 100)' : ''}`, asOf: dayLabel(l.as_of), source: str(l.citation_url) || null };
+    }
+    if (l.state === 'not_named') return { state: 'value', label: `${who}: ${name} is not named`, asOf: dayLabel(l.as_of), source: str(l.citation_url) || null };
+    if (l.state === 'unreadable') return { state: 'unavailable', label: who, reason: str(l.reason) || 'It could not be read.' };
+    return { state: 'not_recorded', label: who, reason: str(l.reason) || 'Not recorded.' };
+  });
+}
+
+/**
  * GR-22's evidence strip, one list per part, from `GET /api/research/geographies/:code`. A line the
  * store does not hold (per-country demand, customers by country, partners covering the country, the
  * WGI and FATF indices) reads Not recorded with its reason, never a count.
  */
-export function evidenceFor(geo) {
+export function evidenceFor(geo, indices = null) {
   const name = str(geo?.item?.name) || 'this country';
   const signals = Array.isArray(geo?.signals) ? geo.signals : [];
   const asOf = geo?.as_of || {};
@@ -211,7 +232,7 @@ export function evidenceFor(geo) {
     ],
     regulation: [
       v(`Signals naming only ${str(geo?.item?.region) || 'its region'}: ${regional}`, asOf.signals),
-      nr(`WGI and FATF indices for ${name}`, 'Not readable from Grow yet.'),
+      ...indexLines(name, indices),
     ],
     partners: [
       v(`Companies in ${name}: ${num(geo?.company_count) ? geo.company_count : 0}`, asOf.companies),

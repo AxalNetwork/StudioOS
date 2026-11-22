@@ -14,6 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, matchRoutes } from 'react-router-dom';
 import { readRoutesSource } from './_routesSource.mjs';
@@ -25,7 +26,7 @@ import MarketsHome, { ComparePanel } from '../src/pages/cycles/MarketsHome.jsx';
 import MarketRecord from '../src/pages/cycles/MarketRecord.jsx';
 import { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import {
-  compareSummary, diffWords, evidenceFor, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
+  compareSummary, diffWords, evidenceFor, indexLines, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
 } from '../src/pages/cycles/marketsModel.js';
 
 const h = React.createElement;
@@ -277,4 +278,30 @@ test('Markets owns its page and its record in Grow’s def, and the old addresse
   assert.equal(matched('/grow/market-expansion'), '/grow/:slug');
   assert.equal(matched('/grow/market-expansion/mka1'), '/grow/:slug/:id');
   assert.equal(matched('/grow/market-expansion/new'), '/grow/:slug/new');
+});
+
+// D8255 (#8255). Mutation checked: a "not named" list read as a value-less line (fails); a missing figure shown as 0 (fails);
+// an unreadable source shown as Not recorded (fails); the as-of day dropped (fails); the record not passing its indices (fails).
+test('indices: a value shows its source, edition and day; no figure is Not recorded; a failed read is Unavailable', () => {
+  const read = { state: 'ok', lines: [
+    { key: 'wgi', publisher: 'World Bank', citation_url: 'https://example.test/wgi', state: 'ok', edition: '2024', as_of: '2025-09-30',
+      values: [{ indicator: 'GE.PER.RNK', label: 'Government effectiveness, percentile rank', value: 74.5 }, { indicator: 'RL.PER.RNK', label: 'Rule of law, percentile rank', value: 0 }] },
+    { key: 'fatf', publisher: 'FATF', state: 'not_recorded', edition: null, as_of: null, values: [], reason: 'FATF’s list has no recorded licence, so it is not read (D1259).' }] };
+  const [wgi, fatf] = indexLines('Portugal', read);
+  assert.equal(wgi.state, 'value');
+  assert.equal(wgi.label, 'World Bank governance indicators 2024, Portugal: Government effectiveness 74.5 · Rule of law 0 (percentile rank, 0 to 100)');
+  assert.equal(wgi.asOf, '30 Sep 2025');
+  assert.equal(wgi.source, 'https://example.test/wgi');
+  assert.deepEqual([fatf.state, fatf.label], ['not_recorded', 'FATF high-risk list']);
+  assert.match(fatf.reason, /no recorded licence/);
+  const [none] = indexLines('Chile', { state: 'ok', lines: [{ key: 'wgi', publisher: 'World Bank', state: 'not_recorded', edition: '2024', values: [], reason: 'The World Bank 2024 edition holds no figure for this country.' }] });
+  assert.equal(none.state, 'not_recorded');
+  const [named] = indexLines('Chile', { state: 'ok', lines: [{ key: 'fatf', publisher: 'FATF', state: 'not_named', edition: 'Oct 2026', as_of: '2026-10-24', values: [] }] });
+  assert.deepEqual([named.state, named.label, named.asOf], ['value', 'FATF high-risk list Oct 2026: Chile is not named', '24 Oct 2026']);
+  const [down] = indexLines('Chile', { state: 'ok', lines: [{ key: 'wgi', publisher: 'World Bank', state: 'unreadable', reason: 'World Bank’s figures could not be read.' }] });
+  assert.equal(down.state, 'unavailable');
+  assert.equal(indexLines('Chile', { state: 'unreadable' })[0].state, 'unavailable');
+  assert.equal(indexLines('Chile', undefined)[0].state, 'not_recorded');
+  assert.equal(evidenceFor({ item: { name: 'Portugal' }, as_of: {}, signals: [] }, read).regulation.length, 3);
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.indices\)/, 'the record hands its indices to the evidence strip');
 });
