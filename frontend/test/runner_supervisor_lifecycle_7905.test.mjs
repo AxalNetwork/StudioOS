@@ -179,20 +179,20 @@ test('D7905 the recovery store is exclusive, private and refuses a linked or sha
   assert.deepEqual(store.list().map(r => r.invalid ?? r.owner), ['202-1-1', '303-1-1.json'], 'a damaged record is reported, never dropped');
 });
 
-test('D8009 the absolute deadline: staging time never extends the lease, and work stops a reserve before it', t => {
+test('D8009 the absolute deadline: staging time never extends the lease, and work stops a reserve before it', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const f = engineFixture(t);
   // Staging consumes 200s; the container deadline stays the receipt's absolute second.
   let job = new JobContainer(POLICY, { engine: f.engine, stage: () => t.mock.timers.tick(200000), namespace: () => true });
-  job.create(identity(), { source: f.source, plan: f.plan });
+  await job.create(identity(), { source: f.source, plan: f.plan });
   const create = f.calls.find(c => c[0] === 'create');
   assert.ok(create.includes(`STUDIOOS_JOB_DEADLINE=${Math.floor(DEADLINE / 1000)}`));
-  const { timeout } = job.candidateExec({ receipt: identity(), admitted: live(), phase: 'test' });
+  const { timeout } = await job.candidateExec({ receipt: identity(), admitted: live(), phase: 'test' });
   assert.equal(timeout, DEADLINE - FINISH_RESERVE_MS - (NOW + 200000), 'work ends the reserve before the absolute deadline');
   // Staging that runs into the reserve refuses before any container exists.
   const g = engineFixture(t);
   job = new JobContainer(POLICY, { engine: g.engine, stage: () => t.mock.timers.tick(DEADLINE - Date.now() - FINISH_RESERVE_MS), namespace: () => true });
-  assert.throws(() => job.create(identity(), { source: g.source, plan: g.plan }), /insufficient_execution_budget/);
+  await assert.rejects(job.create(identity(), { source: g.source, plan: g.plan }), /insufficient_execution_budget/);
   assert.equal(g.calls.some(c => c[0] === 'create'), false);
 });
 
@@ -252,10 +252,10 @@ test('D7905 the interruptible phase returns observations from real processes and
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const run = async (script, signal) => {
     const job = new JobContainer(POLICY, { engine: f.engine, spawnEngine: () => spawn('/bin/sh', ['-c', script], { stdio: 'ignore' }), stage: () => {}, namespace: () => true });
-    job.create(identity(), { source: f.source, plan: f.plan });
+    await job.create(identity(), { source: f.source, plan: f.plan });
     const observed = await job.runCandidateInterruptible({ receipt: identity(), admitted: live(), signal, phase: 'test' });
     assert.ok(job.owned, 'still owned: removal is the supervisor\'s');
-    job.cleanup(identity());
+    await job.cleanup(identity());
     return observed;
   };
   assert.deepEqual(await run('exit 0'), { phase: 'test', status: 'success', exitCode: 0, signal: null });
@@ -286,15 +286,16 @@ test('D7905 an abort or deadline that lands after the process exited, before clo
     const child = new EventEmitter(); const kills = []; child.kill = s => kills.push(s);
     let fire = null;
     const job = new JobContainer(POLICY, { engine: f.engine, spawnEngine: () => child, stage: () => {}, namespace: () => true });
-    job.create(identity(), { source: f.source, plan: f.plan });
+    await job.create(identity(), { source: f.source, plan: f.plan });
     const controller = new AbortController();
     const observed = job.runCandidateInterruptible({ receipt: identity(), admitted: live(), signal: controller.signal, phase: 'test', timers: { setTimeout: fn => { fire = fn; return 1; }, clearTimeout: () => {} } });
+    await new Promise(resolve => setImmediate(resolve));
     child.emit('exit', 2, null);
     if (late === 'abort') controller.abort(); else fire();
     child.emit('close', 2, null);
     assert.deepEqual(await observed, { phase: 'test', status: 'failure', exitCode: 2, signal: null }, late);
     assert.deepEqual(kills, [], 'nothing to kill after exit');
-    job.cleanup(identity());
+    await job.cleanup(identity());
   }
 });
 
@@ -312,23 +313,129 @@ test('D8007 run mode has no route but a verified boundary job: hosted, Mac and e
   assert.doesNotMatch(run, /executeShard\(/, 'the direct-host path is not reachable from run mode');
 });
 
-test('S32 C3: a create whose ID never came back is not clean: cleanup is unknown, never complete', async t => {
-  const f = engineFixture(t);
-  const lost = args => { if (args[0] === 'create') { f.calls.push(args); throw new Error('ack lost after side effect'); } return f.engine(args); };
+/**
+ * S32 C3: an engine whose create performs its side effect but whose ID never reaches the supervisor (lost ack,
+ * timeout, abort). `materialize` decides what the fixed name then resolves to.
+ */
+function lostCreate(f, { materialize = 'ours', inspectByName = null } = {}) {
+  let created = null, removed = false;
+  return args => {
+    if (args[0] === 'create') {
+      f.calls.push(args);
+      f.engine(args); f.calls.pop();
+      created = materialize; throw Object.assign(new Error('engine_call_timed_out'), { interrupted: true });
+    }
+    if (args[0] === 'inspect' && args[1] === '--type') {
+      f.calls.push(args);
+      if (inspectByName) throw inspectByName;
+      if (created === null || removed || materialize === 'none') throw Object.assign(new Error('engine_call_failed'), { stderr: 'Error: No such container: studioos-job-202-1-1' });
+      const row = JSON.parse(f.engine(['inspect', CID]))[0]; f.calls.pop();
+      if (materialize === 'foreign') row.Image = 'sha256:' + 'f'.repeat(64);
+      if (materialize === 'null') return JSON.stringify([null]);
+      return JSON.stringify([row]);
+    }
+    if (args[0] === 'rm') removed = true;
+    return f.engine(args);
+  };
+}
+const runLost = async (t, f, engine, extra = {}) => {
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
-  const job = new JobContainer(POLICY, { engine: lost, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
+  const job = new JobContainer(POLICY, { engine, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
   const logs = [];
-  const code = await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: l => logs.push(l) });
-  const o = JSON.parse(logs.find(l => l.includes('container_outcome')));
+  const code = await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: l => logs.push(l), ...extra });
+  t.mock.timers.reset();
+  return { code, job, o: JSON.parse(logs.find(l => l.includes('container_outcome'))) };
+};
+
+test('S32 C3: an unconfirmed create is reconciled by its exact name; only an exact match is adopted and removed by ID', async t => {
+  const f = engineFixture(t);
+  const { code, o, job } = await runLost(t, f, lostCreate(f, { materialize: 'ours' }));
   assert.equal(code, 1);
-  assert.deepEqual([o.category, o.cleanup, o.cleanupComplete], ['infrastructure', { state: 'unknown', reason: 'create_unconfirmed' }, false]);
-  assert.equal(f.calls.some(c => c[0] === 'rm'), false, 'no broadened deletion without an exact ID');
-  // A failure before any create was attempted is still a genuine 'none'.
+  assert.deepEqual([o.category, o.infrastructure, o.install, o.cleanup, o.cleanupComplete], ['infrastructure', 'container_creation_unconfirmed', null, { state: 'complete', reconciled: 'create_unconfirmed' }, true]);
+  assert.deepEqual(f.calls.filter(c => c[0] === 'rm'), [['rm', '--force', CID]], 'removed by the exact ID the name resolved to');
+  assert.equal(f.calls.some(c => c[0] === 'start'), false, 'an adopted container is never started');
+  assert.deepEqual(job.createReconciliation, { state: 'exact', id: CID });
+  assert.deepEqual(records(f), [], 'the intent and the adopted ID record are both gone after verified removal');
+});
+
+test('S32 C3: a foreign, absent or unreadable name is never removed; the durable intent is kept and cleanup is not complete', async t => {
+  for (const [materialize, inspectByName, cleanup] of [
+    ['foreign', null, { state: 'unknown', reason: 'create_name_conflict', retained: true }],
+    ['none', null, { state: 'unverified', reason: 'create_unconfirmed_absent', retained: true }],
+    ['ours', new Error('daemon timeout'), { state: 'unknown', reason: 'create_unconfirmed', retained: true }],
+    ['null', null, { state: 'unknown', reason: 'create_unconfirmed', retained: true }],
+  ]) {
+    const f = engineFixture(t);
+    const { code, o } = await runLost(t, f, lostCreate(f, { materialize, inspectByName }));
+    assert.equal(code, 1, materialize);
+    assert.deepEqual([o.category, o.cleanup, o.cleanupComplete], ['infrastructure', cleanup, false], materialize);
+    assert.equal(f.calls.some(c => c[0] === 'rm'), false, `${materialize}: no deletion without an exact identity`);
+    assert.deepEqual(records(f), ['202-1-1.create.json'], `${materialize}: the create intent is retained`);
+  }
+  // A failure before any create was attempted is still a genuine 'none', and writes no intent.
   const g = engineFixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const before = new JobContainer(POLICY, { engine: g.engine, stage: () => { throw new Error('EPERM'); }, namespace: () => true });
   const logs2 = [];
   await runInContainer({ job: before, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: g.source }, planPath: g.plan, signal: new AbortController().signal, store: recoveryStore({ root: g.storeRoot, create: true }), exporter: completeExport, log: l => logs2.push(l) });
   assert.deepEqual(JSON.parse(logs2.find(l => l.includes('container_outcome'))).cleanup, { state: 'none' });
+  assert.deepEqual(records(g), []);
+});
+
+test('S32 C3: the intent is durable before create is asked, and an unrecordable intent means no create at all', async t => {
+  const f = engineFixture(t);
+  let atCreate = null;
+  const engine = args => { if (args[0] === 'create') atCreate = records(f); return f.engine(args); };
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const job = new JobContainer(POLICY, { engine, stage: () => {}, namespace: () => true });
+  const store = recoveryStore({ root: f.storeRoot, create: true });
+  job.onCreateIntent = intent => store.writeIntent(intent);
+  job.onOwned = record => store.write(record);
+  await job.create(identity(), { source: f.source, plan: f.plan });
+  assert.deepEqual(atCreate, ['202-1-1.create.json']);
+  assert.deepEqual(records(f), ['202-1-1.json'], 'the exact ID record supersedes the intent');
+  const g = engineFixture(t);
+  const refused = new JobContainer(POLICY, { engine: g.engine, stage: () => {}, namespace: () => true });
+  refused.onCreateIntent = () => { throw new Error('ENOSPC'); };
+  await assert.rejects(refused.create(identity(), { source: g.source, plan: g.plan }), /container_intent_unrecorded/);
+  assert.equal(g.calls.some(c => c[0] === 'create'), false);
+  assert.equal(refused.createAttempted, false);
+});
+
+test('S32 C3: a retained intent is recovered by exact name later; a foreign name or unreadable engine keeps it', async t => {
+  const intent = { version: 1, owner: '202-1-1', image: IMAGE, deadlineSeconds: Math.floor(DEADLINE / 1000) };
+  const root = mkdtempSync(join(tmpdir(), 'intent-7905-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const store = recoveryStore({ root: join(root, 'containers'), create: true });
+  store.writeIntent(intent);
+  assert.deepEqual(store.list(), [{ intent }]);
+  assert.throws(() => store.writeIntent(intent), /EEXIST/);
+  const listed = () => readdirSync(join(root, 'containers'));
+  // No intent reconciler configured: never dropped.
+  assert.deepEqual(await recoverRetained(store, { recover: () => 'removed', verifyRemoved: () => true, log: () => {} }), [{ owner: '202-1-1', state: 'intent_unknown_retained' }]);
+  const row = { Id: CID, Name: '/studioos-job-202-1-1', Image: IMAGE, Config: { Labels: { 'vc.axal.studioos.job': '202-1-1' }, Entrypoint: ['/bin/sh'], Cmd: ['-c', 'exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) - 1 ))"'], Env: [`STUDIOOS_JOB_DEADLINE=${intent.deadlineSeconds}`] } };
+  const engineFor = (state) => { const seen = []; const engine = args => {
+    seen.push(args);
+    if (args[0] === 'inspect') { if (state.unreadable) throw new Error('daemon down'); if (state.gone) throw Object.assign(new Error('x'), { stderr: 'Error: No such object' }); return JSON.stringify([state.row]); }
+    if (args[0] === 'rm') { assert.deepEqual(args, ['rm', '--force', CID]); state.gone = !state.survives; return ''; }
+    throw new Error('unexpected ' + args[0]);
+  }; return { engine, seen }; };
+  const recoverWith = state => { const e = engineFor(state); return { e, run: () => recoverRetained(store, { recover: () => assert.fail(), verifyRemoved: () => assert.fail(), recoverIntent: i => JobContainer.recoverIntent(i, { engine: e.engine }), log: () => {} }) }; };
+  let r = recoverWith({ row: { ...row, Image: 'sha256:' + 'f'.repeat(64) } });
+  assert.deepEqual(await r.run(), [{ owner: '202-1-1', state: 'intent_conflict_retained' }]);
+  assert.equal(r.e.seen.some(a => a[0] === 'rm'), false, 'a foreign object under the name is never removed');
+  r = recoverWith({ unreadable: true });
+  assert.deepEqual(await r.run(), [{ owner: '202-1-1', state: 'intent_failed_retained' }]);
+  r = recoverWith({ row, survives: true });
+  assert.deepEqual(await r.run(), [{ owner: '202-1-1', state: 'intent_unverified_retained' }]);
+  assert.deepEqual(listed(), ['202-1-1.create.json']);
+  r = recoverWith({ row });
+  assert.deepEqual(await r.run(), [{ owner: '202-1-1', state: 'intent_removed' }]);
+  assert.deepEqual(r.e.seen.map(a => a.slice(0, 2)), [['inspect', '--type'], ['rm', '--force'], ['inspect', CID], ['inspect', '--type']]);
+  assert.deepEqual(listed(), []);
+  store.writeIntent(intent);
+  r = recoverWith({ gone: true });
+  assert.deepEqual(await r.run(), [{ owner: '202-1-1', state: 'intent_absent' }]);
+  assert.deepEqual(listed(), []);
 });
 
 test('S32 F1/F3: a full-length receipt ends work, export and three removal calls inside the 26-minute Run step', async t => {
@@ -342,8 +449,8 @@ test('S32 F1/F3: a full-length receipt ends work, export and three removal calls
   assert.equal(step, NOW + LINUX_RUN_STEP_MS - RUN_STEP_MARGIN_MS);
   const job = new JobContainer(POLICY, { engine: f.engine, stage: () => {}, namespace: () => true });
   job.workDeadline = Math.min(full.executionDeadline, step);
-  job.create(full, { source: f.source, plan: f.plan });
-  const { timeout } = job.candidateExec({ receipt: full, admitted: { ...live(), identity: full }, phase: 'test' });
+  await job.create(full, { source: f.source, plan: f.plan });
+  const { timeout } = await job.candidateExec({ receipt: full, admitted: { ...live(), identity: full }, phase: 'test' });
   // Work + export reserve + three 30s removal calls cannot pass the wrapper (the old code reached 1,589,999ms).
   assert.ok(NOW + timeout + FINISH_RESERVE_MS <= step, `${NOW + timeout + FINISH_RESERVE_MS} <= ${step}`);
   assert.ok(step < NOW + LINUX_RUN_STEP_MS);
@@ -355,10 +462,111 @@ test('S32 F3: the supervisor applies the Run step wrapper to the job before any 
   const f = engineFixture(t);
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const timeouts = [];
-  const job = new JobContainer(POLICY, { engine: f.engine, stage: () => {}, namespace: () => true,
-    spawnEngine: args => { timeouts.push(job.candidateExec({ receipt: identity(), admitted: live(), phase: 'test' }).timeout); return spawn('/bin/sh', ['-c', 'exit 0'], { stdio: 'ignore' }); } });
+  const job = new JobContainer(POLICY, { engine: f.engine, stage: () => {}, namespace: () => true, spawnEngine: () => spawn('/bin/sh', ['-c', 'exit 0'], { stdio: 'ignore' }) });
+  const exec = job.candidateExec.bind(job);
+  job.candidateExec = async options => { const planned = await exec(options); timeouts.push(planned.timeout); return planned; };
   const step = NOW + 300_000; // earlier than the receipt's NOW + 600_000
   await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: () => {}, stepDeadline: step });
   assert.equal(job.workDeadline, step);
   assert.ok(timeouts.length === 2 && timeouts.every(ms => ms === step - 150_000 - NOW), JSON.stringify(timeouts));
+});
+
+test('S32 F6: the engine client is bounded and interruptible on real processes, and an interrupted call is marked ambiguous', async () => {
+  const { boundedClient, callBudget, ENGINE_CALL_MS } = await import('../../scripts/ci/runners/job-container.mjs');
+  const client = boundedClient('/bin/sh', { spawnProcess: args => spawn('/bin/sh', ['-c', args[0]], { stdio: ['ignore', 'pipe', 'pipe'] }) });
+  assert.equal(await client(['printf ok']), 'ok');
+  await assert.rejects(client(['echo "Error: No such object" >&2; exit 1']), e => e.code === 'engine_call_failed' && e.status === 1 && /No such object/.test(e.stderr) && e.interrupted === false);
+  let started = performance.now();
+  await assert.rejects(client(['sleep 30'], { timeout: 100 }), e => e.code === 'engine_call_timed_out' && e.interrupted === true);
+  assert.ok(performance.now() - started < 5000, 'killed at its timeout, not after the command');
+  const controller = new AbortController(); setTimeout(() => controller.abort(), 50);
+  started = performance.now();
+  await assert.rejects(client(['sleep 30'], { signal: controller.signal }), e => e.code === 'engine_call_cancelled' && e.interrupted === true);
+  assert.ok(performance.now() - started < 5000);
+  await assert.rejects(client(['true'], { signal: controller.signal }), e => e.code === 'engine_call_cancelled' && e.started === false, 'an aborted signal starts nothing');
+  await assert.rejects(client(['true'], { timeout: 0 }), e => e.code === 'engine_budget_exhausted' && e.started === false);
+  await assert.rejects(client(['head -c 1100000 /dev/zero']), e => e.code === 'engine_output_limit');
+  await assert.rejects(boundedClient('/nonexistent/docker')(['version']), e => e.code === 'engine_unavailable' && e.interrupted === false);
+  assert.equal(callBudget(Infinity, 0), ENGINE_CALL_MS);
+  assert.equal(callBudget(1_000, 0), 1_000);
+  assert.throws(() => callBudget(0, 0), /engine_budget_exhausted/);
+});
+
+test('S32 F6: a cancel during a hanging engine call stops it, and removal still runs (it is never cancellable)', async t => {
+  const { boundedClient } = await import('../../scripts/ci/runners/job-container.mjs');
+  const f = engineFixture(t);
+  const hanging = boundedClient('/bin/sh', { spawnProcess: () => spawn('/bin/sh', ['-c', 'sleep 30'], { stdio: ['ignore', 'pipe', 'pipe'] }) });
+  const removalSignals = [];
+  const engine = (args, options) => {
+    if (args[0] === 'start') { f.calls.push(args); return hanging(args, options); }
+    if (args[0] === 'rm' || (args[0] === 'inspect' && f.calls.some(c => c[0] === 'start'))) removalSignals.push(options?.signal ?? null);
+    return f.engine(args);
+  };
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const job = new JobContainer(POLICY, { engine, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
+  const controller = new AbortController(); setTimeout(() => controller.abort(), 50);
+  const logs = [];
+  const started = performance.now();
+  const code = await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: controller.signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: l => logs.push(l) });
+  const o = JSON.parse(logs.find(l => l.includes('container_outcome')));
+  assert.ok(performance.now() - started < 5000, 'the hung start was killed');
+  assert.deepEqual([code, o.category, o.cleanup.state, o.install], [130, 'cancelled', 'complete', null]);
+  assert.ok(removalSignals.length >= 2 && removalSignals.every(s => s === null), 'inspect and rm carry no cancellation signal');
+  assert.deepEqual(records(f), []);
+});
+
+test('S32 F1/F3: every mandatory phase is bounded inside the lifecycle bound; a hung admission or recheck cannot eat the reserves', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const run = async ({ admit = async () => live(), recheck = async () => true }) => {
+    const f = engineFixture(t), seen = [];
+    const engine = (args, options) => { seen.push({ op: args[0], timeout: options?.timeout }); return f.engine(args); };
+    const job = new JobContainer(POLICY, { engine, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
+    // The step wrapper leaves 300ms of work before the 150s finish reserve.
+    const step = NOW + FINISH_RESERVE_MS + 300, logs = [];
+    const started = performance.now();
+    const code = await runInContainer({ job, executionIsolation: async () => true, admit, recheck, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: l => logs.push(l), stepDeadline: step });
+    return { code, f, seen, step, elapsed: performance.now() - started, o: JSON.parse(logs.find(l => l.includes('container_outcome'))) };
+  };
+  const never = () => new Promise(() => {});
+  for (const [name, options, infrastructure] of [['admission', { admit: never }, 'admission_budget_exhausted'], ['recheck', { recheck: never }, 'recheck_budget_exhausted']]) {
+    const r = await run(options);
+    assert.ok(r.elapsed < 3000, `${name}: stopped at the work deadline (${r.elapsed}ms)`);
+    assert.deepEqual([r.code, r.o.infrastructure, r.o.test?.status ?? null, r.o.cleanup.state], [1, infrastructure, name === 'recheck' ? 'not_run' : null, 'complete'], name);
+    // Every engine call carried a budget no larger than ENGINE_CALL_MS and no later than the bound.
+    assert.ok(r.seen.every(c => Number.isSafeInteger(c.timeout) && c.timeout > 0 && c.timeout <= 30_000 && NOW + c.timeout <= r.step), JSON.stringify(r.seen));
+    // Pre-test calls end by the work deadline; removal calls end by the bound.
+    const removal = r.seen.slice(r.seen.findIndex(c => c.op === 'rm') - 1);
+    assert.deepEqual(removal.map(c => c.op), ['inspect', 'rm', 'inspect'], name);
+    for (const c of r.seen.slice(0, r.seen.length - 3)) assert.ok(NOW + c.timeout <= r.step - FINISH_RESERVE_MS, `${name}: ${c.op} ${c.timeout}`);
+  }
+});
+
+test('S32 F1/F3: a work deadline already past refuses create before any engine call, and the export window is the bound less removal', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const f = engineFixture(t), logs = [];
+  let exportDeadline = null;
+  const job = new JobContainer(POLICY, { engine: f.engine, stage: () => {}, namespace: () => true });
+  await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: async a => { exportDeadline = a.deadline; return { state: 'complete' }; }, log: l => logs.push(l), stepDeadline: NOW + FINISH_RESERVE_MS });
+  const o = JSON.parse(logs.find(l => l.includes('container_outcome')));
+  assert.deepEqual([o.infrastructure, o.cleanup.state, f.calls.length, exportDeadline], ['insufficient_execution_budget', 'none', 0, null]);
+  const step = NOW + 400_000;
+  const g = engineFixture(t), job2 = new JobContainer(POLICY, { engine: g.engine, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
+  await runInContainer({ job: job2, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: g.source }, planPath: g.plan, signal: new AbortController().signal, store: recoveryStore({ root: g.storeRoot, create: true }), exporter: async a => { exportDeadline = a.deadline; return { state: 'complete' }; }, log: () => {}, stepDeadline: step });
+  assert.equal(exportDeadline, step - 90_000);
+});
+
+test('S32 F1/F3: removal that starts late still ends by the bound: inspect, rm and the absence check get only what is left', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const f = engineFixture(t), seen = [];
+  const engine = (args, options) => { seen.push({ op: args[0], timeout: options?.timeout, at: Date.now() }); return f.engine(args); };
+  const job = new JobContainer(POLICY, { engine, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
+  const step = NOW + 400_000;
+  // The export returns 10s before the bound (it overran its own window); removal must not run past the bound.
+  const exporter = async () => { t.mock.timers.tick(step - 10_000 - Date.now()); return { state: 'complete' }; };
+  const logs = [];
+  await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter, log: l => logs.push(l), stepDeadline: step });
+  const removal = seen.slice(-3);
+  assert.deepEqual(removal.map(c => c.op), ['inspect', 'rm', 'inspect']);
+  assert.ok(removal.every(c => c.timeout > 0 && c.at + c.timeout <= step), JSON.stringify(removal));
+  assert.equal(JSON.parse(logs.find(l => l.includes('container_outcome'))).cleanup.state, 'complete');
 });
