@@ -20,9 +20,9 @@ import { downloadCsv } from '../lib/csvExport';
 import { useAuth } from '../hooks/useAuthSync';
 import Lightbox from '../ui/Lightbox';
 import Sheet from '../ui/Sheet.jsx';
-import WorkerRail from '../ui/WorkerRail';
 import { usePhoneWidth } from '../ui/phone/usePhoneWidth';
 import PortfolioFrame from './portfolio/PortfolioFrame';
+import WaterfallRail from './investor/WaterfallRail';
 import { FinancialMetric, Skeleton, SourceFailure } from './portfolio/PortfolioParts';
 import {
   ASSUMPTION_CHIP, LIMITS, MODEL_LINE, NAME_MAX, NOT_MODELLED, RELATION_LINE, barLabel, bodyOf, carryOf, changesSince,
@@ -553,10 +553,7 @@ export default function WaterfallPage() {
       description={DESCRIPTION}
       testid="exit-waterfall"
       tools={tools}
-      rail={(
-        <WorkerRail workspace="Portfolio" role="investor" className="pf-rail" data-testid="waterfall-rail"
-          note="The Exit Waterfall is a model of a split, not a distribution. Its figures come from the fund's recorded commitments and the inputs you type." />
-      )}
+      rail={<WaterfallRail />}
     >
       <p className="pew-print-banner" aria-hidden="true">Model, not a distribution · provisional · nothing here is recorded</p>
       {fundRead.status === 'loading' ? <section className="pf-card" aria-label="Loading the model"><Skeleton rows={3} /></section> : null}

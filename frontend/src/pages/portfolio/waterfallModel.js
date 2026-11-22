@@ -35,6 +35,9 @@ export const NOT_MODELLED = 'Management fee, GP commit, deal-by-deal (American) 
 
 const num = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean' ? NaN : Number(v));
 const isNum = (v) => Number.isFinite(num(v));
+/** A percentage typed on the page ↔ the fraction the engine reads. */
+const fromPct = (v) => num(v) / 100;
+const toPct = (f) => Number(f) * 100;
 
 /** Whole US dollars: $19,500,000. Null when there is no number. */
 export function dollars(v) {
@@ -140,8 +143,8 @@ export function bodyOf(inputs) {
   if (Object.keys(inputErrors(inputs)).length) return null;
   return {
     exit_value: parseMoney(inputs.exit) ?? 0,
-    carry_pct: num(inputs.carry) / 100,
-    hurdle_rate: num(inputs.hurdle) / 100,
+    carry_pct: fromPct(inputs.carry),
+    hurdle_rate: fromPct(inputs.hurdle),
     years_held: num(inputs.years),
     gp_catchup: inputs.catchup !== false,
   };
@@ -391,8 +394,8 @@ export function compareOf(a, b) {
 export function tiersCsvOf({ fund, scenario, body, carry, result, modelledAt }) {
   const head = ['fund', 'scenario', 'exit_value', 'carry_pct', 'carry_source', 'hurdle_pct', 'years_held', 'gp_catchup', 'tier_order', 'tier', 'to', 'amount', 'running_total', 'modelled_at'];
   const rows = tiersOf(result).map((t) => [
-    fund?.name ?? '', scenario ?? '', Math.round(body.exit_value), body.carry_pct * 100, carry?.state === 'fund' || carry?.state === 'lp-record' ? 'fund terms' : 'assumption',
-    body.hurdle_rate * 100, body.years_held, body.gp_catchup ? 'on' : 'off', t.order, t.name, t.to, t.amount, t.running, modelledAt ?? '',
+    fund?.name ?? '', scenario ?? '', Math.round(body.exit_value), toPct(body.carry_pct), carry?.state === 'fund' || carry?.state === 'lp-record' ? 'fund terms' : 'assumption',
+    toPct(body.hurdle_rate), body.years_held, body.gp_catchup ? 'on' : 'off', t.order, t.name, t.to, t.amount, t.running, modelledAt ?? '',
   ]);
   return { filename: 'exit-waterfall-tiers.csv', header: ['Model, not a distribution'], rows: [head, ...rows] };
 }
