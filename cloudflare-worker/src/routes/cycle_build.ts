@@ -948,7 +948,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   // every founder (a segment and a vesting bar each), so every founder is read;
   // investors and option holders are not, nor is their agreement.
   const founderRows = rows(await env.DB.prepare(
-    `SELECT h.id, h.user_id, h.name, h.founder_role, h.ownership_pct, h.shares,
+    `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares, h.user_id,
             v.start_date, v.cliff_months, v.total_months, v.vested_shares,
             (SELECT d.status FROM documents d
               JOIN cofounder_agreement_parties party ON party.document_id = d.id
