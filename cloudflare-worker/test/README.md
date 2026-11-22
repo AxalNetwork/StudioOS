@@ -399,6 +399,9 @@ catalogue version only in the fixture.
 `research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
 
 `research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+`research_company_read_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
 `positions_unavailable_6201.test.ts` (D6201) checks each failed Portfolio distributions, KPI definition and submission read against real SQLite without successful empty-set fallbacks.
 `research_project_subject_notes_7818.test.ts` verifies the D7818 contract against synthetic inputs and the canonical migrated schema.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.

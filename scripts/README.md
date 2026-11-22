@@ -248,6 +248,7 @@ pull.
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
+| `ops/` | D8082: read-only checks of console settings no pull request can make. `check-github-admin.mjs` diffs the live GitHub admin settings against `documentation/operations/GITHUB_ADMIN_BASELINE.md` for `admin-drift.yml`. |
 | `landing-bot/` | #6467: the landing bot's shared rules (`rules.mjs`: mode, eligibility, breakers, attempts, budgets, the path guard, give-up text) and `workflowGuard.mjs`, the helper each bot workflow's test calls. No workflow; tests in `frontend/test/landing_bot_core_6467.test.mjs`. |
 | `deploy/` | D8073: deploy provenance. `record-deployment.mjs` writes one row to D1 `deployments` through `POST /api/internal/deployments` for the deploy a run just shipped and appends the same line to the deploy summary; its rules and tests are `lib/deployProvenance.mjs` and `lib/deployProvenance.test.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |

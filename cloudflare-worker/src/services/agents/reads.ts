@@ -1,6 +1,7 @@
 /**
- * D1528 (#3847, E3 of #3742) — the read functions a run's `context` step may
- * call: one per rule book `reads` key (`catalogue.ts` READ_KEYS). A key with
+ * D1528 (#3847, E3 of #3742) — the read functions a run's context build may
+ * call (once per run, in the `run` step, D7076; `readAll` runs them a few at
+ * a time): one per rule book `reads` key (`catalogue.ts` READ_KEYS). A key with
  * no function here is refused `read_unavailable`, never skipped: an agent
  * whose rule book names a read it cannot have does not run on less than it
  * was told it would see.
@@ -783,4 +784,26 @@ export async function readOne(env: Env, key: string, c: ReadContext, readers: Pa
   if (smaller) return { untrusted: true, data: smaller.data, truncated: true };
   // Nothing whole can be dropped: say so, rather than hand the model half a document.
   return { untrusted: true, data: null, incomplete: true, reason: 'too_large' };
+}
+
+/**
+ * D7076 (#7076): how many of one run's reads are in flight at once. The reads do not depend on each other, so they
+ * run together, but a small fixed pool keeps a long rule book from opening every D1 query at the same moment.
+ */
+export const READ_CONCURRENCY = 4;
+
+/** Every key's read, in the book's order, at most `READ_CONCURRENCY` at a time. A read that throws rejects the whole set. */
+export async function readAll(env: Env, keys: readonly string[], c: ReadContext, readers: Partial<Record<string, Reader>> = READERS,
+  concurrency = READ_CONCURRENCY): Promise<ReadResult[]> {
+  const out: ReadResult[] = new Array(keys.length);
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < keys.length) {
+      const i = next++;
+      try { out[i] = await readOne(env, keys[i], c, readers); } catch (e) { failed = true; throw e; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, keys.length)) }, worker));
+  return out;
 }
