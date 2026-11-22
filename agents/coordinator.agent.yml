@@ -1,0 +1,38 @@
+# Session 1's coordinator (#6312, the `coordinator-audit` skill): snapshots the
+# backlog, plans verified findings, then posts notes, fixes labels, closes
+# finished issues and files tasks. It never merges, approves, pushes code or
+# edits main.
+name: coordinator
+kind: platform
+owner: S01
+identity: session    # S01's own token (GH_TOKEN or GITHUB_TOKEN); #8061's read-only studioos-coordinator App serves #5580, not this pass
+capabilities:
+  - code.read        # reads code at the snapshot's main sha
+  - issue.read
+  - issue.write      # notes, labels, closes and new tasks (coordinator.mjs apply and file)
+models:
+  route: none        # the session is the model; the platform makes no model call for it
+  allowed: []
+resources:
+  cpu: none
+  memory: none
+limits:
+  runtime: none
+  tokens: none
+  parallel_tasks: 1   # one pass at a time, under one run id
+  child_agents: none  # the skill's workflow starts reader and verifier agents per chunk of 8 issues; no cap on chunks
+  prs: 0
+network:
+  internet: true
+  egress:
+    - api.github.com
+allowed_paths: []    # writes no repository file
+runner_pool: none    # a Claude Code session, not an Actions runner
+approval:
+  external_actions: not-required
+escalation: owner    # a security finding goes to the owner privately (the skill's PRIVATE step)
+status: live
+sources:
+  - scripts/coordinator.mjs
+  - scripts/lib/coordinator.mjs
+  - .claude/skills/coordinator-audit/SKILL.md

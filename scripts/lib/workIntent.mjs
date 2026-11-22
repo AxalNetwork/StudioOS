@@ -28,7 +28,9 @@ import { criticalReason, DEPENDENCY_CLASSES } from './prRisk.mjs';
 export const ACTIONS = ['proceed', 'coordinate', 'wait', 'serialize'];
 export const STALE_BASE_HOURS = 72;
 export const MAX_CLAIM_HOPS = 7;
-export const STANDARD_SLOTS = 37;
+export const STANDARD_SLOTS = 39;
+/** The named admin slot (D8059): console configuration, never a build task. Its label is declared in labels.yml. */
+export const ADMIN_SLOT = 'chatgptpro';
 const SHA = /^[a-f0-9]{40}$/;
 const HOUR = 3600000;
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -48,9 +50,10 @@ export function exclusiveReason(path) {
   return null;
 }
 
-/** `S03`, `s39` or `slot:S03` → `S03`. Unknown is a slot past S37 with no `slot:SNN` label in the repository. */
+/** `S03`, `s39` or `slot:S03` → `S03`; the admin slot in any case → `chatgptpro`. Unknown is a slot past S39 with no `slot:SNN` label in the repository. */
 export function checkSlot(raw, knownSlots = null) {
   const text = typeof raw === 'string' ? raw.trim().replace(/^slot:/i, '') : '';
+  if (text.toLowerCase() === ADMIN_SLOT) return { ok: true, slot: ADMIN_SLOT };
   if (!/^s\d{2,3}$/i.test(text)) return { ok: false, reason: `slot "${String(raw ?? '').slice(0, 40)}" is not slot:SNN` };
   const slot = canonicalSlot(text);
   if (!slot) return { ok: false, reason: `slot "${text}" is not a slot` };

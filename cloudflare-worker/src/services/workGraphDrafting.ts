@@ -29,7 +29,7 @@
  */
 import type { Env } from '../types';
 import {
-  WORK_GRAPH_DEPS, advanceHead, createRevision, registerAsset,
+  advanceHead, createRevision, registerAsset,
   type AdvanceHeadResult, type CreateRevisionResult, type Refusal, type RegisterAssetResult,
 } from './workGraphRevisions';
 import type { AccessClass, Actor, AssetKind, Scope, SourceRef, ValidationContext } from './workGraphContracts';
@@ -168,9 +168,21 @@ export async function proposeCandidate(
     } else {
       const res = await env.DB.prepare(
         `INSERT INTO pitch_deck_proposals (project_id, base_deck_id, slides, title, method_id, created_by)
-         VALUES (?, ?, ?, ?, NULL, ?)`,
-      ).bind(t.projectId, t.baseDeckId, JSON.stringify(slides), title, t.createdByUserId || null).run();
-      id = Number((res as any)?.meta?.last_row_id ?? 0);
+         SELECT ?, ?, ?, ?, NULL, ?
+          WHERE NOT EXISTS (SELECT 1 FROM pitch_deck_proposals WHERE project_id = ?)
+            AND EXISTS (SELECT 1 FROM work_graph_assets WHERE asset_uid = ? AND head_revision_uid = ?)`,
+      ).bind(t.projectId, t.baseDeckId, JSON.stringify(slides), title, t.createdByUserId || null,
+        t.projectId, input.assetUid, input.headRevisionUid).run();
+      if (!(res as any)?.meta?.changes) {
+        const raced = await env.DB.prepare(
+          'SELECT id, slides FROM pitch_deck_proposals WHERE project_id = ? ORDER BY id LIMIT 1',
+        ).bind(t.projectId).first<{ id: number; slides: string }>();
+        if (!raced) return { ok: false, code: 'stale_revision', ids: [input.headRevisionUid] };
+        if (await digestOfSlides(raced.slides) !== digest) return { ok: false, code: 'proposal_waiting', ids: [String(raced.id)] };
+        id = Number(raced.id);
+      } else {
+        id = Number((res as any)?.meta?.last_row_id ?? 0);
+      }
     }
     source = { store: 'd1_record', locator: 'pitch_deck_proposals', id: String(id), revision: digest };
   } else {
@@ -261,9 +273,14 @@ async function recordHead(env: Pick<Env, 'DB'>, ctx: ValidationContext, a: {
     mediaProfile: UNITS_MEDIA_PROFILE, source: a.doc.source, author: a.author, idempotencyKey: `${a.idempotencyKey}:rev`,
   });
   if (!rev.ok) return rev;
+  // Replays must hash the same approval timestamp, even when the HTTP retry comes later.
+  const recorded = await env.DB.prepare(
+    'SELECT created_at FROM work_graph_revisions WHERE revision_uid = ? AND asset_uid = ?',
+  ).bind(rev.revisionUid, a.assetUid).first<{ created_at: string }>();
+  if (!recorded) throw new Error('Recorded WorkGraph revision unavailable');
   return advanceHead(env, ctx, {
     assetUid: a.assetUid, expectedRevisionUid: a.expected, revisionUid: rev.revisionUid, actor: a.author,
-    approval: { ref: a.approval.ref, contentDigest: digest, reviewer: a.approval.reviewer, decidedAt: WORK_GRAPH_DEPS.now().toISOString() },
+    approval: { ref: a.approval.ref, contentDigest: digest, reviewer: a.approval.reviewer, decidedAt: recorded.created_at },
     idempotencyKey: `${a.idempotencyKey}:head`,
   });
 }
