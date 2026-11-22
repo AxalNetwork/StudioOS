@@ -17,7 +17,7 @@ import { suggestionHref, suggestionsView } from '../src/pages/cycles/companyCrea
 import { addressFormFor, formsFor, suggestedFilingValues } from '../src/pages/cycles/forms.js';
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/build/company-creation?project_id=7'] }, el));
-const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
+const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const ADD = { text: 'Add filing', href: '/build/company-creation/new?project_id=7', state: { under: '/build/company-creation?project_id=7' } };
 const OK = {
   state: 'ok', pack: 'us_de_ccorp', pack_label: 'US Delaware C-Corp', source: 'the company record', already_added: 1, dismissed: 1,
