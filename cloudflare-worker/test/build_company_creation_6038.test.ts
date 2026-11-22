@@ -13,7 +13,7 @@ import { buildReads, seedHolders, PROJECT } from './_build_reads.ts';
 import { FORMED_SOURCE } from '../src/services/buildCompanyCreation.ts';
 
 const page = (h: Awaited<ReturnType<typeof buildReads>>, user = 1) => h.get(`/api/cycles/build/modules/company-creation?project=${PROJECT}`, user);
-const ahead = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+const ahead = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10); // clock-ok: relative
 
 async function withVenture(setup: (db: any) => void) {
   const h = await buildReads(2);
