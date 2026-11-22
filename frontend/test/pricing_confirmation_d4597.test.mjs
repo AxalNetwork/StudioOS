@@ -119,7 +119,7 @@ async function mount(url, over = {}) {
   })));
   stub(newDeckApi, 'keepSlides', over.keepSlides || (async (_id, b) => (b.save ? { deck: { id: 12, version: 4, title: 'Pitch deck', slides: BUILT_SLIDES.slice(0, 3), theme: null } } : { proposal: { id: 77, slides: BUILT_SLIDES } })));
   stub(newDeckApi, 'regenerateCard', over.regenerateCard || (async () => { throw new Error('not stubbed'); }));
-  stub(deckSourcesApi, 'list', async () => ({ project_id: 1, items: ITEMS, coverage: COVERAGE }));
+  stub(deckSourcesApi, 'list', over.sources || (async () => ({ project_id: 1, items: ITEMS, coverage: COVERAGE })));
   stub(deckEditorApi, 'brandKit', over.kit || (async () => ({ project_id: 1, kit: null })));
   stub(deckImagesApi, 'plan', async () => ({ capability: { available: false, reason: 'Image generation is not available on this deployment.' }, cards: [] }));
   const restore = installDocument();
@@ -391,4 +391,20 @@ test('#6056: generating blocks navigation and duplicate confirmations', async ()
     await act(async () => { finish({ proposal: { id: 77, slides: BUILT_SLIDES } }); await first; });
     assert.equal(m.pr(m.by('pitch-new-step-6'))['aria-current'], 'step');
   } finally { await m.unmount(); }
+});
+
+test('#6056: price summary distinguishes unreadable, pending and a recorded zero source count', async () => {
+  for (const [sources, expected] of [
+    [async () => { throw new Error('Synthetic sources unavailable'); }, /Sources unavailable/],
+    [() => new Promise(() => {}), /Reading sources/],
+    [async () => ({ project_id: 1, items: [], coverage: { slots: 0, filled: 0, by_grade: { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0 }, not_recorded: 0, unreadable: 0 } }), /0 recorded sources selected/],
+  ]) {
+    const m = await mount(`${NEW_PATH}?project_id=1`, { sources });
+    try {
+      await m.press(m.by('pitch-new-step-4'));
+      const price = m.text(m.by('pitch-new-price'));
+      assert.match(price, expected);
+      if (!expected.source.startsWith('0')) assert.doesNotMatch(price, /0 recorded sources selected/);
+    } finally { await m.unmount(); }
+  }
 });

@@ -525,7 +525,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
           <dl className="m-0 grid grid-cols-[80px_minmax(0,1fr)] gap-2 text-xs">
             <dt>Audience</dt><dd className="m-0">{label}</dd>
             <dt>Round</dt><dd className="m-0 break-words">{ctx.round ? roundLine(ctx.round) : NO_ROUND}</dd>
-            <dt>Sources</dt><dd className="m-0">{recordedKeys.length - exclude.length} recorded sources selected</dd>
+            <dt>Sources</dt><dd className="m-0">{sources.status === 'ok' ? `${recordedKeys.length - exclude.length} recorded sources selected` : sources.status === 'loading' ? 'Reading sources…' : 'Sources unavailable'}</dd>
             <dt>Outline</dt><dd className="m-0">{rows.length} cards</dd>
             <dt>Writes</dt><dd className="m-0">A proposal. Nothing is kept until you accept and save.</dd>
           </dl>
