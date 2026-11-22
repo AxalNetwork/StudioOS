@@ -104,9 +104,10 @@ export const EXPORT_ROW_CAP = 5000;
 const DAY_MS = 86_400_000;
 const CHAIN_DEPTH = 50;
 
+/** A refusal of the query: a code and the sentence we wrote for it (never provider or database text). */
 export class ObservationQueryError extends Error {
-  code: string; status: number;
-  constructor(code: string, message: string, status = 400) { super(message); this.code = code; this.status = status; }
+  code: string; status: number; sentence: string;
+  constructor(code: string, sentence: string, status = 400) { super(code); this.code = code; this.status = status; this.sentence = sentence; }
 }
 
 export interface ObservationFilters {

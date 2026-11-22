@@ -18,7 +18,7 @@ import {
 const app = new Hono<{ Bindings: Env }>();
 
 const refusal = (c: any, error: unknown) => {
-  if (error instanceof ObservationQueryError) return refuse(c, error.status, { code: error.code, message: error.message });
+  if (error instanceof ObservationQueryError) return refuse(c, error.status, { code: error.code, message: error.sentence });
   throw error;
 };
 

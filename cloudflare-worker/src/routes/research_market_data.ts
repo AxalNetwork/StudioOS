@@ -41,7 +41,7 @@ app.get('/market-data/export.csv',async c=>{
     const { rows, omitted } = await exportObservations(c.env, marketDataExportFilters(code));
     return csvResponse(observationsCsv(rows), 'research-market-data.csv', { 'X-Export-Rows': String(rows.length), 'X-Export-Omitted': JSON.stringify(omitted) });
   } catch (error) {
-    if (error instanceof ObservationQueryError) return refuse(c, error.status, { code: error.code, message: error.message });
+    if (error instanceof ObservationQueryError) return refuse(c, error.status, { code: error.code, message: error.sentence });
     throw error;
   }
 });
