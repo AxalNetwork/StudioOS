@@ -1,14 +1,20 @@
 /** D6237: fund-register contact corrections and safe removal, with transactional actor history. */
 import type { Env } from '../types';
-import { majorToMinor } from '../../../frontend/src/lib/money.js';
-const dollarsToCents = (value: unknown) => majorToMinor(value, 'USD');
+import { parseMinor } from '../../../frontend/src/lib/money.js';
 import type { LimitedPartner } from '../models/funds';
+function dollarsToCents(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const parsed = parseMinor(String(value), 'USD');
+  return parsed.ok ? parsed.minor : null;
+}
 
 const FIELDS = new Set(['name', 'email', 'commitment_amount', 'status']);
 export class LpMaintenanceError extends Error {
   code: string;
   status: number;
-  constructor(code: string, message: string, status = 400) { super(message); this.code = code; this.status = status; }
+  /** A public sentence authored here; never database/provider diagnostics. */
+  reason: string;
+  constructor(code: string, reason: string, status = 400) { super(reason); this.code = code; this.status = status; this.reason = reason; }
 }
 export function lpPatch(body: unknown): Record<string, string | number | null> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new LpMaintenanceError('lp_patch_invalid', 'Send the LP fields to correct.');
@@ -17,7 +23,7 @@ export function lpPatch(body: unknown): Record<string, string | number | null> {
   const patch: Record<string, string | number | null> = {};
   for (const [key, value] of entries) {
     if (key === 'commitment_amount') {
-      if (typeof value !== 'number' || value < 0 || dollarsToCents(value) == null) throw new LpMaintenanceError('lp_commitment_invalid', 'Commitment must be a non-negative dollar amount within the supported range.');
+      if (typeof value !== 'number' || dollarsToCents(value) == null) throw new LpMaintenanceError('lp_commitment_invalid', 'Commitment must be a non-negative dollar amount with at most two decimal places within the supported range.');
       patch[key] = value;
     } else if (key === 'status') {
       if (typeof value !== 'string' || !['committed', 'active', 'redeemed'].includes(value)) throw new LpMaintenanceError('lp_status_invalid', 'Status must be committed, active or redeemed.');
@@ -32,8 +38,6 @@ export function lpPatch(body: unknown): Record<string, string | number | null> {
   return patch;
 }
 const called = `(SELECT COALESCE(SUM(COALESCE(cc.amount_cents, ROUND(cc.amount * 100))), 0) FROM capital_calls cc WHERE cc.limited_partner_id = limited_partners.id)`;
-const noHistory = `NOT EXISTS (SELECT 1 FROM capital_calls cc WHERE cc.limited_partner_id = limited_partners.id)
-  AND NOT EXISTS (SELECT 1 FROM capital_call_receipts r WHERE r.limited_partner_id = limited_partners.id)`;
 async function existing(env: Env, fundId: number, lpId: number) {
   const row = await env.DB.prepare('SELECT * FROM limited_partners WHERE id = ? AND fund_id = ?').bind(lpId, fundId).first<LimitedPartner>();
   if (!row) throw new LpMaintenanceError('lp_not_found', 'LP not found.', 404);
@@ -65,7 +69,8 @@ export async function removeLp(env: Env, fundId: number, lpId: number, actorId: 
   await existing(env, fundId, lpId);
   // No soft-delete columns or established LP deletion pattern exist. Preserve who/when in the append-only activity log.
   const result = await env.DB.batch([
-    env.DB.prepare(`DELETE FROM limited_partners WHERE id = ? AND fund_id = ? AND ${noHistory} RETURNING id`).bind(lpId, fundId),
+    env.DB.prepare(`DELETE FROM limited_partners WHERE id = ? AND fund_id = ? AND NOT EXISTS (SELECT 1 FROM capital_calls cc WHERE cc.limited_partner_id = limited_partners.id)
+      AND NOT EXISTS (SELECT 1 FROM capital_call_receipts r WHERE r.limited_partner_id = limited_partners.id) RETURNING id`).bind(lpId, fundId),
     audit(env, actorId, fundId, lpId, 'lp_removed', []),
     env.DB.prepare(`UPDATE vc_funds SET lp_count = (SELECT COUNT(*) FROM limited_partners WHERE fund_id = ?), updated_at = datetime('now')
       WHERE id = ? AND changes() > 0`).bind(fundId, fundId),

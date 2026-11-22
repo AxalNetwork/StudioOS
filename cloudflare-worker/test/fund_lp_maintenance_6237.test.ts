@@ -112,3 +112,12 @@ test('D6237 removal rechecks newly arrived history inside the mutation',async()=
     assert.equal((await f.call('DELETE')).status,409);assert.ok(f.row());assert.deepEqual(f.audits(),[]);
   }finally{f.close();}
 });
+
+test('D6237 commitment precision cannot round a below-call amount up across its floor',async()=>{
+  const f=fixture();try{
+    f.line();assert.equal((await f.call('PATCH',100,{commitment_amount:249.999})).status,400);
+    assert.equal(f.row().commitment_amount,1000);assert.deepEqual(f.audits(),[]);
+    assert.equal((await f.call('PATCH',101,{commitment_amount:0.29})).status,200);
+    assert.equal(f.db.prepare('SELECT commitment_amount FROM limited_partners WHERE id=101').get()?.commitment_amount,0.29);
+  }finally{f.close();}
+});

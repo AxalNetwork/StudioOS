@@ -12,7 +12,7 @@ const r = new Hono<{ Bindings: Env }>();
 const id = (raw: string) => /^[1-9]\d*$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : 0;
 function failure(c: any, error: unknown) {
   if (error instanceof Response) return error;
-  if (error instanceof LpMaintenanceError) return refuse(c, error.status, { code: error.code, message: error.message });
+  if (error instanceof LpMaintenanceError) return refuse(c, error.status, { code: error.code, message: error.reason });
   const message = String((error as Error)?.message || '');
   if (AUTH_ERROR_STATUSES[message]) return c.json({ detail: message }, AUTH_ERROR_STATUSES[message]);
   throw error;
