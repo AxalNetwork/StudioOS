@@ -24,6 +24,7 @@ export const ALERT_KINDS = Object.freeze({
   'main-red': { title: '[alert] main is red', label: 'main CI' },
   'review-blocked': { title: '[alert] the PR reviewer is not reviewing', label: 'PR reviewer' },
   queue: { title: '[alert] the Actions queue is backed up', label: 'Actions queue' },
+  'queue-deadline': { title: '[alert] merge queue candidate nearing response deadline', label: 'Merge queue deadline' },
   'queue-stalled': { title: '[alert] merge queue stalled', label: 'Merge queue' },
   'file-backup': { title: '[alert] file recovery backup unhealthy', label: 'File recovery backup' },
   scan: { title: SCAN_ALERT_TITLE, label: 'Main scan' },
@@ -309,6 +310,47 @@ export function queueState({ queued, oldestCreatedAt, now = Date.now(), threshol
   };
 }
 
+/** D5974: one source for warning/hysteresis shares; the response deadline comes from live main rules. */
+export const QUEUE_DEADLINE_DEFAULTS = Object.freeze({ warnShare: 0.8, clearShare: 0.7 });
+export function queueDeadlineState({ runs, required, activeHeads, deadlineMinutes, now, issueOpen = false, warnShare = QUEUE_DEADLINE_DEFAULTS.warnShare }) {
+  const unknown = () => ({active:null,candidates:[],unknown:true});
+  if(!Array.isArray(runs)||!Array.isArray(required)||!required.length||!Array.isArray(activeHeads)||!Number.isFinite(now)||!Number.isFinite(deadlineMinutes)||deadlineMinutes<=0||!Number.isFinite(warnShare)||warnShare<=0||warnShare>1) return unknown();
+  if(activeHeads.some(h=>!/^([a-f0-9]{40})$/.test(h?.sha??'')||!Number.isSafeInteger(h?.pr)||h.pr<1)) return unknown();
+  if(required.some(r=>typeof (typeof r==='string'?r:r?.context)!=='string'||!(typeof r==='string'?r:r.context))) return unknown();
+  const share=issueOpen?warnShare*(QUEUE_DEADLINE_DEFAULTS.clearShare/QUEUE_DEADLINE_DEFAULTS.warnShare):warnShare;
+  const candidates=[];let unread=false;
+  for(const h of activeHeads) {
+    const matches=runs.filter(r=>r?.head_sha===h.sha && r.event==='merge_group' && /^gh-readonly-queue\/main\//.test(r.head_branch??''));
+    if(!matches.length) {unread=true;continue;}
+    const latest=[...matches].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||Number(b.run_attempt??1)-Number(a.run_attempt??1))[0];
+    if(latest.conclusion==='cancelled') continue;
+    const requested=Math.min(...matches.map(r=>Date.parse(r.created_at)));
+    if(!Number.isFinite(requested)||requested>now) {unread=true;continue;}
+    const ageMinutes=(now-requested)/60000;
+    if(ageMinutes<deadlineMinutes*share) continue;
+    const checks=latest.checks;
+    const pending=required.flatMap(item=>{
+      const name=typeof item==='string'?item:item?.context;
+      if(typeof name!=='string'||!name) {unread=true;return [];}
+      if(!Array.isArray(checks)) return [{name,unknown:true}];
+      const found=checks.filter(c=>c?.name===name&&(!item.integration_id||c.app?.id===item.integration_id))
+        .sort((a,b)=>Number(b.id??0)-Number(a.id??0))[0];
+      return found?.status==='completed'?[]:[{name,unknown:!found}];
+    });
+    if(pending.length) candidates.push({sha:h.sha,pr:h.pr,ageMinutes:Math.floor(ageMinutes),pending,unknown:pending.some(p=>p.unknown)});
+  }
+  return {active:candidates.length?true:unread?null:false,candidates,unknown:unread};
+}
+/** Bounded public metadata only; also used by the existing durable alert intent sanitizer. */
+export function safeDeadlineCandidates(list) {
+  const text=v=>String(v??'').replace(/[\u0000-\u001f\u007f<>&\\`*_|\[\]]/g,' ').replaceAll('@',' at ').replace(/\s+/g,' ').trim().slice(0,120);
+  return (Array.isArray(list)?list:[]).slice(0,10).flatMap(c=>{
+    if(!/^[a-f0-9]{40}$/.test(c?.sha??'')||!Number.isSafeInteger(c.pr)||c.pr<1||!Number.isSafeInteger(c.ageMinutes)||c.ageMinutes<0) return [];
+    const pending=(Array.isArray(c.pending)?c.pending:[]).slice(0,30).map(p=>({name:text(p?.name),unknown:p?.unknown===true})).filter(p=>p.name);
+    return pending.length?[{sha:c.sha,pr:c.pr,ageMinutes:c.ageMinutes,pending}]:[];
+  });
+}
+
 /** The failing test names in TAP output (`not ok N - name`), de-duplicated, at most `max`. */
 export function failingTests(tap, max = 15) {
   const out = [];
@@ -400,6 +442,10 @@ export function message(kind, action, facts = {}) {
       return `:warning: *Merge queue stalled.* The same failure is in more than one queue chain, so ejecting one PR will not clear it.${run}${issue}\n${ids.map(stallLine).join('\n')}${more}\nUntil a queue CI run passes: add no queue entries and do not re-queue an ejected PR. The one repair linked on the alert is the exception; the owner moves it to the front (D5604, D7125).`;
     }
     return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;
+  }
+  if (kind === 'queue-deadline') {
+    const rows=safeDeadlineCandidates(facts.deadlineCandidates);
+    return `:warning: *Active merge-queue candidates nearing the response deadline.*${run}${issue}\n${rows.length?rows.map(c=>`#${c.pr} (${c.sha.slice(0,12)}), age ${c.ageMinutes} min: ${c.pending.map(p=>`${p.name}${p.unknown?' (unknown/unreadable)':''}`).join(', ')}`).join('\n'):'Candidate evidence is unknown; inspect the reporter run.'}\nPending required checks are named above; this warning changes no timeout, queue entry or retry policy.`;
   }
   if (kind === 'file-backup') return `:warning: *File recovery backup unhealthy* (${facts.backupReason || 'unavailable'}).${run}${issue} Check the private heartbeat and both copies; no live object content is included in this alert.`;
   if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
