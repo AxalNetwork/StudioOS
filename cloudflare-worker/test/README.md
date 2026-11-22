@@ -1,5 +1,7 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
+
 `research_global_funds_7326.test.ts` replays the worldwide manager import over
 the real fund migrations and through directory reads: preserves historical
 rows, reports, saved references, UID redirects and source reviews; suppresses
@@ -136,6 +138,7 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
 | `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
+`workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart, concurrency and settlement identity (D5570 part 2).
 `_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
 
 ## Conventions
@@ -378,6 +381,7 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `grow_export_6103.test.ts` | D6103: Grow's Feedback and KPI CSV exports: writers only (and `records.can_export`), the table's search/filter/sort, names for writers and never an email, monthly KPI history in cents with currency, empty never 0, formula cells neutralised, the 5,000-row cap refused with a sentence, each export logged. |
 | `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
 | `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
 

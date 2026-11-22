@@ -236,7 +236,7 @@ test('every "latest row" reader of a Stripe or Mercury column skips google_sheet
   ]) assert.match(progress, sql);
   assert.equal((progress.match(/FROM project_metrics WHERE project_id = \? AND \(COALESCE\(source, ''\) <> 'google_sheets' OR \$\{safeMetric\} IS NOT NULL\)/g) || []).length, 2);
   assert.match(src('routes/research.ts'), /SELECT snapshot_date, mrr, paying_accounts, net_burn, cash_balance\s+FROM project_metrics WHERE project_id = \? AND COALESCE\(source, ''\) <> 'google_sheets'/);
-  assert.match(src('services/records/grow.ts'), /cash_balance AS cash, net_burn AS burn FROM project_metrics WHERE project_id = \? AND COALESCE\(source, ''\) <> 'google_sheets'/);
+  assert.match(src('services/growKpis.ts'), /cash_balance AS cash, net_burn AS burn FROM project_metrics WHERE project_id = \? AND COALESCE\(source, ''\) <> 'google_sheets'/);
 });
 
 // ─────────────────────────────────────────────────────────── the Calendar
