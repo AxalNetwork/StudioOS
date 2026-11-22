@@ -1313,7 +1313,7 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
   try { await env.DB.batch(statements); } catch (error) {
     // D6651: the batch is one transaction, so no row names the file this request just stored: it leaves
     // through the one record-erasure path as `unreferenced`.
-    if (key && env.FILES) { try { await eraseRecordObjects(env.FILES, key, 'unreferenced'); } catch { /* the stored file is orphaned, never served */ } }
+    if (key && env.FILES) { try { await eraseRecordObjects(env.FILES, key, 'unreferenced', { db: env.DB }); } catch { /* the stored file is orphaned, never served */ } }
     obligationClash(error, obligationKind(e), next);
   }
   if (storage) await noteStorageLanded(env, storage);

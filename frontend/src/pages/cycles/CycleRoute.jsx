@@ -41,7 +41,6 @@ import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
 import { ValidateLead } from './ValidateNextAction';
-import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import { PmfChip } from './PmfMethod';
@@ -942,16 +941,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           onRetryCard={retryCard}
           action={action}
           search={q}
-          // D1466 (#3714): Raise's lead row (Next steps, From your tools), drawn from the read's own parts.
           // D4589 (#4589): Validate's next action, the same Worker focus the phone root draws;
           // #5999: beside it the same meter and "Set a target" (`CycleMeter.jsx`).
-          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} />
-            : cycle === 'validate' && rawOverview ? <ValidateLead raw={rawOverview} search={q} openAction={openAction} projectId={projectId} onChanged={() => setReload((n) => n + 1)} /> : null}
+          // D6046 (#6046): Raise draws its own Overview (`defs/raise.jsx`), so its lead row and Ask left this branch.
+          lead={cycle === 'validate' && rawOverview ? <ValidateLead raw={rawOverview} search={q} openAction={openAction} projectId={projectId} onChanged={() => setReload((n) => n + 1)} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
-          // D1466 (RO00): Raise's header Ask, beside Build your deck.
-          ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
-          // D6897 part 4 (#6897, RA-31): a cycle's own header controls beside the action (Raise: Share outside Axal).
+          // D6897 part 4 (#6897, RA-31): a cycle's own header controls beside the action (Raise's V2 Overview draws its own, D6046).
           more={projectId ? def?.overviewMore?.({ projectId, role: user?.role ?? null }) ?? null : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}

@@ -98,7 +98,8 @@ class FakeStream {
 }
 
 const EFFECTS = [{ target: 'github_pr' as const, ref: PR }, { target: 'stream' as const, ref: UID }];
-// website_cdn is for a public line only (part 1), so the investors campaign queues the other two; its adapter is checked directly.
+// website_cdn is for a public line only (part 1), so the investors campaign queues the other two; its adapter is checked
+// directly. Here neither has a provider: no FILES bucket, no distribution channel (part 6, D5585-p6).
 const UNINTEGRATED = [{ target: 'signed_document' as const, ref: 'envelope-77' }, { target: 'external_distribution' as const, ref: 'investor-list-1' }];
 
 function live(w: W, over: Record<string, unknown> = {}) {
@@ -217,7 +218,7 @@ test('4. missing credentials and out-of-scope refs are refused without a call; u
   assert.equal(x.gh.count('GET'), pages);
   assert.equal(x.gh.count('POST'), 0);
 
-  // Targets with no integration refuse on every attempt, call nothing, and dead-letter for a person to read.
+  // Targets with no provider in this env refuse on every attempt, call nothing, and dead-letter for a person to read.
   w = world();
   await shipped(w, UNINTEGRATED);
   x = live(w);

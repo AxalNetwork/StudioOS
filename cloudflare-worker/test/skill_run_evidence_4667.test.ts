@@ -237,8 +237,8 @@ test('scheduled: withheld, never connected and unreadable sources end the run sk
   for (const [label, o, readers] of [
     ['withheld', { sponsor: ADMIN }, READERS],
     ['never connected', { facts: false }, READERS],
-    // The context step and the run step's context read it; then the source fails, at the check.
-    ['unreadable', {}, { ...READERS, 'mercury.balances': flaky(2) }],
+    // The run step's context reads it once (D7076: the context step reads nothing); then the source fails, at the check.
+    ['unreadable', {}, { ...READERS, 'mercury.balances': flaky(1) }],
   ] as const) {
     const f = skillWorld(o as Opts);
     try {
