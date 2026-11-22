@@ -302,7 +302,7 @@ test('D7909 pilot configuration refuses included billing and full-suite publicat
 test('D7909 literal pinned caller leaves the ordinary hosted graph and queue matrix independent',()=>{
  const base=yaml(execFileSync('git',['show','270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0:.github/workflows/ci.yml'],{encoding:'utf8'}));
  const current=yaml(readFileSync('.github/workflows/ci.yml','utf8')),caller=current.jobs['capacity-submit'];
- assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@4d31604d09205f672d7f0d226e6ef1a39ba9e60c');
+ assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@ffd1fe3861bcf6527ea15ef99705ba4080cdac5a');
  assert.equal(caller.needs,'plan');assert.equal(caller.permissions['id-token'],'write');
  for(const guard of ["github.event_name == 'push'","github.event_name != 'merge_group'","vars.CI_CAPACITY_ENABLED == 'true'","github.repository == 'AxalNetwork/StudioOS'","needs.plan.outputs.capacity_submission != ''"])assert.ok(caller.if.includes(guard),guard);
  for(const [name,job] of Object.entries(base.jobs)){
@@ -313,7 +313,7 @@ test('D7909 literal pinned caller leaves the ordinary hosted graph and queue mat
  assert.equal(caller.with.submission,'${{ needs.plan.outputs.capacity_submission }}');
  assert.equal(caller.with.executor_sha,'${{ vars.CI_CAPACITY_EXECUTOR_SHA }}');
  assert.equal(caller.with.child_workflow_sha,'${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}');
- const pinned=yaml(execFileSync('git',['show','4d31604d09205f672d7f0d226e6ef1a39ba9e60c:.github/workflows/capacity-planner.yml'],{encoding:'utf8'}));
+ const pinned=yaml(execFileSync('git',['show','ffd1fe3861bcf6527ea15ef99705ba4080cdac5a:.github/workflows/capacity-planner.yml'],{encoding:'utf8'}));
  assert.deepEqual(pinned,yaml(readFileSync('.github/workflows/capacity-planner.yml','utf8')),'the literal pin must contain the exact prepared planner');
  const config=readFileSync('wrangler.merge-control.toml','utf8');
  assert.match(config,/CAPACITY_ENABLED = "false"/);assert.match(config,/CAPACITY_PUBLICATION = "pilot"/);assert.match(config,/CAPACITY_CONFIG = ""/);
