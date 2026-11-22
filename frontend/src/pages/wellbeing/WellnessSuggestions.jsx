@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { wellbeingRecommendationsApi } from '../../lib/api/wellbeingRecommendations';
 import { BTN, FIELD } from './WellbeingParts';
+import { GroupSeatPanel } from './GroupSessions';
 import {
   FORMAT_WORDS, RESOURCES_APART, SOURCES, SOURCE_WORDS, cardFacts, chosenLine, excludedLine, isPrefsChanged, prefsBody,
   prefsDraft, prefsRefusal, sectionState, toggleIn,
@@ -130,8 +131,9 @@ export function InterestsPanel({ prefs, onSaved, onClose }) {
   );
 }
 
-function RecCard({ item, onDismiss }) {
+function RecCard({ item, onDismiss, onSeats }) {
   const [why, setWhy] = useState(false);
+  const [seats, setSeats] = useState(false);
   const f = cardFacts(item);
   return (
     <article className={`${CARD} flex flex-col gap-2 ${f.available ? '' : 'opacity-80'}`} aria-labelledby={`rec-${item.kind}-${item.uid}`} data-testid={`rec-${item.kind}-${item.uid}`}>
@@ -159,14 +161,16 @@ function RecCard({ item, onDismiss }) {
         </span>
         {item.kind === 'expert'
           ? <Link className={BTN.ghost} to={`/wellbeing/expert/${encodeURIComponent(item.uid)}`} data-testid={`rec-view-${item.uid}`}>View</Link>
-          : null}
+          : <button type="button" className={BTN.ghost} aria-expanded={seats} onClick={() => setSeats((v) => !v)} data-testid={`rec-seats-${item.uid}`}>See seats</button>}
       </div>
+      {/* D7120 part 2 (WLM-07): the group seat decision opens under its card. */}
+      {seats && item.kind === 'session' ? <GroupSeatPanel uid={item.uid} onChanged={onSeats} onClose={() => setSeats(false)} /> : null}
     </article>
   );
 }
 
 /** WLM-05: the Recommendations section on the home. */
-export function SuggestionsSection() {
+export function SuggestionsSection({ onSeats } = {}) {
   const [prefs, reloadPrefs] = useRead(wellbeingRecommendationsApi.preferences);
   const [recs, reloadRecs] = useRead(wellbeingRecommendationsApi.recommendations);
   const [choosing, setChoosing] = useState(false);
@@ -209,7 +213,7 @@ export function SuggestionsSection() {
           <p className="text-sm text-stone-700 dark:text-gray-300" data-testid="rec-none">Nothing fits what you chose right now. Browse all, or change your interests.</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="rec-cards">
-            {v.items.map((item) => <RecCard key={`${item.kind}:${item.uid}`} item={item} onDismiss={dismiss} />)}
+            {v.items.map((item) => <RecCard key={`${item.kind}:${item.uid}`} item={item} onDismiss={dismiss} onSeats={onSeats} />)}
           </div>
         )}
       {undo ? (

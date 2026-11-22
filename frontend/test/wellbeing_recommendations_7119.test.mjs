@@ -108,7 +108,7 @@ async function mount(routes) {
   };
 }
 
-test('cards: Why this? says what was used and what never is; Dismiss hides it with Undo; a group session needs no booking link here', async () => {
+test('cards: Why this? says what was used and what never is; Dismiss hides it with Undo; a group session opens its seats, not a profile', async () => {
   let dismissed = false;
   const v = await mount({
     'GET /wellbeing/preferences': PREFS({ support_types: ['coaching', 'nutrition'], formats: ['group', 'one_to_one'] }),
@@ -175,7 +175,7 @@ test('Choose interests: a nutrition interest and group format save with the revi
 
 test('wiring: the home mounts Recommendations; the section reads no journal route; dark pairs; no clinical words', () => {
   const page = read('frontend/src/pages/WellbeingPage.jsx');
-  assert.match(page, /<SuggestionsSection \/>/);
+  assert.match(page, /<SuggestionsSection( onSeats=\{[^}]*\})? \/>/);
   const src = read('frontend/src/pages/wellbeing/WellnessSuggestions.jsx') + read('frontend/src/pages/wellbeing/recommendationsModel.js');
   assert.doesNotMatch(src, /wellbeingReflectionsApi|\/checkins|wellbeingMyCheckins/, 'opted out or in, the page never reads the journal itself');
   for (const m of src.matchAll(/className=\{?[`"]([^`"]*)/g)) {
