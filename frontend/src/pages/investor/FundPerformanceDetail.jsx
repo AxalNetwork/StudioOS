@@ -48,7 +48,7 @@ export function PerformanceDetailView({ fund, history, positions }) {
             </dl>
           </li>)}
         </ul>
-        {history.data.truncated && <p role="note">Partial: only the latest {history.data.items.length} quarters were read. Earlier quarters are not shown.</p>}
+        {history.data.truncated && <p role="note">Partial: only the latest {history.data.items.length} quarter{history.data.items.length === 1 ? '' : 's'} {history.data.items.length === 1 ? 'was' : 'were'} read. Earlier quarters are not shown.</p>}
       </>}
     </section>
     <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700" aria-label="Positions with marks">
