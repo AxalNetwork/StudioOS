@@ -98,6 +98,7 @@
  *
  * Every request value is bound. A typed figure is `source: 'manual'`.
  */
+import { customerEvidence, taggedByCountry } from '../services/growMarketCustomers';
 import { growProposalReceipts, rememberGrowProposal, undoGrowProposal } from '../services/growProposalReceipts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -379,6 +380,7 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     // fails on its own: a failed one leaves its fields null (Not recorded on the page), never a zero.
     const plan = await marketPlanCounts(env, projectId, today(x));
     const countries = await marketCountries(env, projectId);
+    const tagged = await taggedByCountry(env, projectId);
     const counts = Object.fromEntries(MARKET_STATES.map((s) => [s, rows.filter((m) => m.state === s).length]));
     return { cols: ['Market', 'State', 'Readiness', 'Weakest part', 'Decision'],
       rows: rows.map((m) => {
@@ -390,6 +392,7 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
           readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest,
           replies: replies ? replies.get(m.uid) ?? [] : null,
           country_name: country?.name ?? null, country_region: country?.region ?? null,
+          customers: customerEvidence(tagged, more.geography_ref),
           steps_total: p?.steps_total ?? null, steps_open: p?.steps_open ?? null, steps_overdue: p?.steps_overdue ?? null,
           localisation_done: p?.localisation_done ?? null, localisation_open: p ? p.localisation_open : null };
       }),

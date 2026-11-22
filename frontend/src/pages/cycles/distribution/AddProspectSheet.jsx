@@ -12,7 +12,7 @@ export function ConsentFields({basis,proof,onBasis,onProof,disabled=false}){
   </fieldset>;
 }
 export default function AddProspectSheet({projectId,ventureName,api,campaigns={status:'loading'},canWrite=false,onClose,onAdded}){
-  const [form,setForm]=useState({name:'',company:'',email:'',source:'manual',campaign:'',basis:'none',proof:'',note:''});
+  const [form,setForm]=useState({name:'',company:'',country:'',email:'',source:'manual',campaign:'',basis:'none',proof:'',note:''});
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const lock=useRef(false);
   const field=key=>e=>setForm(old=>({...old,[key]:e.target.value}));
   const save=async e=>{e.preventDefault();if(!canWrite||lock.current)return;lock.current=true;setBusy(true);setError('');try{const made=await api.add({project:projectId,...form});onAdded?.(made.uid);}catch(err){setError(prospectRefusal(err));}finally{lock.current=false;setBusy(false);}};
@@ -22,6 +22,7 @@ export default function AddProspectSheet({projectId,ventureName,api,campaigns={s
       {error?<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>:null}
       <fieldset disabled={!canWrite||busy} className="space-y-4">
         {['name','company','email'].map(key=><label key={key} className="block text-sm capitalize">{key}<input type={key==='email'?'email':'text'} required={key!=='company'} maxLength={key==='email'?254:key==='name'?120:200} value={form[key]} onChange={field(key)} className={PROSPECT_INPUT}/>{key==='email'?<span className="text-xs normal-case text-axal-muted dark:text-gray-400">Shown only in this prospect’s own sheet.</span>:null}</label>)}
+        <label className="block text-sm">Country <span className="text-xs text-axal-muted dark:text-gray-400">Two-letter code, for example PT. Optional; Markets counts only prospects you tag.</span><input type="text" maxLength={2} autoCapitalize="characters" value={form.country} onChange={e=>setForm(old=>({...old,country:e.target.value.toUpperCase()}))} className={PROSPECT_INPUT} data-testid="prospect-country"/></label>
         <label className="block text-sm">Source<select value={form.source} onChange={field('source')} className={PROSPECT_INPUT}>{SOURCE_CHIPS.filter(([key])=>key).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
         <label className="block text-sm">Campaign<select value={form.campaign} onChange={field('campaign')} disabled={campaigns.status!=='ready'} className={PROSPECT_INPUT}><option value="">No campaign</option>{(campaigns.rows||[]).map(c=><option key={c.uid} value={c.uid} disabled={!c.utm_campaign}>{c.name}{!c.utm_campaign?' · UTM not recorded':''}</option>)}</select></label>
         {campaigns.status==='unreadable'?<p className="text-xs text-axal-muted dark:text-gray-400">Campaigns could not be read. You can add this prospect without one.</p>:null}

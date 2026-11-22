@@ -14,6 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, matchRoutes } from 'react-router-dom';
 import { readRoutesSource } from './_routesSource.mjs';
@@ -25,7 +26,7 @@ import MarketsHome, { ComparePanel } from '../src/pages/cycles/MarketsHome.jsx';
 import MarketRecord from '../src/pages/cycles/MarketRecord.jsx';
 import { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import {
-  compareSummary, diffWords, evidenceFor, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
+  compareSummary, customerLine, diffWords, evidenceFor, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
 } from '../src/pages/cycles/marketsModel.js';
 
 const h = React.createElement;
@@ -115,7 +116,7 @@ test('the evidence strip counts what Research holds and says Not recorded for wh
     signals: [{ match: 'country' }, { match: 'country' }, { match: 'region' }], company_count: 214, fund_count: 19,
     companies_by_market: [{ name: 'Robotics', count: 38 }, { name: 'Logistics', count: 22 }, { name: 'Other', count: 1 }],
     demand: { status: 'not_recorded', reason: 'Demand data is global only.' } });
-  assert.deepEqual(ev.demand.map((e) => [e.state, e.label]), [['value', 'Signals naming Portugal: 2'], ['not_recorded', 'Per-country demand'], ['not_recorded', 'Customers or sign-ups from Portugal']]);
+  assert.deepEqual(ev.demand.map((e) => [e.state, e.label]), [['value', 'Signals naming Portugal: 2'], ['not_recorded', 'Per-country demand'], ['not_recorded', 'Prospects and customers tagged Portugal']]);
   assert.equal(ev.demand[0].asOf, '1 Nov 2026');
   assert.equal(ev.regulation[0].label, 'Signals naming only Europe: 1');
   assert.equal(ev.regulation[1].state, 'not_recorded');
@@ -277,4 +278,17 @@ test('Markets owns its page and its record in Grow’s def, and the old addresse
   assert.equal(matched('/grow/market-expansion'), '/grow/:slug');
   assert.equal(matched('/grow/market-expansion/mka1'), '/grow/:slug/:id');
   assert.equal(matched('/grow/market-expansion/new'), '/grow/:slug/new');
+});
+
+// D8253 (#8253). Mutation checked: a 0 count read as a value (fails); unreadable shown as Not recorded (fails);
+// the `> 0` guard dropped (fails).
+test('evidence: tagged prospects and customers are a value, none tagged is Not recorded, a failed read is Unavailable', () => {
+  assert.deepEqual(customerLine('Portugal', { state: 'ok', tagged: 12, reason: null }), { state: 'value', label: 'Prospects and customers tagged Portugal: 12', asOf: null });
+  assert.equal(customerLine('Portugal', { state: 'ok', tagged: 0, reason: null }).state, 'not_recorded', 'a 0 is never shown as a count');
+  assert.equal(customerLine('Portugal', { state: 'not_recorded', tagged: null, reason: 'No prospect or customer is tagged with this country.' }).state, 'not_recorded');
+  assert.equal(customerLine('Portugal', { state: 'unreadable', tagged: null, reason: 'The prospects and customers could not be read.' }).state, 'unavailable');
+  assert.equal(customerLine('Portugal', undefined).state, 'not_recorded');
+  const geo = { item: { name: 'Portugal', region: 'Europe' }, as_of: {}, signals: [] };
+  assert.equal(evidenceFor(geo, { state: 'ok', tagged: 3 }).demand.at(-1).label, 'Prospects and customers tagged Portugal: 3');
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.customers\)/, 'the record hands its customer counts to the evidence strip');
 });

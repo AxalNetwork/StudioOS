@@ -10,7 +10,7 @@ export const CONSENT_BASES = ['opted_in','wrote_first','none'] as const;
 export const PROSPECT_SOURCES = ['import','linkedin_csv','website','lovable','manual','update_ask','crm'] as const;
 const REASONS = ['manual','opted_out','requested','bounced'];
 type Body = Record<string, unknown>;
-type Contact = { id: number; uid: string; project_id: number; name: string | null; organization: string | null; email: string; status: string; source: string | null; utm_json: string | null; message: string | null; created_at: string; updated_at: string };
+type Contact = { id: number; uid: string; project_id: number; name: string | null; organization: string | null; country: string | null; email: string; status: string; source: string | null; utm_json: string | null; message: string | null; created_at: string; updated_at: string };
 export class ProspectsRefused extends Error {
   status:number; sentence:string; field?:string;
   constructor(status:number,sentence:string,field?:string) { super(sentence); this.status=status; this.sentence=sentence; this.field=field; }
@@ -40,7 +40,7 @@ function utmOf(raw: string | null): Record<string,string> | null {
   } catch { return null; }
 }
 export async function prospect(env: Env, pid: number, uid: string): Promise<Contact> {
-  const row = await env.DB.prepare("SELECT id,uid,project_id,name,organization,email,status,source,utm_json,message,created_at,updated_at FROM contacts WHERE uid=? AND project_id=? AND audience='customer'").bind(uid,pid).first<Contact>();
+  const row = await env.DB.prepare("SELECT id,uid,project_id,name,organization,country,email,status,source,utm_json,message,created_at,updated_at FROM contacts WHERE uid=? AND project_id=? AND audience='customer'").bind(uid,pid).first<Contact>();
   if (!row) throw new ProspectsRefused(404, 'No such prospect.');
   return row;
 }
@@ -112,6 +112,21 @@ export async function prospectPipeline(env: Env, pid: number, filter: {source?: 
   }
   return {available:true,total:(totals.results||[]).reduce((n,c)=>n+Number(c.n),0),columns,per_status:per};
 }
+/** D8253: a country is ISO 3166-1 alpha-2, upper case, and one Research › Geographies lists; empty clears it. */
+export async function prospectCountry(env: Env, v: unknown): Promise<string | null> {
+  const raw = text(v, 2, 'country');
+  if (raw == null) return null;
+  const code = raw.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code) || !await env.DB.prepare('SELECT 1 FROM research_countries WHERE code = ?').bind(code).first()) return bad('Choose a country Research › Geographies lists.', 'country');
+  return code;
+}
+export async function setProspectCountry(env:Env,pid:number,user:User,uid:string,b:Body) {
+  const row=await prospect(env,pid,uid);
+  if (!Object.hasOwn(b,'country')) return bad('Send the country, or an empty value to clear it.', 'country');
+  const country=await prospectCountry(env,b.country);
+  await env.DB.batch([env.DB.prepare('UPDATE contacts SET country=?,updated_at=? WHERE id=? AND project_id=?').bind(country,stamp(),row.id,pid),
+    audit(env,pid,user,'grow.prospect.country',{uid,country})]); return {ok:true,country};
+}
 export function consentValue(channel: unknown, input: Body) {
   if (!MARKETING_CHANNELS.includes(channel as any)) return bad('Choose a supported marketing channel.', 'channel');
   if (!CONSENT_BASES.includes(input.basis as any)) return bad('Choose how this person agreed, or no consent yet.', 'basis');
@@ -132,20 +147,21 @@ export async function saveProspectConsent(env: Env,pid:number,user:User,uid:stri
   await env.DB.batch([consentStatement(env,pid,uid,user,value),audit(env,pid,user,'grow.prospect.consent',{uid,channel:value.channel,basis:value.basis})]);
   return {ok:true};
 }
-function creation(env:Env,pid:number,user:User,b:Body,tag:string|null) {
+async function creation(env:Env,pid:number,user:User,b:Body,tag:string|null) {
   const email=prospectEmail(b.email),name=text(b.name,120,'name',true),organization=text(b.company,200,'company'),note=text(b.note,2000,'note');
+  const country=await prospectCountry(env,b.country);
   const source=b.source == null ? 'manual' : String(b.source);
   if (!PROSPECT_SOURCES.includes(source as any)) return bad('Choose a recorded source.', 'source');
   const value=consentValue(b.channel || 'email',{basis:b.basis ?? 'none',proof:b.proof});
   const insert=prepareContactInsert(env,{projectId:pid,email,name,audience:'customer',source,message:note,utm:tag?{utm_campaign:tag}:null});
   return {uid:insert.uid,statements:[insert.statement,
-    env.DB.prepare('UPDATE contacts SET organization=? WHERE uid=? AND project_id=?').bind(organization,insert.uid,pid),
+    env.DB.prepare('UPDATE contacts SET organization=?,country=? WHERE uid=? AND project_id=?').bind(organization,country,insert.uid,pid),
     consentStatement(env,pid,insert.uid,user,value),audit(env,pid,user,'grow.prospect.add',{uid:insert.uid,source})]};
 }
 export async function addProspect(env:Env,pid:number,user:User,b:Body) {
   const selected=await campaign(env,pid,b.campaign);
   if (selected&&!selected.utm_campaign) return bad('Add a UTM tag to the campaign before linking a prospect.', 'campaign');
-  const result=creation(env,pid,user,b,selected?.utm_campaign??null); await env.DB.batch(result.statements); return {uid:result.uid};
+  const result=await creation(env,pid,user,b,selected?.utm_campaign??null); await env.DB.batch(result.statements); return {uid:result.uid};
 }
 export async function setProspectStatus(env:Env,pid:number,user:User,uid:string,b:Body) {
   const row=await prospect(env,pid,uid); const status=String(b.status || '');
@@ -160,7 +176,7 @@ export async function prospectDetail(env:Env,pid:number,uid:string) {
     env.DB.prepare('SELECT direction,created_at FROM contact_replies WHERE contact_id=? ORDER BY created_at DESC,id DESC LIMIT 100').bind(row.id).all(),
     env.DB.prepare('SELECT title,due_date,done,created_at FROM contact_tasks WHERE contact_id=? ORDER BY created_at DESC,id DESC LIMIT 100').bind(row.id).all(),
   ]);
-  return {uid:row.uid,name:row.name,company:row.organization,title:null,email:row.email,source:sourceOf(row.source),status:row.status,utm:utmOf(row.utm_json),note:row.message,
+  return {uid:row.uid,name:row.name,company:row.organization,title:null,country:row.country??null,email:row.email,source:sourceOf(row.source),status:row.status,utm:utmOf(row.utm_json),note:row.message,
     created_at:row.created_at,consents:consents.results||[],replies:replies.results||[],tasks:tasks.results||[],sequence:null,sequence_reason:'Not recorded: no outreach sequence is linked.'};
 }
 export async function suppressionHash(env:Env,pid:number,address:string) {
@@ -249,7 +265,7 @@ export async function importProspects(env:Env,pid:number,user:User,b:Body) {
       const value=Object.fromEntries(headers.map((h,j)=>[h,cells[j]]));
       let tag:string|null=null;
       if (value.campaign) { if(!tags.has(value.campaign)||!tags.get(value.campaign)) throw new ProspectsRefused(400,'Choose a campaign with a UTM tag in this venture.','campaign'); tag=tags.get(value.campaign)!; }
-      const made=creation(env,pid,user,{...value,source:value.source||'import',channel:value.consent_channel||'email',basis:value.consent_basis,proof:value.consent_proof},tag);
+      const made=await creation(env,pid,user,{...value,source:value.source||'import',channel:value.consent_channel||'email',basis:value.consent_basis,proof:value.consent_proof},tag);
       // Append the complete row before flushing. The whole array goes to batch(),
       // never a sliced prefix, so a row cannot cross a transaction boundary.
       statements.push(...made.statements);uids.push(made.uid);

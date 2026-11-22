@@ -190,11 +190,22 @@ export function planLine(steps, total, today) {
 }
 
 /**
+ * D8253: the venture's own prospects and customers tagged with this market's country. Tagged rows only; none tagged
+ * is Not recorded, a failed read is Unavailable, and neither is ever a 0.
+ */
+export function customerLine(name, c) {
+  const label = `Prospects and customers tagged ${name}`;
+  if (c?.state === 'ok' && num(c.tagged) && c.tagged > 0) return { state: 'value', label: `${label}: ${c.tagged}`, asOf: null };
+  if (c?.state === 'unreadable') return { state: 'unavailable', label, reason: str(c.reason) || 'They could not be read.' };
+  return { state: 'not_recorded', label, reason: str(c?.reason) || 'No prospect or customer is tagged with a country yet.' };
+}
+
+/**
  * GR-22's evidence strip, one list per part, from `GET /api/research/geographies/:code`. A line the
  * store does not hold (per-country demand, customers by country, partners covering the country, the
  * WGI and FATF indices) reads Not recorded with its reason, never a count.
  */
-export function evidenceFor(geo) {
+export function evidenceFor(geo, customers = null) {
   const name = str(geo?.item?.name) || 'this country';
   const signals = Array.isArray(geo?.signals) ? geo.signals : [];
   const asOf = geo?.as_of || {};
@@ -207,7 +218,7 @@ export function evidenceFor(geo) {
     demand: [
       v(`Signals naming ${name}: ${named}`, asOf.signals),
       nr('Per-country demand', str(geo?.demand?.reason) || 'Demand data is global only.'),
-      nr(`Customers or sign-ups from ${name}`, 'Customers and prospects carry no country yet.'),
+      customerLine(name, customers),
     ],
     regulation: [
       v(`Signals naming only ${str(geo?.item?.region) || 'its region'}: ${regional}`, asOf.signals),
