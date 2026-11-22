@@ -115,8 +115,8 @@ async function linkVisitReads(env: Env, deckId: number, linkId: number, cards: a
   const ids = views.map((v) => Number(v.id));
   const rows = (await env.DB.prepare(
     `SELECT view_id, slide_index, card_uid, seconds, updated_at FROM deck_view_slides
-      WHERE view_id IN (${ids.map(() => '?').join(', ')}) ORDER BY view_id, slide_index LIMIT 10000`,
-  ).bind(...ids).all<SecondsRow>()).results || [];
+      WHERE view_id IN (SELECT value FROM json_each(?)) ORDER BY view_id, slide_index LIMIT 10000`,
+  ).bind(JSON.stringify(ids)).all<SecondsRow>()).results || [];
   return visitReads(cards, views, rows);
 }
 
