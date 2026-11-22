@@ -401,3 +401,6 @@ catalogue version only in the fixture.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+
+| `work_graph_media_storage_5583.test.ts` | D5583 part 2: bounded admission, scoped classes, immutable snapshots, existing blob readback, class-specific reconciliation, cross-project refusal and cost/audit. |
+| `work_graph_media_quota_5583.test.ts` | D5583 part 2: actual migrated cumulative owner quota, dedup, owner transfer and legacy blob migration integrity, synthetic data only. |

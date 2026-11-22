@@ -17,7 +17,8 @@ import {
 const read = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 export const SCHEMA = read('202611140007_5581_work_graph_revisions.sql')
   + read('202611140122_5581_work_graph_lease_events.sql')
-  + read('202611140924_5581_work_graph_integrity.sql');
+  + read('202611140924_5581_work_graph_integrity.sql')
+  + read('202611220358_5583_media_blob_classes.sql');
 
 export const T0 = Date.parse('2026-11-14T09:30:00Z');
 export const clock = { t: T0 };
