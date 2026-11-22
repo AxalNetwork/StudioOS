@@ -33,6 +33,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { compareMigrations } from './lib/migrationPlan.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS = join(ROOT, 'cloudflare-worker/sql/migrations');
@@ -76,7 +77,7 @@ const sqlInt = (v) => (v == null ? 'NULL' : String(Math.trunc(Number(v))));
 /** The review rows the given migrations write: every source_name an INSERT INTO research_fund_sources names. */
 export function reviewedSources(dir = MIGRATIONS) {
   const names = new Set();
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort(compareMigrations)) {
     const text = readFileSync(join(dir, file), 'utf8').replace(/^\s*--.*$/gm, '');
     for (const m of text.matchAll(/INSERT\s+(?:OR\s+\w+\s+)?INTO\s+research_fund_sources\s*\([^)]*\)\s*VALUES\s*/gi)) {
       for (const name of firstStringOfEachTuple(text, m.index + m[0].length)) names.add(name);
@@ -112,7 +113,7 @@ function firstStringOfEachTuple(text, at) {
 export function ledgerOf(dir = MIGRATIONS, skip = null) {
   const keys = new Map();
   if (!existsSync(dir)) return keys;
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort(compareMigrations)) {
     const path = join(dir, file);
     if (skip && resolve(path) === resolve(skip)) continue;
     const text = readFileSync(path, 'utf8');
