@@ -12,23 +12,27 @@ export type SlotRow = {
 };
 
 export type BookedPricing = 'priced' | 'free' | 'unpriced' | 'mixed' | null;
-/** One bounded grouped read, including every capacity-consuming status. */
+const SLOT_FACT_BATCH = 512;
+
+/** Bounded grouped reads, including every capacity-consuming status. */
 export async function slotBookingFacts(env: Env, advisorId: number, slotIds: number[]) {
   const out = new Map<number, { taken: number; pricing: BookedPricing }>();
   if (!slotIds.length) return out;
-  const rows = await env.DB.prepare(
-    `SELECT slot_id, COUNT(*) AS taken,
-            SUM(CASE WHEN amount_cents > 0 THEN 1 ELSE 0 END) AS priced,
-            SUM(CASE WHEN amount_cents = 0 THEN 1 ELSE 0 END) AS free,
-            SUM(CASE WHEN amount_cents IS NULL THEN 1 ELSE 0 END) AS unpriced
-       FROM advisor_bookings
-      WHERE advisor_id = ? AND status IN ('pending','confirmed','completed')
-        AND slot_id IN (SELECT value FROM json_each(?))
-      GROUP BY slot_id`,
-  ).bind(advisorId, JSON.stringify(slotIds)).all<{ slot_id: number; taken: number; priced: number; free: number; unpriced: number }>();
-  for (const r of rows.results || []) {
-    const kinds = [r.priced > 0 && 'priced', r.free > 0 && 'free', r.unpriced > 0 && 'unpriced'].filter(Boolean) as Exclude<BookedPricing, null>[];
-    out.set(Number(r.slot_id), { taken: Number(r.taken), pricing: kinds.length === 1 ? kinds[0] : kinds.length ? 'mixed' : null });
+  for (let offset = 0; offset < slotIds.length; offset += SLOT_FACT_BATCH) {
+    const rows = await env.DB.prepare(
+      `SELECT slot_id, COUNT(*) AS taken,
+              SUM(CASE WHEN amount_cents > 0 THEN 1 ELSE 0 END) AS priced,
+              SUM(CASE WHEN amount_cents = 0 THEN 1 ELSE 0 END) AS free,
+              SUM(CASE WHEN amount_cents IS NULL THEN 1 ELSE 0 END) AS unpriced
+         FROM advisor_bookings
+        WHERE advisor_id = ? AND status IN ('pending','confirmed','completed')
+          AND slot_id IN (SELECT value FROM json_each(?))
+        GROUP BY slot_id`,
+    ).bind(advisorId, JSON.stringify(slotIds.slice(offset, offset + SLOT_FACT_BATCH))).all<{ slot_id: number; taken: number; priced: number; free: number; unpriced: number }>();
+    for (const r of rows.results || []) {
+      const kinds = [r.priced > 0 && 'priced', r.free > 0 && 'free', r.unpriced > 0 && 'unpriced'].filter(Boolean) as Exclude<BookedPricing, null>[];
+      out.set(Number(r.slot_id), { taken: Number(r.taken), pricing: kinds.length === 1 ? kinds[0] : kinds.length ? 'mixed' : null });
+    }
   }
   return out;
 }

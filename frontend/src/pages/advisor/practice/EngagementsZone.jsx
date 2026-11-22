@@ -114,17 +114,17 @@ export default function EngagementsZone() {
     }).catch(error => {
       if (current()) setState({ loading: false, error: zoneError(error, error?.message || 'The engagement record could not be read.', 'practice'), items: [], totals: null });
     });
-    const held = readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null).then(read => {
+    const held = readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null).then(held => {
       if (!current()) return;
-      setCandidatesRead(read != null); setBookings(read ? read.items : null);
+      setCandidatesRead(held != null); setBookings(held ? held.items : null);
       const seen = new Map();
-      for (const b of read?.items || []) if (b.client_user_id && !seen.has(b.client_user_id)) seen.set(b.client_user_id, {
+      for (const b of held?.items || []) if (b.client_user_id && !seen.has(b.client_user_id)) seen.set(b.client_user_id, {
         id: b.client_user_id, name: b.client_name || b.founder_name || b.client_email || `Member #${b.client_user_id}`,
       });
       setCandidates([...seen.values()].sort((a, b) => a.name.localeCompare(b.name)));
     });
-    const work = readEveryPage((page) => api.listMyAdvisorDeliverables(page)).catch(() => null).then(read => {
-      if (current()) setDeliverables(read ? read.items : null);
+    const work = readEveryPage((page) => api.listMyAdvisorDeliverables(page)).catch(() => null).then(work => {
+      if (current()) setDeliverables(work ? work.items : null);
     });
     await Promise.all([held, work]);
     if (current()) setActivityLoading(false);

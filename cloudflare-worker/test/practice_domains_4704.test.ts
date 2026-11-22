@@ -185,6 +185,28 @@ test('501 slots consume one grouped occupancy read; mixed prices and public slot
   } finally { f.db.close(); }
 });
 
+test('513 booked public slots keep every count across bounded occupancy batches', async (t) => {
+  const f = fixture(t);
+  try {
+    const start = Date.now() + 3 * 86_400_000;
+    const slot = f.db.prepare(`INSERT INTO advisor_office_hour_slots
+      (id, uid, advisor_id, starts_at, ends_at, capacity) VALUES (?, ?, 1, ?, ?, 2)`);
+    const booking = f.db.prepare(`INSERT INTO advisor_bookings
+      (uid, slot_id, advisor_id, founder_user_id, status, amount_cents) VALUES (?, ?, 1, ?, 'confirmed', 0)`);
+    for (let id = 1; id <= 513; id++) {
+      slot.run(id, `bounded-slot-${id}`, new Date(start + id * 60_000).toISOString(), new Date(start + (id + 30) * 60_000).toISOString());
+      booking.run(`bounded-booking-${id}`, id, CLIENT);
+    }
+    const result = await f.call('/practice-one/slots', CLIENT);
+    assert.equal(result.items.length, 513, 'batching never truncates the public list');
+    assert.equal(result.items.reduce((sum: number, row: any) => sum + row.taken, 0), 513);
+    assert.equal(result.items.at(-1).available, 1, 'the final batch retains occupancy');
+    const grouped = f.reads.filter((q) => /GROUP BY slot_id/.test(q.sql));
+    assert.equal(grouped.length, 2, 'one query per bounded batch, not per slot');
+    assert.deepEqual(grouped.map((q) => q.rows), [512, 1], 'no occupancy response exceeds the batch ceiling');
+  } finally { f.db.close(); }
+});
+
 test('401 engagements keep whole-practice totals while SQL returns only the requested page', async (t) => {
   const f = fixture(t);
   try {
