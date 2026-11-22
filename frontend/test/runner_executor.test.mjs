@@ -137,7 +137,8 @@ test('staged workflow loads trusted control first, never enables callers, and ke
  ];
  for(const [reason,mutated]of changes)assert.ok(workflowProblems(mutated).includes(reason),reason);
  assert.match(src,/workflow_call:/);assert.match(src,/workflow_dispatch:/);assert.doesNotMatch(src,/uses:.*runner-executor\.yml@(?:main|agent\/)/);
- assert.ok(src.indexOf('Verify runtime and exact plan before candidate dependency scripts')<src.indexOf('run: npm ci'));
+ // #7905/D8007: no candidate dependency install runs as a host step for any profile; installs run inside the boundary.
+ assert.doesNotMatch(src,/run: npm ci/);
 });
 
 test('D7904 target admission has no hosted preflight dependency or OIDC minting permission',()=>{

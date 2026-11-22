@@ -128,3 +128,4 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `guardRunner.mjs` | D5505: independent guard execution, prerequisites, process-group interruption and bounded metadata. |
 | `guardRunner.test.mjs` | D5505: multi-failure, prerequisite, real signal, clean-run and preserved-command contracts. |
 | `guardEvidence5505.test.mjs` | D5505: guard evidence normalization, exact-command inheritance and rest-part continuation. |
+| `queueTimeoutReport.test.mjs` | D5975: deterministic per-SHA latency, coverage gaps and unknown outcome regression checks. |
