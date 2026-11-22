@@ -293,10 +293,10 @@ test('general compute deploys only the disabled preview through the reviewed own
   assert.match(preview, /^    environment: agent-compute-preview$/m);
   assert.match(preview, /^    needs: gate$/m);
   assert.match(preview, /--signer-workflow "\$IMAGE_SIGNER_WORKFLOW" --source-digest "\$GITHUB_SHA"/);
-  assert.match(preview, /COMPUTE_ENABLED = "off"/);
+  assert.match(preview, /python3 scripts\/render-agent-compute-preview\.py --config wrangler\.agent-compute\.toml --output wrangler\.agent-compute\.approved\.json/);
   assert.match(preview, /prevent_self_review.*is True/);
   for (const line of deployLines(preview)) {
-    assert.match(line, /--config wrangler\.agent-compute\.approved\.toml --env preview$/);
+    assert.match(line, /--config wrangler\.agent-compute\.approved\.json --env preview$/);
     assert.doesNotMatch(line, /--env production|--config wrangler\.toml/);
   }
 });

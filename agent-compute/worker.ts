@@ -6,7 +6,7 @@ import { computeBody, COMPUTE_BODY_CAP, computeUid, hostAdmission, type HostAdmi
 import { createWorkspaceSecurity, type GrantTarget, type WorkspaceSecurityDeps, type WorkspaceSecurityRun } from '../cloudflare-worker/src/services/agents/workspaceSecurity';
 import { createComputeHost, type HostRecord } from './host';
 import type { ComputeBindings } from './worker-configuration';
-import { createContainerVm } from './vm';
+import { createContainerVm, PYTHON_COMPUTE_INSTANCE, type ComputeInstance } from './vm';
 
 // Generated locally by wrangler types, before this Worker's typecheck/build.
 export interface ComputeHostEnv extends ComputeBindings { COMPUTE_CONTROL_SECRET?: string; BRANCH_DO_JURISDICTION?: string }
@@ -27,7 +27,7 @@ class Broker {
 }
 
 abstract class ComputeContainer extends DurableObject<ComputeHostEnv> {
-  protected readonly instanceType: 'basic' | 'standard-1' = 'basic';
+  protected readonly instanceType: ComputeInstance = PYTHON_COMPUTE_INSTANCE;
   private host: ReturnType<typeof createComputeHost> | null = null;
   private security: ReturnType<typeof createWorkspaceSecurity> | null = null;
   /** Teardown must not depend on a reachable broker, an approved image or an enabled admission flag. */

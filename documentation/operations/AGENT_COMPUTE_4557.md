@@ -38,18 +38,26 @@ The script requires assertion failures, then verifies restored controls.
 Record nonsecret references in a private operator receipt, never credentials or
 user payloads in GitHub:
 
-1. Exact merged candidate SHA and independent vendor security review. Choose
-   default scheduling with a deprecation/migration plan or approve durable_object
-   before creating either immutable application. For the newer policy, update
-   both configuration and `COMPUTE_SCHEDULING_POLICY` consistently with current
-   Cloudflare configuration; named pinned images/instance startup replace
-   default-policy image, instance_type and max_instances fields.
+1. Exact merged candidate SHA and independent vendor security review. The owner's
+   15 November answer B selects `durable_object`; D4557 part 3 applies it to both
+   applications and `COMPUTE_SCHEDULING_POLICY`. Do not reuse an existing
+   default-policy application: scheduling is immutable. Inventory any existing
+   applications before the separately approved creation/deployment step. Named
+   images and runtime instance options replace default-only application fields.
+   Python's prior basic ceiling is supplied as 0.25 vCPU / 1024 MiB / 4000 MB;
+   Documents uses standard-1. Verify account support for those actual profiles.
+   There is no durable-object application max_instances cap; retain broker
+   per-scope/global quotas and verify provider account limits before admission.
 2. Approved isolated account, jurisdiction/regions, instance profiles, concurrency,
    test data classification, budget and D4566 isolation receipt. Confirm
    entitlements and native network/metadata/process/filesystem isolation on the
    actual provider; local Docker tests do not establish hosted capability.
 3. Publish the reviewed image through an approved protected-main pipeline.
    Attach signed provenance, SBOM, fresh scan and immutable **OCI manifest digest**.
+   Retain the GHCR source reference and prepare the same manifest digest in the
+   approved account's Cloudflare managed registry through that pipeline. Direct
+   GHCR named-image references are unsupported by this scheduling policy.
+   Verify the copy independently; this preview workflow never copies an image.
    Pin that exact digest for both applications and broker evidence. Verify
    `container.inspect().image` identifies it under the chosen policy; empty
    metadata fails closed. No floating tag is acceptable.
@@ -71,18 +79,21 @@ An approved preview overlay must use verified resources. The manual `agent-compu
 `COMPUTE_PREVIEW_GATE_ENABLED=true` and configures the independently protected
 `agent-compute-preview` environment (required reviewer, prevent self-review).
 It accepts only an owner dispatch on the exact main SHA and an approval receipt.
-Provision the environment's `COMPUTE_PREVIEW_IMAGE_REF`,
+Provision the environment's `COMPUTE_PREVIEW_SOURCE_IMAGE_REF` (signed GHCR source),
+`COMPUTE_PREVIEW_IMAGE_REF` (the identical digest in the approved account's
+Cloudflare managed registry),
 `COMPUTE_PREVIEW_IMAGE_SIGNER_WORKFLOW`, `COMPUTE_PREVIEW_HOST_NAME`,
-`COMPUTE_PREVIEW_BROKER_NAME`, `COMPUTE_PREVIEW_DEFAULT_POLICY_REAFFIRMED`,
+`COMPUTE_PREVIEW_BROKER_NAME`, `COMPUTE_PREVIEW_SCHEDULING_POLICY=durable_object`,
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` through approved stores.
 It authenticates to GHCR with a read-only workflow token, verifies GitHub OCI
 provenance from the approved signer and exact source commit, clears registry
 credentials on completion, and deploys
 only the disabled host. The referenced protected-main publish/signing pipeline
 and signature review remain operator prerequisites; this PR never publishes an
-image. The manual workflow intentionally supports only a reaffirmed default
-policy; choosing durable_object requires a reviewed configuration/workflow
-change first. Broker deployment, migration, secrets and enablement retain their
+image. The local renderer validates the policy, account, matching source/target
+digests and disabled preview config before writing deployment JSON. It refuses
+default-policy fields and performs no remote action. Broker deployment,
+migration, secrets and enablement retain their
 separate approvals.
 
 ## One end-to-end preview receipt

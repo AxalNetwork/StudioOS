@@ -185,3 +185,4 @@ private-payloads/
 # D5505: local guard and preflight diagnostics, regenerated for each invocation.
 /guard-results.json
 /preflight-results.json
+wrangler.agent-compute.approved.json
