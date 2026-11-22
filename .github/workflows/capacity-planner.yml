@@ -37,7 +37,6 @@ jobs:
       CAPACITY_EXECUTOR_SHA: ${{ inputs.executor_sha }}
       CAPACITY_CHILD_WORKFLOW_SHA: ${{ inputs.child_workflow_sha }}
       CAPACITY_SOURCE_ROOT: ${{ github.workspace }}/candidate
-      CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
     steps:
       - name: Resolve this pinned reusable workflow revision from GitHub OIDC
         id: trusted
@@ -93,4 +92,6 @@ jobs:
           artifact-ids: ${{ steps.metadata.outputs.artifact_id }}
           path: ${{ runner.temp }}/capacity-plan
       - name: Submit once without waiting for external execution
+        env:
+          CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
         run: node control/scripts/ci/capacity-planner.mjs
