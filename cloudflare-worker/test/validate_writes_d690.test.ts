@@ -719,3 +719,12 @@ test('V9: stop/restart, observations and direction round-trip without inventing 
  db.exec('DROP TABLE hypothesis_experiments');
  assert.equal((await experimentsPart({env,projectId:P})).state,'unreadable');
 });
+
+test('V9: a stopped experiment refuses direct Lovable launch before any handoff is written', async()=>{
+ const {launchPrompt}=await import('../src/services/lovable/launch.ts');
+ const db=fixture(), env=envOf(db), hypothesisId=hyp(db,P,'H1');
+ const ex=await addExperiment(env,{projectId:P,userId:FOUNDER,hypothesisId,title:'Stopped launch'});
+ await setExperimentStatus(env,{projectId:P,userId:FOUNDER,hypothesisId,experiment_id:ex.id,status:'stopped'});
+ await assert.rejects(launchPrompt(env,{id:FOUNDER} as any,'validate',P,{record:{kind:'experiment',id:String(ex.id)},prompt:'Build a test'}),(err:any)=>err.code==='experiment_not_planned' && err.status===422);
+ db.close();
+});

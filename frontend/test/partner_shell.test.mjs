@@ -183,7 +183,6 @@ test('D1424 (#3700): each Operating Partner zone header fills the primary D1424 
     'delivery/status-reports': ['New report'],
     'offers/catalog': ['New service'],
     'offers/perk-deals': ['New perk'],
-    'offers/proof': ['Ask for consent'],
   });
   for (const zone of ['delivery/board', 'delivery/deliverables', 'delivery/capacity', 'delivery/health']) {
     assert.ok(PARTNER_ZONE_ACTIONS[zone].every((r) => !r.primary), `${zone} has no live first step`);

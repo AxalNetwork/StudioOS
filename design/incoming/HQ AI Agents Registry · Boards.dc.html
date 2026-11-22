@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Registry · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ › AI agents › Roster › Registry · #8080 · addendum to HQ AI Agents (D4137), boards SA20 to SA24</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ AI agents registry — the catalogue of deployable agents by stage, and whether each running copy agrees with its manifest</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The registry is a Roster tab beside the 16 personas (owner question Q1, option A drawn). Each entry is a versioned manifest synced from the repository after each deploy: name, version, stage, kind (platform or venture), owner, identity, runner pool, status, capabilities by domain, models allowed, cost and security profiles, synced at and the manifest commit. For each entry HQ sees its live copies and the fields where the runtime disagrees with the manifest; for the platform agents, the last runs from the engine. Manifests change by pull request, never on this screen; Eadwyn only proposes (accept, edit, discard). It continues the landed HQ AI Agents canvas (SA0 to SA9) with the same shell, tabs, tables, pills and tokens. States follow Platform States (D5129): Not recorded, Unreadable and Refused never look like zero, and drift is a word and a glyph, never colour alone. Violet dashed ◇ tags mark what #8080 (and #8079, #8069, #8070, #8071) must add; the amber ⚑ tag marks the owner pick.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main 270cdf4a2a · every agent ([Market Researcher] … [Legal Drafting]), App name ([axal-builder-bot]), person ([Iris Chen], [Maya Ruiz] of [Northwind Labs]), commit, run and figure (12 entries, 84 live copies, drift on 3 entries) is bracketed and fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ AI Agents Registry Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SA20', 'Registry · desktop 1440', 'Five stage groups (Research, Build, Raise, Grow, Operate) with version, kind and identity, capabilities as “n in m domains”, models, cost and security, status, live copies and drift as a word and a number. Stage and status filters, the synced-at line with the manifest commit. Eadwyn collapsed with one proposal; then open: retire [SEO Agent] (no run in 68 days), with Edit showing the pull-request instructions.', [F('SA20', false, 1600), F('SA20B', 'Eadwyn open · retire proposal · Edit shows the PR steps', 1640)]],
+      ['SA21', 'Agent detail · desktop 1440', '[Frontend Builder], a platform agent: the manifest as recorded, the two drift fields (capability to Policies, budget to Spend), its last 5 runs from the engine and “How to change this” pointing at the manifest file.', [F('SA21', false, 1060)]],
+      ['SA22', 'States · desktop 1440', 'Loading; Not recorded (no sync yet: run a deploy, the registry syncs after it); Unreadable (registry read failed, Personas still works, Try again); Refused (not a super admin); drift present, with the five drift marks and a drift list.', [F('SA22', 'Loading', 700), F('SA22B', 'Not recorded · no sync yet', 560), F('SA22C', 'Unreadable · Try again', 560), F('SA22D', 'Refused · not a super admin', 560), F('SA22E', 'Drift present · word and glyph', 580)]],
+      ['SA23', 'Phone 390', 'Agents as cards (name, version, kind, status, drift word) under the Personas | Registry switch; tap opens the full-screen detail sheet. 44 px targets.', [P('SA23', 'Registry'), P('SA23B', 'Detail sheet · [Frontend Builder]')]],
+      ['SA24', 'Dark · desktop 1440', 'SA20 on the dark tokens, and the drift marks in dark: each keeps its word, glyph and border.', [F('SA24', false, 1600), F('SA24B', 'Drift present · dark', 580)]],
+      ['SAR-H', 'Handoff', 'What was checked on main, what #8080 and its neighbours must add (◇), the owner pick (⚑), frontend-only work, the decision file D4137-p<k>.md, and the handoffs to Policies (#8070) and Spend (#8071).', [W('SARH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

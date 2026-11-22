@@ -190,7 +190,8 @@ test('the partner zone: Unreadable with Try again, the empty state, and the phon
   const api = { ...partnerApi([]), programmes: async () => { if (fail) throw new Error('D1 is down'); return { items: [] }; } };
   const v = await mount(h(TestingZone, { api }));
   try {
-    assert.ok(v.text().includes('This did not load'));
+    // D4844: the shared #5129 state, Unavailable with the zone's own sentence.
+    assert.ok(v.text().includes('Unavailable'), 'a failed read is the Unavailable state');
     assert.ok(!v.text().includes('Validate an offer before launch'));
     fail = false;
     await v.clickText('Try again');
