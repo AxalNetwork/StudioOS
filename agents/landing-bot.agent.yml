@@ -1,0 +1,54 @@
+# The landing bot (#5600, #6467–#6481): the first-entry feeder, the ejection
+# handler, the after-green refresh, main repair and the conflict resolver's
+# plan and apply jobs. The branch keeper and the model runner it calls have
+# their own manifests. Every value below is read from the files in `sources`.
+name: landing-bot
+kind: platform
+owner: S21                      # the landing bot's issues #6473–#6478 sit on S21
+identity: studioos-landing-bot  # #8061; the workflows mint its token from LANDING_BOT_APP_ID in the landing-bot environment
+capabilities:
+  - code.read
+  - code.branch      # main repair's `main-repair` branch
+  - code.commit      # conflict-resolution and main-repair commits (permission-contents: write)
+  - code.pr          # main repair opens one main-repair PR
+  - code.enqueue     # the feeder and the ejection handler ask the merge queue to take a PR; the queue merges it
+  - issue.read
+  - issue.write      # labels, the sticky comment, the repair issue (permission-issues: write)
+  - ci.read          # CI evidence and breakers (actions: read, checks: read)
+  - ci.dispatch      # the ejection handler dispatches the keeper (actions: write)
+models:
+  route: none        # it calls no model itself; the conflict resolver and main repair call the model runner
+  allowed: []
+resources:
+  cpu: none          # Actions runners, no container
+  memory: none
+limits:
+  runtime: 30            # minutes: the longest job's timeout-minutes (feeder, refresh)
+  tokens: 0
+  parallel_tasks: none   # one concurrency group per workflow; no cap across them
+  child_agents: 1        # one model-runner call per conflict-resolver or main-repair run
+  prs: none              # main repair: at most 2 attempts per failure fingerprint (rules.mjs), no daily PR count
+network:
+  internet: true     # GitHub-hosted runners do not restrict egress
+  egress:
+    - api.github.com
+    - github.com
+allowed_paths:
+  - '**'             # merge commits over any PR's files; rules.mjs pathGuard() refuses PROTECTED and T2 paths at write time
+runner_pool: trusted # main's code on hosted runners, in the main-only landing-bot environment
+approval:
+  external_actions: not-required   # no email, introduction or payment
+escalation: S21      # giveUp() hands a PR back to its owning slot; the bot's own faults go to S21
+status: paused       # LANDING_BOT_ENABLED is unset: every scheduled run on 2026-11-21 was skipped
+sources:
+  - .github/workflows/landing-feeder.yml
+  - .github/workflows/landing-bot-ejection.yml
+  - .github/workflows/landing-bot-refresh.yml
+  - .github/workflows/landing-bot-main-repair.yml
+  - .github/workflows/landing-bot-conflict.yml
+  - scripts/landing-bot/rules.mjs
+  - scripts/landing-bot/feeder.mjs
+  - scripts/landing-bot/ejection.mjs
+  - scripts/landing-bot/refresh.mjs
+  - scripts/landing-bot/mainRepair.mjs
+  - scripts/landing-bot/resolve.mjs

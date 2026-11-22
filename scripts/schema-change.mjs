@@ -68,7 +68,7 @@ function checks() {
   const results = [];
   for (const c of SCHEMA_CHECKS) {
     const t = Date.now();
-    const r = spawnSync('node', [...c.flags, `scripts/${c.script}`], { encoding: 'utf8', maxBuffer: 1 << 28 });
+    const r = spawnSync(c.command[0], c.command.slice(1), { encoding: 'utf8', maxBuffer: 1 << 28 });
     results.push({ script: c.script, code: r.status ?? 1, ms: Date.now() - t });
     if (r.status !== 0) process.stderr.write(`\n--- ${c.script}\n${(r.stdout || '') + (r.stderr || '')}\n`);
   }

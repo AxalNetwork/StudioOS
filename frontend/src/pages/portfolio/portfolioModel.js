@@ -86,7 +86,14 @@ export function daysBetween(from, to) {
 /** A settled `Promise.allSettled` entry, checked against the shape its board needs. */
 export function readOf(settled, shapeOk = () => true) {
   if (!settled) return { state: 'loading' };
-  if (settled.status === 'rejected') return { state: 'unreadable' };
+  if (settled.status === 'rejected') {
+    const failure = settled.reason?.data;
+    // D6201: retain the route's explicit unavailable reason, without treating it as data.
+    if (failure?.available === false && typeof failure.reason === 'string') {
+      return { state: 'unreadable', unavailable: true, reason: failure.reason };
+    }
+    return { state: 'unreadable' };
+  }
   const value = settled.value;
   if (value == null || typeof value !== 'object' || !shapeOk(value)) return { state: 'unreadable' };
   return { state: 'ok', value };
@@ -133,6 +140,9 @@ export const DEFINITIONS = {
  */
 function metric(key, label, read, pick) {
   if (read.state === 'loading') return { key, label, value: null, state: 'loading', note: DEFINITIONS[key] };
+  if (read.state === 'unreadable' && read.unavailable) {
+    return { key, label, value: UNAVAILABLE, state: 'unavailable', note: DEFINITIONS[key], reason: read.reason };
+  }
   if (read.state === 'unreadable') {
     return { key, label, value: UNREADABLE, state: 'unreadable', note: DEFINITIONS[key], reason: 'Performance could not be read.' };
   }
@@ -249,7 +259,7 @@ export function healthFor(position, health) {
 /** One company's reporting obligation for the measured period: `{ state, period, last, reason }`. */
 export function reportingFor(position, compliance) {
   if (compliance.state === 'loading') return { state: 'loading' };
-  if (compliance.state !== 'ok') return { state: 'Unreadable', reason: 'Reporting could not be read.' };
+  if (compliance.state !== 'ok') return { state: 'Unreadable', reason: compliance.reason || 'Reporting could not be read.' };
   const c = compliance.value;
   const period = c.population?.period ?? c.period ?? null;
   const row = c.companies.find((x) => Number(x.project_id) === Number(position.project_id));
