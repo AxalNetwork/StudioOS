@@ -22,7 +22,9 @@ export const PENDING_READERS = [
   'services/researchCompanyDirectory.ts',
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
-export const MAINTENANCE_WRITERS: string[] = [];
+// D7819: #7821's classification writer is the one reviewed maintenance entry it anticipated. It reads every
+// physical catalogue row (held records included) only to recompute research_company_mapping, and serves none of them.
+export const MAINTENANCE_WRITERS: string[] = ['cloudflare-worker/src/services/researchCompanyClassification.ts'];
 const OWN = 'cloudflare-worker/src/services/researchCompanyRead.ts';
 export function withoutComments(source: string, path = 'file.ts') {
   return transformSync(source, {
