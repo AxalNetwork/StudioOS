@@ -141,6 +141,7 @@ test('Refresh rechecks permission before detail, refreshes both reads and preser
     await refresh();
     await until(() => count(43, 'positions') === 2 && count(43, 'history') === 2);
     assert.equal(audienceCalls, 3);
+    assert.equal(calls.filter(path => path === '/api/fund-performance').length, 3, 'One summary request per mount or Refresh');
     assert.equal(count(42, 'positions'), 1, 'Refresh retained the second fund selection');
     const filter = label => walk(container).find(n => props(n).onClick && props(n)['aria-pressed'] !== undefined && text(n).startsWith(label));
     const active = filter('Active'); assert.ok(active);

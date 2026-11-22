@@ -104,7 +104,7 @@ function FundPerformanceReader({ scope, fundUnlocked, locked }) {
   }, [scope, attempt], { enabled: !locked });
   const visible = state.generation === attempt ? state : { items: [], loading: true, error: null };
   const currentAudience = audience.status === 'ready' && audience.data?.permissionAttempt !== attempt ? { ...audience, status: 'loading', data: null } : audience;
-  const reload = () => { setState({ items: [], loading: !locked, error: null, generation: attempt + 1 }); setAttempt(n => n + 1); };
+  const reload = () => setAttempt(n => n + 1);
   return <FundPerformanceShell fundUnlocked={fundUnlocked} locked={locked} state={visible} reload={reload}>
     <FundPerformanceView key={scope} {...visible} reload={reload} audience={currentAudience} />
   </FundPerformanceShell>;
