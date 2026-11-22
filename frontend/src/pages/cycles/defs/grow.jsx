@@ -15,6 +15,8 @@ import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';
 import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
 import UpdateAskReplies from '../UpdateAskReplies';
+import MarketsHome from '../MarketsHome';
+import MarketRecord from '../MarketRecord';
 import FeedbackThemes from '../FeedbackThemes';
 import FeedbackLoop from '../FeedbackLoop';
 import { toFnMap } from '../adapters';
@@ -65,7 +67,18 @@ const grow = {
       <DurableDueStrip counts={data?.parts?.due_counts} on={data?.parts?.due_on} query={ctx.query} onQuery={ctx.onQuery} search={ctx.search} />
     ),
   }),
-  recordPage: toFnMap({ 'durable-company-building': (record,ctx) => <DurableCompanyRecord record={record} {...ctx}/> }),
+  recordPage: toFnMap({
+    'durable-company-building': (record,ctx) => <DurableCompanyRecord record={record} {...ctx}/>,
+    // D6120 (#6120, GR-22, GR-27, GR-28): a market's record, its parts, entry plan, localisation and side column.
+    'market-expansion': (record, ctx) => <MarketRecord record={record} activity={ctx.activity} onForm={ctx.onForm} onWrite={ctx.onWrite} onShowAll={ctx.onShowAll} />,
+  }),
+  // D6120 (#6120, GR-21, GR-23, GR-25, GR-26, GR-27): Markets owns its page, ranked by readiness with Compare on it.
+  homes: toFnMap({
+    'market-expansion': (data) => ({
+      sub: 'Ranked by readiness out of 40: four parts, each scored 0–10 with its source.',
+      body: (p) => <MarketsHome {...p} parts={data?.parts ?? null} />,
+    }),
+  }),
   fills: { 'product-improvement': 'feedback_theme' },
   // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
   // applicant ranking on Team expansion. D4493 retired Distribution's
