@@ -92,7 +92,7 @@ export default function SegmentCompare({ projectId, records }) {
             <span key={id} className={PILL}>
               {name}
               {ids.length > COMPARE_MIN && (
-                <button type="button" className="ml-0.5 min-h-6 min-w-6 rounded-full text-axal-muted hover:text-axal-ink dark:text-gray-400"
+                <button type="button" className="ml-0.5 min-h-6 min-w-6 rounded-full text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"
                   aria-label={`Remove ${name}`} onClick={() => go(removeId(ids, id))}>✕</button>
               )}
             </span>
