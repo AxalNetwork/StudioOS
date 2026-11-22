@@ -312,6 +312,13 @@ export function queueState({ queued, oldestCreatedAt, now = Date.now(), threshol
 
 /** D5974: one source for warning/hysteresis shares; the response deadline comes from live main rules. */
 export const QUEUE_DEADLINE_DEFAULTS = Object.freeze({ warnShare: 0.8, clearShare: 0.7 });
+/** A blank optional variable uses the default; invalid configuration is an explicit operator error. */
+export function parseDeadlineWarnShare(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return QUEUE_DEADLINE_DEFAULTS.warnShare;
+  const share = Number(value);
+  if (!Number.isFinite(share) || share <= 0 || share > 1) throw new Error('QUEUE_DEADLINE_WARN_SHARE must be greater than 0 and at most 1');
+  return share;
+}
 export function queueDeadlineState({ runs, required, activeHeads, deadlineMinutes, now, issueOpen = false, warnShare = QUEUE_DEADLINE_DEFAULTS.warnShare }) {
   const unknown = () => ({active:null,candidates:[],unknown:true});
   if(!Array.isArray(runs)||!Array.isArray(required)||!required.length||!Array.isArray(activeHeads)||!Number.isFinite(now)||!Number.isFinite(deadlineMinutes)||deadlineMinutes<=0||!Number.isFinite(warnShare)||warnShare<=0||warnShare>1) return unknown();

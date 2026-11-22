@@ -1,7 +1,7 @@
 /** D5974: active native candidates, pending required checks, unreadable evidence and transition-only delivery. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { queueDeadlineState, message, transition } from '../../scripts/lib/githubAlerts.mjs';
+import { queueDeadlineState, parseDeadlineWarnShare, message, transition } from '../../scripts/lib/githubAlerts.mjs';
 import { safeHealthFacts, createHealthMonitor } from '../../scripts/health-alert-episodes.mjs';
 import { readDeadlineEvidence } from '../../scripts/lib/queueDeadline.mjs';
 const NOW=Date.parse('2026-11-01T12:00:00Z'),SHA='a'.repeat(40);
@@ -64,4 +64,15 @@ test('existing health episodes notify once on open and once on complete recovery
  await monitor.apply('queue-deadline',null,{},3);assert.equal(issue.state,'open');
  await monitor.apply('queue-deadline',false,{},4);await monitor.apply('queue-deadline',false,{},5);
  assert.deepEqual(delivered.map(x=>x.phase),['open','recovery']);assert.match(delivered[0].text,/full suite/);assert.equal(issue.state,'closed');
+});
+
+
+test('deadline share configuration is explicit, bounded, and custom hysteresis always clears below warning', () => {
+  for (const v of [undefined, null, '', '  ']) assert.equal(parseDeadlineWarnShare(v), .8);
+  assert.equal(parseDeadlineWarnShare('0.4'), .4);
+  assert.equal(parseDeadlineWarnShare('1'), 1);
+  for (const v of ['abc', 'NaN', 'Infinity', '0', '-1', '1.01']) assert.throws(() => parseDeadlineWarnShare(v), /QUEUE_DEADLINE_WARN_SHARE must be greater than 0 and at most 1/);
+  const runs = [run({ created_at: new Date(NOW - 34 * 60_000).toISOString() })];
+  assert.equal(state({ runs, warnShare: .4, issueOpen: false }).active, false);
+  assert.equal(state({ runs, warnShare: .4, issueOpen: true }).active, true);
 });

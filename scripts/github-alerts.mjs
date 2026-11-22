@@ -14,7 +14,7 @@
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
  * webhook, the issue is still opened or closed and the job warns; the trusted reporter fails visibly on unreadable evidence without changing the watched result.
  */
-import { ALERT_KINDS, FAILURE_ID_TITLE, QUEUE_DEFAULTS, mainState, parseQueueCutoff, possibleRepairs, message, queueAfterCutoff, queueDeadlineState, safeDeadlineCandidates, queueStallState, queueState, reviewState, stallEvidence, stallRunsToRead, stallTestFile, withQueueCutoffLine } from './lib/githubAlerts.mjs';
+import { ALERT_KINDS, FAILURE_ID_TITLE, QUEUE_DEFAULTS, mainState, parseQueueCutoff, parseDeadlineWarnShare, possibleRepairs, message, queueAfterCutoff, queueDeadlineState, safeDeadlineCandidates, queueStallState, queueState, reviewState, stallEvidence, stallRunsToRead, stallTestFile, withQueueCutoffLine } from './lib/githubAlerts.mjs';
 import { SUMMARY_JOBS, safeGithubUrl } from './lib/ciClassify.mjs';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
@@ -135,13 +135,13 @@ async function main() {
     return apply('file-backup', state.active, { ...state, backupReason: state.reason, runUrl: safeGithubUrl(latestRun?.html_url) }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
   if (mode === 'queue-deadline') {
+    const warnShare = parseDeadlineWarnShare(env.QUEUE_DEADLINE_WARN_SHARE);
     const evidence=await readDeadlineEvidence({repo,
       rest:path=>gh(`/repos/${repo}/${path}`),
       graph:async(query,variables)=>{const r=await gh('/graphql',{method:'POST',body:JSON.stringify({query,variables})});if(r.errors?.length||!r.data)throw new Error('queue_membership_unreadable');return r.data;},
     });
     const open=await openIssue('queue-deadline');
-    const state=queueDeadlineState({...evidence,now:Date.now(),issueOpen:Boolean(open),
-      ...(env.QUEUE_DEADLINE_WARN_SHARE?{warnShare:Number(env.QUEUE_DEADLINE_WARN_SHARE)}:{})});
+    const state=queueDeadlineState({...evidence,now:Date.now(),issueOpen:Boolean(open),warnShare});
     if(state.active===null) process.exitCode=1;
     console.log(JSON.stringify({kind:'queue-deadline',active:state.active,deadlineMinutes:evidence.deadlineMinutes,candidates:safeDeadlineCandidates(state.candidates)}));
     if(env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, state.active===true ? `${message('queue-deadline','open',{deadlineCandidates:state.candidates})}\n` : `Queue deadline: ${state.active===false?'no near-deadline candidates':'unknown evidence; no recovery inferred'}.\n`);
