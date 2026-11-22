@@ -72,6 +72,10 @@ const WAITING_ON: Partial<Record<Stage, string>> = {
   paid: 'hq', preparing: 'hq', ready_to_file: 'hq',
   submitted: 'registry', registry_query: 'registry', registered: 'nobody',
 };
+/** D6695: who `stage` waits on where the stage alone says so, else null (formationRequests.ts restores waiting_on with it). */
+export function stageWaitingOn(stage: string): string | null {
+  return WAITING_ON[stage as Stage] ?? null;
+}
 
 export type Party = 'founder' | 'hq' | 'partner' | 'counsel' | 'registry' | 'system';
 export interface Actor { party: Party; userId?: number | null; email?: string | null }
