@@ -15,6 +15,10 @@ import { createTraceExporter } from './runners/trace-exporter.mjs';
 const need=(ok,reason)=>{if(!ok)throw Error(reason);};
 const SHA=/^[a-f0-9]{40}$/,ID=/^[1-9][0-9]{0,14}$/;
 const same=(a,b)=>JSON.stringify(receiptIdentity(a))===JSON.stringify(receiptIdentity(b))&&(a.childWorkflowSha??a.executorSha)===(b.childWorkflowSha??b.executorSha);
+const completionBound=record=>Math.min(record.receipt.executionDeadline,record.completionDeadline??record.receipt.executionDeadline);
+// A matching body alone cannot prove that a successful acknowledgement arrived in budget.
+const timelyAck=record=>record.ack===JSON.stringify(record.result)&&Number.isSafeInteger(record.ackAt)
+ &&record.ackAt<completionBound(record)&&record.ackAt<=Date.now();
 /** Fixed listener-private state, outside disposable run paths; never an environment/workflow path. */
 export const resultRoot=()=>join(dirname(defaultRecoveryRoot()),'capacity-results');
 export function resultStore(root,run){
@@ -25,7 +29,8 @@ export function resultStore(root,run){
   let fd;try{fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);}catch(e){if(e.code==='ENOENT')return null;throw e;}
   try{const st=fstatSync(fd);need(st.isFile()&&st.nlink===1&&st.uid===process.getuid?.()&&(st.mode&0o077)===0&&st.size<=16384,'result_state_invalid');return JSON.parse(readFileSync(fd,'utf8'));}finally{closeSync(fd);}
  };
- const eligible=(value,name)=>value?.receipt?.childAttempt===1&&`${value.receipt.childRunId}-1.json`===name&&value.removed===true&&value.result?.cleanupConfirmed===true&&typeof value.ack==='string'&&value.ack===JSON.stringify(value.result);
+ const eligible=(value,name)=>value?.receipt?.childAttempt===1&&`${value.receipt.childRunId}-1.json`===name&&value.removed===true&&value.result?.cleanupConfirmed===true&&typeof value.ack==='string'&&value.ack===JSON.stringify(value.result)
+  &&(value.result.testStep!=='success'||value.result.executionOutcome!=='completed'||timelyAck(value));
  const retire=path=>{const value=readOne(path);if(eligible(value,path.slice(root.length+1))){rmSync(path);sync();return true;}return false;};
  // At most 128 child journals. Reclaim only durable acknowledgements with independently verified cleanup.
  // The current single-writer job keeps its own journal until cleanup; unreadable/uncertain evidence is retained.
@@ -71,8 +76,8 @@ export async function main(mode,env=process.env,ports={}){
  // Persist the original Run-process bound; a cleanup process must never reopen it with a fresh timeOrigin.
  const fenceLateSuccess=()=>{
   if(record?.result?.testStep==='success'&&record.result.executionOutcome==='completed'
-    &&(mode==='run'||record.ack!==JSON.stringify(record.result))
-    &&Date.now()>=Math.min(record.receipt.executionDeadline,record.completionDeadline??record.receipt.executionDeadline)){
+    &&(mode==='run'||!timelyAck(record))
+    &&Date.now()>=completionBound(record)){
    record.result={...record.result,executionOutcome:'timed_out'};save();
   }
  };
@@ -81,7 +86,12 @@ export async function main(mode,env=process.env,ports={}){
   if(!record?.result||record.ack===JSON.stringify(record.result))return;
   const delivered=structuredClone(record.result);
   const value=await (ports.report??((receipt,result)=>reportExecutionResult(receipt,result,{url:env.CI_CAPACITY_URL,audience:env.CI_CAPACITY_AUDIENCE,oidcToken:githubOidcToken(env)})))(record.receipt,delivered);
-  need(value?.accepted===true,'result_delivery_unacknowledged');record.ack=JSON.stringify(delivered);save();
+  need(value?.accepted===true,'result_delivery_unacknowledged');
+  // Classify ACK arrival before its first durable write. A crash after that write must
+  // leave the timeout correction dirty, never a matching positive ACK for cleanup to retire.
+  record.ackAt=Date.now();record.ack=JSON.stringify(delivered);
+  if(record.result.testStep==='success'&&record.result.executionOutcome==='completed'&&record.ackAt>=completionBound(record))record.result={...record.result,executionOutcome:'timed_out'};
+  save();
   // A late ACK cannot acknowledge a later timeout correction. Cleanup retries that dirty journal.
   fenceLateSuccess();
  };

@@ -192,6 +192,19 @@ test('replacement CapacityControl instances retain the durable ordinary admissio
   assert.equal(f.window().authUsed,L.authPerWindow);assert.deepEqual(f.counts(),{keyReads:0,verifications:0,work:0});
 });
 
+test('failed coalesced OIDC acquisition releases only its flight and a later receipt retries verification',async t=>{
+ const f=fixture(t),start=deferred(),finish=deferred();let acquisitions=0;
+ const input={request:{...body,generation:'1'},context:{repository:REPO,childRunId:100,childAttempt:1,executorSha:EXEC},phase:'execute'};
+ const read=createReceiptReader({url:'https://capacity.invalid',audience:'fixture-capacity',oidcToken:async()=>{
+  acquisitions++;if(acquisitions===1){start.resolve();await finish.promise;throw Error('fixture OIDC unavailable');}
+  return token();
+ },fetcher:(url,init)=>f.control().fetch(new Request(url,init))});
+ const first=assert.rejects(read(input),/OIDC unavailable/),second=assert.rejects(read(input),/OIDC unavailable/);
+ t.after(async()=>{finish.resolve();await Promise.all([first,second]);});
+ await start.promise;assert.equal(acquisitions,1);finish.resolve();await Promise.all([first,second]);
+ assert.equal((await read(input)).active,true);assert.equal(acquisitions,2);assert.equal(f.counts().verifications,1);
+});
+
 test('same-context receipt validation failures discard the bearer before the next read',async t=>{
   t.mock.timers.enable({apis:['Date'],now:NOW});
   const receipt={repository:REPO,childRunId:100,childAttempt:1,executorSha:EXEC,requestId:body.requestId,logicalShard:body.shard,generation:1,profile:body.profile};

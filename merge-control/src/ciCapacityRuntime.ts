@@ -94,29 +94,39 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
       // Admission precedes body reads and ordered work, so unauthenticated waits cannot queue ahead of alarms.
       const result=await this.budget.run(
         async()=>{
-          if(path!=='/capacity/outcome'&&!await this.enabled())throw new Error('capacity_disabled');
+          if(path!=='/capacity/outcome'&&!(await this.enabled()))throw new Error('capacity_disabled');
           return authenticateCapacity(request,this.env.CAPACITY_AUDIENCE??'',this.env.REPOSITORY,capacityPlatformFetch,Date.now,this.keys);
         },
         identity=>{
           const lane=capacityIdentityLane(identity,config);
           if(config.publication==='pilot'&&lane==='submit'&&identity.event_name!=='push')return null;
-          return path===`/capacity/${lane}`||(path==='/capacity/outcome'&&lane==='receipt')?lane:null;
+          return (path===`/capacity/${lane}`||(path==='/capacity/outcome'&&lane==='receipt'))?lane:null;
         },
         async identity=>{
-          if(path!=='/capacity/outcome'&&!await this.enabled())throw new Error('capacity_disabled');
-          const body=JSON.parse(new TextDecoder().decode(await capacityBody(request.body,path.endsWith('/submit')?9*1024*1024:path.endsWith('/outcome')?8192:4096)));
+          if(path!=='/capacity/outcome'&&!(await this.enabled()))throw new Error('capacity_disabled');
+          const bodyLimit=path.endsWith('/submit')?9*1024*1024:(path.endsWith('/outcome')?8192:4096);
+          const body=JSON.parse(new TextDecoder().decode(await capacityBody(request.body,bodyLimit)));
           return this.ordered(async()=>{
-            if(path!=='/capacity/outcome'&&!await this.enabled())throw new Error('capacity_disabled');
+            if(path!=='/capacity/outcome'&&!(await this.enabled()))throw new Error('capacity_disabled');
             const {transport,ports}=await this.components();
-            return path.endsWith('/submit')?transport.submit(body,identity):path.endsWith('/outcome')?transport.outcome(body,identity,ports,this.results):transport.receipt(body,identity);
+            if(path.endsWith('/submit'))return transport.submit(body,identity);
+            if(path.endsWith('/outcome'))return transport.outcome(body,identity,ports,this.results);
+            return transport.receipt(body,identity);
           });
         },
-        path==='/capacity/receipt'?{token,ownedReceipt:result=>'active' in result&&result.active===true&&result.receipt!==null}:undefined,
+        path==='/capacity/receipt'?{
+          token,
+          ownedReceipt:result=>('active' in result&&result.active===true&&result.receipt!==null),
+        }:undefined,
       );
       return Response.json(result);
     }catch(error){
-      if(error instanceof Error&&error.message==='capacity_disabled')return Response.json({error:'capacity_disabled'},{status:503});
-      if(error instanceof Error&&/^capacity_(?:auth|work)_limited$/.test(error.message))return new Response('rate limited',{status:429});
+      if(error instanceof Error&&error.message==='capacity_disabled'){
+        return Response.json({error:'capacity_disabled'},{status:503});
+      }
+      if(error instanceof Error&&/^capacity_(?:auth|work)_limited$/.test(error.message)){
+        return new Response('rate limited',{status:429});
+      }
       console.error(JSON.stringify({component:'ci-capacity',event:'request-refused'}));
       return Response.json({error:'capacity_evidence_unavailable'},{status:403});
     }

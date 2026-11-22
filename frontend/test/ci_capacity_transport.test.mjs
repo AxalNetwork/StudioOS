@@ -288,7 +288,9 @@ test('capacity App client scopes its token, fixes the API origin and caps authen
   calls.push({url,init});return String(url).endsWith('/access_tokens')?Response.json({token:'fixture-installation'}):Response.json({ok:true});
  });
  assert.deepEqual(JSON.parse(calls[0].init.body),{repositories:['StudioOS'],permissions:{actions:'write',checks:'write',contents:'read'}});
- for(let i=0;i<100;i++)await api('GET',PREFIX+'/actions/runs/12');
+ for(let i=0;i<100;i++){
+  await api('GET',PREFIX+'/actions/runs/12');
+ }
  await assert.rejects(api('GET',PREFIX+'/actions/runs/12'),/budget/);
  assert.equal(calls.every(c=>String(c.url).startsWith('https://api.github.com/')),true);
  assert.equal(calls.every(c=>c.init.redirect==='error'&&c.init.signal instanceof AbortSignal),true);

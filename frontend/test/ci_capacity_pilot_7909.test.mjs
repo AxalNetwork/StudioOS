@@ -79,7 +79,9 @@ test('D7909 inventory has a separate bounded read-only credential and repo App c
  const base='/orgs/AxalNetwork/actions/runner-groups/5';
  for(const path of [base,base+'/repositories?per_page=100&page=1',base+'/runners?per_page=100&page=3'])await read('GET',path);
  assert.equal(calls.length,3);assert.equal(calls.every(c=>c.init.headers.Authorization==='Bearer fixture-inventory'&&c.init.signal instanceof AbortSignal),true);
- for(const [method,path] of [['POST',base],['GET',base+'/runners?per_page=100&page=4'],['GET',base.replace('/5','/6')],['GET',PREFIX+'/actions/runs/12']])await assert.rejects(read(method,path),/scope/);
+ for(const [method,path] of [['POST',base],['GET',base+'/runners?per_page=100&page=4'],['GET',base.replace('/5','/6')],['GET',PREFIX+'/actions/runs/12']]){
+  await assert.rejects(read(method,path),/scope/);
+ }
  assert.equal(calls.length,3);
  assert.equal(calls.every(c=>c.url.startsWith('https://api.github.com/orgs/AxalNetwork/actions/runner-groups/5')),true);
  const capped=capacityInventoryClient({REPOSITORY:REPO,CAPACITY_INVENTORY_TOKEN:'fixture-inventory'},async()=>Response.json({ok:true}));

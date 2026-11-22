@@ -54,7 +54,7 @@ function engineFixture(exit=0){
  return {job,engine,control,spawnCopy};
 }
 async function setup(t,{exit=0,lost=false,cleanupFailure=false,long=false,skipExport=false}={}){
- const f=fixture(t,{callbackResults:true}),startedAt=Date.now();t.mock.method(globalThis,'fetch',async(input,init)=>{const response=await f.fetcher(input,init);if(String(input).includes('/actions/runs/100/')&&String(input).includes('/jobs')){const value=await response.json();for(const job of value.jobs)job.started_at=new Date(startedAt).toISOString();return Response.json(value);}return response;});
+ const f=fixture(t),startedAt=Date.now();t.mock.method(globalThis,'fetch',async(input,init)=>{const response=await f.fetcher(input,init);if(String(input).includes('/actions/runs/100/')&&String(input).includes('/jobs')){const value=await response.json();for(const job of value.jobs)job.started_at=new Date(startedAt).toISOString();return Response.json(value);}return response;});
  f.env.CAPACITY_CONFIG=JSON.stringify({...config,maxExternalWorkerShards:1});f.restart();
  f.runners.push({id:5,os:'linux',status:'online',busy:false,labels:['self-hosted','Linux','X64','studioos-worker-v1'].map(name=>({name}))});
  await unlock(f);const scripts=JSON.parse(fs.readFileSync('package.json','utf8')).scripts,bytes=JSON.stringify(buildPlan(scripts,{},process.cwd()),null,2)+'\n';
@@ -247,4 +247,32 @@ test('D7909 a completed acknowledged Run is not retroactively expired by a later
  t.mock.timers.setTime(deadline+1);t.mock.getter(performance,'timeOrigin',()=>Date.now());
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);assert.equal(x.reports(),1,'cleanup must not reopen an already completed in-budget delivery');
  const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'success');assert.equal(row.executionOutcome,'completed');
+});
+
+for(const late of [false,true])test(`D7909 crash immediately after durable ${late?'late':'timely'} ACK preserves its budget classification on restart`,async t=>{
+ const x=await setup(t),start=Date.now(),deadline=start-120_000+26*60_000-5_000;
+ t.mock.getter(performance,'timeOrigin',()=>start-120_000);
+ const report=x.ports.report,write=x.results.write;let crashed=false;
+ x.ports.report=async(...args)=>{if(late)t.mock.timers.setTime(deadline+1);return report(...args);};
+ x.ports.results={...x.results,write(row){write(row);if(!crashed&&row.ack!==null){crashed=true;throw Error('fixture crash immediately after durable ACK');}}};
+ await assert.rejects(bridge('run',x.env,x.ports),/immediately after durable ACK/);assert.equal(crashed,true);
+ const saved=x.results.read();assert.equal(saved.result.executionOutcome,late?'timed_out':'completed');
+ assert.equal(saved.ackAt,late?deadline+1:start);
+ assert.equal(saved.ack===JSON.stringify(saved.result),!late,'a late positive ACK cannot cover the persisted timeout');
+ assert.equal(x.results.retire(),!late,'only the timely positive completion can retire before restart');
+ if(!late)x.results.write(saved);
+ // Use the original store, a new process origin and the actual authenticated authority delivery.
+ x.ports.results=x.results;x.ports.report=report;t.mock.timers.setTime(deadline+2);t.mock.getter(performance,'timeOrigin',()=>Date.now());
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);
+ assert.equal(row.executionOutcome,late?'timed_out':'completed');assert.equal(x.reports(),late?2:1);
+});
+
+test('D7909 a legacy matching positive ACK without durable timing cannot retire or bypass the earlier Run bound',async t=>{
+ const x=await setup(t),start=Date.now(),deadline=start-120_000+26*60_000-5_000;
+ t.mock.getter(performance,'timeOrigin',()=>start-120_000);assert.equal(await bridge('run',x.env,x.ports),0);
+ const saved=x.results.read();delete saved.ackAt;x.results.write(saved);assert.equal(x.results.retire(),false);
+ t.mock.timers.setTime(deadline+1);t.mock.getter(performance,'timeOrigin',()=>Date.now());
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.executionOutcome,'timed_out');
 });

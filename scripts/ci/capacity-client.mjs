@@ -38,8 +38,9 @@ function transport({url,audience,oidcToken,fetcher=globalThis.fetch},receiptCont
    cached={scope,token,until:Math.min(now+30000,exp*1000-1000)};
    return token;
   })();
-  flight={scope,promise};
-  try{return await promise;}finally{if(flight?.promise===promise)flight=null;}
+  const current={scope,promise};flight=current;
+  // Compare acquisition identity, not promise values; keep the await inside finally's scope.
+  try{return await current.promise;}finally{if(flight===current)flight=null;}
  }
  return async(path,body,signal,scope,validate)=>{
   const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000);
