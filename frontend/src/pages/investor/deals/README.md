@@ -29,6 +29,7 @@ band underneath.
 | `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
 | `ClosingWorkspace.jsx` | DX17 to DX26 · the closing workspace (D6866, #6866) | `/deals/closing?deal=<id>` | WORKSPACE. One deal's Checklist, Paper, Conditions, Transfer and Audit tabs, rendered by `ClosingZone.jsx` when `?deal=` is set; the checklist item side sheet; the before-close rules. Every read is a route main serves, scoped at the route |
 | `closingWorkspaceModel.js` | (DX17 to DX26) | — | The workspace's pure rules: status words and glyphs, Overdue, condition order, the transfer hold, the Audit merge, the close rules and the side sheet's patch. Read by `ClosingWorkspace.jsx` and its test |
+| `commit/` | DE19 to DE23 of Deals v2 addendum B (D6142), built by D6144 (#6144) | `/deals/commit` | The Commit zone's own vote: `VoteDialogs.jsx` (Your vote, Cast or change my vote, Recuse yourself) and `commitVoteModel.js` (what the reader may do, the vote body, the roster line, a refusal in the Worker's words). Read by `CommitZone.jsx` |
 
 ## The rule for adding to this folder
 
