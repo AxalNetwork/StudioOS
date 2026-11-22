@@ -28,6 +28,9 @@ const OK = {
   ],
 };
 
+// An invented idempotency value (not a credential), passed through unchanged.
+const SAME_WRITE = 'same-write';
+
 test('the view: each row says its date and days left, or why there is none, and how often; every state its own', () => {
   const v = suggestionsView({ suggestions: OK }, 'ready', '2026-11-22');
   assert.equal(v.state, 'ok');
@@ -84,11 +87,11 @@ test('the form: the existing filing form and write, with the suggestion’s name
   const uploads = [];
   const w = { build: { formationStep: async (...a) => { sent.push(a); return { id: 5 }; } }, recordAction: async (...a) => { uploads.push(a); return {}; } };
   const file = { name: 'receipt.pdf' };
-  assert.deepEqual(await form.submit(w, 7, { title: 'Registered agent renewal', kind: 'other', state: 'upcoming', proof: file }, { idempotencyKey: 'key-8259-abcdef' }), { id: 5 });
+  assert.deepEqual(await form.submit(w, 7, { title: 'Registered agent renewal', kind: 'other', state: 'upcoming', proof: file }, { idempotencyKey: SAME_WRITE }), { id: 5 });
   assert.equal(sent[0][0], 7);
   assert.equal(sent[0][1].title, 'Registered agent renewal');
   assert.equal(sent[0][1].kind, 'other');
-  assert.equal(sent[0][2], 'key-8259-abcdef');
+  assert.equal(sent[0][2], SAME_WRITE);
   assert.equal(uploads[0][3], 'step-5', 'the proof goes to the filing it made, as Add filing’s does');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.equal(form.addressOnly, true);

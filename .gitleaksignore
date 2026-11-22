@@ -343,3 +343,9 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # The same string, quoted in the comment above as first written (commit d3fc770); the
 # next commit rewords the comment, so no later commit carries it. Scoped to that line.
 d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
+# D8259 (#8259): not a secret. The suggested-filings frontend test's first
+# commit passed an invented idempotency value to the filing form under a field
+# the generic-api-key rule matches by name. The next commit names it
+# SAME_WRITE, a plain constant, so no later commit carries it. Scoped to the
+# one finding.
+4e9cfd8335c37678ad99e0f6e236abb6d2d6c508:frontend/test/company_suggested_filings_8259.test.mjs:generic-api-key:87
