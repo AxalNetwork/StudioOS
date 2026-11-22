@@ -114,6 +114,8 @@ export interface Env {
   // Used by the boot guards in auth.ts to decide whether to throw on missing
   // secrets vs warn-and-fallback.
   ENVIRONMENT?: string;
+  /** Fixed recipient of the scheduled production HQ magic-link insert probe. */
+  MAGIC_INSERT_CANARY_EMAIL?: string;
   /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
   PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
@@ -205,6 +207,17 @@ export interface Env {
   // owner has registered https://axal.vc and https://app.axal.vc as
   // Authorized JavaScript origins on that client.
   GOOGLE_SIGNIN_POPUP?: string;
+  // D6957 — Sign in with Apple for the web (routes/auth_apple.ts). The
+  // Services ID is the OAuth client_id; the Team ID and Key ID sign the client
+  // secret with the private key (the .p8 file's contents, a wrangler secret).
+  // /api/auth/apple/config answers configured only when all four are set, and
+  // /login shows the Apple button only then. APPLE_SIGNIN_RETURN_BASE_URL
+  // overrides the host of the registered return URL (default PUBLIC_BASE_URL).
+  APPLE_SIGNIN_SERVICES_ID?: string;
+  APPLE_SIGNIN_TEAM_ID?: string;
+  APPLE_SIGNIN_KEY_ID?: string;
+  APPLE_SIGNIN_PRIVATE_KEY?: string;
+  APPLE_SIGNIN_RETURN_BASE_URL?: string;
   // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
   // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
   // spreadsheets scope never forces calendar users to re-consent. Resolution
@@ -322,6 +335,9 @@ export interface Env {
   // When any of the three is unset, /api/linkedin/oauth/start returns 503
   // and the UI hides the OAuth tab while still allowing the CSV-export
   // walkthrough to function.
+  /** #3725: Axal's Eventbrite app. Both unset keeps the Eventbrite syndication channel switched off. */
+  EVENTBRITE_CLIENT_ID?: string;
+  EVENTBRITE_CLIENT_SECRET?: string;
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
   LINKEDIN_REDIRECT_URI?: string;
@@ -391,8 +407,21 @@ export interface Env {
   AGENT_SKILL_RUNTIME?: string;
   /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
   AGENT_INFERENCE_STUB?: string;
-  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
+  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. D7073: an engine run with none is refused `gateway_required`, and a value that cannot name a gateway refuses every run. */
   AGENT_AI_GATEWAY?: string;
+  /** D7073-p2 (#7073): the `agents` gateway's Run token, sent as `cf-aig-authorization` on the accounts' calls. A secret. Unset: engine runs are refused `accounts_unconfigured`. */
+  AGENT_AI_GATEWAY_TOKEN?: string;
+  /** D7073-p2: the stored-key aliases of the model accounts on the `agents` gateway, in order (never `default`). Unset skips the slot. */
+  AGENT_CLAUDE_ALIAS_1?: string;
+  AGENT_CLAUDE_ALIAS_2?: string;
+  AGENT_CLAUDE_ALIAS_3?: string;
+  AGENT_OPENAI_ALIAS?: string;
+  /** D7073-p2: the Claude accounts' model, a priced `PROVIDER_MODELS` id (`anthropic/claude-sonnet-5-5`). */
+  AGENT_CLAUDE_MODEL?: string;
+  /** D7073-p2: the OpenAI account's model, the review's own variable (`gpt-5.3-codex`); priced by the catalogue or AGENT_OPENAI_RATES. */
+  OPENAI_MODEL?: string;
+  /** D7073-p2: USD per 1M tokens for an OPENAI_MODEL the catalogue does not price, as JSON {tokens_in, tokens_cached, tokens_out}. */
+  AGENT_OPENAI_RATES?: string;
   /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
   AGENT_COMPUTE?: string;
   /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */
@@ -515,6 +544,9 @@ export interface Env {
   STREAM_API_TOKEN?: string;
   // #4176: verifies Stream's Webhook-Signature (owner step B).
   STREAM_WEBHOOK_SECRET?: string;
+  // D5585 part 3 (#5585): `preview` lets `drainReleaseEffects` deliver WorkGraph release effects through the real
+  // provider adapters. Unset (the default) it delivers nothing. Nothing schedules that drain yet.
+  WORK_GRAPH_RELEASE_DELIVERY?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test

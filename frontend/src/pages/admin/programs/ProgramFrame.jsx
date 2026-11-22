@@ -5,6 +5,7 @@ import { programsApi } from '../../../lib/api/programs';
 import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, ProgramDimensions, StatusPill, SUB, Unread } from './parts';
 import useProgramsTitle from './useProgramsTitle';
 import StudioProgramAccess from './StudioProgramAccess';
+import { ViewPresentationLink } from '../../programs/AdminPresentationLinks';
 import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, programDimensions, withoutMoved } from './programsModel';
 import { CSV_DONE, CSV_LINES, CSV_PROGRAMS, refusalSentence } from './programPagesModel';
 
@@ -64,6 +65,8 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
           {page.whoReason ? <span className={SUB} data-testid="programs-header-who">{`Who: ${NOT_RECORDED}. ${page.whoReason}`}</span> : null}
         </div>
         <div className="flex items-start gap-2">
+          {/* D6966 (PGS07C–D): a program with a presentation in the map links it first, on a phone too. */}
+          <ViewPresentationLink programKey={program} />
           {/* D962: a page that draws its own way in on a phone has no header buttons there (PG20b). */}
           {phone && !actionsOnPhone ? null : actions}
           {CSV_PROGRAMS.includes(program) ? <MoreMenu program={program} title={page.title} /> : null}

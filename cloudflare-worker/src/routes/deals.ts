@@ -1,3 +1,4 @@
+import { dealActivitySources } from '../services/dealActivitySources';
 import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
 import { investorPreviewRefusal } from '../util/investorPreview';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
@@ -10,7 +11,7 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { STARTUP_NOT_PUBLIC_STATUSES } from '../services/startupProfileVisibility';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
+import { selectJwt, requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
 import { dealHiddenFrom, editorialKeys, hiddenDealIds, hiddenJson, preparationManagesDeal, PREPARATION_MANAGED_TERMS, withoutHidden, type ReaderMode } from '../services/dealPreparation';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
@@ -577,9 +578,11 @@ deals.get('/transfers', async (c) => {
     ? await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
              t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
-             t.company_id, cp.company_name AS company_name
+             t.company_id, cp.company_name AS company_name,
+             t.phone_verified_by, pv.name AS phone_verified_by_name
         FROM deal_transfers t
         LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN users pv ON pv.id = t.phone_verified_by
         LEFT JOIN company_profiles cp ON cp.id = t.company_id
         LEFT JOIN deals d ON d.id = t.deal_id
         LEFT JOIN projects p ON p.id = d.project_id
@@ -591,9 +594,11 @@ deals.get('/transfers', async (c) => {
     : await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
              t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
-             t.company_id, cp.company_name AS company_name
+             t.company_id, cp.company_name AS company_name,
+             t.phone_verified_by, pv.name AS phone_verified_by_name
         FROM deal_transfers t
         LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN users pv ON pv.id = t.phone_verified_by
         LEFT JOIN company_profiles cp ON cp.id = t.company_id
         LEFT JOIN deals d ON d.id = t.deal_id
         LEFT JOIN projects p ON p.id = d.project_id
@@ -1094,9 +1099,11 @@ deals.get('/:id/documents', async (c) => {
     await sql.end();
     return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
   }
-  const docs = await sql`SELECT id, uid, title, doc_type, status, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
+  // D6186 (#6186): no route serves a `documents` row's text (`legal.ts` `safeDoc` redacts it), so each row says
+  // why it cannot be opened; `in_paper` marks one sent through e-sign, which the Deal paper card opens instead.
+  const docs = await sql`SELECT id, uid, title, doc_type, status, created_at, migrated_to_esign_id IS NOT NULL AS in_paper FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
   await sql.end();
-  return c.json(docs);
+  return c.json((docs as any[]).map((d) => ({ ...d, in_paper: Number(d.in_paper) === 1 })));
 });
 
 // D1265 (#3288): the deal page's Evidence block. An investor the deal admits (invited or committed)
@@ -1274,6 +1281,7 @@ export const ACTIVITY_KINDS = ['deal', 'documents', 'diligence'] as const;
  * caller's own rows, for the page's Mine filter.
  */
 deals.get('/:id/activity', async (c) => {
+  if ((await selectJwt(c))?.payload.impersonated_by) return c.json({error:'support_session_refused'},403);
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
@@ -1334,6 +1342,7 @@ deals.get('/:id/activity', async (c) => {
       events.push({ type: 'unreadable', kind: 'diligence', label: 'Diligence activity could not be read', at: null, mine: false });
     }
   }
+  if (deal.project_id) events.push(...await dealActivitySources(c, deal, user));
   await sql.end();
   events.sort((a, b) => (normTs(b.at) || 0) - (normTs(a.at) || 0));
   return c.json(events);
@@ -1415,8 +1424,10 @@ deals.get('/:id/transfers', async (c) => {
   const rows = await sql`
     SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
            t.recorded_by, t.recorded_at, u.name AS recorded_by_name,
-           t.company_id, cp.company_name AS company_name
+           t.company_id, cp.company_name AS company_name,
+           t.phone_verified_by, pv.name AS phone_verified_by_name
       FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+      LEFT JOIN users pv ON pv.id = t.phone_verified_by
       LEFT JOIN company_profiles cp ON cp.id = t.company_id
      WHERE t.deal_id = ${id} ORDER BY t.recorded_at DESC`;
   await sql.end();
@@ -1511,6 +1522,31 @@ deals.post('/:id/transfers', async (c) => {
   const reference = data?.reference != null ? String(data.reference).trim().slice(0, 200) || null : null;
   const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
   const phoneVerified = data?.phone_verified === true ? 1 : 0;
+  // D6889 (#6889): who confirmed the wire instructions by phone, when it was
+  // phone-verified: an Admin's user id, or nothing (Not recorded). Never taken
+  // from the recorder, and never kept on a transfer that was not verified.
+  let phoneVerifiedBy: number | null = null;
+  if (data?.phone_verified_by != null && data.phone_verified_by !== '') {
+    const v = data.phone_verified_by;
+    if (!phoneVerified) {
+      await sql.end();
+      return c.json({
+        error: 'phone_verifier_without_verification',
+        message: 'A phone verifier is recorded only on a transfer confirmed by phone. Tick phone-verified or leave the verifier out. Nothing was recorded.',
+      }, 400);
+    }
+    const verifier = typeof v === 'number' && Number.isSafeInteger(v) && v > 0
+      ? await c.env.DB.prepare("SELECT id FROM users WHERE id = ? AND role = 'admin'").bind(v).first<{ id: number }>()
+      : null;
+    if (!verifier) {
+      await sql.end();
+      return c.json({
+        error: 'phone_verifier_invalid',
+        message: 'The phone verifier is an Admin, named by their user id. Nothing was recorded.',
+      }, 400);
+    }
+    phoneVerifiedBy = Number(verifier.id);
+  }
   const firm = await transferFirm(c, user);
   if ('refuse' in firm) { await sql.end(); return firm.refuse; }
   // D1215: the closing line this transfer serves, when one is named: a line
@@ -1529,25 +1565,26 @@ deals.post('/:id/transfers', async (c) => {
   const uid = newUid();
   const ins = lineUid === null
     ? await c.env.DB.prepare(
-      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId).run()
-    : await c.env.DB.prepare(
-      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id, closing_line_uid)
+      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, phone_verified_by, note, recorded_by, recorded_at, company_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId, lineUid).run();
+    ).bind(uid, id, amountCents, reference, phoneVerified, phoneVerifiedBy, note, user.id, nowIso(), firm.companyId).run()
+    : await c.env.DB.prepare(
+      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, phone_verified_by, note, recorded_by, recorded_at, company_id, closing_line_uid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, id, amountCents, reference, phoneVerified, phoneVerifiedBy, note, user.id, nowIso(), firm.companyId, lineUid).run();
   await sql.end();
-  await logDealRoomAction(c.env, user, 'deal_transfer_recorded', id, { transfer_uid: uid, amount_cents: amountCents, company_id: firm.companyId });
+  await logDealRoomAction(c.env, user, 'deal_transfer_recorded', id, { transfer_uid: uid, amount_cents: amountCents, company_id: firm.companyId, phone_verified_by: phoneVerifiedBy });
   const row = await c.env.DB.prepare(
-    `SELECT t.*, u.name AS recorded_by_name, cp.company_name AS company_name
+    `SELECT t.*, u.name AS recorded_by_name, cp.company_name AS company_name, pv.name AS phone_verified_by_name
        FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+       LEFT JOIN users pv ON pv.id = t.phone_verified_by
        LEFT JOIN company_profiles cp ON cp.id = t.company_id WHERE t.id = ?`
   ).bind((ins as any).meta?.last_row_id).first<any>();
   return c.json({ item: withFirm(row) }, 201);
 });
 
-/** The checklist a deal's closing runs on, with its items — or null. */
-async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
+/** The checklist a deal's closing runs on, with its items — or null. D6157: the closing overview reads it too. */
+export async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
   const list = await env.DB.prepare(
     'SELECT * FROM deal_closing_checklists WHERE deal_id = ?'
   ).bind(dealId).first();

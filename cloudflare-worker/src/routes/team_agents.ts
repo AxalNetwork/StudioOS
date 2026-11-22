@@ -61,6 +61,7 @@ import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
 import { FIRST_TEN_SLUGS, inputMatrix, preflight } from '../services/agents/skillInputs';
+import { selectedDocument, selectedFund } from '../services/agents/reads';
 import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
@@ -389,7 +390,18 @@ router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
       if (!p) return say(c, 404, 'project_not_in_company', 'The project is not this company\'s.');
       projectId = p.id;
     }
-    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } });
+    // D4667-p3: the one data-room document a run would work on (`data_room_file:<uid>`), as its record selects it.
+    const docAsked = c.req.query('document') || null;
+    const document = docAsked === null ? null : selectedDocument(docAsked);
+    if (docAsked !== null && !document) return say(c, 400, 'invalid_document', 'The document is a data room file reference such as data_room_file:<uid>.');
+    // D4667-p4: the one fund a run would read (`vc_fund:<id>`), for the last whole quarter ending on or before `to`.
+    const fundAsked = c.req.query('fund') || null;
+    const fundId = fundAsked === null ? null : selectedFund(fundAsked);
+    if (fundAsked !== null && fundId === null) return say(c, 400, 'invalid_fund', 'The fund is a fund reference such as vc_fund:<id>.');
+    const fund = fundId === null ? null : `vc_fund:${fundId}`;
+    // D4667-p2: through the keys the agent's rule book reads, as a run of it is checked; any other is `not_granted`.
+    const { rules } = await effectiveBook(c.env, s, a.role_key);
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to }, document, fund }, undefined, undefined, undefined, undefined, { granted: rules.reads });
     return c.json({ readiness: r });
   } catch (e) { return mapError(c, e); }
 });
@@ -748,9 +760,20 @@ router.post('/:scope/:id/agents', async (c) => {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     if (!s) return notFound(c);
+    return await addAgentAs(c, s, user, await readBody(c));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D7075 (#7075): the add path, every check in its order, with the caller as
+ * the sponsor. The route above and a recruit's approval (`agent_recruits.ts`)
+ * both come through here, so a recruit is added exactly as a person adds one.
+ * Answers the route's own Response: 201 `{ agent }` or the refusal.
+ */
+export async function addAgentAs(c: C, s: NonNullable<Awaited<ReturnType<typeof loadScope>>>, user: User, b: Record<string, any> | null): Promise<Response> {
+  {
     if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can add agents.');
     if (!planOk(user)) return say(c, 403, 'plan_required', 'Agents come with a paid Founder plan.');
-    const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send the role, the model and the monthly cap.');
     const role = typeof b.role_key === 'string' ? roleOf(b.role_key) : null;
     if (!role) return say(c, 400, 'invalid_role', 'Choose one of the roles.');
@@ -821,8 +844,8 @@ router.post('/:scope/:id/agents', async (c) => {
       await logSkillsChanged(c.env, a!.id, user.id, { added: skillsChecked.wanted.map((w) => ({ uid: w.s.uid, version: w.version })), repinned: [], removed: [] });
     }
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
-  } catch (e) { return mapError(c, e); }
-});
+  }
+}
 
 router.get('/:scope/:id/rulebooks/:role', async (c) => {
   try {

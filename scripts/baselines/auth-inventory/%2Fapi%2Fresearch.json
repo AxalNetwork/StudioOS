@@ -9,11 +9,6 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
-  "DELETE /api/research/benchmarks/:uid/constituents/:cuid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
   "DELETE /api/research/brief-notes/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
@@ -54,11 +49,6 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
-  "GET /api/research/benchmarks/:uid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
   "GET /api/research/company-directory/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
@@ -91,6 +81,11 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/market-data/countries/:code": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
   "GET /api/research/market-directory/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
@@ -100,6 +95,13 @@
     "review": "record_without_ownership_check",
     "kind": "unclassified",
     "state": "unreviewed"
+  },
+  "GET /api/research/market-readings/:uid/summary": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_market_summary_7651.test.ts",
+    "note": "D7651: the reading is read only WHERE uid = ? AND owner_user_id = the caller, so another member's reading gets the same 404 a missing one does; an investor-only account is refused with 403 before anything is read (D6273 Q2)."
   },
   "GET /api/research/markets/:slug": {
     "review": "record_without_ownership_check",
@@ -112,11 +114,6 @@
     "state": "unreviewed"
   },
   "PATCH /api/research/ask/answers/:uid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
-  "PATCH /api/research/benchmarks/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
     "state": "unreviewed"
@@ -146,10 +143,12 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
-  "POST /api/research/benchmarks/:uid/constituents": {
+  "PATCH /api/research/funds/:uid/reports/:reportUid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_fund_reports_7169.test.ts",
+    "note": "Signed in (requireAuth). The report is read and written only WHERE uid, fund_uid and owner_user_id = the caller match; another owner, another fund or an unknown report gets the same 404."
   },
   "POST /api/research/collections/:uid/documents": {
     "review": "record_without_ownership_check",

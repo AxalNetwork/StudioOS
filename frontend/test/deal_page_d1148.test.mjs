@@ -14,7 +14,8 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
-import { TAB_DEFS, WAITS, dealGroupsFor, dealTabsFor, tabHref, tabOf } from '../src/pages/dealPageModel.js';
+import * as dealPageModel from '../src/pages/dealPageModel.js';
+import { TAB_DEFS, dealGroupsFor, dealTabsFor, scopeHref, tabHref, tabOf } from '../src/pages/dealPageModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -69,12 +70,13 @@ async function mounted(url, user) {
  * ------------------------------------------------------------------ */
 
 test('each role draws the canvas\'s tabs in its order: eleven for an investor (DL1), five for a founder (DL16), staff with their own (DL17)', () => {
-  assert.deepEqual(dealTabsFor('investor'), ['overview', 'scorecard', 'evidence', 'team', 'market', 'traction', 'diligence', 'documents', 'terms', 'commitment', 'notes']);
+  // D6164 part 3 (answer A): the investor's last view is Activity, whose Firm notes filter holds the notes.
+  assert.deepEqual(dealTabsFor('investor'), ['overview', 'scorecard', 'evidence', 'team', 'market', 'traction', 'diligence', 'documents', 'terms', 'commitment', 'activity']);
   assert.deepEqual(dealTabsFor('founder'), ['overview', 'documents', 'terms', 'commitment', 'activity']);
   assert.ok(dealTabsFor('admin').includes('invitations') && !dealTabsFor('admin').includes('notes'), 'an investor\'s notes are their firm\'s, never the studio\'s');
   assert.ok(!dealTabsFor('partner').includes('diligence'), 'reference calls are an admin\'s and an investor\'s (D609)');
   assert.deepEqual(dealTabsFor('advisor'), ['overview']);
-  assert.deepEqual(dealTabsFor('investor').map((t) => TAB_DEFS[t].label), ['Overview', 'Scorecard', 'Evidence', 'Team', 'Market', 'Traction', 'Diligence', 'Documents', 'Terms', 'Commitment', 'Notes']);
+  assert.deepEqual(dealTabsFor('investor').map((t) => TAB_DEFS[t].label), ['Overview', 'Scorecard', 'Evidence', 'Team', 'Market', 'Traction', 'Diligence', 'Documents', 'Terms', 'Commitment', 'Activity']);
 });
 
 test('the address names the tab; a word the role does not draw, or no word, is Overview', () => {
@@ -85,15 +87,15 @@ test('the address names the tab; a word the role does not draw, or no word, is O
   assert.equal(tabOf('', 'admin'), 'overview');
   assert.equal(tabHref(4, 'overview'), '/deals/4');
   assert.equal(tabHref('4', 'commitment'), '/deals/4/commitment');
-  assert.equal(tabHref('4x', 'notes'), '/deals//notes', 'a bad id never reaches the address');
+  assert.equal(tabHref('4x', 'activity'), '/deals//activity', 'a bad id never reaches the address');
 });
 
-test('every tab with no read says why, and none says zero or none', () => {
-  for (const t of ['scorecard', 'evidence']) assert.ok(WAITS[t], t);
-  for (const t of ['team', 'market', 'traction']) assert.equal(WAITS[t], undefined, `D1154: ${t} reads D1151's section and no longer waits`);
-  assert.equal(WAITS.notes, undefined, 'D1152: Notes reads its store and no longer waits');
-  for (const t of ['terms', 'diligence']) assert.equal(WAITS[t], undefined, `D1153: ${t} is a working tab and no longer waits`);
-  for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w.replace('not a score of zero', '')), w);
+test('D6168: no tab waits any more; a scope’s drawer has its own address on the Scorecard tab', () => {
+  assert.equal('WAITS' in dealPageModel, false, 'Scorecard and Evidence draw their reads (D1257, D1268); no tab draws a wait card');
+  assert.equal(scopeHref(4, 'team'), '/deals/4/scorecard?scope=team');
+  assert.equal(scopeHref('4', 'legal_ip'), '/deals/4/scorecard?scope=legal_ip');
+  assert.equal(scopeHref(4, 'x&y=1'), '/deals/4/scorecard', 'a word that is not a scope key never reaches the address');
+  assert.equal(scopeHref('4x', 'team'), '/deals//scorecard?scope=team', 'a bad id never reaches the address');
 });
 
 /* ------------------------------------------------------------------ *
@@ -117,18 +119,18 @@ test('an investor at /deals/4: Overview from the deal read, the eight tabs as li
 test('D1154: Traction reads its own section and draws no wait card', async () => {
   const v = await mounted('/deals/4/traction', INVESTOR);
   try {
-    assert.deepEqual(v.current(), ['deal-tab-evidence', 'deal-subtab-traction'], 'Traction is a view under Evidence, at its old address');
+    assert.deepEqual(v.current(), ['deal-tab-scorecard', 'deal-subtab-traction'], 'D6164 part 3: Traction is a view under Scorecard, at its old address');
     assert.ok(!v.ids().includes('deal-wait-traction'));
     assert.ok(v.requests.some((u) => /\/api\/deals\/4\/traction$/.test(u)), 'Traction reads D1151\'s section');
   } finally { await v.close(); }
 });
 
-test('Notes reads your firm\'s notes (D1152) and carries the activity beside them; Commitment reads the investor\'s own commitments', async () => {
+test('/notes opens Activity with Firm notes on and reads your firm\'s notes (D1152, D6164 part 3); Commitment reads the investor\'s own commitments', async () => {
   let v = await mounted('/deals/4/notes', INVESTOR);
   try {
     assert.ok(!v.ids().includes('deal-wait-notes'), 'D1152: part 2\'s store is read, so Notes no longer waits');
     assert.ok(v.requests.some((u) => /\/api\/deals\/4\/notes/.test(u)));
-    assert.ok(v.requests.some((u) => /\/api\/deals\/4\/activity/.test(u)));
+    assert.deepEqual(v.current(), ['deal-tab-activity'], 'the notes are Activity\'s Firm notes');
   } finally { await v.close(); }
   v = await mounted('/deals/4/commitment', INVESTOR);
   try {
@@ -165,10 +167,13 @@ test('the wiring: the tab route beside the deal route, tabs as links, and the ca
 });
 
 // D4631 (#4631): the documents list is behind the venture's NDA for an investor; the tab says so, it is not "unreadable".
-test('D4631: the Documents tab tells an investor without the NDA why, and keeps a failed read unreadable', () => {
-  const src = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
-  const tab = src.slice(src.indexOf('function DocumentsTab'), src.indexOf('function DocumentsTab') + 1600);
-  assert.match(tab, /e\?\.code === 'nda_required' \? setNdaNeeded\(true\) : setFailed\(true\)/);
-  assert.match(tab, /data-testid="deal-documents-nda"/);
-  assert.ok(tab.indexOf('if (ndaNeeded)') < tab.indexOf('if (failed)'), 'the NDA reason is checked before the failure');
+// D6186 (#6186): the non-investor tab is `deal/DealDocumentsStaff.jsx`; an Operating Partner meets the same NDA rule there.
+test('D4631: the Documents tab tells a reader without the NDA why, and keeps a failed read unreadable', () => {
+  const page = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
+  assert.ok(!page.includes('function DocumentsTab'), 'the legacy list is gone (D6186)');
+  assert.match(page, /<DealDocumentsStaff deal=\{deal\} viewer=\{viewerOf\(role, user, deal\)\} \/>/);
+  const src = readFileSync(new URL('../src/pages/deal/DealDocumentsStaff.jsx', import.meta.url), 'utf8');
+  assert.match(src, /status: e\?\.code === 'nda_required' \? 'nda' : 'unreadable'/);
+  assert.match(src, /data-testid="deal-documents-nda"/);
+  assert.match(src, /claim="That is not a claim that no documents exist\."/);
 });

@@ -20,7 +20,7 @@ import { Unreadable } from '../../ui';
 import { reportError } from '../../lib/log';
 import { dealContextApi } from '../../lib/api/dealContext.js';
 import { dealViewsApi } from '../../lib/api/dealViews.js';
-import { tabHref } from '../dealPageModel';
+import { notesHref, tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
 import {
   CASE_TAGS, caseNotes, missingEvidence, scoreSummary, termsAtGlance, thesisFitOf, whatsNewList, whatsNewOf,
@@ -31,6 +31,8 @@ import { FOUNDER_PAGE, stripOf } from '../../components/scoring/scorecard/scorec
 import { whatsNewOnce } from './dealVisit';
 
 const LINK = 'text-[12.5px] font-bold text-axal-violet-deep hover:underline dark:text-violet-300';
+// D4815 part 15 (#5908, DE15): a link standing on its own line is a 44px target on a phone; one inside a sentence stays inline.
+const LINK_ALONE = `${LINK} w-fit max-md:inline-flex max-md:min-h-[44px] max-md:items-center`;
 const TRY = 'w-fit rounded-axal-sm border border-axal-hairline bg-white px-2.5 py-1 text-[12px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 max-sm:min-h-[44px]';
 
 const SLOT = 'flex flex-col gap-2 rounded-axal-lg border border-dashed border-axal-muted bg-axal-ground px-4 py-4 dark:border-gray-600 dark:bg-gray-800/60';
@@ -150,7 +152,7 @@ function ScoreSummary({ dealId, strips, className = '' }) {
           </div>
         )}
         {sum.line && <p className={`m-0 ${SUB}`} data-testid="deal-score-line">{sum.line}</p>}
-        {strip.state === 'open' && <Link to={`/deals/${dealId}/scorecard`} className={LINK} data-testid="deal-score-open">Open scorecard</Link>}
+        {strip.state === 'open' && <Link to={`/deals/${dealId}/scorecard`} className={LINK_ALONE} data-testid="deal-score-open">Open scorecard</Link>}
       </>
     );
   }
@@ -205,7 +207,7 @@ function InvestmentCase({ deal, strips, className = '' }) {
           </div>
           <p className="m-0" data-testid="deal-case-evidence">
             <span className="text-axal-muted dark:text-gray-400">Main evidence: </span>
-            <Link to={tabHref(id, 'evidence')} className={LINK}>Open the shared evidence</Link>
+            <Link to={tabHref(id, 'evidence')} className={LINK_ALONE}>Open the shared evidence</Link>
           </p>
         </div>
         <div className="flex min-w-0 flex-col gap-2 text-[12.5px] leading-[1.55]" data-testid="deal-case-open">
@@ -217,13 +219,13 @@ function InvestmentCase({ deal, strips, className = '' }) {
               <TryAgain onClick={retryNotes} testId="deal-case-notes-retry" />
             </>
           )}
-          {notes.state === 'none' && <p className={`m-0 ${SUB}`} data-testid="deal-case-notes-none">No note at your firm is tagged {CASE_TAGS.join(' or ')}. <Link to={tabHref(id, 'notes')} className={LINK}>Add one in Notes</Link></p>}
+          {notes.state === 'none' && <p className={`m-0 ${SUB}`} data-testid="deal-case-notes-none">No note at your firm is tagged {CASE_TAGS.join(' or ')}. <Link to={notesHref(id)} className={LINK}>Add one in Firm notes</Link></p>}
           {notes.state === 'some' && (
             <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100" data-testid="deal-case-notes">
               {notes.rows.map((n) => <li key={n.uid}><span className="text-axal-muted dark:text-gray-400">{n.tag}: </span>{n.text}</li>)}
             </ul>
           )}
-          {notes.state === 'some' && notes.more > 0 && <Link to={tabHref(id, 'notes')} className={LINK} data-testid="deal-case-notes-more">{notes.more} more in Notes</Link>}
+          {notes.state === 'some' && notes.more > 0 && <Link to={notesHref(id)} className={LINK_ALONE} data-testid="deal-case-notes-more">{notes.more} more in Firm notes</Link>}
           <div data-testid="deal-case-missing">
             {missing.state === 'loading' && <p className={`m-0 ${SUB}`}>Reading the scorecard…</p>}
             {missing.state === 'unreadable' && (
@@ -265,7 +267,7 @@ export default function DealOverview({ deal, investor, position = null }) {
           <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-terms">
             <h3 className={H3}>Terms at a glance</h3>
             {termsAtGlance(deal).map((t) => <Row key={t.label} {...t} />)}
-            {investor && <Link to={`/deals/${deal.id}/terms`} className="mt-1 text-[12.5px] font-bold text-axal-violet-deep dark:text-violet-300">Full terms</Link>}
+            {investor && <Link to={`/deals/${deal.id}/terms`} className="mt-1 w-fit text-[12.5px] font-bold text-axal-violet-deep max-md:inline-flex max-md:min-h-[44px] max-md:items-center dark:text-violet-300">Full terms</Link>}
           </section>
           {/* D4815 part 4 (DE04): the round's size and committed total are the strip's, and the one next
               action is the header's, so neither is drawn again here. */}

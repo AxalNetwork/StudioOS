@@ -46,6 +46,7 @@ and StudioHome at `/raise/pitch`).
 | `fonts/` | Inter, Roboto Mono and Space Grotesk (variable, latin; OFL, licences beside them) |
 | `__screenshots__/` | The baselines, committed. One PNG per screenshot name |
 | `pricing_journey_4651.spec.mjs` | #4651/D4655: pricing-to-signup return flows plus comparison semantics, tab keyboard/focus behavior, billing/FAQ state, shared signup labels, 320px reflow and axe; desktop/phone evidence screenshots, no pixel baselines. |
+| `build_lovable_sources_5077.spec.mjs` | #5077 BD8: existing Lovable handoff inside Sources after core records; desktop/390px, light/dark, zero/populated, keyboard disclosure, retry, 44px target and card/page containment. Synthetic module reads; no provider launch or pixel baselines. |
 | `calendar_degraded_5202.spec.mjs` | #5202: one external calendar's read failing with a good credential — the agenda stands, the rail says Connected and "Events temporarily unavailable", and Retry re-reads that provider alone; desktop and phone, no screenshots |
 | `approvals.a11y.spec.mjs` | D4814 (#4814, part 7): Approvals (Inbox, an item, Lanes, Decided, the three boards) at 1440 and 390 — zero serious or critical axe violations, no page wider than a phone, the keyboard path through ⋯, Assign and the sheets, 44px phone targets, the lane chart inside its box; part 8: the boards' selection bar and ⋯, and a last row's ⋯ clickable; no screenshots |
 | `_approvals.mjs` | The reads Approvals makes, answered for that spec: the glance, inbox, item, weekly, Decided and the boards, as the Worker answers them; made-up names |
@@ -61,6 +62,9 @@ and StudioHome at `/raise/pitch`).
 | `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
 
 | `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
+
+| `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
+| `login_journeys_6959.spec.mjs` | #6959: /login's Sign In v2 journeys (#6958, D6957) on the desktop card at 1440 and the phone sheet under the iPhone 13, iPhone SE and Pixel 7 descriptors at 390 and 320 (Chromium, not Safari): three actions, the Email methods, Apple and Google returns through mocked callbacks, the sheet's focus, axe, keyboard-open and 200% text, destination continuity; screenshots only to `LOGIN_EVIDENCE_DIR`, no baselines. |
 
 ### Run it
 

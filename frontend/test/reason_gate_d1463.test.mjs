@@ -24,7 +24,6 @@ import {
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 
 const NARRATIVE = { record: 'Investor narrative', what: 'this narrative', rule: { kind: 'grant', hours: 8 }, min: 3, max: 200 };
 const CAP_TABLE = { record: 'Cap table', what: 'this cap table', rule: { kind: 'per_open' }, min: 10, max: 500 };
@@ -198,7 +197,7 @@ test('RR03 (Q1 A): on a founder\'s record the rail keeps where, says Eadwyn is o
   assert.doesNotMatch(on, /text-worker-rail-founder-record/);
   const route = cycleRouteText();
   // D1464 (#4021): a per-open read of the Data room or Capital relationships turns it off too.
-  assert.match(route, /readOnlyFor=\{narrativeAdmin \|\| supportOpen \? 'founder-record' : null\}/);
+  assert.match(route, /readOnlyFor=\{narrativeAdmin \|\| supportOpen \|\| companyRoleReadOnly \? 'founder-record' : null\}/);
 });
 
 test('RR07: a founder sees who read the narrative on Home, even with no saved version; an admin never does', () => {

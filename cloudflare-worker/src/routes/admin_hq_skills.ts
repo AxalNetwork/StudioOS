@@ -11,6 +11,8 @@
  *                                    D5970: optional filters on those two blocks (never on `skills`): scope=hq, status,
  *                                    uid, version, category, tag, role; model and from/to (YYYY-MM-DD, at most 366 days)
  *                                    on `published_evaluation` only; the response's `filters` says what each block applied.
+ *                                    D4536-p4: `executions`, completed runs per skill and executed version (tokens,
+ *                                    actual charge, model-call latency, manual or scheduled), from the run-time tags.
  *                                    400 filter_unknown, filter_repeated, scope_not_served, status_unknown, uid_malformed,
  *                                    version_malformed, category_unknown, tag_unknown, role_unknown, model_unknown,
  *                                    window_incomplete, window_malformed, window_reversed, window_too_long
@@ -103,6 +105,10 @@ import {
   adoptionOf, catalogueCoverage, filtersApplied, matchesSkill, parseSkillFilters, publishedEvaluation,
   type CampaignCoverageRow, type CoverageRow, type PublishedVersionRow, type SkillFilters, type SkillLinkRow, type VersionEvalRow,
 } from '../services/agents/skillCoverage';
+import {
+  EXECUTION_LATENCY_SQL, EXECUTIONS_SQL, OUTCOMES_SQL, executionsWindow, skillExecutions, type ExecutionRow, type LatencyRow, type OutcomeRow,
+} from '../services/agents/skillExecutions';
+import { readSkillOverlap } from '../services/agents/skillOverlap';
 import { CATALOGUE } from '../services/ai/catalogue';
 import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
@@ -263,14 +269,16 @@ adminHqSkills.get('/', async (c) => {
       run_cost: null,
     };
   });
-  // D4536: the catalogue's coverage, in two more fixed reads whatever the page; D4536-p2: the published versions'
-  // evaluation, in three more. D5970: the same five reads with or without filters; `filters` says what was applied.
+  // D4536: catalogue coverage, including one bounded metadata read for overlap, and published version evaluation.
   const [coverage, published_evaluation] = await Promise.all([
     libraryCoverage(env, tax.category, page == null ? draftsUnevaluated : null, filters),
     libraryPublishedEvaluation(env, tax.category, filters),
   ]);
+  // D4536-p4: completed runs per skill and executed version; the published skills with none come from coverage's rows.
+  const executions = await libraryExecutions(env, tax.category, filters, coverage.rows);
   return c.json({
-    skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null, coverage, published_evaluation,
+    skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null,
+    coverage: coverage.block, published_evaluation, executions,
     ...(filters ? { filters: filtersApplied(filters) } : {}),
   });
 });
@@ -386,11 +394,40 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
   ]);
   const all = read.results ?? [];
   const rows = filters ? all.filter((r) => matchesSkill(r, filters, category)) : all;
-  return catalogueCoverage(rows, {
+  const coverage = catalogueCoverage(rows, {
     category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY_SLUGS,
     adoption: adoptionOf(links.results ?? [], rows),
     draftsWithoutCurrentEvaluation, filtered: filters != null,
   });
+  return { block: { ...coverage, overlap: await readSkillOverlap(env, rows) }, rows };
+}
+
+/**
+ * D4536-p4: three reads, whatever the catalogue's size or the page: the completed runs grouped in SQL, the latency
+ * ranks for the skills the filters kept, and the marked run and refusal events for the outcome rates. An unreadable run history is said, never served as zeros.
+ */
+async function libraryExecutions(env: Env, category: ReadonlyMap<string, string>, filters: SkillFilters | null, published: readonly CoverageRow[]) {
+  const window = executionsWindow(filters, new Date());
+  const model = filters?.model ?? null, version = filters?.version ?? null;
+  let rows: ExecutionRow[];
+  try {
+    rows = (await env.DB.prepare(EXECUTIONS_SQL).bind(window.since, window.until, model, model).all<ExecutionRow>()).results ?? [];
+  } catch {
+    return { available: false, reason: 'The completed-run history could not be read.', window } as const;
+  }
+  const kept = skillExecutions(rows, [], { filters, category, window, published });
+  const ids = [...new Set(rows.filter((r) => r.scope === 'hq' && r.uid && kept.skills.some((s) => s.skill_uid === r.uid)).map((r) => Number(r.skill_id)))];
+  let latency: LatencyRow[] | 'unreadable' = [];
+  if (ids.length) {
+    try {
+      latency = (await env.DB.prepare(EXECUTION_LATENCY_SQL).bind(JSON.stringify(ids), window.since, window.until, model, model, version, version).all<LatencyRow>()).results ?? [];
+    } catch { latency = 'unreadable'; }
+  }
+  let outcomes: OutcomeRow[] | 'unreadable';
+  try {
+    outcomes = (await env.DB.prepare(OUTCOMES_SQL).bind(window.since, window.until).all<OutcomeRow>()).results ?? [];
+  } catch { outcomes = 'unreadable'; }
+  return skillExecutions(rows, latency, { filters, category, window, published, outcomes });
 }
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.

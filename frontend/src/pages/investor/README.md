@@ -14,6 +14,11 @@ the generic route wrapper once a canvas has graduated.
   commitment for an investor on HQ only. It never draws a balance, and the
   account id lives in state only. `proofOfFundsModel.js` holds its words and
   rules, pure, and fills in the Worker's own consent and statement words.
+- `FundTermsForm.jsx` (D6235, #6235) is Create a fund record on the Fund
+  overview's no-fund state (FV1b, `POST /api/funds`) and Edit terms on the
+  fund page (`PATCH /api/funds/:id`) for the general partner of record. Its
+  rules and words are in `fundTermsModel.js`, pure, which reuses the admin
+  console's parsers in `../admin/fundAdmin/fundsModel.js`.
 - `PortfolioCompanyPage.jsx` (D1056, #2427) is the investor's page per
   portfolio company at `/portfolio/companies/:uid`, with Figures, Reports
   (`/reports`) and Terms (`/terms`). The header is the caller's own position
@@ -22,7 +27,9 @@ the generic route wrapper once a canvas has graduated.
   frozen figures of the reports received, the Reports timeline with Read, Ask
   and Waive, Terms read only, the reader (640 wide) and the holding notes. Its
   address rules live in `../cycles/reportingModel.js`; the reporting words and
-  sums in `portfolioReportsModel.js`, pure.
+  sums in `portfolioReportsModel.js`, pure. D6224 (#6224): Figures offers
+  "Download figures (CSV)", built in the browser from the same rows, with no
+  read of its own.
 - `PortfolioReports.jsx` (D1061, #2931) is RPT9 at the top of Portfolio ›
   Reports (`InvestorPortfolioUpdates.jsx`): four tiles and one row per company
   the investor signed into, from `GET /api/reporting/portfolio`, with filters
@@ -253,3 +260,6 @@ soon, verification, empty and Unreadable states. Its words, filters and sort
 live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
 `../founder/RoundCallPage.jsx`.
 `introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.
+
+- `settings/` holds the investor Firm Settings editor (#6287).
+- `fund/` holds the Axal VC Fund workspace's section components and navigation (#6130).

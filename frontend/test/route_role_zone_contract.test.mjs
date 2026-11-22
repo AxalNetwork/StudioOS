@@ -20,6 +20,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -58,6 +59,22 @@ const BRANCHED = {
   // D905 (#2684), PD22: the studio's home tells an Advisor or an Operating
   // Partner it is for the venture's founders (PitchBoundary), never their body.
   '/raise/pitch': ['advisor', 'partner'],
+};
+
+/**
+ * Routes that admit a role whose shell has no such zone because the element
+ * always resolves ANOTHER role's shell, so `zoneForPath` never sees the
+ * visitor's buckets and cannot fall back to their first zone.
+ *
+ * D6154 (#6154, owner answer A): partners enter the Commit zone only. Its
+ * element, `InvestorDealsRoutes`, resolves the investor shell whatever the
+ * visitor's role, so a partner at /deals/commit gets Commit's own body. Each
+ * row is verified below: the route renders that element, the element pins that
+ * shell, and that shell resolves the path to its own zone.
+ */
+const FIXED_SHELL = {
+  '/deals/commit': { roles: ['partner'], element: 'InvestorDealsRoutes', shell: 'investor',
+    source: 'frontend/src/workspaces/investor/InvestorDealsRoutes.jsx' },
 };
 
 /**
@@ -104,7 +121,7 @@ test('the parser finds every declared zone route in App.jsx', () => {
 test('every zone route admits only roles whose shell has that zone', () => {
   const offenders = [];
   for (const { path, roles } of zoneRouteRows) {
-    const allowed = BRANCHED[path] || [];
+    const allowed = [...(BRANCHED[path] || []), ...(FIXED_SHELL[path]?.roles || [])];
     for (const role of roles) {
       if (!ROLES.includes(role)) continue;          // admin and the lab roles
       if (declared.get(role).has(path)) continue;   // its own zone
@@ -130,6 +147,19 @@ test('every allowlisted cross-role route really branches on the role', () => {
       assert.ok(row.roles.includes(role),
         `${path} is allowlisted for ${role} but its guard does not admit that role`);
     }
+  }
+});
+
+test('every fixed-shell cross-role route really resolves that shell\'s own zone', () => {
+  for (const [path, { roles, element, shell, source }] of Object.entries(FIXED_SHELL)) {
+    const row = zoneRouteRows.find((r) => r.path === path);
+    assert.ok(row, `${path} is allowlisted but is not a declared zone route`);
+    assert.match(row.body, new RegExp(`<${element} />`), `${path} no longer renders ${element}`);
+    for (const role of roles) assert.ok(row.roles.includes(role), `${path} is allowlisted for ${role} but its guard does not admit that role`);
+    const code = readFileSync(resolve(here, '../..', source), 'utf8');
+    assert.match(code, new RegExp(`bucketForPath\\('${shell}', location\\.pathname\\)`), `${element} no longer pins the ${shell} shell`);
+    assert.ok(declared.get(shell).has(path), `the ${shell} shell does not declare ${path}`);
+    assert.equal(zoneForPath(bucketForPath(shell, path), path)?.slug, path.split('/').pop(), `${path} does not resolve to its own ${shell} zone`);
   }
 });
 
@@ -173,10 +203,15 @@ test('zoneForPath answers a root with its first zone and an unknown slug with nu
  */
 const FOUNDER_PREVIEW_PREFIXES = ['/research', '/network'];
 
-test('admin, browsing Research and Network as the founder, reaches only zones the founder shell lists', () => {
-  assert.match(appSrc, /const researchRole = \(!effectiveRole \|\| effectiveRole === 'admin'\) \? 'founder' : effectiveRole;/,
-    'an admin no longer previews Research as the founder; this guard must learn the new rule');
-  assert.match(appSrc, /const networkRole = researchRole;/);
+test('admin, browsing Research and Network as the founder, reaches only zones the founder shell lists', async () => {
+  // D7178: researchRole is the held-licence rule (`researchRoleFor`); its admin case is the one this test relies on.
+  assert.match(appSrc, /const researchRole = researchRoleFor\(\{ effectiveRole, heldLicences, pathname: location\.pathname, labActive: user\?\.spinout_lab_active === 1 \}\);/);
+  const { researchRoleFor } = await import('../src/lib/researchAccess.js');
+  for (const pathname of ['/research', '/research/markets', '/research/companies', '/research/diligence', '/research/client-prep']) {
+    assert.equal(researchRoleFor({ effectiveRole: 'admin', heldLicences: ['admin'], pathname }), 'founder',
+      `an admin no longer previews ${pathname} as the founder; this guard must learn the new rule`);
+  }
+  assert.match(appSrc, /const networkRole = \(!effectiveRole \|\| effectiveRole === 'admin'\) \? 'founder' : effectiveRole;/);
   const founder = declared.get('founder');
   const offenders = [];
   let foreign = 0;

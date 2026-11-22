@@ -306,3 +306,25 @@ test('a studio sees only this program’s accepted HQ service and no enrolment a
     assert.ok(v.requests.every((request) => request.method === 'GET'));
   } finally { await v.close(); }
 });
+
+test('the global Wellness capability opens only the viewer’s own workspace, including on a fallback key', async () => {
+  for (const [key, studioOnly] of [['axal-wellness', null], ['wellness', 'lic-n']]) {
+    const mock = worker(SUPER);
+    const view = await mounted('/admin/programs/' + key, h(Table), (url, opts) => {
+      if (url === '/api/admin/programs/' + key) {
+        return response({ ...DETAIL, program: { ...DETAIL.program, key, name: 'Wellness', modules: ['wellbeing'], studio_only: studioOnly } });
+      }
+      return mock(url, opts);
+    }, SUPER);
+    try {
+      if (studioOnly === null) {
+        assert.equal(view.props('programs-tab-module-wellbeing').href, '/wellbeing');
+        assert.match(view.textOf('programs-generic-screens'), /personal check-ins/);
+        assert.ok(view.requests.every((r) => !r.url.includes('/api/wellbeing')), 'program metadata reads no personal wellbeing records');
+      } else {
+        assert.ok(!view.has('programs-tab-module-wellbeing'));
+        assert.match(view.textOf('programs-generic-screens'), /No operating screen/);
+      }
+    } finally { await view.close(); }
+  }
+});

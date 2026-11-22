@@ -95,7 +95,7 @@ test('6 (route): below 1024px /build/solution-design draws PhoneModulePage with 
     const bars = m.fibers(CycleBar);
     assert.equal(bars.length, 1, 'one bar');
     assert.deepEqual([bars[0].back.label, bars[0].back.to, bars[0].title, bars[0].sub, bars[0].eadwynLabel],
-      ['Build', `/build${Q}`, 'Solution design', 'Features against the pains they answer.', 'Build · Solution design']);
+      ['Build', `/build${Q}`, 'Solution design', 'Decide what you are building, and tie every feature to the evidence behind it.', 'Build · Solution design'], 'D6029: a Build module\'s line is its BD23 outcome');
     assert.equal(pr(m.by('phone-module-cta')).href, `/build/solution-design/new${Q}`, 'the module\'s own Add, as the desktop links it');
     assert.ok(txt(m.by('phone-module-records')).includes('Features ·'), 'the records group');
     assert.equal(pr(m.by('phone-module-row')).href, `/build/solution-design/7${Q}`, 'a linkable row opens its record');

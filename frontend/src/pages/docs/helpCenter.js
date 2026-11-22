@@ -1,4 +1,5 @@
 import { guidePlacement } from './guidePlacement';
+import { guideBodyText } from './sections';
 
 // D599 (#1280) — the Help Center's addresses and its one derived figure, as
 // plain functions, so the layout and tests run the same address and signal
@@ -36,8 +37,7 @@ export function hashTarget(hash, visibleSections, { isAdmin = false, restricted 
 
 /** Reading time from the guide's own words, at 200 a minute, never under one. */
 export function readingMinutes(sub) {
-  const text = [sub?.overview, ...(sub?.howto || []), ...(sub?.tips || []), ...(sub?.pitfalls || [])]
-    .filter(Boolean).join(' ');
+  const text = guideBodyText(sub);
   const words = text.split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 200));
 }

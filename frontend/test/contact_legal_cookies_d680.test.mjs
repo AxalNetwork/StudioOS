@@ -4,8 +4,11 @@
  * (CONTACT, LEGAL PAGES, COOKIE PREFERENCES).
  *
  * This pins:
- *   - the contact form's intents: the canvas's three, plus Licence only when
- *     `?topic=licence` asks for it, each one a key the Worker route accepts;
+ *   - the contact form's intents: the canvas's three, Licence, and the four
+ *     owner decision Q1 added (#6987), all always drawn, each one a key the
+ *     Worker route accepts; `?topic=` presses its pill, an unknown topic
+ *     presses General, and the company field is required only for the Lab;
+ *   - no link under frontend/src still sends a circle intent to registration;
  *   - the form posting through the existing `request('/contact')` to the
  *     existing route, with the fields that route reads, its Turnstile and its
  *     honeypot; no sample cohort typed; the canvas's confidentiality line,
@@ -73,47 +76,97 @@ const ROUTE_INTENTS = (() => {
 
 // ---------------------------------------------------------------- Contact
 
-test('the form offers the canvas\'s three intents, Spin-Out Lab first and pressed', () => {
-  // The canvas's own list, read from its logic script.
+const ALL_PILLS = ['Spin-Out Lab', 'Investing / LP', 'Advising', 'Licence', 'Operating Partners', 'Directory', 'Circle', 'General'];
+const LAB_QUESTION = 'What are you building, and what is the hardest unresolved question in it right now?';
+const NEUTRAL_QUESTION = 'What would you like to ask us?';
+
+test('the form offers the canvas\'s three intents first, then Licence and the four #6987 added, Spin-Out Lab pressed', () => {
+  // The canvas's own list, read from its logic script, leads the pills.
   const canvasIntents = [...CANVAS.match(/const INTENTS = \[(.*?)\];/)[1].matchAll(/l:'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(canvasIntents, ['Spin-Out Lab', 'Investing / LP', 'Advising']);
-  assert.deepEqual(contact.INTENTS.map((i) => i.label), canvasIntents);
+  assert.deepEqual(contact.INTENTS.slice(0, 3).map((i) => i.label), canvasIntents);
+  assert.deepEqual(contact.INTENTS.map((i) => i.label), ALL_PILLS);
 
   const html = render(React.createElement(ContactPage), '/contact');
-  assert.deepEqual(pills(html), [
-    { label: 'Spin-Out Lab', on: true },
-    { label: 'Investing / LP', on: false },
-    { label: 'Advising', on: false },
-  ], 'three pills, the first pressed, and no Licence without the topic');
+  assert.deepEqual(pills(html), ALL_PILLS.map((label, i) => ({ label, on: i === 0 })),
+    'eight pills, Licence always among them, and the first pressed');
   assert.match(html, /Application enquiry/);
-  for (const placeholder of ['Full name', 'Email', 'Company or project name', 'Website, repo, or deck link (optional)',
-    'What are you building, and what is the hardest unresolved question in it right now?']) {
+  for (const placeholder of ['Full name', 'Email', 'Company or project name', 'Website, repo, or deck link (optional)', LAB_QUESTION]) {
     assert.ok(html.includes(`placeholder="${placeholder}"`), `the field "${placeholder}" is missing`);
   }
   assert.equal((html.match(/class="ax-contact-input"/g) || []).length, 5, 'five fields');
   assert.match(html, />Send enquiry →<\/button>/);
 });
 
-test('?topic=licence adds a fourth intent, Licence, and presses it', () => {
-  const html = render(React.createElement(ContactPage), '/contact?topic=licence');
-  assert.deepEqual(pills(html), [
-    { label: 'Spin-Out Lab', on: false },
-    { label: 'Investing / LP', on: false },
-    { label: 'Advising', on: false },
-    { label: 'Licence', on: true },
-  ]);
-  assert.equal(contact.initialIntent('licence'), 'licence');
-  // Any other topic (Circles links `?topic=circle`) keeps the canvas's three.
-  assert.deepEqual(contact.intentsFor('circle').map((i) => i.value), ['lab', 'invest', 'advise']);
-  assert.equal(contact.initialIntent('circle'), 'lab');
+test('#6986, #6987: each of the eight ?topic= values presses its own pill; an unknown topic presses General', () => {
+  const on = (path) => pills(render(React.createElement(ContactPage), path)).filter((p) => p.on).map((p) => p.label);
+  const shown = (path) => pills(render(React.createElement(ContactPage), path)).map((p) => p.label);
+  for (const { value, label } of contact.INTENTS) {
+    assert.deepEqual(on(`/contact?topic=${value}`), [label], `?topic=${value} presses ${label}`);
+    assert.deepEqual(shown(`/contact?topic=${value}`), ALL_PILLS, `?topic=${value} shows all eight`);
+    assert.equal(contact.initialIntent(value), value);
+  }
+  assert.deepEqual(on('/contact?topic=nonsense'), ['General']);
+  assert.deepEqual(shown('/contact?topic=nonsense'), ALL_PILLS);
+  assert.equal(contact.initialIntent('constructor'), 'general', 'an inherited property name is not a topic');
+  assert.deepEqual(on('/contact'), ['Spin-Out Lab'], 'no topic keeps the canvas\'s default');
   assert.equal(contact.initialIntent(null), 'lab');
+  assert.equal(contact.initialIntent(''), 'lab');
+});
+
+test('#6987: the question under the pills comes from the per-topic table, provisional until WEB-03 (#6982)', () => {
+  const field = (path) => {
+    const html = render(React.createElement(ContactPage), path);
+    const tag = html.match(/<textarea id="ax-contact-about"[^>]*>/)[0];
+    const label = html.match(/<label class="ax-vh" for="ax-contact-about">([^<]+)<\/label>/)[1];
+    return { placeholder: tag.match(/placeholder="([^"]*)"/)[1], label };
+  };
+  assert.deepEqual(field('/contact?topic=lab'), { placeholder: LAB_QUESTION, label: 'What you are building' }, 'the Lab keeps today\'s text');
+  for (const { value } of contact.INTENTS.filter((i) => i.value !== 'lab')) {
+    assert.deepEqual(field(`/contact?topic=${value}`), { placeholder: NEUTRAL_QUESTION, label: 'Your question' },
+      `${value} asks the one neutral question until WEB-03 supplies its own`);
+  }
+  assert.match(CONTACT_SRC, /PROVISIONAL until the WEB-03\s+\* canvas \(#6982\)/, 'the table says it is provisional');
+});
+
+test('#6987: the company field is required only for a Spin-Out Lab enquiry', () => {
+  const company = (path) => render(React.createElement(ContactPage), path).match(/<input id="ax-contact-company"[^>]*>/)[0];
+  assert.match(company('/contact?topic=lab'), / required=""/);
+  assert.match(company('/contact?topic=lab'), /placeholder="Company or project name"/);
+  for (const { value } of contact.INTENTS.filter((i) => i.value !== 'lab')) {
+    assert.doesNotMatch(company(`/contact?topic=${value}`), / required=""/, `${value} may be sent without a company`);
+    assert.match(company(`/contact?topic=${value}`), /placeholder="Company or project name \(optional\)"/);
+  }
 });
 
 test('every intent the page can send is one the Worker route accepts, under the same name', () => {
-  assert.deepEqual(Object.keys(ROUTE_INTENTS), ['lab', 'invest', 'advise', 'licence']);
-  for (const i of contact.intentsFor('licence')) {
+  assert.deepEqual(Object.keys(ROUTE_INTENTS), ['lab', 'invest', 'advise', 'licence', 'partners', 'directory', 'circle', 'general']);
+  assert.deepEqual(contact.INTENTS.map((i) => i.value), Object.keys(ROUTE_INTENTS), 'the page draws every intent the route takes');
+  for (const i of contact.INTENTS) {
     assert.equal(ROUTE_INTENTS[i.value], i.label, `the route does not accept "${i.value}" as ${i.label}`);
   }
+});
+
+test('#6987: no link under frontend/src sends a circle intent, and the circle and directory ways in open their topics', () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, ent.name);
+      if (ent.isDirectory()) walk(full);
+      else if (/\.(jsx?|tsx?|json|html|css)$/.test(ent.name) && readFileSync(full, 'utf8').includes('intent=circle')) {
+        offenders.push(relative(ROOT, full));
+      }
+    }
+  };
+  walk(resolve(ROOT, 'frontend/src'));
+  assert.deepEqual(offenders, [], 'a link still sends intent=circle');
+
+  const circles = read('frontend/src/pages/CirclesPage.jsx');
+  assert.match(circles, /export const CIRCLE_INTEREST_HREF = '\/contact\?topic=circle';/);
+  assert.match(circles, /<Link to=\{CIRCLE_INTEREST_HREF\} className="ax-btn ax-btn-md ax-btn-primary">Register interest in a circle<\/Link>/);
+  assert.doesNotMatch(circles, /Join the network|Create a circle/, 'the header has one button');
+  assert.match(read('frontend/src/pages/PublicDirectoryPage.jsx'), /<Link to="\/contact\?topic=directory">Request directory access →<\/Link>/);
+  assert.match(read('frontend/src/pages/site/ResourcesPage.jsx'), /<Link to="\/contact\?topic=directory" className="ax-nw-more">Request directory access →<\/Link>/);
 });
 
 test('the form posts through the existing request(\'/contact\') to the existing route, with the fields it reads', () => {

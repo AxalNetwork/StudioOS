@@ -11,12 +11,16 @@ its data, passes it in, and does only what these functions allow.
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
+| `conflict-indicator.mjs` | The PR-list conflict indicator (#6476, D6476-p5): labels a confirmed conflict `conflict` and clears it only on a fresh `mergeable: true` for the current head and main. Labels only. |
 | `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
+| `refresh-rules.mjs` | The serial refresh's pure rules (#6478): which PRs inherited main's failure, how many the window allows, and the one-at-a-time loop that stops at a breaker. |
+| `refresh.mjs` | The serial refresh's entry point (`plan`, `apply`): update-branch with the App token, else the keeper's runner merge. |
 | `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
 | `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
 | `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
 | `resolve-rules.mjs` | The conflict resolver's rules (#6475), pure: `gate()` and `afterStage()` before any model call, `checkResolution()` (both sides' added lines kept, no test dropped, no skip added, only the conflicted files), the verify commands and today's reservations. |
 | `resolve.mjs` | The conflict resolver's entry point (`plan`, `apply`): stages the merge, builds the model task, then re-checks the patch and the resolution with main's code and pushes a normal merge commit, or hands back. |
+| `mainRepair.mjs` | Main repair (#6477): the pure decision (`confirmRed()`, `ownership()`, `choose()`), the patch and revert checks, and the entry point (`plan`, `claim`, `apply`) that takes the repair issue and opens one `main-repair` PR, or steps aside. |
 | `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
@@ -85,7 +89,9 @@ twice, with and without the rules. Only `README.md` files may differ between the
   the push fails, which is intended.
 - If GitHub refuses the push because main's changes include a workflow file, the keeper tries the update-branch
   API. If that fails too, it hands the PR back. Each run's summary counts these refusals.
-- A real conflict is labelled `conflict` and listed in the sticky comment, and the resolver is asked.
+- A real conflict is labelled `conflict` (the PR-list indicator) and `bot:keeper-tried` (the keeper's own hand-back),
+  listed in the sticky comment, and the resolver is asked. The keeper waits for a push only on its own
+  `bot:keeper-tried` or `needs-session`, never on `conflict` alone (D6476-p5).
 - A conflict in a file `pathGuard()` refuses, or a refused union, is handed back with `needs-session`.
 
 **Daily pushes.** The plan uploads a reservation artifact before any push, and pushes only if the upload
@@ -157,3 +163,107 @@ ejection, then:
   - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
+## The conflict indicator
+
+`.github/workflows/landing-conflict-indicator.yml` (#6476 owner addition, D6476-p5) runs on each push to main and every
+15 minutes, with the workflow's `GITHUB_TOKEN` and no App. For every open PR into main:
+- **GitHub says `CONFLICTING`:** it adds `conflict` if missing, whether checks are green or pending, and keeps every
+  other label.
+- **The list says `MERGEABLE` and `conflict` is on:** it re-reads the PR. It removes the label only if that read says
+  `mergeable: true`, on the head the list saw, against the current main head.
+- **Unknown, uncomputed or unread:** it changes nothing.
+
+The label explains; it authorises nothing. No bot reads it to decide an action. It never merges main, runs a model,
+enqueues or re-runs CI, and it works with every repair bot off.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_CONFLICT_LABELS` | `true` turns the indicator on; anything else leaves the workflow skipped. Separate from `LANDING_BOT_ENABLED`. |
+
+Otherwise it either waits or hands back (#6476 S1, D6476-p4):
+- **Waits, unlabelled,** when only a condition that clears on its own holds: required checks still running on the
+  current head (a keeper merge always starts new ones), evidence that could not be read, the head moving between
+  reads, a breaker or `[alert] merge queue stalled`, or a daily budget that resets. Each sweep looks again and
+  re-reads the head's full-suite and required-check evidence, consent, budgets and breakers; the same removal is
+  restored once it all holds. Past 24 hours after the ejection it is handed back instead.
+- **Hands back with `ejected`** when the owner must act: no consent (a person removed it, or a commit other than a
+  no-model merge of main), a failed required check, `bot:off`, a `repair/` branch, a `.gitattributes` change, or a
+  class that is never re-queued.
+- **Mergeability:** a re-queue needs GitHub's `mergeable: true` on the fresh read, for every class. An explicit
+  `false` (even after a cascade or infrastructure ejection) is a conflict; `null` waits.
+- **A conflict** asks the keeper only in the first 20 minutes after the ejection; after that the keeper's own
+  15-minute schedule runs. If the keeper's merge landed and GitHub still reports a conflict, it hands back.
+
+One sticky comment says which, and a sweep whose outcome has not changed writes nothing. `ejected` labels the App
+wrote before 2026-11-21, when it labelled the waiting cases too, get one fresh look on removals under 7 days old;
+on a restore the App removes only its own label, after a fresh read shows it is still the App's. A stranded hand-back
+adds `bot:handed-back`, which makes it final and is never removed. A label a person added is never second-guessed.
+## The serial refresh
+
+`.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green
+and an older one in the last 20 was red. It picks open, non-draft PRs whose latest CI run on their current head
+failed, and that `verdictFor()` calls `inherited_main_failure` against that red run. Then, one at a time:
+- **Before each PR,** it re-reads the mode, `bot:off`, the head and `breakers('refresh')`, which includes the
+  queued-runs limit. A breaker stops the run at once.
+- **The update** is GitHub's update-branch with `expected_head_sha`. If that refuses the App token, it uses the
+  branch keeper's runner merge instead.
+- **A conflict** is labelled `conflict` for the keeper and not retried.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_REFRESH_PER_WINDOW` | PRs refreshed per window. Unset is 0. |
+| `LANDING_BOT_REFRESH_WINDOW_MIN` | The window in minutes. Unset is 0, which refreshes nothing. |
+
+Each run reserves its refreshes in an artifact before it makes any, and counts the window's reservations.
+
+## Main repair
+
+`.github/workflows/landing-bot-main-repair.yml` (#6477, D6477) sweeps every 10 minutes, or runs by dispatch. The #4571
+guard admits `workflow_run` only for pull-request runs, so the trigger gate is applied to the run data instead: main's
+newest completed push run of CI, from this repository, failed. D5398 is one repair for a red main, so the bot never
+works beside a session. Four jobs:
+
+- **`plan`** (`landing-bot` environment, a read-only token, an App token that reads metadata only). It calls no model
+  and writes nothing on GitHub. It stops quietly when:
+  - main's newest push run is green, cancelled or unreadable;
+  - `verdictFor()` calls the failure infrastructure;
+  - `[alert] the Actions queue is backed up` is open;
+  - no repair issue is open yet. The issue is `[alert] main is red` from the alert workflow, else D6387's
+    CI-on-main issue, written by a trusted author.
+
+  When the issue has a `claim/<n>` ref (expired or not), `state:in-progress`, `needs-session`, a linked open PR, or
+  any open PR is labelled `main-repair` or on a `repair/main-` branch, the decision is one comment.
+
+  Otherwise it triages the red run with `../lib/redCiTriage.mjs`: the failing jobs, tests and reproduce commands, the
+  first red push and its files. Then it decides:
+  - **`repair`:** `attempts()` (2 per failure fingerprint, job plus test, whatever the commit), `budget()` (model runs
+    and repair PRs today) and a usable failing command all allow a model.
+  - **`revert`:** they do not.
+
+  Before the model is called, it reserves the attempt and today's run as artifacts.
+- **`claim`** (`landing-bot`, the App token with contents and issues write) posts the comment and stops. Or it claims
+  the issue with `../claim.mjs` as `bot`/`landing-bot`/`main-repair-<run id>` and labels it `state:in-progress`. A
+  claim it loses means it steps aside.
+- **`repair`** is the model runner on `main`. Its files are the suspected commit's and the failure's, each clearing
+  `pathGuard()`. It verifies with the installs, `npm run test:types` and the failing command. It has no GitHub write.
+- **`apply`** (`landing-bot`, the App token, no model key, scripts from main, no repository code run):
+  1. Re-reads main and the open PRs. A green main or a repair PR that appeared releases the claim and stops.
+  2. Re-checks the patch with `checkPatch()`, `pathGuard()` and main's `merge-policy.mjs`. It refuses any change to
+     an existing test, the failing test, a guard script, a baseline, an allowlist, a migration or a protected path.
+  3. If the model did not pass or the patch is refused, it tries a plain revert of the first red commit. The revert
+     needs one parent, a clean apply, no migration and no protected path.
+  4. Pushes its own `repair/main-<short sha>` branch, never forced and never main.
+  5. Opens ONE PR labelled `main-repair`, with `Part of #<issue>` and the suspected commit named. Then it releases the
+     claim and labels the issue `state:review`.
+  6. Anything else is one comment, the claim released and `needs-session`.
+
+**The owner lands every repair PR.** No bot queues or merges one. The keeper, the resolver and red-PR repair skip
+`repair/` branches (`eligible()`). The feeder holds `Landing-Bot-Kind: main-repair` commits.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_DAILY_MODEL_RUNS` | Model runs per UTC day, counted from this workflow's reservations. Unset is 0: revert only. |
+| `LANDING_BOT_DAILY_PUSHES` | Repair PRs per UTC day, counted from `repair/main-` PRs opened today. Unset is 0: comment only. |
+
+Tests: `frontend/test/landing_bot_main_repair_6477.test.mjs`.
+

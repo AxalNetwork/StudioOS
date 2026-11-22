@@ -20,6 +20,7 @@ import { moneyCents } from '../src/pages/founder/roundCallParts.jsx';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import WorkspaceShell from '../src/workspaces/WorkspaceShell.jsx';
+import { tagHolding } from './_tagHolding.mjs';
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
@@ -57,7 +58,7 @@ test('each row names the company and shows the investor’s own response or No r
   assert.ok(!/Commit/.test(text), 'the word Commit never appears');
   assert.match(out, /href="\/round-calls\/kestrel"/);
   // Phone: whole-card targets at least 44px, and filters at 44px.
-  const tag = (testid) => (out.match(new RegExp(`<a[^>]*data-testid="${testid}"[^>]*>`)) || [''])[0];
+  const tag = (testid) => tagHolding(out, `data-testid="${testid}"`, (t) => t.startsWith('<a'));
   // Mutation checked: dropping min-h-[44px] from the card or the filter fails these.
   assert.match(tag('round-call-card'), /min-h-\[44px\]/);
   assert.match(tag('round-calls-filter-open'), /min-h-\[44px\]/);

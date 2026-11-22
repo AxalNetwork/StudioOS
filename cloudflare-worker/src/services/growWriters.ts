@@ -22,6 +22,8 @@ import { calendarDay } from './growKpis';
 import { mintDownloadToken } from './signedDownload';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 import { onCompanyTeam } from './obligationOwner';
+import { putRecordOrThrow } from './recordStore';
+import { eraseRecordObjects } from './recordErasure';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
@@ -905,13 +907,36 @@ export async function removeObligation(env: Env, pid: number, user: Pick<User, '
 }
 
 export async function setChecklistItem(env: Env, pid: number, user: User, key: string, done: boolean) {
+  // D6789: a tick by hand says the item applies, so it clears a Not applicable mark.
   await env.DB.prepare(
     `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at`,
+     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at,
+       not_applicable_at = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_at END,
+       not_applicable_by = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_by END`,
   ).bind(pid, key, done ? nowIso() : null, done ? user.id : null, nowIso()).run();
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key, action: done ? 'grow_checklist_done' : 'grow_checklist_undone',
     summary: done ? 'Checklist item ticked' : 'Checklist item unticked' });
   return { key, done };
+}
+
+/**
+ * D6789 (#6789): mark a durability checklist item Not applicable, or clear the mark. The mark records who and
+ * when, clears a tick by hand, and takes the item out of the score. The route refuses an item the Spin-Out Lab
+ * ticked: the Lab says it applies.
+ */
+export async function setChecklistNotApplicable(env: Env, pid: number, user: User, key: string, notApplicable: boolean) {
+  const at = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, not_applicable_at, not_applicable_by, updated_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)
+     ON CONFLICT(project_id, item_key) DO UPDATE SET not_applicable_at = excluded.not_applicable_at, not_applicable_by = excluded.not_applicable_by,
+       done_at = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_at END,
+       done_by = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_by END,
+       updated_at = excluded.updated_at`,
+  ).bind(pid, key, notApplicable ? at : null, notApplicable ? user.id : null, at).run();
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key,
+    action: notApplicable ? 'grow_checklist_not_applicable' : 'grow_checklist_applies',
+    summary: notApplicable ? 'Checklist item marked not applicable' : 'Checklist item applies again' });
+  return { key, not_applicable: notApplicable };
 }
 
 // ── The records' actions (#1698) ────────────────────────────────────────────
@@ -997,6 +1022,51 @@ export async function addPartnerDeal(env: Env, pid: number, user: User, partnerU
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_added', summary: 'Deal added' })),
   ]);
   return { uid: id };
+}
+
+/**
+ * D6114 (#6114): a deal of this partner, by its uid. The deal's partner must be
+ * the partner named and that partner the venture's, so a deal of another
+ * partner, or of another venture's, is a 404 before anything is written.
+ */
+async function partnerDeal(env: Env, pid: number, partnerUid: string, dealUid: unknown) {
+  if (typeof dealUid !== 'string' || !dealUid) throw new Refused(404, 'Not found', 'deal');
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.customer, d.closed_on, d.amount_cents, d.currency FROM growth_partner_deals d JOIN growth_partners p ON p.id = d.partner_id
+      WHERE d.uid = ? AND p.uid = ? AND p.project_id = ?`,
+  ).bind(dealUid, partnerUid, pid).first<{ id: number; customer: string; closed_on: string | null; amount_cents: number | null; currency: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'deal');
+  return row;
+}
+
+/**
+ * D6114 (#6114): a deal's edit. Only the keys the body sends change; an amount
+ * keeps its currency unless the body names another, and an amount cleared
+ * clears its currency. Logged on the partner; the customer is never named.
+ */
+export async function updatePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown, b: Body) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  let customer = d.customer;
+  if (has(b, 'customer')) { customer = str(b.customer, 200) ?? ''; if (!customer) throw new Refused(400, 'A deal names its customer', 'customer'); }
+  const closed = has(b, 'closed_on') ? day(b.closed_on, 'closed_on') : d.closed_on;
+  const amount = has(b, 'amount_cents') ? centsOrNull(b.amount_cents, 'amount_cents') : d.amount_cents;
+  const currency = currencyFor(amount, has(b, 'currency') ? b.currency : d.currency, 'currency');
+  await env.DB.batch([
+    env.DB.prepare("UPDATE growth_partner_deals SET customer = ?, closed_on = ?, amount_cents = ?, currency = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(customer, closed, amount, currency, d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_updated', summary: 'Deal updated' })),
+  ]);
+  return { uid: String(dealUid) };
+}
+
+/** D6114 (#6114): removes a deal of this partner, logged on the partner without the customer. */
+export async function removePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM growth_partner_deals WHERE id = ?').bind(d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_removed', summary: 'Deal removed' })),
+  ]);
+  return { uid: String(dealUid), deleted: true as const };
 }
 
 export async function addEntryStep(env: Env, pid: number, user: User, marketUid: string, b: Body) {
@@ -1091,6 +1161,44 @@ export async function addAgendaItem(env: Env, pid: number, user: User, eventId: 
   return { uid: id };
 }
 
+/**
+ * D6114 (#6114): an agenda item of this obligation, by its uid. The item's
+ * obligation must be the one named and that obligation the venture's, so an
+ * item of another obligation, or of another venture's, is a 404.
+ */
+async function agendaItem(env: Env, pid: number, eventId: number, itemUid: unknown) {
+  if (typeof itemUid !== 'string' || !itemUid || !Number.isSafeInteger(eventId)) throw new Refused(404, 'Not found', 'item');
+  const row = await env.DB.prepare(
+    `SELECT a.id, a.text, a.owner_name FROM obligation_agenda_items a JOIN compliance_events e ON e.id = a.event_id
+      WHERE a.uid = ? AND e.id = ? AND e.project_id = ?`,
+  ).bind(itemUid, eventId, pid).first<{ id: number; text: string; owner_name: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'item');
+  return row;
+}
+
+/** D6114 (#6114): an agenda item's edit; only the sent keys change. Logged on the obligation, never the item's text. */
+export async function updateAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown, b: Body) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  let text = a.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'An agenda item says what is discussed', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : a.owner_name;
+  await env.DB.batch([
+    env.DB.prepare("UPDATE obligation_agenda_items SET text = ?, owner_name = ?, updated_at = datetime('now') WHERE id = ?").bind(text, owner, a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_updated', summary: 'Agenda item updated' })),
+  ]);
+  return { uid: String(itemUid) };
+}
+
+/** D6114 (#6114): removes an agenda item of this obligation, logged on the obligation. */
+export async function removeAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM obligation_agenda_items WHERE id = ?').bind(a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_removed', summary: 'Agenda item removed' })),
+  ]);
+  return { uid: String(itemUid), deleted: true as const };
+}
+
 /** The month length each repeat moves an obligation by (decision 2); a one-time obligation is completed instead. */
 const REPEAT_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, annual: 12 };
 
@@ -1153,7 +1261,8 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
     key = `${minutesPrefix(pid)}${newUid()}.${ext}`;
     // D1170 — Grow minutes count to the venture's owner (D1169 §1).
     storage = await assertStorageRoom(env, { projectId: pid }, file.size, user);
-    await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+    // D6651: minutes are a record, written once under a fresh key.
+    await putRecordOrThrow(env.FILES, key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
   }
   const months = REPEAT_MONTHS[e.recurrence];
   const next = months ? addCalendarMonths(e.due_date, months) : e.due_date;
@@ -1174,7 +1283,9 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
       summary: months ? `Held on ${heldOn}; next due ${next}` : `Held on ${heldOn}; completed` })),
   ];
   try { await env.DB.batch(statements); } catch (error) {
-    if (key) { try { await env.FILES?.delete(key); } catch { /* the stored file is orphaned, never served */ } }
+    // D6651: the batch is one transaction, so no row names the file this request just stored: it leaves
+    // through the one record-erasure path as `unreferenced`.
+    if (key && env.FILES) { try { await eraseRecordObjects(env.FILES, key, 'unreferenced'); } catch { /* the stored file is orphaned, never served */ } }
     obligationClash(error, obligationKind(e), next);
   }
   if (storage) await noteStorageLanded(env, storage);

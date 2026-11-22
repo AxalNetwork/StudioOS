@@ -27,19 +27,23 @@ test('fund dossier exposes source-backed quarterly reports rather than placehold
   assert.match(migration, /UNIQUE \(fund_uid, owner_user_id, period\)/);
 });
 
-test('company records navigate from the full row and profiles separate identity from diligence', () => {
+test('company records have one link per row and profiles separate identity from diligence', () => {
   const directory = read('pages/research/CompanyDirectoryZone.jsx');
   const profile = read('pages/research/CompanyProfile.jsx');
   // D593 moved `companyHref` into the directory's view helpers, so the
   // analysis and competitor pages can link a profile without loading the zone.
   const view = read('lib/companyDirectoryView.js');
   assert.match(view, /export const companyHref = \(uid\) => `\/research\/companies\/company\/\$\{encodeURIComponent\(uid\)\}`;/);
-  assert.match(directory, /onClick=\{\(\) => navigate\(companyHref\(x\.uid\)\)\}/);
-  assert.match(directory, /role="link"/);
+  // D7179 (D7045, RS-17 E): one native link per company. The row is no longer
+  // a role="link" with a click handler that nested a second link.
+  assert.match(directory, /<Link to=\{companyHref\(row\.uid\)\} data-company-link=\{row\.uid\}/);
+  assert.doesNotMatch(directory, /role="link"/);
+  assert.doesNotMatch(directory, /navigate\(companyHref/);
   // D534 (#1079): the profile is built to the Research · Company canvas. Each
-  // metric shows its source and date or Not recorded, and diligence reads the
-  // stored status beside the sources, not an inferred figure.
-  assert.match(profile, /Key metrics/);
-  assert.match(profile, /Funding total/);
-  assert.match(profile, /Diligence status/);
+  // metric shows its source and date or Not recorded. D7180 (D7046 option A):
+  // the directory record's stored diligence status names no analysis, so the
+  // profile no longer prints it; nothing infers one either.
+  assert.match(profile, /<KeyMetrics /);
+  assert.match(read('pages/research/companyProfileRead.js'), /title: 'Funding total'/);
+  assert.doesNotMatch(profile, /Diligence status|diligence_status/);
 });

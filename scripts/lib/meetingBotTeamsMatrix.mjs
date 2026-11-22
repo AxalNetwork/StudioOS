@@ -14,6 +14,7 @@
  * and #5675's isolated preview receipt, and runs in the deploy workflow.
  */
 import { parseSections } from '../check-wrangler-binding-parity.mjs';
+import { botBindingProblem } from './meetingBotBinding.mjs';
 
 const unquote = v => (typeof v === 'string' && /^".*"$/.test(v) ? v.slice(1, -1) : v);
 const SWITCH = new Set(['off', 'canary', 'on']);
@@ -39,8 +40,8 @@ function topName(sections, prefix) {
 function rootKey(source, key) {
   for (const raw of source.split('\n')) {
     if (/^\s*\[/.test(raw)) return null;
-    const m = new RegExp(`^${key}\\s*=\\s*"([^"]*)"`).exec(raw.trim());
-    if (m) return m[1];
+    const m = /^([^\s=]+)\s*=\s*"([^"]*)"/.exec(raw.trim());
+    if (m && m[1] === key) return m[2];
   }
   return null;
 }
@@ -60,10 +61,9 @@ export function teamsMatrix({ site, bot, workflow, dockerfile, botPackage, conta
   for (const e of ENVIRONMENTS) {
     const sv = vars(S, e.site);
     // 1. Site → host: a cross-script Durable Object binding to this environment's own host.
-    const binding = section(S, `${e.site}durable_objects.bindings`, s => s.kv.get('name') === '"MEETING_BOT_CONTAINER"');
-    add('site_binds_its_own_bot_host', e.env, binding.length === 1
-      && unquote(binding[0].kv.get('class_name')) === 'MeetingBotContainer'
-      && unquote(binding[0].kv.get('script_name')) === e.hostScript
+    //    D7147 part 2: preview may instead bind nothing while its MEETING_BOT is "off" (staging);
+    //    it never binds production's host or a local class. Production always binds its own.
+    add('site_binds_its_own_bot_host', e.env, botBindingProblem(S, e.site) === null
       && hostNames[e.env] === e.hostScript);
     // 2. The run-state Durable Object stays on the site (it holds the lease, consent and billing state).
     const run = section(S, `${e.site}durable_objects.bindings`, s => s.kv.get('name') === '"MEETING_BOT_RUN"');
@@ -108,13 +108,13 @@ export function teamsMatrix({ site, bot, workflow, dockerfile, botPackage, conta
     const sv = vars(S, e.site);
     add('teams_never_wider_than_bot', e.env, !(sv.get('MEETING_BOT_TEAMS') === 'on' && sv.get('MEETING_BOT') === 'off'));
   }
-  // 11. Pinned image and browser: an exact Playwright version, Chromium installed from it, one Node major.
+  // 11. Pinned image and browser: exact Playwright, Chromium from it, one Node major and an image digest.
   let pkg = {};
   try { pkg = JSON.parse(botPackage); } catch { /* fails below */ }
   const pw = (pkg.dependencies ?? {}).playwright;
   add('browser_pinned', 'both', typeof pw === 'string' && /^\d+\.\d+\.\d+$/.test(pw)
     && /npx --no-install playwright install --with-deps chromium/.test(dockerfile)
-    && /^FROM node:\d+-[a-z]+-slim AS base$/m.test(dockerfile) && /npm ci --omit=dev/.test(dockerfile));
+    && /^FROM node:\d+-[a-z]+-slim@sha256:[a-f0-9]{64} AS base$/m.test(dockerfile) && /npm ci --omit=dev/.test(dockerfile));
   // 12. Container readiness and egress: one instance type, egress on, a readiness probe before the command.
   add('container_readiness_and_egress', 'both', /enableInternet:true/.test(container) && /instance:'standard-2'/.test(container)
     && /\/healthz/.test(container) && /MEETING_BOT_CALLBACK_ORIGIN:origin/.test(container));

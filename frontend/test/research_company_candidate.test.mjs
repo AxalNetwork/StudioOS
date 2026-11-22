@@ -59,7 +59,7 @@ test('the company directory and profile are routes for the same licences as anal
   assert.match(app, /path="\/research\/companies\/company\/:uid"/);
   assert.match(workspace, /CompanyDirectoryZone/);
   assert.match(app, /path="\/research\/companies\/:analysisId\/:candidateId"/);
-  assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'advisor'\]\), <CompanyCandidate/);
+  assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'advisor'\], \{ preview: false \}\), <CompanyCandidate/);
   assert.match(list, /searchParams\.get\('market'\)/);
 });
 

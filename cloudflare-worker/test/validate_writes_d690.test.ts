@@ -73,6 +73,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  db.exec(sqlOf('202611180053_7176_competitor_saved_versions.sql')); // D7176: competitor_sources.origin, saved versions
   applyAcceptRetryKeys(db); // D5352
   addColumnsFrom(db,sqlOf('605_member_file_sizes.sql'),'demand_signals');
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
@@ -80,6 +81,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(MIG460);
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('228_research_company_directory.sql'));
+  db.exec(sqlOf('202611180051_7175_competitor_subject_and_verified_website.sql')); // D7175: subject_uid, website_verified_at
   db.exec(sqlOf('438_interview_sessions.sql'));
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');

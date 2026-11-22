@@ -159,8 +159,8 @@ finish technical mitigation.
 |------|-------|----------|-----------|----------------|
 | D1 database | R2 `studioos-backups/d1/<database>/backup-YYYY-MM-DD.sql` (flat `d1/backup-…` before 2026-09-15; `scripts/dr-drill.sh` reads both) | Daily 02:10 UTC (GH Actions) | 365 days, object-lock compliance mode | [`scripts/restore-d1.sh`](scripts/restore-d1.sh), into an empty EU database you create (`D1_RECOVERY.md` §3) |
 | KV (`TOKENS`) | R2 `studioos-backups/kv/TOKENS/YYYY-MM-DD.jsonl` | Daily 02:00 UTC (worker cron) | 365 days | manual `wrangler kv:bulk put` |
-| R2 contracts | R2 versioning on `studioos-files` | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
-| R2 KYC | R2 versioning on `studioos-files` (`kyc/` prefix) | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
+| R2 contracts | Approved record classes only: append-only snapshots under `studioos-backups/files-recovery/`; optional age-encrypted second copy in the owner-provisioned outside-account bucket (D6653) | Daily 02:30 UTC, gated off until counsel/prefix approval and configuration | Seven years only where the class has a recorded legal retention basis | Primary synthetic drill: `python3 scripts/file-recovery-drill.py`; monthly outside-preview synthetic restore via `file-recovery-independent.py drill`; hourly `[alert] file recovery backup unhealthy` checks failure/freshness. Live restore awaits #6654 suppression-ledger integration |
+| R2 KYC | Only counsel-approved record prefixes from #6650; unclassified personal files are excluded | Same gated snapshot job; no live protection claimed before activation | Class-specific legal basis required before seven-year lock | Same verified snapshot path and suppression requirement; no dashboard version restore exists |
 | Worker source | Git (origin/main) | Per-commit | Indefinite | `git revert` + `wrangler deploy` |
 | R2 publications | `studioos-publications` | Recovery schedule not recorded | Not recorded; no locked-copy approval | No verified recovery path recorded; see [R2 inventory](R2_INVENTORY.json) and #6428 handoff |
 | R2 company logos | `studioos-company-logos` | Recovery schedule not recorded | Not recorded | Re-upload an available source asset; no archived restore path recorded; see [R2 inventory](R2_INVENTORY.json) |
@@ -177,16 +177,114 @@ finish technical mitigation.
    Object Lock.
 3. Add a **lifecycle rule**: transition to **Standard-IA** after **30
    days**, delete after **365 days**.
-4. Enable **versioning** on the contracts bucket (`studioos-files`) and
-   set a **7-year retention** on noncurrent versions.
-5. Add the same versioning + 7-year retention to the KYC sub-prefix
-   (currently sharing `studioos-files`; if it's split out later, repeat
-   the steps on the new bucket).
+4. **R2 has no object versioning or noncurrent-version restore.** Before
+   enabling file snapshots, obtain #6650's prefix registry and counsel's legal
+   retention basis for each record class (#6652, decision A). Registry schema:
+   `{"version":1,"classes":[{"prefix":"approved-record-prefix/","bucket":"studioos-files","class":"record","locked_copy":"yes","retention_basis":"approved-reference","retention_days":2557}]}`.
+   There are no default live prefixes. Keep personal files without a recorded
+   basis out of the locked archive. #6651 supplies write-once record keys;
+   this scheduled copy cannot recover a revision overwritten or deleted before
+   it was captured. RPO is at most the last verified successful snapshot, not
+   continuous versioning. Unobserved intermediate writes are not recoverable.
+5. After counsel approval, configure an **R2 bucket lock** covering
+   `files-recovery/` in `studioos-backups` for **2557 days**, at least seven
+   calendar years. This is a prefix lock, not S3 versioning or a claimed
+   compliance-mode setting. Inspect with `wrangler r2 bucket lock list
+   studioos-backups`; a 365-day D1/KV rule does not satisfy file retention.
+   The script checks the actual lock via Cloudflare's control-plane API and
+   refuses short, missing, indefinite or longer overlapping retention rules.
+   Provide separate private S3 credentials: a read-only source key for
+   `studioos-files` and an archive read/write destination key for
+   `studioos-backups`. GitHub secrets are `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`,
+   `FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY`,
+   `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID` and
+   `FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`.
+   Set `FILE_RECOVERY_REGISTRY` to the reviewed registry file path and enable
+   `FILE_RECOVERY_ENABLED=true` only after the operator checks and counsel
+   approval. The workflow stays disabled otherwise. No live configuration has
+   been changed by this implementation. Live restore must apply #6654's current
+   suppression ledger and remains blocked until its adapter exists. D6653 adds
+   the optional independent copy and the missed-run alert, configured below.
 6. Add GitHub Actions secrets:
    - `CLOUDFLARE_API_TOKEN` (D1:edit + R2:read+write + Workers:edit)
    - `CLOUDFLARE_ACCOUNT_ID`
    - `PAGER_WEBHOOK_URL` (Slack/PagerDuty webhook; optional but
      strongly recommended for the DR drill to page on failure).
+
+### Independent file copy and heartbeat (D6653)
+
+Provision the independent bucket and its retention policy outside the production
+account, with the same approved record-class/legal-basis limits. Values belong
+only in Actions settings. No outside bucket, credential or enable flag is
+created by the source change. Keep both file enable flags off until the owner
+has verified separation, retention and access policy.
+
+- Production copy: set `FILE_DR_SECOND_COPY_ENABLED=true` only after approval.
+  Reuse D1's non-secret naming pattern: `DR_COPY_ENDPOINT`, `DR_COPY_BUCKET`,
+  optional `DR_COPY_REGION` (defaults to `auto`), and `DR_AGE_RECIPIENT` (age
+  public recipient). Keep the matching private key offline. Provide separate
+  `FILE_DR_COPY_ACCESS_KEY_ID` / `FILE_DR_COPY_SECRET_ACCESS_KEY`, restricted
+  to conditional writes and metadata HEAD on this file prefix; no content GET,
+  listing or deletion. A same-account R2 endpoint is refused. For a different
+  S3-compatible provider, the owner must verify account ownership and set
+  `FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED=true`; a URL cannot prove that ownership.
+- Primary snapshot bytes and manifest are briefly staged in a private runner
+  directory, encrypted before leaving that runner, and removed by an always-run
+  cleanup step. No plaintext bundle or manifest is uploaded as an Actions
+  artifact. A copy completion descriptor is written only after every copied
+  object and encrypted manifest has verified checksum/size metadata. A retry
+  can accept an existing object only for the same plaintext digest.
+- Each run writes an immutable `files-recovery-health/runs/<run>-<attempt>.json`
+  and updates `heartbeat-files.json` in the primary backup bucket, outside the
+  locked record prefix. Fields are time, outcome, counts, newest source-key
+  modification time (null with an explicit reason when unknown), run identity
+  and independent-copy status; never member file keys or contents. Failure
+  records do not invent zero counts. A partial or enabled-but-unconfigured
+  outside copy is a failure. A deliberately disabled optional copy emits a
+  clear notice and records `not_configured`.
+- Provide `FILE_RECOVERY_HEALTH_ACCESS_KEY_ID` /
+  `FILE_RECOVERY_HEALTH_SECRET_ACCESS_KEY` as a separate metadata-only reader
+  for the heartbeat keys. The existing hourly GitHub alert path reads that
+  marker and the latest completed snapshot workflow. A reported failure or
+  heartbeat older than two daily intervals (48 hours) opens one
+  `[alert] file recovery backup unhealthy` episode. Repeated unhealthy checks
+  do not spam; verified recovery closes the episode. Missing/invalid markers
+  raise; an access/network error fails the observer without inferring recovery.
+  A failed workflow can still raise when its heartbeat could not be written.
+
+**Synthetic outside-preview proof and monthly drill:** provision a separate
+outside-account **preview** bucket, then set `FILE_DR_PREVIEW_ENABLED=true`,
+`FILE_DR_PREVIEW_ENDPOINT`, `FILE_DR_PREVIEW_BUCKET`, and optional
+`FILE_DR_PREVIEW_REGION`. Use separate preview writer secrets
+`FILE_DR_PREVIEW_COPY_ACCESS_KEY_ID` /
+`FILE_DR_PREVIEW_COPY_SECRET_ACCESS_KEY`, and preview read-only secrets
+`FILE_DR_PREVIEW_RESTORE_ACCESS_KEY_ID` /
+`FILE_DR_PREVIEW_RESTORE_SECRET_ACCESS_KEY`. These never grant production
+source/archive access. The monthly DR workflow runs the file drill with those
+preview settings; the existing D1 drill is unchanged. For acceptance, dispatch
+`file-recovery.yml` with `mode=synthetic-proof` on the reviewed branch.
+
+The proof generates an ephemeral age key, copies one fresh synthetic record,
+stores a per-run synthetic heartbeat outside the production account, removes
+its local source, and restores/decrypts/checks only that fixture from the
+outside copy. It cannot select a live member record and never advances the
+live backup heartbeat. Retain the run link and its redacted counts/heartbeat
+receipt. This is transport recovery evidence, not evidence that live record
+classes or the #6654 suppression-aware live restore have been enabled.
+
+| Hosted file proof | Outcome | Heartbeat / restore evidence |
+|---|---|---|
+| [s39 synthetic preview attempt, 2026-11-18](https://github.com/AxalNetwork/StudioOS/actions/runs/44409361430) | Skipped: preview enablement gate did not admit the job | None; owner preview configuration and a verified run remain required. Configuration metadata was inaccessible (403), so presence is unknown. |
+
+**File recovery verification (#6428):** the synthetic-only drill writes and
+checks archive bytes, removes its synthetic source, restores one object and
+suppresses another. It does not read production files or establish live backup
+coverage. New snapshots use unique immutable keys, condition source GETs on
+listed ETags, verify each copied SHA-256 and publish a manifest only after all
+copies verify. A failed run cannot masquerade as a completed snapshot. The
+archive is private; object contents, keys and credentials stay out of logs.
+Operator evidence, approved prefixes and counsel retention decisions remain
+prerequisites; this task does not change D1/KV backup behavior.
 
 ---
 
@@ -241,3 +339,5 @@ non-involved engineer.
 ## Change Log
 
 - **2026-05-20** — Initial playbook (Task #5 IE).
+
+R2 retention reference: [Cloudflare bucket locks](https://developers.cloudflare.com/r2/buckets/bucket-locks/).

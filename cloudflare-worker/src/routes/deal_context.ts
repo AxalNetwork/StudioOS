@@ -65,22 +65,28 @@ async function facts(db: D1Database, x: any) {
   return { invitation, member, dd, ic, committee, commitment, envelope, funded };
 }
 
+/** The investor's stage and one next action on this deal (D1150), as `GET /:id/stage` returns it. #6629's deal summary
+ *  prints the same stage, so the rule lives here once. */
+export async function stageRead(db: D1Database, x: any) {
+  const f = await facts(db, x);
+  const base = `/deals/${x.id}`;
+  let stage: string | null = f.invitation ? 'Invited' : null, next = { label: f.invitation ? 'I’m interested' : 'View deal', href: `${base}/overview` };
+  if (f.member || f.invitation?.status === 'interested') { stage = 'Reviewing'; next = { label: 'Ask for data room access', href: `${base}/documents` }; }
+  if (f.dd) { stage = 'Diligence'; next = { label: 'Open the diligence case', href: `/due-diligence/${encodeURIComponent(f.dd.uid)}` }; }
+  if (f.ic) { stage = 'IC'; next = { label: 'Open IC record', href: `/deals/commit/${encodeURIComponent(f.ic.uid)}` }; }
+  if (f.ic?.terms || f.envelope) { stage = 'Terms'; next = { label: 'Review terms', href: `${base}/terms` }; }
+  if (f.commitment) { stage = 'Committed'; next = { label: 'Review signing', href: `${base}/commitment` }; }
+  if (f.envelope?.status === 'completed') { stage = 'Signed'; next = { label: 'Review funding', href: `${base}/commitment` }; }
+  if (f.funded) { stage = 'Funded'; next = { label: 'View company reports', href: '/portfolio/updates' }; }
+  if (x.deal.status === 'rejected') { stage = 'Passed by the studio'; next = { label: 'View deal', href: `${base}/overview` }; }
+  if (f.invitation?.status === 'passed' || f.ic?.decision === 'pass') { stage = 'You passed'; next = { label: 'View deal', href: `${base}/overview` }; }
+  return { my_stage: stage, reason: stage === null ? 'No current invitation or progress fact is recorded.' : null, next_action: { ...next, kind: stage === 'Invited' ? 'respond_interest' : 'navigate', ...(stage === 'Invited' ? { invitation_uid: f.invitation.uid } : {}) }, ic: f.committee ? { state: 'used' } : { state: 'not_used', label: 'Not used', reason: 'No IC record is recorded for this firm.' } };
+}
+
 r.get('/:id/stage', async c => {
   try {
     const x = await context(c); if ('error' in x) return x.error;
-    const f = await facts(c.env.DB, x);
-    const base = `/deals/${x.id}`;
-    let stage: string | null = f.invitation ? 'Invited' : null, next = { label: f.invitation ? 'I’m interested' : 'View deal', href: `${base}/overview` };
-    if (f.member || f.invitation?.status === 'interested') { stage = 'Reviewing'; next = { label: 'Ask for data room access', href: `${base}/documents` }; }
-    if (f.dd) { stage = 'Diligence'; next = { label: 'Open the diligence case', href: `/due-diligence/${encodeURIComponent(f.dd.uid)}` }; }
-    if (f.ic) { stage = 'IC'; next = { label: 'Open IC record', href: `/ic/${encodeURIComponent(f.ic.uid)}` }; }
-    if (f.ic?.terms || f.envelope) { stage = 'Terms'; next = { label: 'Review terms', href: `${base}/terms` }; }
-    if (f.commitment) { stage = 'Committed'; next = { label: 'Review signing', href: `${base}/commitment` }; }
-    if (f.envelope?.status === 'completed') { stage = 'Signed'; next = { label: 'Review funding', href: `${base}/commitment` }; }
-    if (f.funded) { stage = 'Funded'; next = { label: 'View company reports', href: '/portfolio/updates' }; }
-    if (x.deal.status === 'rejected') { stage = 'Passed by the studio'; next = { label: 'View deal', href: `${base}/overview` }; }
-    if (f.invitation?.status === 'passed' || f.ic?.decision === 'pass') { stage = 'You passed'; next = { label: 'View deal', href: `${base}/overview` }; }
-    return c.json({ my_stage: stage, reason: stage === null ? 'No current invitation or progress fact is recorded.' : null, next_action: { ...next, kind: stage === 'Invited' ? 'respond_interest' : 'navigate', ...(stage === 'Invited' ? { invitation_uid: f.invitation.uid } : {}) }, ic: f.committee ? { state: 'used' } : { state: 'not_used', label: 'Not used', reason: 'No IC record is recorded for this firm.' } });
+    return c.json(await stageRead(c.env.DB, x));
   } catch { return c.json({ error: 'stage_unreadable', message: 'Deal progress is unreadable. Try again.' }, 503); }
 });
 

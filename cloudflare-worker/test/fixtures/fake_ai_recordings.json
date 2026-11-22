@@ -1,10 +1,10 @@
 {
-  "about": "D1511 (#3762): the fake AI binding's recorded outputs (cloudflare-worker/test/_recorded_ai.mjs). Each recording answers the first call whose model (null: any) and prompt pattern (a RegExp source, multiline) match. Synthetic words only: no figure, no name of a real person or company. The deck build's words name no number, as the composer requires, so none is dropped.",
+  "about": "D1511 (#3762): the fake AI binding's recorded outputs (cloudflare-worker/test/_recorded_ai.mjs). Each recording answers the first call whose model (null: any) and prompt match: the prompt has a line that starts with `prompt` (null answers any prompt, the empty string any non-empty one). Synthetic words only: no figure, no name of a real person or company. The deck build's words name no number, as the composer requires, so none is dropped.",
   "recordings": [
     {
       "id": "deck_outline",
       "model": null,
-      "prompt": "^Plan a ",
+      "prompt": "Plan a ",
       "response": { "rows": [
         { "card": "title", "title": "Synthetic Ledger Co", "purpose": "Who we are", "message": "The close, done in a day" },
         { "card": "problem", "title": "Problem", "purpose": "The pain", "message": "Finance teams lose the week to the close" },
@@ -18,7 +18,7 @@
     {
       "id": "deck_build",
       "model": null,
-      "prompt": "^Write the cards of a pitch deck",
+      "prompt": "Write the cards of a pitch deck",
       "response": { "cards": [
         { "n": 1, "headline": "The close, done in a day.", "body": "Synthetic Ledger Co gives finance teams their week back." },
         { "n": 2, "headline": "Month-end eats the week.", "body": "Teams told us the close is the job they dread most." },
@@ -48,7 +48,7 @@
     {
       "id": "chat",
       "model": null,
-      "prompt": "[\\s\\S]",
+      "prompt": "",
       "response": "A clear, sourced line for this card.",
       "usage": { "prompt_tokens": 120, "completion_tokens": 20 }
     }

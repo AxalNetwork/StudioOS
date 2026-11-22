@@ -29,7 +29,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { logAdminAction } from '../services/adminAudit';
-import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { mapError, nowIso, newUid, todayIso } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
   periodComplete, periodCounts, reportDue, REPORT_DUE_DEFAULT_DAYS,
@@ -187,6 +187,14 @@ r.get('/', async (c) => {
     // metrics beside it used the mark as of the requested date, so one page
     // could show a position and the totals priced on different days.
     const listAsOf = isoDate(c.req.query('as_of'));
+    // D6887 (#6887): the rows are cut at the same date. Before, `as_of` moved
+    // only the marks, so a company funded after the date was still listed and
+    // the rows' invested total did not equal the analytics `paid_in` beside it.
+    // Both queries below keep a cheque dated on or before `as_of` (bound twice;
+    // with none, every row), dated the way `/analytics` dates it
+    // (`isoDate(position_date) || isoDate(created_at)`): its position date when
+    // that starts YYYY-MM-DD, else when it was recorded (`created_at` is NOT
+    // NULL, so every cheque has a date).
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
     // handful of holdings.
@@ -202,8 +210,10 @@ r.get('/', async (c) => {
          LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
         WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
                OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
+          AND (? IS NULL OR (CASE WHEN p.position_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                                  THEN substr(p.position_date, 1, 10) ELSE substr(p.created_at, 1, 10) END) <= ?)
         GROUP BY p.project_id`
-    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, listAsOf, listAsOf).all<any>();
     // Latest ownership/round per project, also in one pass, over the same rows:
     // for a company read as GP, the latest of their funds' rounds.
     const latestRows = await c.env.DB.prepare(
@@ -213,12 +223,14 @@ r.get('/', async (c) => {
                  FROM portfolio_positions q
                 WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(q.project_id AS TEXT) || ',') > 0
                        OR instr(',' || ? || ',', ',' || CAST(q.fund_id AS TEXT) || ',') > 0)
+                  AND (? IS NULL OR (CASE WHEN q.position_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                                          THEN substr(q.position_date, 1, 10) ELSE substr(q.created_at, 1, 10) END) <= ?)
                 GROUP BY q.project_id) l
            ON l.project_id = p.project_id AND l.d = COALESCE(p.position_date, p.created_at)
          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
                 OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
          GROUP BY p.project_id`
-    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, listAsOf, listAsOf, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
     const marks = await scopedLatestMarks(c.env, scope, listAsOf);
@@ -247,6 +259,8 @@ r.get('/', async (c) => {
         // Vintage = year of first cheque, so cohort analysis is derived
         // from real position dates rather than a hand-kept field.
         vintage: row.first_date ? Number(String(row.first_date).slice(0, 4)) || null : null,
+        /** D6887: the first cheque's date (YYYY-MM-DD), on or before `as_of` when one is given. */
+        first_date: isoDate(row.first_date),
         // #125 — carrying value. `unmarked: true` means we are showing
         // cost because no mark exists; the UI must say so rather than
         // presenting cost as a valuation.
@@ -270,6 +284,8 @@ r.get('/', async (c) => {
       items,
       scope: scope.held == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE,
       fund_scope: gpScopeStatement(scope),
+      /** D6226: the Worker's UTC date, so the page ages a mark without the browser clock. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -442,6 +458,9 @@ r.get('/analytics', async (c) => {
       // returned on every read, explicit or not.
       as_of_default: readAt.slice(0, 10),
       read_at: readAt,
+      // D6226: the Worker's UTC date, whatever `as_of` was asked; mark age is
+      // measured at it. Taken from the same clock read as `read_at` (D6207).
+      today: readAt.slice(0, 10),
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
       /** D4644: positions whose recorded mark could not be used, and why not. */
@@ -638,15 +657,25 @@ r.get('/:projectUid', async (c) => {
           WHERE project_id = ?
             AND (? IS NULL OR fund_id IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY as_of_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
       c.env.DB.prepare(
         `SELECT uid, distribution_date, amount, kind, note
            FROM portfolio_distributions
           WHERE project_id = ?
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY distribution_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
     ]);
+    // #5847: a failed marks or distributions read is Unreadable, never an
+    // empty history, "None recorded" or $0. The page reads a refused read as
+    // Unreadable (`readOf`); an empty but successful read is still [].
+    const unread = markRows.results == null ? 'marks' : distRows.results == null ? 'distributions' : null;
+    if (unread) {
+      const reason = unread === 'marks'
+        ? "Unreadable — this company's valuation marks could not be read. Try again."
+        : "Unreadable — this company's distributions could not be read. Try again.";
+      return c.json({ available: false, source: unread, detail: reason, reason }, 503);
+    }
     const marks = markRows.results || [];
     const invested = (rounds.results || []).reduce((a: number, x: any) => a + (Number(x.invested_amount) || 0), 0);
     const roll = rollUpPosition(invested, marks.length > 0 ? Number(marks[0].fmv) : null);
@@ -662,6 +691,8 @@ r.get('/:projectUid', async (c) => {
         latest_mark_as_of: marks.length > 0 ? marks[0].as_of_date : null,
         latest_mark_basis: marks.length > 0 ? marks[0].basis : null,
       },
+      /** D6226: the Worker's UTC date, so the latest mark's age is measured against it. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });

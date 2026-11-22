@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+
+// Code Scanning js/bad-code-sanitization: a value put into generated source as a string literal, with <, >,
+// U+2028 and U+2029 escaped as well as JSON.stringify's quotes, so it cannot close the literal or a script.
+const lit = (v: unknown) => JSON.stringify(v).replace(/[<>\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scenarios=['meeting-bot/test/contract_recovery.test.ts','meeting-bot/test/callback_privacy.test.ts','meeting-bot/test/container_smoke.test.ts','meeting-bot/test/lifecycle.test.ts'];
 const childEnv={...process.env};delete childEnv.NODE_TEST_CONTEXT;
@@ -13,7 +17,7 @@ const run=(loader?:string)=>spawnSync(process.execPath,['--experimental-strip-ty
 const cases=[
   ['notice payload not required','runtime.ts',"typeof command.notice!=='string'||command.notice!==approved",'false'],
   ['completion counts omitted','callback.ts',"...(report.chunks===undefined?{}:{chunks:report.chunks}),",''],
-  ['explicit budget refusal ignored','lifecycle.ts',"if(error instanceof TransportError&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');",''],
+  ['explicit budget refusal ignored','lifecycle.ts',"if((error instanceof TransportError)&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');",''],
   ['in-flight chunk omitted from failure count','uploader.ts','this.queue.length + (this.inFlight ? 1 : 0)','this.queue.length'],
   ['signature omits route','callback.ts','`v1:${ts}:POST:${path}:${body}`','`v1:${ts}:POST:${body}`'],
   ['wire sequence reused','callback.ts','seq:++seq','seq:seq'],
@@ -37,7 +41,7 @@ test('D886 new contract assertions survive restore and catch each isolated mutat
     for(const [name,file,before,after] of cases){
       const target=new URL('../src/'+file,import.meta.url).href;
       assert.ok(readFileSync(new URL(target),'utf8').includes(before),name+' target');
-      writeFileSync(join(temporary,'hook.mjs'),`import {readFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';export async function load(url,ctx,next){if(url===${JSON.stringify(target)}){const source=readFileSync(new URL(url),'utf8').replace(${JSON.stringify(before)},()=>${JSON.stringify(after)});return {format:'module',source:stripTypeScriptTypes(source,{mode:'strip'}),shortCircuit:true};}return next(url,ctx);}`);
+      writeFileSync(join(temporary,'hook.mjs'),`import {readFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';export async function load(url,ctx,next){if(url===${lit(target)}){const source=readFileSync(new URL(url),'utf8').replace(${lit(before)},()=>${lit(after)});return {format:'module',source:stripTypeScriptTypes(source,{mode:'strip'}),shortCircuit:true};}return next(url,ctx);}`);
       writeFileSync(join(temporary,'register.mjs'),"import {register} from 'node:module';register('./hook.mjs',import.meta.url);");
       const mutant=run(join(temporary,'register.mjs'));
       assert.notEqual(mutant.status,0,name+' must fail '+mutant.stdout.slice(-500));

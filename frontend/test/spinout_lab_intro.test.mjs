@@ -165,7 +165,9 @@ test('the four gates render from PIPELINE_PHASES, not from a per-track list', ()
   // everyone. Four invented gate sets would tell a founder that week 2 asks
   // something it does not ask.
   assert.match(INTRO_CODE, /PIPELINE_PHASES\.map/);
-  assert.match(INTRO_CODE, /pipelineItemsFor\(phase, jurisdiction\)/);
+  assert.match(INTRO_CODE, /pipelineItemsFor\(phase\)/);
+  // D6991: formation sits in no week; its jurisdiction lines render once, under the gates.
+  assert.match(INTRO_CODE, /formationItemsFor\(jurisdiction\)/);
   // The canvas's own gate names, which belong to no week this product runs.
   for (const invented of ['Structure', 'Discover', 'Interview', 'Size', 'Scope', 'Prove']) {
     assert.ok(!INTRO_CODE.includes(`'${invented}'`) && !INTRO_CODE.includes(`"${invented}"`),

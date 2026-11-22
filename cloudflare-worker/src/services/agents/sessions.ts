@@ -28,12 +28,15 @@ import { agentQuote } from './agentRun';
 import { canManage, canRead, effectiveBook, monthSpend, scopeOfAgent, type AgentRow, type Scope } from './teams';
 import { fromSql, sqlTime, type DutyRow } from './duties';
 import type { Refusal } from './goals';
+import { roomReaderRole, selectedFund } from './reads';
+import { heldLicences } from '../accountLicences';
+import { userMeetsInvestorTier } from '../../middleware/requireInvestorTier';
 
 export const INSTRUCTION_MAX = 1000;
 export const SESSIONS_PER_AGENT_MAX = 20;
-export const TARGET_KINDS = ['module', 'deck', 'meeting', 'deal', 'document'] as const;
+export const TARGET_KINDS = ['module', 'deck', 'meeting', 'deal', 'document', 'fund'] as const;
 /** The record kinds a session can work on today: the ones whose read gate this file can check. */
-export const CHECKED_TARGETS = ['module', 'deck'] as const;
+export const CHECKED_TARGETS = ['module', 'deck', 'document', 'fund'] as const;
 /** The screen's weekday names; agent_duties stores 0 = Sunday … 6 = Saturday. */
 export const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
@@ -172,6 +175,26 @@ export async function targetReadable(env: Env, a: AgentRow, s: Scope, target: { 
     const deck = await env.DB.prepare('SELECT id, project_id, title FROM pitch_decks WHERE id = ?').bind(Number(target.id)).first<{ id: number; project_id: number; title: string | null }>();
     return deck && projectIds.includes(Number(deck.project_id)) ? { title: deck.title || 'Pitch deck', href: `/raise/pitch?deck=${deck.id}` } : null;
   }
+  if (target.kind === 'fund') {
+    // D7701: match fund.performance's institutional GP/company gate, without reading its figures.
+    const id = /^[1-9][0-9]{0,11}$/.test(target.id) ? selectedFund(target.id) : null;
+    const companyId = s.kind === 'company' ? s.id : s.company_id ?? null;
+    const caller = { ...sponsor, licences: await heldLicences(env.DB as any, { id: Number(sponsor.id), role: sponsor.role }) };
+    if (id === null || companyId === null || String(caller.role).toLowerCase() === 'admin' || !userMeetsInvestorTier(caller, 'institutional')) return null;
+    // Non-admin fundGpScope predicate, kept static so all caller values remain bound.
+    const fund = await env.DB.prepare('SELECT f.name FROM vc_funds f WHERE f.id = ? AND f.gp_user_id = ? AND (f.company_id = ? OR f.company_id IS NULL)')
+      .bind(id, Number(caller.id), companyId).first<{ name: string }>();
+    return fund ? { title: fund.name, href: null } : null;
+  }
+  if (target.kind === 'document') {
+    // D4667-p3: one live file of a data room in this scope, which the sponsor reads whole by the room's own rule.
+    if (!/^[a-f0-9]{32}$/.test(target.id)) return null;
+    const file = await env.DB.prepare(
+      `SELECT f.name, f.project_id FROM data_room_files f JOIN projects p ON p.id = f.project_id
+        WHERE f.uid = ? AND f.removed_at IS NULL AND ((? = 'project' AND p.id = ?) OR (? = 'company' AND p.company_id = ?))`,
+    ).bind(target.id, s.kind, s.id, s.kind, s.id).first<{ name: string; project_id: number }>();
+    return file && await roomReaderRole(env, Number(a.sponsor_user_id), Number(file.project_id)) ? { title: file.name, href: null } : null;
+  }
   return null;
 }
 
@@ -204,7 +227,7 @@ export async function checkSession(env: Env, a: AgentRow, s: Scope, b: SessionIn
   const ti = b.target_id === undefined ? base?.target_id ?? null : b.target_id;
   if (tk != null || ti != null) {
     if (!(TARGET_KINDS as readonly unknown[]).includes(tk) || typeof ti !== 'string' || !ti || ti.length > 100) {
-      return { ok: false, refusal: no(400, 'invalid_session', 'Choose a meeting, a deal, a deck, a module or a document to work on.') };
+      return { ok: false, refusal: no(400, 'invalid_session', 'Choose a meeting, a deal, a deck, a module, a document or a fund to work on.') };
     }
     const seen = await targetReadable(env, a, s, { kind: tk as string, id: ti });
     if (!seen) return { ok: false, refusal: no(422, 'target_not_readable', 'The sponsor cannot read that record, so the agent cannot work on it.') };

@@ -1,3 +1,4 @@
+import { guardChain } from './guardCatalog.mjs';
 /**
  * #6326: the `red-ci-triage` skill's decisions, apart from GitHub. Which CI
  * failure digest comment on a PR is the current one, which open `[alert]`
@@ -16,6 +17,7 @@
  */
 import { ALERT_KINDS } from './githubAlerts.mjs';
 import { VERDICTS } from './ciClassify.mjs';
+import { testGlobMatches } from './literalMatch.mjs';
 
 export const DIGEST_MARKER = '<!-- studioos-ci-digest:v1 -->';
 export const DIGEST_AUTHOR = 'github-actions[bot]';
@@ -179,7 +181,8 @@ export function parseLog(text) {
       const fields = {};
       for (let k = i + 1; k < lines.length && k < i + 60; k++) {
         const l = lines[k];
-        if (new RegExp(`^\\s{${indent}}\\s*\\.\\.\\.\\s*$`).test(l) && k > i + 1) break;
+        const close = /^(\s*)\.\.\.\s*$/.exec(l);
+        if (close && close[1].length >= indent && k > i + 1) break;
         const f = /^\s+(location|failureType|error|code): (.*)$/.exec(l);
         if (f && !(f[1] in fields)) {
           let value = f[2];
@@ -210,6 +213,13 @@ export function parseLog(text) {
     const lint = /^\s+(\d+):(\d+)\s+error\s+(.+?)\s{2,}(\S+)\s*$/.exec(line);
     if (lint && lintFile) { out.lint.push({ file: lintFile, line: Number(lint[1]), message: lint[3], rule: lint[4] }); continue; }
     if (line.trim() === '') lintFile = null;
+    const recorded = /^\[guard\] ([a-z][a-z0-9-]*): (failed|blocked|interrupted|not_run); exit=([\d-]+)/.exec(line);
+    if (recorded) {
+      const existing = out.guards.find(g => [g.name, `check-${g.name}`, `build-${g.name}`].includes(recorded[1]));
+      if (existing) { existing.name = recorded[1]; existing.status = recorded[2]; existing.exitCode = recorded[3]; }
+      else out.guards.push({ name: recorded[1], message: `${recorded[2]}; exit=${recorded[3]}`, details: [] });
+      continue;
+    }
     const guard = /^✖ ([\w.-]+):\s*(.*)$/.exec(line);
     if (guard) {
       const details = [];
@@ -227,7 +237,8 @@ export function parseLog(text) {
   return out;
 }
 
-const globRegex = (pattern) => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/?/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?')}$`);
+/** A package.json test glob as a matcher (`**` any directories, `*` within one); see literalMatch.mjs. */
+const globRegex = (pattern) => ({ test: (file) => testGlobMatches(pattern, file) });
 
 /**
  * The `node … --test` prefixes package.json uses, with the file globs each one owns.
@@ -267,7 +278,7 @@ export function reproduceTypes(file) {
 
 /** The `test:guards` step that prints `✖ <name>:`, e.g. `test-clock` → `node --no-warnings scripts/check-test-clock.mjs`. */
 export function guardCommand(name, scripts) {
-  const steps = String(scripts?.['test:guards'] || '').split(' && ').map((s) => s.trim());
+  const steps = String(scripts?.['test:guards'] === 'node scripts/run-guards.mjs' ? guardChain : scripts?.['test:guards'] || '').split(' && ').map((s) => s.trim());
   const base = String(name).replace(/\.mjs$/, '');
   const wanted = [`${base}.mjs`, `check-${base}.mjs`, `build-${base}.mjs`];
   return steps.find((s) => s.split(/\s+/).some((w) => wanted.some((n) => w === `scripts/${n}` || w.endsWith(`/${n}`)))) || null;

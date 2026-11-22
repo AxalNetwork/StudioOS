@@ -10,7 +10,7 @@ import '../studio/tiles/investorHomeModules.css';
  * Investor Home linking to the Settings card where it is edited. Not a zone:
  * the thesis is one record, `investor_profiles.thesis_text`, read through
  * `GET /api/investor-profile/me` and written only by Settings' "My thesis"
- * card (`/account/security-privacy`, `PUT /api/investor-profile/me`).
+ * editor (`/account/portfolio/settings`, `PUT /api/investor-profile/me`).
  *
  * Four states, none of them a guess:
  *   reading     "Reading your thesis…"
@@ -26,7 +26,7 @@ import '../studio/tiles/investorHomeModules.css';
  * so and points to Settings, where fit on live deals is set too. On a phone the
  * chips after the fifth fold into "+n more".
  */
-export const THESIS_HREF = '/account/security-privacy?from=home#my-thesis';
+export const THESIS_HREF = '/account/portfolio/settings?from=home#my-thesis';
 
 export function thesisBandState(read) {
   if (!read || read.status === 'loading') return { kind: 'reading' };

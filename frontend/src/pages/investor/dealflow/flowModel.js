@@ -333,7 +333,7 @@ export function toggleCard(cards, key) {
 }
 
 /** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
-export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
+export const THESIS_PATH = '/account/portfolio/settings?from=deal-flow#my-thesis';
 
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -537,11 +537,17 @@ export const passAnswersInvitation = (row) => row?.myInvitation === 'invited' ||
  * `unreadable`, never a count of 0; a way in that could not be read is named,
  * so a count from the rest reads as "at least".
  */
-export function attentionOf(read, unreadWords = () => []) {
+export function attentionOf(read, unreadWords = () => [], recorded) {
+  if (recorded?.kind === 'loading') return {kind:'loading',items:[],unread:[]};
+  if (recorded && (recorded.kind !== 'ok' || [recorded.data?.stale,recorded.data?.diligence].some(s=>s?.state==='unreadable'))) return {kind:'unreadable',items:[],unread:[]};
   if (!read || read.kind === 'loading') return { kind: 'loading', items: [], unread: [] };
   if (read.kind !== 'ok') return { kind: 'unreadable', items: [], unread: [] };
   const deals = new Set((read.data?.items || []).map((i) => String(i.deal_id)));
   const unread = unreadWords(read.data?.sources || {});
   const items = deals.size ? [{ key: 'new', count: deals.size, word: `${deals.size} new`, label: `${deals.size} ${deals.size === 1 ? 'deal' : 'deals'} new for you` }] : [];
+  if (recorded?.kind === 'ok') for (const [key,word] of [['stale','stale'],['diligence','waiting on diligence']]) {
+    const source=recorded.data?.[key];
+    if(source?.state==='recorded'&&source.count>0)items.push({key,count:source.count,word:`${source.count} ${word}`,label:`${source.count} ${word}`});
+  }
   return { kind: 'ok', items, unread };
 }

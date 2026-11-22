@@ -16,6 +16,9 @@
  * second, PR-only failure inside it, so an inherited verdict says so, and the PR's own tests in that part still
  * count once main is green again.
  */
+// D5502: production diagnostics and digests use exact-base test evidence.
+// classify() below remains the legacy job-level API for historical scorecards.
+export { compareEvidence as classifyEvidence } from './ciFailures.mjs';
 export const VERDICTS = Object.freeze(['pr_failure', 'inherited_main_failure', 'main_health_unknown', 'infra_failure']);
 
 export const INFRA_STEPS = Object.freeze([
@@ -26,7 +29,7 @@ export const INFRA_STEPS = Object.freeze([
 ]);
 
 /** Jobs whose failure is only a summary of others: the gate reports the suite parts. */
-const SUMMARY_JOBS = new Set(['test:drift (full suite)', 'landing gate']);
+export const SUMMARY_JOBS = new Set(['test:drift (full suite)', 'landing gate']);
 /**
  * A job name as it may appear in the summary: letters, digits, spaces and `( ) - _ : . / ↔`, at most 100 characters.
  * Job names come from the workflow file, which a pull request can change, so anything else is dropped rather than

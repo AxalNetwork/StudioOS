@@ -238,9 +238,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // D497 (#1023): question 8 on #1023 asks whether this reuses the
-    // `intro_propositions` flow between two of your accepted ties.
-    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
+    // D6637 / D6263 Q8: offer between two accepted ties through existing propositions.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // D6258: the list is derived from the relationship book, and since D572
@@ -302,10 +301,13 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
     { label: 'Export', kind: 'export' },
   ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); Edit thesis opens Settings › My thesis. They
+  // replace New deep-dive, Export and Cite in a memo.
   'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
-    { label: 'Export', kind: 'export' },
-    { label: 'Cite in a memo', unbuilt: 'nothing carries a sector into a memo' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'Edit thesis', kind: 'handler', handler: 'editThesis', primary: true },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
   // `Add document`, and it opens the same file picker. It was

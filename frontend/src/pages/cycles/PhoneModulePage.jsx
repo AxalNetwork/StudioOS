@@ -1,3 +1,4 @@
+import BuildFacts from './BuildFacts.jsx';
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EadwynButton, PhoneBar, PhoneRows, Unreadable } from '../../ui';
@@ -6,11 +7,11 @@ import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { phoneStateRow } from './BuildStates.jsx';
-import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
+import { buildOutcome } from './buildNav.js';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -62,7 +63,8 @@ export function phoneRow(cols, row) {
   const targetLine = target?.separateLink === true ? `Target: ${cellView(target).text}${typeof comparison === 'string' ? ` · ${comparison}` : ''}` : null;
   return {
     title,
-    description: [second?.text, targetLine].filter(Boolean).join(' · ') || undefined,
+    // #6006: the title cell's first note (a theme's rank reason) follows the second cell on a phone.
+    description: [second?.text, cells[0]?.note?.[0], targetLine].filter(Boolean).join(' · ') || undefined,
     pill: toned ? { label: toned.text, tone: PILL_TONE[toned.tone] || 'neutral' } : undefined,
   };
 }
@@ -107,9 +109,10 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
   // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
   phoneRow: rowOf = phoneRow,
+  showAboveRecordsWhenEmpty = false,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
   // D5081 (#5081, RA-14): a tool that owns its page; its `subnav` is the page, as on the desktop (`CycleModulePage`).
@@ -131,7 +134,7 @@ export default function PhoneModulePage({
   const bar = header === undefined ? (
     // D5081 part 4 (#5081): a tool that owns its page says its own line, as the desktop header does, never the
     // caption of the generic card it no longer draws.
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : card?.caption || undefined}
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : (meta.key === 'build' && buildOutcome(slug)) || card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
@@ -218,8 +221,6 @@ export default function PhoneModulePage({
           <h2 id="phone-module-next-title" className="m-0 mt-2 text-[29px] font-black leading-[1.15] tracking-[-.032em] text-gray-900 [text-wrap:balance] dark:text-gray-100">{headline}</h2>
           {zero && <p className="m-0 mt-2 text-[14px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="phone-module-outcome">{progressive.outcome}</p>}
           {addOne && <Cta add={addOne} />}
-          {/* D1082 (#2947, LV7, LV8a): Build in Lovable follows the first Add on the phone. */}
-          {lovable && <div className="mt-3 flex justify-center"><BuildInLovable lovable={lovable} /></div>}
         </section>
       )}
       <section className={`${headline ? 'mt-[22px]' : ''} min-w-0`.trim()} data-testid="phone-module-chart" data-state={view.state}>
@@ -232,9 +233,10 @@ export default function PhoneModulePage({
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
+      <BuildFacts cycle={cycle} slug={slug} data={data} status={status} />
+      {/* Partnerships can have a pending proposal before the first partner exists. */}
+      {showRecords && aboveRecords && (!zero || showAboveRecordsWhenEmpty) && <div className="mt-[22px]">{aboveRecords}</div>}
       {showRecords && <>{!zero && <>
-      {/* #3938 (D1478 part 9): a control that acts on the records themselves, as on the desktop page. */}
-      {aboveRecords && <div className="mt-[22px]">{aboveRecords}</div>}
       {controls && <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}

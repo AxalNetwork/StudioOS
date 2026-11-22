@@ -47,6 +47,10 @@ export const LABELS = Object.freeze({
   needsSession: 'needs-session',
   mainRepair: 'main-repair',
   resolved: 'bot:resolved',
+  // #6476 owner addition: the keeper's own hand-back. `conflict` is only the PR-list indicator now (D6476-p5).
+  keeperTried: 'bot:keeper-tried',
+  // #6476 (D6476-p4): the ejection handler's add-only record that it handed a stranded removal back. Never removed.
+  handedBack: 'bot:handed-back',
 });
 export const REPAIR_BRANCH_PREFIX = 'repair/';
 export const STICKY_MARKER = '<!-- landing-bot -->';
@@ -272,7 +276,8 @@ export const PROTECTED = Object.freeze([
 
 /**
  * Which of a bot's intended writes are refused. Every path (and a rename's old path) must clear PROTECTED and must
- * not be T2 under merge-policy.mjs, which also rates every existing test T2. No files at all is refused.
+ * not be T2 under merge-policy.mjs. It is called without a diff, and an existing test with no diff to read is T2
+ * there (D6679), so a bot never edits an existing test. No files at all is refused.
  * @param files [{ path, previousPath?, status? }] status as git's letter; default M (an edit)
  */
 export function pathGuard(files) {

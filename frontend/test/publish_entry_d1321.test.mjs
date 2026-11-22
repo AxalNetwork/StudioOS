@@ -212,7 +212,7 @@ test('the wiring: Grow’s module headers and overview carry Publish to… on pa
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D1328 (#3489): the other cycles' modules carry Fill with Eadwyn (`FillModule`) in the same slot.
   // D5330 (#5330) wraps the slot in a fragment, so Working here sits beside Publish to….
-  assert.match(route, /more=\{(?:<>\{)?cycle === 'grow' && projectId \? <PublishTo part=\{module\?\.parts\?\.publish\} projectId=\{projectId\} module=\{slug\} \/>\n/);
+  assert.match(route, /more=\{(?:<>\{)?cycle === 'grow' && projectId && !companyReadOnly \? <PublishTo part=\{module\?\.parts\?\.publish\} projectId=\{projectId\} module=\{slug\} \/>\n/);
   assert.match(route, /\{cycle === 'grow' && <PublishedFromHere part=\{module\?\.parts\?\.publish\} \/>\}/);
   assert.match(route, /more=\{cycle === 'grow' && projectId \? <PublishTo part=\{rawOverview\?\.publish\} projectId=\{projectId\} module="overview" \/> : null\}/);
   assert.match(route, /\{cycle === 'grow' && <PublishedFromHere part=\{rawOverview\?\.publish\} \/>\}/);

@@ -12,7 +12,7 @@
  *      `last_success_at`; it names no member, company, agent or hold.
  *   3. A source that throws, hangs, answers without a count or lacks the
  *      binding is `unavailable` with `value: null`, never 0.
- *   4. Any non-zero count is a warning (proposed); a measured 0 clears it; an
+ *   4. Any non-zero count is a warning (approved 2026-11-21); a measured 0 clears it; an
  *      outage after a recent measurement is a freshness gap, a stale one opens
  *      nothing. The snapshot keeps the key.
  *   5. The statement is answered from two indexes, with no table scan.
@@ -69,7 +69,7 @@ test('a settled AI charge with no usage row is counted, with its provenance, and
   assert.deepEqual([m.key, m.availability, m.value, m.level, m.unit, m.scope], [KEY, 'measured', 2, 'warning', 'count', 'deployment']);
   assert.equal(m.last_success_at, NOW.toISOString(), 'the read itself is the source of the count');
   assert.deepEqual(m.thresholds, SETTLEMENT_WITHOUT_USAGE_THRESHOLDS);
-  assert.match(m.thresholds!.basis, /Proposed.*Not yet approved/);
+  assert.match(m.thresholds!.basis, /Approved by the owner on 2026-11-21/);
   assert.match(m.source, /ai_budget_reservations.*ai_usage_logs\.reservation_uid/);
   assert.match(m.window!, /last 24 hours.*5 minutes/);
   assert.ok(m.sampling);
@@ -134,7 +134,7 @@ test('alerts: a count opens a warning, a measured 0 clears it, an outage is a fr
   const open = [{ id: 9, metric_key: KEY, severity: 'warning' as const, muted_until: null }];
   assert.deepEqual(evaluateAlerts(open, [found], {}, NOW).map((a) => a.kind), ['touch'], 'one episode, not one per sweep');
   const many = { ...found, value: 40 };
-  assert.deepEqual(evaluateAlerts(open, [many], {}, NOW).map((a) => a.kind), ['touch'], 'no critical level is proposed');
+  assert.deepEqual(evaluateAlerts(open, [many], {}, NOW).map((a) => a.kind), ['touch'], 'there is no critical level');
   const zero = await count([]);
   assert.deepEqual(evaluateAlerts(open, [zero], {}, NOW).map((a) => a.kind), ['clear']);
 

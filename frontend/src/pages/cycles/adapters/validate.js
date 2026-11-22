@@ -72,6 +72,11 @@ export function usdShort(v) {
 
 const SEVERITY_TONE = { severe: 'v1', real: 'v2', mild: 'v3' };
 const SEVERITY_WORD = { severe: 'Severe', real: 'Real', mild: 'Mild' };
+// #6006 (V17): a severity carries a word and a glyph, three dots to one; an unjudged theme says so.
+const SEVERITY_GLYPH = { severe: '●●●', real: '●●○', mild: '●○○' };
+export const severityPill = (v) => (SEVERITY_WORD[v]
+  ? { text: `${SEVERITY_GLYPH[v]} ${SEVERITY_WORD[v]}`, tone: SEVERITY_TONE[v] }
+  : { text: '○ Not judged', tone: 'grey' });
 
 // ---------- Cards ------------------------------------------------------------
 
@@ -395,16 +400,41 @@ const seg = (id) => (id == null ? null : String(id));
  */
 const workerId = (v) => (v == null || v === '' ? null : String(v));
 
+/** #6006: "7 people · 7 organisations", each "not recorded" when no interview behind the theme names one. */
+export function sourcesLine(sources) {
+  if (!sources || typeof sources !== 'object') return null;
+  const part = (n, one, many) => (num(n) ? `${n} ${n === 1 ? one : many}` : `${many} not recorded`);
+  return `${part(sources.people, 'person', 'people')} · ${part(sources.organisations, 'organisation', 'organisations')}`;
+}
+/** #6006: the theme cell's notes. A grouped theme says why it ranks there; a phrase in no theme says it opens nothing. */
+export function themeNotes(r) {
+  const rank = num(r?.rank) ? r.rank : null;
+  if (r?.grouped === false) return [`${rank != null ? `#${rank} · ` : ''}Not grouped · no record to open`];
+  if (typeof r?.rank_reason === 'string' && r.rank_reason) return [`${rank != null ? `Why rank ${rank}: ` : ''}${r.rank_reason}`];
+  return rank != null ? [`Rank ${rank}`] : null;
+}
+/** #6006: "+ H1 · − H2", with the counts in each direction under it; no link reads so in words. */
+export function hypothesesCell(r) {
+  const plus = Array.isArray(r?.supports) ? r.supports : [];
+  const minus = Array.isArray(r?.contradicts) ? r.contradicts : [];
+  if (!plus.length && !minus.length) return { text: 'No hypothesis linked' };
+  const text = [...plus.map((c) => `+ ${c}`), ...minus.map((c) => `− ${c}`)].join(' · ');
+  const counted = num(r?.supporting) && num(r?.contradicting);
+  return { text, note: counted ? `${r.supporting} supporting · ${r.contradicting} contradicting` : null };
+}
+
 /** Column keys in the order the read lists its labels; each row builder fills them. */
 export const RECORDS = {
   'problem-discovery': {
     keys: ['theme', 'mentions', 'severity', 'trend', 'supports'],
+    // #6006 (V17): the ranked list. The theme says why it ranks there; a phrase in no theme ranks
+    // as its own row, says Not grouped and opens no record (the Worker sends its `id` as null).
     row: (r, i) => ({ id: `theme-${i}-${r.theme}`, recordId: workerId(r.id), cells: {
-      theme: r.theme ?? null,
-      mentions: num(r.mentions) ? `${r.mentions} ${r.mentions === 1 ? 'interview' : 'interviews'}` : null,
-      severity: SEVERITY_WORD[r.severity] ? { text: SEVERITY_WORD[r.severity], tone: SEVERITY_TONE[r.severity] } : null,
+      theme: r.theme == null ? null : { text: String(r.theme), note: themeNotes(r) },
+      mentions: num(r.mentions) ? { text: `${r.mentions} ${r.mentions === 1 ? 'interview' : 'interviews'}`, note: r.grouped === false ? null : sourcesLine(r.sources) } : null,
+      severity: r.grouped === false && !SEVERITY_WORD[r.severity] ? null : severityPill(r.severity),
       trend: trend(r.trend),
-      supports: Array.isArray(r.supports) && r.supports.length ? r.supports.join(', ') : null,
+      supports: hypothesesCell(r),
     } }),
     filters: [
       { key: 'severity', label: 'Severity', options: [{ value: 'severe', label: 'Severe' }, { value: 'real', label: 'Real' }, { value: 'mild', label: 'Mild' }, { value: 'not_recorded', label: 'Not judged' }] },
@@ -457,7 +487,7 @@ export const RECORDS = {
       updated: typeof r.updated === 'string' ? r.updated.slice(0, 10) : null,
     } }),
     filters: [{ key: 'evidence', label: 'Evidence', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'not_recorded', label: 'Not recorded' }] }],
-    sorts: [{ key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],
+    sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],
   },
   'market-intelligence': {
     keys: ['company', 'kind', 'latest_signal', 'date', 'source'],

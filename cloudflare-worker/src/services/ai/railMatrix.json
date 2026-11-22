@@ -3235,37 +3235,6 @@
   },
   {
    "pageKey": "Founder · Research · Companies",
-   "optionKey": "analyse:sources",
-   "optionLabel": "Refresh sources",
-   "kind": "research",
-   "handler": "draft",
-   "routeTask": "rail_research",
-   "models": [
-    {
-     "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Default",
-     "line": "Long sources, cited answers"
-    },
-    {
-     "id": "@cf/openai/gpt-oss-120b",
-     "role": "Alternative",
-     "line": "Weighs conflicting sources"
-    },
-    {
-     "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Deeper",
-     "line": "Finds the right records first"
-    }
-   ],
-   "more": [
-    {
-     "id": "@cf/baai/bge-reranker-base",
-     "line": "Puts the most relevant on top"
-    }
-   ]
-  },
-  {
-   "pageKey": "Founder · Research · Companies",
    "optionKey": "extract:candidate",
    "optionLabel": "Add",
    "kind": "research",
@@ -3990,37 +3959,6 @@
    "pageKey": "Advisor · Research · Companies",
    "optionKey": "rerun:analysis",
    "optionLabel": "Re-run",
-   "kind": "research",
-   "handler": "form",
-   "routeTask": "rail_research",
-   "models": [
-    {
-     "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Default",
-     "line": "Long sources, cited answers"
-    },
-    {
-     "id": "@cf/openai/gpt-oss-120b",
-     "role": "Alternative",
-     "line": "Weighs conflicting sources"
-    },
-    {
-     "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Deeper",
-     "line": "Finds the right records first"
-    }
-   ],
-   "more": [
-    {
-     "id": "@cf/baai/bge-reranker-base",
-     "line": "Puts the most relevant on top"
-    }
-   ]
-  },
-  {
-   "pageKey": "Advisor · Research · Companies",
-   "optionKey": "refresh:sources",
-   "optionLabel": "Refresh sources",
    "kind": "research",
    "handler": "form",
    "routeTask": "rail_research",

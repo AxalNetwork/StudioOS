@@ -67,10 +67,12 @@ export function literal(arg) {
 
 /** A `const W = { ro02: 788, ph1: 390 }` width table as an object; null when `name` is not declared as one. */
 function widthMapOf(text, name) {
-  const m = new RegExp(`const\\s+${name.replace(/\$/g, '\\$')}\\s*=\\s*\\{([^}]*)\\}`).exec(text);
+  // A fixed pattern that captures each declared name (Semgrep detect-non-literal-regexp is fixed, not suppressed:
+  // GOTCHAS.md). The body is read in a lookahead, so a match never swallows the next declaration.
+  const m = [...text.matchAll(/const\s+([\w$]+)\s*=\s*\{(?=([^}]*)\})/g)].find((d) => d[1] === name);
   if (!m) return null;
   const map = {};
-  for (const [, k, v] of m[1].matchAll(/['"]?([\w$-]+)['"]?\s*:\s*(\d+)/g)) map[k] = Number(v);
+  for (const [, k, v] of m[2].matchAll(/['"]?([\w$-]+)['"]?\s*:\s*(\d+)/g)) map[k] = Number(v);
   return Object.keys(map).length ? map : null;
 }
 
@@ -281,7 +283,7 @@ export function coverage(boards, source = 'list') {
   };
 }
 
-const cell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
+const cell = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
 
 /** The checklist as a Markdown table: one row per board with its frames and sizes. */
 export function checklistTable(boards) {

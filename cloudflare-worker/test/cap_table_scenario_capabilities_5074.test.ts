@@ -82,7 +82,6 @@ async function call(f: any, id: number, path: string, method = 'GET', body?: unk
   return { status: res.status, body: json, text };
 }
 const SUPER = 11;
-const REASON = 'Synthetic support correction for the test';
 
 async function fresher() {
   const f = fresh();

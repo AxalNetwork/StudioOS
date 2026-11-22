@@ -1,7 +1,7 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
 import { dealMoney } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -10,12 +10,11 @@ import { branchOfUser } from '../lib/shellRole';
 import { mercuryAttestationsApi } from '../lib/api/mercuryAttestations';
 import { ProofOfFundsSheet } from './investor/ProofOfFunds';
 import { COMMIT_RECORDED, SHARE_BUTTON, newestDealTarget, showsProof } from './investor/proofOfFundsModel';
-import { Unreadable } from '../ui';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
-import { tabHref, tabOf } from './dealPageModel';
+import { forwardOf, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
 import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';
@@ -27,14 +26,15 @@ import {
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { usePhoneWidth } from '../ui';
 import DealOverview from './deal/DealOverview';
-import DealNotes, { DealActivity } from './deal/DealNotes';
+import { DealActivity, InvestorActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
 import { ROUTES, ROUTE_NONE, ROUTE_NOTE, commitAction, commitRefusal, myCommitment, routePreferenceWord } from './deal/dealWorkModel';
 import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
+import DealDocumentsStaff from './deal/DealDocumentsStaff';
 import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
 import { DealMarket, DealTeam, DealTraction } from './deal/DealInsightTabs';
 import {
-  ArrowLeft, DollarSign, FileText, Loader2, X, Send, Check, Users,
+  ArrowLeft, DollarSign, Loader2, X, Send, Check, Users,
 } from 'lucide-react';
 
 function useCurrentRole() {
@@ -67,6 +67,8 @@ export default function DealRoomPage() {
   // D1155 (DL15–DL17): the founder's, an Admin's and an Operating Partner's views.
   const isPartner = role === 'partner';
   const tab = tabOf(tabParam, role);
+  // D6164 part 3: an address whose content moved opens where it now sits (`/notes` → Activity, Firm notes on).
+  const forward = forwardOf(tabParam, role, dealId);
   const evidenceNote = isInvestor ? location.state?.evidenceNote : null;
   // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
   const blocked = blockedRole(role);
@@ -141,6 +143,7 @@ export default function DealRoomPage() {
   const tabRow = (id) => <DealTabs dealId={id} role={role} tab={tab} />;
 
   if (blocked) return <NoPermission kind={blocked} />;
+  if (forward) return <Navigate to={forward} replace state={location.state} />;
   // D4633: nothing, an action least of all, is drawn for a deal the address no longer names.
   if (loading || (deal && String(deal.id) !== String(dealId))) return <DealLoading tabs={tabRow(dealId)} />;
   if (error || !deal) {
@@ -154,13 +157,13 @@ export default function DealRoomPage() {
   if (deal.plan_limited) return <DealFreePlan deal={deal} onRetry={loadDeal} />;
   const track = isInvestor ? trackOf(stage) : null;
   // D6191: Commit only when it can succeed; Change amount on a Pending one; nothing on a Confirmed one.
-  const headerCommit = isInvestor && deal ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
+  const headerCommit = isInvestor ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
 
   const head = headerOf(deal);
   const next = track && (track.state === 'ready' || track.state === 'none') ? track.next : null;
 
   return (
-    <div className="flex flex-col gap-4 pb-20 md:pb-0">
+    <div className="flex flex-col gap-4 pb-24 lg:pb-0">
       {/* DE04: Back to Deals, then the header with one h1. */}
       <button type="button" onClick={() => navigate(back.path)} className="inline-flex min-h-[44px] w-fit items-center gap-1 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink md:min-h-0 dark:text-gray-400 dark:hover:text-gray-200" data-testid="deal-crumb">
         <ArrowLeft size={14} /> {back.label}
@@ -216,8 +219,8 @@ export default function DealRoomPage() {
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
-      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
+      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. D6168: `?scope=` opens a scope's drawer. */}
+      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} addressed />}
       {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
       {tab === 'evidence' && <EvidenceSummary key={deal.id} dealId={deal.id} company={deal.project_name || null} role={role} ndaHref={isInvestor ? tabHref(deal.id, 'documents') : null} />}
       {tab === 'team' && <DealTeam deal={deal} />}
@@ -225,16 +228,17 @@ export default function DealRoomPage() {
       {tab === 'traction' && <DealTraction deal={deal} userId={user?.id} />}
       {/* D1153 (#3058): the working tabs, DL7–DL13. An investor's Documents and Commitment are theirs; a founder and staff keep today's. */}
       {tab === 'diligence' && <DealDiligence deal={deal} userId={user?.id} />}
-      {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DocumentsTab dealId={deal.id} />)}
+      {/* D6186 (#6186): the founder, an Admin and an Operating Partner read the frame's Documents tab, not the legacy list. */}
+      {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DealDocumentsStaff deal={deal} viewer={viewerOf(role, user, deal)} />)}
       {tab === 'terms' && <DealTerms deal={deal} investor={isInvestor} />}
       {/* D1213 (#2424): the round's closing room, its own address under the deal. */}
       {tab === 'commitment' && isInvestor && <DealCommitment key={proofKey} deal={deal} user={user} onChangeAmount={(row) => setCommitOpen({ current: row || null })} onShare={openProof} />}
       {tab === 'commitment' && !isInvestor && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
       {tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId={deal.id} currency={deal.currency} viewer={viewerOf(role, user, deal)} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
-      {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
-      {tab === 'notes' && <DealNotes key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
-      {tab === 'activity' && <DealActivity dealId={deal.id} />}
+      {/* D6164 part 3 (DE27): an investor's Activity, with their firm's notes as its Firm notes filter. */}
+      {tab === 'activity' && isInvestor && <InvestorActivity key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
+      {tab === 'activity' && !isInvestor && <DealActivity dealId={deal.id} />}
       {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
@@ -275,44 +279,6 @@ function DealRoomMembership({ dealId }) {
         <JoinNote />
       </div>
       {quotaState.quota && <JoinLeaveButton dealId={dealId} member={member} quotaState={quotaState} onChanged={reloadQuota} compact />}
-    </div>
-  );
-}
-
-function DocumentsTab({ dealId }) {
-  const [docs, setDocs] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const [ndaNeeded, setNdaNeeded] = useState(false);
-  const load = () => {
-    setFailed(false); setNdaNeeded(false);
-    // D4631 (#4631): the list is behind the venture's NDA for an investor; that refusal says why, it is not a failure.
-    api.dealDocuments(dealId).then(setDocs).catch((e) => (e?.code === 'nda_required' ? setNdaNeeded(true) : setFailed(true)));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
-  if (ndaNeeded) return <div className="py-8 text-center text-gray-600 dark:text-gray-300" data-testid="deal-documents-nda">The documents are shared under the venture&rsquo;s NDA. Sign it to see them.</div>;
-  // A failed read is unreadable, never an empty list: "No documents yet" was
-  // the catch branch, and it asserted something the page cannot know.
-  if (failed) return <Unreadable what="The documents" claim="That is not a claim that no documents exist." onRetry={load} />;
-  return (
-    <div>
-      {/* D1152: the zip export is retired (410 since #2647), so its button and its browser pop-up are gone. */}
-      {docs == null ? (
-        <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>
-      ) : docs.length === 0 ? (
-        <div className="text-center text-gray-500 py-8">No documents yet</div>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-50 dark:bg-gray-900 dark:border-gray-800 dark:divide-gray-800">
-          {docs.map(d => (
-            <div key={d.id} className="flex items-center gap-3 p-3">
-              <FileText size={16} className="text-gray-400" />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{d.title}</div>
-                <div className="text-xs text-gray-500 capitalize">{(d.doc_type || '').replace(/_/g, ' ')} · {d.status}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

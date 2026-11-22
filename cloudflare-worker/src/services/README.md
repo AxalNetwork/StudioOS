@@ -23,6 +23,15 @@ storage readers and guards must consume it rather than copy figures.
 
 `eventSyndication/` (D1490, #3904) lists an approved public event on outside channels: the eligibility rule, the channel registry (no adapter yet), the four triggers and the `event_syndication` job. See its README.
 
+`recordStore.ts` and `recordErasure.ts` (D6651, #6651) are the only code that
+writes or deletes an R2 object under a `record` prefix of the D6650 inventory. A
+record is written once (`putRecord` refuses an existing key), a replacement is a
+new key (the replaced object is kept), and the only delete is
+`eraseRecordObjects` with a stated reason, the door #6654's suppression ledger
+completes; a failed write's rollback of the object it just stored goes through
+it as `unreferenced`. `scripts/check-record-writes.mjs`
+fails the build on any other put or delete of a record prefix.
+
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
 before its R2 write, and the 80/95/100% notices sent once the write lands. Its
 refusal is the one exception to "never a Response" here: it throws the 413
@@ -304,6 +313,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `tiktok/` | D5863 (#5863, part 2a of #2401): a founder's own TikTok in Grow. `client.ts` is the only caller of TikTok's Display API (the account's counts and the public videos, field by field); `grow.ts` links one account to one venture, lands the daily snapshot and the videos through the ledger, draws the "From TikTok" parts and purges a connection's figures on disconnect. Its README has the rules. |
 | `typeform/` | D5828 (#5828): Typeform's incremental response importer for one connection, venture and form. `api.ts` builds the two GET reads by validated region; `mappings.ts` holds what may be mapped and when an answer qualifies; `importer.ts` pages, dedupes through the `connector_fed_items` ledger, checkpoints after durable writes, reconciles provider deletions and keeps withdrawn items withdrawn. No respondent identity is read or stored. Its README has the rules. |
 | `facebook/` | D5859 (#5859, part 2a of #2399): a linked Facebook Page in Grow. `insights.ts` is the only reader of Page figures (followers, daily views, unique viewers and engagements), through the provider's bounded Graph call; `grow.ts` links one Page per venture and lands the figures through the ledger, never as a KPI. Its README has the rules. |
+| `marketObservations/` | D7709 (#7709): shared bounded observation writer, body-free run receipts and operator importer registry; distinct from dashboard quotes and the World Bank adapter. See its README. |
 
 ## Rules
 

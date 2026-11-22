@@ -19,6 +19,8 @@ import {
   holdingRouteOf, identityOf, keyFactsOf, nextActionsOf,
 } from '../portfolio/companyModel';
 import CompanyPreview from '../portfolio/CompanyPreview';
+import { CompanyNotes, noteSentence, useCompanyNotes } from '../portfolio/CompanyNotes';
+import OwnershipRights from '../portfolio/OwnershipRights';
 import { isInvestorPreview } from '../portfolio/previewModel';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import '../portfolio/company.css';
@@ -35,7 +37,8 @@ import '../portfolio/company.css';
  * company's name, its sector and stage, your holding and its route, its
  * health, six key facts, and five tabs, each its own address:
  *   - Overview (`/portfolio/companies/:uid`): why it reads as it does, next
- *     actions, and the figures it reported (the old Figures);
+ *     actions, the figures it reported (the old Figures) and, from D6222
+ *     (#6222), the investor's own private notes on the company;
  *   - Financials (`…/financials`): investment history, return, valuation
  *     marks and distributions (`GET /api/positions/:uid`), then Ownership &
  *     rights — the old Terms and the read-only cap table. The old `…/terms`
@@ -68,6 +71,9 @@ const sourcesFor = (uid) => {
     support: { call: () => api.portfolioSupportList(), shape: COMPANY_SHAPES.support },
   };
 };
+
+/** D6868: the reporting duties row of the rights table reads the duties read: a count, or that read's own state. */
+const dutiesOf = (owed, company) => (owed.state === 'ok' ? { state: 'ok', count: (company?.duties || []).length } : { state: owed.state });
 
 const SOURCE_NAMES = { health: 'Health', support: 'The support ledger', positions: 'Your positions', owed: 'The reports owed to you' };
 const FACT_SOURCE = { invested: 'positions', ownership: 'positions', fmv: 'positions', multiple: 'positions', report: 'owed', support: 'support' };
@@ -135,8 +141,22 @@ function KeyFacts({ facts, retry }) {
   );
 }
 
-/** Overview (canvas PF-06 A, addendum PFA01): why it reads as it does, next actions, and the figures it reported. */
+/**
+ * Overview (canvas PF-06 A, addendum PFA01): why it reads as it does, next
+ * actions, the figures it reported, and (D6222, #6222) the investor's own
+ * notes, where What changed's "Save as my note" lands. A What changed save
+ * that fails hands its text to the Notes box with the reason, so it is kept.
+ */
 function Overview({ uid, reads, retry, company }) {
+  const notes = useCompanyNotes(uid);
+  const [draft, setDraft] = useState(null);
+  const saveChanges = async (body) => {
+    try { await notes.create(body); } catch (e) {
+      const { body: text, ...source } = body;
+      setDraft({ text, source: source.source ? source : null, error: noteSentence(e) });
+      throw e;
+    }
+  };
   const why = evidenceOf(reads, uid);
   const actions = nextActionsOf(reads, uid);
   const state = why.health.state;
@@ -184,8 +204,9 @@ function Overview({ uid, reads, retry, company }) {
           <h2 className="pf-h2" id="pf-co-reported">Company-reported performance</h2>
           <span className="pf-sm">Separate from your investment and its marks</span>
         </div>
-        <FiguresTab uid={uid} periods={company?.periods || []} />
+        <FiguresTab uid={uid} periods={company?.periods || []} onSaveNote={notes.status === 'ready' && notes.canWrite ? saveChanges : null} />
       </section>
+      <CompanyNotes notes={notes} draft={draft} />
       <section className="pf-card" aria-labelledby="pf-co-recent">
         <div className="pf-card-head">
           <h2 className="pf-h2" id="pf-co-recent">Recent activity</h2>
@@ -267,6 +288,8 @@ function CompanyWorkspace({ uid, tab }) {
               <h2 className="pf-h2" id="pf-co-rights">Ownership &amp; rights</h2>
               <span className="pf-sm">Read only · from the documents you signed</span>
             </div>
+            {/* D6868 (#6868, PRM18–PRM19): the holding line, then the rights under your documents and your requests to record one. */}
+            <OwnershipRights uid={uid} position={position} route={route} duties={dutiesOf(reads.owed, company)} reportsHref={companyTabHref(uid, 'reports')} canAsk={access.can} />
             {ownedBlock((c) => <TermsCard company={c} />, 'What this company owes you', 'company-terms-none')}
             {position ? <InvestorCapTablePanel projectId={position.project_id} venture={position.project?.name} testId="company-captable" /> : null}
             <p className="pf-foot">If a document or the cap table cannot be read, only that section says so.</p>

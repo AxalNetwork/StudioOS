@@ -2741,7 +2741,52 @@ Four board sets from the owner's Claude Design canvas "Axal VC – platform desi
 
 None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
 
+## Landed 2026-11-16 — Sign in v2 (#6956)
 
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the copy-paste prompt on #6956, as a page plus its boards:
+- **`Sign In v2 Page.dc.html`**, **`Sign In v2 · Boards.dc.html`**: SGN-00 to SGN-14, 40 frames (D6956). The component loads the production artwork from `frontend/public/auth/login-background.webp`. A clickable prototype is linked from #6956.
+
+Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
+
+
+## Landed 2026-11-21 — Research Markets, Funds and Companies, and Network people, introductions, sources and organizations (#7703, #7738, #7809, #7676 to #7680)
+
+Seventeen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-19 (#7703, #7738) and 2026-11-21 (the rest), each as a page plus its boards. Landed at the owner's request before the briefs' owner questions were answered: every open question is drawn as its option A, and boards a brief says wait for a letter are marked "not for build until answered" on the canvas and in their decision.
+
+- **Research → Markets (#7703):** `Research Markets Observations` (RMO-00 to RMO-06, RMO-H) and `Licences Country Data Sheets` (LCD-00 to LCD-08, LCD-H), D7703; `Research Markets Market Study` (RST-00 to RST-18), D7703-p2; `Research Markets Market Study Models and Report` (RST-20 to RST-35; RST-26 and RST-27 held for Questions 4, 10 and 11), D7703-p3.
+- **Research → Funds (#7738):** `Research Funds Source Import Console` (FND-I00 to FND-I17), D7738; `Research Funds Directory Mandate Filters` (RFD-08 to RFD-17), D7031-p3; `Research Funds Profile Statements` (FND-P12 to FND-P23), D7032-p3.
+- **Research → Companies (#7809):** `Research Companies Trust and Coverage` (RCT), D7809; `Research Companies Search and Shortlist` (RCQ), D7809-p2; `Research Companies Competitor Evidence and Criteria` (RCE), D7809-p3; `Research Companies Investment Firms` (RCF), D7809-p4; `Research Companies Partnership Prospects` (RCN), D7809-p5.
+- **Network:** `Network People Directory` (NPD, #7676, D7676); `Network Requester Profile and Readiness` (NRD, #7677, D7677); `Network External Introduction Requests` (NIE, #7678, D7678); `Network Shared Source Import` (NSI, #7679, D7679); `Network Organizations People First` (NPO, #7680, D7680).
+
+Each file is the canvas export as published; no value was edited. Every person, firm, fund, source and figure is bracketed sample content. None is built yet.
+
+## Landed 2026-11-17 — Program presentations: ten public pages and PDF decks (#6966 to #6975)
+
+Ten board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the briefs under #6965, each as a page plus its boards. The Spin-Out Lab pilot defines the program presentation kit, the admin entry points (PGS07) and the public Programs index (PGS08); the nine others reuse it:
+- **`Program Spin-Out Lab Presentation Page.dc.html`**, **`Program Spin-Out Lab Presentation · Boards.dc.html`** (#6966, D6966).
+- **`Program AI-native Venture Presentation Page.dc.html`**, **`Program AI-native Venture Presentation · Boards.dc.html`** (#6967, D6967).
+- **`Program Mentor Cohort Access Presentation Page.dc.html`**, **`Program Mentor Cohort Access Presentation · Boards.dc.html`** (#6968, D6968).
+- **`Program Investor Cohort Access Presentation Page.dc.html`**, **`Program Investor Cohort Access Presentation · Boards.dc.html`** (#6969, D6969).
+- **`Program Referral Partners Presentation Page.dc.html`**, **`Program Referral Partners Presentation · Boards.dc.html`** (#6970, D6970).
+- **`Program Refer and Earn Presentation Page.dc.html`**, **`Program Refer and Earn Presentation · Boards.dc.html`** (#6971, D6971).
+- **`Program Perks Presentation Page.dc.html`**, **`Program Perks Presentation · Boards.dc.html`** (#6972, D6972).
+- **`Program Learning Presentation Page.dc.html`**, **`Program Learning Presentation · Boards.dc.html`** (#6973, D6973).
+- **`Program Product Testing Presentation Page.dc.html`**, **`Program Product Testing Presentation · Boards.dc.html`** (#6974, D6974).
+- **`Program Influencers Presentation Page.dc.html`**, **`Program Influencers Presentation · Boards.dc.html`** (#6975, D6975).
+
+**One edit, named.** The pages drew the public site's artwork as `./site/<file>`; every such reference now points at `/site/<file>`, served from `frontend/public/site/`, where each file already exists. No other value was edited.
+
+None is built yet: `/programs/*` and `frontend/public/program-briefs/` are new with #6966. Availability labels, dates and edition dates are drawn from what main records or bracketed; open owner questions are marked ⚑ in each decision.
+
+## Landed 2026-11-17 — Wellness: the member home at /wellbeing and the public presentation (#7117, #7121)
+
+Two board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-17 from the #7117 and #7121 briefs and the owner's Wellness direction of the same day, each as a page plus its boards:
+- **`Wellness Member Home Page.dc.html`**, **`Wellness Member Home · Boards.dc.html`**: Wellness · Member Home, Reflections and Bookings, WLM00 to WLMH (D7117).
+- **`Program Wellness Presentation Page.dc.html`**, **`Program Wellness Presentation · Boards.dc.html`**: Program · Wellness Presentation, PGW01 to PGW08, the eleventh in the #6965 series (D7121).
+
+**One edit, named.** Both pages drew the owner's dawn image as `./site/wellness-dawn.webp`; it now points at `/axal-vc-future.png`, the same image already served from `frontend/public/`. The presentation's other `./site/` references now point at `/site/` (`frontend/public/site/`). No other value was edited.
+
+None is built yet. Daily and monthly journals, recommendations and group sessions are drawn as planned (#7118, #7119, #7120). Every provider, session, date and price is sample content; the live provider roster is unverified. Open owner questions are marked ⚑ in each decision.
 ## Landed 2026-11-16 — Network: Organizations, Relationships and Introductions (#7051–#7066)
 
 Fourteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Network briefs, each as a page plus its boards. They extend the approved Network workspace (`network-workspace/`, #4799) and the investor addendum (`Network v2 Investor Page.dc.html`, #6256), and keep their shell, four links, Person Sheet and state words. Section labels carry the NW board ids the briefs ask for; frame keys carry each canvas's prefix.

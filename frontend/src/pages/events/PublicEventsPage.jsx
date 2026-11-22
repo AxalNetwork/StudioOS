@@ -232,7 +232,11 @@ export default function PublicEventsPage() {
         </header>
 
         <section aria-labelledby="ax-n2-programs">
-          <h2 id="ax-n2-programs" className="ax-n2-k">Programs</h2>
+          {/* D6966 (PGS08C): the way into the public Programs index, beside the heading. */}
+          <div className="ax-n2-k-row">
+            <h2 id="ax-n2-programs" className="ax-n2-k">Programs</h2>
+            <Link to="/programs" className="ax-link ax-n2-all" data-testid="events-all-programs">See all programs →</Link>
+          </div>
           <div className="ax-grid-3">
             <LabProgramCard />
           </div>

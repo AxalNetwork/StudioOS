@@ -13,6 +13,9 @@
  * D6897 part 2 (RA-27, RA-28 C, RA-29): Output is Link or PDF. A PDF copy has no expiry and no view limit; the Worker
  * records it and returns the pack, the browser draws the A4 page. Shared links lists PDF copies apart, with no state.
  *
+ * D6897 part 3 (RA-27 A): with a reader after an NDA, Eadwyn can propose the selection for one reader
+ * (`ShareDrafts.jsx`); accepting only ticks rows here, and the founder still makes the pack.
+ *
  * No browser pop-up anywhere; every write opens an in-page sheet or dialog first.
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -27,11 +30,12 @@ import { day, itemTitle, sourceWord } from './evidenceView';
 import { BTN_D, BTN_P, BTN_S, CARD, H2, LINK, MUTED } from './EvidenceParts';
 import {
   READERS, NOTHING_SENT, COPY_IS_DATED, PDF_LINE, TYPED_FIXED, readerSees, readerWord, linkStateOf, isGrey, viewsLine,
-  changedWord, composerErrors, composerBody, typedErrors, typedBody, whatItShares, PDF_DOWNLOADED,
+  changedWord, composerErrors, composerBody, typedErrors, typedBody, whatItShares, countWord, remakeOf, PDF_DOWNLOADED,
 } from './shareOutsideModel';
 import { COPY_LINE, copyShares } from './sharePdfModel';
 import { OutputChoice } from './ShareReadiness';
 import { downloadPackPdf } from '../../../lib/raiseSharePdf';
+import { PackProposal } from './ShareDrafts';
 
 const FIELD = 'min-h-[44px] w-full rounded-lg border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:min-h-[36px]';
 const LABEL = 'flex flex-col gap-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100';
@@ -200,6 +204,8 @@ export function ShareOutsideSheet({ projectId, onClose, onMade }) {
         </div>}
         <section className="flex flex-col gap-2">
           <h3 className={H2}>The reader sees</h3>
+          {after && preview?.items?.state === 'recorded' && preview.items.rows.length
+            ? <PackProposal projectId={projectId} rows={preview.items.rows} onTick={(uids) => setPicked(new Set(uids))} /> : null}
           <ReaderRows preview={preview} reader={form.reader} picked={picked} onToggle={toggle} />
           {errors.items ? <p className={ERR}>{errors.items}</p> : null}
           {after && preview?.claims?.state === 'recorded' && preview.claims.rows.length
@@ -233,7 +239,7 @@ function RevokeDialog({ link, projectId, onClose, onDone }) {
         <p className="m-0 text-[13.5px]" role="status" data-testid="share-revoke-result">Revoked. Anyone opening it now sees “This link was stopped by the founder.” The row stays on Shared links in grey.</p>
       ) : (
         <div className="flex flex-col gap-2 text-[13.5px]">
-          <p className="m-0">This stops the link for everyone who has it: {link.output === 'readiness' ? 'a readiness snapshot' : readerWord(link.reader).toLowerCase()}, {link.item_count} {link.output === 'readiness' ? 'areas' : link.item_count === 1 ? 'item' : 'items'}, {viewsLine(link)} views.</p>
+          <p className="m-0">This stops the link for everyone who has it: {link.output === 'readiness' ? 'a readiness snapshot' : link.output === 'status' ? 'a Raise status page' : readerWord(link.reader).toLowerCase()}, {link.item_count} {countWord(link)}, {viewsLine(link)} views.</p>
           <p className={MUTED}>{PDF_LINE}</p>
           {error ? <p role="alert" className={ERR} data-testid="share-revoke-error">{error}</p> : null}
         </div>
@@ -264,8 +270,8 @@ export function SharedLinksList({ links, onRevoke, onMakeNew }) {
                   {changed ? <div className="text-amber-800 dark:text-amber-300" data-testid="shared-link-changed">{changed}{l.changed_since_sent ? ' · the reader’s copy did not change' : ''}</div> : null}</td>
                 <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800">
                   <div className="flex flex-wrap gap-1">
-                    {l.changed_since_sent ? (l.output === 'readiness'
-                      ? <Link className={BTN_S} to="/raise/fundraising-readiness" data-testid="shared-link-new">Make a new snapshot</Link>
+                    {l.changed_since_sent ? (remakeOf(l)
+                      ? <Link className={BTN_S} to={remakeOf(l).to} data-testid="shared-link-new">{remakeOf(l).word}</Link>
                       : <button type="button" className={BTN_S} onClick={onMakeNew} data-testid="shared-link-new">Make a new pack</button>) : null}
                     {l.state === 'live' ? <button type="button" className={BTN_D} onClick={() => onRevoke(l)} data-testid="shared-link-revoke">Revoke</button> : null}
                   </div>
@@ -281,11 +287,11 @@ export function SharedLinksList({ links, onRevoke, onMakeNew }) {
           return (
             <li key={l.uid} className={`rounded-lg border border-axal-hairline p-3 dark:border-gray-800 ${isGrey(l.state) ? 'text-axal-muted dark:text-gray-500' : ''}`}>
               <div className="flex justify-between gap-2"><b>{l.label}</b><span><span aria-hidden="true">{st.glyph}</span> {st.word}</span></div>
-              <p className="m-0 text-[12.5px]">{whatItShares(l)} · {l.item_count} {l.output === 'readiness' ? 'areas' : 'items'} · {viewsLine(l)} views · expires {day(l.expires_at) || 'Not recorded'}</p>
+              <p className="m-0 text-[12.5px]">{whatItShares(l)} · {l.item_count} {countWord(l)} · {viewsLine(l)} views · expires {day(l.expires_at) || 'Not recorded'}</p>
               {changed ? <p className="m-0 text-[12.5px] text-amber-800 dark:text-amber-300">{changed}</p> : null}
               <div className="mt-2 flex flex-wrap gap-2">
-                {l.changed_since_sent ? (l.output === 'readiness'
-                  ? <Link className={`${BTN_S} min-h-[44px]`} to="/raise/fundraising-readiness">Make a new snapshot</Link>
+                {l.changed_since_sent ? (remakeOf(l)
+                  ? <Link className={`${BTN_S} min-h-[44px]`} to={remakeOf(l).to}>{remakeOf(l).word}</Link>
                   : <button type="button" className={`${BTN_S} min-h-[44px]`} onClick={onMakeNew}>Make a new pack</button>) : null}
                 {l.state === 'live' ? <button type="button" className={`${BTN_D} min-h-[44px]`} onClick={() => onRevoke(l)}>Revoke</button> : null}
               </div>

@@ -3,8 +3,8 @@
  * (`scripts/lib/previewIsolation.mjs`), on the real `wrangler.toml` and on
  * small synthetic configs. Nothing here reaches Cloudflare; every id is made up.
  *
- *   1. The real config: preview declares no production identity, and its
- *      placeholders keep a hosted run unverified.
+ *   1. The real config: preview declares no production identity, and while
+ *      its ids are placeholders they keep a hosted run unverified.
  *   2. Shared D1, KV, Queue, DLQ, Workflow, Durable Object, R2, AI Gateway or
  *      Worker name: unsafe. An unknown binding kind: unsafe.
  *   3. An observation that disagrees with the declaration, names production,
@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { INTERNAL_SECRETS, isolationMatrix, preflight } from '../../scripts/lib/previewIsolation.mjs';
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 
 const REAL = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 
@@ -111,16 +112,23 @@ test('the real wrangler.toml: preview declares no production identity; its place
   // Mutation checked: preview's AI Gateway slug back to production's `advisor-ongoing` → the static check fails.
   const s = preflight(REAL, { static: true });
   assert.equal(s.ok, true, JSON.stringify(s.unsafe));
-  assert.deepEqual(s.rows.filter((r) => r.status === 'placeholder').map((r) => r.binding).sort(), ['DB', 'OAUTH_KV', 'RATE_LIMITS', 'TOKENS'],
-    'D1 and the three KV namespaces are not provisioned for preview yet');
-  const hosted = preflight(REAL, { observed: { ...observation(), worker: 'studioos-preview' } });
-  assert.notEqual(hosted.verdict, 'isolated', 'a placeholder can never be isolated');
+  // #7147 step 5 (D7147-p3): all four ids are placeholders (not provisioned, or torn down) or all four
+  // are real; a mix fails the static check (scripts/lib/stagingIds.test.mjs). This holds before and after the step-5 PR.
+  const placeholders = s.rows.filter((r) => r.status === 'placeholder').map((r) => r.binding).sort();
+  if (s.provisioning === 'unprovisioned') {
+    assert.deepEqual(placeholders, ['DB', 'OAUTH_KV', 'RATE_LIMITS', 'TOKENS'], 'D1 and the three KV namespaces are not provisioned for preview yet');
+    const hosted = preflight(REAL, { observed: { ...observation(), worker: 'studioos-preview' } });
+    assert.notEqual(hosted.verdict, 'isolated', 'a placeholder can never be isolated');
+  } else {
+    assert.equal(s.provisioning, 'provisioned');
+    assert.deepEqual(placeholders, [], 'once written, no preview id is a placeholder');
+  }
   // Every production critical identity appears somewhere in the comparison.
   const prodShared = preflight(REAL.replace('CF_AI_GATEWAY_SLUG_ADVISOR     = ""', 'CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"'), { static: true });
   assert.deepEqual(unsafeOf(prodShared), ['ai_gateway:CF_AI_GATEWAY_SLUG_ADVISOR:shared']);
   // The CLI agrees, and is part of test:guards.
   assert.match(execFileSync('node', ['scripts/check-preview-isolation.mjs', '--static'], { cwd: new URL('../../', import.meta.url), encoding: 'utf8' }), /declares no production identity/);
-  assert.match(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'), /check-preview-isolation\.mjs --static/);
+  assert.match(guardChain, /check-preview-isolation\.mjs --static/);
 });
 
 test('a fully observed, separate preview is isolated; the same config without an observation is unverified', () => {
@@ -222,4 +230,20 @@ test('the fixture writer refuses without an isolated, fresh preflight, and write
     assert.equal(run('cleanup', '--run', 'a0run01', '--local', '--out', out), 0);
     assert.match(readFileSync(out, 'utf8'), /LOCAL SQLite only/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// #7147 (D7147): an environment with no `routes` inherits the top-level ones,
+// which are the axal.vc and app.axal.vc custom domains, so deploying preview
+// would move both hosts off production. Resolve the config the way
+// `wrangler deploy` does and require preview to carry no route at all, while
+// production still carries the apex custom domains.
+test('#7147: preview resolves to no route, so deploying it cannot take axal.vc or app.axal.vc', async () => {
+  const { unstable_readConfig } = await import('wrangler');
+  const config = new URL('../../wrangler.toml', import.meta.url).pathname;
+  const read = (env) => unstable_readConfig({ config, env }, { hideWarnings: true });
+  const routes = (c) => (c.routes || []).map((r) => (typeof r === 'string' ? r : r.pattern));
+  assert.deepEqual(routes(read('preview')), [], 'preview resolves a route; it would take a production host');
+  const prod = routes(read('production'));
+  assert.ok(prod.includes('axal.vc') && prod.includes('app.axal.vc'), `production lost its custom domains: ${prod.join(', ')}`);
+  assert.match(REAL, /\[env\.preview\]\nname = "studioos-preview"\nworkers_dev = true\nroutes = \[\]\n/, 'the empty route table is gone from [env.preview]');
 });
