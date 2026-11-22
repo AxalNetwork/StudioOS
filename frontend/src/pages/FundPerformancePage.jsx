@@ -6,6 +6,11 @@ import { fmtMultiple, fmtRate, Unrecorded } from '../lib/fundAnalytics';
 import { fundPerformanceApi } from '../lib/api/fundPerformance.js';
 import { titleCase as caseLabel } from '../lib/absence';
 import FundPerformanceShell from './investor/FundPerformanceShell';
+import { api } from '../lib/api';
+import { useActiveCompany } from '../contexts/ActiveCompanyContext';
+import { useRead } from './admin/fundAdmin/useRead';
+import FundPerformanceDetail from './investor/FundPerformanceDetail';
+import { Unreadable } from '../ui/Honesty';
 const titleCase = (s) => caseLabel(s) || 'Unknown';
 
 const money = (cents) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -18,13 +23,16 @@ export function PerformanceMetric({ fund, field, label, format = money }) {
 }
 
 /** D627: I6's fund summary and investment NAV, without unrecorded cash or charts. */
-export function FundPerformanceView({ items = [], loading = false, error = null, reload = () => {} }) {
+export function FundPerformanceView({ items = [], loading = false, error = null, reload = () => {}, audience = { status: 'loading' } }) {
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedId, setSelectedId] = useState(null);
   const statusOptions = useMemo(() => {
     const counts = items.reduce((acc, f) => { const key = f.status || 'unknown'; acc[key] = (acc[key] || 0) + 1; return acc; }, {});
     return [{ id: 'all', label: 'All funds', count: items.length }, ...Object.keys(counts).map(key => ({ id: key, label: titleCase(key) || 'Unknown', count: counts[key] }))];
   }, [items]);
   const funds = statusFilter === 'all' ? items : items.filter(f => (f.status || 'unknown') === statusFilter);
+  const selected = funds.find(f => String(f.id) === String(selectedId)) || funds[0];
+  const canManage = audience.status === 'ready' && audience.data.items.some(f => String(f.id) === String(selected?.id) && f.can_manage === true);
   if (loading) return <div className="space-y-4" aria-busy="true" aria-label="Loading fund performance"><Skeleton h={16} w="66%" /><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[0,1,2,3].map(i => <Skeleton key={i} h={88} rounded="rounded-xl" />)}</div></div>;
   if (error) return <ErrorState message={`Unreadable: ${error}`} onRetry={reload} />;
   return <div className="space-y-6">
@@ -37,6 +45,7 @@ export function FundPerformanceView({ items = [], loading = false, error = null,
           <Chip tone="gray">{titleCase(fund.status) || 'Unknown'}</Chip>
           <span>{fund.vintage_year == null ? <Unrecorded reason="No vintage year is recorded." /> : `${fund.vintage_year} vintage`}</span>
           <span>As of {fund.as_of}</span>
+          <button type="button" className="min-h-11 underline" aria-pressed={selected?.id === fund.id} onClick={() => setSelectedId(fund.id)}>Show detail</button>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <PerformanceMetric fund={fund} field="nav_cents" label="NAV · investments only" />
@@ -51,10 +60,21 @@ export function FundPerformanceView({ items = [], loading = false, error = null,
         </div>
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{fund.nav_basis}</p>
       </Section>)}
+    {selected && <>
+      {audience.status === 'loading' && <p aria-busy="true">Checking access to fund detail…</p>}
+      {audience.status === 'unreadable' && <Unreadable what="Fund detail access" onRetry={audience.reload} />}
+      {audience.status === 'ready' && <FundPerformanceDetail key={selected.id} fund={selected} canManage={canManage} />}
+    </>}
   </div>;
 }
 /** #6245 (owner: C): the page; its Fund chrome is `investor/FundPerformanceShell.jsx`. */
 export default function FundPerformancePage({ fundUnlocked = false, locked = false }) {
+  const { company } = useActiveCompany();
+  const scope = company?.id ?? null;
+  return <FundPerformanceReader key={scope} scope={scope} fundUnlocked={fundUnlocked} locked={locked} />;
+}
+// Remount on company changes: neither stale permission nor a late read may cross that boundary.
+function FundPerformanceReader({ scope, fundUnlocked, locked }) {
   const [state, setState] = useState({ items: [], loading: !locked, error: null });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -66,9 +86,14 @@ export default function FundPerformancePage({ fundUnlocked = false, locked = fal
       if (live) setState({ items: data.items, loading: false, error: null });
     }).catch(error => { if (live) setState({ items: [], loading: false, error: error?.message || 'Fund performance could not be read.' }); });
     return () => { live = false; };
-  }, [attempt, locked]);
+  }, [attempt, locked, scope]);
+  const audience = useRead(async () => {
+    const result = await api.fundsList();
+    if (!Array.isArray(result?.items) || result.items.some(f => typeof f?.can_manage !== 'boolean')) throw new Error('Fund access could not be read.');
+    return result;
+  }, [scope], { enabled: !locked });
   const reload = () => setAttempt(n => n + 1);
   return <FundPerformanceShell fundUnlocked={fundUnlocked} locked={locked} state={state} reload={reload}>
-    <FundPerformanceView {...state} reload={reload} />
+    <FundPerformanceView key={scope} {...state} reload={reload} audience={audience} />
   </FundPerformanceShell>;
 }

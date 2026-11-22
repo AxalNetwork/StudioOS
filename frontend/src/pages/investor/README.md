@@ -263,3 +263,5 @@ live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
 
 - `settings/` holds the investor Firm Settings editor (#6287).
 - `fund/` holds the Axal VC Fund workspace's section components and navigation (#6130).
+
+- `FundPerformanceDetail.jsx` holds the GP-only read-only quarterly history and dated position marks on `/funds/performance` (D6253).
