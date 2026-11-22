@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Execution Budgets · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · AI agents · Operations › Spend · #8071 · continues HQ AI Agents (D4137, SA0–SA9) · part of #8059</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ AI agents execution budgets — what each agent has used against its caps, the workspace ceilings above them, and the runs halted for budget</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Boards SA15 to SA19 add the agent budget panel to HQ › AI agents › Operations › Spend (/hq/ai-agents/operations/spend), for the super admin; a sponsor reads their own agents’ panel in Team, read only. Each agent has four caps: tokens and minutes per month, PRs per day and retries per task, each drawn as used / cap with its period and share; the workspace has four ceilings above the table: agents in total, live at once, AI spend and compute spend per month. A super admin edits caps in a side panel with a reason; a cap below usage is warned about, and the agent halts at its next step with budget_exhausted. Nothing is truncated: halted runs are listed with their code and open in Audit. Shell, header, tabs, tables, chips and type are copied from the landed HQ AI Agents canvas; Eadwyn proposes caps in the one shared rail (#5130) as accept, edit or discard. Zero, No cap (Not recorded), Not applicable, Unreadable and Refused each have their own glyph and word (D5129). Violet dashed ◇ tags mark backend work for #8071; amber ⚑ tags mark owner picks drawn as option A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main 270cdf4a2a · [Northwind Labs], sponsor [Maya Ruiz], super admin [Iris Chen], the eight agents ([SEO Agent] to [Data Room Clerk]) and every figure ($194.70 AI spend in Nov 2026, 3 halted runs) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ AI Agents Execution Budgets Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SA15', 'Budgets', 'Operations › Spend › Agent budgets for [Northwind Labs]: the four workspace ceilings, then each agent’s four meters (used / cap, period, share; ■ At cap, ▲ 80% and over), sorted by the highest share, cost linking to AI usage, and the three runs halted with budget_exhausted. Eadwyn proposes a token cap from three months’ usage.', [F('SA15', false, 1660)]],
+      ['SA16', 'Edit caps panel', 'The side panel for [Frontend Builder]: four fields with units, current usage beside each, who set them and the platform ceiling. A minutes cap of 900 is below the 1,020 used: the warning says it halts at its next step. Reason required; Save caps is the one primary.', [F('SA16', false, 1120)]],
+      ['SA17', 'States', 'Loading; No cap (caps not recorded: meters say No cap in words, usage still shown); Unreadable (the ledger read failed: caps shown, used says Unreadable, never 0, Try again); the sponsor’s read-only Team panel and Refused on another team’s agent; Saving, Save failed and a cap above the platform ceiling (⚑ A).', [F('SA17', 'Loading', 1100), F('SA17B', 'No cap set', 1560), F('SA17C', 'Unreadable', 1560), F('SA17D', 'Sponsor · Team › Agents › Budgets, read only', 1200), F('SA17E', 'Refused · another team’s agent', 640), C('SA17F', 'Saving · Save failed · Above the ceiling', 1440, 1020)]],
+      ['SA18', 'Phone 390', 'One agent per card with the four meters stacked, the ceilings two by two and the halted runs one tap away; Edit caps opens the panel as a sheet. 44 px targets.', [P('SA18', 'Budgets'), P('SA18B', 'Edit caps sheet')]],
+      ['SA19', 'Dark', 'SA15 and the phone on the dark tokens; states keep their words and glyphs.', [F('SA19', 'Budgets · dark', 1660), P('SA19B', 'Phone · dark')]],
+      ['SAB-H', 'Handoff', 'What main has (spend by agent, the dollar cap, halted status and refusal codes, policy writes with audit), what #8071 must add (◇), the two owner picks (⚑ A), frontend-only work, and the hand-offs to Capability Policies (#8070) and Registry (#8080).', [W('SABH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
