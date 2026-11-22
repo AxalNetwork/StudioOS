@@ -597,6 +597,8 @@ export interface Env {
   WORK_GRAPH_LEASE?: DurableObjectNamespace;
   /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
   WORK_GRAPH_LEASES?: string;
+  /** D5582 part 3: Super Admin drafting routes, only "preview" on a preview deployment enables them. */
+  WORK_GRAPH_DRAFTING?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.

@@ -44,5 +44,8 @@ test('S21 reconciliation can update trackers but cannot write code, PRs or secur
     '          permission-issues: write',
     '          permission-pull-requests: read',
     '          permission-security-events: read',
+    // D8074: the App credential also reads Dependabot and secret-scanning alerts; it writes neither.
+    '          permission-vulnerability-alerts: read',
+    '          permission-secret-scanning-alerts: read',
   ])
 })
