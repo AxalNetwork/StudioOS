@@ -11,6 +11,7 @@ its data, passes it in, and does only what these functions allow.
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
+| `conflict-indicator.mjs` | The PR-list conflict indicator (#6476, D6476-p5): labels a confirmed conflict `conflict` and clears it only on a fresh `mergeable: true` for the current head and main. Labels only. |
 | `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
 | `refresh-rules.mjs` | The serial refresh's pure rules (#6478): which PRs inherited main's failure, how many the window allows, and the one-at-a-time loop that stops at a breaker. |
 | `refresh.mjs` | The serial refresh's entry point (`plan`, `apply`): update-branch with the App token, else the keeper's runner merge. |
@@ -88,7 +89,9 @@ twice, with and without the rules. Only `README.md` files may differ between the
   the push fails, which is intended.
 - If GitHub refuses the push because main's changes include a workflow file, the keeper tries the update-branch
   API. If that fails too, it hands the PR back. Each run's summary counts these refusals.
-- A real conflict is labelled `conflict` and listed in the sticky comment, and the resolver is asked.
+- A real conflict is labelled `conflict` (the PR-list indicator) and `bot:keeper-tried` (the keeper's own hand-back),
+  listed in the sticky comment, and the resolver is asked. The keeper waits for a push only on its own
+  `bot:keeper-tried` or `needs-session`, never on `conflict` alone (D6476-p5).
 - A conflict in a file `pathGuard()` refuses, or a refused union, is handed back with `needs-session`.
 
 **Daily pushes.** The plan uploads a reservation artifact before any push, and pushes only if the upload
@@ -158,6 +161,24 @@ ejection, then:
   - this PR has had fewer than 2 re-queues in 24 hours;
   - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
   - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
+
+Otherwise it labels `ejected` with the reasons. One sticky comment says which.
+## The conflict indicator
+
+`.github/workflows/landing-conflict-indicator.yml` (#6476 owner addition, D6476-p5) runs on each push to main and every
+15 minutes, with the workflow's `GITHUB_TOKEN` and no App. For every open PR into main:
+- **GitHub says `CONFLICTING`:** it adds `conflict` if missing, whether checks are green or pending, and keeps every
+  other label.
+- **The list says `MERGEABLE` and `conflict` is on:** it re-reads the PR. It removes the label only if that read says
+  `mergeable: true`, on the head the list saw, against the current main head.
+- **Unknown, uncomputed or unread:** it changes nothing.
+
+The label explains; it authorises nothing. No bot reads it to decide an action. It never merges main, runs a model,
+enqueues or re-runs CI, and it works with every repair bot off.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_CONFLICT_LABELS` | `true` turns the indicator on; anything else leaves the workflow skipped. Separate from `LANDING_BOT_ENABLED`. |
 
 Otherwise it either waits or hands back (#6476 S1, D6476-p4):
 - **Waits, unlabelled,** when only a condition that clears on its own holds: required checks still running on the

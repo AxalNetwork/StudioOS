@@ -168,7 +168,7 @@ export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-tes
  * D6164 part 3: `label` names a menu that is not More (the deal's Share), and
  * its button then shows that word with ▾ instead of "⋯".
  */
-export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin-page-more', label = null }) {
+export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin-page-more', label = null, onOpen = null }) {
   const name = label || 'More';
   const [open, setOpen] = useState(false);
   const phone = usePhoneWidth('(max-width: 639px)');
@@ -210,7 +210,7 @@ export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin
   );
   return (
     <div ref={wrap} className={`relative ${className ?? `col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`}`} onKeyDown={onKey}>
-      <button ref={button} type="button" aria-label={name} aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className={label
+      <button ref={button} type="button" aria-label={name} aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => { if (!open) onOpen?.(); setOpen((o) => !o); }} className={label
         ? 'inline-flex h-11 items-center gap-1.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10'
         : 'grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10'} data-testid={testId}>{label ? <>{label}<span aria-hidden="true">▾</span></> : '⋯'}</button>
       {open ? phone ? (

@@ -287,6 +287,22 @@ test('D4631 · the venture\'s documents are behind its NDA for an investor, a pa
   } finally { db.close(); }
 });
 
+// D6186 (#6186): no route serves a document's text, so the list says which rows went out through e-sign
+// (`in_paper`), and the tab points those to Deal paper; the rest say why they cannot be opened.
+test('D6186 · each document row says whether it is in the deal paper, as a boolean, and never carries its text', async () => {
+  const db = licensedDb();
+  try {
+    db.exec(ddl('documents'));
+    db.exec(`INSERT INTO documents (project_id, title, doc_type, status, content) VALUES (10, 'Synthetic memo', 'memo', 'draft', 'SECRET-BODY')`);
+    db.exec(`INSERT INTO documents (project_id, title, doc_type, status, content, migrated_to_esign_id) VALUES (10, 'Synthetic SAFE', 'safe', 'signed', 'SECRET-BODY', 77)`);
+    const r = await get(db, FOUNDER, '/documents');
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(r.body.map((d: any) => [d.title, d.in_paper]).sort(), [['Synthetic SAFE', true], ['Synthetic memo', false]]);
+    assert.ok(!r.text.includes('SECRET-BODY'), 'the text never leaves');
+    assert.ok(!r.text.includes('migrated_to_esign_id'), 'the envelope id is not named');
+  } finally { db.close(); }
+});
+
 test('D4631 · the screening desk narrows anyone who is not deal staff to their own deals, whatever their primary role', async () => {
   const db = licensedDb();
   try {
