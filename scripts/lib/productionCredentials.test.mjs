@@ -1,3 +1,4 @@
+/** D7145 tests the credential inventory, deployment environments and the temporary PR preview exception. */
 /** D7145: fixture workflows must keep production credentials inside their recorded job environments. */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

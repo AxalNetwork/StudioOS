@@ -23,6 +23,9 @@ They do not change production application state.
 | `runner-execution.mjs` | D7886: exact-plan Worker execution, verified runtime/source, actual test-result truth and owned-run cleanup. |
 | `macbook-admission.mjs` | Verify exact parent CI identity, active delegation and same-repository source provenance before the Mac runs candidate code (D7881). |
 | `macbook-worker.mjs` | Delegate one Worker shard with startup/completion bounds, real-failure propagation and standard hosted fallback (D7881). |
+| `ownership-check.mjs` | Read-only, advisory-first check of changed paths against active tasks' explicit ownership (D8075). |
+| `ownership-check.test.mjs` | Ownership parser, glob, API completeness and workflow contract regressions (D8075). |
+| `ownership-fixtures.json` | Full public task-body snapshots used to catch ownership wording drift (D8075). |
 | `capacity-client.mjs` | D7973: default-off submission and fresh OIDC receipt reader without a hosted waiter. |
 | `capacity-planner.mjs` | D7973: trusted reusable planner, original event/exact plan validation and one-shot submission. |
 

@@ -9,8 +9,13 @@ import { readFileSync } from 'node:fs';
 import { claimRef, isExpired, parseClaim } from './claims.mjs';
 
 const states = ['draft', 'red', 'conflicted', 'green', 'waiting'];
-const slotPattern = /^slot:(S\d+)$/i;
-const slotsFor = labels => labels.map(label => slotPattern.exec(label)?.[1].toUpperCase()).filter(Boolean);
+const slotPattern = /^slot:(S\d+|chatgptpro)$/i;
+/** `s39` → `S39`; the named admin slot (D8059) → `chatgptpro`. The WIP table keys rows by this. */
+export const normalizeWipSlot = slot => {
+  const text = String(slot ?? '').trim();
+  return /^chatgptpro$/i.test(text) ? 'chatgptpro' : text.toUpperCase();
+};
+const slotsFor = labels => labels.map(label => { const m = slotPattern.exec(label); return m ? normalizeWipSlot(m[1]) : null; }).filter(Boolean);
 
 function bodyIssue(pull) {
   // Strip comments until none is left, so a nested `<!-<!---->-` cannot leave one behind.
@@ -114,7 +119,7 @@ export async function readWip({ api, pages, graphql, repo, now, labelsFile }) {
     const { message } = await api('GET', `git/commits/${sha}`);
     const claim = parseClaim(message);
     if (!claim || claim.issue !== issue.number || !isExpired(claim, now)) continue;
-    row(claim.slot.toUpperCase()).expired.push(issue.number);
+    row(normalizeWipSlot(claim.slot)).expired.push(issue.number);
   }
   return bySlot;
 }

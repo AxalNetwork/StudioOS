@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/** D7145 checks each workflow job against the production credential inventory and enforces its environment. */
 /** D7145: check every Actions workflow against the production credential inventory. */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
