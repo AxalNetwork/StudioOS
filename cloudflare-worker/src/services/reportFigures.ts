@@ -91,7 +91,7 @@ export function requiredFiguresOf(duty: { kind: string; required_figures?: strin
   try { stored = JSON.parse(String(duty.required_figures ?? '[]')); } catch { stored = []; }
   const named = Array.isArray(stored) ? stored.map((k) => figureFor(String(k))?.key).filter((k): k is string => !!k) : [];
   const keys = named.length ? named : ['monthly_financials','quarterly_kpi'].includes(duty.kind) ? duty.kpi_rules_required || [] : [];
-  return [...new Set(keys.map(k => figureFor(k)?.key || k))];
+  return [...new Set(keys.map(k => figureFor(k)?.key).filter((k): k is string => !!k))];
 }
 
 // ── The figures as read ─────────────────────────────────────────────────────

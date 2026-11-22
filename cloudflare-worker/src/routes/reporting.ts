@@ -1,4 +1,4 @@
-import { dutyReportingRuleKeys } from '../services/portfolioReportingRules';
+import { resolveDutyPeriodRules } from '../services/portfolioReportingRules';
 /**
  * D1058 (#2928, part 2 of #2427) — `/api/reporting`: the duties a company owes
  * the investors who signed, their periods, the founder's desk and the
@@ -97,7 +97,7 @@ type DutyRow = {
   id: number; uid: string; project_id: number; holder_user_id: number | null; holder_name?: string | null; kind: Kind; cadence: Cadence;
   due_rule: DueRule; due_days: number; required_figures: string; required_documents: string; source_document: string; source_clause: string;
   source_kind: string; source_envelope_id: number | null; body_sha256: string | null; defaulted_json: string; starts_on: string; status: string;
-  kpi_rules_required?: string[]; closing_line_uid: string; holding_route?: string | null; spv_lead_user_id?: number | null;
+  kpi_rules_required?: string[] | null; kpi_rules_by_period?: Record<string,string[]|null>; closing_line_uid: string; holding_route?: string | null; spv_lead_user_id?: number | null;
 };
 type PeriodRow = {
   id: number; uid: string; duty_id: number; period_label: string; period_start: string; period_end: string; due_on: string;
@@ -109,7 +109,7 @@ type PeriodRow = {
 function dutyDto(d: DutyRow, withHolder: boolean) {
   return {
     uid: d.uid, kind: d.kind, title: KIND_WORDS[d.kind], cadence: d.cadence, due_rule: d.due_rule, due_days: d.due_days,
-    required_figures: parse(d.required_figures), kpi_rules_required: d.kpi_rules_required || [], required_documents: parse(d.required_documents),
+    required_figures: parse(d.required_figures), kpi_rules_required: d.kpi_rules_required ?? null, required_documents: parse(d.required_documents),
     source: { document: d.source_document, clause: d.source_clause, kind: d.source_kind, body_sha256: d.body_sha256, signed: d.source_kind === 'signed_envelope' },
     defaulted: parse(d.defaulted_json), starts_on: d.starts_on, status: d.status,
     // D1061: the investor reads their own holding's route (direct, syndicate, Axal VC fund, third-party fund), never the line or a name.
@@ -129,6 +129,7 @@ function periodsWithState(duties: DutyRow[], periods: PeriodRow[], day: string) 
       expected_on: p.expected_on, expected_note: p.expected_note, waived_at: p.waived_at, sent_at: p.met_at, ...s,
       // D1061: the report that met it, so the reader can open it; null until it is sent.
       report_uid: p.report_uid ?? null,
+      kpi_rules_required: d.kpi_rules_by_period?.[p.period_label] ?? null,
     };
   });
 }
@@ -177,9 +178,10 @@ r.get('/desk', async (c) => {
             d.closing_line_uid, u.name AS holder_name FROM reporting_duties d LEFT JOIN users u ON u.id = d.holder_user_id
       WHERE d.project_id = ? ORDER BY d.id`,
   ).bind(project.id).all<DutyRow>()).results || [];
-  await Promise.all(duties.map(async d=>{d.kpi_rules_required=await dutyReportingRuleKeys(c.env,d,today());}));
   const day = today();
-  const periods = periodsWithState(duties, await periodsOf(c.env, duties.map((d) => d.id)), day);
+  const raw = await periodsOf(c.env, duties.map(d=>d.id));
+  await resolveDutyPeriodRules(c.env,duties,raw,day);
+  const periods = periodsWithState(duties, raw, day);
   const asks = (await c.env.DB.prepare(
     `SELECT p.uid AS period_uid, e.created_at AS asked_at FROM reporting_events e JOIN reporting_periods p ON p.id = e.period_id
       WHERE e.project_id = ? AND e.event = 'asked' ORDER BY e.id DESC LIMIT 100`,
@@ -300,10 +302,10 @@ async function signedCopies(env: Env, user: { id: number; role: string }, duties
 async function companies(env: Env, user: { id: number; role: string }, projectId: number | null) {
   const userId = Number(user.id);
   const duties = await ownDuties(env, userId, projectId);
-  await Promise.all(duties.map(async d=>{d.kpi_rules_required=await dutyReportingRuleKeys(env,d,today());}));
   const copies = await signedCopies(env, user, duties);
   const day = today();
   const raw = await periodsOf(env, duties.map((d) => d.id));
+  await resolveDutyPeriodRules(env,duties,raw,day);
   const periods = periodsWithState(duties, raw, day);
   // D4817 part 9: who waived each period, as the caller may read it: themself, someone else (never named), or not recorded.
   const waivedBy = new Map(raw.map((p) => [p.uid, !p.waived_at || p.waived_by == null ? null : Number(p.waived_by) === userId]));

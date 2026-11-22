@@ -9,8 +9,8 @@ export function validateReportingRules(raw: unknown): ReportingRule[] {
    || !['monthly','quarterly'].includes(r.cadence) || ![0,1].includes(r.required)
    || typeof r.applies_to !== 'string' || !r.applies_to.trim() || r.applies_to.length > 100
    || ![r.definition,r.unit].every(v => v === null || typeof v === 'string' && v.length <= 1000)) throw new Error('A figure is invalid. Check its key, name, cadence, scope and required state.');
-  if(seen.has(r.kpi_key))throw new Error(`The key ${r.kpi_key} is used by more than one figure.`);
-  seen.add(r.kpi_key);
+  if(seen.has(`${r.cadence}:${r.kpi_key}`))throw new Error(`The key ${r.kpi_key} is used by more than one figure.`);
+  seen.add(`${r.cadence}:${r.kpi_key}`);
   return { kpi_key:r.kpi_key,name:r.name.trim(),definition:r.definition,unit:r.unit,cadence:r.cadence,required:r.required,applies_to:r.applies_to.trim(),sort_order:index };
  });
 }
@@ -48,3 +48,13 @@ export async function dutyReportingRuleKeys(env: Env, duty: { kind: string; requ
  }
  return [...new Set(keys)];
 }
+
+/** Resolve each measured period independently; one failed set never erases another duty. */
+export async function resolveDutyPeriodRules(env: Env, duties: Array<{id:number;project_id:number;holder_user_id:number|null;kind:string;required_figures?:string|null;kpi_rules_required?:string[]|null;kpi_rules_by_period?:Record<string,string[]|null>}>, periods: Array<{duty_id:number;period_label:string;period_end:string}>, day: string) {
+ await Promise.all(duties.map(async duty => {
+  const read = async (date: string) => { try { return await dutyReportingRuleKeys(env,duty,date); } catch { return null; } };
+  duty.kpi_rules_required = await read(day);
+  duty.kpi_rules_by_period = Object.fromEntries(await Promise.all(periods.filter(p=>p.duty_id===duty.id).map(async p=>[p.period_label,await read(p.period_end)])));
+ }));
+}
+

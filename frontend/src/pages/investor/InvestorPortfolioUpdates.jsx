@@ -338,6 +338,7 @@ export default function InvestorPortfolioUpdates() {
   const [open, setOpen] = useState(() => location.state?.founderAskReportKey ?? null);
   const [settings,setSettings]=useState(false);
   const [settingsNote,setSettingsNote]=useState('');
+  const [rulesRefresh,setRulesRefresh]=useState(0);
   const [ruleBook,setRuleBook]=useState({id:'hq',name:'Firm-wide'});
   const [bookRules,setBookRules]=useState({state:'loading'});
   const ruleAttempt=useRef(0);
@@ -365,15 +366,16 @@ export default function InvestorPortfolioUpdates() {
     if(!measuredPeriod){setBookRules({state:'unreadable'});return;}
     try{const value=await portfolioReportingSettingsApi.read(ruleBook.id,cadence,{period:measuredPeriod});if(!Array.isArray(value?.rules))throw new Error();if(own===ruleAttempt.current)setBookRules({state:'ok',value});}
     catch{if(own===ruleAttempt.current)setBookRules({state:'unreadable'});}
-  },[ruleBook.id,cadence,measuredPeriod,companyId]);
+  },[ruleBook.id,cadence,measuredPeriod,companyId,rulesRefresh]);
   useEffect(()=>{if(ruleBook.id!=='hq')loadBookRules();return()=>{ruleAttempt.current+=1;};},[ruleBook.id,loadBookRules]);
+  useEffect(()=>{setRuleBook({id:'hq',name:'Firm-wide'});setBookRules({state:'loading'});},[companyId]);
   const selectedRules = ruleBook.id==='hq' ? kpiSet : bookRules.state==='ok' ? bookRules.value.rules : null;
   const rulesLoading = reads.compliance.state==='loading'||(ruleBook.id!=='hq'&&bookRules.state==='loading');
   const bookProjects = new Set((reads.compliance.value?.companies||[]).filter(co=>ruleBook.id==='hq'||co.fund_ids?.includes(Number(ruleBook.id))).map(co=>Number(co.project_id)));
 
   // Each company's latest stored update the rule set is read against; with the
   // update source unreadable there is no denominator at all.
-  const storedUpdates = reads.updates.state !== 'ok' ? null : rows.filter(row=>bookProjects.has(Number(row.projectId))).map((row) => row.update).filter(Boolean);
+  const storedUpdates = reads.updates.state !== 'ok' || reads.compliance.state !== 'ok' ? null : rows.filter(row=>bookProjects.has(Number(row.projectId))).map((row) => row.update).filter(Boolean);
   // `Rules` is a VIEW, not a row predicate: it swaps the body.
   const showingRules = filter === 'rules';
   // D6204: Overdue is the Worker's overdue set (past the due day, unreported), not every unreported company.
@@ -463,7 +465,7 @@ export default function InvestorPortfolioUpdates() {
       ) : null}
       rail={<UpdatesRail rows={rows} reads={reads} />}
     >
-      {settings && <PortfolioReportingSettings onClose={book=>{setSettings(false);setFilter('rules');if(book)setRuleBook(book);}} onSaved={(note,book)=>{setSettings(false);setFilter('rules');setSettingsNote(note);if(book)setRuleBook(book);retry('compliance');}} />}
+      {settings && <PortfolioReportingSettings onClose={book=>{setSettings(false);setFilter('rules');if(book)setRuleBook(book);}} onSaved={(note,book)=>{setSettings(false);setFilter('rules');setSettingsNote(note);if(book)setRuleBook(book);setRulesRefresh(n=>n+1);retry('compliance');}} />}
       {settingsNote&&<p role="status">{settingsNote}</p>}
       {chaseNote ? <p className="pf-partial" role="status" data-testid="status-chase-note">{chaseNote}</p> : null}
       <section className="pf-tiles pf-tiles-4" aria-label="This period" data-testid="reports-tiles">

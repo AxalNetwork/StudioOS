@@ -6,8 +6,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import router from '../src/routes/portfolio_reporting_settings.ts';
-import positions from '../src/routes/positions.ts';
-import { readReportingRules, validateReportingRules, dutyReportingRuleKeys } from '../src/services/portfolioReportingRules.ts';
+import positions, { reportingRuleFundId } from '../src/routes/positions.ts';
+import {requiredFiguresOf} from '../src/services/reportFigures.ts';
+import { readReportingRules, validateReportingRules, dutyReportingRuleKeys, resolveDutyPeriodRules } from '../src/services/portfolioReportingRules.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -147,4 +148,36 @@ test('semantic mutants cannot bypass ownership, atomic revision checks, history 
   ["(rule.applies_to==='all'||rule.applies_to===fund.stage)",'true'],
  ]){assert.ok(service.includes(a));await assert.rejects(()=>moduleOf(servicePath,service.replace(a,b)).then(verifyService),{name:'AssertionError'});}
  await verifyRoute(await moduleOf(routePath,route));await verifyService(await moduleOf(servicePath,service));
+});
+
+
+test('desk period requirements retain their own effective rules and isolate a failed duty',async()=>{
+ const w=world();try{
+  const base=await call(w,2);
+  await call(w,2,'PUT','/10',{rules:base.body.all_rules.map((r:any)=>({...r,required:0})),revision:base.body.revision,due_days:30});
+  const duties:any[]=[{id:1,project_id:5,holder_user_id:2,kind:'monthly_financials',required_figures:'[]'},{id:2,project_id:5,holder_user_id:2,kind:'monthly_financials',required_figures:'not json'}];
+  await resolveDutyPeriodRules(w.env,duties,[{duty_id:1,period_label:'October',period_end:'2026-10-31'},{duty_id:1,period_label:'November',period_end:'2026-11-30'},{duty_id:2,period_label:'October',period_end:'2026-10-31'}],'2026-11-20');
+  assert.ok(duties[0].kpi_rules_by_period.October.includes('revenue'));
+  assert.deepEqual(duties[0].kpi_rules_by_period.November,[]);
+  assert.equal(duties[1].kpi_rules_by_period.October,null);
+  assert.deepEqual(duties[0].kpi_rules_required,[]);
+ }finally{w.db.close();}
+});
+test('migration refuses incompatible legacy-shaped rows and permits the same key at distinct cadences',async()=>{
+ const w=world();try{
+  const base=await call(w,2),rule=base.body.all_rules[0];
+  assert.doesNotThrow(()=>validateReportingRules([rule,{...rule,cadence:rule.cadence==='monthly'?'quarterly':'monthly'}]));
+  const insert=w.db.prepare("INSERT INTO portfolio_reporting_rule_sets(fund_id,rules_json,effective_month,effective_quarter) VALUES(10,?,'2026-11','2026-Q4')");
+  for(const changed of [{...rule,required:2},{...rule,applies_to:''},{...rule,kpi_key:'bad-key'},rule]){
+   const rows=changed===rule?[rule,rule]:[changed];
+   assert.throws(()=>insert.run(JSON.stringify(rows)),/Reporting rules need repair/);
+  }
+ }finally{w.db.close();}
+});
+
+test('holding a company does not expose another fund rule set; custom keys remain tracked in updates',()=>{
+ assert.equal(reportingRuleFundId({held:[5],funds:[10]},20),null);
+ assert.equal(reportingRuleFundId({held:[5],funds:[10]},10),10);
+ assert.equal(reportingRuleFundId({held:null,funds:[]},20),20);
+ assert.deepEqual(requiredFiguresOf({kind:'monthly_financials',kpi_rules_required:['net_burn','custom_units']}),['net_burn']);
 });

@@ -235,7 +235,7 @@ test('“Carried by” counts stored updates, and a blank arrival is not a carri
   assert.match(body, /value !== undefined && value !== null && String\(value\)\.trim\(\) !== ''/,
     'a blank value now counts as a carried figure');
   // No denominator means no count — never zero out of zero.
-  assert.match(P, /const storedUpdates = reads\.updates\.state !== 'ok' \? null : rows\.filter\(row=>bookProjects\.has\(Number\(row\.projectId\)\)\)\.map\(\(row\) => row\.update\)\.filter\(Boolean\);/,
+  assert.match(P, /const storedUpdates = reads\.updates\.state !== 'ok' \|\| reads\.compliance\.state !== 'ok' \? null : rows\.filter\(row=>bookProjects\.has\(Number\(row\.projectId\)\)\)\.map\(\(row\) => row\.update\)\.filter\(Boolean\);/,
     'the denominator no longer distinguishes an unreadable update source');
   assert.match(body, /held === null \? <span className="pf-unreadable">Unavailable<\/span>/,
     'an unreadable update source is counted rather than labelled');

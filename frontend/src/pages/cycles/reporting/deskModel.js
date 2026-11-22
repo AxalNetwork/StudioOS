@@ -68,7 +68,7 @@ const byDue = (a, b) => String(a.due_on).localeCompare(String(b.due_on)) || Stri
 /** Each period with its duty beside it; a period whose duty the read lacks is dropped, never drawn half. */
 export function withDuties(desk) {
   const duties = new Map(list(desk?.duties).map((d) => [d.uid, d]));
-  return list(desk?.periods).filter((p) => duties.has(p.duty_uid)).map((p) => ({ ...p, duty: duties.get(p.duty_uid) }));
+  return list(desk?.periods).filter((p) => duties.has(p.duty_uid)).map((p) => ({ ...p, duty: { ...duties.get(p.duty_uid), ...(Object.hasOwn(p,'kpi_rules_required') ? {kpi_rules_required:p.kpi_rules_required} : {}) } }));
 }
 
 /** Names, joined: `A`, `A and B`, `A, B and C`. */
@@ -219,14 +219,18 @@ export const FIGURE_LABELS = Object.freeze({
 export function requiredFigures(d) {
   const named = list(d?.required_figures).map((k) => FIGURE_LABELS[k]).filter(Boolean);
   if (named.length) return { labels: [...new Set(named)], from: 'document' };
+  if (d?.kpi_rules_required == null && ['monthly_financials','quarterly_kpi'].includes(d?.kind)) return { labels: [], from: 'unreadable' };
   const keys = Array.isArray(d?.kpi_rules_required) ? d.kpi_rules_required : [];
-  return { labels: [...new Set(keys.map((k) => FIGURE_LABELS[k] || k.replaceAll('_', ' ')))], from: keys.length ? 'kpi_rules' : 'none' };
+  const tracked = keys.filter(k=>!FIGURE_LABELS[k]).map(k=>k.replaceAll('_',' '));
+  return { labels: [...new Set(keys.map(k=>FIGURE_LABELS[k]).filter(Boolean))], from: keys.length ? 'kpi_rules' : 'none', ...(tracked.length ? {tracked} : {}) };
 }
 export function requiredFiguresLine(d) {
   const r = requiredFigures(d);
+  if (r.from === 'unreadable') return 'Unavailable: reporting rules could not be read';
   if (r.from === 'none') return 'None';
   const shown = r.labels.length > 4 ? `${r.labels.length} figures · ${r.labels.slice(0, 3).join(', ')} +${r.labels.length - 3}` : r.labels.join(' · ');
-  return r.from === 'kpi_rules' ? `${shown} (the studio’s KPI rules; the document names none)` : shown;
+  const line = r.from === 'kpi_rules' ? `${shown || 'No assembled figure'} (the studio’s KPI rules; the document names none)` : shown;
+  return r.tracked?.length ? `${line} · Tracked in company updates: ${r.tracked.join(', ')}` : line;
 }
 
 export const DOCUMENT_WORDS = Object.freeze({

@@ -111,6 +111,11 @@ export type PositionScope = {
   visibleCsv: string | null;
 };
 
+/** A company holding never grants another fund's reporting-rule history. */
+export function reportingRuleFundId(scope: Pick<PositionScope,'held'|'funds'>, raw: number|null): number|null {
+ return raw !== null && (scope.held === null || scope.funds.includes(Number(raw))) ? Number(raw) : null;
+}
+
 export async function positionScope(c: any, user: any): Promise<PositionScope | null> {
   const licensed = canViewLpData(user);
   // Never the held read without the licence: it is null, every row, for a non-investor.
@@ -583,7 +588,9 @@ r.get('/kpi-compliance', async (c) => {
     // D6214: one read per distinct fund; each company carries its applicable rules and history.
     if (!hasQueryResults(held)) throw new Error('Positions unreadable');
     const byProject = new Map<number, any>();
-    for (const h of held.results || []) {
+    for (const row of held.results || []) {
+      // Holding a company permits its round read, not another manager’s rule history.
+      const h = { ...row, fund_id: reportingRuleFundId(scope,row.fund_id) };
       const current = byProject.get(Number(h.project_id));
       if (current) { if (h.fund_id != null) current.fund_ids.add(Number(h.fund_id)); }
       else byProject.set(Number(h.project_id), { ...h, fund_ids: new Set(h.fund_id == null ? [] : [Number(h.fund_id)]) });
@@ -597,7 +604,8 @@ r.get('/kpi-compliance', async (c) => {
       const last = lastSeen.get(pid) || null;
       const reportedNow = thisPeriod.has(pid);
       const sets = [...h.fund_ids].map((id: any) => ruleSets.get(id)!).filter(Boolean);
-      const rules = (sets.length ? sets.flatMap(set => set.rules) : defs!.results).filter((r: any) => r.applies_to === 'all' || r.applies_to === h.stage);
+      const applicable = (sets.length ? sets.flatMap(set => set.rules) : defs!.results).filter((r: any) => r.applies_to === 'all' || r.applies_to === h.stage);
+      const rules = [...new Map(applicable.map((rule: any) => [rule.kpi_key, { ...rule, required: applicable.some((r: any) => r.kpi_key === rule.kpi_key && r.required) ? 1 : 0 }])).values()];
       const ownSets = sets.filter(set => !set.inherited);
       const dueDays = ownSets.length ? Math.min(...sets.map(set => set.due_days)) : null;
       return {

@@ -35,11 +35,17 @@ export default function PortfolioReportingSettings({ onClose, onSaved }) {
  const dirty=draft&&current&&(makingOwn||JSON.stringify(draft)!==JSON.stringify(current.all_rules)||due!==current.due_days);
  const bookContext={id:fund,name:fund==='hq'?'Firm-wide':books.items.find(b=>String(b.id)===fund)?.name||'Fund reporting rules'};
  const close=()=>{if(dirty){setError('Save your changes or discard them before closing.');return;}onClose(bookContext);};
- const move=(index,offset)=>setDraft(rows=>{const copy=[...rows],next=index+offset;if(next<0||next>=copy.length)return rows;[copy[index],copy[next]]=[copy[next],copy[index]];return copy.map((r,i)=>({...r,sort_order:i}));});
+ const neighbor=(index,offset)=>{const cadence=draft[index].cadence;let next=index+offset;while(next>=0&&next<draft.length){if(draft[next].cadence===cadence)return next;next+=offset;}return -1;};
+ const move=(index,offset)=>{const next=neighbor(index,offset);if(next<0)return;setDraft(rows=>{const copy=[...rows];[copy[index],copy[next]]=[copy[next],copy[index]];return copy.map((r,i)=>({...r,sort_order:i}));});};
+ const readLatest=async()=>{
+  if(!dirty){await load();return;}
+  try{const latest=await api.read(fund,'monthly');if(!Array.isArray(latest.all_rules)||!Number.isSafeInteger(latest.revision))throw new Error();setConflict(latest);setError('Compare the current rules with your changes before saving.');}
+  catch{setConflict({unavailable:true});setError('Current rules could not be read. Your changes are kept; try reading again.');}
+ };
  const saveFigure=()=>{
   const row=edit.row;
   if(!/^[a-z][a-z0-9_]{0,63}$/.test(row.kpi_key)||!row.name.trim()||!row.applies_to.trim()){setError('Enter a valid key, name and scope for the figure.');return;}
-  const other=draft.find((r,i)=>i!==edit.index&&r.kpi_key===row.kpi_key);
+  const other=draft.find((r,i)=>i!==edit.index&&r.kpi_key===row.kpi_key&&r.cadence===row.cadence);
   if(other){setError(`The key is already used by ${other.name}.`);return;}
   setDraft(rows=>edit.index===rows.length?[...rows,{...row,sort_order:rows.length}]:rows.map((r,i)=>i===edit.index?row:r));setEdit(null);setError('');
  };
@@ -63,6 +69,7 @@ export default function PortfolioReportingSettings({ onClose, onSaved }) {
   <button type="button" className="pf-btn" onClick={close} disabled={busy}>Close</button>
  </div>}>
   <div className="pf-reporting-settings">
+  <p>Custom figure keys are collected in company updates. The report builder assembles its existing Grow figures; custom keys do not block that report.</p>
   <p>Each fund inherits the HQ set until it records its own. A change applies from the current monthly and quarterly periods.</p>
   {books.error?<p role="alert">Funds unavailable. Close and reopen settings to try again.</p>:<label className="pf-select">Book<select aria-label="Reporting book" value={fund} disabled={busy||dirty||books.loading} onChange={e=>setFund(e.target.value)}><option value="hq">HQ default · read only</option>{books.items.map(b=><option key={b.id} value={String(b.id)}>{b.name}</option>)}</select></label>}
   {['monthly','quarterly'].map(cadence=><section key={cadence} aria-label={`${cadence} figures`}><h3>{cadence==='monthly'?'Monthly':'Quarterly'} · {reads[cadence]?.value?.period||'current period'}</h3>
@@ -71,7 +78,7 @@ export default function PortfolioReportingSettings({ onClose, onSaved }) {
     {draft?.filter(r=>r.cadence===cadence).length===0&&<p>No figure is recorded at this cadence.</p>}
     {(draft||reads[cadence]?.value?.rules||[]).map((row,index)=>row.cadence!==cadence?null:<article className="pf-card" key={row.kpi_key} onKeyDown={e=>{if(editable&&e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();move(index,e.key==='ArrowUp'?-1:1);}}}>
       <h4>{row.name} · {row.unit||'Unit not recorded'}</h4><p>{row.required?'Required':'Optional'} · {row.applies_to==='all'?'All companies':`${row.applies_to} only`}</p><p>{row.definition||'Definition not recorded'}</p>
-      {editable&&<div className="pf-tools"><button type="button" className="pf-btn" disabled={busy} onClick={()=>setEdit({index,row:{...row}})}>Edit {row.name}</button><button type="button" className="pf-btn" disabled={busy||index===0} onClick={()=>move(index,-1)} aria-label={`Move ${row.name} up`}>Move up</button><button type="button" className="pf-btn" disabled={busy||index===draft.length-1} onClick={()=>move(index,1)} aria-label={`Move ${row.name} down`}>Move down</button></div>}
+      {editable&&<div className="pf-tools"><button type="button" className="pf-btn" disabled={busy} onClick={()=>setEdit({index,row:{...row}})}>Edit {row.name}</button><button type="button" className="pf-btn" disabled={busy||neighbor(index,-1)<0} onClick={()=>move(index,-1)} aria-label={`Move ${row.name} up`}>Move up</button><button type="button" className="pf-btn" disabled={busy||neighbor(index,1)<0} onClick={()=>move(index,1)} aria-label={`Move ${row.name} down`}>Move down</button></div>}
     </article>)}
    </>}
   </section>)}
@@ -82,23 +89,25 @@ export default function PortfolioReportingSettings({ onClose, onSaved }) {
   <p>A signed reporting duty keeps its own due day. These rules supply the fund default.</p>
   {current&&<p>Last changed: {current.updated_at||'Not recorded'} · {current.updated_by_name||'Actor not recorded'} · applies from {current.effective_from}.</p>}
   {conflict&&<section aria-label="Compare reporting rules"><h3>Compare changes</h3>
-    <p>Your changes: {draft.map(r=>`${r.name} (${r.required?'Required':'Optional'}, ${r.cadence}, ${r.applies_to})`).join('; ')} · Due after {due} days.</p>
+    <p>Your changes: {draft.map(r=>`${r.name} (${r.required?'Required':'Optional'}, ${r.cadence}, ${r.applies_to}, ${r.unit||'Unit not recorded'}, ${r.definition||'Definition not recorded'})`).join('; ')} · Due after {due} days.</p>
     {conflict.unavailable?<p>Current rules unavailable. Your changes remain here.</p>:<>
-      <p>Current rules: {conflict.all_rules.map(r=>`${r.name} (${r.required?'Required':'Optional'}, ${r.cadence}, ${r.applies_to})`).join('; ')} · Due after {conflict.due_days} days.</p>
+      <p>Current rules: {conflict.all_rules.map(r=>`${r.name} (${r.required?'Required':'Optional'}, ${r.cadence}, ${r.applies_to}, ${r.unit||'Unit not recorded'}, ${r.definition||'Definition not recorded'})`).join('; ')} · Due after {conflict.due_days} days.</p>
       <button type="button" className="pf-btn" onClick={()=>{setDraft(structuredClone(conflict.all_rules));setDue(conflict.due_days);setReads(previous=>({...previous,monthly:{value:conflict}}));setConflict(null);setError('');}}>Use current rules</button>
       <button type="button" className="pf-btn" onClick={()=>{setReads(previous=>({...previous,monthly:{value:conflict}}));setConflict(null);setError('Compare the fields, then save your reconciled rules.');}}>Keep editing my changes</button>
     </>}
   </section>}
-  {error&&<div role="alert"><p>{error}</p><button type="button" className="pf-btn" onClick={load} disabled={busy}>Read latest rules</button>{current&&<p>Previously read: {current.all_rules.map(r=>`${r.name} (${r.required?'Required':'Optional'})`).join(', ')}</p>}</div>}
+  {error&&<div role="alert"><p>{error}</p><button type="button" className="pf-btn" onClick={readLatest} disabled={busy}>Read latest rules</button>{current&&<p>Previously read: {current.all_rules.map(r=>`${r.name} (${r.required?'Required':'Optional'})`).join(', ')}</p>}</div>}
   {edit&&<Sheet title="Edit figure" width={640} onClose={()=>setEdit(null)} footer={<button type="button" className="pf-btn is-primary" onClick={saveFigure}>Save figure</button>}>
+   <div className="pf-reporting-settings pf-reporting-figure">
    {['name','kpi_key','unit'].map(key=><label key={key}>{({name:'Figure',kpi_key:'Key',unit:'Unit',definition:'Definition',applies_to:'Applies to (all or one stage)'})[key]}<input aria-label={`Figure ${key}`} value={edit.row[key]??''} readOnly={key==='kpi_key'&&edit.index<draft.length} maxLength={key==='definition'?1000:100} onChange={e=>setEdit(previous=>({...previous,row:{...previous.row,[key]:e.target.value}}))}/></label>)}
    <label>Definition<textarea aria-label="Figure definition" value={edit.row.definition??''} maxLength={1000} onChange={e=>setEdit(previous=>({...previous,row:{...previous.row,definition:e.target.value}}))}/></label>
    <label>Applies to<select aria-label="Figure applies_to" value={edit.row.applies_to} onChange={e=>setEdit(previous=>({...previous,row:{...previous.row,applies_to:e.target.value}}))}>
     <option value="all">All companies</option>{[...new Set([...(current.stages||[]),edit.row.applies_to].filter(stage=>stage!=='all'))].map(stage=><option key={stage} value={stage}>{stage}{!(current.stages||[]).includes(stage)?' · no current company':''}</option>)}
    </select></label>
    <label>Cadence<select value={edit.row.cadence} onChange={e=>setEdit(previous=>({...previous,row:{...previous.row,cadence:e.target.value}}))}><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option></select></label>
-   <label><input type="checkbox" checked={Boolean(edit.row.required)} onChange={e=>setEdit(previous=>({...previous,row:{...previous.row,required:e.target.checked?1:0}}))}/>Required</label>
+   <label className="pf-reporting-required"><input type="checkbox" checked={Boolean(edit.row.required)} onChange={e=>setEdit(previous=>({...previous,row:{...previous.row,required:e.target.checked?1:0}}))}/>Required</label>
    {error&&<p role="alert">{error}</p>}
+   </div>
   </Sheet>}
   </div>
  </Sheet>;
