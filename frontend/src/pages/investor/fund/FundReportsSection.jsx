@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React from 'react';
 import { LP_ONLY, LP_ONLY_PHRASE } from '../../../lib/spinoutFundFigures';
 import { CARD, MONO, LBL, REPORT_PKG, LADDER, TONES, SectionLabel } from './FundWorkspaceSupport';
@@ -68,7 +69,7 @@ return (
                 return (
                   <div key={row.key} className="grid grid-cols-[1.9fr_.7fr_.8fr_auto] items-center gap-2 border-b border-gray-100 dark:border-gray-800 px-3 py-2.5 last:border-b-0">
                     <div className="min-w-0">
-                      <div className={`truncate text-xs font-semibold ${hasReports ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{row.title}</div>
+                      <div className={`truncate text-xs font-semibold ${hasReports ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{row.readHref && hasReports ? <Link to={row.readHref}>{row.title}</Link> : row.title}</div>
                       <div className="text-[10px] text-gray-400 dark:text-gray-500">
                         {row.kind === 'external' ? row.from
                           : row.kind === 'interim' ? 'Generated from your account · marked draft until the GP issues the period'

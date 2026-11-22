@@ -556,3 +556,20 @@ export function quarterlyReportFilename(vm) {
   ].filter(Boolean);
   return `${parts.join('-')}${vm?.meta?.draft ? '-draft' : ''}.pdf`;
 }
+
+/** D6250: shared frozen fund rows for the issued document; no LP allocation or live model. */
+export function issuedFundRows(figures) {
+  if (!figures) return [];
+  if (figures.source === 'report_pack') {
+    const frozen = frozenSections({ figures });
+    return [...frozen.headline, ...frozen.fundSummary.filter(row => !row.k.startsWith('Your '))]
+      .map(row => ({ ...row, why: row.why || row.note }));
+  }
+  const totals = figures.totals || {};
+  return [['Committed capital', 'committed'], ['Invested capital', 'invested'], ['Called to date', 'called'], ['Collected capital', 'collected'], ['Net asset value', 'nav']].map(([k, key]) => {
+    const cents = totals[`${key}_cents`];
+    const recorded = Number.isSafeInteger(cents) && cents >= 0;
+    return { k, v: recorded ? `$${(BigInt(cents) / 100n).toLocaleString('en-US')}.${String(BigInt(cents) % 100n).padStart(2, '0')}` : NOT_RECORDED,
+      why: recorded ? null : totals[`${key}_reason`] || 'This figure was not frozen when the report was issued.' };
+  });
+}
