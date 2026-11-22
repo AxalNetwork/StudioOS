@@ -147,7 +147,7 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     sentence: "A Super Admin changes a fund's carry or management fee.",
     routes: ['PATCH /api/funds/:id (carried_interest, management_fee)'] }),
   act({ act: 'fund.write', label: 'Edit a fund and its LP records', tier: 'admin', owner: '#1779', sentence: null,
-    routes: ['PATCH /api/funds/:id', 'POST /api/funds/:id/lps', 'PUT /api/funds/:id/lps/:lpId/type',
+    routes: ['PATCH /api/funds/:id', 'POST /api/funds/:id/lps', 'PATCH /api/funds/:id/lps/:lpId', 'DELETE /api/funds/:id/lps/:lpId', 'PUT /api/funds/:id/lps/:lpId/type',
       'POST /api/funds/:id/comms', 'POST /api/funds/:id/regenerate-lpa'] }),
   act({ act: 'fund_ledger.administrator', label: "Assign a fund's ledger administrator", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin assigns a fund's ledger administrator.",
