@@ -35,7 +35,6 @@ import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 // bootstrap that ran against database A — so B would be told the users-table
 // CHECK had been relaxed when nothing had touched it.
 const READY = new WeakMap<object, boolean>();
-const IN_FLIGHT = new WeakMap<object, Promise<void>>();
 
 export function exploringSchemaReady(env: Env): boolean {
   return READY.get(bindingKey(env)) === true;
@@ -44,13 +43,7 @@ export function exploringSchemaReady(env: Env): boolean {
 export async function ensureExploringSchema(env: Env): Promise<void> {
   const key = bindingKey(env);
   if (READY.get(key)) return;
-  // Multiple requests can land on a cold isolate before the first live-DDL
-  // repair completes. Coalesce them so only one users-table rebuild and schema
-  // setup runs at a time in that isolate — per database, so two bindings still
-  // get one rebuild each rather than one between them.
-  const pending = IN_FLIGHT.get(key);
-  if (pending) return pending;
-  const started = (async () => {
+  // D7587: cache completed readiness, never another request's in-flight I/O.
   try {
     // A successful call means the live CHECK now admits 'exploring' (either it
     // already did — no-op — or the table was rebuilt). Only then may the
@@ -92,12 +85,7 @@ export async function ensureExploringSchema(env: Env): Promise<void> {
     if (roleCheckOk) READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureExploringSchema failed:', (e as Error).message);
-  } finally {
-    IN_FLIGHT.delete(key);
   }
-  })();
-  IN_FLIGHT.set(key, started);
-  return started;
 }
 
 /**

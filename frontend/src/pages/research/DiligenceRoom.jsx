@@ -12,6 +12,7 @@ import { activityLine, day, fileSize, roomFileState, when } from './diligenceRea
 import { SharedEvidence } from '../cycles/evidence/InvestorEvidence';
 import { createRecordGate } from './recordGate.js';
 import RoomDeals from './RoomDeals';
+import { AddToLibrarySheet, RoomFileLibrary, RoomLibraryNote, useRoomLibrary } from './RoomLibrary';
 
 /**
  * `/research/diligence/:grantUid` — one data room, read by the investor who
@@ -89,6 +90,9 @@ export default function DiligenceRoom({ role = 'investor' }) {
   useRecordCrumb(room?.project?.name || null, 'diligence-room', grantUid);
   const railPage = useRailPage()?.page ?? null;
 
+  // D6913 (RS-13): which open files are in the caller's Library, and whether the founder allows it.
+  const library = useRoomLibrary(room?.project?.uid || null);
+  const [adding, setAdding] = useState(null);
   const fileState = roomFileState(room);
   // Read only inside the ready branch, where the worker always sends the count.
   const withheld = room ? room.withheld_behind_nda : null;
@@ -225,6 +229,7 @@ export default function DiligenceRoom({ role = 'investor' }) {
                           <th className={`${th} pb-2`}>File</th>
                           <th className={`${th} pb-2`}>Size</th>
                           <th className={`${th} pb-2`}>You last downloaded</th>
+                          <th className={`${th} pb-2`}>Library</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -243,11 +248,14 @@ export default function DiligenceRoom({ role = 'investor' }) {
                             <td className="py-2.5 text-[11px] text-axal-muted">
                               {f.last_downloaded_at ? when(f.last_downloaded_at) : <Unrecorded />}
                             </td>
+                            <td className="py-2.5"><RoomFileLibrary file={f} read={library.read} onAdd={setAdding} /></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  <RoomLibraryNote read={library.read} />
+                  {adding ? <AddToLibrarySheet file={adding} room={room} onClose={() => setAdding(null)} onAdded={() => library.reload()} /> : null}
                   <p className="mt-3 border-t border-axal-hairline pt-2.5 text-[11px] text-axal-muted dark:border-gray-800">
                     Links are issued to you alone, work once, expire after two minutes. Not watermarked.
                     The founder can see which documents you opened.

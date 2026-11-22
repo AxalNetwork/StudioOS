@@ -402,6 +402,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // Under the lightbox is the module page the founder was on, when it is one of
   // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
   const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : suppliedSlug ?? routeSlug;
+  const companyRoleReadOnly = cycle === 'grow' && slug === 'durable-company-building' && ['advisor','partner'].includes(user?.role);
   const distribution = cycle === 'grow' && slug === 'distribution' && !record && !lightbox && !adding;
   const distributionTab = tab || 'overview';
   const [searchParams, setSearchParams] = useSearchParams();
@@ -802,7 +803,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     <WorkerRail
       workspace={name}
       role="founder"
-      readOnlyFor={narrativeAdmin || supportOpen ? 'founder-record' : null}
+      readOnlyFor={narrativeAdmin || supportOpen || companyRoleReadOnly ? 'founder-record' : null}
       stance="Evidence-led view"
       fills
       note={ASSIST_SURFACES.workspace.desks[name]?.fills}
@@ -908,7 +909,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
-        : recordState.data && (fnOf(def.recordPage, slug)?.(recordState.data, { projectId, id: recordId, activity: recordState.activity, cycleName: name, moduleName, onLink: recordState.link, onForm: recordState.openForm, onWrite: recordState.write, onClient: recordState.client, onShowAll: recordState.showAll, act: (key, body) => cyclesApi.recordAction(cycle, projectId, slug, recordId, key, body), reload: () => setReload((n) => n + 1), openDialog })
+        : recordState.data && (fnOf(def.recordPage, slug)?.(recordState.data, { projectId, id: recordId, readOnly: companyRoleReadOnly || supportOpen, activity: recordState.activity, cycleName: name, moduleName, onLink: recordState.link, onForm: recordState.openForm, onWrite: recordState.write, onClient: recordState.client, onShowAll: recordState.showAll, act: (key, body) => cyclesApi.recordAction(cycle, projectId, slug, recordId, key, body), reload: () => setReload((n) => n + 1), openDialog })
           ?? <RecordView record={recordState.data} activity={recordState.activity}
           cycleName={name} moduleName={moduleName} onLink={recordState.link} onForm={recordState.openForm}
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
@@ -960,6 +961,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     );
   } else {
     const read = module?.records;
+    const companyReadOnly = cycle === 'grow' && slug === 'durable-company-building' && (companyRoleReadOnly || supportOpen || module?.parts?.can_write !== true);
     const isPartnerNetwork = cycle === 'grow' && slug === 'partner-network';
     const rankable = isPartnerNetwork && projectId && !narrativeAdmin && Array.isArray(read?.rows) && read.rows.length > 0;
     const ranked = rankable && partnerRank ? applyRank(read.rows, (row) => row.id, partnerRank) : null;
@@ -972,7 +974,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
-    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: reloadPart, openAction, query, openDialog, role: user?.role ?? null }) : null;
+    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: reloadPart, openAction, query, openDialog, role: user?.role ?? null, canWrite: !companyReadOnly }) : null;
     const moduleSources = def.sourcesRegion ? parts : null;
     // D6001 (#6001): what a def's own Add and row control are handed: the venture, the page's one dialog, a re-read, and whether this viewer writes.
     const defCtx = { projectId, openDialog, reload: () => setReload((n) => n + 1), canWrite: module?.parts?.can_write === true };
@@ -1005,9 +1007,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         query={query}
         onQuery={setQuery}
         // D5081 part 5 (#5081, RA-12): a module that owns its page (`def.homes`) names its own header action, or none.
-        action={home && Object.hasOwn(home, 'action') ? home.action : action}
+        action={companyReadOnly ? null : home && Object.hasOwn(home, 'action') ? home.action : action}
         // D6001 (#6001): a def's Add may open a dialog of its own (Customer research's Add a lead).
-        add={narrativeAdmin ? undefined : forms.length && projectId
+        add={narrativeAdmin || companyReadOnly ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction, defCtx)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
@@ -1017,7 +1019,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'grow' && projectId && read?.exportable === true
             ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
         // D6001 (#6001): a module with no Edit may name its own row control (Customer research's Move stage).
-        rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
+        rowAction={!narrativeAdmin && !companyReadOnly && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
@@ -1050,15 +1052,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         home={home?.body ?? null}
         sub={home ? home.sub : undefined}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
-        more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
+        more={<>{cycle === 'grow' && projectId && !companyReadOnly ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
-          : moduleFill ? <FillModule key={`${slug}-${projectId}`} refresh={reload} target={moduleFill} projectId={projectId} moduleName={moduleName} aiOff={!fillsOn}
+          : !companyReadOnly && moduleFill ? <FillModule key={`${slug}-${projectId}`} refresh={reload} target={moduleFill} projectId={projectId} moduleName={moduleName} aiOff={!fillsOn}
             onChanged={() => setReload((n) => n + 1)}
             onEdit={(p) => {
               const i = forms.findIndex((f) => f.key === moduleFill.form);
               navigate(addHref(forms[i], i), { state: { under: `${location.pathname}${location.search}`, fillRow: { uid: p.uid, row: p.row, form: moduleFill.form } } });
             }} /> : null}
-          {projectId && slug && !narrativeAdmin && <ModuleWorkingHere key={`${projectId}:${slug}`} projectId={projectId} module={slug} moduleLabel={moduleName} readOnly={Boolean(supportOpen)} />}
+          {projectId && slug && !narrativeAdmin && <ModuleWorkingHere key={`${projectId}:${slug}`} projectId={projectId} module={slug} moduleLabel={moduleName} readOnly={Boolean(supportOpen || companyReadOnly)} />}
         </>}
       >
         {cycle === 'grow' && <PublishedFromHere part={module?.parts?.publish} />}
