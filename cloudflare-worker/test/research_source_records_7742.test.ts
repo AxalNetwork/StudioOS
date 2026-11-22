@@ -356,8 +356,10 @@ function storeTables(): string[] {
 }
 /** Files outside researchSource* / research_source_* that name one of the store's tables. */
 export function tableLeaks(files: Array<{ path: string; text: string }>, tables: string[]): string[] {
-  const re = new RegExp(`\\b(${tables.join('|')})\\b`);
-  return files.filter((f) => !/^(researchSource|research_source_)/.test(basename(f.path)) && re.test(f.text)).map((f) => f.path);
+  // Whole words through one fixed pattern and a set lookup; no pattern is built from a string.
+  const names = new Set(tables);
+  const namesOne = (text: string) => (text.match(/[A-Za-z0-9_]+/g) ?? []).some((word) => names.has(word));
+  return files.filter((f) => !/^(researchSource|research_source_)/.test(basename(f.path)) && namesOne(f.text)).map((f) => f.path);
 }
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : [p]; });
