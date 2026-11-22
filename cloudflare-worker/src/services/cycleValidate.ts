@@ -722,11 +722,11 @@ export async function customerResearchCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-type SegmentRow = { id: number; name: string; source: string; updated_at: string | null };
+type SegmentRow = { id: number; name: string; source: string; updated_at: string | null; is_primary?: number | null };
 
 export async function loadSegments(ctx: Ctx): Promise<SegmentRow[]> {
   const res = await ctx.env.DB.prepare(
-    `SELECT id, name, source, updated_at FROM customer_segments
+    `SELECT id, name, source, updated_at, is_primary FROM customer_segments
       WHERE project_id = ? AND archived_at IS NULL ORDER BY id`,
   ).bind(ctx.projectId).all<SegmentRow>();
   return res.results || [];
@@ -738,6 +738,8 @@ export type SegmentSummary = {
   /** anecdote under three interviews, pattern from three; null with none. */
   evidence: 'anecdote' | 'pattern' | null;
   updated_at: string | null;
+  /** D6007 (#6007): the venture's one primary ICP. */
+  primary: boolean;
 };
 
 /**
@@ -748,7 +750,7 @@ export type SegmentSummary = {
  */
 export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]) {
   const held = interviews.filter(isHeld);
-  const summary = (id: number | null, name: string, source: string | null, updated: string | null): SegmentSummary => {
+  const summary = (id: number | null, name: string, source: string | null, updated: string | null, primary = false): SegmentSummary => {
     const ivs = held.filter((i) => (i.segment_id ?? null) === id);
     const n = ivs.length;
     return {
@@ -759,12 +761,13 @@ export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]) {
       unrecorded: ivs.filter((i) => i.icp_fit == null).length,
       evidence: n === 0 ? null : n < 3 ? 'anecdote' : 'pattern',
       updated_at: updated,
+      primary,
     };
   };
   const known = new Set(segments.map((s) => Number(s.id)));
   const unassignedInterviews = held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id)));
   return {
-    segments: segments.map((s) => summary(Number(s.id), s.name, s.source, s.updated_at)),
+    segments: segments.map((s) => summary(Number(s.id), s.name, s.source, s.updated_at, Number(s.is_primary) === 1)),
     unassigned: unassignedInterviews.length,
     unassignedInterviews,
   };
@@ -1151,7 +1154,8 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },
   'ideal-customer-profile': {
-    cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
+    // D6007 (#6007, V21): the Primary ICP column, last.
+    cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated', 'Primary ICP'],
     filters: [
       { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), NOT_RECORDED] },
       { key: 'fit', label: 'Fit', options: [opt('strong', 'Has a strong fit'), opt('none', 'No strong fit')] },
@@ -1500,6 +1504,7 @@ async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   else rows.sort((a, b) => (EVIDENCE_RANK[b.evidence ?? ''] ?? 0) - (EVIDENCE_RANK[a.evidence ?? ''] ?? 0) || b.interviews - a.interviews);
   return paged(LISTS['ideal-customer-profile'].cols, rows.map((s) => ({
     id: s.id, segment: s.name, interviews: s.interviews, strong_fit: s.strong, evidence: s.evidence, updated: s.updated_at,
+    primary: s.primary,
   })), rq.page, {
     ...listOf('ideal-customer-profile'),
     ...(ctx.canWrite === true ? { parts: {
@@ -1510,6 +1515,91 @@ async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       ).slice(0, PAGE_SIZE).map((i) => ({ id: i.id, interviewee: i.interviewee_name, date: heldDate(i), fit: i.icp_fit })),
     } } : {}),
   });
+}
+
+/** D6007 (#6007, V24): Compare takes two to four segments. */
+export const COMPARE_MIN = 2;
+export const COMPARE_MAX = 4;
+const TOP_THEMES = 3;
+
+type Firmographic = { label: string; value: string };
+const jsonList = <T>(raw: unknown, ok: (x: unknown) => x is T): T[] | null => {
+  if (typeof raw !== 'string' || raw === '') return null;
+  try {
+    const v = JSON.parse(raw);
+    const items = Array.isArray(v) ? v.filter(ok) : [];
+    return items.length ? items : null;
+  } catch { return null; }
+};
+export const firmographicsOf = (raw: unknown) => jsonList<Firmographic>(raw, (x): x is Firmographic =>
+  !!x && typeof x === 'object' && typeof (x as Firmographic).label === 'string' && typeof (x as Firmographic).value === 'string');
+export const disqualifiersOf = (raw: unknown) => jsonList<string>(raw, (x): x is string => typeof x === 'string' && x.trim() !== '');
+
+export type ComparedSegment = {
+  id: number; name: string; source: string | null; primary: boolean;
+  steps: { who_they_are: string | null; context: string | null; job_to_be_done: string | null; urgency: string | null; value_promised: string | null };
+  value_source: string | null;
+  interviews: number; strong: number; partial: number; none: number; unrecorded: number;
+  evidence: 'anecdote' | 'pattern' | null;
+  top_themes: Array<{ title: string; mentions: number }>;
+  disqualifiers: string[] | null;
+  firmographics: Firmographic[] | null;
+};
+
+/**
+ * D6007 (#6007, V24): two to four active segments side by side, in the order asked. Every value is the stored one:
+ * an unwritten step, source or list is `null`, which the page reads as Not recorded. Fit and themes count the same
+ * held interviews the module counts (`segmentsOf`); evidence stops at Pattern, as there. One query for the segments,
+ * the module's interview and theme reads, and nothing written.
+ */
+export async function compareSegments(ctx: Ctx, ids: number[]): Promise<{ segments: ComparedSegment[]; missing: number[] }> {
+  const asked = [...new Set(ids)];
+  const [rowsRes, interviews, model] = await Promise.all([
+    ctx.env.DB.prepare(
+      `SELECT id, name, source, is_primary, who_they_are, context, job_to_be_done, urgency, value_promised, value_source,
+              firmographics_json, disqualifiers_json, updated_at
+         FROM customer_segments
+        WHERE project_id = ? AND archived_at IS NULL AND id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`,
+    ).bind(ctx.projectId, JSON.stringify(asked)).all<Record<string, unknown>>(),
+    loadInterviews(ctx),
+    loadPainGroupModel(ctx.env, ctx.projectId, { strict: true }),
+  ]);
+  const rows = new Map((rowsRes.results || []).map((r) => [Number(r.id), r]));
+  const fits = new Map(segmentsOf((rowsRes.results || []).map((r) => ({
+    id: Number(r.id), name: String(r.name), source: String(r.source ?? ''), updated_at: (r.updated_at as string | null) ?? null,
+  })), interviews).segments.map((s) => [Number(s.id), s]));
+  const titles = new Map(model.groups.map((g) => [Number(g.id), g.title]));
+  const text = (v: unknown) => (v == null || String(v).trim() === '' ? null : String(v));
+  const segments: ComparedSegment[] = [];
+  for (const id of asked) {
+    const r = rows.get(id);
+    if (!r) continue;
+    const fit = fits.get(id);
+    const by = new Map<number, number>();
+    for (const iv of interviews) {
+      if (!isHeld(iv) || Number(iv.segment_id) !== id) continue;
+      const seen = new Set<number>();
+      for (const p of safeParseStrings(iv.pains_json)) {
+        const gid = model.aliasByNorm.get(normPhrase(p));
+        if (gid && !seen.has(Number(gid))) { seen.add(Number(gid)); by.set(Number(gid), (by.get(Number(gid)) ?? 0) + 1); }
+      }
+    }
+    segments.push({
+      id, name: String(r.name), source: text(r.source), primary: Number(r.is_primary) === 1,
+      steps: {
+        who_they_are: text(r.who_they_are), context: text(r.context), job_to_be_done: text(r.job_to_be_done),
+        urgency: text(r.urgency), value_promised: text(r.value_promised),
+      },
+      value_source: text(r.value_source),
+      interviews: fit?.interviews ?? 0, strong: fit?.strong ?? 0, partial: fit?.partial ?? 0, none: fit?.none ?? 0, unrecorded: fit?.unrecorded ?? 0,
+      evidence: fit?.evidence ?? null,
+      top_themes: [...by.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, TOP_THEMES)
+        .map(([gid, mentions]) => ({ title: titles.get(gid) ?? 'Pain theme', mentions })),
+      disqualifiers: disqualifiersOf(r.disqualifiers_json),
+      firmographics: firmographicsOf(r.firmographics_json),
+    });
+  }
+  return { segments, missing: asked.filter((id) => !rows.has(id)) };
 }
 
 async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {

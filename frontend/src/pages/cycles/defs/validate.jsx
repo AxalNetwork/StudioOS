@@ -34,6 +34,8 @@ import WaitlistBar from '../ValidateWaitlistBar.jsx';
 import { PrepareQuestions } from '../InterviewGuide.jsx';
 import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
 import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
+import SegmentCompare from '../SegmentCompare.jsx';
+import { inCompare, withCompare } from '../segmentCompareModel.js';
 
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
@@ -168,6 +170,17 @@ const validate = {
       ];
     },
     'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
+    // D6007 (#6007, V21): Compare segments opens the module's compare mode (owner option A: no new route).
+    'ideal-customer-profile': (search) => ({ label: 'Compare segments', href: '/validate/ideal-customer-profile' + withCompare(projectSearch(search), []) }),
+  }),
+  // D6007 (#6007, V24): with `?compare=` the Ideal customer profile page is Compare segments: its body replaces
+  // the chart and table, and its line says so. Without it the module draws as before.
+  homes: toFnMap({
+    'ideal-customer-profile': (data, ctx) => (inCompare(ctx.searchParams) ? {
+      sub: 'Two to four segments side by side. Anything unwritten reads Not recorded.',
+      action: null,
+      body: () => <SegmentCompare projectId={ctx.projectId} records={data?.records} />,
+    } : null),
   }),
   add: toFnMap({
     // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.

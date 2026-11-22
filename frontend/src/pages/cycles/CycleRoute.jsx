@@ -981,7 +981,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const defRowAction = fnOf(def.rowActions, slug);
     // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
     // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
-    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
+    // D6007 (#6007): it is handed the page's search params, so a mode (Compare segments) can own the page.
+    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), searchParams }) ?? null;
     const Bands = home?.Bands || PlainBands;
     body = (
       <ModulePage
