@@ -32,7 +32,9 @@ export function PerformanceBand({ reading }) {
       <dl className="fd-performance-grid">{[
         ['NAV · USD', 'nav_cents', cents], ['Called · USD', 'paid_in_cents', cents], ['Distributed · USD', 'distributed_cents', cents],
         ['TVPI', 'tvpi', multiple], ['DPI', 'dpi', multiple], ['IRR · called-capital basis', 'irr', rate],
-      ].map(([label, key, format]) => <div key={key}><dt>{label}</dt><dd>{format(reading.data[key]) ?? missing(reading.data.unavailable[key])}</dd></div>)}</dl>
+      ].map(([label, key, format]) => <div key={key}><dt>{label}</dt><dd>{format(reading.data[key]) ?? missing(reading.data.unavailable[key])}</dd></div>)}
+        <div><dt>Uncalled · USD</dt><dd>{missing('The performance read does not return uncalled capital.')}</dd></div>
+      </dl>
       <p className="fd-source">{reading.data.nav_basis || 'NAV covers investments only.'} Source: fund performance read.</p>
     </>}
     <Link to="/funds/performance" className="fd-inline-link">Open fund performance</Link>

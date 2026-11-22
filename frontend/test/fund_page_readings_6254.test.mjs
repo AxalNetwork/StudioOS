@@ -39,6 +39,7 @@ test('the band preserves zero distributions and the missing NAV reason', () => {
   const html = render(React.createElement(PerformanceBand, { reading: { status: 'ready', data: perf } }));
   assert.match(html, /22 Nov 2026/); assert.match(html, /\$0\.00/); assert.match(html, /\$100\.00/);
   assert.match(html, /One position has no dated mark/); assert.match(html, /Investments only/);
+  assert.match(html, /Uncalled · USD/); assert.match(html, /The performance read does not return uncalled capital/);
   assert.match(html, /href="\/funds\/performance"/);
 });
 test('the LP card filters by fund and pairs each multiple with its own LP id', () => {
