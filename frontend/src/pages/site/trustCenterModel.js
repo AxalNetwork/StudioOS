@@ -118,7 +118,8 @@ export const DISCLOSURE_GAPS = [
 ];
 
 /**
- * The documents and their last update, from the legal pages' own dates; a version is not recorded yet.
+ * The documents and their last update, from the legal pages' own dates, each read as a day word
+ * ("8 Jul 2026"); a version is not recorded yet.
  * #7002: the interview notice's version and date come from the notice page's own source
  * (`currentInterviewNotice()` in InterviewNoticePage.jsx), so the two cannot differ. Its date reads as a
  * day word ("22 Oct 2026", owner's choice); a date that is not YYYY-MM-DD reads Not recorded.
@@ -126,12 +127,27 @@ export const DISCLOSURE_GAPS = [
 export function documentRows({ terms, privacy, risk, interview = null }) {
   const notice = interview && Number.isInteger(interview.version) ? interview : null;
   return [
-    { name: 'Terms of Service', to: '/terms', updated: terms || null, appliesTo: 'Everyone' },
-    { name: 'Privacy Policy', to: '/privacy', updated: privacy || null, appliesTo: 'Everyone' },
-    { name: 'Risk Disclosures', to: '/risk-disclosures', updated: risk || null, appliesTo: 'Investors' },
+    { name: 'Terms of Service', to: '/terms', updated: legalDay(terms), appliesTo: 'Everyone' },
+    { name: 'Privacy Policy', to: '/privacy', updated: legalDay(privacy), appliesTo: 'Everyone' },
+    { name: 'Risk Disclosures', to: '/risk-disclosures', updated: legalDay(risk), appliesTo: 'Investors' },
     { name: 'Interview notice', to: '/privacy/interviews', updated: dayWord(notice?.updated), appliesTo: 'Recorded sessions', version: notice ? `Version ${notice.version}` : null },
     { name: 'Data Processing Addendum', to: null, updated: null, appliesTo: 'Being reviewed by counsel' },
   ];
+}
+
+const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/**
+ * #7002: a legal page's own "July 8, 2026" → "8 Jul 2026", so every row of the Documents table reads the
+ * same way (owner's choice). The legal pages keep their own wording. Text that is not a date stays as written.
+ */
+export function legalDay(v) {
+  if (!v) return null;
+  const iso = dayWord(v);
+  if (iso) return iso;
+  const m = /^([A-Z][a-z]+) (\d{1,2}), (\d{4})$/.exec(String(v).trim());
+  const month = m ? LONG_MONTHS.indexOf(m[1]) : -1;
+  if (month < 0 || Number(m[2]) < 1 || Number(m[2]) > 31) return String(v);
+  return dayWord(`${m[3]}-${String(month + 1).padStart(2, '0')}-${m[2].padStart(2, '0')}`);
 }
 
 /* ------------------------------------------------------------------ *

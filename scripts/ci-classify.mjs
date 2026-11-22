@@ -19,7 +19,8 @@ async function main() {
   } catch { /* Optional incident link never changes attribution. */ }
   let text = `${renderEvidence(result)}\n\n`;
   if (/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/.test(result.runUrl || '')) text += `Tested run: ${result.runUrl}\n`;
-  text += `Tested SHA: ${result.testedSha}\n`;
+  text += `Tested SHA: ${result.testedSha || 'unknown (failure evidence unavailable)'}\n`;
+  text += `Run head SHA: ${result.headSha}\n`;
   for (const f of result.unknown) if (f.jobUrl) text += `Job: ${f.jobUrl}\n`;
   if (result.incident && result.shared.length) text += `Canonical incident: ${result.incident}\n`;
   text += result.warnings.join('\n');

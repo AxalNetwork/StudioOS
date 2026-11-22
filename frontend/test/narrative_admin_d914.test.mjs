@@ -248,8 +248,8 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin\(user\);/);
   assert.match(route, /const drafts = !record && slug && !narrativeAdmin && /);
   assert.match(route, /const fillKind = !record && slug && !narrativeAdmin && /);
-  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length/);
-  assert.match(route, /rowAction=\{!narrativeAdmin && edit/);
+  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length/);
+  assert.match(route, /rowAction=\{!narrativeAdmin && !companyReadOnly && edit/);
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
