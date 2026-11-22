@@ -180,3 +180,15 @@ test('a recorded zero target stays zero in review and the editable number field'
     } finally { await m.close(); }
   }
 });
+
+test('sector search resets between questions while saved selections remain intact', async () => {
+  const m = await fixture({ step: 3 });
+  try {
+    const search = m.nodes().find(n => m.props(n)?.type === 'search');
+    m.props(search).onChange({ target: { value: 'General Tech' } }); await m.settle();
+    await m.click('Continue'); await m.settle();
+    const exclusionsSearch = m.nodes().find(n => m.props(n)?.type === 'search');
+    assert.equal(m.props(exclusionsSearch).value, '');
+    assert.deepEqual(m.progress.at(-1).data.sectors, answers.sectors);
+  } finally { await m.close(); }
+});

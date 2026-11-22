@@ -205,7 +205,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
         {step.description && (
           <p className="text-sm text-gray-600 mt-1 dark:text-gray-300">{step.description}</p>
         )}
-        <div className="mt-5">
+        <div className="mt-5" key={reviewFlow ? step.key : undefined}>
           {step.render({ values, set: setField, error, edit: (key) => {
             const index = steps.findIndex(s => s.key === key);
             if (busy || index < 0 || index === steps.length - 1) return;
@@ -216,7 +216,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
           <div role="alert" className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 dark:border-red-800 dark:bg-red-950 dark:text-red-300">{error}</div>
         )}
 
-        <div className="mt-6 flex items-center justify-between gap-3">
+        <div data-testid={reviewFlow ? 'onboarding-action-bar' : undefined} className={`mt-6 flex items-center justify-between gap-3 ${reviewFlow ? 'sticky bottom-0 z-10 -mx-6 border-t border-gray-200 bg-white px-6 py-3 dark:border-gray-700 dark:bg-gray-900 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:dark:bg-transparent' : ''}`}>
           <button
             type="button"
             onClick={goBack}
@@ -240,7 +240,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
             type="button"
             onClick={goNext}
             disabled={busy}
-            className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
+            className={`inline-flex min-h-11 items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50 ${reviewFlow ? 'min-w-0 flex-1 justify-center sm:flex-none' : ''}`}
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : null}
             {stepIdx + 1 === steps.length ? finishLabel : returnToReview ? 'Return to review' : 'Continue'}
@@ -329,17 +329,18 @@ export function ChoiceField({ label, options, value, onChange }) {
 
 export function MultiChoiceField({ label, options, value, onChange, searchable = false, disabledValues = [] }) {
   const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const arr = Array.isArray(value) ? value : [];
   const toggle = (v) => {
     if (disabledValues.includes(v) && !arr.includes(v)) return;
     onChange(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   };
   return (
-    <div>
+    <div role="group" aria-label={label}>
       <span className="block text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">{label}</span>
       {searchable && <><label className="mb-3 block text-sm text-gray-700 dark:text-gray-300">Search {label.toLowerCase()}<input type="search" value={search} onChange={e => setSearch(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" /></label><p className="mb-2 text-xs text-gray-600 dark:text-gray-400" role="status">{arr.length} picked</p></>}
       <div className="flex flex-wrap gap-2">
-        {options.filter(opt => String(typeof opt === 'string' ? opt : opt.label).toLowerCase().includes(search.toLowerCase())).map((opt) => {
+        {options.filter(opt => String(typeof opt === 'string' ? opt : opt.label).toLowerCase().includes(search.toLowerCase())).map((opt, index) => {
           const v = typeof opt === 'string' ? opt : opt.value;
           const lab = typeof opt === 'string' ? opt : opt.label;
           const active = arr.includes(v);
@@ -350,7 +351,7 @@ export function MultiChoiceField({ label, options, value, onChange, searchable =
               aria-pressed={active}
               disabled={disabledValues.includes(v) && !active}
               onClick={() => toggle(v)}
-              className={`text-sm px-3 py-1.5 rounded-full border ${
+              className={`text-sm px-3 py-1.5 rounded-full border ${searchable && !search && !showAll && index >= 16 ? 'hidden sm:inline-flex' : ''} ${
                 active
                   ? 'bg-violet-600 text-white border-violet-600'
                   : 'bg-white text-gray-700 border-gray-200 hover:border-violet-300 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700'
@@ -361,6 +362,7 @@ export function MultiChoiceField({ label, options, value, onChange, searchable =
           );
         })}
       </div>
+      {searchable && !search && !showAll && options.length > 16 && <button type="button" className="mt-3 min-h-11 text-sm font-semibold text-violet-700 underline dark:text-violet-300 sm:hidden" onClick={() => setShowAll(true)}>Show all {options.length} {label.toLowerCase()}</button>}
     </div>
   );
 }
