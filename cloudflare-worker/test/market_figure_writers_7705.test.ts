@@ -1,22 +1,29 @@
 /** D7705 (#7705): real SQLite create/answer history, rollback and a source-level market-writer inventory. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
-import ts from 'typescript';
+import { stripTypeScriptTypes } from 'node:module';
+import { parse } from 'acorn';
 import projects from '../src/routes/projects.ts';
 import { routeAnswer } from '../src/services/advisor/writeRouter.ts';
 import { REQUIRED_OFFICIAL_INPUTS } from '../src/services/scoreIntegrity.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { loadSchema } from './_schema_once.mjs';
+import { schemaPath, SCHEMA_OPTIONS } from './_schema_once.mjs';
 import { JWT_SECRET, token } from './_esign_harness.ts';
 
+const schema = schemaPath();
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  loadSchema(db);
+  const dir = mkdtempSync(join(tmpdir(), 'market-writers-7705-'));
+  const file = join(dir, 'fixture.sqlite');
+  copyFileSync(schema, file);
+  const db = new DatabaseSync(file, SCHEMA_OPTIONS);
+  const close = db.close.bind(db);
+  db.close = () => { try { close(); } finally { rmSync(dir, { recursive: true, force: true }); } };
   db.exec(`INSERT INTO users(id,role,name,email,founder_id,is_active,subscription_tier) VALUES
     (1,'founder','Synthetic Founder','founder@example.test',11,1,'studio'),
     (900,'admin','Synthetic Admin','admin@example.test',NULL,1,'studio');
@@ -66,6 +73,15 @@ for (const value of ['0', '100']) test(`D7705 Eadwyn SOM ${value} writes the fig
     assert.deepEqual(f.rows(1), [{ figure: 'som', value: Number(value), method: 'typed', source_title: null, source_url: null, market_source_id: null, set_by: 1, sizing_version_id: null }]);
   } finally { f.db.close(); }
 });
+test('D7705 an unrecorded SAM imposes no invented SOM ceiling', async () => {
+  const f = fixture(); try {
+    f.db.exec('UPDATE projects SET sam=NULL WHERE id=1');
+    const result = await f.answer('500');
+    assert.equal(result.saved_to?.column, 'som', JSON.stringify(result));
+    assert.equal(f.db.prepare('SELECT som FROM projects WHERE id=1').get()?.som, 500);
+    assert.equal(f.rows(1)[0]?.value, 500);
+  } finally { f.db.close(); }
+});
 for (const value of ['-1', '101', 'not a number']) test(`D7705 refused SOM ${value} remains a chat note and writes no figure history`, async () => {
   const f = fixture(); try {
     const result = await f.answer(value);
@@ -88,48 +104,50 @@ test('D7705 Eadwyn history failure rolls back SOM while preserving the chat-note
  * This is a source guard, not a general SQL/JavaScript proof: generated SQL must remain in reviewed writers.
  */
 function marketWrites(source: string) {
-  const file = ts.createSourceFile('writer.ts', source, ts.ScriptTarget.Latest, true);
-  const declarations = new Map<string, ts.Node[]>();
-  const add = (name: string, node: ts.Node) => declarations.set(name, [...declarations.get(name) ?? [], node]);
-  function collect(node: ts.Node) {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) add(node.name.text, node.initializer);
-    if (ts.isForOfStatement(node) && ts.isVariableDeclarationList(node.initializer)) for (const d of node.initializer.declarations) {
-      if (ts.isIdentifier(d.name)) add(d.name.text, node.expression);
-      else for (const part of d.name.elements) if (ts.isBindingElement(part) && ts.isIdentifier(part.name)) add(part.name.text, node.expression);
+  if (!/\b(?:UPDATE\s+projects\s+SET|INSERT\s+INTO\s+projects\s*\()/i.test(source)) return [];
+  const code = stripTypeScriptTypes(source, { mode: 'transform' });
+  const file = parse(code, { ecmaVersion: 'latest', sourceType: 'module' });
+  const children = (node: any): any[] => Object.values(node).flatMap(value =>
+    Array.isArray(value) ? value.filter(v => v && typeof v.type === 'string') :
+      value && typeof value === 'object' && 'type' in value ? [value] : []);
+  const visit = (node: any, fn: (node: any) => void) => { fn(node); for (const child of children(node)) visit(child, fn); };
+  const declarations = new Map<string, any[]>();
+  const add = (name: string, node: any) => declarations.set(name, [...declarations.get(name) ?? [], node]);
+  const names = (node: any): string[] => node?.type === 'Identifier' ? [node.name] :
+    node?.type === 'ArrayPattern' ? node.elements.flatMap(names) : [];
+  visit(file, node => {
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) add(node.id.name, node.init);
+    if (node.type === 'ForOfStatement' && node.left.type === 'VariableDeclaration') for (const d of node.left.declarations) {
+      for (const name of names(d.id)) add(name, node.right);
     }
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'push' && ts.isIdentifier(node.expression.expression)) {
-      for (const arg of node.arguments) add(node.expression.expression.text, arg);
+    if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && node.callee.property.name === 'push' && node.callee.object.type === 'Identifier') {
+      for (const arg of node.arguments) add(node.callee.object.name, arg);
     }
-    ts.forEachChild(node, collect);
-  }
-  collect(file);
-  function expand(node: ts.Node, seen = new Set<string>()): string {
-    if (ts.isStringLiteralLike(node)) return node.text;
-    if (ts.isIdentifier(node)) {
-      if (seen.has(node.text)) return '';
-      const next = new Set([...seen, node.text]);
-      return (declarations.get(node.text) ?? []).map(n => expand(n, next)).join(' ');
+  });
+  function expand(node: any, seen = new Set<string>()): string {
+    if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
+    if (node.type === 'Identifier') {
+      if (seen.has(node.name)) return '';
+      const next = new Set([...seen, node.name]);
+      return (declarations.get(node.name) ?? []).map(n => expand(n, next)).join(' ');
     }
-    if (ts.isPropertyAccessExpression(node)) return expand(node.expression, seen);
-    let text = ''; ts.forEachChild(node, child => { text += ' ' + expand(child, seen); }); return text;
+    if (node.type === 'MemberExpression') return expand(node.object, seen);
+    return children(node).map(child => expand(child, seen)).join(' ');
   }
   const found: string[] = [];
-  function visit(node: ts.Node) {
-    if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) {
-      const text = node.getText(file);
-      const columns = /\bUPDATE\s+projects\s+SET\s+([\s\S]*?)(?:\bWHERE\b|$)/i.exec(text)?.[1]
-        ?? /\bINSERT\s+INTO\s+projects\s*\(([\s\S]*?)\)\s*VALUES/i.exec(text)?.[1];
-      if (columns != null) {
-        let resolved = columns;
-        if (ts.isTemplateExpression(node)) for (const span of node.templateSpans) {
-          if (columns.includes('${' + span.expression.getText(file) + '}')) resolved += ' ' + expand(span.expression);
-        }
-        if (/\b(?:tam|sam|som)\b/.test(resolved)) found.push(resolved);
-      }
+  visit(file, node => {
+    if (node.type !== 'Literal' && node.type !== 'TemplateLiteral') return;
+    const text = code.slice(node.start, node.end);
+    const columns = /\bUPDATE\s+projects\s+SET\s+([\s\S]*?)(?:\bWHERE\b|$)/i.exec(text)?.[1]
+      ?? /\bINSERT\s+INTO\s+projects\s*\(([\s\S]*?)\)\s*VALUES/i.exec(text)?.[1];
+    if (columns == null) return;
+    let resolved = columns;
+    if (node.type === 'TemplateLiteral') for (const expression of node.expressions) {
+      if (columns.includes('${' + code.slice(expression.start, expression.end) + '}')) resolved += ' ' + expand(expression);
     }
-    ts.forEachChild(node, visit);
-  }
-  visit(file); return found;
+    if (/\b(?:tam|sam|som)\b/.test(resolved)) found.push(resolved);
+  });
+  return found;
 }
 const writerFiles = new Set(['routes/projects.ts', 'routes/market_sizing.ts', 'services/advisor/writeRouter.ts']);
 function violations(files: Map<string, string>) {
