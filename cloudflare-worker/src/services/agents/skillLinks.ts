@@ -29,6 +29,7 @@ import { grantsOf } from './agentTools';
 import { missingTools, type Tag } from './skills';
 import { logEvent, type AgentRow } from './teams';
 import { skillRunRefusal } from './skillModeration';
+import { requireCapability, toolCapability } from '../agentCapabilities';
 
 const LEVEL: Record<string, number> = { aware: 1, working: 2, proficient: 3, advanced: 4, expert: 5 };
 
@@ -47,13 +48,13 @@ export type VersionRow = {
   /** D4533: an HQ version's release-evidence manifest; null on a company version and on one published before it. */
   evidence_json?: string | null;
 };
-export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'skill_suspended' | 'role_mismatch' | 'tool_not_approved';
-export type Blocked = { code: AttachCode; tool?: { key: string; label: string } };
+export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'skill_suspended' | 'role_mismatch' | 'tool_not_approved' | 'capability_missing';
+export type Blocked = { code: AttachCode; tool?: { key: string; label: string }; capability?: { code: string; name: string } };
 export type Axis = { slug: string; label: string; level: number | null };
 
 /** The status each code answers with when a write is refused. */
 export const ATTACH_STATUS: Record<AttachCode, number> = {
-  not_found: 404, version_not_published: 422, skill_retired: 409, skill_suspended: 409, role_mismatch: 422, tool_not_approved: 422,
+  not_found: 404, version_not_published: 422, skill_retired: 409, skill_suspended: 409, role_mismatch: 422, tool_not_approved: 422, capability_missing: 403,
 };
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
@@ -79,7 +80,7 @@ export async function agentCompanyId(env: Env, a: Pick<AgentRow, 'scope_kind' | 
   return p?.company_id ?? null;
 }
 
-type AgentPart = Pick<AgentRow, 'scope_kind' | 'company_id' | 'project_id' | 'role_key' | 'tool_grants_json'>;
+type AgentPart = Pick<AgentRow, 'scope_kind' | 'company_id' | 'project_id' | 'role_key' | 'tool_grants_json'> & { id?: number | null };
 
 /**
  * Why `a` may not be given `s` at `version`; null when it may. `pinned` is the
@@ -99,6 +100,11 @@ export async function attachCheck(env: Env, a: AgentPart, s: SkillRow, version: 
   if (!versionRoles(v).includes(a.role_key)) return { code: 'role_mismatch' };
   const missing = missingTools(versionTools(v), grantsOf(a.tool_grants_json));
   if (missing.length) return { code: 'tool_not_approved', tool: { key: missing[0], label: toolLabel(missing[0]) } };
+  // D8070: each tool's declared capability, held by the agent (an agent not yet added holds none).
+  for (const tool of versionTools(v)) {
+    const capable = await requireCapability(env, a.id == null ? null : { id: a.id }, toolCapability(tool));
+    if (!capable.ok) return { code: 'capability_missing', tool: { key: tool, label: toolLabel(tool) }, capability: { code: capable.code, name: capable.capability } };
+  }
   return null;
 }
 

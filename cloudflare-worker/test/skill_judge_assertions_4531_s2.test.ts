@@ -40,8 +40,8 @@ const refused = (expect: Record<string, unknown>, message: RegExp | string) => {
   }
 };
 
-test('the evaluator is version 4 (D4531 part 4 extends claims) and names its assertion keys', () => {
-  assert.equal(JUDGE_VERSION, 4);
+test('the evaluator is version 5 (D7700 adds selected-passage citations) and names its assertion keys', () => {
+  assert.equal(JUDGE_VERSION, 5);
   assert.deepEqual([...ASSERTION_KEYS], ['numbers', 'output_schema', 'structure', 'evidence', 'refusal', 'claims']);
 });
 
@@ -334,7 +334,7 @@ test('version 2 results are unchanged: every library case on a battery of output
   };
   let judged = 0, passed = 0;
   // The v1 golden cases only: #4588's scenarios, packed beside them since D5336, are written for judge version 3.
-  for (const entry of SKILL_LIBRARY) for (const k of (entry.cases as any[]).filter((x) => !x.case_id)) {
+  for (const entry of SKILL_LIBRARY) for (const k of (entry.cases as any[]).filter((x) => !x.case_id && (x.version ?? 1) === 1)) {
     const c = checkCase({ name: entry.slug, input: k.input, expect: k.expect });
     assert.ok(c.ok, entry.slug);
     if (!c.ok) continue;
