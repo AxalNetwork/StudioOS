@@ -576,6 +576,12 @@ withdrawal. Every outcome is a sentence on the session (`digest_status`,
 columns and pending `validate_proposals`, and every model call goes through
 `aiRouter.run`.
 
+D6713: `formationPacks.ts` reads pinned/current catalogue obligations, keeps
+unsourced deadlines unknown, and prepares idempotent project-step/company-event
+inserts for the registered-case transaction. Company-only coverage remains
+`reminders:false`. `entityObligations.ts` uses the catalogue in production;
+its legacy pure schedule helper remains a compatibility/parity fixture.
+
 D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,
 seeded events and new-venture action are preserved; TypeScript maps `due_date`
