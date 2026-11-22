@@ -109,3 +109,5 @@ profile's Lab page or LP workspace layout changes. This layout correction
 allocates no new decision or migration number.
 
 D1133: `PricingPage.jsx` carries the account-plan read into the checkout sheet, including loading, failure/retry and a held Pro plan.
+
+| `FundPageReadings.jsx` | D6254: independent fund-page performance, GP positions and the LP’s own position, admitted by server audience. |
