@@ -184,14 +184,16 @@ export default function PhoneModulePage({
       <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">
         {bar}
         {tabs}
-        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true })}
+        {/* D5078 (#5078): a home that `placesSources` draws the Sources region itself (Operating systems › Tools). */}
+        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true,
+          sources: sources ? <Sources phone action={sourcesAction}>{sources}</Sources> : null })}
         {toolLinks.map((item) => (
           <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
             {item.label || `Open ${name}`}
           </Link>
         ))}
         {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
-        {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+        {sources && !home.placesSources && <Sources phone action={sourcesAction}>{sources}</Sources>}
       </div>
     );
   }

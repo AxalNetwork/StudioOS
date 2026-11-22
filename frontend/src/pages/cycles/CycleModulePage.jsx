@@ -397,9 +397,11 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search })}
+          {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools). */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
+            sources: sources ? <Sources action={sourcesAction}>{sources}</Sources> : null })}
           {doors}
-          {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
+          {children}{sources && !home.placesSources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>
       ) : owned ? children : (
         <>
