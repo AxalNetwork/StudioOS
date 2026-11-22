@@ -278,6 +278,8 @@ export default function FundDossier({ role = 'founder' }) {
   // write that answers after the route has moved to another fund is dropped,
   // and writes go to the loaded fund only while the route still names it.
   const routeKey = recordKey(uid);
+  const route = useRef(routeKey);
+  route.current = routeKey;
   const [loadedKey, setLoadedKey] = useState(null);
   const gate = useRef(null);
   if (!gate.current) gate.current = createRecordGate();
@@ -427,24 +429,34 @@ export default function FundDossier({ role = 'founder' }) {
   // Linking and Keep as my own record go through the same queue; a refusal
   // reaches the chooser, which keeps the choice and says why.
   const link = async (catalogueUid) => {
-    const target = JSON.parse(loadedKey)[0];
+    if (!current) return;
+    const key = loadedKey;
+    const fresh = gate.current.begin();
+    const belongs = () => fresh() && sameRecord(key, route.current);
+    const target = JSON.parse(key)[0];
     await api.research.fundUpdate(target, { catalogue_uid: catalogueUid });
     const row = await api.research.fundGet(target);
+    if (!belongs()) return;
     setDrafts((d) => mergeDrafts(d, fundRef.current, row, []));
     showFund(row);
     setChooserOpen(false);
     setAnnouncement(`Linked to ${row.public_record?.record?.name || catalogueUid}. Catalogue id ${catalogueUid}. Your note and reads are unchanged.`);
-    setTimeout(() => identityRef.current?.focus?.(), 0);
+    setTimeout(() => { if (belongs()) identityRef.current?.focus?.(); }, 0);
   };
   const keepOwn = async () => {
-    const target = JSON.parse(loadedKey)[0];
+    if (!current) return;
+    const key = loadedKey;
+    const fresh = gate.current.begin();
+    const belongs = () => fresh() && sameRecord(key, route.current);
+    const target = JSON.parse(key)[0];
     await api.research.fundUpdate(target, { own_record: true });
     const row = await api.research.fundGet(target);
+    if (!belongs()) return;
     setDrafts((d) => mergeDrafts(d, fundRef.current, row, []));
     showFund(row);
     setChooserOpen(false);
     setAnnouncement('Kept as your own record. It will not be offered a match again. You can link it later from its identity block.');
-    setTimeout(() => identityRef.current?.focus?.(), 0);
+    setTimeout(() => { if (belongs()) identityRef.current?.focus?.(); }, 0);
   };
 
   // Write into the note appended the brief on the Worker. Re-read, take the
@@ -452,14 +464,19 @@ export default function FundDossier({ role = 'founder' }) {
   // other unsaved box, and move focus to the added text.
   const acceptedBrief = async () => {
     if (!current) return;
-    const target = JSON.parse(loadedKey)[0];
+    const key = loadedKey;
+    const fresh = gate.current.begin();
+    const belongs = () => fresh() && sameRecord(key, route.current);
+    const target = JSON.parse(key)[0];
     const before = (fundRef.current?.note || '').trim().length;
     try {
       const row = await api.research.fundGet(target);
+      if (!belongs()) return;
       setDrafts((d) => mergeDrafts(d, fundRef.current, row, ['note']));
       showFund(row);
       setAnnouncement(`Brief written into your note at ${clock()}. Nothing was sent to ${row.name}.`);
       setTimeout(() => {
+        if (!belongs()) return;
         const el = noteRef.current;
         if (!el) return;
         el.focus?.();
@@ -467,7 +484,7 @@ export default function FundDossier({ role = 'founder' }) {
         el.setSelectionRange?.(at, String(row.note || '').length);
       }, 0);
     } catch {
-      await load();
+      if (belongs()) await load();
     }
   };
 

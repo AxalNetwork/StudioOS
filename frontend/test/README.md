@@ -277,3 +277,5 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
+
+| `research_changed_interfaces_7815.test.mjs` | D7815: actual project Compare retry/status recovery, tab results return and stale catalogue/dossier responses after route changes. |

@@ -728,9 +728,21 @@ comparisons.post('/:uid/comparisons/:comparisonUid/members', async (c) => {
   if (result.withdrawn) return withdrawnRefusal(c, result.withdrawn);
   if (result.missing) return c.json({ detail: 'not_in_directory', missing: result.missing }, 404);
   const subject = result.subjects![0];
-  await c.env.DB.prepare(
-    'INSERT INTO research_project_comparison_members (comparison_id, subject_id, kind, position, created_by) VALUES (?, ?, ?, ?, ?)'
-  ).bind(set.id, subject.id, set.kind, Number(count?.last || 0) + 1, user.id).run();
+  // D7815: count, next position and duplicate exclusion are decided by one write, never a stale read.
+  const inserted = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO research_project_comparison_members (comparison_id, subject_id, kind, position, created_by)
+     SELECT ?, ?, ?, COALESCE(MAX(position), 0) + 1, ?
+       FROM research_project_comparison_members WHERE comparison_id = ?
+     HAVING COUNT(*) < ? AND NOT EXISTS (
+       SELECT 1 FROM research_project_comparison_members WHERE comparison_id = ? AND subject_id = ?
+     )`
+  ).bind(set.id, subject.id, set.kind, user.id, set.id, MEMBER_LIMIT, set.id, subject.id).run();
+  if (Number(inserted.meta?.changes) === 0) {
+    const existing = await c.env.DB.prepare(
+      'SELECT 1 AS x FROM research_project_comparison_members WHERE comparison_id = ? AND subject_id = ?'
+    ).bind(set.id, subject.id).first();
+    return existing ? c.json({ ok: true, added: false }) : c.json({ detail: 'comparison_full' }, 409);
+  }
   await c.env.DB.prepare("UPDATE research_project_comparisons SET updated_at = datetime('now') WHERE id = ?").bind(set.id).run();
   await touch(c.env, project.id);
   await logAdminAction(c.env, user.id, user.email, 'research_project_comparison_member_added', { project_uid: project.uid, comparison_uid: set.uid, kind: set.kind, directory_uid: subject.directory_uid });

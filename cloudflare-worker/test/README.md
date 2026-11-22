@@ -401,3 +401,5 @@ catalogue version only in the fixture.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+
+| `research_comparison_members_7815.test.ts` | D7815: overlapping mounted add-member requests in all arrival orders preserve the live limit, distinct positions and duplicate response. |

@@ -35,14 +35,15 @@
  * column hands focus to the column that took its place, or to Add fund when
  * none is left (FND-P10).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { BTN_PRIMARY } from '../hq/security/ActionDialog.jsx';
 import { researchProjectComparisonsApi } from '../../lib/api/researchProjectComparisons.js';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import { KIND_WORDS, columnAfterRemoval, comparisonError, comparisonsView, fundPage, subjectHref } from './researchComparisons.js';
-import { columnPage, partWay, stepAttribute } from './comparisonSave.js';
+import { OUTCOME_COPY, columnPage, newRequestId, partWay, saveOutcome, statusView, stepAttribute } from './comparisonSave.js';
+import { backToResults } from './companyDirectoryState.js';
 
 const CARD = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
 const SECONDARY = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground disabled:opacity-50 sm:min-h-[32px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
@@ -393,24 +394,66 @@ function Subjects({ projectUid, view, archived, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState(null);
   const [removing, setRemoving] = useState(null);
-  const toggle = (kind, uid) => setPicked((p) => {
+  const [outcome, setOutcome] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const attempt = useRef(null);
+  const creating = useRef(false);
+  const route = useRef(projectUid);
+  route.current = projectUid;
+  const unknown = outcome?.kind === 'unknown';
+  const locked = busy || checking || unknown;
+  const companyResults = backToResults(typeof window === 'undefined' ? null : window.sessionStorage).href;
+  useEffect(() => {
+    attempt.current = null; creating.current = false;
+    setPicked({ kind: null, uids: [] }); setTitle(''); setBusy(false);
+    setOutcome(null); setStatus(null); setChecking(false);
+  }, [projectUid]);
+  const toggle = (kind, uid) => {
+    if (locked) return;
+    attempt.current = null; setOutcome(null); setStatus(null);
+    setPicked((p) => {
     if (p.kind && p.kind !== kind) return { kind, uids: [uid] };
     const uids = p.uids.includes(uid) ? p.uids.filter((u) => u !== uid) : [...p.uids, uid];
     return { kind: uids.length ? kind : null, uids };
-  });
+    });
+  };
   const create = async (e) => {
     e?.preventDefault?.();
-    if (!picked.uids.length) return;
-    setBusy(true);
-    setFailure(null);
+    if (!picked.uids.length || creating.current || checking || (unknown && status?.kind !== 'not_found')) return;
+    const request = attempt.current ?? {
+      projectUid, request_id: newRequestId(), kind: picked.kind, uids: [...picked.uids],
+      ...(title.trim() ? { title: title.trim() } : {}),
+    };
+    attempt.current = request;
+    const belongs = () => attempt.current === request && route.current === request.projectUid;
+    creating.current = true;
+    setBusy(true); setFailure(null); setStatus(null);
     try {
-      await researchProjectComparisonsApi.create(projectUid, { kind: picked.kind, uids: picked.uids, ...(title.trim() ? { title: title.trim() } : {}) });
-      setPicked({ kind: null, uids: [] });
-      setTitle('');
-      onChanged();
+      const { projectUid: target, ...body } = request;
+      const res = await researchProjectComparisonsApi.create(target, body);
+      if (!belongs()) return;
+      const result = saveOutcome({ res });
+      setOutcome(result);
+      if (result.kind === 'ok') {
+        attempt.current = null; setPicked({ kind: null, uids: [] }); setTitle(''); onChanged();
+      }
     } catch (err) {
-      setFailure(`${comparisonError(err, 'The comparison could not be created.')} Nothing was created.`);
-    } finally { setBusy(false); }
+      if (belongs()) setOutcome(saveOutcome({ err }));
+    } finally { if (belongs() || attempt.current == null && route.current === request.projectUid) { creating.current = false; setBusy(false); } }
+  };
+  const checkSave = async () => {
+    const request = attempt.current;
+    if (!request || checking || creating.current) return;
+    const belongs = () => attempt.current === request && route.current === request.projectUid;
+    setChecking(true);
+    try {
+      const result = statusView({ res: await researchProjectComparisonsApi.saveStatus(request.request_id) });
+      if (!belongs()) return;
+      setStatus(result);
+      if (result.kind === 'saved') { attempt.current = null; setPicked({ kind: null, uids: [] }); setTitle(''); setOutcome(null); onChanged(); }
+    } catch (err) { if (belongs()) setStatus(statusView({ err })); }
+    finally { if (route.current === request.projectUid) setChecking(false); }
   };
   const remove = async (s) => {
     setFailure(null);
@@ -429,7 +472,7 @@ function Subjects({ projectUid, view, archived, onChanged }) {
         <h2 id="ps-heading" className={H2}>Companies and funds in this project</h2>
         {!archived ? (
           <span className="flex flex-wrap gap-3 text-[12.5px] font-bold">
-            <Link className={LINK} to="/research/companies">Add from Companies</Link>
+            <Link className={LINK} to={companyResults}>Add from Companies</Link>
             <Link className={LINK} to="/research/funds">Add from Funds</Link>
           </span>
         ) : null}
@@ -445,7 +488,7 @@ function Subjects({ projectUid, view, archived, onChanged }) {
                 {view.subjects[kind].map((s) => (
                   <li key={s.uid} className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid={`subject-${s.kind}-${s.uid}`}>
                     <label className="flex min-h-[44px] min-w-0 items-center gap-2 sm:min-h-[28px]">
-                      {!archived ? <input type="checkbox" checked={picked.kind === kind && picked.uids.includes(s.uid)} onChange={() => toggle(kind, s.uid)} aria-label={`Select ${s.name} to compare`} data-testid={`pick-${s.kind}-${s.uid}`} /> : null}
+                      {!archived ? <input type="checkbox" checked={picked.kind === kind && picked.uids.includes(s.uid)} disabled={locked} onChange={() => toggle(kind, s.uid)} aria-label={`Select ${s.name} to compare`} data-testid={`pick-${s.kind}-${s.uid}`} /> : null}
                       <Link to={subjectHref(s.kind, s.uid)} className={`truncate font-semibold ${LINK}`}>{s.name}</Link>
                       {s.state !== 'listed' ? <span className="text-[11px] text-amber-800 dark:text-amber-300">{s.state === 'unreadable' ? 'Unreadable' : s.state === 'withdrawn' ? 'List taken down' : 'No longer in the directory'}</span> : null}
                       {s.comparisons ? <span className={FAINT}>in {s.comparisons} {s.comparisons === 1 ? 'comparison' : 'comparisons'}</span> : null}
@@ -463,18 +506,24 @@ function Subjects({ projectUid, view, archived, onChanged }) {
             </div>
           ))}
           {!archived ? (
-            <form onSubmit={create} className="flex flex-col gap-2 border-t border-axal-hairline pt-3 sm:flex-row sm:items-end dark:border-gray-800" data-testid="form-new-comparison">
+            <form noValidate onSubmit={create} className="flex flex-col gap-2 border-t border-axal-hairline pt-3 sm:flex-row sm:items-end dark:border-gray-800" data-testid="form-new-comparison">
               <div className="flex flex-1 flex-col gap-1">
                 <label htmlFor="nc-title" className="text-[12px] font-bold text-axal-ink dark:text-white">New comparison <span className="font-normal text-axal-muted dark:text-gray-400">· tick {picked.kind ? KIND_WORDS[picked.kind].many : 'companies or funds'} of one kind; the title is optional</span></label>
-                <input id="nc-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} className={INPUT} data-testid="input-new-comparison-title" />
+                <input id="nc-title" value={title} disabled={locked} onChange={(e) => { attempt.current = null; setOutcome(null); setStatus(null); setTitle(e.target.value); }} maxLength={160} className={INPUT} data-testid="input-new-comparison-title" />
               </div>
-              <button type="submit" className={BTN_PRIMARY} disabled={busy || !picked.uids.length || picked.uids.length > view.limit} data-testid="button-new-comparison">
+              <button type="submit" className={BTN_PRIMARY} disabled={busy || checking || unknown && status?.kind !== 'not_found' || !picked.uids.length || picked.uids.length > view.limit} aria-busy={busy || undefined} data-testid="button-new-comparison">
                 {busy ? 'Creating…' : `Compare ${picked.uids.length || ''}`.trim()}
               </button>
             </form>
           ) : null}
         </>
       )}
+      {outcome ? <div role={OUTCOME_COPY[outcome.kind]?.role || 'status'} className={MUTED} data-testid="project-comparison-outcome">
+        <strong>{OUTCOME_COPY[outcome.kind]?.chip}</strong>{' '}{OUTCOME_COPY[outcome.kind]?.head}
+        {OUTCOME_COPY[outcome.kind]?.body ? <p>{OUTCOME_COPY[outcome.kind].body}</p> : null}
+        {unknown ? <button type="button" className={SECONDARY} onClick={checkSave} disabled={checking || busy} data-testid="button-project-comparison-status">{checking ? 'Checking…' : 'Check save status'}</button> : null}
+      </div> : null}
+      {status ? <div role="status" className={MUTED} data-testid="project-comparison-save-status"><strong>{status.chip}</strong>{' '}{status.head}<p>{status.body}</p></div> : null}
       {failure ? <p role="alert" className={FAILURE}>{failure}</p> : null}
     </section>
   );
@@ -483,6 +532,7 @@ function Subjects({ projectUid, view, archived, onChanged }) {
 export function ProjectComparisons({ projectUid, read, retry, archived, onChanged }) {
   const view = comparisonsView(read);
   const { hash } = useLocation();
+  const companyResults = backToResults(typeof window === 'undefined' ? null : window.sessionStorage).href;
   const flags = view.state === 'ok' ? partWay(view.comparisons) : new Map();
   // "Open the comparison →" lands here with #comparison-<uid>: focus moves to that comparison's heading.
   const target = view.state === 'ok' && hash.startsWith('#comparison-') ? decodeURIComponent(hash.slice('#comparison-'.length)) : null;
@@ -511,7 +561,7 @@ export function ProjectComparisons({ projectUid, read, retry, archived, onChange
         <section className={CARD} data-testid="comparisons-empty">
           <strong className="text-axal-ink dark:text-white">No comparisons yet</strong>
           <p className={MUTED}>Tick two or more companies or funds above and press Compare, or select 2 to 6 companies in Companies and press Compare there.</p>
-          {!archived ? <Link className={`${SECONDARY} self-start`} to="/research/companies">Open Companies</Link> : null}
+          {!archived ? <Link className={`${SECONDARY} self-start`} to={companyResults}>Open Companies</Link> : null}
         </section>
       )}
     </div>
