@@ -42,7 +42,7 @@ export type StatusBody = {
   investors: { in_pipeline: number; active_conversations: number; in_diligence: number; committed: number };
   readiness: { areas: SnapshotArea[] };
   next_steps: Array<{ label: string; text: string }>;
-  tools: Array<{ key: string; label: string; state: 'connected' | 'not_connected' | 'unreadable'; words: string; as_of: string | null }>;
+  tools: Array<{ key: string; label: string; state: 'connected' | 'not_connected' | 'disconnected' | 'unreadable'; words: string; as_of: string | null }>;
 };
 
 /** The materials RA-02 lists, in its order. */
