@@ -202,3 +202,49 @@ test('missing exact-base run remains unknown rather than falling back to another
   assert.equal(result.verdict, 'main_health_unknown');
   assert.ok(result.warnings.some(w => w.includes('No completed main run')));
 });
+
+const mergeSha = 'c'.repeat(40);
+function mergeFixture({ parents = [sha, other], head = other, apiUnavailable = false, copies = 2 } = {}) {
+  const f = fixture(), api = f.api, download = f.download; let reads = 0;
+  f.api = async path => {
+    if (path === '/actions/runs/10') return { ...await api(path), event: 'pull_request' };
+    if (path === `/git/commits/${mergeSha}`) { reads++; if (apiUnavailable) throw new Error('offline'); return { sha: mergeSha, parents: parents.map(sha => ({ sha })) }; }
+    return api(path);
+  };
+  f.download = async path => path.includes('/10/') ? archive(Array.from({ length: copies }, () => ({ ...report([failure()]), testedSha: mergeSha, headSha: head, runId: '10', attempt: '1', part: 'worker-1-of-6' }))) : download(path);
+  f.reads = () => reads;
+  return f;
+}
+test('PR evidence binds the run head separately from the tested merge and verifies both exact parents', async () => {
+  const f = mergeFixture(); const r = await collectEvidence(f);
+  assert.equal(r.verdict, 'inherited_main_failure'); assert.equal(r.testedSha, mergeSha); assert.equal(r.headSha, other); assert.equal(f.reads(), 1);
+});
+test('wrong head, wrong merge parents and missing commit proof stay unknown', async () => {
+  for (const f of [mergeFixture({ head: 'd'.repeat(40) }), mergeFixture({ head: null }), mergeFixture({ parents: [sha, other, 'd'.repeat(40)] }), mergeFixture({ parents: [sha, other, other] }), mergeFixture({ parents: [sha, 'd'.repeat(40)] }), mergeFixture({ parents: [other, 'd'.repeat(40)] }), mergeFixture({ apiUnavailable: true })]) assert.equal((await collectEvidence(f)).verdict, 'main_health_unknown');
+});
+
+test('an unidentified failed command beside a shared guard or test cannot be called inherited', async () => {
+  const f = fixture(), download = f.download;
+  f.download = async path => {
+    const rows = readFailureArchive(await download(path));
+    return path.includes('/10/') ? archive([...rows, { ...rows[0], complete: false, failures: [], files: [] }]) : archive(rows);
+  };
+  const r = await collectEvidence(f); assert.equal(r.shared.length, 1); assert.equal(r.verdict, 'main_health_unknown'); assert.ok(r.unknown.length);
+});
+test('a malformed record invalidates its whole artifact rather than retaining a partial inherited result', async () => {
+  const f = fixture(), download = f.download;
+  f.download = async path => {
+    const rows = readFailureArchive(await download(path));
+    return path.includes('/10/') ? archive([...rows, null]) : archive(rows);
+  };
+  const r = await collectEvidence(f); assert.equal(r.verdict, 'main_health_unknown'); assert.equal(r.shared.length, 0);
+});
+test('two conflicting tested merges in one attempt remain unknown even with valid parents', async () => {
+  const f = mergeFixture({ copies: 1 }), api = f.api, download = f.download, second = 'd'.repeat(40);
+  f.api = async path => path === `/git/commits/${second}` ? { sha: second, parents: [{ sha }, { sha: other }] } : api(path);
+  f.download = async path => {
+    const rows = readFailureArchive(await download(path));
+    return path.includes('/10/') ? archive([...rows, { ...rows[0], testedSha: second }]) : archive(rows);
+  };
+  const r = await collectEvidence(f); assert.equal(r.verdict, 'main_health_unknown'); assert.equal(r.testedSha, null);
+});

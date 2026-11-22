@@ -1077,6 +1077,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   const repeats = REPEATS_OF[String(e.recurrence)] ?? null;
   return keep({
     title: String(e.title),
+    parts: { meeting: e.event_type === 'board_meeting' },
     sub: joined(label(kind), `due ${dMon(e.due_date) ?? e.due_date}`, owner),
     pills: [pill(state), ...(repeats ? [{ text: label(repeats), tone: 'grey' }] : [])],
     facts: [

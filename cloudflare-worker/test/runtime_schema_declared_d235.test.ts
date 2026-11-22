@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D235 — a runtime bootstrap is a safety net for a DECLARED object, never the
  * only declaration.
@@ -444,6 +445,5 @@ test('the drift check and this guard build the same database from one list', () 
   const guard = read('scripts/check-runtime-schema-declared.mjs');
   assert.match(guard, /import \{[^}]*\bbuildFresh\b[^}]*\bpostCutoffMigrations\b[^}]*\} from '\.\/check-baseline-drift\.mjs'/);
   assert.doesNotMatch(guard, /readdirSync\([^)]*migrations/, 'the guard must not list migrations itself');
-  const pkg = JSON.parse(read('package.json'));
-  assert.match(pkg.scripts['test:guards'], /node --no-warnings scripts\/check-runtime-schema-declared\.mjs/);
+  assert.match(guardChain, /node --no-warnings scripts\/check-runtime-schema-declared\.mjs/);
 });

@@ -156,7 +156,12 @@ test('2. the device copy survives a card-only acknowledgement and goes only when
   assert.equal(local.doc.theme.kind, 'brand'); assert.equal(local.doc.audience, 'angel');
   // Reconnected: the document is acknowledged, then the copy goes.
   w.saveDoc = fakeWorker().saveDoc;
-  a2.retry(); await new Promise((r) => setTimeout(r, 5));
+  a2.retry();
+  // The fake IndexedDB answers through setTimeout(0) several times per save, so wait for the
+  // save to settle (bounded) rather than a fixed 5ms a loaded CI runner can outlast.
+  for (let tick = 0, deadline = 400; tick < deadline && !(a2.state().state === 'synced' && await store.get(keyOf(41)) === undefined); tick++) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
   assert.equal(a2.state().state, 'synced');
   assert.equal(await store.get(keyOf(41)), undefined);
   void a;
