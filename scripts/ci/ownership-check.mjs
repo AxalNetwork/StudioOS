@@ -21,7 +21,16 @@ function patternOf(input, issue) {
   return value;
 }
 
-/** Only ownership sections count. Fenced examples, subsequent peer sections and explicit exclusions do not. */
+function addPatterns(line, issue, patterns) {
+  const included = line.split(/\b(?:not|except|excluding)\s+/i)[0];
+  const add = token => { const pattern = patternOf(token, issue); if (pattern) patterns.add(pattern); };
+  for (const match of included.matchAll(/`([^`\n]+)`/g)) add(match[1]);
+  const plain = included.replace(/`[^`\n]*`/g, '');
+  for (const token of plain.split(/\s+/)) add(token.replace(/^["'•-]+|[,;:"'.]+$/g, ''));
+  if (patterns.size > 500) throw new Error('ownership pattern limit exceeded');
+}
+
+/** Ownership headings and line-local labels count; fenced examples and exclusions do not. */
 export function ownedPatterns(body = '', issue) {
   if (typeof body !== 'string' || body.length > 1024 * 1024 || !positive(issue)) throw new Error('invalid ownership body');
   const patterns = new Set();
@@ -30,6 +39,8 @@ export function ownedPatterns(body = '', issue) {
     const code = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
     if (code) { if (!fence) fence = code[1][0]; else if (fence === code[1][0]) fence = null; continue; }
     if (fence) continue;
+    const inline = /^ {0,3}(?:\*\*)?(?:files owned|owned files)(?:\*\*)?\s*:(?:\*\*)?\s*(.*)$/i.exec(line);
+    if (inline) { addPatterns(inline[1], issue, patterns); continue; }
     const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) {
       const name = heading[2].replace(/[*_`]/g, '').replace(/:$/, '').trim().toLowerCase();
@@ -43,44 +54,54 @@ export function ownedPatterns(body = '', issue) {
       || /^\s*(?:not|except|excluding)\b.*:\s*$/i.test(line)) { excluding = true; continue; }
     if (/^\s*(?:also\s+)?owned(?:\s+files)?\s*:\s*$/i.test(line)) { excluding = false; continue; }
     if (excluding) continue;
-    const included = line.split(/\b(?:not|except|excluding)\s+/i)[0];
-    const add = token => { const pattern = patternOf(token, issue); if (pattern) patterns.add(pattern); };
-    for (const match of included.matchAll(/`([^`\n]+)`/g)) add(match[1]);
-    const plain = included.replace(/`[^`\n]*`/g, '');
-    for (const token of plain.split(/\s+/)) add(token.replace(/^["'•-]+|[,;:"'.]+$/g, ''));
-    if (patterns.size > 500) throw new Error('ownership pattern limit exceeded');
+    addPatterns(line, issue, patterns);
   }
   return [...patterns].sort();
 }
 
-/** Branch identity wins over incidental dependencies in prose; otherwise use title, closing link, then body reference. */
+const numbers = (text, pattern) => [...new Set([...String(text || '').matchAll(pattern)].map(m => Number(m[1])).filter(positive))];
+const ambiguousTask = () => Object.assign(new Error('ambiguous task attribution'), { code: 'TASK_AMBIGUOUS' });
+/** Tagged branches win. Explicit links disambiguate incidental title references; conflicting evidence is unknown. */
 export function taskIssue(pr) {
-  const n = /^agent\/[\w.-]+\/([1-9]\d*)-/.exec(pr.head?.ref || '')?.[1]
-    || /#([1-9]\d*)\b/.exec(pr.title || '')?.[1]
-    || /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\s+of)\s+#([1-9]\d*)\b/i.exec(pr.body || '')?.[1]
-    || /#([1-9]\d*)\b/.exec(pr.body || '')?.[1];
-  return positive(n) ? Number(n) : null;
+  const branch = /^agent\/[\w.-]+\/([1-9]\d*)-/.exec(pr.head?.ref || '')?.[1]
+    || /^claude\/[\w.-]+-([1-9]\d*)[a-z]?$/i.exec(pr.head?.ref || '')?.[1];
+  if (branch) { if (!positive(branch)) throw ambiguousTask(); return Number(branch); }
+  const title = numbers(pr.title, /#([1-9]\d*)\b/g);
+  const links = numbers(pr.body, /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\s+of)\s+#([1-9]\d*)\b/gi);
+  if (links.length > 1 || links.length === 1 && title.length && !title.includes(links[0])) throw ambiguousTask();
+  if (links.length === 1) return links[0];
+  const fallback = title.length ? title : numbers(pr.body, /#([1-9]\d*)\b/g);
+  if (fallback.length > 1) throw ambiguousTask();
+  return fallback[0] || null;
 }
 
 /** Match changed filenames directly, so new/deleted files and both sides of renames need no local filesystem expansion. */
-export function overlaps(issue, files, issues) {
+function ownershipEvidence(issue, files, issues) {
   const paths = [...new Set(files.flatMap(f => typeof f === 'string' ? [f] : [f.filename, f.previous_filename]).filter(Boolean))].sort();
-  const rows = [], owners = new Map(issues.map(i => [i.number, i]));
+  const rows = [], unconfirmed = [], owners = new Map(issues.map(i => [i.number, i]));
   let comparisons = 0;
   for (const owner of [...owners.values()].sort((a, b) => a.number - b.number)) {
     if (owner.number === issue || owner.pull_request || owner.state !== 'open' || !owner.labels?.some(l => activeLabels.has(labelName(l)))) continue;
     const patterns = ownedPatterns(owner.body || '', owner.number);
     for (const file of paths) {
-      const matches = patterns.filter(pattern => {
+      const matches = [], names = [], broad = [];
+      for (const pattern of patterns) {
         if (++comparisons > 2000000) throw new Error('ownership comparison limit exceeded');
-        return posix.matchesGlob(file, pattern.endsWith('/') ? `${pattern}**` : pattern)
+        const full = posix.matchesGlob(file, pattern.endsWith('/') ? `${pattern}**` : pattern)
           || (!posix.extname(pattern) && posix.matchesGlob(file, `${pattern}/**`));
-      });
+        if (full) (/^[*?]+\//.test(pattern) ? broad : matches).push(pattern);
+        else if (!pattern.includes('/') && pattern === posix.basename(file)) names.push(pattern);
+      }
       if (matches.length) rows.push({ issue, owner: owner.number, file, patterns: matches });
+      else {
+        if (names.length) unconfirmed.push({ issue, owner: owner.number, file, patterns: names, kind: 'name-only' });
+        if (broad.length) unconfirmed.push({ issue, owner: owner.number, file, patterns: broad, kind: 'unscoped' });
+      }
     }
   }
-  return rows;
+  return { overlaps: rows, unconfirmed };
 }
+export const overlaps = (issue, files, issues) => ownershipEvidence(issue, files, issues).overlaps;
 
 /** Scan results exist only in this invocation. No cross-run cache may hide newly claimed ownership. */
 export async function checkOwnership({ api, prNumber, expectedHead }) {
@@ -107,19 +128,22 @@ export async function checkOwnership({ api, prNumber, expectedHead }) {
     if (!Number.isSafeInteger(pr.changed_files) || pr.changed_files !== files.length || files.some(f => typeof f?.filename !== 'string' || (f.previous_filename != null && typeof f.previous_filename !== 'string'))) throw new Error('incomplete changed-file list');
     const issues = new Map();
     for (const label of activeLabels) for (const row of await pages(`/issues?state=open&labels=${encodeURIComponent(label)}`)) {
+      if (row?.pull_request) continue;
       if (!positive(row?.number) || typeof row.body !== 'string' && row.body !== null || !Array.isArray(row.labels) || row.state !== 'open') throw new Error('invalid issue inventory');
       issues.set(row.number, row);
     }
-    const matches = overlaps(issue, files, [...issues.values()]);
+    const evidence = ownershipEvidence(issue, files, [...issues.values()]);
     if (expectedHead !== undefined) {
       // Re-read identity, not the cached inventory: a push during pagination invalidates this run.
       const latest = await api(`/pulls/${prNumber}`);
       if (latest.head?.sha !== expectedHead || latest.base?.sha !== pr.base?.sha) throw new Error('PR changed during scan');
     }
-    return { status: matches.length ? 'overlap' : 'clear', issue, overlaps: matches, scannedIssues: issues.size, changedFiles: files.length };
-  } catch {
+    return { status: evidence.overlaps.length ? 'overlap' : evidence.unconfirmed.length ? 'unconfirmed' : 'clear', issue, ...evidence, scannedIssues: issues.size, changedFiles: files.length };
+  } catch (error) {
     // Never echo request errors: they may include credentials or an untrusted response body.
-    return { status: 'unknown', issue, overlaps: [], note: 'Ownership unavailable: PR, changed files or active-issue inventory could not be read completely and safely.' };
+    return { status: 'unknown', issue, overlaps: [], note: error?.code === 'TASK_AMBIGUOUS'
+      ? 'Task references are ambiguous; no ownership clearance was established.'
+      : 'Ownership unavailable: PR, changed files or active-issue inventory could not be read completely and safely.' };
   }
 }
 
@@ -138,7 +162,14 @@ export function renderReport(report, mode) {
     lines.push('| PR task | Other owning issue | Changed path | Ownership pattern |', '|---|---|---|---|');
     for (const r of report.overlaps.slice(0, 200)) lines.push(`| #${r.issue} | #${r.owner} | ${markdownCell(r.file)} | ${r.patterns.map(markdownCell).join(', ')} |`);
     if (report.overlaps.length > 200) lines.push('', `Showing 200 of ${report.overlaps.length} overlaps.`);
-  } else if (report.status === 'clear') lines.push('No overlap with the explicit paths in active issues’ ownership sections. Undeclared or prose-only ownership is not inferred.');
+  } else if (report.status === 'clear') lines.push('No overlap with recognized path declarations in the eligible issues. Path-shaped tokens use the documented parsing heuristic; missing prose paths are not inferred.');
+  if (report.unconfirmed?.length) {
+    lines.push('', '### Unconfirmed matches — coordinate before editing', '', 'These are not ownership claims and are not counted as overlaps.', '',
+      '| PR task | Issue | Changed path | Declared pattern | Reason |', '|---|---|---|---|---|');
+    for (const r of report.unconfirmed.slice(0, 200)) lines.push(`| #${r.issue} | #${r.owner} | ${markdownCell(r.file)} | ${r.patterns.map(markdownCell).join(', ')} | ${r.kind === 'name-only' ? 'Unconfirmed name-only match' : 'Unscoped broad pattern'} |`);
+    if (report.unconfirmed.length > 200) lines.push('', `Showing 200 of ${report.unconfirmed.length} unconfirmed matches.`);
+  }
+  lines.push('', 'Coverage: state:in-progress and state:review issues only; state:blocked claims are not evaluated. This is not the complete WorkIntent claim inventory.');
   lines.push('', 'This check creates no reservation, grants no editing permission, and changes no repository settings.');
   return lines.join('\n') + '\n';
 }

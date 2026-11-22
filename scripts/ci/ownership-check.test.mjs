@@ -29,10 +29,21 @@ test('form headings, bare paths, nested headings, negatives and code fences have
 test('the branch is authoritative; unrelated body references cannot exempt another task', () => {
   assert.equal(taskIssue(pr), 8075);
   assert.equal(taskIssue({ ...pr, title: 'Depends on #42', body: 'Closes #43' }), 8075);
-  assert.equal(taskIssue({ head: { ref: 'feature/check' }, title: 'Fix #42', body: 'Closes #43' }), 42);
+  assert.throws(() => taskIssue({ head: { ref: 'feature/check' }, title: 'Fix #42', body: 'Closes #43' }), { code: 'TASK_AMBIGUOUS' });
   assert.equal(taskIssue({ title: 'Fix check', body: 'Depends on #43\nCloses #42' }), 42);
   assert.equal(taskIssue({ body: 'Related #44' }), 44);
   assert.equal(taskIssue({ title: 'Maintenance' }), null);
+});
+test('explicit task links beat incidental title references and tagged Claude branches identify their task', () => {
+  assert.equal(taskIssue({ title: 'Hold #5719 while doing #8075', body: 'Closes #8075' }), 8075);
+  assert.equal(taskIssue({ head: { ref: 'claude/session-name-8075' }, title: 'Coordination #5719', body: '' }), 8075);
+  assert.equal(taskIssue({ head: { ref: 'claude/session-name-8075c' }, title: 'Coordination #5719', body: 'Part of #8075' }), 8075);
+  for (const input of [{ title: 'Hold #5719 while doing #8075' }, { body: 'Closes #8075\nCloses #8076' }, { title: 'Fix #8075', body: 'Closes #8075\nCloses #8076' }, { body: 'Related #8075 and #8076' }]) assert.throws(() => taskIssue(input), { code: 'TASK_AMBIGUOUS' });
+});
+test('single-line ownership labels parse only their value and preserve section exclusions', () => {
+  const body = 'Files owned: `src/a.js`, `ci.yml`\nUnrelated `outside.js`\n**Files owned:** `src/b.js`\n**Owned files**: `src/c.js`\n```md\nFiles owned: `fake.js`\n```';
+  assert.deepEqual(ownedPatterns(body, 42), ['ci.yml', 'src/a.js', 'src/b.js', 'src/c.js']);
+  assert.deepEqual(ownedPatterns('### Files owned\nNot:\n- `src/no.js`\nFiles owned: `src/yes.js`\n- `src/still-no.js`', 42), ['src/yes.js']);
 });
 test('multiline exclusions never become ownership through later bullets or nested headings', () => {
   const bodies = [
@@ -70,6 +81,45 @@ test('unlinked PR skips with a note, no scan; a clean complete scan passes even 
   assert.equal(skipped.status, 'skipped'); assert.match(renderReport(skipped), /No linked task issue/); assert.equal(exitStatus(skipped, 'enforce'), 0);
   const clean = await checkOwnership({ prNumber: 9000, api: async path => path === '/pulls/9000' ? pr : path.startsWith('/pulls/') ? [{ filename: 'unowned.js' }] : [] });
   assert.equal(clean.status, 'clear'); assert.equal(exitStatus(clean, 'enforce'), 0);
+});
+test('name-only matches stay unconfirmed, including rename sources, rather than claiming a file or reporting clear', async () => {
+  const files = [{ filename: '.github/workflows/ci.yml', previous_filename: 'old/<b>/ci.yml' }];
+  const owners = [active(42, '### Files owned\n`ci.yml`'), active(8075, '### Files owned\n`ci.yml`')];
+  const result = await checkOwnership({ prNumber: 9000, api: async path => path === '/pulls/9000' ? pr : path.startsWith('/pulls/') ? files : owners });
+  assert.equal(result.status, 'unconfirmed'); assert.deepEqual(result.overlaps, []);
+  assert.deepEqual(result.unconfirmed.map(r => [r.kind, r.owner, r.file]), [['name-only', 42, '.github/workflows/ci.yml'], ['name-only', 42, 'old/<b>/ci.yml']]);
+  const summary = renderReport(result); assert.match(summary, /Unconfirmed name-only match/); assert.doesNotMatch(summary, /No overlap/);
+  assert.doesNotMatch(summary, /<b>/); assert.match(summary, /old\/&lt;b&gt;\/ci.yml/);
+  assert.equal(exitStatus(result), 0); assert.equal(exitStatus(result, 'enforce'), 1);
+  assert.deepEqual(overlaps(8075, ['ci.yml'], owners).map(r => r.owner), [42]);
+});
+test('a confirmed path suppresses redundant name-only uncertainty for that owner, while other owners remain distinct', async () => {
+  const owners = [active(42, '### Files owned\n`ci.yml`, `.github/workflows/ci.yml`'), active(43, '### Files owned\n`ci.yml`')];
+  const result = await checkOwnership({ prNumber: 9000, api: async path => path === '/pulls/9000' ? pr : path.startsWith('/pulls/') ? [{ filename: '.github/workflows/ci.yml' }] : owners });
+  assert.equal(result.status, 'overlap'); assert.deepEqual(result.overlaps.map(r => r.owner), [42]);
+  assert.deepEqual(result.unconfirmed.map(r => r.owner), [43]);
+});
+test('unscoped root globs require coordination instead of asserting ownership of every changed path', async () => {
+  const owners = [active(42, '### Files owned\n`**/*`, `*/*`')];
+  const result = await checkOwnership({ prNumber: 9000, api: async path => path === '/pulls/9000' ? pr : path.startsWith('/pulls/') ? [{ filename: 'src/a.js' }] : owners });
+  assert.equal(result.status, 'unconfirmed'); assert.deepEqual(result.overlaps, []);
+  assert.deepEqual(result.unconfirmed[0].patterns, ['**/*', '*/*']); assert.equal(result.unconfirmed[0].kind, 'unscoped');
+  assert.match(renderReport(result), /Unscoped broad pattern/); assert.equal(exitStatus(result, 'enforce'), 1);
+  assert.equal(overlaps(8075, ['src/a.js'], [active(42, '### Files owned\n`src/**`')]).length, 1);
+  assert.equal(overlaps(8075, ['a.js'], [active(42, '### Files owned\n`*.js`')]).length, 1);
+});
+test('issue inventory excludes PR rows before validation and counts only actual issues', async () => {
+  const result = await checkOwnership({ prNumber: 9000, api: async path => path === '/pulls/9000' ? pr : path.startsWith('/pulls/') ? [{ filename: 'src/a.js' }] : [{ number: 9001, pull_request: {} }, active(42, '### Files owned\n`src/a.js`')] });
+  assert.equal(result.status, 'overlap'); assert.equal(result.scannedIssues, 1);
+});
+test('ambiguous task attribution is unknown before the inventory scan, without echoing the PR body', async () => {
+  const result = await checkOwnership({ prNumber: 9000, api: async path => { assert.equal(path, '/pulls/9000'); return { title: 'Work #8075 or #8076', body: 'private text must not be echoed' }; } });
+  assert.equal(result.status, 'unknown'); assert.match(result.note, /ambiguous/i); assert.equal(exitStatus(result, 'enforce'), 1);
+  assert.doesNotMatch(renderReport(result), /private text/);
+});
+test('blocked claims remain outside the requested label scope and the report makes that coverage limit explicit', () => {
+  assert.deepEqual(overlaps(8075, ['src/a.js'], [active(42, '### Files owned\n`src/a.js`', 'state:blocked')]), []);
+  assert.match(renderReport({ status: 'clear', issue: 8075, overlaps: [] }), /blocked.*not evaluated/i);
 });
 test('API failure, truncated file list and malformed inventory are unknown, never an empty success', async () => {
   for (const variant of ['error', 'files', 'issues']) {
@@ -124,6 +174,8 @@ test('summary escapes API-supplied filenames and bounds large overlap tables', (
   assert.doesNotMatch(summary, /<b>|`bad`/); assert.match(summary, /&lt;b&gt;&#124;&#96;bad&#96; &amp;.js/);
   assert.doesNotMatch(summary, /\r|^::warning/m);
   assert.equal(summary.split('\n').filter(l => l.startsWith('| #')).length, 200); assert.match(summary, /200 of 201/);
+  const uncertain = renderReport({ status: 'unconfirmed', issue: 8075, overlaps: [], unconfirmed: Array.from({ length: 201 }, () => ({ ...row, kind: 'name-only' })) });
+  assert.equal(uncertain.split('\n').filter(l => l.startsWith('| #')).length, 200); assert.match(uncertain, /200 of 201 unconfirmed/);
 });
 test('a filename remains literal text instead of Markdown links, mentions or formatting', () => {
   const summary = renderReport({ status: 'overlap', issue: 8075, overlaps: [{ issue: 8075, owner: 42, file: '[name](path) @synthetic *bold* _em_ ~strike~ \\file', patterns: ['src/**'] }] });
