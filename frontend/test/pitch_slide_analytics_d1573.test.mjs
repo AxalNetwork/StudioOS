@@ -115,7 +115,7 @@ test('pd37: the sheet reads one link through the adapter: the investor, the NDA 
   });
   try {
     const text = v.text();
-    for (const words of ['[Pat Partner] · [Fund A]', 'Accepted the NDA 12 Oct', 'Time per slide', '[Traction] · 1 m 48 s', 'Not read', 'Visit timeline', 'Accepted the NDA', 'Reached the ask', 'Revisited', '14 Oct · 18:02']) {
+    for (const words of ['[Pat Partner] · [Fund A]', 'Accepted the NDA 12 Oct', 'Time per slide', '[Traction] · 1 m 48 s', 'Not read', 'Journey', 'Accepted the NDA', 'Reached the ask', 'Revisited', '14 Oct · 18:02']) {
       assert.ok(text.includes(words), words);
     }
     assert.ok(v.has('viewer-analytics-bar-traction'));
