@@ -64,9 +64,10 @@ export async function askRecipient(
 type Moved = { ok: true; quarter: string } | { ok: false; reason: 'not_found' | 'already_answered'; status?: string };
 
 async function why(env: Env, uid: string, column: 'recipient_user_id' | 'investor_user_id', userId: number): Promise<Moved> {
-  const row = await env.DB.prepare(
-    `SELECT status FROM investor_introductions WHERE uid = ? AND ${column} = ?`,
-  ).bind(uid, userId).first<{ status: string }>();
+  const sql = column === 'recipient_user_id'
+    ? `SELECT status FROM investor_introductions WHERE uid = ? AND recipient_user_id = ?`
+    : `SELECT status FROM investor_introductions WHERE uid = ? AND investor_user_id = ?`;
+  const row = await env.DB.prepare(sql).bind(uid, userId).first<{ status: string }>();
   return row ? { ok: false, reason: 'already_answered', status: row.status } : { ok: false, reason: 'not_found' };
 }
 
