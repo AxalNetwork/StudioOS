@@ -31,7 +31,7 @@ export const H3 = 'm-0 text-[15px] font-extrabold tracking-axal-heading text-axa
 const MONO = 'font-mono tabular-nums';
 // DE15: every button is at least 44px tall on a phone.
 const BTN = 'inline-flex min-h-[44px] md:min-h-[34px] items-center justify-center gap-1.5 rounded-axal-sm px-3.5 text-[13px] font-bold whitespace-nowrap';
-// D4815-p16 (#5917, DE16b): the canvas keeps #7c3aed with white text in dark mode (5.7:1); violet-500 read 4.4:1.
+// D4815-p16 (#5917, DE16b): the canvas keeps the brand violet with white text in dark mode (5.7:1); violet-500 read 4.4:1.
 export const BTN_P = `${BTN} border border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep`;
 export const BTN_S = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 
