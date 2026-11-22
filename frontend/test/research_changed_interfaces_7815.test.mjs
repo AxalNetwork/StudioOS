@@ -1,6 +1,7 @@
 /** D7815 (#7815): comparison reconciliation and route-bound fund refreshes on the actual React pages. */
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import React, { act } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
@@ -20,7 +21,7 @@ const tid = (m, id) => walk(document.body).find(n => m.props(n)?.['data-testid']
 const props = (m, id) => { const node = tid(m, id); assert.ok(node, id); return m.props(node); };
 const textOf = node => !node ? '' : node.childNodes?.length ? node.childNodes.map(textOf).join('') : node.textContent || '';
 const button = (m, label) => walk(document.body).find(n => n.tagName === 'BUTTON' && textOf(n) === label);
-const until = async (m, condition) => { const end = Date.now() + 5000; while (!condition()) { if (Date.now() > end) assert.fail('Expected UI condition did not settle'); await m.flush(); } };
+const until = async (m, condition) => { const end = performance.now() + 5000; while (!condition()) { if (performance.now() > end) assert.fail('Expected UI condition did not settle'); await m.flush(); } };
 const catalog = id => ({ item: { uid: id, name: `Vehicle ${id}`, provenance: {}, proposed: {}, source_name: 'Synthetic list' }, history: {}, reports: [], reports_status: 'ok' });
 const dossier = id => ({ uid: id, name: `Dossier ${id}`, thesis: 'Synthetic thesis', note: 'Synthetic private note', source_url: 'https://example.test/source', updated_at: '2026-11-22T00:00:00Z', identity_review_needed: true });
 async function routed(Component, path, initial) {
@@ -129,5 +130,41 @@ for (const operation of ['link', 'own', 'brief']) test(`D7815 the dossier ${oper
     assert.match(m.text(), /Dossier b/);
     assert.doesNotMatch(m.text(), /Late old dossier answer/);
     assert.doesNotMatch(m.text(), /Dossier a/);
+  } finally { await m.unmount(); }
+});
+
+for (const navigate of [false, true]) test(`D7815 a queued link ${navigate ? 'is dropped after navigation' : 'waits for the accepted-brief refresh and keeps both results'}`, async t => {
+  const pending = defer(); let reads = 0; const updates = [];
+  const latest = { ...dossier('a'), note: 'Synthetic accepted brief retained' };
+  t.mock.method(api.research, 'fundGet', async id => { if (id === 'b') return dossier('b'); reads++; return reads === 1 ? dossier('a') : reads === 2 ? pending.promise : latest; });
+  t.mock.method(api.research, 'fundUpdate', async (id, body) => { updates.push({ id, body }); return latest; });
+  t.mock.method(api.research, 'zoneDrafts', async () => ({ items: [{ uid: 'draft-one', body: 'Synthetic brief', accepted: false }] }));
+  t.mock.method(api.research, 'zoneDraftAccept', async () => ({ item: { uid: 'draft-one', body: 'Synthetic brief', accepted: true } }));
+  t.mock.method(researchFundsApi, 'list', async () => ({ items: [{ uid: 'vehicle-one', name: 'Public vehicle' }] }));
+  t.mock.method(researchMyFundsApi, 'list', async () => ({ items: [], catalogue_links: [] }));
+  const m = await routed(FundDossier, '/research/funds/:uid', '/research/funds/a');
+  try {
+    await until(m, () => button(m, 'Write into the note'));
+    await act(async () => { m.props(button(m, 'Write into the note')).onClick(); });
+    await until(m, () => reads === 2);
+    const choose = walk(document.body).find(n => n.tagName === 'BUTTON' && /Choose the record|Link to a catalogue/.test(textOf(n)));
+    assert.ok(choose);
+    await act(async () => m.props(choose).onClick());
+    await until(m, () => walk(document.body).some(n => m.props(n)?.type === 'radio' && m.props(n)?.value === 'vehicle-one'));
+    const radio = walk(document.body).find(n => m.props(n)?.type === 'radio' && m.props(n)?.value === 'vehicle-one');
+    await act(async () => m.props(radio).onChange());
+    await act(async () => { m.props(button(m, 'Link to Public vehicle')).onClick(); });
+    assert.deepEqual(updates, [], 'the identity write must wait for the earlier refresh');
+    if (navigate) { await m.go('/research/funds/b'); await until(m, () => m.text().includes('Dossier b')); }
+    await act(async () => pending.resolve(latest));
+    if (navigate) {
+      await m.flush(); assert.deepEqual(updates, []); assert.match(m.text(), /Dossier b/);
+      return;
+    }
+    await until(m, () => updates.length === 1 && reads === 3);
+    assert.deepEqual(updates, [{ id: 'a', body: { catalogue_uid: 'vehicle-one' } }]);
+    assert.match(m.text(), /Dossier a/);
+    assert.ok(m.nodes().some(n => m.props(n)?.value === latest.note), 'the accepted brief remains in the note');
+    assert.doesNotMatch(m.text(), /Your choice is kept in the sheet/);
   } finally { await m.unmount(); }
 });
