@@ -127,7 +127,7 @@ async function mount(entry, props) {
   const by = (id) => nodes().find((n) => propsOf(n)['data-testid'] === id);
   return {
     by, nodes, text: () => textOf(container), where: () => textOf(by('where')),
-    async flush() { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); },
+    async flush() { await act(async () => { await new Promise((r) => setImmediate(r)); }); },
     async click(node) { await act(async () => propsOf(node).onClick?.({ preventDefault() {}, button: 0 })); },
     async choose(node, value) { await act(async () => propsOf(node).onChange({ target: { value } })); },
     async unmount() { await act(async () => root.unmount()); restore(); },
