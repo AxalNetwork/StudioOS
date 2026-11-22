@@ -165,7 +165,9 @@ test('print: only the comparison prints, the chart gives way to the table, the h
   const html = markup({ ventures: VENTURES() });
   assert.match(html, /data-testid="dealflow-compare-page" data-compare-print=""/);
   assert.match(html, /<style>[^<]*@media print/);
-  assert.match(html, /<div data-print="hide"><ul[^>]*data-testid="dealflow-compare-chart"/, 'the chart does not print; the table holds its bands');
+  // D6151: the chart is desktop-only (the phone stacks the sections), and still never prints.
+  assert.match(html, /<div class="hidden md:block" data-print="hide"><ul[^>]*data-testid="dealflow-compare-chart"/, 'the chart does not print; the table holds its bands');
+  assert.match(html, /<div class="hidden md:block print:block"><div class="max-h-\[65vh\] overflow-auto" id="compare-table"/, 'the table prints at any width');
   assert.match(html, /<div class="[^"]*" data-print="hide">(?:(?!<\/div>).)*dealflow-compare-add(?:(?!<\/div>).)*dealflow-compare-csv(?:(?!<\/div>).)*dealflow-compare-print/, 'the toolbar does not print');
   assert.match(html, /data-print="hide" data-testid="dealflow-compare-remove-1"/, 'Remove does not print');
   assert.match(html, /data-print="cards"/);

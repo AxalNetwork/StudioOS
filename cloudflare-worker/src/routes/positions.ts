@@ -381,6 +381,11 @@ r.get('/marks', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D6201: D1 may reject or resolve an unsuccessful/malformed read. Neither is an empty set.
+function hasQueryResults<T>(reply: { success?: boolean; results?: T[] } | null): reply is { success?: boolean; results: T[] } {
+  return reply != null && reply.success !== false && Array.isArray(reply.results);
+}
+
 r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -403,9 +408,14 @@ r.get('/analytics', async (c) => {
            FROM portfolio_distributions
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0
                  OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)`,
-      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => null),
       scopedLatestMarks(c.env, scope, c.req.query('as_of') ? today : null),
     ]);
+
+    if (!hasQueryResults(distributions)) {
+      const reason = 'Portfolio distributions could not be read.';
+      return c.json({ available: false, reason, detail: reason }, 503);
+    }
 
     // The quarter-end read (D463): with an explicit `as_of`, only flows ON OR
     // BEFORE the date count — a quarter-end export must not include a wire
@@ -513,7 +523,7 @@ r.get('/kpi-compliance', async (c) => {
            FROM portfolio_kpi_definitions
           WHERE fund_id IS NULL AND cadence = ?
           ORDER BY sort_order`,
-      ).bind(cadence).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(cadence).all<any>().catch(() => null),
       c.env.DB.prepare(
         `SELECT DISTINCT p.project_id, pr.uid, pr.name
            FROM portfolio_positions p
@@ -527,8 +537,18 @@ r.get('/kpi-compliance', async (c) => {
           WHERE status = 'submitted'
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)
           GROUP BY project_id, period`,
-      ).bind(scope.visibleCsv, scope.visibleCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(scope.visibleCsv, scope.visibleCsv).all<any>().catch(() => null),
     ]);
+
+    if (!hasQueryResults(defs)) {
+      const reason = 'Required KPIs could not be read.';
+      return c.json({ available: false, reason, detail: reason }, 503);
+    }
+
+    if (!hasQueryResults(updates)) {
+      const reason = 'Submitted portfolio updates could not be read.';
+      return c.json({ available: false, reason, detail: reason }, 503);
+    }
 
     // #6204 (D6204): each company's due day for this period. The term is the reporting duty's own
     // (`reporting_duties.due_days`, `after_end`, at this cadence) for the caller's book: the duties

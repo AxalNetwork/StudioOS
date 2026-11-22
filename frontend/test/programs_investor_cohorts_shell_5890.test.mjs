@@ -66,8 +66,10 @@ async function check(suffix, registryFails, verify) {
         h(Route, { path: base, element: h(ProgramPage) }),
         h(Route, { path: `${base}/activity`, element: h(ProgramPage) }),
         investorRoutes({ guard })))))));
-    // Match the other mounted Programs fixtures: settle the lazy route before inspecting tabs.
-    await act(async () => {});
+    // Settle the lazy route before inspecting tabs: one act() tick is not enough on a loaded
+    // runner, so wait (bounded) until a section tab is marked current.
+    const current = () => nodes(div).some((n) => String(props(n)['data-testid'] || '').startsWith('programs-tab-') && props(n)['aria-current'] === 'page');
+    for (let tick = 0, deadline = 200; tick < deadline && !current(); tick++) await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
     verify(byId, text, props);
   } finally {
     await act(async () => root.unmount());
