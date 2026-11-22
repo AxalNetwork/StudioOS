@@ -1325,11 +1325,12 @@ export async function verdictEvidenceState(ctx: Ctx) {
     const { coverage } = await offeredCoverage(ctx.env, ctx.projectId, 'venture', items.map(e=>e.id), { evidenceSource: async()=>items });
     const claims = claimsOf(hypotheses.hyps, hypotheses.links, interviews, pains);
     const latest=recent.rows[0];
+    const observedHypotheses = new Set(items.filter(e=>e.kind!=='experiment'||e.observed===true).map(e=>Number(e.hypothesis_id)));
     return { state: 'ok', coverage,
       latest:latest?{id:Number(latest.id),decision:latest.decision,state:latest.state,reasoning:latest.reasoning,evidence:Number(latest.evidence_count)}:null,
       supporting: claims.reduce((n,c)=>n+c.supporting,0), contradicting: claims.reduce((n,c)=>n+c.contradicting,0),
       fit_unrecorded: claims.reduce((n,c)=>n+c.fit_unrecorded,0),
-      hypotheses_without_evidence: claims.filter(c=>!items.some(e=>Number(e.hypothesis_id)===c.id && (e.kind!=='experiment'||e.observed===true))).length,
+      hypotheses_without_evidence: claims.filter(c=>!observedHypotheses.has(c.id)).length,
       experiments_done: (results.results||[]).length,
       results_recorded: (results.results||[]).filter(e=>!!e.result?.trim()).length,
       missing_results: (results.results||[]).filter(e=>!e.result?.trim()).length,
