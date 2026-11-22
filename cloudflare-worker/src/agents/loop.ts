@@ -9,14 +9,17 @@
  *            progress; the project's company not the one it was admitted
  *            under (`scope_moved`); the daily limit (20 runs per agent per
  *            UTC day; the agent is paused `daily_limit`).
- *   context  only the rule book's `reads`, each through `reads.ts` (a key
- *            with no function: `read_unavailable`), as the sponsor, inside
- *            the scope; a company agent reads a project only while the
- *            project is still the company's. Adds the last 20 memory notes,
- *            the task, its goal and its One Next Thing. Its answer is a
- *            summary: the prompt is never a step's output, so the Workflow's
- *            stored state never holds it. `run` builds it again.
- *   run      #3727's `agentRun` with `taskId`, the run uid (`agent:<uid>`,
+ *   context  the preflight (D7076, #7076): only the checks that can refuse a
+ *            run (the scope, the sponsor, a moved project, a company
+ *            agent's project still the company's, every `reads` key with a
+ *            function in `reads.ts`, else `read_unavailable`) and the count
+ *            of memory notes. It calls no reader and makes no prompt.
+ *   run      builds the context once: the same checks again, then the rule
+ *            book's `reads` (as the sponsor, inside the scope, a few at a
+ *            time), the last 20 memory notes, the task, its goal and its One
+ *            Next Thing; what was read and left out is its own timeline line.
+ *            The prompt is never a step's output, a line or a log, so the
+ *            Workflow's stored state never holds it. Then #3727's `agentRun` with `taskId`, the run uid (`agent:<uid>`,
  *            `agent:<uid>:run`) and the hold `agent.<role_key>`; a session's
  *            task also names its saved skill and version (D4534,
  *            `sessionSkill`), refused `skill_unavailable` when unreadable.
@@ -52,14 +55,14 @@ import { railByRunKey } from '../services/railProposals';
 import { skillEvidenceForRun, skillSlugOf } from '../services/agents/skillEvidence';
 import { moduleOf } from '../services/agents/catalogue';
 import { logCycleWrite, type CycleWrite } from '../services/cycleActivity';
-import { readOne, READERS, type ReadContext } from '../services/agents/reads';
+import { readAll, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
 import { canRead, effectiveBook, logEvent, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
 import type { Rules } from '../services/agents/catalogue';
 import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
 import { sessionBlock, sessionSkill } from '../services/agents/sessions';
 import {
-  dailyLimitReached, laneLimitIn, markRun, moveTask, pauseAgent, runByUid, runsToday, scopeOfRow, scopeSettings, tellTeam,
+  dailyLimitReached, laneLimitIn, markRun, moveTask, pauseAgent, runByUid, runsToday, scopeOfRow, scopeSettings, stepsOf, tellTeam,
   type PauseReason, type RunRow, type RunStep,
 } from './engine';
 import { dailyLimit, needsCeilings } from './capacity';
@@ -161,9 +164,14 @@ export type Built = {
   ok: true; prompt: string; reads: string[]; notes: number; omitted: string[];
   scope: Scope; rules: Rules; projectId: number | null; bound: string[]; document: string | null; fund: string | null;
 } | { ok: false; status: string; refusal: string; summary: string; pause?: PauseReason };
+type Refused = Extract<Built, { ok: false }>;
+type Cleared = { ok: true; s: Scope; projectId: number | null; rules: Rules; reads: string[] };
 
-/** The prompt, built from D1 alone. Every read is wrapped as data. */
-export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
+/**
+ * D7076 (#7076): the checks that can refuse a run, and nothing read for the prompt. The `context` step runs them
+ * alone; `buildContext` runs them again before its reads, so access is checked at the `run` step as before.
+ */
+async function preflight(d: LoopDeps, l: Loaded): Promise<Cleared | Refused> {
   const s = await scopeOfAgent(d.env, l.agent);
   if (!s) {
     // An archived company no longer loads: its agents pause `scope_archived`.
@@ -194,7 +202,19 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const { rules } = await effectiveBook(d.env, s, l.agent.role_key);
   const missing = rules.reads.find((k) => typeof d.readers[k] !== 'function');
   if (missing) return { ok: false, status: 'refused', refusal: 'read_unavailable', summary: `The read ${missing} is not available yet.` };
+  return { ok: true, s, projectId, rules, reads: rules.reads };
+}
+
+/** The keys of the agent's live notes in its scope; both note queries below spell out the same WHERE. */
+const noteKeys = (l: Loaded, s: Scope) => [l.agent.id, s.kind, ...(s.kind === 'company' ? [s.id, 0] : [0, s.id])];
+
+/** The prompt, built from D1 alone. Every read is wrapped as data. */
+export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
+  const c = await preflight(d, l);
+  if (!c.ok) return c;
+  const { s, projectId, rules } = c;
   // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
+  // Read first: D4667-p3's document comes from it, and the book's reads need it.
   const session = await sessionBlock(d.env, l.task);
   // D4667-p3: a session on one data-room document reads that document's text; the reader checks the room's rule again.
   const target = session?.target as { kind?: string; id?: string } | null | undefined;
@@ -202,24 +222,24 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   // D7701: the same selected fund binds context and the pre-charge readiness check.
   const fund = target?.kind === 'fund' && typeof target.id === 'string' ? `vc_fund:${target.id}` : null;
   const rc: ReadContext = { scope: s, agent: l.agent, projectId, document, fund };
-  const reads: { key: string; block: string }[] = [];
-  for (const key of rules.reads) {
-    const r = await readOne(d.env, key, rc, d.readers);
-    reads.push({ key, block: `<agent_data source="read:${key}" trust="data">${inert(r)}</agent_data>` });
-  }
-  const [companyId, projId] = s.kind === 'company' ? [s.id, 0] : [0, s.id];
-  const notes = (await d.env.DB.prepare(
-    `SELECT kind, body, created_at FROM agent_memory_notes
-      WHERE agent_id = ? AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?
-        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
-      ORDER BY created_at DESC, id DESC LIMIT ?`,
-  ).bind(l.agent.id, s.kind, companyId, projId, NOTES_MAX).all<{ kind: string; body: string; created_at: string }>()).results ?? [];
-  const goal = l.task.goal_id
-    ? await d.env.DB.prepare('SELECT title, why FROM scope_goals WHERE id = ?').bind(l.task.goal_id).first<{ title: string; why: string | null }>()
-    : null;
-  // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
-  const handTo = await handsOffTo(d.env, l.agent);
-  const handoff = await handoffBlockFor(d.env, l.task);
+  // D7076: none of these depends on another, so they run together; the book's reads a few at a time (`readAll`).
+  const [results, notesRes, goal, handTo, handoff] = await Promise.all([
+    readAll(d.env, c.reads, rc, d.readers),
+    d.env.DB.prepare(
+      `SELECT kind, body, created_at FROM agent_memory_notes
+        WHERE agent_id = ? AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?
+          AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
+        ORDER BY created_at DESC, id DESC LIMIT ?`,
+    ).bind(...noteKeys(l, s), NOTES_MAX).all<{ kind: string; body: string; created_at: string }>(),
+    l.task.goal_id
+      ? d.env.DB.prepare('SELECT title, why FROM scope_goals WHERE id = ?').bind(l.task.goal_id).first<{ title: string; why: string | null }>()
+      : Promise.resolve(null),
+    // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
+    handsOffTo(d.env, l.agent),
+    handoffBlockFor(d.env, l.task),
+  ]);
+  const reads = c.reads.map((key, i) => ({ key, block: `<agent_data source="read:${key}" trust="data">${inert(results[i])}</agent_data>` }));
+  const notes = notesRes.results ?? [];
   const head = [
     `Task: ${l.task.title}`,
     l.task.detail ? `Detail: ${l.task.detail}` : '',
@@ -242,22 +262,33 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
     else omitted.push(names[i]);
   });
   if (omitted.length) prompt += `\nLeft out for length: ${omitted.join(', ')}.`;
-  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: rules.reads.filter((k) => !omitted.includes(k)), document, fund };
+  return { ok: true, prompt, reads: c.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: c.reads.filter((k) => !omitted.includes(k)), document, fund };
 }
 
+/** What a build read and left out, the run's own line (`runActivity.sourcesOf` reads it). Never the prompt. */
+const readLine = (b: { reads: string[]; notes: number; omitted: string[] }) =>
+  `Read ${b.reads.length ? b.reads.join(', ') : 'nothing'} and ${b.notes} notes${b.omitted.length ? `; left out ${b.omitted.join(', ')}` : ''}.`;
+
+/** D7076: the preflight. No reader runs and no prompt is made; the `run` step builds the context once. */
 export async function context(d: LoopDeps, uid: string): Promise<StepOut> {
   const l = await loaded(d.env, uid);
   if (!l) return stop('gone', 'run_gone');
   const g = await gate(d, l, 'context');
   if (g) return g;
-  const b = await buildContext(d, l);
-  if (!b.ok) {
-    if (b.pause) await pauseAgent(d.env, l.agent.id, b.pause, d.now());
-    return end(d, l, 'context', b.status, b.refusal, b.summary);
+  const c = await preflight(d, l);
+  if (!c.ok) {
+    if (c.pause) await pauseAgent(d.env, l.agent.id, c.pause, d.now());
+    return end(d, l, 'context', c.status, c.refusal, c.summary);
   }
-  const summary = `Read ${b.reads.length ? b.reads.join(', ') : 'nothing'} and ${b.notes} notes${b.omitted.length ? `; left out ${b.omitted.join(', ')}` : ''}.`;
-  await markRun(d.env, uid, 'context', { status: 'done', summary });
-  return { go: true, reads: b.reads, notes: b.notes, ...(await computeRunRequested(d.env, uid) ? { compute: true } : {}) };
+  const counted = await d.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM (SELECT 1 FROM agent_memory_notes
+      WHERE agent_id = ? AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
+      LIMIT ?)`,
+  ).bind(...noteKeys(l, c.s), NOTES_MAX).first<{ n: number }>();
+  const notes = Number(counted?.n ?? 0);
+  await markRun(d.env, uid, 'context', { status: 'done', summary: `Cleared to read ${c.reads.length ? c.reads.join(', ') : 'nothing'} and ${notes} notes.` });
+  return { go: true, reads: c.reads, notes, ...(await computeRunRequested(d.env, uid) ? { compute: true } : {}) };
 }
 
 // ── run ─────────────────────────────────────────────────────────────────────
@@ -276,6 +307,8 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
     if (b.pause) await pauseAgent(d.env, l.agent.id, b.pause, d.now());
     return end(d, l, 'run', b.status, b.refusal, b.summary);
   }
+  // D7076: the one full build's line; a retried step keeps the line its first attempt wrote.
+  if (!stepsOf(l.run).some((e) => e.name === 'run' && e.summary.startsWith('Read '))) await markRun(d.env, uid, 'run', { status: 'done', summary: readLine(b) });
   if (await computeRunRequested(d.env, uid)) {
     try {
       const proposal = await computeProposal(d.env, l.run, l.agent, l.task);

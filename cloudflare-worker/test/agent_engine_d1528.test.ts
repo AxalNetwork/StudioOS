@@ -180,7 +180,8 @@ test('a decision moves the task to done and writes one memory note and the cycle
     assert.deepEqual([taskRow(w, 200).status, taskRow(w, 200).board_column, taskRow(w, 200).close_reason], ['done', 'done', 'completed']);
     const r = runRow(w, uid);
     assert.deepEqual([r.status, r.step, r.proposal_uid], ['done', 'after', `prop-${uid}`]);
-    assert.deepEqual(JSON.parse(r.steps_json).map((s: any) => s.name), ['load', 'context', 'run', 'propose', 'after']);
+    // D7076: the run step's first line names what its one context build read; its second, the proposal.
+    assert.deepEqual(JSON.parse(r.steps_json).map((s: any) => s.name), ['load', 'context', 'run', 'run', 'propose', 'after']);
     const notes = w.db.prepare('SELECT kind, body, run_id FROM agent_memory_notes WHERE agent_id = ?').all(AGENT) as any[];
     assert.equal(notes.length, 1);
     assert.equal(notes[0].kind, 'decision');

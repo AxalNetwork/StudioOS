@@ -1,0 +1,310 @@
+{
+  "schema": 1,
+  "issue": 8012,
+  "evidence": "offline_additive_prediction_from_retained_hosted_file_timings",
+  "historicalSource": "af019ea025334d1d4fb6d365bcd8af9ca3c93fdc",
+  "currentSource": "c2fb23a5cc4e440268dce3c65c579a0ee21bf469",
+  "replayNode": "v22.23.4",
+  "artifact": {
+    "id": 14346295606,
+    "runId": 44110620304,
+    "sha256": "60db8ccafaa93bd01cc58cd8a5f8db99e1216e00b3cb45051ba0c920ea25012d",
+    "sizeBytes": 13983192,
+    "createdAt": "2026-11-17T16:04:31Z",
+    "expiresAt": "2026-12-17T16:04:28Z",
+    "timingSha256": "3d5e745cf8688f716cf43a3fc0f0bc4188c00cadd2d86763ab4a207c53e31618",
+    "dependenciesSha256": "8b9427c80b609fb49721fc0cf0bdb207e4f04d3ccb8a5b39426ed5c191468401",
+    "producerNode": "v22.23.4",
+    "timingRows": 4036,
+    "dependencyRows": 4036,
+    "untracedRows": 0,
+    "failedWorkerTimingRows": [],
+    "envelopeChecksPassed": true
+  },
+  "unknownWeight": {
+    "rule": "suite positive-duration p90; fallback 1 if no positive durations",
+    "historicalP90Ms": 9640
+  },
+  "sourceIdentities": {
+    "scripts/lib/shardPlan.mjs": {
+      "historical": "100644 blob 161596981716bbbb0daaed9408544e2df0a81e35",
+      "current": "100644 blob 161596981716bbbb0daaed9408544e2df0a81e35"
+    },
+    "scripts/test-drift-parts.mjs": {
+      "historical": "100644 blob e54fe6890cd7b7aa2280d5709332bddfa147cdac",
+      "current": "100644 blob 678cd61066bc5938b89e6566aaf208b27287dc8b"
+    },
+    "scripts/ci/merge-test-deps.mjs": {
+      "historical": "100644 blob 6e75fd21f0bfcbdcd064c403bdf4d3956524f959",
+      "current": "100644 blob 6e75fd21f0bfcbdcd064c403bdf4d3956524f959"
+    },
+    "scripts/ci/test-tracer.mjs": {
+      "historical": "100644 blob 760f39763a060b586ee6affb59310c96c3508d7b",
+      "current": "100644 blob 760f39763a060b586ee6affb59310c96c3508d7b"
+    },
+    "documentation/architecture/decisions/D5609.md": {
+      "historical": "100644 blob 71caca07d83b12ebb176908311175a7443de39e4",
+      "current": "100644 blob 71caca07d83b12ebb176908311175a7443de39e4"
+    },
+    "package.json": {
+      "historical": "100644 blob f77b8b8dd6d5ee4fc939f79635c26cf7594adabc",
+      "current": "100644 blob d032c14ed725cccdcb5be7989276c9d1e913b093"
+    },
+    ".github/workflows/ci.yml": {
+      "historical": "100644 blob 849b700ee68c1bb476437de52ce79d6d5823a505",
+      "current": "100644 blob 21ddc09419eba91b32a0fae8c7a933c72129f588"
+    }
+  },
+  "inventoryCounts": {
+    "historicalCount": 1933,
+    "currentCount": 2056,
+    "newFiles": 123,
+    "removedFiles": 0,
+    "changedFiles": 226,
+    "sameTestBlobFiles": 1707,
+    "sameTestBlobWithChangedRecordedDependency": 1590,
+    "historicalUnknownFiles": 0,
+    "historicalOpaqueFiles": 19,
+    "currentFilesWithoutHistoricalTiming": 123,
+    "currentOpaqueFilesFromHistoricalTrace": 19,
+    "historicalUntraced": 0
+  },
+  "longestFiles": [
+    {
+      "file": "cloudflare-worker/test/branch_freeze_admin_acts_d260.test.ts",
+      "wallMs": 420580,
+      "opaque": true
+    },
+    {
+      "file": "cloudflare-worker/test/partner_invitation_fixes_d924.test.ts",
+      "wallMs": 330529,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/branch_emergency_sign_out_d4669.test.ts",
+      "wallMs": 321479,
+      "opaque": true
+    },
+    {
+      "file": "cloudflare-worker/test/deck_share_null_limit_d895.test.ts",
+      "wallMs": 263767,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/grow_writes_d691.test.ts",
+      "wallMs": 260908,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/sub_cutoff_restores_d190.test.ts",
+      "wallMs": 257691,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/kyc_people_queue_d1229.test.ts",
+      "wallMs": 234733,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/branch_unbind_admin_d262.test.ts",
+      "wallMs": 194255,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/branch_support_session_d259.test.ts",
+      "wallMs": 168870,
+      "opaque": true
+    },
+    {
+      "file": "cloudflare-worker/test/hq_unbind_admin_d262.test.ts",
+      "wallMs": 162340,
+      "opaque": true
+    },
+    {
+      "file": "cloudflare-worker/test/pipeline_access_d4676.test.ts",
+      "wallMs": 153372,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/account_move_recovery_5043.test.ts",
+      "wallMs": 148585,
+      "opaque": true
+    },
+    {
+      "file": "cloudflare-worker/test/cap_table_venture_d1020.test.ts",
+      "wallMs": 137199,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/user_column_cap_d189.test.ts",
+      "wallMs": 133798,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/deck_image_tools_d1534.test.ts",
+      "wallMs": 132315,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/deck_image_sweep_d1508.test.ts",
+      "wallMs": 130050,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/company_compliance_3976.test.ts",
+      "wallMs": 128812,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/deck_voice_d1569.test.ts",
+      "wallMs": 128081,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/calendar_external_d1485.test.ts",
+      "wallMs": 118379,
+      "opaque": false
+    },
+    {
+      "file": "cloudflare-worker/test/deck_slide_analytics_d1573.test.ts",
+      "wallMs": 118152,
+      "opaque": false
+    }
+  ],
+  "comparisons": [
+    {
+      "parts": 6,
+      "files": 1933,
+      "measuredFiles": 1933,
+      "unknownFiles": 0,
+      "opaqueFiles": 19,
+      "totalAdditiveMs": 12477977,
+      "predictedPartLoadsMs": [
+        2079641,
+        2079709,
+        2079642,
+        2079644,
+        2079699,
+        2079642
+      ],
+      "maxMs": 2079709,
+      "medianMs": 2079643,
+      "maxMinusMedianMs": 66,
+      "maxOverMedian": 1.000031736216264,
+      "maxMinSpreadFraction": 0.000032696882111872384,
+      "additiveCriticalPathMs": 2079709,
+      "longestMeasuredFileMs": 420580,
+      "equalWeightAssignmentMeasuredLoadsMs": [
+        2301909,
+        1686006,
+        1785142,
+        1691443,
+        2216308,
+        2797169
+      ],
+      "equalWeightAssignmentMaxMs": 2797169,
+      "exactOnce": true,
+      "deterministic": true,
+      "deterministicWithReversedTimingKeys": true,
+      "planSha256": "fae0b7d069882fa9f77039fe425501f80db0dbdd4cfd3079142fab8822eaddcd"
+    },
+    {
+      "parts": 8,
+      "files": 1933,
+      "measuredFiles": 1933,
+      "unknownFiles": 0,
+      "opaqueFiles": 19,
+      "totalAdditiveMs": 12477977,
+      "predictedPartLoadsMs": [
+        1559759,
+        1559691,
+        1559764,
+        1559772,
+        1559772,
+        1559758,
+        1559771,
+        1559690
+      ],
+      "maxMs": 1559772,
+      "medianMs": 1559761.5,
+      "maxMinusMedianMs": 10.5,
+      "maxOverMedian": 1.0000067317984191,
+      "maxMinSpreadFraction": 0.000052571786132845055,
+      "additiveCriticalPathMs": 1559772,
+      "longestMeasuredFileMs": 420580,
+      "equalWeightAssignmentMeasuredLoadsMs": [
+        1436608,
+        1278268,
+        1417405,
+        1585872,
+        1636905,
+        1144755,
+        1812441,
+        2165723
+      ],
+      "equalWeightAssignmentMaxMs": 2165723,
+      "exactOnce": true,
+      "deterministic": true,
+      "deterministicWithReversedTimingKeys": true,
+      "planSha256": "1741f975abaca73f7586b843b013274fe801f892c9d7d20e76d7fdf686f208c4"
+    },
+    {
+      "parts": 12,
+      "files": 1933,
+      "measuredFiles": 1933,
+      "unknownFiles": 0,
+      "opaqueFiles": 19,
+      "totalAdditiveMs": 12477977,
+      "predictedPartLoadsMs": [
+        1039774,
+        1039853,
+        1039774,
+        1039846,
+        1039774,
+        1039854,
+        1039840,
+        1039856,
+        1039854,
+        1039842,
+        1039854,
+        1039856
+      ],
+      "maxMs": 1039856,
+      "medianMs": 1039849.5,
+      "maxMinusMedianMs": 6.5,
+      "maxOverMedian": 1.000006250904578,
+      "maxMinSpreadFraction": 0.00007885707251773323,
+      "additiveCriticalPathMs": 1039856,
+      "longestMeasuredFileMs": 420580,
+      "equalWeightAssignmentMeasuredLoadsMs": [
+        1119511,
+        854279,
+        849019,
+        786029,
+        1017879,
+        663330,
+        1182398,
+        831727,
+        936123,
+        905414,
+        1198429,
+        2133839
+      ],
+      "equalWeightAssignmentMaxMs": 2133839,
+      "exactOnce": true,
+      "deterministic": true,
+      "deterministicWithReversedTimingKeys": true,
+      "planSha256": "d5ac340187a95c4ddc20f857cd28c1056fe8b0421c24fc3378b99188a88724b9"
+    }
+  ],
+  "limits": [
+    "No current-source duration prediction: changed tests and dependency closures require fresh evidence.",
+    "Opaque denotes incomplete dependency tracing, not a missing wall-time measurement.",
+    "Per-file process wall times overlap under node:test concurrency and include contention and tracing overhead.",
+    "Additive loads and critical paths assume serial files within each part and simultaneous part starts; they are not hosted elapsed times or runner-minutes.",
+    "Checkout, npm installs, runner wait, top-level generation and artifact upload are outside file-process timings.",
+    "Per-file loader/setup/child work and SQLite migration work inside the test process contribute to wall time; stage costs cannot be separated from this artifact.",
+    "One run supplies maxima across root-process records; raw records, runner hardware, repetition variance and job timestamps are not in this archive.",
+    "The live six-part configuration and two-Linux/four-standard-hosted pilot allocation are unchanged."
+  ]
+}
