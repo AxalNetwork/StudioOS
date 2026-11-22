@@ -185,7 +185,7 @@ async function mountSheet(props, answer) {
   globalThis.fetch = async () => { calls += 1; return answer(calls); };
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+  const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setImmediate(r)); }); };
   await act(async () => root.render(h(MemoryRouter, null, h(ViewerAnalyticsSheet, { deck: { id: 6, version: 6 }, row: ROW(), onClose() {}, ...props }))));
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
