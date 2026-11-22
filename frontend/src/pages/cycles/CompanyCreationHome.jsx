@@ -19,7 +19,7 @@
  * colour has its `dark:` pair (BD31), and no state is carried by colour alone.
  */
 import { Link } from 'react-router-dom';
-import { Unreadable } from '../../ui';
+import { PhoneRows, Unreadable } from '../../ui';
 import { RecordsTable } from './CycleModulePage.jsx';
 import { safeHref, isPlainClick } from './cycleModel';
 import { incorporateFirst, listStage, progressiveFor } from './progressiveList.js';
@@ -295,22 +295,28 @@ export default function CompanyCreationHome({ data, projectId, ...p }) {
       <Summary view={summaryView(facts, status)} phone={phone} onRetry={retry} />
       {!phone && !loading && !zero && <Dominant view={dominantView(facts, rowHref)} add={add} />}
       <Elections view={electionView(facts, status)} rowHref={rowHref} phone={phone} onRetry={retry} search={p.search} />
-      <RecordsTable
-        key="build/company-creation"
-        title="Filings"
-        records={filingRows(records)}
-        status={p.recordsStatus || (records ? 'ready' : 'loading')}
-        message={p.recordsMessage}
-        query={p.query || {}}
-        onQuery={p.onQuery}
-        onRetry={p.onRetryRecords || retry}
-        // BD11: the table's Add is a supporting tool below; only the measured zero of a formed company leads with it (BD29).
-        add={zero ? p.add : []}
-        rowAction={p.rowAction}
-        progressive={copy}
-        onExport={p.onExport}
-        rowHref={p.rowHref}
-      />
+      {/* D703 / BD30: on a phone the filings are the module page's own phone rows (a tap opens Edit as a page);
+          loading, unreadable and the empty stages stay with the table, which says each. */}
+      {phone && p.phoneRows && (p.recordsStatus || 'ready') === 'ready' && (p.phoneRows.rows || []).length > 0
+        ? <div className="min-w-0"><PhoneRows groups={[p.phoneRows]} /></div>
+        : (
+        <RecordsTable
+          key="build/company-creation"
+          title="Filings"
+          records={filingRows(records)}
+          status={p.recordsStatus || (records ? 'ready' : 'loading')}
+          message={p.recordsMessage}
+          query={p.query || {}}
+          onQuery={p.onQuery}
+          onRetry={p.onRetryRecords || retry}
+          // BD11: the table's Add is a supporting tool below; only the measured zero of a formed company leads with it (BD29).
+          add={zero ? p.add : []}
+          rowAction={p.rowAction}
+          progressive={copy}
+          onExport={p.onExport}
+          rowHref={p.rowHref}
+        />
+        )}
       <WhereChanged records={records} projectId={projectId} />
       {!zero && <Supporting add={add} tools={p.tools} />}
       {zero && <Supporting add={null} tools={p.tools} />}
