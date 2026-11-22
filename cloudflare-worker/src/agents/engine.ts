@@ -31,6 +31,7 @@ import { notify } from '../services/notify';
 import { chargedFor } from '../services/agents/agentRun';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
 import { logEvent, monthSpend, type AgentRow, type Spend } from '../services/agents/teams';
+import { moduleCapability, requireCapability } from '../services/agentCapabilities';
 import {
   NO_CEILINGS, backlogLimit, capacityCeilings, capacityOf, freeLane, laneBudget, laneLimit, needsCeilings, parallelLimit,
   type Capacity, type Ceilings,
@@ -202,6 +203,9 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
   if (!task || task.assignee_kind !== 'agent' || task.assignee_agent_id !== a.id || !isReady(task, deps) || !task.module || !task.option) {
     return no(409, 'not_ready', 'That task is not ready for this agent: it must be open, assigned to it, with nothing left to wait on.');
   }
+  // D8070: the task's module is a domain action the agent must hold.
+  const capable = await requireCapability(env, a, moduleCapability(task.module));
+  if (!capable.ok) return no(capable.status, capable.code, capable.message);
   const computeRequest = await env.DB.prepare('SELECT uid, status, requested_by_user_id FROM agent_compute_requests WHERE task_id = ?')
     .bind(task.id).first<{ uid: string; status: string; requested_by_user_id: number }>();
   if (computeRequest) {

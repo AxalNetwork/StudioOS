@@ -31,6 +31,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { seedAssumptions, sizingRequest } from '../src/pages/SpinoutLabMarketPage.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -53,23 +54,13 @@ test('the drawer loads what was saved and saves what it shows', () => {
   // which is the orphan-table shape this repo has hit twice.
   assert.match(PAGE, /api\.getMarketAssumptions\(p\.id\)/,
     'the page no longer loads its saved assumptions');
-  assert.match(PAGE, /api\.saveMarketAssumptions\(project\.id, \{/,
-    'the page no longer saves the assumptions behind its figures');
+  assert.match(PAGE, /marketSizingApi\.saveVersion\(id, request\)/);
   assert.match(API, /getMarketAssumptions: \(id\) =>/);
-  assert.match(API, /saveMarketAssumptions: \(id, assumptions\) =>/);
+  const assumptions = seedAssumptions(null);
+  const payload = sizingRequest(assumptions, '').assumptions;
+  for (const field of FIELDS) assert.ok(Object.hasOwn(payload, field), `${field} must be saved`);
+  assert.deepEqual(payload, assumptions);
 
-  // EVERY FIELD THE DRAWER SHOWS TRAVELS. A field left out of the save is one a
-  // founder edits and loses, with nothing on screen to say which.
-  const at = PAGE.indexOf('api.saveMarketAssumptions(project.id, {');
-  const payload = PAGE.slice(at, PAGE.indexOf('});', at));
-  // THE PAYLOAD'S OWN KEYS, READ ONCE. A bare `includes(field)` would pass on a
-  // longer name that merely contains this one (`acv` inside `acvBenchmark`), and
-  // a regex compiled per field is what `detect-non-literal-regexp` objects to —
-  // so one literal pattern collects the keys and each field is looked up.
-  const sent = new Set([...payload.matchAll(/\b([A-Za-z_$][\w$]*)\s*:/g)].map((m) => m[1]));
-  for (const field of FIELDS) {
-    assert.ok(sent.has(field), `${field} is edited on the drawer and never saved`);
-  }
 });
 
 test('a saved value wins, and a cleared one stays cleared', () => {
@@ -85,10 +76,8 @@ test('a saved value wins, and a cleared one stays cleared', () => {
   assert.match(fn, /const s = \(key, fallback = ''\) => \{/);
   assert.match(fn, /v == null \|\| v === '' \? fallback : String\(v\)/,
     'a saved value is coerced in a way that can drop a legitimate 0');
-  // The two computed fallbacks are still the fallbacks — a project sized before
-  // 247 has only the saved ratios to show what the founder chose.
-  assert.match(fn, /samPct: s\('samPct', tam > 0 && sam > 0/);
-  assert.match(fn, /winRate: s\('winRate', sam > 0 && som > 0/);
+  assert.match(fn, /samPct: s\('samPct'\)/);
+  assert.match(fn, /winRate: s\('winRate'\)/);
   // And no field seeds from an invented market figure.
   for (const field of ['population', 'acv', 'cagr', 'tamOverride', 'runway', 'capacity']) {
     assert.ok(fn.includes(`${field}: s('${field}')`),
@@ -104,7 +93,7 @@ test('nothing on screen still says these fields are not saved', () => {
   assert.doesNotMatch(PAGE, /only TAM\/SAM\/SOM are saved/i);
   assert.doesNotMatch(PAGE, /assumption fields are page-local session state/i);
   assert.doesNotMatch(PAGE, /local-only until backend columns exist/i);
-  assert.match(PAGE, /Saved with your startup when you recalculate/,
+  assert.match(PAGE, /Save keeps the inputs, figures, method and source in one version/,
     'the drawer no longer says when its figures are saved');
   // "Auto-saves" is STILL not claimed, and for a narrower reason than before:
   // nothing is written as you type.
@@ -118,19 +107,12 @@ test('D1317: the assumptions drawer is the shared right-side Sheet at 480px, and
   assert.doesNotMatch(PAGE, /w-\[400px\]|fixed inset-0 z-\[75\]/, 'no own drawer left');
 });
 
-test('a failed assumptions save is visible, not swallowed', () => {
-  // `saveError` is drawn INSIDE the drawer, so closing it on a failure files the
-  // one message that says what was lost behind a panel nobody will reopen. The
-  // figures still saved — that half is a separate request and succeeded — which is
-  // exactly why the message has to say so precisely.
+test('a failed version save keeps the drawer and reports failure without a half-saved claim', () => {
   const src = codeOnly(PAGE);
-  assert.match(src, /let assumptionsSaved = true;/);
-  assert.match(src, /assumptionsSaved = false;/);
-  assert.match(src, /if \(assumptionsSaved\) setEditOpen\(false\);/,
-    'the drawer closes over an unsaved-assumptions error');
-  assert.match(PAGE, /Your sizing saved\. The assumptions behind it did not/);
-  // And the failure is reported rather than only shown.
-  assert.match(src, /reportError\('SpinoutLabMarketPage:assumptions', e\)/);
+  assert.doesNotMatch(src, /api\.saveMarketAssumptions|api\.updateProject\(project\.id, \{ tam/);
+  assert.match(src, /reportError\('SpinoutLabMarketPage:save', error\)/);
+  assert.match(PAGE, /Couldn’t save\. Your edits are kept here\. Nothing changed on the page\./);
+  assert.doesNotMatch(PAGE, /Your sizing saved\. The assumptions behind it did not/);
 });
 
 test('a figure Eadwyn supplied is marked, and one the founder replaced is not', () => {
