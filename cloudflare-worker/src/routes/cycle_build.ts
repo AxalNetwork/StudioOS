@@ -35,6 +35,7 @@ import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
 import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
+import { suggestedFilings } from '../services/suggestedFilings';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -1065,6 +1066,8 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
         entity: await entitySummary(env, p, order ?? null, steps),
         elections: await electionRows(env, p, viewer, steps),
         papers: await companyPapers(env, p, viewer),
+        // #8259 (D8259, BD28): the pack's filings not yet added or dismissed, failing on its own.
+        suggestions: await suggestedFilings(env, p, order ?? null, steps),
       } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
