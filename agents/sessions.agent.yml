@@ -1,0 +1,43 @@
+# The slot sessions (AGENTS.md): each takes its slot's oldest ready issue,
+# branches from main, opens a draft PR and reports in STATUS comments. One
+# manifest for all of them: they share one rule file.
+name: sessions
+kind: platform
+owner: owner         # the owner starts and stops sessions
+identity: session
+capabilities:
+  - code.read
+  - code.branch      # agent/<agent>/<issue>-<slug>, and the claim/<issue> ref (scripts/claim.mjs)
+  - code.commit
+  - code.pr          # one draft PR per task
+  - code.enqueue     # AGENTS.md step 5: a T0/T1 PR with --auto --squash once every gate holds; never --admin
+  - issue.read
+  - issue.write      # STATUS comments and state:* labels
+  - ci.read
+models:
+  route: none        # the session is the model; the platform makes no model call for it
+  allowed: []
+resources:
+  cpu: none
+  memory: none
+limits:
+  runtime: none      # a claim lasts 24 hours and is renewed; no run cap
+  tokens: none
+  parallel_tasks: 1  # one task at a time per slot (AGENTS.md step 1)
+  child_agents: none
+  prs: none
+network:
+  internet: true     # each session's environment sets its network, outside this repository
+  egress:
+    - api.github.com
+    - github.com
+allowed_paths:
+  - '**'             # any file; the owner lands a T2 change (merge-policy.mjs)
+runner_pool: none    # Claude Code and other vendors' sessions, not Actions runners
+approval:
+  external_actions: not-required
+escalation: S01      # STATUS comments go to Session 1; an owner's call is needs-decision
+status: live
+sources:
+  - AGENTS.md
+  - scripts/claim.mjs

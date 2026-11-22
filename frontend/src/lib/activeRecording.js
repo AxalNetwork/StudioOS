@@ -75,7 +75,8 @@ const blank = () => ({
 export function startRefused(e) {
   const sid = Number(e?.data?.session_id);
   return {
-    text: (typeof e?.message === 'string' && e.message.trim()) || 'The recording could not start.',
+    text: (typeof e?.message === 'string' && e.message.trim() && !['Request failed', 'Internal server error', 'Internal Server Error'].includes(e.message.trim()) ? e.message.trim() : '')
+      || 'The recording could not start. Return to the session and try again.',
     sessionId: e?.code === 'session_active' && Number.isSafeInteger(sid) && sid > 0 ? sid : null,
   };
 }
@@ -299,7 +300,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       // request's own when it never answered (offline, a timeout), never the
       // microphone's (#1588).
       const refused = !resume ? startRefused(e) : null;
-      set({ phase: resume ? 'paused' : 'denied', error: e?.message || 'The recording could not start.', refused });
+      set({ phase: resume ? 'paused' : 'denied', error: refused?.text || e?.message || 'The recording could not start.', refused });
       return 'refused';
     }
   };

@@ -150,6 +150,7 @@ globalThis.fetch=async(input,init={})=>{
  const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin'};
  if(p==='/api/auth/google/config') return Response.json({configured:false,popup:false,client_id:null});
  if(p==='/api/health') return Response.json({connectors_oauth:{github:true}});
+ if(p==='/api/public/version') return Response.json({sha:'a'.repeat(40),version_id:null,built_at:null,missing:['version_id','built_at']});
  if(p.startsWith('/api/')) return Response.json({}, {status:503});
  if(p.startsWith('/assets/')) {
   if(process.env.FAULT==='retry' && ['/assets/index-current.js','/assets/lazy-current.js'].includes(p)) {
