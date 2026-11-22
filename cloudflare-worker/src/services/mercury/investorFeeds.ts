@@ -653,7 +653,7 @@ export async function acceptProposal(env: Env, user: User, p: ProposalRow, body:
     // `unreferenced`); a copy that was already there, or that a concurrent accept recorded, is kept.
     if (stored.ok) {
       const named = await env.DB.prepare('SELECT 1 AS x FROM mercury_investor_proposals WHERE id = ? AND result_ref = ?').bind(p.id, key).first().catch(() => true);
-      if (!named) await eraseRecordObjects(env.FILES, key, 'unreferenced').catch(() => {});
+      if (!named) await eraseRecordObjects(env.FILES, key, 'unreferenced', { db: env.DB }).catch(() => {});
     }
     return no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
   }
