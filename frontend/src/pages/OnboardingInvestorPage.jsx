@@ -12,7 +12,7 @@ const ENTITY_FIELDS = [
   ['entity_name', 'Legal entity name'], ['registration_number', 'Registration number'],
   ['signing_authority_name', 'Signing authority · name'], ['signing_authority_title', 'Signing authority · title'],
 ];
-const ENTITY_TYPES = ['llc', 'c_corp', 's_corp', 'b_corp', 'ltd', 'plc', 'gmbh', 'ug', 'ag', 'sa', 'sas', 'sarl', 'bv', 'nv', 'spa', 'srl', 'ab', 'as', 'oy', 'pte_ltd', 'pty_ltd', 'kk', 'gk', 'sole_proprietorship', 'partnership', 'other'];
+const ENTITY_TYPES = [{"value": "llc", "label": "LLC"}, {"value": "c_corp", "label": "C-Corp"}, {"value": "s_corp", "label": "S-Corp"}, {"value": "b_corp", "label": "B-Corp"}, {"value": "ltd", "label": "Ltd"}, {"value": "plc", "label": "PLC"}, {"value": "gmbh", "label": "GmbH"}, {"value": "ug", "label": "UG"}, {"value": "ag", "label": "AG"}, {"value": "sa", "label": "SA"}, {"value": "sas", "label": "SAS"}, {"value": "sarl", "label": "SARL"}, {"value": "bv", "label": "BV"}, {"value": "nv", "label": "NV"}, {"value": "spa", "label": "SpA"}, {"value": "srl", "label": "Srl"}, {"value": "ab", "label": "AB"}, {"value": "as", "label": "AS"}, {"value": "oy", "label": "Oy"}, {"value": "pte_ltd", "label": "Pte Ltd"}, {"value": "pty_ltd", "label": "Pty Ltd"}, {"value": "kk", "label": "KK"}, {"value": "gk", "label": "GK"}, {"value": "sole_proprietorship", "label": "Sole proprietorship"}, {"value": "partnership", "label": "Partnership"}, {"value": "other", "label": "Other"}];
 function EntityDetails({ values, set }) {
   const [state, setState] = useState('loading');
   const [attempt, setAttempt] = useState(0);
@@ -51,7 +51,7 @@ function ReviewAnswers({ values, edit }) {
   const intent = { yes_now: 'Yes, ready to commit this cycle', maybe: 'Open, want more info', deal_only: 'Deal-by-deal only for now', no: 'Not at this time' };
   const entityLabels = Object.fromEntries([...ENTITY_FIELDS, ['entity_type', 'Entity type'], ['registered_country', 'Registered country']]);
   const groups = [
-    ['profile', 'Who you are', [['Investor type', type[values.investor_type] || values.investor_type], ['Firm or family office', values.firm_name], ['Entity details', values._entity_skipped ? 'Skipped' : values._entity ? Object.entries(values._entity).filter(([key, v]) => entityLabels[key] && v).map(([key, v]) => `${entityLabels[key]}: ${v}`).join('; ') : null]]],
+    ['profile', 'Who you are', [['Investor type', type[values.investor_type] || values.investor_type], ['Firm or family office', values.firm_name], ['Entity details', values._entity_skipped ? 'Skipped' : values._entity ? Object.entries(values._entity).filter(([key, v]) => entityLabels[key] && v).map(([key, v]) => `${entityLabels[key]}: ${key === 'entity_type' ? ENTITY_TYPES.find(option => option.value === v)?.label || v : v}`).join('; ') : null]]],
     ['accreditation', 'Accreditation', [['US accreditation status · You told us, not verified', accreditation[values.accreditation_status] || values.accreditation_status], ['Country of residence', values.country]]],
     ['check', 'Check size and stages', [['Typical check size', values.check_size], ['Stages', values.stages]]],
     ['sectors', 'Sectors and regions', [['Sectors', values.sectors], ['Regions', values.geos]]],
