@@ -37,8 +37,8 @@ const FOUNDER = 10, ADVISOR = 12;
 const A = 1;
 const PEOPLE: Array<[number, string, string]> = [[FOUNDER, 'founder', 'Ana Wren'], [ADVISOR, 'founder', 'Dee Advisor']];
 const OLD = '2026-01-01 00:00:00';
-const TODAY = new Date().toISOString().slice(0, 10);
-const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+const TODAY = new Date().toISOString().slice(0, 10); // clock-ok: relative
+const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10); // clock-ok: relative
 
 function fixture(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });

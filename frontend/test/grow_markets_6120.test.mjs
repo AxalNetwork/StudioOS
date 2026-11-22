@@ -190,8 +190,8 @@ test('read only: no Add, no next step, a line that says why', () => {
   assert.doesNotMatch(t, /Score regulation/);
 });
 
-const STEP_TODAY = new Date().toISOString().slice(0, 10);
-const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const STEP_TODAY = new Date().toISOString().slice(0, 10); // clock-ok: relative
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); // clock-ok: relative
 const RECORD = (o = {}) => ({
   title: 'Portugal',
   parts: { market: {
