@@ -185,7 +185,7 @@ export default function PhoneModulePage({
         {bar}
         {tabs}
         {/* D5078 (#5078): a home that `placesSources` draws the Sources region itself (Operating systems › Tools). */}
-        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true,
+        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true, query, onQuery,
           sources: sources ? <Sources phone action={sourcesAction}>{sources}</Sources> : null })}
         {toolLinks.map((item) => (
           <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">

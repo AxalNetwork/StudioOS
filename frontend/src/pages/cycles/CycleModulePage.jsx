@@ -397,8 +397,9 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools). */}
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
+          {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools).
+              D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read. */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, query, onQuery,
             sources: sources ? <Sources action={sourcesAction}>{sources}</Sources> : null })}
           {doors}
           {children}{sources && !home.placesSources && <Sources action={sourcesAction}>{sources}</Sources>}

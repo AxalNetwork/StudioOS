@@ -35,6 +35,7 @@ import { roomGatesAskNda } from '../src/services/dataRoomNda.ts';
 import { checklistRead } from '../src/services/dataRoomActivity.ts';
 import { searchRoom, DIMENSIONS } from '../src/services/dataRoomSearch.ts';
 import { daysLeft, purgeExpiredTrash, readTrash, TRASH_DAYS } from '../src/services/dataRoomTrash.ts';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
@@ -53,6 +54,7 @@ const DAY = 86_400_000;
 
 function freshDb() {
   const db = new DatabaseSync(':memory:');
+  applySuppressionLedger(db); // D6654
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER,
@@ -361,6 +363,7 @@ test('the sweep purges what has had its thirty days, oldest first, and nothing e
 
 test('a database without the Trash column still reads, and Remove refuses rather than deleting', async () => {
   const db = new DatabaseSync(':memory:');
+  applySuppressionLedger(db); // D6654
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT UNIQUE NOT NULL, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);`);
   for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas', 'raise_prospects', 'project_members', 'activity_logs']) {
