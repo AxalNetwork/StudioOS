@@ -8,6 +8,9 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import researchSectors from './research_sectors';
 import type { RouteMount } from '../util/routeRegistry';
+import { refuse } from '../util/refusal';
+import { csvResponse } from '../services/csv';
+import { ObservationQueryError, exportObservations, marketDataExportFilters, observationsCsv } from '../services/researchObservations';
 
 const app=new Hono<{Bindings:Env}>();
 const safeCode=(v:string)=>/^[A-Z]{3}$/.test(v.toUpperCase())?v.toUpperCase():null;
@@ -33,15 +36,14 @@ app.get('/market-data/export.csv',async c=>{
   await requireAuth(c);
   const code=c.req.query('country')?safeCode(c.req.query('country')!):null;
   if(c.req.query('country') && !code) return c.json({detail:'ISO-3 country code required'},400);
-  const sql=`SELECT o.source_id,s.name source_name,s.source_url,s.dataset_or_edition source_dataset_or_edition,
-    o.metric_key,o.metric_label,o.geography_type,o.geography_code,o.period,o.value,o.unit,o.observation_status,
-    o.published_at,o.retrieved_at,s.methodology_url,s.license_or_usage_note,o.confidence,o.vintage,o.supersedes_observation_id
-    FROM research_market_observations o JOIN research_market_sources s ON s.id=o.source_id
-    ${code?"WHERE o.geography_code=?":''} ORDER BY o.geography_code,o.metric_key,o.period`;
-  const r=code?await c.env.DB.prepare(sql).bind(code).all():await c.env.DB.prepare(sql).all();
-  const rows=r.results ?? []; const cols=['source_id','source_name','source_url','source_dataset_or_edition','metric_key','metric_label','geography_type','geography_code','period','value','unit','observation_status','published_at','retrieved_at','methodology_url','license_or_usage_note','confidence','vintage','supersedes_observation_id'];
-  const esc=(v:any)=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  return new Response([cols.join(','),...rows.map((x:any)=>cols.map(k=>esc(x[k])).join(','))].join('\n'),{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="research-market-data.csv"'}});
+  // D7716: one format and one export rule with /api/research/observations/export.csv; every vintage, as before.
+  try {
+    const { rows, omitted } = await exportObservations(c.env, marketDataExportFilters(code));
+    return csvResponse(observationsCsv(rows), 'research-market-data.csv', { 'X-Export-Rows': String(rows.length), 'X-Export-Omitted': JSON.stringify(omitted) });
+  } catch (error) {
+    if (error instanceof ObservationQueryError) return refuse(c, error.status, { code: error.code, message: error.message });
+    throw error;
+  }
 });
 export default app;
 export const mount: RouteMount = { path: '/api/research', router: app, before: [researchSectors] };
