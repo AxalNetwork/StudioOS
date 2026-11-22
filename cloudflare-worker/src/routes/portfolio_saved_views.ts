@@ -3,8 +3,9 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, canViewLpData, selectJwt } from '../auth';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { refuse } from '../util/refusal';
 const router = new Hono<{ Bindings: Env }>();
-class Refused extends Error { readonly status: 400 | 404 | 409; constructor(status: 400 | 404 | 409, message: string) { super(message); this.status = status; } }
+class Refused extends Error { readonly status: 400 | 404 | 409; readonly sentence: string; constructor(status: 400 | 404 | 409, message: string) { super(message); this.status = status; this.sentence = message; } }
 export function portfolioViewSpec(page: unknown, raw: unknown) {
   if (typeof page !== 'string' || !['overview', 'positions'].includes(page) || !raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Refused(400, 'Choose a Portfolio table and valid settings.');
   const value = raw as Record<string, unknown>;
@@ -21,8 +22,9 @@ const versionOf = (raw: unknown) => { if (!Number.isSafeInteger(raw) || Number(r
 const pageOf = (raw: unknown) => { if (typeof raw !== 'string' || !['overview', 'positions'].includes(raw)) throw new Refused(400, 'Choose a Portfolio table.'); return String(raw); };
 const shape = (row: any) => ({ uid: row.uid, page: row.page, name: row.name, spec: JSON.parse(portfolioViewSpec(row.page, JSON.parse(row.spec_json))), version: row.version, updated_at: row.updated_at });
 function failure(c: any, error: any) {
-  const status = error instanceof Refused ? error.status : (Object.hasOwn(AUTH_ERROR_STATUSES, error?.message) ? AUTH_ERROR_STATUSES[error.message] : undefined);
-  return c.json({ error: status ? error.message : 'Saved views are unreadable. Try again.' }, status || 503);
+  if (error instanceof Refused) return refuse(c,error.status,{code:'saved_view_refused',message:error.sentence});
+  const status = Object.hasOwn(AUTH_ERROR_STATUSES,error?.message) ? AUTH_ERROR_STATUSES[error.message] : undefined;
+  return refuse(c,status||503,{code:status?'saved_view_forbidden':'saved_views_unreadable',message:status?'This account cannot access saved views.':'Saved views are unreadable. Try again.',raw:error});
 }
 router.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store');
