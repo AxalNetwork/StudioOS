@@ -53,6 +53,19 @@ export function writeFailureText(error, fallback = 'That did not save.') {
   return fallback;
 }
 
+/**
+ * D4844: the field a refused save names, so the editor can put the sentence on
+ * that field (OF-02b). Only a bounded 400/422 naming a well-formed field counts,
+ * the same rule `writeFailureText` uses for the sentence; anything else is null.
+ */
+export function writeFailureField(error) {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || (code === 'validation_error' ? 422 : 0);
+  if (status !== 400 && status !== 422) return null;
+  const field = error?.field || error?.data?.field;
+  return typeof field === 'string' && /^[a-z][\w.[\]-]{0,79}$/i.test(field) ? field : null;
+}
+
 export function useGuardedWrite(load) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -67,7 +80,7 @@ export function useGuardedWrite(load) {
       await write();
     } catch (e) {
       setNote({
-        ok: false, scope, text: writeFailureText(e, failed),
+        ok: false, scope, text: writeFailureText(e, failed), field: writeFailureField(e),
         retry: () => save(write, opts),
       });
       setBusy(false);
@@ -115,7 +128,12 @@ export function WriteNote({ note, busy = false, onReload }) {
     : note.refreshFailed ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-300';
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="write-note">
-      <p role={note.ok ? 'status' : 'alert'} className={`text-[12px] font-semibold ${tone}`}>{note.text}</p>
+      {/* D4844: a tick, a cross or a warning sign leads the sentence, so saved,
+          not saved and saved-but-not-refreshed differ by shape, not colour alone. */}
+      <p role={note.ok ? 'status' : 'alert'} className={`flex items-start gap-1.5 text-[13px] font-semibold ${tone}`} data-save-status={!note.ok ? 'not-saved' : note.refreshFailed ? 'saved-unrefreshed' : 'saved'}>
+        <span aria-hidden="true">{!note.ok ? '✕' : note.refreshFailed ? '!' : '✓'}</span>
+        <span>{note.text}</span>
+      </p>
       {!note.ok && note.retry && (
         <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => note.retry()}>
           Retry

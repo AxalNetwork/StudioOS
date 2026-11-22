@@ -7,13 +7,18 @@
 Live copies require an approved registry and a verified seven-year destination
 prefix lock. Live restore waits for #6654; restore() always requires a suppression
 checker. No object keys, contents, credentials or manifests are printed.
+
+D6654 supplied it: `file-recovery.py restore` reads the whole D1 record suppression
+ledger first and never puts an erased object back.
 """
 import argparse
 import hashlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
+import sys
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -22,6 +27,15 @@ from urllib.request import Request, urlopen
 
 ARCHIVE_PREFIX = 'files-recovery/'
 RETENTION_DAYS = 2557  # At least seven calendar years, including leap days.
+# D6654: the ledger the Worker's one record-erasure path writes (cloudflare-worker/src/services/recordErasure.ts).
+SUPPRESSION_BUCKET = 'studioos-files'
+LEDGER_PAGE = 5000
+LEDGER_QUERY = ('SELECT id, bucket, key_hash, erased_at FROM record_suppression_ledger '
+                'WHERE id > ? ORDER BY id LIMIT ?')
+# An object written more than this long after its key was erased is a new object under a reused key and may be
+# restored. Anything closer, or with no recorded write time, stays suppressed (clock skew fails toward suppression).
+SUPPRESSION_MARGIN_SECONDS = 300
+PRODUCTION_D1_ID = '16a23acd-c82e-4ff1-a6c0-408e3eb014c8'
 
 
 def sha(data):
@@ -146,8 +160,10 @@ def snapshot(store, registry, run_id=None):
             store.put(archive, data)
             if sha(store.get(archive, archive=True)) != digest:
                 raise ValueError('Archive verification failed; no complete snapshot was recorded.')
+            written = parse_time(getattr(store, 'last_modified', {}).get(key))
             entries.append({'key': key, 'archive': archive, 'sha256': digest, 'size': len(data),
-                            'retention_basis': record_class['retention_basis']})
+                            'retention_basis': record_class['retention_basis'],
+                            'last_modified': written.isoformat() if written else None})
     times = [getattr(store, 'last_modified', {}).get(entry['key']) for entry in entries]
     newest = None
     try:
@@ -169,20 +185,133 @@ def snapshot(store, registry, run_id=None):
     return manifest
 
 
-def restore(store, manifest, target, suppression_check):
-    # Fail closed until the current suppression ledger is available. No default
-    # empty ledger: #6654 provides the live adapter, not this script.
-    if not callable(suppression_check):
+def parse_time(value):
+    """An aware UTC datetime from an R2 LastModified or ledger time, or None when absent or unreadable."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00').replace(' ', 'T', 1))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+class SuppressedObjectRefused(ValueError):
+    """A restore asked for an object the suppression ledger names. Refused, never warned (D6654)."""
+
+
+class SuppressionLedger:
+    """The complete record suppression ledger, read before a restore touches any archive object (D6654)."""
+
+    def __init__(self, rows):
+        self.erased = {}
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get('bucket'), str) or not row['bucket']:
+                raise ValueError('The suppression ledger is unavailable or incomplete.')
+            key_hash = row.get('key_hash')
+            at = parse_time(row.get('erased_at'))
+            if not isinstance(key_hash, str) or not re.fullmatch('[a-f0-9]{64}', key_hash) or at is None:
+                raise ValueError('The suppression ledger is unavailable or incomplete.')
+            slot = (row['bucket'], key_hash)
+            self.erased[slot] = max(self.erased.get(slot, at), at)
+
+    def __len__(self):
+        return len(self.erased)
+
+    def decision(self, entry):
+        """'suppress' when the entry's key was erased and this copy is not clearly a later object; else 'restore'."""
+        erased_at = self.erased.get((SUPPRESSION_BUCKET, sha(entry['key'].encode())))
+        if erased_at is None:
+            return 'restore'
+        written = parse_time(entry.get('last_modified'))
+        if written is None or (written - erased_at).total_seconds() <= SUPPRESSION_MARGIN_SECONDS:
+            return 'suppress'
+        return 'restore'
+
+
+def load_ledger(query):
+    """Read every ledger row through `query(sql, params) -> rows`, page by page. Any failure refuses the restore."""
+    rows, after = [], 0
+    while True:
+        try:
+            page = query(LEDGER_QUERY, [after, LEDGER_PAGE])
+        except Exception as error:
+            raise ValueError('The suppression ledger is unavailable or incomplete.') from error
+        if not isinstance(page, list):
+            raise ValueError('The suppression ledger is unavailable or incomplete.')
+        rows.extend(page)
+        if len(page) < LEDGER_PAGE:
+            return SuppressionLedger(rows)
+        last = page[-1].get('id') if isinstance(page[-1], dict) else None
+        if not isinstance(last, int) or last <= after:
+            raise ValueError('The suppression ledger is unavailable or incomplete.')
+        after = last
+
+
+def sqlite_query(connection):
+    """The ledger query against a SQLite database built from the D1 migrations (the synthetic drill)."""
+    def query(sql, params):
+        connection.row_factory = sqlite3.Row
+        return [dict(row) for row in connection.execute(sql, params).fetchall()]
+    return query
+
+
+def d1_query(account, database_id, token):
+    """The ledger query through the Cloudflare D1 HTTP API. Read-only SQL; the token needs D1 read only."""
+    if not re.fullmatch('[a-f0-9]{32}', account or '') or not re.fullmatch('[a-f0-9-]{36}', database_id or '') or not token:
+        raise ValueError('The suppression ledger is unavailable or incomplete.')
+    url = f'https://api.cloudflare.com/client/v4/accounts/{account}/d1/database/{database_id}/query'
+
+    def query(sql, params):
+        return d1_post(url, token, sql, params)
+    return query
+
+
+def d1_post(url, token, sql, params):
+    request = Request(url, data=json.dumps({'sql': sql, 'params': params}).encode(), method='POST',
+                      headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+    # The URL is a fixed https:// Cloudflare API address; only the hex account and database ids checked above vary.
+    with urlopen(request, timeout=60) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+        result = json.load(response)
+    batches = result.get('result') if result.get('success') else None
+    if not isinstance(batches, list) or len(batches) != 1 or not batches[0].get('success'):
+        raise ValueError('The D1 query failed.')
+    return batches[0].get('results', [])
+
+
+def restore(store, manifest, target, suppression_check, keys=None):
+    """Restore a verified snapshot, skipping every suppressed object; asking for a suppressed one is refused.
+
+    `suppression_check` is the SuppressionLedger read before this call (or, in unit tests, a callable from key to
+    'restore' | 'suppress'). There is no default empty ledger and no override.
+    """
+    if isinstance(suppression_check, SuppressionLedger):
+        decide = suppression_check.decision
+    elif callable(suppression_check):
+        decide = lambda entry: suppression_check(entry['key'])  # noqa: E731
+    else:
         raise ValueError('A current suppression-ledger checker is required (#6654).')
     if manifest.get('version') != 1 or not re.fullmatch('[a-f0-9-]{36}', manifest.get('run_id', '')):
         raise ValueError('Invalid manifest.')
+    entries = manifest['entries']
+    decisions = []
+    for entry in entries:
+        decision = decide(entry)
+        if decision not in ('restore', 'suppress'):
+            raise ValueError('The suppression ledger is unavailable or incomplete.')
+        decisions.append(decision)
+    if keys is not None:
+        wanted = set(keys)
+        if not wanted <= {entry['key'] for entry in entries}:
+            raise ValueError('A requested object is not in this snapshot.')
+        if any(entry['key'] in wanted and decision == 'suppress' for entry, decision in zip(entries, decisions)):
+            raise SuppressedObjectRefused('Restoring an erased object is refused (D6654).')
     target = Path(target)
     target.mkdir(mode=0o700, parents=True, exist_ok=False)
     count = suppressed = 0
-    for entry in manifest['entries']:
-        decision = suppression_check(entry['key'])
-        if decision not in ('restore', 'suppress'):
-            raise ValueError('The suppression ledger is unavailable or incomplete.')
+    for entry, decision in zip(entries, decisions):
+        if keys is not None and entry['key'] not in wanted:
+            continue
         if decision == 'suppress':
             suppressed += 1
             continue
@@ -248,7 +377,27 @@ def receipt(manifest):
             'newest_key_at': manifest.get('newest_key_at'), 'newest_key_at_status': manifest.get('newest_key_at_status', 'unavailable')}
 
 
+def restore_main(argv):
+    """Restore one snapshot into a fresh private directory, after reading the whole suppression ledger (D6654)."""
+    parser = argparse.ArgumentParser(prog='file-recovery.py restore', description=restore_main.__doc__)
+    parser.add_argument('--run-id', required=True, help='The snapshot to restore')
+    parser.add_argument('--target', required=True, help='A fresh private directory; files are named by key hash')
+    parser.add_argument('--d1-database-id', required=True, help='The D1 database that holds record_suppression_ledger')
+    args = parser.parse_args(argv)
+    if not re.fullmatch('[a-f0-9-]{36}', args.run_id):
+        raise ValueError('Invalid snapshot identity.')
+    account = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '')
+    # The ledger first: no archive object is read until the complete ledger is in hand.
+    ledger = load_ledger(d1_query(account, args.d1_database_id, os.environ.get('CLOUDFLARE_API_TOKEN', '')))
+    store = AwsStore(account)
+    manifest = json.loads(store.get(ARCHIVE_PREFIX + args.run_id + '/manifest.json', archive=True))
+    result = restore(store, manifest, args.target, ledger)
+    print(json.dumps({'outcome': 'restored', **result}))
+
+
 def main():
+    if sys.argv[1:2] == ['restore']:
+        return restore_main(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', required=True, help='Approved #6650 registry JSON; no default personal-file prefixes')
     parser.add_argument('--bundle-dir', help='Fresh private staging directory; never uploaded as a workflow artifact')
@@ -273,4 +422,4 @@ if __name__ == '__main__':
     except Exception:
         # AWS/HTTP exceptions can carry paths or operational details: keep them
         # out of public runner logs. Failure never advances a freshness marker.
-        raise SystemExit('File recovery snapshot failed; consult approved configuration and private operator diagnostics.')
+        raise SystemExit('File recovery failed; consult approved configuration and private operator diagnostics.')

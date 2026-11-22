@@ -1,0 +1,618 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-21T14:11:15.962111+00:00",
+  "environment": {
+    "os": "Darwin",
+    "architecture": "arm64",
+    "node": "26.8.1",
+    "python": "3.9.6",
+    "AGENT_ENGINE": "off",
+    "qualification_target": "Linux x86_64; not this host"
+  },
+  "checks": [
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py"
+      ],
+      "exit": 0,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, bundled_npm, upstream_authentication\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py",
+        "--context",
+        "/nonexistent/offline-context"
+      ],
+      "exit": 2,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\n",
+      "stderr": "REFUSED build context: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, bundled_npm, upstream_authentication\n",
+      "interpretation": "Expected refusal, not a successful build-input verification"
+    },
+    {
+      "argv": [
+        "python3",
+        "-c",
+        "import ast,pathlib; ast.parse(pathlib.Path('documentation/operations/runner-image-8008/verify-inputs.py').read_text()); print('Python syntax OK')"
+      ],
+      "exit": 0,
+      "stdout": "Python syntax OK\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-n",
+        "documentation/operations/runner-image-8008/native-probe.sh"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "-e",
+        "const fs=require('node:fs'),cp=require('node:child_process'),path=require('node:path');\nconst npm=fs.realpathSync(cp.execFileSync('which',['npm'],{encoding:'utf8'}).trim());\nconst requireNpm=require('node:module').createRequire(npm),semver=requireNpm('semver');\nconst m=JSON.parse(fs.readFileSync('documentation/operations/runner-image-8008/components.json'));\nconst version=m.artifacts.find(a=>a.name==='node').version;let bad=[],checked=0,excluded=0;\nconst accepts=(values,target)=>!values||(!values.includes('!'+target)&&(values.filter(v=>!v.startsWith('!')).length===0||values.includes(target)));\nfor(const lock of m.locks){const packages=JSON.parse(fs.readFileSync(lock.path)).packages;\n for(const [name,p] of Object.entries(packages)){\n  if(!accepts(p.os,'linux')||!accepts(p.cpu,'x64')||!accepts(p.libc,'glibc')){excluded++;continue;}\n  if(p.engines?.node){checked++;if(!semver.satisfies(version,p.engines.node))bad.push({lock:lock.path,name,range:p.engines.node});}\n }}\nconsole.log(JSON.stringify({targetNode:version,semver:requireNpm('semver/package.json').version,checked,excludedPlatformEntries:excluded,mismatches:bad}));\nif(bad.length)process.exitCode=1;"
+      ],
+      "exit": 0,
+      "stdout": "{\"targetNode\":\"22.23.3\",\"semver\":\"7.8.5\",\"checked\":364,\"excludedPlatformEntries\":192,\"mismatches\":[]}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-decision-ids.mjs"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "interpretation": "Exit 0 but CLI entry guard does not run in a space-containing workspace; not counted as a passing check. Exported API invocation below performs the check."
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "\u2716 check-folder-docs:\n  - cloudflare-worker/src/services/agents/README.md names `skillLibrary.generated.ts`, which exists nowhere in the repo\n  - cloudflare-worker/src/services/agents/skills/README.md points at `../skillLibrary.generated.ts`, which does not exist\n  - frontend/src/lib/README.md names `apiModules.generated.js`, which exists nowhere in the repo\n  - frontend/src/lib/api/README.md points at `../apiModules.generated.js`, which does not exist\n  - frontend/test/README.md points at `frontend/src/lib/apiModules.generated.js`, which does not exist\n  - cloudflare-worker/src/README.md points at `routes/_registry.ts`, which does not exist\n  - cloudflare-worker/src/routes/README.md names `_registry.ts`, which exists nowhere in the repo\n  - scripts/README.md points at `cloudflare-worker/src/routes/_registry.ts`, which does not exist\n  - scripts/README.md points at `frontend/src/lib/apiModules.generated.js`, which does not exist\n  - scripts/lib/README.md names `_registry.ts`, which exists nowhere in the repo\n  - documentation/operations/README.md never mentions its subfolder `runner-image-8008/`\n  - cloudflare-worker/src/util/README.md points at `../routes/_registry.ts`, which does not exist\n"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--exit-code",
+        "db11f2f3da613f3542d2bf8f736acaa35735457d",
+        "d990215df2ed696f6b7572b904afe2c96a653f7b",
+        "--",
+        "scripts/ci/runners/profiles.json",
+        "scripts/ci/runners/job-container.mjs",
+        "scripts/ci/runner-execution.mjs"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--exit-code",
+        "c2fb23a5cc4e440268dce3c65c579a0ee21bf469",
+        "d990215df2ed696f6b7572b904afe2c96a653f7b",
+        "--",
+        "scripts/ci/runners/profiles.json",
+        "scripts/ci/runners/job-container.mjs"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/build-generated.mjs"
+      ],
+      "exit": 0,
+      "stdout": "wrote cloudflare-worker/src/routes/_registry.ts\nwrote frontend/src/lib/apiModules.generated.js\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "\u2716 check-folder-docs:\n  - cloudflare-worker/src/services/agents/README.md names `skillLibrary.generated.ts`, which exists nowhere in the repo\n  - cloudflare-worker/src/services/agents/skills/README.md points at `../skillLibrary.generated.ts`, which does not exist\n  - documentation/operations/README.md never mentions its subfolder `runner-image-8008/`\n"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-decision-appends.mjs"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "interpretation": "Exit 0 but CLI entry guard does not run in a space-containing workspace; not counted as a passing check. Exported API invocation below performs the check."
+    },
+    {
+      "argv": [
+        "uname",
+        "-sm"
+      ],
+      "exit": 0,
+      "stdout": "Darwin arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "v26.8.1\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "python3",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "Python 3.9.6\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-c",
+        "command -v docker"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-c",
+        "command -v syft"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-c",
+        "command -v trivy"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-c",
+        "command -v cosign"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-c",
+        "command -v buildctl"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "sh",
+        "-c",
+        "command -v shellcheck"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {writeFileSync} from 'node:fs'; import {libraryEntries,render,writeAsset,SKILL_LIBRARY_REL} from './scripts/build-skill-library.mjs'; const entries=libraryEntries(); writeFileSync(SKILL_LIBRARY_REL,render(entries)); console.log('wrote '+SKILL_LIBRARY_REL); console.log('wrote '+writeAsset(entries));"
+      ],
+      "exit": 0,
+      "stdout": "wrote cloudflare-worker/src/services/agents/skillLibrary.generated.ts\nwrote frontend/public/skill-library/library-ab5698c3384982dc.json\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "\u2716 check-folder-docs:\n  - documentation/operations/README.md never mentions its subfolder `runner-image-8008/`\n"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {readFileSync} from 'node:fs'; import {allDecisionProblems,readDecisionFiles} from './scripts/check-decision-ids.mjs'; const files=readDecisionFiles(); const errors=allDecisionProblems(readFileSync('documentation/architecture/DECISIONS.md','utf8'),files); console.log(JSON.stringify({filesChecked:files.length,errors})); process.exitCode=errors.length?1:0;"
+      ],
+      "exit": 0,
+      "stdout": "{\"filesChecked\":2297,\"errors\":[]}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {main} from './scripts/check-decision-appends.mjs'; process.exitCode=main();"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines.\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--cached",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py"
+      ],
+      "exit": 0,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, bundled_npm, upstream_authentication\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described.\n",
+      "stderr": "",
+      "phase": "owner-authorized shared README completion"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "owner-authorized shared README completion"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py"
+      ],
+      "exit": 0,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py",
+        "--inspect-runtime-archives",
+        "../s31-8008-delivery/qualification-attempt/inputs"
+      ],
+      "exit": 0,
+      "stdout": "Saved to qualification-attempt/runtime-archive-inspection.json",
+      "stderr": "",
+      "phase": "actual qualification follow-up",
+      "stdout_sha256": "3cb89226bc33340c3da46d603806aa98a21aec245f9f469084c75ba8c449dac0"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described.\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py",
+        "--inspect-runtime-archives",
+        "<temporary-corrupt-input-fixture>"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "REFUSED: runtime archive checksum mismatch: node\n",
+      "phase": "checksum rejection: synthetic corrupted archive, not native runtime qualification"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "check-folder-docs: documentation/operations/runner-image-8008/ holds 8 source files and is not in DOCUMENTED",
+      "phase": "intermediate follow-up layout; resolved by consolidating archive inspection into existing offline verifier rather than adding a second tool; subsequent guard passes"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {readFileSync} from 'node:fs'; import {allDecisionProblems,readDecisionFiles} from './scripts/check-decision-ids.mjs'; const errors=allDecisionProblems(readFileSync('documentation/architecture/DECISIONS.md','utf8'),readDecisionFiles()); console.log(JSON.stringify({errors})); process.exitCode=errors.length?1:0;"
+      ],
+      "exit": 0,
+      "stdout": "{\"errors\":[]}\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {main} from './scripts/check-decision-appends.mjs'; process.exitCode=main();"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines.\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py"
+      ],
+      "exit": 0,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication, operator_engine_baseline\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "sh",
+        "-n",
+        "documentation/operations/runner-image-8008/native-probe.sh"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described.\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {readFileSync} from 'node:fs'; import {allDecisionProblems,readDecisionFiles} from './scripts/check-decision-ids.mjs'; const errors=allDecisionProblems(readFileSync('documentation/architecture/DECISIONS.md','utf8'),readDecisionFiles()); console.log(JSON.stringify({errors})); process.exitCode=errors.length?1:0;"
+      ],
+      "exit": 0,
+      "stdout": "{\"errors\":[]}\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {main} from './scripts/check-decision-appends.mjs'; process.exitCode=main();"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines.\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    }
+  ],
+  "tools": {
+    "docker": {
+      "available": false
+    },
+    "syft": {
+      "available": false
+    },
+    "trivy": {
+      "available": false
+    },
+    "cosign": {
+      "available": false
+    },
+    "buildctl": {
+      "available": false
+    },
+    "shellcheck": {
+      "available": false
+    }
+  },
+  "not_run": [
+    "Dockerfile parse/build (Docker/BuildKit unavailable)",
+    "native Linux runtime probe",
+    "clean native npm ci/shards",
+    "reproducible image builds",
+    "SBOM generation",
+    "immutable image scan",
+    "signature/provenance verification",
+    "actual-node isolation/cancellation/cleanup canary",
+    "full application guard/test suites (no application or executor change; dependencies not installed)",
+    "release-signature/attestation policy authentication; official HTTPS metadata and runtime archive checksums have been corroborated"
+  ],
+  "image_status": "qualification pending",
+  "publication": "Draft source publication authorized by owner; exact remote head/tree and PR receipt are recorded in the latest issue STATUS and local handoff.",
+  "limitations": [
+    "Earlier folder-doc failures are retained as historical evidence. Ignored generated modules were produced using the generator API where necessary. The owner subsequently authorized the shared operations README registration; it is now included, and the latest documentation guard exits 0.",
+    "Engine range reconciliation is a static Linux/glibc selection check, not an npm install or native ABI qualification.",
+    "No Docker parser/build, SBOM, scan, provenance or node qualification was run.",
+    "Decision CLI entry guards also do not execute from this space-containing path; actual decision validation used their exported APIs and recorded output/exits. The initial silent exit-0 calls are not counted as checks."
+  ],
+  "updated_utc": "2026-11-21T23:26:27.750619+00:00",
+  "shared_readme_registration": "Completed locally with explicit owner authorization; documentation guard passes.",
+  "qualification_follow_up": "Verified acquired runtime hashes/static ELF and current published-source compatibility recorded in qualification-progress.json. Native builder/rootfs/node inputs requested from operator; no actual image build, scan or native runtime result exists.",
+  "s09_source_delivery": "Received cumulative c36bf920 snapshot and verified packet checksums, Git head/parent/tree, profiles and syntax; requirements reconciled. Exact source delivery is no longer missing. Native builder/rootfs and intended-node baseline remain unsupplied.",
+  "draft_publication_preparation": {
+    "recorded_utc": "2026-11-22T11:12:09.275411+00:00",
+    "status": "Owner-authorized draft source publication; actual qualification pending",
+    "previous_package_commit": "18fcd5151bdbc7af8063cc045c656da189c2f434",
+    "verified_repository_main": "66a705b7ade7e3188f62f34bdb3e58345d8902d5",
+    "backlog_issue_5719": "closed",
+    "merged_prs": [
+      7972,
+      7981,
+      8055
+    ],
+    "planner_pr_8148": {
+      "pr": 8148,
+      "state": "open, unmerged, ready for review",
+      "head": "29eb838db6a703b9413f06089b40f1130f94c4b9",
+      "owner": "S39 reconciles actual landed/selected immutable revision"
+    },
+    "operator_input_record": "qualification-progress.json:operator_input_record",
+    "actual_qualification_gates": {
+      "native_reproducible_build": "NOT RUN",
+      "build_provenance": "NOT RUN",
+      "image_sbom": "NOT RUN",
+      "immutable_image_scan": "NOT RUN",
+      "signature_and_attestation_verification": "NOT RUN",
+      "image_approval": "NOT RUN",
+      "native_runtime_compatibility": "NOT RUN",
+      "actual_node_isolation_and_cleanup": "NOT RUN"
+    },
+    "scope": "Preparation publication only; no installation, build, scan, native execution, dispatch, registry publication or activation performed",
+    "checks": [
+      {
+        "check": "offline source preflight",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication, operator_engine_baseline"
+      },
+      {
+        "check": "missing build-input refusal",
+        "exit": 2,
+        "status": "EXPECTED REFUSAL; build not run",
+        "stdout_or_stderr": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nREFUSED build context: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication, operator_engine_baseline"
+      },
+      {
+        "check": "folder documentation",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described."
+      },
+      {
+        "check": "decision IDs through exported API",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "PASS decision IDs (2297 files; exported API actually executed)"
+      },
+      {
+        "check": "decision append guard through exported API",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines."
+      },
+      {
+        "check": "Python AST and JSON parsing",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "check": "native probe shell syntax only",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "check": "Git whitespace",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "check": "public-reference/credential-pattern review of publication files",
+        "exit": 0,
+        "status": "PASS"
+      }
+    ],
+    "not_run": [
+      "image build",
+      "provenance/SBOM production",
+      "image scan",
+      "signature verification",
+      "native probe execution",
+      "node compatibility/isolation tests",
+      "full application build/drift for preparation-only publication update"
+    ]
+  },
+  "historical_publication_record": {
+    "recorded_utc": "2026-11-21T14:11:15.962111+00:00",
+    "publication": "none; #5719 hold"
+  }
+}
