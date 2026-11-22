@@ -325,3 +325,20 @@ test('house rules in the source: own projects only, no gate, the bank is Mercury
   assert.doesNotMatch(src, /FillFormTrigger|FillTrigger|Ask Eadwyn to fill/, 'no field trigger until #3706');
   assert.match(src, /import AskButton from '\.\.\/team\/AskButton\.jsx';/, 'Ask is the shared button, which draws nothing until its panel exists');
 });
+
+
+test('D6688: an owned prefilled project reports its formation state instead of a false ownership refusal', async () => {
+  for (const state of ['incorporated', 'in_formation', 'unreadable']) {
+    const fallback = worker();
+    const view = await mount('/incorporate?project=77', { handle: (url, init) => new URL(url, 'http://fixture').pathname === '/api/account/projects'
+      ? response({ projects: [{ id: 77, name: 'Owned project', my_seat: 'owner', formation_state: state, formation_order_id: state === 'in_formation' ? 81 : null }] }) : fallback(url, init) });
+    try {
+      assert.equal(view.has('incorporate-project-state'), true, state);
+      assert.equal(view.has('incorporate-not-yours'), false, state);
+      assert.equal(view.has('incorporate-flow'), false, state);
+      assert.match(view.text(), state === 'incorporated' ? /already incorporated/ : state === 'in_formation' ? /In formation/ : /Unavailable/);
+      if (state === 'in_formation') assert.equal(view.has('formation-order'), true);
+      assert.deepEqual(view.writes(), []);
+    } finally { await view.close(); }
+  }
+});

@@ -389,15 +389,15 @@ function MemberIncorporateFlow({ embedded = false, user, subjectCompany = null }
     if (subjectCompany) setProjects({ status: 'ready', own: [] });
     else accountCompaniesApi.projects().then((r) => {
       if (!Array.isArray(r?.projects)) throw Error('Projects unreadable');
-      if (alive) setProjects({ status: 'ready', own: ownProjects({ projects: r.projects.filter(p => p.formation_state === 'not_incorporated') }), formationUnread: r.projects.some(p => p.my_seat === 'owner' && !['not_incorporated', 'in_formation', 'incorporated'].includes(p.formation_state)) });
+      if (alive) setProjects({ status: 'ready', requested: r.projects.find(p => p.my_seat === 'owner' && String(p.id) === String(asked)) || null, own: ownProjects({ projects: r.projects.filter(p => p.formation_state === 'not_incorporated') }), formationUnread: r.projects.some(p => p.my_seat === 'owner' && !['not_incorporated', 'in_formation', 'incorporated'].includes(p.formation_state)) });
     }).catch(() => { if (alive) setProjects({ status: 'error', own: [] }); });
     return () => { alive = false; };
-  }, [tick, subjectCompany]);
+  }, [tick, subjectCompany, asked]);
 
   // `?project=<id>` prefills once your projects are read; one that is not yours says so.
   useEffect(() => {
     if (projects.status !== 'ready') return;
-    const p = prefill(projects.own, asked);
+    const p = projects.requested && projects.requested.formation_state !== 'not_incorporated' ? { id: null, refused: false } : prefill(projects.own, asked);
     setPrefilled(p);
     if (p.id != null) setPick((x) => (x == null ? p.id : x));
   }, [projects, asked]);
@@ -512,6 +512,14 @@ function MemberIncorporateFlow({ embedded = false, user, subjectCompany = null }
     ['Founders and equity split', cofounder.kind === 'signed' ? `From your Co-founder Agreement · signed${cofounder.on ? ` ${shortDay(cofounder.on)}` : ''}` : cofounder.kind === 'drafted' ? 'Co-founder Agreement drafted, not signed' : cofounder.kind === 'unread' ? 'Could not be read' : 'No Co-founder Agreement yet', 2],
     ['Officers and directors', 'Recorded on the company once it exists', null],
   ];
+
+  // Ownership and formation eligibility are different facts. Never call an owned project ‘not yours’.
+  if (projects.status === 'ready' && projects.requested && projects.requested.formation_state !== 'not_incorporated') {
+    const entry = formationEntry(projects.requested, 'project');
+    return <div className={CARD} data-testid="incorporate-project-state">
+      {entry.state === 'incorporated' ? <p>This project is already incorporated.</p> : <FormationEntry entry={entry} name={projects.requested.name || 'this project'} project onRetry={retry} />}
+    </div>;
+  }
 
   return (
     <div className={`mx-auto flex w-full max-w-5xl flex-col gap-4 ${embedded ? '' : 'px-4 pb-24 pt-6 md:px-7 md:pb-8'}`} data-testid="incorporate-flow" data-step={STEPS[step].id}>
