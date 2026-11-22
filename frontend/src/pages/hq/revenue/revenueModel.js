@@ -800,7 +800,19 @@ export function coverageSources({ summary, statements, disputes, refunds, ceilin
     });
   }
 
-  return out;
+  const metricKeys = { subscriptions: 'subscription_revenue', subsidiaries: 'revenue_per_subsidiary', promotions: 'promo_issued_per_licence' };
+  const replace = out.map((source) => {
+    const key = metricKeys[source.key];
+    if (!key || !isReady(summary) || !summary.metrics?.[key]) return source;
+    return metricCoverage(source.key, source.name, revenueMetric(summary, key, period));
+  });
+  if (!isReady(summary) || summary.metrics?.ai_margin_per_licence) replace.push(metricCoverage('ai_licences', 'AI per licence', revenueMetric(summary, 'ai_margin_per_licence', period)));
+  if (isReady(summary) && summary.metrics?.refunds_and_disputes) replace.push(metricCoverage('financial_events', 'Quarterly refunds and disputes ledger', revenueMetric(summary, 'refunds_and_disputes', period)));
+  if (isReady(summary) && summary.metrics?.licence_fees_invoiced) {
+    const ledgerSource = replace.find((s) => s.key === 'ledger');
+    ledgerSource.metadata = metricCoverage('ledger', 'Licence fees invoiced', revenueMetric(summary, 'licence_fees_invoiced', period)).metadata;
+  }
+  return replace;
 }
 
 /** "N of M sources complete": a live read counts as complete, a loading one does not. */
@@ -899,4 +911,117 @@ export function attentionItems({ summary, statements, disputes, ceilings, period
     }
   }
   return items.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
+
+
+/* D5952 — existing quarterly metric envelopes, never a guessed zero. */
+export function revenueMetric(summary, key, period) {
+  if (!isReady(summary)) return { state: pendingState(summary), reason: 'The revenue summary has not been read.', values: null };
+  const m = summary.metrics?.[key];
+  if (!m) return { state: 'not_recorded', reason: 'This source has not recorded a metric.', values: null };
+  if (m.period !== period) return { state: 'unavailable', reason: 'The metric does not match the selected period.', values: null };
+  const state = ({ complete: 'recorded', incomplete: 'incomplete', not_recorded: 'not_recorded', not_available: 'not_recorded', unreadable: 'unavailable' })[m.state];
+  return { ...m, state: state || 'unavailable', values: ['complete', 'incomplete'].includes(m.state) ? m.values : null };
+}
+
+export function metricMoney(metric, amount, currency, { stale = false, micro = false } = {}) {
+  if (!['recorded', 'incomplete'].includes(metric.state)) return { state: metric.state, text: null };
+  const n = finite(amount);
+  if (n === null || !currencyCode(currency)) return { state: 'not_recorded', text: null };
+  const incomplete = metric.state === 'incomplete';
+  const text = micro ? formatMicro(n, currency) : money(n, currency);
+  return { state: stale ? 'stale' : incomplete ? 'incomplete' : n === 0 ? 'zero' : 'recorded', text: incomplete ? `${text}+` : text };
+}
+
+export function subscriptionLines(summary, period) {
+  const metric = revenueMetric(summary, 'subscription_revenue', period);
+  const rows = metric.values?.by_currency;
+  return { metric, rows: Array.isArray(rows) ? rows.map((r) => ({
+    currency: r.currency,
+    gross: metricMoney(metric, r.gross_cents, r.currency),
+    refunds: metricMoney(metric, r.refund_cents, r.currency),
+    net: metricMoney(metric, r.net_cents, r.currency),
+  })) : [] };
+}
+
+export function subsidiaryMetricRows(summary, period, currentPeriod, nowMs, licenceUid) {
+  const metric = revenueMetric(summary, 'revenue_per_subsidiary', period);
+  return { metric, rows: (metric.values?.by_licence || []).filter((r) => !licenceUid || r.licence_uid === licenceUid).map((r) => {
+    const age = ageDays(r.reported_at, nowMs);
+    const stale = r.reported && period === currentPeriod && age !== null && age > STALE_REPORT_DAYS;
+    return { ...r, name: r.brand_name || r.licence_ref || r.licence_uid,
+      report: { state: !r.reported ? 'not_reported' : stale ? 'stale' : 'recorded', text: !r.reported ? 'Not reported' : stale ? `Stale · ${age} d ago` : 'Reported' },
+      streams: (r.streams || []).map((x) => ({ ...x,
+        figure: ['unreadable', 'not_available', 'not_recorded'].includes(x.state)
+          ? { state: x.state === 'unreadable' ? 'unavailable' : 'not_recorded', text: null }
+          : metricMoney({ state: x.is_estimate ? 'incomplete' : 'recorded' }, x.gross_cents, x.currency, { stale }),
+      })),
+    };
+  }) };
+}
+
+export function licenceAiRows(summary, period, licenceUid) {
+  const metric = revenueMetric(summary, 'ai_margin_per_licence', period);
+  const detail = metric.incomplete_detail || {};
+  return { metric,
+    unattributed: finite(metric.values?.unattributed_runs ?? detail.unattributed),
+    preMigration: finite(metric.values?.pre_migration_runs ?? detail.pre_migration),
+    rows: (metric.values?.by_licence || []).filter((r) => !licenceUid || r.licence_uid === licenceUid).map((r) => ({ ...r,
+      billed: metricMoney(metric, r.billed_microusd, 'USD', { micro: true }),
+      cost: metricMoney(metric, r.cost_microusd, 'USD', { micro: true }),
+      margin: metricMoney(metric, r.margin_microusd, 'USD', { micro: true }),
+    })),
+  };
+}
+
+/** Join only the exact period, licence and currency. A stale report keeps its dated figure. */
+export function promoMetricFacts(summary, row, period) {
+  const metric = revenueMetric(summary, 'promo_issued_per_licence', period);
+  const line = row.period === period ? metric.values?.by_licence?.find((x) => x.licence_uid === row.licence_uid && x.currency === row.currency) : null;
+  const usable = line && ['reported', 'stale'].includes(line.issued_state) && finite(line.issued_cents) !== null && line.reported_at;
+  const state = !['recorded', 'incomplete'].includes(metric.state) ? metric.state
+    : line?.issued_state === 'unreadable' ? 'unavailable' : 'not_reported';
+  if (!usable) return { issued: { state, text: null }, remaining: { state, text: null }, reportedAt: null };
+  const opts = { stale: line.issued_state === 'stale' };
+  // The ceiling must still be the one this report describes, including after an edit.
+  const ceiling = finite(line.ceiling_cents);
+  return {
+    issued: metricMoney({ state: 'recorded' }, line.issued_cents, line.currency, opts),
+    remaining: ceiling !== null && ceiling === finite(row.ceiling_cents)
+      ? metricMoney({ state: 'recorded' }, Math.max(0, ceiling - line.issued_cents), line.currency, opts)
+      : { state: 'not_recorded', text: null },
+    reportedAt: line.reported_at,
+  };
+}
+
+
+function metricCoverage(key, name, m) {
+  return { key, name, state: ({ recorded: 'complete', incomplete: 'partial' })[m.state] || m.state,
+    reason: m.reason || 'The source reported the selected period.',
+    metadata: [
+      ['Source', m.source || 'Not recorded'], ['Period', m.period || 'Not recorded'],
+      ['Currency', Array.isArray(m.currencies) && m.currencies.length ? m.currencies.join(', ') : 'Not recorded'],
+      ['Last reconciled', m.last_reconciled_at || 'Not recorded'],
+      ['Reconciliation basis', m.last_reconciled_basis || 'Not recorded'],
+      ['Coverage begins', m.coverage?.recorded_from || 'Not recorded'],
+      ['Coverage basis', m.coverage?.recorded_by || 'Not recorded'],
+      ['Gap', m.incomplete_rows === null || m.incomplete_rows === undefined ? 'Not recorded' : String(m.incomplete_rows)],
+      ...Object.entries(m.incomplete_detail || {}).map(([k, v]) => [k.replaceAll('_', ' '), String(v)]),
+    ],
+  };
+}
+
+
+/** Scope options are the union of the actual licence-bearing reads, never a platform-wide allocation. */
+export function revenueScopes(summary, period) {
+  if (!isReady(summary)) return [];
+  const rows = summary.usage_coverage?.available ? [...(summary.usage_coverage.by_licence || [])] : [];
+  for (const key of ['revenue_per_subsidiary', 'ai_margin_per_licence', 'promo_issued_per_licence']) {
+    const metric = revenueMetric(summary, key, period);
+    rows.push(...(metric.values?.by_licence || []));
+  }
+  const options = new Map();
+  for (const row of rows) if (row.licence_uid && !options.has(row.licence_uid)) options.set(row.licence_uid,
+    { licence_uid: row.licence_uid, name: row.brand_name || row.licence_ref || row.licence_uid });
+  return [...options.values()];
 }
