@@ -225,6 +225,20 @@ export function RaiseInvestorActivity({ view, addHref = null, openHref, readOnly
   );
 }
 
+/**
+ * D8258 (RA-06): a connected source's freshness beside its last read: Fresh, Stale (the shared chip, with the
+ * source's window) or, with no last read stored, Not recorded. An older read with no freshness shows its last read only.
+ */
+function SourceFreshness({ r }) {
+  const read = <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="raise-source-last-read">{lastRead(r.asOf)}</span>;
+  if (r.freshness === 'fresh') return <><span className="text-[11.5px] font-bold text-emerald-700 dark:text-emerald-300" data-freshness="fresh">Fresh</span>{read}</>;
+  if (r.freshness === 'stale') {
+    return <><StateChip kind="stale" lastGood={r.asOf} data-freshness="stale" />{r.window ? <span className="sr-only">{`Older than ${r.window}.`}</span> : null}{read}</>;
+  }
+  if (r.freshness === 'not_recorded') return <span data-freshness="not_recorded" className="contents">{read}</span>;
+  return read;
+}
+
 /** RA-06: connected evidence: one message and Connect sources with nothing connected; otherwise one row per source. */
 export function RaiseConnectedEvidence({ view, readOnly = false, onRetry }) {
   if (!view) return null;
@@ -251,13 +265,16 @@ export function RaiseConnectedEvidence({ view, readOnly = false, onRetry }) {
               {r.state === 'connected'
                 ? <span className="text-axal-ink/80 dark:text-gray-300">{r.fact || 'Not recorded'}</span>
                 : r.state === 'not_connected' ? <span className={SUB}>Not connected</span>
-                  : <span className={SUB}>{r.label} could not be read.</span>}
-              <span className="flex items-center gap-2 sm:justify-end">
+                  : r.state === 'disconnected' ? <span className={SUB}>{r.label} was disconnected. Its figures are not read until it is reconnected.</span>
+                    : <span className={SUB}>{r.label} could not be read.</span>}
+              <span className="flex flex-wrap items-center gap-2 sm:justify-end">
                 {r.state === 'connected'
-                  ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="raise-source-last-read">{lastRead(r.asOf)}</span>
+                  ? <SourceFreshness r={r} />
                   : r.state === 'unreadable'
                     ? <><StateChip kind="unavailable" />{onRetry ? <button type="button" onClick={onRetry} className={LINK} aria-label={`Try reading ${r.label} again`}>Try again</button> : null}</>
-                    : !readOnly ? <Link to={connect} className={LINK} aria-label={`Connect ${r.label}`}>Connect</Link> : null}
+                    : r.state === 'disconnected'
+                      ? <><span className="text-[11.5px] font-bold text-amber-800 dark:text-amber-300" data-testid="raise-source-disconnected">Disconnected</span>{!readOnly ? <Link to={connect} className={LINK} aria-label={`Reconnect ${r.label}`}>Reconnect</Link> : null}</>
+                      : !readOnly ? <Link to={connect} className={LINK} aria-label={`Connect ${r.label}`}>Connect</Link> : null}
               </span>
             </li>
           ))}

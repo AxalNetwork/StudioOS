@@ -62,7 +62,8 @@ export function materialWords(slug: string, state: string): string | null {
   return CARD_WORD[state] ?? null;
 }
 
-const TOOL_WORD = { connected: 'Connected', not_connected: 'Not connected', unreadable: 'Unavailable' } as const;
+// D8258: a lost connection is its own word, never Connected or Unavailable.
+const TOOL_WORD = { connected: 'Connected', not_connected: 'Not connected', disconnected: 'Disconnected', unreadable: 'Unavailable' } as const;
 const IN_TALKS = ['contacted', 'meeting', 'diligence'];
 
 class Unreadable extends Error {}
