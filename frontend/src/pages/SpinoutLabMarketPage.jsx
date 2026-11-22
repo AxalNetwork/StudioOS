@@ -1,28 +1,8 @@
-// Spin-Out Lab "Market Intel" tool page — TAM/SAM sizing + live market
-// signal, per the design handoff (Market Intel .dc screenshots / repo
-// spin-out-lab-pipeline/project). Every number is real:
-//   - TAM / SAM / SOM come from the founder's project record (recalculated
-//     here via the assumptions drawer — the Week-1 "Size your market"
-//     deliverable) via PUT /projects/:id. The TWELVE INPUTS behind them persist
-//     too, since migration 247, in project_market_assumptions via
-//     /projects/:id/market-assumptions — they used to be page-local session
-//     state, so the page kept the conclusion and dropped the derivation the
-//     moment a tab closed.
-//   - Market dynamics / segments come from the platform Market-Intel
-//     aggregator (sector compass + founder lens), matched to the project's
-//     sector. Growth-outlook rows are founder assumptions, labeled as such.
-//   - Sources & research log list the aggregator's actual data sources and
-//     recent citations; founder-added sources are local-only and say
-//     "not saved yet" (no backend endpoint exists for them).
-//   - Competitors persist through the real Competitor Analysis API
-//     (/competitors) — the same records the Competitor Analysis tool edits.
-//   - Investor signals are the REAL anonymised fit matches from
-//     /market-intel/fit/founder/:id (identity disclosure is NDA-gated
-//     platform-wide, so names stay masked here — honestly, not decoratively).
-// The positioning map's dot placement is a deterministic sketch hashed from
-// competitor names (labeled illustrative on-page) — never presented as
-// measured data. The design's fake investor Focus/Stage columns are NOT
-// reproduced (the fit payload doesn't carry them).
+// Spin-Out Lab Market intelligence: saved project figures and versioned Worker sizing.
+// D7706 (#7706): the drawer previews on the Worker and saves inputs, figures,
+// method and named source as one version. Nothing on this page invents sizing
+// percentages or infers missing inputs from old totals. Market signals,
+// competitors, Eadwyn input marks and their explicit accept/reload remain separate.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -42,6 +22,7 @@ import LabPageShell from '../components/spinout/LabPageShell';
 import Sheet from '../ui/Sheet.jsx';
 import { api, spinoutLab } from '../lib/api';
 import { cycleValidateApi } from '../lib/api/cycleValidate';
+import { marketSizingApi } from '../lib/api/marketSizing.js';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -93,7 +74,7 @@ const GHOST_SM = 'h-[26px] px-2.5 rounded-[7px] border border-gray-200 dark:bord
 
 export function fmtMoney(v) {
   const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) return null;
+  if (v == null || v === '' || !Number.isFinite(n) || n < 0) return null;
   if (n >= 1e12) return `$${+(n / 1e12).toFixed(1)}T`;
   if (n >= 1e9) return `$${+(n / 1e9).toFixed(1)}B`;
   // 1 decimal below $10M so $2.4M doesn't flatten to $2M; values that would
@@ -102,6 +83,21 @@ export function fmtMoney(v) {
   if (n >= 1e3) return `$${+(n / 1e3).toFixed(0)}K`;
   return `$${n}`;
 }
+
+export const marketFigureDefined = value => value != null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
+export function sizingRequest(assumptions, sourceId) {
+  return { assumptions: { ...assumptions, segFilter: [...(assumptions.segFilter || [])] }, marketFigureSource: sizingProvenance(assumptions.methodology, sourceId) };
+}
+export function currentSizingVersion(version, project) {
+  return Boolean(version && version.current && version.recomputes && Array.isArray(version.formula) &&
+    ['tam', 'sam', 'som'].every(key => marketFigureDefined(project?.[key]) && Number(project[key]) === Number(version[key])));
+}
+export function marketShare(value, total) {
+  if (!marketFigureDefined(value) || !marketFigureDefined(total)) return null;
+  return Number(value) === 0 ? 0 : Number(total) > 0 ? Math.round(Number(value) / Number(total) * 100) : null;
+}
+const SIZING_INPUT_IDS = { population: 'input-population', acv: 'input-acv', tamOverride: 'input-tam', tamOverrideReason: 'input-tam-reason', samPct: 'input-sam', winRate: 'input-som', capacity: 'input-capacity', horizonMonths: 'input-horizon', salesCycleMonths: 'input-sales-cycle', retentionPct: 'input-retention' };
+const sizingFields = error => error?.data?.fields || (error?.data?.field ? [error.data.field] : []);
 
 // Match the project's free-text sector to an aggregator sector row.
 export function matchSectorRow(rows, sector) {
@@ -143,26 +139,10 @@ const DIM_LABELS = {
 };
 
 // ---------------------------------------------------------------------------
-// Assumptions (drawer) — PERSISTED since migration 247, in
-// `project_market_assumptions` via GET/PUT /projects/:id/market-assumptions.
-//
-// They used to be page-local session state, and this comment used to say so: only
-// TAM/SAM/SOM were saved and "the other fields need backend columns (or a
-// project_market_assumptions table) that don't exist yet". What that cost was a
-// page keeping the CONCLUSION and dropping the derivation — a founder typed a
-// population, an ACV, a geography, a CAGR, pressed Recalculate, and came back to
-// three numbers with nothing behind them. The inversions below are still here as
-// the FALLBACK for a project sized before 247, where the saved ratios are the
-// only trace of what the founder chose.
-//
-// Nothing seeds from an invented market number. Everything the store has no value
-// for starts empty, because empty is what the page says it means: not researched
-// yet.
-// ---------------------------------------------------------------------------
-function seedAssumptions(p, saved) {
-  const tam = Number(p?.tam) || 0;
-  const sam = Number(p?.sam) || 0;
-  const som = Number(p?.som) || 0;
+// Assumptions are read from the stored drawer inputs. Save uses the Worker’s
+// versioned model to commit those inputs, figures, method and source together.
+// Only recorded inputs seed calculation fields; old totals cannot reconstruct them.
+export function seedAssumptions(p, saved) {
   // A saved value always wins. `??` and not `||`: a field the founder cleared
   // comes back as null and must stay cleared rather than re-seed from the
   // project, and '0' is a figure somebody typed.
@@ -178,10 +158,12 @@ function seedAssumptions(p, saved) {
     population: s('population'),
     acv: s('acv'),
     tamOverride: s('tamOverride'),
-    // Real inversions of the calculator, for a project sized before 247 saved the
-    // percentages the founder actually chose.
-    samPct: s('samPct', tam > 0 && sam > 0 ? String(Math.round((sam / tam) * 100)) : ''),
-    winRate: s('winRate', sam > 0 && som > 0 ? String(Math.round(((som / sam) / 2.2) * 100)) : ''),
+    samPct: s('samPct'),
+    winRate: s('winRate'),
+    horizonMonths: s('horizonMonths'),
+    salesCycleMonths: s('salesCycleMonths'),
+    retentionPct: s('retentionPct'),
+    tamOverrideReason: s('tamOverrideReason'),
     runway: s('runway'),
     capacity: s('capacity'),
     // Stays empty until the founder sets it — visuals fall back to the design's
@@ -309,6 +291,48 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const [shared, setShared] = useState(false);
   // Assumptions drawer (spec A) — persisted since 247, see seedAssumptions().
   const [assume, setAssume] = useState(() => seedAssumptions(null));
+  const [sizingSourceId, setSizingSourceId] = useState('');
+  const [preview, setPreview] = useState({ state: 'idle', result: null });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [versionRead, setVersionRead] = useState({ state: 'loading', version: null });
+  const projectIdentity = useRef(null);
+  projectIdentity.current = project?.id ?? null;
+  const savingRef = useRef(false);
+  useEffect(() => {
+    if (!project?.id) return undefined;
+    let alive = true;
+    const id = project.id;
+    setVersionRead({ state: 'loading', version: null });
+    (async () => {
+      try {
+        const list = await marketSizingApi.versions(id);
+        const latest = list.versions?.[0];
+        const value = latest ? await marketSizingApi.version(id, latest.uid) : null;
+        if (alive && projectIdentity.current === id) setVersionRead({ state: 'ok', version: value?.version || null });
+      } catch {
+        if (alive && projectIdentity.current === id) setVersionRead({ state: 'unreadable', version: null });
+      }
+    })();
+    return () => { alive = false; };
+  }, [project?.id, project?.tam, project?.sam, project?.som]);
+  useEffect(() => {
+    if (!editOpen || !project?.id) return undefined;
+    let alive = true;
+    const id = project.id;
+    setPreview({ state: 'loading', result: null });
+    setFieldErrors({});
+    marketSizingApi.preview(id, sizingRequest(assume, sizingSourceId)).then(reply => {
+      if (alive && projectIdentity.current === id) setPreview({ state: 'ok', result: reply.result });
+    }).catch(error => {
+      if (!alive || projectIdentity.current !== id) return;
+      setPreview({ state: 'unreadable', result: null, message: error?.message || 'The calculation could not be checked. Try again.' });
+      setFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
+    });
+    return () => { alive = false; };
+  }, [editOpen, project?.id, assume, sizingSourceId]);
+  const fieldState = key => ({ id: SIZING_INPUT_IDS[key], 'aria-invalid': Boolean(fieldErrors[key]) || undefined, 'aria-describedby': fieldErrors[key] ? `${SIZING_INPUT_IDS[key]}-error` : undefined });
+  const fieldError = key => fieldErrors[key] ? <p id={`${SIZING_INPUT_IDS[key]}-error`} className="text-[11.5px] text-red-700 dark:text-red-400" role="alert">{fieldErrors[key]}</p> : null;
+
   // WHICH FIGURES EADWYN SUPPLIED — and only the ones that are STILL its figures.
   // The server compares each provenance row against what the row holds now, so a
   // figure the founder has since typed over comes back unmarked: a label reading
@@ -383,7 +407,6 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const [srcForm, setSrcForm] = useState({ title: '', type: 'Report' });
   // D6011 (#6011): the source the three figures are saved with — one of
   // `founderSources` by id, or '' for none named. Seeded from the current TAM row.
-  const [sizingSourceId, setSizingSourceId] = useState('');
 
   useEffect(() => () => clearInterval(animRef.current), []);
 
@@ -487,8 +510,8 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
     setEditOpen(true);
   };
 
-  const setA = (k) => (e) => setAssume((a) => ({ ...a, [k]: e.target.value }));
-  const setAV = (k, v) => setAssume((a) => ({ ...a, [k]: v }));
+  const setA = (k) => (e) => { if (!saving) setAssume((a) => ({ ...a, [k]: e.target.value })); };
+  const setAV = (k, v) => { if (!saving) setAssume((a) => ({ ...a, [k]: v })); };
   const toggleSeg = (name) =>
     setAssume((a) => {
       const cur = a.segFilter || [];
@@ -523,93 +546,39 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
     }, 16);
   };
 
-  // "Recalculate market sizing" — the design's math (1596-1605), then the
-  // existing persistence flow: PUT /projects/:id {tam,sam,som} + the
-  // market_sizing_completed milestone. Only those three fields are saved.
+  // D7706: only the Worker sizes and commits the version; cards change after that commit succeeds.
   const recalcMarket = async () => {
-    if (!project) return;
-    const f = assume;
-    const pop = parseFloat(f.population) || 0;
-    const acv = parseFloat(f.acv) || 0;
-    const tamCalc = (pop * acv) / 1e6; // $M
-    const curM = Number(project.tam) > 0 ? Number(project.tam) / 1e6 : 0;
-    const tamM = parseFloat(f.tamOverride) || tamCalc || curM;
-    const samM = tamM * ((parseFloat(f.samPct) || 14) / 100);
-    const somM = samM * ((parseFloat(f.winRate) || 8) / 100) * 2.2;
-    if (!(tamM > 0)) {
-      setSaveError('Add an addressable population × ACV (or a TAM override) so there is something to calculate.');
-      return;
-    }
-    if ([tamM, samM, somM].some((v) => !Number.isFinite(v) || v < 0)) {
-      setSaveError('Assumptions must be positive numbers.');
-      return;
-    }
-    const tam = Math.round(tamM * 1e6);
-    const sam = Math.round(samM * 1e6);
-    const som = Math.round(somM * 1e6);
-    if (sam > tam) {
-      setSaveError('SAM should not exceed TAM — it is the serviceable slice of it.');
-      return;
-    }
-    if (som > sam) {
-      setSaveError('SOM should not exceed SAM — it is the obtainable slice of it.');
-      return;
-    }
-    setSaving(true);
-    setSaveError('');
-    finishRef.current = { tween: false, saved: false };
-    tweenTo({ tam, sam, som });
+    if (!project || savingRef.current) return;
+    const id = project.id;
+    const request = sizingRequest(assume, sizingSourceId);
+    savingRef.current = true; setSaving(true); setSaveError(''); setFieldErrors({});
     try {
-      const updated = await api.updateProject(project.id, { tam, sam, som, market_figure_source: sizingProvenance(f.methodology, sizingSourceId) });
-      setProject((prev) => ({ ...prev, ...updated }));
-      // D6011: the figures saved but their `market_figures` rows did not; said, not hidden.
-      const sourceSaved = updated?.market_figures?.recorded !== null;
-      // THE REASONING GOES WITH THE RESULT, since migration 247. Saved AFTER the
-      // three figures and not instead of them: `projects.tam/.sam/.som` stay the
-      // canonical derived values every other surface reads, and this is what they
-      // were derived FROM. A failure here does not fail the recalculation — the
-      // figures are saved and correct — but it is reported, because assumptions
-      // that silently did not persist are what this page did for its whole life.
-      let assumptionsSaved = true;
+      const reply = await marketSizingApi.saveVersion(id, request);
+      if (projectIdentity.current !== id) return;
+      const version = reply.version;
+      const figures = { tam: version.tam, sam: version.sam, som: version.som };
+      finishRef.current = { tween: false, saved: true };
+      tweenTo(figures);
+      setProject(prev => ({ ...prev, ...figures }));
+      setVersionRead({ state: 'ok', version });
+      setEditOpen(false);
+      // These are separate workflow marks, earned only after the atomic sizing save.
+      try { await markMilestone(user, 'market_sizing_completed'); }
+      catch (error) { reportError('SpinoutLabMarketPage:mark-sizing', error); }
       try {
-        await api.saveMarketAssumptions(project.id, {
-          category: f.category, geography: f.geography, targetYear: f.targetYear,
-          methodology: f.methodology, population: f.population, acv: f.acv,
-          tamOverride: f.tamOverride, samPct: f.samPct, winRate: f.winRate,
-          runway: f.runway, capacity: f.capacity, cagr: f.cagr,
-          growthDriver: f.growthDriver, maturity: f.maturity, segFilter: f.segFilter,
-        });
-      } catch (e) {
-        reportError('SpinoutLabMarketPage:assumptions', e);
-        assumptionsSaved = false;
-        setSaveError('Your sizing saved. The assumptions behind it did not — press Recalculate again to keep them.');
-      }
-      if (!sourceSaved) {
-        assumptionsSaved = false;
-        setSaveError('Your sizing saved. Where it came from did not — press Recalculate again to keep it.');
-      }
-      // W1 deliverable — sizing counts once both TAM and SAM are on record
-      // (citations aggregate automatically from MI sources for the sector).
-      if (tam != null && sam != null) await markMilestone(user, 'market_sizing_completed');
-      finishRef.current.saved = true;
-      if (finishRef.current.tween) setAnim(null);
-      setAssumptionsReviewed(true);
-      if (project?.id) {
-        cycleValidateApi.setMarketMark(project.id, 'assumptions_reviewed', true)
-          .catch((e) => reportError('SpinoutLabMarketPage:mark-assumptions', e));
-      }
-      // THE DRAWER STAYS OPEN WHEN THE ASSUMPTIONS DID NOT LAND, because
-      // `saveError` is drawn inside it: closing would file the one message that
-      // says what was lost behind a panel nobody has a reason to reopen, which is
-      // the silent failure this whole change exists to end.
-      if (assumptionsSaved) setEditOpen(false);
-    } catch (e) {
-      reportError('SpinoutLabMarketPage:save', e);
-      clearInterval(animRef.current);
-      setAnim(null); // revert the cards to the saved record
-      setSaveError("Couldn't save your sizing. Try again.");
+        await cycleValidateApi.setMarketMark(id, 'assumptions_reviewed', true);
+        if (projectIdentity.current === id) setAssumptionsReviewed(true);
+      } catch (error) { reportError('SpinoutLabMarketPage:mark-assumptions', error); }
+    } catch (error) {
+      if (projectIdentity.current !== id) return;
+      reportError('SpinoutLabMarketPage:save', error);
+      setFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
+      setSaveError('Couldn’t save. Your edits are kept here. Nothing changed on the page.');
+      const field = sizingFields(error)[0];
+      document.getElementById(SIZING_INPUT_IDS[field])?.focus?.();
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (projectIdentity.current === id) setSaving(false);
     }
   };
 
@@ -773,14 +742,16 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const tamTxt = fmtMoney(anim ? anim.tam : project?.tam);
   const samTxt = fmtMoney(anim ? anim.sam : project?.sam);
   const somTxt = fmtMoney(anim ? anim.som : project?.som);
-  const samPct = project?.tam && project?.sam ? Math.round((project.sam / project.tam) * 100) : null;
-  const somPct = project?.sam && project?.som ? Math.round((project.som / project.sam) * 100) : null;
+  const samPct = marketShare(project?.sam, project?.tam);
+  const somPct = marketShare(project?.som, project?.sam);
+  const version = versionRead.version;
+  const versionCurrent = currentSizingVersion(version, project);
 
   // ---- Readiness checklist (spec F, design 2181-2192) ----
   const checklist = [
-    { label: 'TAM defined', done: Number(project?.tam) > 0 },
-    { label: 'SAM defined', done: Number(project?.sam) > 0 },
-    { label: 'SOM defined', done: Number(project?.som) > 0 },
+    { label: 'TAM defined', done: marketFigureDefined(project?.tam) },
+    { label: 'SAM defined', done: marketFigureDefined(project?.sam) },
+    { label: 'SOM defined', done: marketFigureDefined(project?.som) },
     { label: 'Sources added (min 2)', done: citRows.length + founderSources.length >= 2 },
     { label: 'Market growth rate added', done: Boolean(assume.cagr) },
     { label: 'Competitive landscape (min 3 competitors)', done: compRows.length >= 3 },
@@ -798,9 +769,8 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
         : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300';
 
   // ---- Growth outlook (spec E, design 2077-2088) — founder assumptions ----
-  // Design fallback: parseFloat(cagr)||24; the pill says "(default)" until the
-  // founder actually sets a rate, so the fallback never masquerades as data.
-  const cagrPct = parseFloat(assume.cagr) || 24;
+  // Only a blank CAGR uses the visibly labelled design fallback; a typed zero is zero.
+  const cagrPct = assume.cagr === '' ? 24 : Number(assume.cagr);
   const sparkTamM = ((anim ? anim.tam : Number(project?.tam)) || 0) / 1e6;
   let spark = null;
   if (sparkTamM > 0) {
@@ -818,10 +788,10 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const compShown = compRows.slice(0, 6); // design caps the grid at 6
   const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
 
-  // D1317: the sizing drawer's fixed footer — the error line and Recalculate.
+  // D1317/D7706: one fixed footer save, with the failed-save edits kept (V18).
   const sizingFooter = (
     <>
-      {saveError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-2.5" data-testid="sizing-error">{saveError}</div>}
+      {saveError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-2.5" role="alert" data-testid="sizing-error">{saveError}</div>}
       <button
         type="button"
         data-testid="button-save-sizing"
@@ -829,9 +799,9 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
         disabled={saving}
         className="w-full h-[42px] rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[13.5px] font-bold disabled:opacity-60 inline-flex items-center justify-center gap-2"
       >
-        {saving && <Loader2 size={14} className="animate-spin" />} Recalculate market sizing
+        {saving && <Loader2 size={14} className="animate-spin" />} {saving ? 'Saving…' : saveError ? 'Try again' : 'Save'}
       </button>
-      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed text-center">Recalculating updates TAM, SAM, SOM cards and the Pitch Deck Market slide automatically.</div>
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed text-center">Save keeps the inputs, figures and source together and updates the cards and Pitch Deck Market slide.</div>
     </>
   );
 
@@ -1052,26 +1022,13 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
             {methodOpen && (
               <div className="px-5 pb-4 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-3" data-testid="methodology-body">
                 <div className="flex flex-col gap-2.5 mt-3.5">
-                  {[
-                    {
-                      tag: 'TAM',
-                      method: 'Top-down',
-                      desc: 'Addressable population × average contract value — or your direct override.',
-                      why: 'Saved on your startup record; the deck’s Market slide cites it.',
-                    },
-                    {
-                      tag: 'SAM',
-                      method: 'Segmented top-down',
-                      desc: 'TAM filtered to the share you can actually reach (% reachable × segment focus).',
-                      why: samPct != null ? `${samPct}% of TAM on your record.` : 'Set % reachable in the assumptions drawer.',
-                    },
-                    {
-                      tag: 'SOM',
-                      method: 'Bottom-up',
-                      desc: 'Reachable share × win rate, modeled on sales capacity.',
-                      why: somPct != null ? `${somPct}% of SAM on your record.` : 'Set win rate in the assumptions drawer.',
-                    },
-                  ].map((m) => (
+                  {versionRead.state === 'loading' ? <p role="status">Reading the saved sizing version…</p> : versionRead.state === 'unreadable'
+                    ? <p role="alert">Unavailable: the saved sizing version could not be read.</p>
+                    : !versionCurrent ? <p data-testid="sizing-unversioned">These figures were saved without a matching version. No formula is recorded for them.</p> : null}
+                  {(versionCurrent ? ['TAM', 'SAM', 'SOM'].map((tag, index) => ({
+                    tag, method: `Version ${version.version_number} · ${String(version.created_at || '').slice(0, 10)}`,
+                    desc: version.formula[index], why: index === 2 ? version.formula[3] : 'Saved inputs and figures agree.',
+                  })) : []).map((m) => (
                     <div key={m.tag} className="px-3.5 py-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-[11px]">
                       <div className="flex items-center gap-2">
                         <span className="text-[10.5px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 rounded-md px-[7px] py-0.5">{m.tag}</span>
@@ -1151,7 +1108,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 dark:text-gray-400">CAGR</span>
                     <span className="inline-flex items-center gap-1 text-[11.5px] font-bold rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                      ↑ {cagrPct}%/yr{assume.cagr ? '' : ' (default)'}
+                      ↑ {cagrPct}%/yr{assume.cagr === '' ? ' (default)' : ''}
                     </span>
                   </div>
                   {/* Peak window + tailwind have no drawer/backend field yet —
@@ -1543,28 +1500,24 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
       {/* Market-assumptions drawer (spec A, design 1458-1549) — the shared
           right-side Sheet (D1317) at 480px. Test-id names from the old modal
           are kept for continuity: modal-edit-sizing = the sheet (its × is
-          modal-edit-sizing-close), button-save-sizing = "Recalculate market
-          sizing", sizing-error = the validation line; input-tam/-sam/-som map
+          modal-edit-sizing-close), button-save-sizing = "Save", sizing-error = the validation line; input-tam/-sam/-som map
           to the drawer controls that now drive each figure (TAM override /
           % reachable / win rate). While it saves, nothing closes it. */}
       {editOpen && project && (
         <Sheet
           label="Edit Market Assumptions"
           title="Edit Market Assumptions"
-          sub="Saved with your startup when you recalculate — these figures, and the TAM/SAM/SOM they produce."
+          sub="Preview changes without saving. Save keeps the inputs, figures, method and source in one version."
           onClose={() => { if (!saving) setEditOpen(false); }}
           width={480}
           testId="modal-edit-sizing"
           footer={sizingFooter}
         >
-          {/* The design shows an "Auto-saves" chip by the title. Still omitted, and
-              for a narrower reason than before: migration 247 persists every
-              field on this drawer, but on the explicit Recalculate — nothing
-              is written as you type, so "Auto-saves" would still be wrong. */}
+          {/* D7706: explicit version save; previews never write the venture. */}
           <div className="px-5 py-4 flex flex-col gap-[22px]">
             <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-[10px] px-3 py-2.5">
               <Lock size={13} className="text-amber-700 dark:text-amber-400 flex-none mt-0.5" />
-              <span className="text-[11.5px] text-amber-800 dark:text-amber-200 leading-relaxed">Pitch Deck Market slide will update when you recalculate.</span>
+              <span className="text-[11.5px] text-amber-800 dark:text-amber-200 leading-relaxed">Only Save updates the page and Pitch Deck Market slide. The calculation below is not saved.</span>
             </div>
 
             {/* Market definition */}
@@ -1572,11 +1525,11 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
               <div className={`${LBL} mb-2.5`}>Market definition</div>
               <div className="flex flex-col gap-2.5">
                 <label>
-                  <span className={FLD}>Market category</span>
+                  <span className={FLD}>Market category · recorded, not used in the calculation</span>
                   <input type="text" value={assume.category} onChange={setA('category')} className={INP} data-testid="input-market-category" />
                 </label>
                 <label>
-                  <span className={FLD}>Geography</span>
+                  <span className={FLD}>Geography · recorded, not used in the calculation</span>
                   <select value={assume.geography} onChange={setA('geography')} className={INP} data-testid="select-geography">
                     <option>Global</option>
                     <option>North America</option>
@@ -1586,7 +1539,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
                   </select>
                 </label>
                 <label>
-                  <span className={FLD}>Target year</span>
+                  <span className={FLD}>Target year · recorded, not used in the calculation</span>
                   <select value={assume.targetYear} onChange={setA('targetYear')} className={INP} data-testid="select-target-year">
                     <option>2025</option>
                     <option>2026</option>
@@ -1630,17 +1583,26 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
                     </button>
                   ))}
                 </div>
+                <p className="text-[11.5px] text-gray-500 dark:text-gray-400">Top-down / Bottom-up is recorded, not used in the calculation.</p>
                 <label>
                   <span className={FLD}>Total addressable population (units)<FillMark mark={marketFillMark(filled.population)} /></span>
-                  <input type="number" min="0" value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
+                  <input type="number" min="0" {...fieldState('population')} disabled={saving} value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
+                  {fieldError('population')}
                 </label>
                 <label>
                   <span className={FLD}>Average contract value ($)<FillMark mark={marketFillMark(filled.acv)} /></span>
-                  <input type="number" min="0" value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
+                  <input type="number" min="0" {...fieldState('acv')} disabled={saving} value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
+                  {fieldError('acv')}
                 </label>
                 <label>
                   <span className={FLD}>TAM override ($M, optional)</span>
-                  <input type="number" min="0" placeholder="Override calculated TAM" value={assume.tamOverride} onChange={setA('tamOverride')} className={INP} data-testid="input-tam" />
+                  <input type="number" min="0" placeholder="Override calculated TAM" {...fieldState('tamOverride')} disabled={saving} value={assume.tamOverride} onChange={setA('tamOverride')} className={INP} data-testid="input-tam" />
+                  {fieldError('tamOverride')}
+                </label>
+                <label>
+                  <span className={FLD}>Reason for TAM override</span>
+                  <input type="text" {...fieldState('tamOverrideReason')} disabled={saving} value={assume.tamOverrideReason} onChange={setA('tamOverrideReason')} className={INP} data-testid="input-tam-reason" />
+                  {fieldError('tamOverrideReason')}
                 </label>
               </div>
             </div>
@@ -1651,10 +1613,11 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
               <div className="flex flex-col gap-2.5">
                 <label>
                   <span className={FLD}>% of TAM reachable</span>
-                  <input type="number" min="0" max="100" value={assume.samPct} onChange={setA('samPct')} className={INP} data-testid="input-sam" />
+                  <input type="number" min="0" max="100" {...fieldState('samPct')} disabled={saving} value={assume.samPct} onChange={setA('samPct')} className={INP} data-testid="input-sam" />
+                  {fieldError('samPct')}
                 </label>
                 <div>
-                  <span className={FLD}>Segment filter</span>
+                  <span className={FLD}>Segment filter · recorded, not used in the calculation</span>
                   {picks.length === 0 ? (
                     <div className="text-[11px] text-gray-400 dark:text-gray-500">No aggregator segments this period.</div>
                   ) : (
@@ -1681,18 +1644,38 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
               <div className="flex flex-col gap-2.5">
                 <label>
                   <span className={FLD}>Win rate (%)</span>
-                  <input type="number" min="0" value={assume.winRate} onChange={setA('winRate')} className={INP} data-testid="input-som" />
+                  <input type="number" min="0" {...fieldState('winRate')} disabled={saving} value={assume.winRate} onChange={setA('winRate')} className={INP} data-testid="input-som" />
+                  {fieldError('winRate')}
                 </label>
                 <label>
-                  <span className={FLD}>Runway (months)</span>
+                  <span className={FLD}>Runway (months) · recorded, not part of the figures</span>
                   <input type="number" min="0" value={assume.runway} onChange={setA('runway')} className={INP} data-testid="input-runway" />
                 </label>
                 <label>
                   <span className={FLD}>Sales capacity (deals/month)</span>
-                  <input type="number" min="0" value={assume.capacity} onChange={setA('capacity')} className={INP} data-testid="input-capacity" />
+                  <input type="number" min="0" {...fieldState('capacity')} disabled={saving} value={assume.capacity} onChange={setA('capacity')} className={INP} data-testid="input-capacity" />
+                  {fieldError('capacity')}
                 </label>
+                {[
+                  ['horizonMonths', 'Time horizon (months)', 'input-horizon'],
+                  ['salesCycleMonths', 'Sales cycle (months)', 'input-sales-cycle'],
+                  ['retentionPct', 'Retention (%)', 'input-retention'],
+                ].map(([key, label, testId]) => <label key={key}>
+                  <span className={FLD}>{label}</span>
+                  <input type="number" min="0" {...fieldState(key)} disabled={saving} value={assume[key]} onChange={setA(key)} className={INP} data-testid={testId} />
+                  {fieldError(key)}
+                </label>)}
+
               </div>
             </div>
+
+            <section aria-label="How it was computed" data-testid="sizing-preview" className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+              <div className={`${LBL} mb-2`}>How it was computed · not saved</div>
+              {preview.state === 'loading' ? <p role="status">Calculating…</p> : preview.result ? <>
+                {['tam', 'sam', 'som'].map((key, index) => <div key={key} className="mb-2 text-[12px] text-gray-700 dark:text-gray-300"><strong>{['Total', 'Serviceable', 'Obtainable'][index]} · {fmtMoney(preview.result[key])}</strong><p>{preview.result.formula?.[index]}</p></div>)}
+                <p className="text-[12px] text-gray-600 dark:text-gray-400">{preview.result.formula?.[3]}</p>
+              </> : <p role="status" className="text-[12px] text-gray-600 dark:text-gray-400">{preview.message || 'Enter the inputs to see the calculation.'}</p>}
+            </section>
 
             {/* Growth */}
             <div>
