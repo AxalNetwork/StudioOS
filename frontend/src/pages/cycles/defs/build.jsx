@@ -11,6 +11,7 @@ import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
+import SolutionDesignRisks from '../SolutionDesignRisks';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 import { lazyStep } from '../lazyStep.jsx';
@@ -69,7 +70,14 @@ const build = {
     'prototype-mvp': (module, { projectId, reload }) => (
       <MvpSummary facts={module?.facts} save={(date) => cyclesWrite.build.mvpTarget(projectId, date)} onSaved={reload} />
     ),
+    // D6033 (#6033, BD25, Q1 A): Solution design's Risks list, its own paged read, above the features table.
+    // A risk added or edited re-reads the module, so the counts card's severities follow.
+    'solution-design': (_module, { projectId, reload, search }) => (
+      <SolutionDesignRisks key={projectId} projectId={projectId} search={search} onChanged={reload} />
+    ),
   }),
+  // D6033 (BD34): the Risks list shows on a phone before the venture has a feature (a Build Plan risk needs none).
+  aboveRecordsWhenEmpty: ['solution-design'],
   phoneRows: toFnMap({ 'prototype-mvp': mvpPhoneRow }),
   // D6043 (#6043): each module's records list as CSV, with the table's own search, filters and sort.
   exportRecords: (projectId, slug, query) => buildModuleExportApi.exportCsv(projectId, slug, query),
