@@ -198,6 +198,11 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
       renameSync(pending, ready);
       at.phase = 'publish';
       await sync(leaf);
+      at.synced = true;
+      // S32 (f13 recheck): the terminal fsync can return after the deadline or the abort. The offer is then published
+      // and durable, but the export overran its phase, so it is not reported complete.
+      const late = closed ?? (signal?.aborted ? 'export_cancelled' : deadline - now() > 0 ? null : 'export_budget_exhausted');
+      if (late) return { state: 'failed', phase: 'publish', reason: late, offer: 'published' };
       return { state: 'complete', ready, files: files.length, bytes: transport.expandedBytes };
     };
     let timer = null, abort = null;
@@ -215,7 +220,7 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
       if (result.value) return result.value;
       if (result.error) return failed(result.error);
       // A stop after the rename leaves a published but not yet durable offer; say so rather than claim either.
-      return { state: 'failed', phase: at.phase, reason: result.code, ...(at.phase === 'publish' ? { offer: 'published_unsynced' } : {}) };
+      return { state: 'failed', phase: at.phase, reason: result.code, ...(at.phase === 'publish' ? { offer: at.synced ? 'published' : 'published_unsynced' } : {}) };
     } finally {
       if (closed === null) closed = 'export_closed';
       timers.clearTimeout(timer); signal?.removeEventListener('abort', abort);

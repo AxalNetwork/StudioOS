@@ -258,3 +258,32 @@ test('S32 E1 whole phase: a hung write, fsync or pause cannot hold the export pa
   assert.equal(existsSync(f.ready), true);
   gate.release();
 });
+
+test('S32 f13 recheck: a terminal fsync that returns after the deadline or after an abort is never reported complete', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const setup = options => {
+    const root = mkdtempSync(join(tmpdir(), 'terminal-7905-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+    const tarFile = join(root, 'archive.tar'); writeFileSync(tarFile, valid());
+    const stagingRoot = join(root, 'trace-export');
+    const exporter = createTraceExporter({ stagingRoot, engine: () => '', spawnCopy: () => spawn('/bin/cat', [tarFile], { stdio: ['ignore', 'pipe', 'ignore'] }), ...options });
+    return { ready: join(stagingRoot, '202-1-1', 'ready'), go: extra => exporter({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 60_000, ...extra }) };
+  };
+  // The leaf fsync (the third directory sync, after the rename) crosses the deadline but returns normally.
+  let syncs = 0;
+  let f = setup({ sync: async () => { if (++syncs === 3) t.mock.timers.tick(60_000); } });
+  assert.deepEqual(await f.go(), { state: 'failed', phase: 'publish', reason: 'export_budget_exhausted', offer: 'published' });
+  assert.equal(existsSync(join(f.ready, 'COMPLETE.json')), true, 'the offer exists; the report says it was late, not complete');
+  t.mock.timers.reset(); t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  // The run is cancelled while the leaf fsync is in flight, which then returns normally.
+  syncs = 0; const controller = new AbortController();
+  f = setup({ sync: async () => { if (++syncs === 3) controller.abort(); } });
+  const result = await f.go({ signal: controller.signal });
+  assert.deepEqual([result.state, result.phase, result.reason], ['failed', 'publish', 'export_cancelled']);
+  assert.ok(['published', 'published_unsynced'].includes(result.offer), JSON.stringify(result));
+  assert.equal(existsSync(join(f.ready, 'COMPLETE.json')), true);
+  // Control: the same seam with no late event still completes.
+  syncs = 0;
+  f = setup({ sync: async () => { ++syncs; } });
+  assert.equal((await f.go()).state, 'complete');
+  assert.equal(syncs, 3);
+});
