@@ -106,3 +106,33 @@ test('Scope can select a licence supplied only by the new per-licence metrics, w
   assert.deepEqual(revenueScopes(data, period), [{ licence_uid: 'fr', name: 'France' }, { licence_uid: 'ai-only', name: 'ai-only' }]);
   assert.deepEqual(revenueScopes(data, '2026-Q3'), []);
 });
+
+
+test('AI licence labels reuse recorded names, including names that arrive after a bare coverage UID', () => {
+  const data = summary({
+    ai_margin_per_licence: metric('ai_margin_per_licence', { by_licence: [{ licence_uid: 'fr', billed_microusd: 3000000, cost_microusd: 1000000, margin_microusd: 2000000 }] }),
+    revenue_per_subsidiary: metric('revenue_per_subsidiary', { by_licence: [{ licence_uid: 'fr', brand_name: 'France' }] }),
+  });
+  data.usage_coverage.by_licence = [{ licence_uid: 'fr' }];
+  assert.deepEqual(revenueScopes(data, period), [{ licence_uid: 'fr', name: 'France' }]);
+  assert.equal(licenceAiRows(data, period).rows[0].name, 'France');
+  assert.match(html(AiEconomicsSection, { summary: data, period }), /France/);
+});
+
+test('coverage always has a ledger row before metric metadata is attached, across recorded and absent invoice states', () => {
+  for (const inv of [undefined, { available: false, reason: 'Read failed.' }, { available: true, by_currency: [], receivable_by_currency: [] }]) {
+    const data = summary({ licence_fees_invoiced: metric('licence_fees_invoiced', { by_currency: [] }) });
+    data.licence_invoices = inv;
+    const rows = coverageSources({ summary: data, period });
+    assert.equal(rows.filter((r) => r.key === 'ledger').length, 1);
+    assert.ok(rows.find((r) => r.key === 'ledger').metadata.some(([k, v]) => k === 'Source' && v === 'Recorded source'));
+  }
+});
+
+test('present failed and mismatched-period subscription reads say Unavailable, never Missing ledger', () => {
+  for (const m of [sub({ state: 'unreadable' }), sub({ period: '2026-Q3' })]) {
+    const output = html(RevenueStreams, { summary: summary({ subscription_revenue: m }), periodStatements: null, period });
+    assert.match(text(output), /Unavailable/);
+    assert.doesNotMatch(output, /Missing ledger/);
+  }
+});

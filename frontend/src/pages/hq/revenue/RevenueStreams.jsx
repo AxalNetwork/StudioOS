@@ -269,7 +269,7 @@ export function AiEconomicsSection({ summary, period, licenceUid, onWhy }) {
         {ai.rows.length ? <div className="relative overflow-x-auto"><table className={TABLE}>
           <caption className="sr-only">AI billed, cost and margin by licence for {periodLabel(period)}</caption>
           <thead><tr>{['Licence', 'Billed · USD', 'Cost · USD', 'Margin · USD'].map((h) => <th key={h} scope="col" className={TH}>{h}</th>)}</tr></thead>
-          <tbody>{ai.rows.map((r) => <tr key={r.licence_uid}><td className={TD}>{r.licence_uid}</td>{[r.billed, r.cost, r.margin].map((f, i) => <td key={i} className={`${TD} ${NUM}`}><Figure figure={f} /></td>)}</tr>)}</tbody>
+          <tbody>{ai.rows.map((r) => <tr key={r.licence_uid}><td className={TD}>{r.name}</td>{[r.billed, r.cost, r.margin].map((f, i) => <td key={i} className={`${TD} ${NUM}`}><Figure figure={f} /></td>)}</tr>)}</tbody>
         </table></div> : <Figure figure={{ state: ai.metric.state === 'recorded' ? 'not_recorded' : ai.metric.state, text: null }} />}
         <dl className="mt-2 flex flex-wrap gap-4 text-[12.5px]">
           <div><dt>Unattributed runs</dt><dd><Figure figure={countFigure(ai.unattributed, { absent: ai.metric.state === 'unavailable' ? 'unavailable' : 'not_recorded' })} /></dd></div>

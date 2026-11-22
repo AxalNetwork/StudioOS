@@ -963,10 +963,12 @@ export function subsidiaryMetricRows(summary, period, currentPeriod, nowMs, lice
 export function licenceAiRows(summary, period, licenceUid) {
   const metric = revenueMetric(summary, 'ai_margin_per_licence', period);
   const detail = metric.incomplete_detail || {};
+  const names = new Map(revenueScopes(summary, period).map((r) => [r.licence_uid, r.name]));
   return { metric,
     unattributed: finite(metric.values?.unattributed_runs ?? detail.unattributed),
     preMigration: finite(metric.values?.pre_migration_runs ?? detail.pre_migration),
     rows: (metric.values?.by_licence || []).filter((r) => !licenceUid || r.licence_uid === licenceUid).map((r) => ({ ...r,
+      name: names.get(r.licence_uid) || r.licence_uid,
       billed: metricMoney(metric, r.billed_microusd, 'USD', { micro: true }),
       cost: metricMoney(metric, r.cost_microusd, 'USD', { micro: true }),
       margin: metricMoney(metric, r.margin_microusd, 'USD', { micro: true }),
@@ -1021,7 +1023,11 @@ export function revenueScopes(summary, period) {
     rows.push(...(metric.values?.by_licence || []));
   }
   const options = new Map();
-  for (const row of rows) if (row.licence_uid && !options.has(row.licence_uid)) options.set(row.licence_uid,
-    { licence_uid: row.licence_uid, name: row.brand_name || row.licence_ref || row.licence_uid });
+  for (const row of rows) {
+    if (!row.licence_uid) continue;
+    const name = row.brand_name || row.licence_ref || row.licence_uid;
+    const existing = options.get(row.licence_uid);
+    if (!existing || existing.name === row.licence_uid) options.set(row.licence_uid, { licence_uid: row.licence_uid, name });
+  }
   return [...options.values()];
 }
