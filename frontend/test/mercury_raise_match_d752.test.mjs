@@ -219,7 +219,7 @@ test('Capital relationships draws the panel first on Overview, with the viewer\'
   const src = codeOnly(cycleRouteText());
   // D1227 (#3226): the Calls history left Overview, so the panel comes first.
   assert.match(src, /'capital-relationships': \(data, ctx\) => \(\s*<>\s*<RaiseReceiptMatches role=\{ctx\.role\} onChanged=\{ctx\.reload\} \/>/);
-  assert.match(src, /openDialog, role: user\?\.role \?\? null \}\)/);
+  assert.match(src, /openDialog, role: user\?\.role \?\? null, canWrite: !companyReadOnly \}\)/);
 });
 
 // ─────────────────────────────────────────────────────────── the credit import and the words

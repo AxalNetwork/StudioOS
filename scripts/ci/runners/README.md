@@ -14,6 +14,8 @@ required checks, provider resources or shard counts.
 | `hosted-verification.mjs` | D8007 (S30): hosted isolation-verification port for `hosted`/`github-8`; trusted readers only, no default positive reader, returns the verified boundary identity. Never execution or dispatch authority. |
 | `hosted-verification-8007.fixture.mjs` | D8007 (S30): manual behavioural fixture against pinned published sources; all provider, OIDC and native facts simulated. |
 | `profiles.json` | Schema v1 profile enums, shared AND labels and reviewed archive digests; hosted Ubuntu is a separate pool. |
+| `verify-capacity.mjs` | D7888/D7974: bounded GET-only timing observations and structural six-Worker pilot audit; never aggregate-check authority. |
+| `ephemeral-supervisor.mjs` | D7889: pure one-job enrollment/drain proposals and filtered environment; no live issuer or process launcher. |
 
 Start at [RUNNER_BOOTSTRAP.md](../../../documentation/operations/RUNNER_BOOTSTRAP.md).
 Install/verify need no runner token, provider API or fleet manager. Register/start

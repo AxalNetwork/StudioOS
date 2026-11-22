@@ -55,6 +55,7 @@ function world() {
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   db.exec(stripForeignKeys(MIGRATION));
+  db.exec(stripForeignKeys(sql('migrations/202611170937_7075_agent_recruits.sql'))); // D7075: recruits, filed in accept's batch
   db.exec(`CREATE TABLE IF NOT EXISTS project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");

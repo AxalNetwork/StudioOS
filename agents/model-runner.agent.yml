@@ -1,0 +1,49 @@
+# The landing bot's model runner (#6473): given a task, returns a patch or
+# nothing. It pushes, comments and labels nothing. `edit` holds the model
+# credentials and runs no repository code; `verify` runs the patched code and
+# holds no secret (scripts/landing-bot/model/README.md).
+name: model-runner
+kind: platform
+owner: S21
+identity: github-actions  # no App token: contents: read, plus id-token: write for Claude's federation
+capabilities:
+  - code.read        # the commit to edit is checked out as data; the patch leaves as an artifact
+models:
+  route: direct      # provider SDKs, not the agent gateway; each account's model is a repository variable
+  allowed:           # the provider accounts of providers.mjs, as LANDING_BOT_PROVIDERS names them
+    - claude
+    - claude-2
+    - claude-3
+    - codex
+    - gemini
+resources:
+  cpu: none
+  memory: none
+limits:
+  runtime: 120       # minutes: HARD in task.mjs, 3 rounds of 20 edit and 20 verify minutes
+  tokens: none       # HARD caps model calls (30 per round), not tokens
+  parallel_tasks: none
+  child_agents: 0
+  prs: 0
+network:
+  internet: true
+  egress:            # the SDKs' default endpoints, and GitHub for checkout and artifacts
+    - api.anthropic.com
+    - api.openai.com
+    - generativelanguage.googleapis.com
+    - api.github.com
+    - github.com
+allowed_paths:
+  - '**'             # the task's allowed files only, each cleared by pathGuard(): no protected path, no T2 file, no existing test
+runner_pool: trusted # edit runs main's runner in the main-only repair environment; verify runs with no secret
+approval:
+  external_actions: not-required
+escalation: S21
+status: paused       # called only by the conflict resolver and main repair, which are off
+sources:
+  - .github/workflows/landing-bot-model.yml
+  - .github/workflows/landing-bot-model-round.yml
+  - scripts/landing-bot/model/task.mjs
+  - scripts/landing-bot/model/providers.mjs
+  - scripts/landing-bot/model/edit.mjs
+  - scripts/landing-bot/model/verify.mjs

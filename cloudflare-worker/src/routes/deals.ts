@@ -1099,9 +1099,11 @@ deals.get('/:id/documents', async (c) => {
     await sql.end();
     return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
   }
-  const docs = await sql`SELECT id, uid, title, doc_type, status, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
+  // D6186 (#6186): no route serves a `documents` row's text (`legal.ts` `safeDoc` redacts it), so each row says
+  // why it cannot be opened; `in_paper` marks one sent through e-sign, which the Deal paper card opens instead.
+  const docs = await sql`SELECT id, uid, title, doc_type, status, created_at, migrated_to_esign_id IS NOT NULL AS in_paper FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
   await sql.end();
-  return c.json(docs);
+  return c.json((docs as any[]).map((d) => ({ ...d, in_paper: Number(d.in_paper) === 1 })));
 });
 
 // D1265 (#3288): the deal page's Evidence block. An investor the deal admits (invited or committed)
