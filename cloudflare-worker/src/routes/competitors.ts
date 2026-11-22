@@ -422,31 +422,51 @@ function versionConflict(c: Context<{ Bindings: Env }>, current: number): Respon
  * whose text the save changes is dated in `sections_edited_json`; a section it
  * leaves alone keeps its date.
  */
-async function saveText(env: Env, analysisId: string, body: Record<string, unknown>): Promise<void> {
+type CandidateEdit = { id: string; name?: string; category?: string; summary?: string };
+
+/** D7814: one transaction, with every write conditional on the same saved version. */
+async function saveText(env: Env, userId: number, analysisId: string, body: Record<string, unknown>, edits: CandidateEdit[], base: number | null): Promise<{ version: number } | { conflict: number }> {
   const db = env.DB;
   const at = nowIso();
-  const stmts = [];
-  if (typeof body.title === 'string') {
-    stmts.push(db.prepare('UPDATE competitor_analyses SET title = ?, edited = 1, updated_at = ? WHERE id = ?')
-      .bind(body.title.slice(0, 200), at, analysisId));
+  const row = await db.prepare('SELECT version, output_json, sections_edited_json FROM competitor_analysis_outputs WHERE analysis_id = ?')
+    .bind(analysisId).first<{ version: number; output_json: string | null; sections_edited_json: string | null }>();
+  const current = Number(row?.version ?? 1) || 1;
+  if (base != null && base !== current) return { conflict: current };
+  const savesText = typeof body.title === 'string' || (!!body.output && typeof body.output === 'object');
+  const stmts = [db.prepare("INSERT INTO competitor_analysis_outputs (analysis_id, output_json, edited, updated_at) VALUES (?, '{}', 0, ?) ON CONFLICT(analysis_id) DO NOTHING").bind(analysisId, at)];
+  if (savesText) {
+    const record = await loadAnalysis(env, userId, analysisId);
+    stmts.push(db.prepare(`INSERT INTO competitor_analysis_versions (analysis_id, version, snapshot_json, saved_at)
+      SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM competitor_analysis_outputs WHERE analysis_id = ? AND version = ?)
+      ON CONFLICT(analysis_id, version) DO UPDATE SET snapshot_json = excluded.snapshot_json, saved_at = excluded.saved_at`).bind(analysisId, current, JSON.stringify({ ...(record || {}), version: current }), String(record?.updated_at || at), analysisId, current));
   }
+  if (typeof body.title === 'string') stmts.push(db.prepare(`UPDATE competitor_analyses SET title = ?, edited = 1, updated_at = ?
+    WHERE id = ? AND EXISTS (SELECT 1 FROM competitor_analysis_outputs WHERE analysis_id = ? AND version = ?)`)
+    .bind(body.title.slice(0, 200), at, analysisId, analysisId, current));
   if (body.output && typeof body.output === 'object') {
-    const row = await db.prepare('SELECT output_json, sections_edited_json FROM competitor_analysis_outputs WHERE analysis_id = ?')
-      .bind(analysisId).first<{ output_json: string | null; sections_edited_json: string | null }>();
     const before = (safeParse(row?.output_json, {}) || {}) as Record<string, unknown>;
     const edited = (safeParse(row?.sections_edited_json, {}) || {}) as Record<string, string>;
     const next = body.output as Record<string, unknown>;
-    for (const f of EDITABLE_SECTIONS) {
-      if (f in next && !sameValue(fieldValue(before, f), fieldValue(next, f))) edited[f] = at;
-    }
-    stmts.push(db.prepare(
-      `INSERT INTO competitor_analysis_outputs (analysis_id, output_json, edited, updated_at, sections_edited_json) VALUES (?, ?, 1, ?, ?)
-       ON CONFLICT(analysis_id) DO UPDATE SET output_json = excluded.output_json, edited = 1, updated_at = excluded.updated_at,
-         sections_edited_json = excluded.sections_edited_json`,
-    ).bind(analysisId, JSON.stringify(next), at, JSON.stringify(edited)));
-    stmts.push(db.prepare('UPDATE competitor_analyses SET edited = 1, updated_at = ? WHERE id = ?').bind(at, analysisId));
+    for (const f of EDITABLE_SECTIONS) if (f in next && !sameValue(fieldValue(before, f), fieldValue(next, f))) edited[f] = at;
+    stmts.push(db.prepare(`UPDATE competitor_analysis_outputs SET output_json = ?, edited = 1, updated_at = ?, sections_edited_json = ?
+      WHERE analysis_id = ? AND version = ?`).bind(JSON.stringify(next), at, JSON.stringify(edited), analysisId, current));
   }
-  if (stmts.length) await db.batch(stmts);
+  for (const edit of edits) stmts.push(db.prepare(`UPDATE competitor_candidates SET
+    name = CASE WHEN ? THEN ? ELSE name END, category = CASE WHEN ? THEN ? ELSE category END, summary = CASE WHEN ? THEN ? ELSE summary END
+    WHERE analysis_id = ? AND id = ? AND EXISTS (SELECT 1 FROM competitor_analysis_outputs WHERE analysis_id = ? AND version = ?)`)
+    .bind(Number(edit.name !== undefined), edit.name ?? null, Number(edit.category !== undefined), edit.category ?? null, Number(edit.summary !== undefined), edit.summary ?? null, analysisId, edit.id, analysisId, current));
+  if (savesText || edits.length) stmts.push(db.prepare(`UPDATE competitor_analyses SET edited = 1, updated_at = ?
+    WHERE id = ? AND EXISTS (SELECT 1 FROM competitor_analysis_outputs WHERE analysis_id = ? AND version = ?)`)
+    .bind(at, analysisId, analysisId, current));
+  // Last: until this point, every statement sees the same expected version.
+  stmts.push(db.prepare('UPDATE competitor_analysis_outputs SET version = version + ? WHERE analysis_id = ? AND version = ?')
+    .bind(savesText ? 1 : 0, analysisId, current));
+  const results = await db.batch(stmts);
+  if (!Number(results[results.length - 1]?.meta?.changes ?? 0)) {
+    const latest = await db.prepare('SELECT version FROM competitor_analysis_outputs WHERE analysis_id = ?').bind(analysisId).first<{ version: number }>();
+    return { conflict: Number(latest?.version ?? current) };
+  }
+  return { version: current + (savesText ? 1 : 0) };
 }
 
 /**
@@ -646,38 +666,44 @@ competitors.patch('/:id', async (c) => {
   await ensureCompetitorSchema(c.env);
   const id = c.req.param('id');
   const sql = getSQL(c.env);
-  const owned = await sql`SELECT id FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
+  const owned = await sql`SELECT id, inputs_json FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
   if (!owned[0]) return c.json({ error: 'not_found' }, 404);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-
-  // D7176: a save of the title or the output is a new version. With If-Match
-  // (or `base_version`) naming an older one it answers 409 and writes nothing.
-  const savesText = typeof body.title === 'string' || (!!body.output && typeof body.output === 'object');
-  if (savesText) {
-    const base = baseVersionOf(c.req.header('If-Match'), body);
-    if (Number.isNaN(base)) {
-      return refuse(c, 400, { code: 'bad_version', message: 'The version this save is based on is not a version number.' });
-    }
-    const claim = await claimVersion(c.env, user.id, id, base);
-    if ('conflict' in claim) return versionConflict(c, claim.conflict);
-    try {
-      await saveText(c.env, id, body);
-    } catch (e) {
-      await releaseVersion(c.env, id, claim.version);
-      return refuse(c, 503, { code: 'save_failed', message: 'Save failed. Nothing was saved; the saved version is unchanged.', raw: e });
+  const base = baseVersionOf(c.req.header('If-Match'), body);
+  if (Number.isNaN(base) || ('candidates' in body && base == null)) return refuse(c, 400, { code: 'bad_version', message: 'Name the saved version this edit is based on.' });
+  if ('candidates' in body && !Array.isArray(body.candidates)) return c.json({ error: 'Candidates must be a list.' }, 400);
+  const edits: CandidateEdit[] = [];
+  if (Array.isArray(body.candidates)) {
+    const stored = await sql`SELECT id, name, url, domain FROM competitor_candidates WHERE analysis_id = ${id}`;
+    const byId = new Map(stored.map(row => [String(row.id), row]));
+    const seen = new Set<string>();
+    const inputs = safeParse(owned[0].inputs_json, {}) as AnalysisInputs;
+    for (const raw of body.candidates as Array<Record<string, unknown>>) {
+      if (!raw || typeof raw.id !== 'string' || !byId.has(raw.id) || seen.has(raw.id)) return c.json({ error: 'Every company must belong to this analysis, once.' }, 400);
+      seen.add(raw.id);
+      const edit: CandidateEdit = { id: raw.id };
+      if ('name' in raw) {
+        if (typeof raw.name !== 'string' || !raw.name.trim()) return c.json({ error: 'A company needs a name.' }, 400);
+        edit.name = raw.name.trim().slice(0, 200);
+      }
+      if ('category' in raw) {
+        if (raw.category !== 'direct' && raw.category !== 'adjacent') return c.json({ error: 'Category is direct or adjacent.' }, 400);
+        edit.category = raw.category;
+      }
+      if ('summary' in raw) {
+        if (typeof raw.summary !== 'string') return c.json({ error: 'A company summary must be text.' }, 400);
+        edit.summary = raw.summary.slice(0, 4000);
+      }
+      const previous = byId.get(raw.id)!;
+      if (isSubjectMatch(inputs.subject, { name: edit.name ?? previous.name, url: previous.url, domain: previous.domain })) return c.json({ error: 'subject_not_candidate', message: 'The subject of this analysis cannot be its own competitor.' }, 400);
+      edits.push(edit);
     }
   }
-
-  if (Array.isArray(body.candidates)) {
-    await sql`DELETE FROM competitor_candidates WHERE analysis_id = ${id}`;
-    let pos = 0;
-    for (const raw of body.candidates as Array<Record<string, unknown>>) {
-      const cand = raw || {};
-      const cid = typeof cand.id === 'string' && cand.id ? cand.id : crypto.randomUUID();
-      await sql`INSERT INTO competitor_candidates (id, analysis_id, name, domain, url, category, relevance_score, scores_json, summary, details_json, origin, position)
-        VALUES (${cid}, ${id}, ${String(cand.name || 'Unnamed')}, ${cand.domain ?? null}, ${cand.url ?? null}, ${cand.category === 'adjacent' ? 'adjacent' : 'direct'}, ${Number(cand.relevance_score) || 0}, ${JSON.stringify(cand.scores || {})}, ${String(cand.summary || '')}, ${JSON.stringify(cand.details || {})}, ${String(cand.origin || 'manual')}, ${pos++})`;
-    }
-    await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
+  try {
+    const saved = await saveText(c.env, user.id, id, body, edits, base);
+    if ('conflict' in saved) return versionConflict(c, saved.conflict);
+  } catch (e) {
+    return refuse(c, 503, { code: 'save_failed', message: 'Save failed. Nothing was saved; the saved version is unchanged.', raw: e });
   }
 
   const full = await loadAnalysis(c.env, user.id, id);
@@ -745,30 +771,26 @@ competitors.patch('/:id/candidates/:cid', async (c) => {
   const id = c.req.param('id');
   const cid = c.req.param('cid');
   const sql = getSQL(c.env);
-  const owned = await sql`SELECT id FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
+  const owned = await sql`SELECT id, inputs_json FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
   if (!owned[0]) return c.json({ error: 'This analysis is not on your list.' }, 404);
-  const rows = await sql`SELECT id FROM competitor_candidates WHERE analysis_id = ${id} AND id = ${cid}`;
+  const rows = await sql`SELECT id, name, url, domain FROM competitor_candidates WHERE analysis_id = ${id} AND id = ${cid}`;
   if (!rows[0]) return c.json({ error: 'This company is not in that analysis.' }, 404);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!['name', 'category', 'summary'].some(field => field in body)) return c.json({ error: 'Nothing on this company was sent to save.' }, 400);
+  if (('name' in body && (typeof body.name !== 'string' || !body.name.trim()))
+    || ('category' in body && !['direct', 'adjacent'].includes(String(body.category)))
+    || ('summary' in body && typeof body.summary !== 'string')) return c.json({ error: 'Name and summary must be text; category is direct or adjacent.' }, 400);
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : null;
+  const inputs = safeParse(owned[0].inputs_json, {}) as AnalysisInputs;
+  if (isSubjectMatch(inputs.subject, { name: name ?? rows[0].name, url: rows[0].url, domain: rows[0].domain })) return c.json({ error: 'subject_not_candidate', message: 'The subject of this analysis cannot be its own competitor.' }, 400);
+  const at = nowIso();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE competitor_candidates SET name = CASE WHEN ? THEN ? ELSE name END,
+      category = CASE WHEN ? THEN ? ELSE category END, summary = CASE WHEN ? THEN ? ELSE summary END WHERE analysis_id = ? AND id = ?`)
+      .bind(Number('name' in body), name, Number('category' in body), body.category ?? null, Number('summary' in body), typeof body.summary === 'string' ? body.summary.slice(0, 4000) : null, id, cid),
+    c.env.DB.prepare('UPDATE competitor_analyses SET edited = 1, updated_at = ? WHERE id = ?').bind(at, id),
+  ]);
 
-  if (typeof body.name === 'string') {
-    const name = body.name.trim().slice(0, 200);
-    if (!name) return c.json({ error: 'A company needs a name.' }, 400);
-    await sql`UPDATE competitor_candidates SET name = ${name} WHERE analysis_id = ${id} AND id = ${cid}`;
-  }
-  if (typeof body.category === 'string') {
-    if (body.category !== 'direct' && body.category !== 'adjacent') {
-      return c.json({ error: 'Category is direct or adjacent.' }, 400);
-    }
-    await sql`UPDATE competitor_candidates SET category = ${body.category} WHERE analysis_id = ${id} AND id = ${cid}`;
-  }
-  if (typeof body.summary === 'string') {
-    await sql`UPDATE competitor_candidates SET summary = ${body.summary.slice(0, 4000)} WHERE analysis_id = ${id} AND id = ${cid}`;
-  }
-  if (typeof body.name !== 'string' && typeof body.category !== 'string' && typeof body.summary !== 'string') {
-    return c.json({ error: 'Nothing on this company was sent to save.' }, 400);
-  }
-  await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
   const full = await loadAnalysis(c.env, user.id, id);
   return c.json(full);
 });
