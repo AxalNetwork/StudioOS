@@ -108,6 +108,7 @@ test('each edit appends an immutable snapshot, changes only the case and rejects
     assert.throws(() => f.db.exec("UPDATE formation_case_answers SET answers_json = '{}'"), /immutable answer set/);
     assert.equal(f.db.prepare('SELECT name FROM projects WHERE id = 10').get()!.name, 'Synthetic project');
     assert.equal((await request(f, 'POST', path, { revision: 0, answers: {} })).status, 409);
+    assert.equal((await request(f, 'POST', path, { revision: 2, answers: { notes: 'é'.repeat(20000) } })).status, 400, 'the 32 KB limit counts UTF-8 bytes');
     assert.equal(f.db.prepare('SELECT count(*) AS n FROM formation_case_answers').get()!.n, 2);
   } finally { f.close(); }
 });

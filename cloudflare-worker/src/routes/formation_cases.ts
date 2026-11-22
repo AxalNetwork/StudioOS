@@ -81,7 +81,7 @@ formationCases.post('/:uid/answers', async (c) => {
   if (!row || !await ownsCase(c.env, user, row)) return refuse(c, 404, { code: 'formation_case_not_found', message: 'That formation case is not available to you.' });
   if (row.closed_at || !['draft', 'options_shown', 'chosen', 'structure_review', 'details', 'quoted'].includes(row.stage)) return refuse(c, 409, { code: 'formation_answers_locked', message: 'This case is no longer accepting intake answers.' });
   const body = await c.req.json().catch(() => null);
-  if (!body?.answers || typeof body.answers !== 'object' || Array.isArray(body.answers) || JSON.stringify(body.answers).length > 32768) return refuse(c, 400, { code: 'formation_answers_invalid', message: 'Provide an answers object of at most 32 KB.' });
+  if (!body?.answers || typeof body.answers !== 'object' || Array.isArray(body.answers) || new TextEncoder().encode(JSON.stringify(body.answers)).byteLength > 32768) return refuse(c, 400, { code: 'formation_answers_invalid', message: 'Provide an answers object of at most 32 KB.' });
   if (body.revision !== row.revision) return refuse(c, 409, { code: 'formation_case_moved', message: 'The case changed. Reload it before saving.' });
   const prefill = await formationPrefill(c.env, row);
   const suppliedFounders = body.answers.founders ?? prefill.values.founders;
