@@ -18,11 +18,13 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const ZONE = codeOnly(read('frontend/src/pages/investor/deals/ClosingZone.jsx'));
 const API = read('frontend/src/lib/api.js');
+const MODEL = codeOnly(read('frontend/src/pages/investor/deals/closingWorkspaceModel.js'));
 
 test('Record wire posts integer cents and prints the gate’s refusal', () => {
   assert.match(ZONE, /Math\.round\(Number\(wireForm\.amount\) \* 100\)/,
     'the form must convert dollars to integer cents — the store holds cents');
-  assert.match(ZONE, /api\.dealTransferRecord\(wireForm\.dealId, \{/,
+  // D6889: the body is built by the workspace model's transferBody.
+  assert.match(ZONE, /api\.dealTransferRecord\(wireForm\.dealId, transferBody\(\{ \.\.\.wireForm, cents \}\)\)/,
     'the form must record against the deal it names');
   assert.match(API, /dealTransferRecord: \(id, data\) => request\(`\/deals\/\$\{id\}\/transfers`/,
     'api.js lost the transfer write');
@@ -31,7 +33,8 @@ test('Record wire posts integer cents and prints the gate’s refusal', () => {
   assert.match(ZONE, /cause\?\.message \|\| 'The transfer could not be recorded\.'/,
     'the form must print the route’s refusal verbatim');
   // And the phone-verified flag is the artboard's fraud note, carried as data.
-  assert.match(ZONE, /phone_verified: wireForm\.phoneVerified/, 'the phone-verified flag is not sent');
+  assert.match(MODEL, /phone_verified: !!form\.phoneVerified/, 'the phone-verified flag is not sent');
+  assert.match(MODEL, /amount_cents: form\.cents/, 'the integer cents are not sent');
 });
 
 test('the Wires view reads the scoped transfers list and renders who and when', () => {

@@ -44,7 +44,7 @@ policy. This work does not claim delegated bypass enforcement.
 | --- | --- | --- |
 | `dependency-review.yml` | All PRs to main, including drafts; merge groups | Fail new high/critical vulnerabilities across runtime, development and unknown dependency scopes. |
 | `ossf-scorecard.yml` | Saturday 04:23 UTC; manual on public main | Advisory posture findings in code scanning; upload only after a successful scan. |
-| `scan-remediation.yml` | Existing two-hour schedule; successful main-scan or manual dispatch | Reconcile scanner alerts with S21 trackers using issue-write permission only. |
+| `scan-remediation.yml` | Hourly; weekly digest Mondays 08:41 UTC; manual dispatch | Reconcile Code Scanning, Dependabot and secret-scanning alerts with S21 trackers using issue-write permission only (D8074). |
 | `gitleaks.yml` | Existing PR, merge-group and main coverage | Required `scan` context; includes the project-specific bearer rule. |
 
 Dependency Review reads the graph diff for the event's immutable base/head. It
@@ -94,6 +94,19 @@ Identifier-name and versioned-enum exemptions are scoped to the inherited
 generic-key detector so they cannot suppress the dedicated bearer/JWT rules.
 Other existing global allowlists still apply. Add new exceptions only for demonstrably synthetic
 exact fixtures; do not reinstate the removed blanket JWT-header exemption.
+
+## Dependabot and secret-scanning tasks (D8074)
+
+The same reconciler files one `slot:S21` task per open Dependabot alert and per open secret-scanning alert, on
+the hourly sweep. A task names the alert number and its published rule only, never a package, file, line or
+value. It closes when GitHub resolves the alert: `fixed` for Dependabot, `revoked` for a secret. A dismissed
+alert leaves its task for a person to close. Every new task carries `sla:7d`; one still open seven days after
+filing gains `sla:breached` and one comment. A weekly Slack digest (Mondays 08:41 UTC, or a manual run with
+`digest`) counts open tasks per source and age band through `SLACK_GITHUB_WEBHOOK_URL`.
+
+**To turn it on:** give the scan-remediation GitHub App *Dependabot alerts: read* and *Secret scanning alerts:
+read*. Until it has them, both sources log "not readable with this credential" and are skipped; Code Scanning
+is unaffected. For a leaked secret, revoke or rotate it at the provider before anything else.
 
 ## Sources and maintenance
 

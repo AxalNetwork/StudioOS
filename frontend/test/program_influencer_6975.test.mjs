@@ -28,7 +28,7 @@ import { InfluencerPanel, contentFor, tierBlocks } from '../src/pages/influencer
 import { HERO_LINE, REGISTER_TO_APPLY, STRATEGIC_NOTE, disclosureFor } from '../src/pages/influencer/influencerPublicModel.js';
 
 const h = React.createElement;
-const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const P = programFor('influencer');
 const AFFILIATE = { tier: 'affiliate_creator', label: 'Affiliate Creator', percentage_bps: 2000, duration_invoices: 12 };
 const STRATEGIC = { tier: 'strategic_partner', label: 'Strategic Partner', percentage_bps: null, duration_invoices: null };
@@ -42,6 +42,13 @@ const render = ({ signedIn = false, me = OFF, state = null, tiers = READY } = {}
     program: P, content: contentFor({ signedIn, state, tiers }),
     panel: h(InfluencerPanel, { program: P, signedIn, me, state, tiers, onApply() {}, onAddDetails() {} }),
   })));
+
+test('rendered text keeps literal entity spellings and separates element words', () => {
+  const literal = `Literal &quot; &#39; &#x27; &amp;quot; &amp;#39; with "quotes", 'apostrophes' & ampersands`;
+  const html = renderToStaticMarkup(h('section', null,
+    h('span', null, literal), h('strong', null, 'next'), h('span', null, 'last')));
+  assert.equal(text(html), `${literal} next last`);
+});
 
 test('the map: influencer → the existing /influencers → its committed PDF; /programs/influencer resolves there', () => {
   assert.ok(P, 'influencer has no map entry');
