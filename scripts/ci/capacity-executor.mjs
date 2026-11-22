@@ -43,7 +43,7 @@ export function resultStore(root,run){
 export function supervisorResult(values,{observedTest,removed,exportedAt,exportDeadline,observedCaptured=false,receiptDeadline=Infinity,now=Date.now}={}){
  need(values&&['success','test_failure','cancelled','timed_out','infrastructure','incomplete_cleanup'].includes(values.category)
   &&['complete','none','failed','unverified','unknown'].includes(values.cleanup)&&['complete','failed','skipped_no_budget','not_configured','not_run'].includes(values.export),'supervisor_shape');
- const categories={success:'success',test_failure:'test_failure',cancelled:'cancelled',timed_out:'timed_out',cleanup_failure:'incomplete_cleanup',export_failure:'infrastructure',install_failure:'infrastructure',infrastructure:'infrastructure',unknown:'infrastructure'};
+ const categories={success:'success',test_failure:'test_failure',cancelled:'cancelled',timed_out:'timed_out',cleanup_failure:'incomplete_cleanup',export_failure:'infrastructure',install_failure:'infrastructure',infrastructure:'infrastructure',deadline_overrun:'infrastructure',unknown:'infrastructure'};
  need(categories[values.result]===values.category,'supervisor_category_mismatch');
  if(observedTest?.status==='success')need(String(values.test_exit)==='0','supervisor_test_truth');
  const failure=observedTest?.status==='failure'&&Number.isSafeInteger(observedTest.exitCode)&&observedTest.exitCode>0&&String(observedTest.exitCode)===String(values.test_exit);
@@ -52,7 +52,7 @@ export function supervisorResult(values,{observedTest,removed,exportedAt,exportD
  const exportComplete=values.export==='complete'&&Number.isSafeInteger(exportedAt)&&Number.isSafeInteger(exportDeadline)&&exportedAt<exportDeadline&&exportedAt<=now();
  const testStep=failure?'failure':observedTest?.status==='success'&&observedTest.exitCode===0?'success':observedTest?.status==='not_run'||(observedCaptured&&observedTest===null)?'not_run':'unknown';
  if(values.category==='success')need(values.result==='success'&&testStep==='success'&&cleanupConfirmed&&exportComplete&&now()<receiptDeadline,'supervisor_success_unproven');
- const executionOutcome=values.category==='timed_out'?'timed_out':!cleanupConfirmed?'cleanup_failure':!exportComplete?'export_failure':testStep==='success'||failure?'completed':'setup_failure';
+ const executionOutcome=(values.category==='timed_out'||values.result==='deadline_overrun')?'timed_out':!cleanupConfirmed?'cleanup_failure':!exportComplete?'export_failure':testStep==='success'||failure?'completed':'setup_failure';
  return {testStep,executionOutcome,cleanupConfirmed,exportComplete};
 }
 function outputValues(path){
@@ -79,9 +79,17 @@ export async function main(mode,env=process.env,ports={}){
   if(proof===true&&record?.container?.id===owned.id&&record.container.owner===owned.owner){record.removed=true;if(record.result)record.result.cleanupConfirmed=true;save();}
   return proof;
  };
+ const reconcileIntent=async intent=>{
+  const outcome=await (ports.recoverIntent??(value=>JobContainer.recoverIntent(value)))(intent);
+  const receipt=record?.receipt;
+  if(['absent','removed'].includes(outcome)&&receipt&&record.container===null&&intent.owner===`${receipt.childRunId}-${receipt.childAttempt}-${receipt.generation}`){
+   record.removed=true;if(record.result)record.result.cleanupConfirmed=true;save();
+  }
+  return outcome;
+ };
  const executeMode=ports.execute??execute;
  if(mode==='prepare'||mode==='cleanup'){
-  let failure;try{await executeMode(mode,env,{store,recover:ports.recover??(owned=>JobContainer.recover(owned)),verifyRemoved:removed,recoverIntent:ports.recoverIntent??(intent=>JobContainer.recoverIntent(intent))});}catch(e){failure=e;}
+  let failure;try{await executeMode(mode,env,{store,recover:ports.recover??(owned=>JobContainer.recover(owned)),verifyRemoved:removed,recoverIntent:reconcileIntent});}catch(e){failure=e;}
   // Retry only this job's retained outcome, never mint another job's OIDC or convert absence into cleanup proof.
   if(mode==='cleanup')try{await report();}catch(e){failure??=e;}
   if(failure)throw failure;if(mode==='cleanup')state.retire?.();return 0;

@@ -229,7 +229,7 @@ jobs:
       actions: read
       id-token: write
     # Exact local preparation pin; publication and activation remain held under #5719.
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@ffd1fe3861bcf6527ea15ef99705ba4080cdac5a
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@19927c8960ec01377ff25d6d5a081ae8db080df5
     with:
       submission: ${{ needs.plan.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}

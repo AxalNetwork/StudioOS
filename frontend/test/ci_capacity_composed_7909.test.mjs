@@ -141,6 +141,8 @@ test('D7909 conflicting ambiguous creation retains its durable intent without cl
  assert.equal(x.e.control.calls.filter(args=>args[0]==='rm').length,0);
  await assert.rejects(bridge('cleanup',x.env,x.ports),/recovery_retained/);assert.notEqual(x.results.read(),null,'acknowledgement cannot retire uncertain creation');
  x.f.result('failure');await x.f.tick();const a=new SqlCapacityStore(x.f.storage).get(x.s.requestId).shards[0].attempts[0];assert.equal(a.generation,1);assert.ok(['cancelling','cancellation_unknown'].includes(a.phase));
+ x.e.control.intentConflict=false;assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);assert.equal(x.store.list().length,0);
+ const delivered=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(delivered.cleanupConfirmed,true);assert.notEqual(delivered.testStep,'success');
 });
 
 test('D7909 observed negative truth survives a supervisor-loss boundary before typed output or export',async t=>{
@@ -190,4 +192,14 @@ test('D7909 lost create acknowledgement may confirm cleanup only through exact r
  const row=x.results.read();assert.equal(row.container.id,CID);assert.equal(row.removed,true);assert.equal(row.result.cleanupConfirmed,true);assert.notEqual(row.result.testStep,'success');
  assert.equal(x.e.control.calls.filter(args=>args[0]==='rm').length,1);assert.equal(x.store.list().length,0);
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+});
+
+
+for(const exit of [0,9])test(`D7909 durable cleanup tail past the receipt preserves test exit ${exit} without success`,async t=>{
+ const x=await setup(t,{exit}),remove=x.store.remove;
+ x.ports.store={...x.store,remove(owner){remove(owner);const receipt=x.results.read().receipt;t.mock.timers.setTime(receipt.executionDeadline+60_000);}};
+ assert.equal(await bridge('run',x.env,x.ports),exit===9?9:1);
+ const row=x.results.read();assert.equal(row.result.testStep,exit===9?'failure':'success');assert.equal(row.result.executionOutcome,exit===9?'completed':'timed_out');assert.equal(row.result.cleanupConfirmed,true);
+ const stored=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(stored.executionOutcome,row.result.executionOutcome);assert.equal(stored.testStep,row.result.testStep);
+ x.f.result(exit===9?'failure':'success');await x.f.tick();assert.notEqual(x.f.checks[0].conclusion,'success');
 });
