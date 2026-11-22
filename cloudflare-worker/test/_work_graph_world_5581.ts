@@ -13,6 +13,7 @@ import { WORK_GRAPH_EFFECT_DEPS } from '../src/services/workGraphEffects.ts';
 import {
   WORK_GRAPH_DEPS, advanceHead, createRevision, registerAsset, type CreateRevisionInput,
 } from '../src/services/workGraphRevisions.ts';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 const read = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 export const SCHEMA = read('202611140007_5581_work_graph_revisions.sql')
@@ -117,6 +118,7 @@ function leaseNamespace(flag: () => string) {
 
 export function world(opts: { leases?: 'on' | 'off'; files?: boolean } = {}) {
   const { DB, db } = makeD1(SCHEMA);
+  applySuppressionLedger(db); // D6654: the record-erasure path writes its ledger row.
   const r2 = new FakeR2();
   const state = { leases: opts.leases ?? 'off' };
   const lease = leaseNamespace(() => state.leases);

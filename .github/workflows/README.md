@@ -10,6 +10,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 
 | Workflow file | Workflow | pull_request | pull_request_target | merge_group | push to main | schedule | Other events |
 |---|---|---|---|---|---|---|---|
+| `admin-drift.yml` | Admin drift | — | — | — | — | read the live admin settings and diff the baseline (advisory, conditional)<br>file or update one issue per drift (advisory, conditional) | `workflow_dispatch` · read the live admin settings and diff the baseline (advisory, conditional)<br>file or update one issue per drift (advisory, conditional) |
 | `agent-compute-image.yml` | General compute image | image (advisory) | — | — | — | — | — |
 | `agent-compute-preview.yml` | General compute preview (owner gated) | — | — | — | — | — | `workflow_dispatch` · gate (advisory, conditional)<br>deploy_disabled_host (advisory) |
 | `agent-gateway-keys.yml` | Agent gateway keys | — | — | — | — | — | `workflow_dispatch` · Verify, store and link the account keys (advisory, conditional) |
@@ -34,7 +35,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `deck-visual.yml` | deck-visual | Deck editor visual regression and axe (Playwright, pinned container) (advisory, conditional) | — | — | — | — | `workflow_dispatch` · Deck editor visual regression and axe (Playwright, pinned container) (advisory, conditional) |
 | `dependency-review.yml` | Dependency Review | Dependency Review (advisory) | — | Dependency Review (advisory) | — | — | — |
 | `dr-drill.yml` | Monthly DR Drill | — | — | — | — | drill (advisory)<br>Synthetic outside file restore (advisory, conditional) | `workflow_dispatch` · drill (advisory)<br>Synthetic outside file restore (advisory, conditional) |
-| `file-recovery.yml` | Approved file recovery snapshot | — | — | — | — | snapshot (advisory, conditional)<br>synthetic-proof (advisory, conditional) | `workflow_dispatch` · snapshot (advisory, conditional)<br>synthetic-proof (advisory, conditional) |
+| `file-recovery.yml` | Approved file recovery snapshot | — | — | — | — | snapshot (advisory, conditional)<br>synthetic-proof (advisory, conditional)<br>suppression-drill (advisory, conditional) | `workflow_dispatch` · snapshot (advisory, conditional)<br>synthetic-proof (advisory, conditional)<br>suppression-drill (advisory, conditional) |
 | `form-lightbox-contracts.yml` | Form lightbox contracts | D695 form and page contracts (advisory, conditional) | — | — | — | — | — |
 | `gateway-live-check.yml` | Gateway live check (#4870, one synthetic call) | — | — | — | — | — | `workflow_dispatch` · one synthetic gateway call, then teardown (advisory) |
 | `github-alerts.yml` | GitHub alerts | — | — | — | — | Report workflow failures to Issues (advisory, conditional)<br>Merge queue stalled (advisory, conditional)<br>main is red (advisory, conditional)<br>Actions queue (advisory, conditional)<br>suite plan (advisory, conditional)<br>future clock (${{ matrix.part }}) (advisory, conditional)<br>future clock (report) (advisory, conditional)<br>File recovery heartbeat (advisory, conditional)<br>Merge queue deadline warning (advisory, conditional) | `workflow_dispatch` · Report workflow failures to Issues (advisory, conditional)<br>Merge queue stalled (advisory, conditional)<br>main is red (advisory, conditional)<br>Actions queue (advisory, conditional)<br>suite plan (advisory, conditional)<br>future clock (${{ matrix.part }}) (advisory, conditional)<br>future clock (report) (advisory, conditional)<br>File recovery heartbeat (advisory, conditional)<br>Merge queue deadline warning (advisory, conditional) |
@@ -50,7 +51,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `landing-bot-refresh.yml` | Landing bot serial refresh | — | — | — | — | Refresh inherited-red branches (advisory, conditional) | `workflow_dispatch` · Refresh inherited-red branches (advisory, conditional) |
 | `landing-conflict-indicator.yml` | Landing conflict indicator | — | — | — | Label confirmed conflicts (advisory, conditional) | Label confirmed conflicts (advisory, conditional) | `workflow_dispatch` · Label confirmed conflicts (advisory, conditional) |
 | `landing-feeder.yml` | Feed the merge queue | — | — | — | — | Feed the merge queue (advisory, conditional) | `workflow_dispatch` · Feed the merge queue (advisory, conditional) |
-| `landing-policy.yml` | Landing policy | landing policy (advisory) | — | — | — | — | — |
+| `landing-policy.yml` | Landing policy | landing policy (advisory)<br>privileged label (advisory, conditional) | — | — | — | — | — |
 | `lfs-budget.yml` | LFS budget | — | — | — | — | Check LFS bandwidth vs 250 GB plan (advisory) | `workflow_dispatch` · Check LFS bandwidth vs 250 GB plan (advisory) |
 | `macbook-worker.yml` | MacBook Worker | — | — | — | — | — | `workflow_dispatch` · Worker shard on MacBook (advisory, conditional) |
 | `magic-link-insert-probe.yml` | magic-link insert probe | — | — | — | — | magic-link insert (advisory) | `workflow_dispatch` · magic-link insert (advisory) |
@@ -62,6 +63,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `merge-control-deploy.yml` | Merge Control deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
 | `migration-immutability.yml` | Migration immutability | applied migrations unchanged (required context) | — | applied migrations unchanged (required context) | applied migrations unchanged (required context) | — | — |
 | `ossf-scorecard.yml` | OpenSSF Scorecard | — | — | — | — | OpenSSF Scorecard (advisory) (advisory, conditional) | `workflow_dispatch` · OpenSSF Scorecard (advisory) (advisory, conditional) |
+| `ownership.yml` | Ownership | ownership (advisory) | — | — | — | — | — |
 | `post-deploy-smoke.yml` | post-deploy SPA smoke | — | — | — | — | live SPA smoke (advisory) | `workflow_dispatch` · live SPA smoke (advisory) |
 | `pr-overlap.yml` | Advisory PR overlap | — | — | — | — | report (advisory, conditional) | `workflow_dispatch` · report (advisory, conditional) |
 | `pr-preview-deploy.yml` | PR preview deploy | — | — | — | — | — | `workflow_run` · resolve the pull request (advisory, conditional)<br>deploy the preview Worker (advisory, conditional)<br>delete the preview Worker (advisory, conditional) |
@@ -331,6 +333,7 @@ It uses synthetic queue responses and has no production credentials.
 
 ## Workflow purpose and credentials
 
+- `admin-drift.yml` · D8082: weekly read-only diff of the live GitHub admin settings (rulesets, environments, Actions permissions, Apps, runner groups) against `documentation/operations/GITHUB_ADMIN_BASELINE.md`; files or updates one `slot:chatgptpro` issue per drifted setting and changes no setting · Monday 04:47 UTC and manual dispatch on main · `check` reads `ADMIN_DRIFT_READ_TOKEN` from `production-ops` (`contents: read` only); `file` has `issues: write` and no secret
 - `agent-compute-image.yml` · D4557: read-only PR image validation; no publishing, credentials or deployment.
 - `agent-compute-preview.yml` · D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement.
 - `agent-stage-a.yml` · D4594 parts 2 and 3 (#4594): hosted Stage A. Creates a throwaway Worker `studioos-s4594-<run>` (workers.dev, no route, no cron) over its own D1, KV, queues, Workflow and R2, runs the #4566 preflight (must be `isolated`), drives one Workflow-path and one manual sponsor-run lifecycle with stubbed inference, reconciles holds, usage and proposals, and deletes everything. Never touches production. `scripts/agent-stage-a.mjs` · manual dispatch only · `CLOUDFLARE_API_TOKEN` (needs **Workers Scripts:Edit, D1:Edit, Workers KV:Edit, Queues:Edit, R2:Edit**, and Workflows), `CLOUDFLARE_ACCOUNT_ID`; repository secrets.
@@ -387,7 +390,7 @@ It uses synthetic queue responses and has no production credentials.
 | `agent-compute-image.yml` | D4557: read-only PR image validation; no publishing, credentials or deployment. |
 | `agent-compute-preview.yml` | D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement. Uses its own preview-only token in the required `agent-compute-preview` environment. |
 
-| `file-recovery.yml` | D6428/D6653: gated approved-class R2 archive, optional encrypted outside-account copy, per-run heartbeat and an isolated outside-preview restore drill. Disabled until counsel/#6650/configuration approval; live restore awaits #6654. | Daily 02:30 UTC and manual dispatch, only with `FILE_RECOVERY_ENABLED=true` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, separate `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`/`FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` and `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID`/`FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`; nonsecret `FILE_RECOVERY_REGISTRY` variable |
+| `file-recovery.yml` | D6428/D6653: gated approved-class R2 archive, optional encrypted outside-account copy, per-run heartbeat and an isolated outside-preview restore drill. Disabled until counsel/#6650/configuration approval. D6654 adds the `suppression-drill` dispatch mode: synthetic objects against the preview D1 suppression ledger only (`FILE_RECOVERY_PREVIEW_DRILL_ENABLED`, `FILE_RECOVERY_PREVIEW_D1_ID`, preview-only `FILE_RECOVERY_PREVIEW_D1_TOKEN`). | Daily 02:30 UTC and manual dispatch, only with `FILE_RECOVERY_ENABLED=true` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, separate `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`/`FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` and `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID`/`FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`; nonsecret `FILE_RECOVERY_REGISTRY` variable |
 
 D6653 extends `file-recovery.yml` with `snapshot` and `synthetic-proof` dispatch
 modes. The proof and monthly `dr-drill.yml` file job use only

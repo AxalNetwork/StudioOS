@@ -189,8 +189,9 @@ test('Ask for consent runs, and its old reason described a page that exists', ()
   const ops = entriesIn(actions, "'offers/proof': [");
   assert.deepEqual(ops.map((e) => e.match(/label: '([^']+)'/)[1]), canvasOps,
     'the ops row is no longer the artboard’s three labels in its order');
-  assert.match(ops[0], /\{ label: 'Ask for consent', kind: 'handler', handler: 'askConsent', primary: true \}/,
-    'Ask for consent is no longer performed by the page');
+  // D4844: still performed by the page, but no longer the zone's primary (`+ Add proof` is).
+  assert.match(ops[0], /\{ label: 'Ask for consent', kind: 'handler', handler: 'askConsent' \}/,
+    'Ask for consent is no longer performed by the page, or is drawn as a second primary');
   assert.match(ops[2], /\{ label: 'Export', kind: 'export' \}/, 'the export has stopped running');
   // The surface the retired reason said did not exist.
   assert.match(app, /path="\/attest\/partner\/:token"/,
@@ -210,7 +211,7 @@ test('the ask names the outcome it is about, and issues one credential', () => {
   // A consent is about a specific claim — the store keeps the wording for that
   // reason — so a header op that asked without naming one would issue a
   // credential against nothing in particular.
-  assert.match(modal, /<Field label="Which outcome"/, 'the ask no longer names which outcome it is about');
+  assert.match(modal, /<OfferField label="Which outcome"/, 'the ask no longer names which outcome it is about');
   assert.match(modal, /onChange=\{\(e\) => setPick\(Number\(e\.target\.value\)\)\}/, 'the outcome cannot be chosen');
   assert.match(modal, /issuedToken=\{issued\?\.itemId === item\.id \? issued : null\}/,
     'the issued link is no longer scoped to the item it was issued for');
