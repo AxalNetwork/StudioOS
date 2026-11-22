@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -69,32 +69,28 @@ export default function OpportunitiesZone() {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState('');
 
+  const readEpoch = useRef(0);
   const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, error: '' }));
-    try {
-      // #4714 (D4714): every page, so the rate and counts cover every request.
-      const bookings = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page));
-      // The templates are a SECOND source and must not take the page down with
-      // them: an advisor with no service definitions still has a decision log.
-      const services = await api.listMyAdvisorServices().catch(() => null);
-      // #4830 (D4830): the advisor's own uid, for PX-02b's "Preview profile". Optional: without it the link is left out.
-      const me = await api.getMyAdvisor().catch(() => null);
-      setState({
-        loading: false, error: '',
-        uid: me?.uid || null,
-        bookings: bookings?.items || [],
-        partial: partialLine(bookings),
-        services: services?.items || [],
-        servicesUnavailable: services === null,
-      });
-    } catch (error) {
-      setState({
-        loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'),
-        bookings: [], services: [], servicesUnavailable: true,
-      });
-    }
+    const epoch = ++readEpoch.current;
+    const current = () => epoch === readEpoch.current;
+    setState(s => ({ ...s, loading: true, error: '', servicesLoading: true, servicesUnavailable: false, uid: null }));
+    // Each source settles its own state. A slow template/profile read must
+    // never keep the request log on a skeleton.
+    await Promise.all([
+      readEveryPage(page => api.listMyAdvisorBookings(undefined, page)).then(bookings => {
+        if (current()) setState(s => ({ ...s, loading: false, error: '', bookings: bookings.items, partial: partialLine(bookings) }));
+      }).catch(error => {
+        if (current()) setState(s => ({ ...s, loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'), bookings: [] }));
+      }),
+      api.listMyAdvisorServices().then(services => {
+        if (current()) setState(s => ({ ...s, services: services?.items || [], servicesLoading: false, servicesUnavailable: false }));
+      }).catch(() => {
+        if (current()) setState(s => ({ ...s, services: [], servicesLoading: false, servicesUnavailable: true }));
+      }),
+      api.getMyAdvisor().then(me => { if (current()) setState(s => ({ ...s, uid: me?.uid || null })); }).catch(() => {}),
+    ]);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => { readEpoch.current++; }; }, [load]);
 
   // `Date.now()` once per render rather than per row, so every row on one paint
   // is classified against the same instant.
@@ -307,7 +303,9 @@ export default function OpportunitiesZone() {
           title="Terms templates"
           blurb="Your stored service definitions — what you offer, and on what terms."
         />
-        {state.servicesUnavailable
+        {state.servicesLoading
+          ? <p role="status" className="text-[12.5px] text-axal-muted">Reading service definitions…</p>
+          : state.servicesUnavailable
           ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Your service definitions could not be read. That is not a claim that you have none.</p>
           : state.services.length === 0
             ? <p className="text-[12.5px] leading-relaxed text-axal-muted">No service is defined yet. Expertise &rsaquo; Services is where they are written, and they appear here once they are.</p>
