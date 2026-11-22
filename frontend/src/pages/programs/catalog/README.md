@@ -17,4 +17,4 @@ its file name.
 D7121 part 3: `wellness.js` registers the existing bespoke Wellness page and
 PDF. Its content and diagram deck live in `pages/wellbeing/`; the shared
 brief builder delegates to `scripts/build-wellness-brief.mjs`. It needs no
-generic `content/wellness.js` module.
+separate generic content module.
