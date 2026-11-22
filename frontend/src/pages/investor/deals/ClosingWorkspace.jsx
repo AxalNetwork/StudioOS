@@ -9,6 +9,7 @@ import {
   LOADING, UNREADABLE, ok, UNAVAILABLE_WORD, DISCLAIMER,
   itemStatus, itemOwner, checklistSummary, paperRows, conditionRows,
   transferHold, transferRows, auditRows, closeRules, workspaceTabs, itemPatch,
+  phoneCell, portfolioRows, companyHref,
 } from './closingWorkspaceModel';
 
 /**
@@ -114,6 +115,20 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
   const tabs = workspaceTabs({ investor, checklist, paper, conditions, transfers });
   const audit = useMemo(() => auditRows({ events: reads.events, transfers, paper, closing: reads.closing }), [reads.events, transfers, paper, reads.closing]);
   const rules = useMemo(() => closeRules(closingRec), [closingRec]);
+  // D6889 (DX23 A): after close, each received line In Portfolio or not. Only
+  // an admin's read carries the position, so only an admin reads the
+  // positions list to find the venture's Portfolio page for the link.
+  const portfolio = useMemo(() => portfolioRows(closingRec), [closingRec]);
+  const [company, setCompany] = useState(LOADING);
+  const needsCompany = isAdmin && portfolio.state === 'ready' && portfolio.rows.some((r) => r.positionUid);
+  const projectId = closingRec?.project_id;
+  useEffect(() => {
+    if (!needsCompany) return undefined;
+    let alive = true;
+    setCompany(LOADING);
+    api.positionsList().then((r) => { if (alive) setCompany(ok(companyHref(r, projectId))); }, () => { if (alive) setCompany(UNREADABLE); });
+    return () => { alive = false; };
+  }, [needsCompany, projectId]);
   const items = reads.checklist.state === 'ready' && reads.checklist.value ? reads.checklist.value.items || [] : [];
   const title = deal?.project_name || `Deal #${dealId}`;
 
@@ -302,7 +317,10 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
                               <tr key={t.uid}>
                                 <td className={`${TD} font-mono`}>{money(t.cents, currency)}</td>
                                 <td className={TD}>{t.reference ? <span className="font-mono">{t.reference}</span> : <NotRecorded />}</td>
-                                <td className={TD}><StatusWord status={t.phoneVerified ? { key: 'done', word: 'Yes', glyph: '✓' } : { key: 'none', word: 'No', glyph: '–' }} /></td>
+                                <td className={TD} data-testid={`transfer-phone-${t.uid}`}>
+                                  <StatusWord status={phoneCell(t)} />
+                                  {t.phoneVerified ? <div className={`mt-0.5 text-[11px] ${t.phoneVerifiedBy ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>by {phoneCell(t).by}</div> : null}
+                                </td>
                                 <td className={TD}>{t.recordedBy || <NotRecorded />}</td>
                                 <td className={`${TD} font-mono`}>{t.at || <NotRecorded />}</td>
                                 <td className={TD}>{t.firm || <NotRecorded />}</td>
@@ -350,7 +368,12 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
           {reads.closing.state === 'loading' ? <Reading testid="close-rules-loading" />
             : reads.closing.state === 'unreadable' ? <Unavailable what="The closing record" onRetry={load} testid="close-rules-unavailable" />
               : rules.state === 'none' ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="close-rules-none">No closing record is open on this deal, so there is nothing to close yet.</p>
-                : rules.state === 'closed' ? <p className="text-[12.5px]" data-testid="close-rules-closed"><StatusWord status={{ key: 'done', word: `Closed${rules.closedAt ? ` ${rules.closedAt}` : ''}`, glyph: '✓' }} /> Checklist, Paper, Conditions, Transfer and Audit stay readable.</p>
+                : rules.state === 'closed' ? (
+                  <>
+                    <p className="text-[12.5px]" data-testid="close-rules-closed"><StatusWord status={{ key: 'done', word: `Closed${rules.closedAt ? ` ${rules.closedAt}` : ''}`, glyph: '✓' }} /> Checklist, Paper, Conditions, Transfer and Audit stay readable.</p>
+                    {portfolio.state === 'ready' ? <PortfolioTable portfolio={portfolio} isAdmin={isAdmin} company={company} currency={currency} /> : null}
+                  </>
+                )
                   : (
                     <>
                       <ul className="mt-2 space-y-1.5" id="close-rules-list">
@@ -367,6 +390,52 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
         </section>
       )}
     </section>
+  );
+}
+
+/**
+ * After close (DX23 A, D6889): each received line, In Portfolio or not.
+ * An admin's In Portfolio links to the venture's Portfolio page and names
+ * the position; anyone else (the founder) reads the label only. Closing
+ * creates no position: an Admin records one in Portfolio, naming the line.
+ */
+function PortfolioTable({ portfolio, isAdmin, company, currency }) {
+  const href = company.state === 'ready' ? company.value : null;
+  return (
+    <div className="mt-3 space-y-2" data-testid="portfolio-lines">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h4 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Record in Portfolio</h4>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">{isAdmin ? 'Admin · closing does not create positions' : 'Whether each line is in Portfolio'}</span>
+      </div>
+      {portfolio.rows.length === 0 ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="portfolio-lines-empty">No line was received on this closing.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead><tr><th className={TH}>Line</th><th className={`${TH} text-right`}>Amount</th><th className={TH}>Received</th><th className={TH}>In Portfolio</th></tr></thead>
+            <tbody>{portfolio.rows.map((r) => (
+              <tr key={r.uid} data-testid={`portfolio-line-${r.uid}`}>
+                <td className={TD}><b>{r.name}</b>{r.route ? <div className="text-[11px] text-gray-500 dark:text-gray-400">{r.route.replace(/_/g, ' ')}</div> : null}</td>
+                <td className={`${TD} whitespace-nowrap text-right font-mono`}>{money(r.cents, currency)}</td>
+                <td className={`${TD} whitespace-nowrap font-mono`}>{r.received || <NotRecorded />}</td>
+                <td className={TD}>
+                  {isAdmin && r.positionUid && href
+                    ? <a href={href} className="inline-flex min-h-[44px] items-center gap-1 font-semibold text-axal-violet-deep underline-offset-2 hover:underline dark:text-violet-300 md:min-h-0" data-testid={`portfolio-link-${r.uid}`}><StatusWord status={r.status} /><span className="sr-only">Open the position in Portfolio</span><span aria-hidden="true">›</span></a>
+                    : <StatusWord status={r.status} testid={`portfolio-status-${r.uid}`} />}
+                  {isAdmin && r.positionUid ? (
+                    <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                      Position <span className="break-all font-mono">{r.positionUid}</span>
+                      {company.state === 'unreadable' ? ' · the Portfolio page could not be found' : company.state === 'ready' && !href ? ' · no Portfolio page lists this venture' : ''}
+                    </div>
+                  ) : null}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-gray-500 dark:text-gray-400">{isAdmin
+        ? 'A line is In Portfolio when a position names it. Record a position in Portfolio and name the line it came from; a position that names no line is not matched by venture or amount.'
+        : 'A line is In Portfolio when an Admin recorded a position that names it.'}</p>
+    </div>
   );
 }
 

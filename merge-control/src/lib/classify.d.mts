@@ -11,3 +11,9 @@ export interface ChangedFile {
 }
 export interface Classification { tier: Tier; reasons: string[] }
 export function classify(files: readonly ChangedFile[]): Classification;
+/** D8067: the privileged paths, one gitignore-style glob each with its reason. */
+export const PRIVILEGED_PATHS: readonly { readonly glob: string; readonly why: string }[];
+export const PRIVILEGED: readonly RegExp[];
+export function globRegExp(glob: string): RegExp;
+export function isPrivileged(path: unknown): boolean;
+export function privilegedFiles(files: readonly Pick<ChangedFile, 'path' | 'previousPath'>[] | null | undefined): string[];

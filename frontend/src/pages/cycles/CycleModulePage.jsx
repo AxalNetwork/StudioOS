@@ -397,7 +397,8 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, query, onQuery, search })}
+          {/* D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read. */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, query, onQuery })}
           {doors}
           {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>

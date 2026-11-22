@@ -172,7 +172,7 @@ test('the row keeps every control the card grid had', () => {
   for (const control of ['>Edit<', '>Delete<', "{o.is_active ? 'Unlist' : 'List'}"]) {
     assert.ok(MINE.includes(control), `the rewrite lost the row control: ${control}`);
   }
-  assert.ok(MINE.includes('<OfferingFormModal'), 'the offering form is gone');
+  assert.ok(MINE.includes('<OfferingSheet'), 'the offering form is gone');
 });
 
 test('New service is a page op, and Pricing history is still prose', () => {

@@ -2177,7 +2177,7 @@ async function deleteFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Respons
   ]);
   if (existing.proof_file_key && c.env.FILES) {
     // D6651: the venture removing its own filing goes through the one record-erasure path.
-    try { await eraseRecordObjects(c.env.FILES, existing.proof_file_key, 'owner_removed'); }
+    try { await eraseRecordObjects(c.env.FILES, existing.proof_file_key, 'owner_removed', { db: c.env.DB }); }
     catch (e) { console.warn('[cycle_build] deleted filing proof not removed:', (e as Error)?.message); }
   }
   return c.json({ ok: true, deleted: id });
