@@ -171,7 +171,8 @@ test('RegisterPage reads its lane through laneForVisit and stores only an addres
 test('a plain /register after an old investor click does not say investor', async () => {
   const now = Date.UTC(2026, 10, 22, 12);
   const m = await mountRegister('', READ, { lane: 'investor', ts: now - INTENT_TTL_MS - 1000 }, now);
-  try { assert.equal(m.by('register-context'), undefined); } finally { await m.close(); }
+  // The line's text, not the node: a DOM node in a failure message is inspected whole.
+  try { assert.equal(m.by('register-context') ? text(m.by('register-context')) : null, null); } finally { await m.close(); }
   const f = await mountRegister('', READ, { lane: 'investor', ts: now - 60_000 }, now);
   try { assert.equal(text(f.by('register-context')), 'You are signing up as an investor.'); } finally { await f.close(); }
 });
