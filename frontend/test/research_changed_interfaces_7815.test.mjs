@@ -18,7 +18,8 @@ const defer = () => { let resolve, reject; const promise = new Promise((yes, no)
 const walk = node => [node, ...(node?.childNodes || []).flatMap(walk)];
 const tid = (m, id) => walk(document.body).find(n => m.props(n)?.['data-testid'] === id);
 const props = (m, id) => { const node = tid(m, id); assert.ok(node, id); return m.props(node); };
-const button = (m, label) => walk(document.body).find(n => n.tagName === 'BUTTON' && walk(n).filter(x => x.nodeType === 3).map(x => x.textContent).join('') === label);
+const textOf = node => !node ? '' : node.childNodes?.length ? node.childNodes.map(textOf).join('') : node.textContent || '';
+const button = (m, label) => walk(document.body).find(n => n.tagName === 'BUTTON' && textOf(n) === label);
 const until = async (m, condition) => { const end = Date.now() + 5000; while (!condition()) { if (Date.now() > end) assert.fail('Expected UI condition did not settle'); await m.flush(); } };
 const catalog = id => ({ item: { uid: id, name: `Vehicle ${id}`, provenance: {}, proposed: {}, source_name: 'Synthetic list' }, history: {}, reports: [], reports_status: 'ok' });
 const dossier = id => ({ uid: id, name: `Dossier ${id}`, thesis: 'Synthetic thesis', note: 'Synthetic private note', source_url: 'https://example.test/source', updated_at: '2026-11-22T00:00:00Z', identity_review_needed: true });

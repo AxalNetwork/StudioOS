@@ -408,6 +408,7 @@ function Subjects({ projectUid, view, archived, onChanged }) {
     attempt.current = null; creating.current = false;
     setPicked({ kind: null, uids: [] }); setTitle(''); setBusy(false);
     setOutcome(null); setStatus(null); setChecking(false);
+    return () => { attempt.current = null; creating.current = false; };
   }, [projectUid]);
   const toggle = (kind, uid) => {
     if (locked) return;
