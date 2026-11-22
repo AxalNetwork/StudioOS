@@ -22,7 +22,7 @@ import grow from '../src/pages/cycles/defs/grow.jsx';
 import { fnOf } from '../src/pages/cycles/adapters/index.js';
 import { RECORDS } from '../src/pages/cycles/adapters/grow.js';
 import MarketsHome, { ComparePanel } from '../src/pages/cycles/MarketsHome.jsx';
-import MarketRecord from '../src/pages/cycles/MarketRecord.jsx';
+import MarketRecord, { historyLine } from '../src/pages/cycles/MarketRecord.jsx';
 import { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import {
   compareSummary, diffWords, evidenceFor, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
@@ -277,4 +277,21 @@ test('Markets owns its page and its record in Grow’s def, and the old addresse
   assert.equal(matched('/grow/market-expansion'), '/grow/:slug');
   assert.equal(matched('/grow/market-expansion/mka1'), '/grow/:slug/:id');
   assert.equal(matched('/grow/market-expansion/new'), '/grow/:slug/new');
+});
+
+// D8252 (#8252). Mutation checked: the changes list dropped (fails); a legacy line parsed as a list (fails); a source
+// holding "; " split in two (fails); "and N more" glued onto the value before it (fails).
+test('History: a line with values shows each change under the update; a legacy line reads as it did', () => {
+  assert.deepEqual(historyLine('Market updated: Regulation score 2 → 4; Decision Not decided → Enter by Ana'),
+    { text: 'Market updated by Ana', changes: ['Regulation score 2 → 4', 'Decision Not decided → Enter'] });
+  assert.deepEqual(historyLine('Market updated by Ana'), { text: 'Market updated by Ana', changes: [] });
+  assert.deepEqual(historyLine('Market updated'), { text: 'Market updated', changes: [] });
+  assert.deepEqual(historyLine('Market updated: Demand source Not recorded → Calls; two by Ana').changes, ['Demand source Not recorded → Calls; two']);
+  assert.deepEqual(historyLine('Market updated: State Considering → Entering; and 3 more by Ana').changes, ['State Considering → Entering', 'and 3 more']);
+  assert.equal(historyLine('Market updated: no field changed by Ana').text, 'Market updated, no field changed by Ana');
+  const html = ssr(h(MarketRecord, { record: RECORD(), activity: [
+    { a: 'Market updated: Regulation score 2 → 4 by Ana', b: '2026-11-12 16:20:00' }, { a: 'Market updated by Ana', b: '2026-11-01 09:00:00' }], ...handlers }));
+  const hist = html.slice(html.indexOf('data-testid="market-history"'));
+  assert.equal((hist.match(/data-testid="market-history-changes"/g) || []).length, 1, 'only the line with values has a list');
+  assert.match(text(hist), /Market updated by Ana Regulation score 2 → 4/);
 });

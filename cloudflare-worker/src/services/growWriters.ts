@@ -715,8 +715,50 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
   ).bind(b.state === undefined ? row.state : oneOf(b.state, MARKET_STATES, 'state', true), decision, decision, row.decision, nowIso().slice(0, 10),
     p.demand_score, p.demand_source, p.regulation_score, p.regulation_source, p.partners_score, p.partners_source,
     p.cost_score, p.cost_source, x.geography_ref, x.size_cents, x.size_currency, x.size_source, user.id, nowIso(), row.id).run();
-  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_updated', summary: 'Market updated' });
+  const changes = marketChanges(row, { state: b.state === undefined ? row.state : oneOf(b.state, MARKET_STATES, 'state', true), decision, ...p, ...x });
+  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_updated', summary: marketUpdatedSummary(changes) });
   return { uid };
+}
+
+// D8252 (#8252): what a market edit changed, written into the activity line itself: `Market updated: Regulation
+// score 2 → 4; Decision Not decided → Enter`. A line written before this says `Market updated` and keeps that text.
+// The activity log's summary is capped at 500 characters, so a long list ends in `and N more` rather than being cut.
+const NOT_SET = 'Not recorded';
+const STATE_WORD: Record<string, string> = { considering: 'Considering', entering: 'Entering', served: 'Served', not_now: 'Not now' };
+const DECISION_WORD: Record<string, string> = { enter: 'Enter', not_yet: 'Not yet', exit: 'Exit' };
+const clip = (v: string, n = 48) => (v.length > n ? `${v.slice(0, n - 1).trimEnd()}…` : v);
+const worded = (words: Record<string, string>, v: unknown, empty = NOT_SET) => (v == null || v === '' ? empty : words[String(v)] ?? clip(String(v)));
+const money = (cents: unknown, cur: unknown) => (cents == null ? NOT_SET : `${Number(cents) / 100}${cur ? ` ${String(cur).toUpperCase()}` : ''}`);
+
+export function marketChanges(before: Row, after: Row): string[] {
+  const out: string[] = [];
+  const diff = (label: string, a: unknown, b: unknown, show: (v: unknown) => string) => {
+    if ((a ?? null) !== (b ?? null)) out.push(`${label} ${show(a)} → ${show(b)}`);
+  };
+  diff('State', before.state, after.state, (v) => worded(STATE_WORD, v));
+  diff('Decision', before.decision, after.decision, (v) => worded(DECISION_WORD, v, 'Not decided'));
+  for (const [k, label] of MARKET_PARTS) {
+    diff(`${label} score`, before[`${k}_score`], after[`${k}_score`], (v) => (v == null ? NOT_SET : String(v)));
+    diff(`${label} source`, before[`${k}_source`], after[`${k}_source`], (v) => (v == null || v === '' ? NOT_SET : clip(String(v))));
+  }
+  diff('Country', before.geography_ref, after.geography_ref, (v) => (v == null || v === '' ? NOT_SET : String(v)));
+  if ((before.size_cents ?? null) !== (after.size_cents ?? null) || (before.size_currency ?? null) !== (after.size_currency ?? null)) {
+    out.push(`Size ${money(before.size_cents, before.size_currency)} → ${money(after.size_cents, after.size_currency)}`);
+  }
+  diff('Size source', before.size_source, after.size_source, (v) => (v == null || v === '' ? NOT_SET : clip(String(v))));
+  return out;
+}
+
+export function marketUpdatedSummary(changes: string[], cap = 500): string {
+  if (!changes.length) return 'Market updated: no field changed';
+  let line = 'Market updated: ';
+  for (let i = 0; i < changes.length; i++) {
+    const next = `${i ? '; ' : ''}${changes[i]}`;
+    const tail = changes.length - i - 1 > 0 ? `; and ${changes.length - i - 1} more` : '';
+    if (line.length + next.length + tail.length > cap) return i ? `${line}; and ${changes.length - i} more` : `${line}${clip(changes[0], cap - line.length)}`;
+    line += next;
+  }
+  return line;
 }
 
 // ── Durable company-building ────────────────────────────────────────────────
