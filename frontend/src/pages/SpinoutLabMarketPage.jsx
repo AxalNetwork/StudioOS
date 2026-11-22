@@ -566,7 +566,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
       try { await markMilestone(user, 'market_sizing_completed'); }
       catch (error) { reportError('SpinoutLabMarketPage:mark-sizing', error); }
       try {
-        await cycleValidateApi.setMarketMark(id, 'assumptions_reviewed', true);
+        await cycleValidateApi.setMarketMark(project.id, 'assumptions_reviewed', true);
         if (projectIdentity.current === id) setAssumptionsReviewed(true);
       } catch (error) { reportError('SpinoutLabMarketPage:mark-assumptions', error); }
     } catch (error) {
