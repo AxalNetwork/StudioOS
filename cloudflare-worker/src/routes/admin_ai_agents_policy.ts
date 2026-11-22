@@ -22,6 +22,15 @@
  *   PUT    /capabilities/ceiling { capabilities: [..] | null, reason }    null offers every grantable name
  *   PUT    /capabilities/enforcement { enforced: boolean, reason }        off: only the reserved names are refused
  *
+ * D8071 (#8071), execution budgets (`services/agentBudgets.ts`):
+ *   GET    /budgets                                            every agent's caps and use this period, the platform's workspace
+ *                                                               figures, and the runs halted for budget
+ *   PUT    /budgets/agents/:uid  { tokens_cap?, minutes_cap?, prs_per_day_cap?, retries_per_task_cap?, reason }   null is no cap
+ *   PUT    /budgets/tasks/:uid   { tokens_cap?, minutes_cap?, retries_cap?, reason }   null is the agent's cap
+ *   PUT    /budgets/workspace    { scope_kind, scope_id, agents_cap?, live_agents_cap?, ai_spend_cap_cents?, compute_spend_cap_cents?, reason }
+ *                    null is the platform figure; 409 above_platform_ceiling past it; 404 scope_not_found
+ *   PUT    /budgets/platform     { agents_cap?, live_agents_cap?, ai_spend_cap_cents?, compute_spend_cap_cents?, reason }   null is no ceiling
+ *
  * Every write takes a reason and writes H5's admin audit row (before, after,
  * reason) in the same batch as the change (`aiAdminAuditStatement`), so the
  * change and its audit land together or not at all.
@@ -40,6 +49,9 @@ import {
   CAPABILITY_REASON_MAX, capabilityMatrix, capabilityOf, capabilityReason, ceilingOf, expandCapabilities, grantStatement, liveGrants,
   readCapabilityPolicy, revokeStatement,
 } from '../services/agentCapabilities';
+import {
+  aboveCeiling, agentBudgetView, agentCaps, agentCapsOf, haltedRuns, platformWorkspaceCaps, taskCapsOf, workspaceCapsOf, workspaceOwnCaps,
+} from '../services/agentBudgets';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -261,6 +273,106 @@ r.put('/capabilities/enforcement', async (c) => {
       .bind(b.enforced ? 1 : 0, Number(admin.id)),
   ]);
   return c.json(await capabilityMatrix(c.env));
+});
+
+// ── D8071: execution budgets ─────────────────────────────────────────────────────────────────────────────────────
+
+const budgetUnreadable = (c: any) => refuse(c, 503, { code: 'budget_unreadable', message: 'The agent budgets could not be read. Nothing was changed.' });
+
+async function budgetsView(c: any) {
+  const agents = (await c.env.DB.prepare(
+    "SELECT id, uid, role_key, scope_kind FROM team_agents WHERE status <> 'removed' ORDER BY id LIMIT 500",
+  ).all()).results as { id: number; uid: string; role_key: string; scope_kind: string }[] ?? [];
+  const rows = await Promise.all(agents.map(async (a) => ({ agent_uid: a.uid, role_key: a.role_key, scope_kind: a.scope_kind, ...await agentBudgetView(c.env, a.id) })));
+  return { platform: await platformWorkspaceCaps(c.env), agents: rows, halted: await haltedRuns(c.env, null) };
+}
+
+r.get('/budgets', async (c) => {
+  await requireSuperAdmin(c);
+  try { return c.json(await budgetsView(c)); } catch { return budgetUnreadable(c); }
+});
+
+r.put('/budgets/agents/:uid', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const why = reasonProblem(b.reason); if (why) return say(c, why);
+  const agent = await liveAgent(c, c.req.param('uid'));
+  if (!agent) return refuse(c, 404, { code: 'agent_not_found', message: 'There is no such agent.' });
+  let cur;
+  try { cur = await agentCaps(c.env, agent.id); } catch { return budgetUnreadable(c); }
+  const before = { tokens_cap: cur.tokens_cap, minutes_cap: cur.minutes_cap, prs_per_day_cap: cur.prs_per_day_cap, retries_per_task_cap: cur.retries_per_task_cap };
+  const next = agentCapsOf(b, before); if (!next.ok) return say(c, next.problem);
+  const v = next.value;
+  await write(c, Number(admin.id), 'policy.budget_agent', `agent:${agent.uid}`, before, v, b.reason, [
+    c.env.DB.prepare(`INSERT INTO agent_budgets (agent_id, tokens_cap, minutes_cap, prs_per_day_cap, retries_per_task_cap, set_by, set_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(agent_id) DO UPDATE SET tokens_cap = excluded.tokens_cap, minutes_cap = excluded.minutes_cap,
+          prs_per_day_cap = excluded.prs_per_day_cap, retries_per_task_cap = excluded.retries_per_task_cap, set_by = excluded.set_by, set_at = CURRENT_TIMESTAMP`)
+      .bind(agent.id, v.tokens_cap, v.minutes_cap, v.prs_per_day_cap, v.retries_per_task_cap, Number(admin.id)),
+  ]);
+  return c.json({ agent_uid: agent.uid, ...await agentBudgetView(c.env, agent.id) });
+});
+
+r.put('/budgets/tasks/:uid', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const why = reasonProblem(b.reason); if (why) return say(c, why);
+  const uid = c.req.param('uid');
+  const task = /^[a-f0-9]{32}$/.test(uid)
+    ? await c.env.DB.prepare('SELECT id, uid, budget_tokens_cap, budget_minutes_cap, budget_retries_cap FROM scope_tasks WHERE uid = ?').bind(uid).first<Record<string, any>>()
+    : null;
+  if (!task) return refuse(c, 404, { code: 'task_not_found', message: 'There is no such task.' });
+  const before = { budget_tokens_cap: task.budget_tokens_cap ?? null, budget_minutes_cap: task.budget_minutes_cap ?? null, budget_retries_cap: task.budget_retries_cap ?? null };
+  const next = taskCapsOf(b, before); if (!next.ok) return say(c, next.problem);
+  const v = next.value;
+  await write(c, Number(admin.id), 'policy.budget_task', `task:${task.uid}`, before, v, b.reason, [
+    c.env.DB.prepare('UPDATE scope_tasks SET budget_tokens_cap = ?, budget_minutes_cap = ?, budget_retries_cap = ? WHERE id = ?')
+      .bind(v.budget_tokens_cap, v.budget_minutes_cap, v.budget_retries_cap, task.id),
+  ]);
+  return c.json({ task_uid: task.uid, caps: { tokens: v.budget_tokens_cap, minutes: v.budget_minutes_cap, retries: v.budget_retries_cap } });
+});
+
+r.put('/budgets/workspace', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const why = reasonProblem(b.reason); if (why) return say(c, why);
+  const kind = b.scope_kind === 'company' || b.scope_kind === 'project' ? b.scope_kind as 'company' | 'project' : null;
+  const id = Number.isSafeInteger(b.scope_id) && b.scope_id > 0 ? Number(b.scope_id) : null;
+  if (!kind || !id) return say(c, { code: 'invalid_scope', message: 'Name the workspace: scope_kind company or project, and its scope_id.' });
+  const exists = await c.env.DB.prepare(kind === 'company' ? 'SELECT 1 AS ok FROM company_profiles WHERE id = ?' : 'SELECT 1 AS ok FROM projects WHERE id = ?').bind(id).first();
+  if (!exists) return refuse(c, 404, { code: 'scope_not_found', message: 'There is no such workspace.' });
+  const scope = { kind, id };
+  let before, platform;
+  try { [before, platform] = await Promise.all([workspaceOwnCaps(c.env, scope), platformWorkspaceCaps(c.env)]); } catch { return budgetUnreadable(c); }
+  const next = workspaceCapsOf(b, before); if (!next.ok) return say(c, next.problem);
+  const v = next.value;
+  const above = aboveCeiling(v, platform);
+  if (above) return refuse(c, 409, { code: 'above_platform_ceiling', message: `${above} is above the platform figure. Raise the figure on Policies first.`, extra: { field: above } });
+  const [companyId, projectId] = kind === 'company' ? [id, null] : [null, id];
+  await write(c, Number(admin.id), 'policy.budget_workspace', `${kind}:${id}`, before, v, b.reason, [
+    c.env.DB.prepare('INSERT OR IGNORE INTO agent_scope_settings (scope_kind, company_id, project_id, updated_by) VALUES (?, ?, ?, ?)')
+      .bind(kind, companyId, projectId, Number(admin.id)),
+    c.env.DB.prepare(`UPDATE agent_scope_settings SET agents_cap = ?, live_agents_cap = ?, ai_spend_cap_cents = ?, compute_spend_cap_cents = ?,
+        updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`)
+      .bind(v.agents_cap, v.live_agents_cap, v.ai_spend_cap_cents, v.compute_spend_cap_cents, Number(admin.id), kind, companyId ?? 0, projectId ?? 0),
+  ]);
+  return c.json({ scope_kind: kind, scope_id: id, caps: v, platform });
+});
+
+r.put('/budgets/platform', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const why = reasonProblem(b.reason); if (why) return say(c, why);
+  let before;
+  try { before = await platformWorkspaceCaps(c.env); } catch { return budgetUnreadable(c); }
+  const next = workspaceCapsOf(b, before); if (!next.ok) return say(c, next.problem);
+  const v = next.value;
+  await write(c, Number(admin.id), 'policy.budget_platform', 'policy:budgets', before, v, b.reason, [
+    c.env.DB.prepare(`UPDATE ai_agent_policy SET workspace_agents_cap = ?, workspace_live_agents_cap = ?, workspace_ai_spend_cap_cents = ?,
+        workspace_compute_spend_cap_cents = ?, updated_by = ?, updated_at = datetime('now') WHERE id = 1`)
+      .bind(v.agents_cap, v.live_agents_cap, v.ai_spend_cap_cents, v.compute_spend_cap_cents, Number(admin.id)),
+  ]);
+  return c.json({ platform: await platformWorkspaceCaps(c.env) });
 });
 
 export const mount: RouteMount = { path: '/api/admin/ai-agents/policy', router: r };
