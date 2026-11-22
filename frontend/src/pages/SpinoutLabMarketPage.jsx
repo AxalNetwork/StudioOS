@@ -97,6 +97,7 @@ export function marketShare(value, total) {
   return Number(value) === 0 ? 0 : Number(total) > 0 ? Math.round(Number(value) / Number(total) * 100) : null;
 }
 const SIZING_INPUT_IDS = { population: 'input-population', acv: 'input-acv', tamOverride: 'input-tam', tamOverrideReason: 'input-tam-reason', samPct: 'input-sam', winRate: 'input-som', capacity: 'input-capacity', horizonMonths: 'input-horizon', salesCycleMonths: 'input-sales-cycle', retentionPct: 'input-retention' };
+const PREVIEW_INPUTS = [...Object.keys(SIZING_INPUT_IDS), 'targetYear'];
 const sizingFields = error => error?.data?.fields || (error?.data?.field ? [error.data.field] : []);
 
 // Match the project's free-text sector to an aggregator sector row.
@@ -295,41 +296,44 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const [preview, setPreview] = useState({ state: 'idle', result: null });
   const [fieldErrors, setFieldErrors] = useState({});
   const [versionRead, setVersionRead] = useState({ state: 'loading', version: null });
+  const versionRequest = useRef(0);
   const projectIdentity = useRef(null);
   projectIdentity.current = project?.id ?? null;
   const savingRef = useRef(false);
+  const previewInputs = JSON.stringify(Object.fromEntries(PREVIEW_INPUTS.map(key => [key, assume[key]])));
   useEffect(() => {
     if (!project?.id) return undefined;
     let alive = true;
     const id = project.id;
+    const ticket = ++versionRequest.current;
     setVersionRead({ state: 'loading', version: null });
     (async () => {
       try {
         const list = await marketSizingApi.versions(id);
         const latest = list.versions?.[0];
         const value = latest ? await marketSizingApi.version(id, latest.uid) : null;
-        if (alive && projectIdentity.current === id) setVersionRead({ state: 'ok', version: value?.version || null });
+        if (alive && projectIdentity.current === id && versionRequest.current === ticket) setVersionRead({ state: 'ok', version: value?.version || null });
       } catch {
-        if (alive && projectIdentity.current === id) setVersionRead({ state: 'unreadable', version: null });
+        if (alive && projectIdentity.current === id && versionRequest.current === ticket) setVersionRead({ state: 'unreadable', version: null });
       }
     })();
     return () => { alive = false; };
-  }, [project?.id, project?.tam, project?.sam, project?.som]);
+  }, [project?.id]);
   useEffect(() => {
     if (!editOpen || !project?.id) return undefined;
     let alive = true;
     const id = project.id;
     setPreview({ state: 'loading', result: null });
     setFieldErrors({});
-    marketSizingApi.preview(id, sizingRequest(assume, sizingSourceId)).then(reply => {
+    const timer = setTimeout(() => marketSizingApi.preview(id, { assumptions: JSON.parse(previewInputs) }).then(reply => {
       if (alive && projectIdentity.current === id) setPreview({ state: 'ok', result: reply.result });
     }).catch(error => {
       if (!alive || projectIdentity.current !== id) return;
       setPreview({ state: 'unreadable', result: null, message: error?.message || 'The calculation could not be checked. Try again.' });
       setFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
-    });
-    return () => { alive = false; };
-  }, [editOpen, project?.id, assume, sizingSourceId]);
+    }), 350);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [editOpen, project?.id, previewInputs]);
   const fieldState = key => ({ id: SIZING_INPUT_IDS[key], 'aria-invalid': Boolean(fieldErrors[key]) || undefined, 'aria-describedby': fieldErrors[key] ? `${SIZING_INPUT_IDS[key]}-error` : undefined });
   const fieldError = key => fieldErrors[key] ? <p id={`${SIZING_INPUT_IDS[key]}-error`} className="text-[11.5px] text-red-700 dark:text-red-400" role="alert">{fieldErrors[key]}</p> : null;
 
@@ -560,6 +564,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
       finishRef.current = { tween: false, saved: true };
       tweenTo(figures);
       setProject(prev => ({ ...prev, ...figures }));
+      versionRequest.current += 1; // A pending history read cannot replace this committed version.
       setVersionRead({ state: 'ok', version });
       setEditOpen(false);
       // These are separate workflow marks, earned only after the atomic sizing save.

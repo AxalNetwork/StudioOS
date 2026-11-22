@@ -45,7 +45,7 @@ async function page(t, options={}) {
   t.mock.method(cycleValidateApi,'marketReadiness',async()=>({sources:[]}));
   t.mock.method(cycleValidateApi,'setMarketMark',async(...args)=>{events.push(['mark',...args]);});
   t.mock.method(spinoutLab,'complete',async(key)=>{events.push(['milestone',key]); return {};});
-  t.mock.method(marketSizingApi,'versions',async()=>({versions:options.version?[options.version]:[]}));
+  t.mock.method(marketSizingApi,'versions',async()=>options.versions?options.versions():({versions:options.version?[options.version]:[]}));
   t.mock.method(marketSizingApi,'version',async()=>({version:options.version}));
   t.mock.method(marketSizingApi,'preview',async(id,body)=>{previews.push({id,body}); return options.preview?options.preview(id,body):{result:version};});
   t.mock.method(marketSizingApi,'saveVersion',async(id,body)=>{events.push(['save',id,body]); return options.save?options.save(id,body):{version};});
@@ -116,5 +116,50 @@ for(const matches of [true,false]) test(`saved formula ${matches?'appears for ma
     await until(m,()=>m.text().includes(matches?'Total from entered accounts':'saved without a matching version'));
     if(matches) {assert.match(m.text(),/Version 4 · 2026-11-22/); assert.match(m.text(),/Sales capacity set the limit/);}
     else assert.doesNotMatch(m.text(),/Total from entered accounts/);
+  } finally {await m.unmount();}
+});
+for(const fails of [false,true]) test(`a committed version survives a late ${fails?'failed':'older'} history read without refetching`,async t=>{
+  const pending=deferred(); let reads=0;
+  const m=await page(t,{versions:()=>{reads++; return pending.promise;}});
+  try {
+    await until(m,()=>reads===1);
+    await act(async()=>props(m,'button-edit-sizing').onClick());
+    await act(async()=>{await props(m,'button-save-sizing').onClick();});
+    await act(async()=>props(m,'button-toggle-methodology').onClick());
+    assert.match(m.text(),/Version 4 · 2026-11-22/);
+    await act(async()=>{if(fails) pending.reject(new Error('Synthetic history unavailable')); else pending.resolve({versions:[]});});
+    assert.equal(reads,1,'saving figures must not start a redundant history refresh');
+    assert.match(m.text(),/Version 4 · 2026-11-22/);
+    assert.match(m.text(),/Total from entered accounts/);
+  } finally {await m.unmount();}
+});
+test('preview waits for a pause, cancels pending inputs and ignores context-only edits',async t=>{
+  const m=await page(t);
+  const scheduled=[]; const originalSet=setTimeout,originalClear=clearTimeout;
+  t.mock.method(globalThis,'setTimeout',(fn,ms,...args)=>{
+    if(ms!==350) return originalSet(fn,ms,...args);
+    const timer={fn:()=>fn(...args),active:true};scheduled.push(timer);return timer;
+  });
+  t.mock.method(globalThis,'clearTimeout',timer=>{
+    if(scheduled.includes(timer)) timer.active=false;else originalClear(timer);
+  });
+  const advance=()=>act(async()=>{for(const timer of scheduled.filter(t=>t.active)){timer.active=false;timer.fn();}});
+  try {
+    await act(async()=>props(m,'button-edit-sizing').onClick());
+    await act(async()=>{
+      props(m,'input-capacity').onChange({target:{value:'9'}});
+      props(m,'input-horizon').onChange({target:{value:'36'}});
+    });
+    assert.equal(m.previews.length,0,'no request while typing');
+    await advance();
+    assert.equal(m.previews.length,1,'only the final edited inputs are calculated');
+    const first=m.previews[0];assert.equal(first.body.assumptions.capacity,'9');
+    assert.equal(first.body.assumptions.horizonMonths,'36');
+    await act(async()=>props(m,'input-cagr').onChange({target:{value:'12'}}));
+    await advance();assert.equal(m.previews.length,1,'CAGR does not affect this Worker formula');
+    await act(async()=>props(m,'input-capacity').onChange({target:{value:'10'}}));
+    await advance();assert.equal(m.previews.length,2);
+    await act(async()=>props(m,'input-capacity').onChange({target:{value:'11'}}));
+    await m.unmount();await advance();assert.equal(m.previews.length,2,'leaving cancels the pending calculation');
   } finally {await m.unmount();}
 });
