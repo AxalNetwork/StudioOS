@@ -4,7 +4,7 @@ import { constants, closeSync, fstatSync, fsyncSync, mkdirSync, openSync, readFi
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { privateDirectory } from '../local-files.mjs';
-import { main as execute, ownedPaths } from './runner-execution.mjs';
+import { main as execute, ownedPaths, runStepDeadline } from './runner-execution.mjs';
 import { main as admit, receiptIdentity } from './runner-admission.mjs';
 import { trustedAuthority } from './executor-authority.mjs';
 import { githubOidcToken, reportExecutionResult } from './capacity-client.mjs';
@@ -51,8 +51,8 @@ export function supervisorResult(values,{observedTest,removed,exportedAt,exportD
  const cleanupConfirmed=values.cleanup==='complete'&&removed===true;
  const exportComplete=values.export==='complete'&&Number.isSafeInteger(exportedAt)&&Number.isSafeInteger(exportDeadline)&&exportedAt<exportDeadline&&exportedAt<=now();
  const testStep=failure?'failure':observedTest?.status==='success'&&observedTest.exitCode===0?'success':observedTest?.status==='not_run'||(observedCaptured&&observedTest===null)?'not_run':'unknown';
- if(values.category==='success')need(values.result==='success'&&testStep==='success'&&cleanupConfirmed&&exportComplete&&now()<receiptDeadline,'supervisor_success_unproven');
- const executionOutcome=(values.category==='timed_out'||values.result==='deadline_overrun')?'timed_out':!cleanupConfirmed?'cleanup_failure':!exportComplete?'export_failure':testStep==='success'||failure?'completed':'setup_failure';
+ if(values.category==='success')need(values.result==='success'&&testStep==='success'&&cleanupConfirmed&&exportComplete,'supervisor_success_unproven');
+ const executionOutcome=(values.category==='timed_out'||values.result==='deadline_overrun'||(values.category==='success'&&now()>=receiptDeadline))?'timed_out':!cleanupConfirmed?'cleanup_failure':!exportComplete?'export_failure':testStep==='success'||failure?'completed':'setup_failure';
  return {testStep,executionOutcome,cleanupConfirmed,exportComplete};
 }
 function outputValues(path){
@@ -68,10 +68,21 @@ export async function main(mode,env=process.env,ports={}){
  let record=state.read();
  if(record)need(same(record.receipt,{...record.receipt,executorSha:context.executorSha,childWorkflowSha:context.childWorkflowSha,childRunId:Number(context.childRunId),childAttempt:1})&&record.receipt.repository===context.repository,'result_context_changed');
  const save=()=>state.write(record);
+ // Persist the original Run-process bound; a cleanup process must never reopen it with a fresh timeOrigin.
+ const fenceLateSuccess=()=>{
+  if(record?.result?.testStep==='success'&&record.result.executionOutcome==='completed'
+    &&Date.now()>=Math.min(record.receipt.executionDeadline,record.completionDeadline??record.receipt.executionDeadline)){
+   record.result={...record.result,executionOutcome:'timed_out'};save();
+  }
+ };
  const report=async()=>{
+  fenceLateSuccess();
   if(!record?.result||record.ack===JSON.stringify(record.result))return;
-  const value=await (ports.report??((receipt,result)=>reportExecutionResult(receipt,result,{url:env.CI_CAPACITY_URL,audience:env.CI_CAPACITY_AUDIENCE,oidcToken:githubOidcToken(env)})))(record.receipt,record.result);
-  need(value?.accepted===true,'result_delivery_unacknowledged');record.ack=JSON.stringify(record.result);save();
+  const delivered=structuredClone(record.result);
+  const value=await (ports.report??((receipt,result)=>reportExecutionResult(receipt,result,{url:env.CI_CAPACITY_URL,audience:env.CI_CAPACITY_AUDIENCE,oidcToken:githubOidcToken(env)})))(record.receipt,delivered);
+  need(value?.accepted===true,'result_delivery_unacknowledged');record.ack=JSON.stringify(delivered);save();
+  // A late ACK cannot acknowledge a later timeout correction. Cleanup retries that dirty journal.
+  fenceLateSuccess();
  };
  const verifyRemoved=ports.verifyRemoved??(owned=>JobContainer.isRemoved(owned));
  const removed=async owned=>{
@@ -90,7 +101,8 @@ export async function main(mode,env=process.env,ports={}){
  const executeMode=ports.execute??execute;
  if(mode==='prepare'||mode==='cleanup'){
   let failure;try{await executeMode(mode,env,{store,recover:ports.recover??(owned=>JobContainer.recover(owned)),verifyRemoved:removed,recoverIntent:reconcileIntent});}catch(e){failure=e;}
-  // Retry only this job's retained outcome, never mint another job's OIDC or convert absence into cleanup proof.
+  // Retry only this job's outcome. Exact canonical create-intent reconciliation may prove absence;
+  // an absent result/ID record alone never proves cleanup, and no other job's OIDC is minted.
   if(mode==='cleanup')try{await report();}catch(e){failure??=e;}
   if(failure)throw failure;if(mode==='cleanup')state.retire?.();return 0;
  }
@@ -116,7 +128,7 @@ export async function main(mode,env=process.env,ports={}){
  mkdirSync(paths.temp,{recursive:true,mode:0o700});const out=join(paths.temp,'supervisor-values');
  // Never use a candidate path or the public log as outcome authority. No bearer is persisted.
  const fd=openSync(out,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);closeSync(fd);
- const observedStore={...store,write(owned){store.write(owned);need(canonical,'supervisor_receipt_missing');record={receipt:canonical,container:{...owned},removed:false,ack:null,result:null};save();},remove(owner){store.remove(owner);if(record?.container?.owner===owner){record.removed=true;if(record.result)record.result.cleanupConfirmed=true;save();}}};
+ const observedStore={...store,write(owned){store.write(owned);need(canonical,'supervisor_receipt_missing');record={receipt:canonical,completionDeadline:Math.min(canonical.executionDeadline,runStepDeadline()),container:{...owned},removed:false,ack:null,result:null};save();},remove(owner){store.remove(owner);if(record?.container?.owner===owner){record.removed=true;if(record.result)record.result.cleanupConfirmed=true;save();}}};
  const exporter=ports.exporter??createTraceExporter({stagingRoot:join(paths.temp,'trace-export'),engine:isolation.job.engine});
  let observedTest=null,observedCaptured=false,exportedAt=null,exportDeadline=null;
  const observedExport=async args=>{
@@ -142,14 +154,14 @@ export async function main(mode,env=process.env,ports={}){
  };
  let code;
  try{code=await executeMode('run',{...env,GITHUB_OUTPUT:out},{...deps,store:observedStore,exporter:observedExport});
-  need(canonical,'supervisor_receipt_missing');record??={receipt:canonical,removed:false,container:null,ack:null,result:null};
+  need(canonical,'supervisor_receipt_missing');record??={receipt:canonical,completionDeadline:Math.min(canonical.executionDeadline,runStepDeadline()),removed:false,container:null,ack:null,result:null};
   const failed=record.result?.testStep==='failure';let mapped;
-  try{mapped=supervisorResult(outputValues(out),{observedTest,removed:record.removed,exportedAt,exportDeadline,observedCaptured,receiptDeadline:canonical.executionDeadline});}
+  try{mapped=supervisorResult(outputValues(out),{observedTest,removed:record.removed,exportedAt,exportDeadline,observedCaptured,receiptDeadline:record.completionDeadline??canonical.executionDeadline});}
   catch(error){if(!failed)throw error;mapped={testStep:'failure',executionOutcome:'cleanup_failure',cleanupConfirmed:record.removed===true,exportComplete:false};}
   // Later metadata cannot erase a phase failure already captured in durable listener state.
   record.result={...mapped,testStep:failed?'failure':mapped.testStep};save();await report();
  }finally{isolation.job.runCandidateInterruptible=phase;rmSync(out,{force:true});}
- return code;
+ return code===0&&record?.result?.executionOutcome==='timed_out'?124:code;
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
  try{process.exitCode=await main(process.argv[2]);}catch{console.error('capacity_supervisor_refused_or_delivery_pending');process.exitCode=1;}

@@ -97,7 +97,7 @@ test('D7909 supervisor mapping refuses missing export, inconsistent failure and 
  const values={category:'success',result:'success',test_exit:'0',cleanup:'complete',export:'complete'},proof={observedTest:{status:'success',exitCode:0},removed:true,exportedAt:10,exportDeadline:20,receiptDeadline:100,now:()=>30};
  assert.equal(supervisorResult(values,proof).testStep,'success');
  for(const change of [{export:'not_configured'},{cleanup:'none'},{test_exit:'9'},{category:'test_failure'}])assert.throws(()=>supervisorResult({...values,...change},proof));
- assert.throws(()=>supervisorResult(values,{...proof,removed:false}));assert.throws(()=>supervisorResult(values,{...proof,exportedAt:20}));assert.throws(()=>supervisorResult(values,{...proof,receiptDeadline:30}));
+ assert.throws(()=>supervisorResult(values,{...proof,removed:false}));assert.throws(()=>supervisorResult(values,{...proof,exportedAt:20}));assert.equal(supervisorResult(values,{...proof,receiptDeadline:30}).executionOutcome,'timed_out');
  const failed={category:'test_failure',result:'test_failure',test_exit:'9',cleanup:'failed',export:'failed'};
  assert.deepEqual(supervisorResult(failed,{observedTest:{status:'failure',exitCode:9},removed:false}),{testStep:'failure',executionOutcome:'cleanup_failure',cleanupConfirmed:false,exportComplete:false});
  assert.deepEqual(supervisorResult({category:'infrastructure',result:'infrastructure',test_exit:'',cleanup:'unknown',export:'not_run'},{observedCaptured:true}),{testStep:'unknown',executionOutcome:'cleanup_failure',cleanupConfirmed:false,exportComplete:false});
@@ -201,5 +201,28 @@ for(const exit of [0,9])test(`D7909 durable cleanup tail past the receipt preser
  assert.equal(await bridge('run',x.env,x.ports),exit===9?9:1);
  const row=x.results.read();assert.equal(row.result.testStep,exit===9?'failure':'success');assert.equal(row.result.executionOutcome,exit===9?'completed':'timed_out');assert.equal(row.result.cleanupConfirmed,true);
  const stored=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(stored.executionOutcome,row.result.executionOutcome);assert.equal(stored.testStep,row.result.testStep);
+ x.f.result(exit===9?'failure':'success');await x.f.tick();assert.notEqual(x.f.checks[0].conclusion,'success');
+});
+
+
+for(const tail of ['after-supervisor','journal-write','delivery'])for(const exit of [0,9])test(`D7909 ${tail} respects the persisted earlier Run bound while preserving test exit ${exit}`,async t=>{
+ const x=await setup(t,{exit}),start=Date.now(),deadline=start-120_000+26*60_000-5_000;
+ t.mock.getter(performance,'timeOrigin',()=>start-120_000);
+ let injected=false;
+ if(tail==='after-supervisor'){
+  const execute=(await import('../../scripts/ci/runner-execution.mjs')).main;
+  x.ports.execute=async(mode,env,deps)=>{const code=await execute(mode,env,deps);if(mode==='run'){injected=true;t.mock.timers.setTime(deadline+1);}return code;};
+ }else if(tail==='journal-write'){
+  const write=x.results.write;x.ports.results={...x.results,write(row){write(row);if(!injected&&row.removed===true&&row.result?.executionOutcome==='completed'){injected=true;t.mock.timers.setTime(deadline+1);}}};
+ }else{
+  const report=x.ports.report;x.ports.report=async(...args)=>{const result=await report(...args);if(!injected){injected=true;t.mock.timers.setTime(deadline+1);}return result;};
+ }
+ assert.equal(await bridge('run',x.env,x.ports),exit===9?9:124);assert.equal(injected,true);
+ const journal=x.results.read();assert.equal(journal.completionDeadline,deadline);assert.ok(Date.now()<journal.receipt.executionDeadline,'receipt still live; the earlier step bound is decisive');
+ assert.equal(journal.result.testStep,exit===9?'failure':'success');assert.equal(journal.result.executionOutcome,exit===9?'completed':'timed_out');
+ if(tail==='delivery'&&exit===0)assert.notEqual(journal.ack,JSON.stringify(journal.result),'late ACK cannot acknowledge the timeout correction');
+ // New cleanup process origin cannot extend the recorded Run deadline. It sends any pending correction.
+ t.mock.getter(performance,'timeOrigin',()=>Date.now());assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,exit===9?'failure':'success');assert.equal(row.executionOutcome,exit===9?'completed':'timed_out');
  x.f.result(exit===9?'failure':'success');await x.f.tick();assert.notEqual(x.f.checks[0].conclusion,'success');
 });
