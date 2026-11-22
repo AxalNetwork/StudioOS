@@ -5,8 +5,11 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // D5620: the pure classifier lives in Merge Control, which bundles the same file.
 import { classify } from '../merge-control/src/lib/classify.mjs';
+// D8067: the one privileged-path list, for this script's output, the landing bot and scripts/lib/privilegedPaths.mjs.
+import { PRIVILEGED, PRIVILEGED_PATHS, globRegExp, isPrivileged, privilegedFiles } from '../merge-control/src/lib/classify.mjs';
 
 export { classify };
+export { PRIVILEGED, PRIVILEGED_PATHS, globRegExp, isPrivileged, privilegedFiles };
 
 function git(...args) {
   return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -41,7 +44,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (baseFlag !== '--base' || headFlag !== '--head' || rest.length) {
       throw new Error('Usage: node scripts/merge-policy.mjs --base <sha> --head <sha>');
     }
-    console.log(JSON.stringify(classify(changedFiles(base, head))));
+    const files = changedFiles(base, head);
+    // D8067: `privileged` names the files the landing policy workflow labels `pr:privileged` for.
+    console.log(JSON.stringify({ ...classify(files), privileged: privilegedFiles(files) }));
   } catch (error) {
     console.error(`merge-policy: ${error.message}`);
     process.exitCode = 1;

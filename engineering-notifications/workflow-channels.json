@@ -2,6 +2,11 @@
   "repository": "AxalNetwork/StudioOS",
   "workflows": [
     {
+      "id": null,
+      "path": ".github/workflows/admin-drift.yml",
+      "channel": "#axalvc-actions-admin-drift"
+    },
+    {
       "id": 416675427,
       "path": ".github/workflows/agent-compute-image.yml",
       "channel": "#axalvc-actions-agent-compute-image"

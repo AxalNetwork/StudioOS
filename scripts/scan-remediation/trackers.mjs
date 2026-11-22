@@ -1,14 +1,16 @@
 // Match public tracking issues to protected alerts using their repo, number and creator.
-import { trackerIssueBody } from '../lib/scanTrackerIssueBody.mjs'
+// D8074: one tracker engine serves every alert source; Code Scanning is the default source.
+import { codeScanning } from './sources.mjs'
 
-const titles = /^(?:\[Code Scanning\] Investigate and fix alert #|\[Code Scanning\] Remediate alert #)([1-9]\d*)$/
 const validNumber = value => Number.isSafeInteger(value) && value > 0
 const names = issue => issue.labels.map(label => typeof label === 'string' ? label : label.name)
-const marker = number => '<!-- studioos-scan-remediation:' + number + ' -->'
 const login = value => String(value || '').toLowerCase()
 const routingSlot = 'slot:S21'
+export const SLA_LABEL = 'sla:7d'
 
-export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin = 'github-actions[bot]' }) {
+export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin = 'github-actions[bot]', source = codeScanning }) {
+  const titles = source.titles
+  const marker = source.marker
   const base = 'https://github.com/' + owner + '/' + repo
   const bots = new Set([login(botLogin), 'github-actions[bot]'])
   const trusted = issue => bots.has(login(issue.user?.login)) || (owner.toLowerCase() === 'axalnetwork' && login(issue.user?.login) === 'guillaumelauzier')
@@ -25,12 +27,12 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
   // Pagination also avoids GitHub Search's 1,000-result ceiling for bug history.
   for (const issue of await api.pages('/issues?state=all&labels=bug')) remember(issue)
 
-  const alertUrl = number => base + '/security/code-scanning/' + number
+  const alertUrl = number => base + '/security/' + source.urlPart + '/' + number
   function recognized(issue, number) {
     const body = String(issue.body || '')
     const exactLink = body.split(/\s|[()<>\[\]]/).includes(alertUrl(number))
     if (!exactLink) return false
-    return issue.title === '[Code Scanning] Investigate and fix alert #' + number ||
+    return (source.legacyTitle && issue.title === source.legacyTitle(number)) ||
       body.split('\n').includes(marker(number))
   }
 
@@ -39,7 +41,7 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     const number = Number(titles.exec(issue.title)?.[1])
     // S21 routing permits reconciliation until a session claims the automatic tracker.
     const automaticallyRouted = bots.has(login(issue.user?.login)) &&
-      issue.title === '[Code Scanning] Remediate alert #' + number &&
+      issue.title === source.title(number) &&
       String(issue.body || '').split('\n').includes(marker(number))
     if (issue.locked || issue.assignees?.length || labels.some(label =>
       (label.startsWith('slot:') && !(automaticallyRouted && label === routingSlot)) ||
@@ -62,12 +64,15 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     return fresh
   }
 
-  async function ensure(number) {
+  // A new tracker's rule comes from the alert the caller just read; sources.mjs writes it only if it is a published identifier.
+  const alertFacts = new Map()
+  async function ensure(number, alert) {
     if (!validNumber(number)) throw Error('Invalid alert number')
+    if (alert) alertFacts.set(number, alert)
     if (!byAlert.has(number)) {
       // Includes old trackers whose bug label was removed. An alert-specific query
       // stays bounded even when thousands of unrelated alerts have already closed.
-      const hits = await api.searchIssues('is:issue in:title "Code Scanning" "alert #' + number + '"')
+      const hits = await api.searchIssues(source.search(number))
       for (const issue of hits) remember(issue)
     }
     const matches = [...(byAlert.get(number)?.values() || [])]
@@ -89,9 +94,9 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     }
 
     const issue = await api.request('POST', '/issues', {
-      title: '[Code Scanning] Remediate alert #' + number,
-      body: trackerIssueBody({ owner, repo, defaultBranch, number }),
-      labels: ['bug', routingSlot],
+      title: source.title(number),
+      body: source.body({ owner, repo, defaultBranch, number, rule: source.rule?.(alertFacts.get(number)) }),
+      labels: ['bug', routingSlot, SLA_LABEL],
     })
     if (!trusted(issue) || !validNumber(issue.number) || !recognized(issue, number)) throw Error('Unexpected tracker identity')
     remember(issue)
@@ -153,8 +158,7 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
   }
 
   async function closeFixed(alert) {
-    if (alert?.state !== 'fixed' || alert.most_recent_instance?.ref !== 'refs/heads/' + defaultBranch ||
-      alert.most_recent_instance.state !== 'fixed') return false
+    if (!source.resolved(alert, defaultBranch)) return false
     const candidates = byAlert.get(alert.number)
     if (candidates?.size !== 1) return false
     const [candidate] = candidates.values()
