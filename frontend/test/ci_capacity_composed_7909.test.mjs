@@ -249,7 +249,7 @@ test('D7909 a completed acknowledged Run is not retroactively expired by a later
  const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'success');assert.equal(row.executionOutcome,'completed');
 });
 
-for(const late of [false,true])test(`D7909 crash immediately after durable ${late?'late':'timely'} ACK preserves its budget classification on restart`,async t=>{
+for(const late of [false,true])test(`D7909 crash after the provisional ${late?'late':'timely'} ACK write cannot finalize completion on restart`,async t=>{
  const x=await setup(t),start=Date.now(),deadline=start-120_000+26*60_000-5_000;
  t.mock.getter(performance,'timeOrigin',()=>start-120_000);
  const report=x.ports.report,write=x.results.write;let crashed=false;
@@ -258,14 +258,25 @@ for(const late of [false,true])test(`D7909 crash immediately after durable ${lat
  await assert.rejects(bridge('run',x.env,x.ports),/immediately after durable ACK/);assert.equal(crashed,true);
  const saved=x.results.read();assert.equal(saved.result.executionOutcome,late?'timed_out':'completed');
  assert.equal(saved.ackAt,late?deadline+1:start);
+ assert.equal(saved.ackDurableAt,null,'a write that did not return has no completed durability observation');
  assert.equal(saved.ack===JSON.stringify(saved.result),!late,'a late positive ACK cannot cover the persisted timeout');
- assert.equal(x.results.retire(),!late,'only the timely positive completion can retire before restart');
- if(!late)x.results.write(saved);
+ assert.equal(x.results.retire(),false,'neither provisional ACK can retire before finalization');
  // Use the original store, a new process origin and the actual authenticated authority delivery.
  x.ports.results=x.results;x.ports.report=report;t.mock.timers.setTime(deadline+2);t.mock.getter(performance,'timeOrigin',()=>Date.now());
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
  const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);
- assert.equal(row.executionOutcome,late?'timed_out':'completed');assert.equal(x.reports(),late?2:1);
+ assert.equal(row.executionOutcome,'timed_out');assert.equal(x.reports(),2);
+});
+
+test('D7909 ACK durability crossing the Run bound then crashing leaves an unfinalized positive journal for timeout recovery',async t=>{
+ const x=await setup(t),start=Date.now(),deadline=start-120_000+26*60_000-5_000,write=x.results.write;let crashed=false;
+ t.mock.getter(performance,'timeOrigin',()=>start-120_000);
+ x.ports.results={...x.results,write(row){write(row);if(!crashed&&row.ack!==null){crashed=true;t.mock.timers.setTime(deadline+1);throw Error('fixture crash after late ACK durability');}}};
+ await assert.rejects(bridge('run',x.env,x.ports),/late ACK durability/);
+ const saved=x.results.read();assert.equal(saved.ackAt,start);assert.equal(saved.ackDurableAt,null);assert.equal(x.results.retire(),false);
+ x.ports.results=x.results;t.mock.getter(performance,'timeOrigin',()=>Date.now());
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.executionOutcome,'timed_out');assert.equal(x.reports(),2);
 });
 
 test('D7909 a legacy matching positive ACK without durable timing cannot retire or bypass the earlier Run bound',async t=>{

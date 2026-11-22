@@ -18,7 +18,8 @@ const same=(a,b)=>JSON.stringify(receiptIdentity(a))===JSON.stringify(receiptIde
 const completionBound=record=>Math.min(record.receipt.executionDeadline,record.completionDeadline??record.receipt.executionDeadline);
 // A matching body alone cannot prove that a successful acknowledgement arrived in budget.
 const timelyAck=record=>record.ack===JSON.stringify(record.result)&&Number.isSafeInteger(record.ackAt)
- &&record.ackAt<completionBound(record)&&record.ackAt<=Date.now();
+ &&Number.isSafeInteger(record.ackDurableAt)&&record.ackAt<=record.ackDurableAt
+ &&record.ackDurableAt<completionBound(record)&&record.ackDurableAt<=Date.now();
 /** Fixed listener-private state, outside disposable run paths; never an environment/workflow path. */
 export const resultRoot=()=>join(dirname(defaultRecoveryRoot()),'capacity-results');
 export function resultStore(root,run){
@@ -89,8 +90,12 @@ export async function main(mode,env=process.env,ports={}){
   need(value?.accepted===true,'result_delivery_unacknowledged');
   // Classify ACK arrival before its first durable write. A crash after that write must
   // leave the timeout correction dirty, never a matching positive ACK for cleanup to retire.
-  record.ackAt=Date.now();record.ack=JSON.stringify(delivered);
+  record.ackAt=Date.now();record.ackDurableAt=null;record.ack=JSON.stringify(delivered);
   if(record.result.testStep==='success'&&record.result.executionOutcome==='completed'&&record.ackAt>=completionBound(record))record.result={...record.result,executionOutcome:'timed_out'};
+  save();
+  // Only a returned journal write supplies an observation of ACK durability. Its
+  // provisional record must not be mistaken for finalized in-budget completion.
+  record.ackDurableAt=Date.now();
   save();
   // A late ACK cannot acknowledge a later timeout correction. Cleanup retries that dirty journal.
   fenceLateSuccess();
