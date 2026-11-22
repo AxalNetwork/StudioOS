@@ -367,6 +367,7 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `import-global-funds.py` | D7325: offline validator and duplicate-safe SQL generator for primary-source fund-manager research; `--check` verifies the committed migration. |
 
 | `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |
+| `import-global-research-funds-7585.py` | D7585: deterministically render the next worldwide manager import with its own source, original evidence dates and additive identity guards. |
 
 | `file-recovery-independent.py` | D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof. |
 | `file_recovery_6653_test.py` | D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats. |

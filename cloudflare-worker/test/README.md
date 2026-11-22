@@ -381,6 +381,7 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `research_global_funds_7585.test.ts` | D7585: historical preservation, original verification dates, independent source citation, competing manager identities, country filters and in-memory guard mutations for the next worldwide import. |
 | `research_companies_registers_d7316.test.mjs` | D7316 part 2: native registry identity/status and retained-hold admission; record/file hash tampering; shared-domain/name conflicts; immutable evidence and exact SQL ownership; real-schema insert-only replay, unknown metrics, and source-ledger overwrite refusal. |
 | `grow_export_6103.test.ts` | D6103: Grow's Feedback and KPI CSV exports: writers only (and `records.can_export`), the table's search/filter/sort, names for writers and never an email, monthly KPI history in cents with currency, empty never 0, formula cells neutralised, the 5,000-row cap refused with a sentence, each export logged. |
 | `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
