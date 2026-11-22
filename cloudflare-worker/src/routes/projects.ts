@@ -641,7 +641,7 @@ async function createProjectHandler(c: any) {
     projectSlug = await generateSlug(c.env, 'project', name, createCompanyId ?? null);
   }
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, slug, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${projectSlug}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam ?? null}, ${data.sam ?? null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, slug, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${projectSlug}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam === 0 ? 0 : data.tam || null}, ${data.sam === 0 ? 0 : data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
 
   // D7705: a created venture records the figures actually stored, without client-supplied provenance.
   let marketFigures: { recorded: MarketFigureKey[] } | { recorded: null; reason: string };

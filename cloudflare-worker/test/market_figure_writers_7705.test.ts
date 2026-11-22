@@ -65,6 +65,15 @@ for (const path of ['/api/projects', '/api/projects/submit']) {
     } finally { f.db.close(); }
   });
 }
+for (const value of ['', false]) test(`D7705 ordinary create keeps ${JSON.stringify(value)} absent rather than inventing a zero figure`, async () => {
+  const f = fixture(); try {
+    const response = await f.create('/api/projects', { ...intake, tam: value, sam: value });
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+    assert.equal(response.body.tam, null); assert.equal(response.body.sam, null);
+    assert.deepEqual(response.body.market_figures, { recorded: [] });
+    assert.deepEqual(f.rows(response.body.id), []);
+  } finally { f.db.close(); }
+});
 for (const value of ['0', '100']) test(`D7705 Eadwyn SOM ${value} writes the figure and actor history together`, async () => {
   const f = fixture(); try {
     const result = await f.answer(value);
