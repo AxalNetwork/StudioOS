@@ -8,6 +8,7 @@ import {
   classifyGithubResponse, intentDigest, planAgentPublish, publisherEnabled, publishIntentProblem,
   type PublishIntent, type PublisherObservations, type PublisherRefusal,
 } from './agentPublisher';
+import { agentOfProvenance, requireCapability, type CapabilityCode } from '../agentCapabilities';
 import { inspectVentureGitPublisher, type VentureGitScope } from './ventureGitInstallation';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -41,7 +42,8 @@ export type BrokerResult =
   | PublisherRefusal
   | { ok: false; code: 'not_authorized' | 'work_intent_required' | 'candidate_mismatch' | 'queue_full'
       | 'publication_pending' | 'github_unavailable';
-      retryable: boolean };
+      retryable: boolean }
+  | { ok: false; code: CapabilityCode; retryable: false; capability: string };
 
 type PublicationRow = {
   intent_digest: string; candidate_sha: string; state: string; pr_number: number | null; pr_url: string | null; attempts: number; retry_at_ms: number | null;
@@ -127,6 +129,9 @@ export async function executeAgentPublication(
     return { ok: false, code: 'not_authorized', retryable: false };
   }
   if (!SHA.test(candidateSha)) return { ok: false, code: 'candidate_mismatch', retryable: false };
+  // D8070: opening the pull request is the agent's code.pr.
+  const capable = await requireCapability(env, await agentOfProvenance(env, intent.provenance.agent_id), 'code.pr');
+  if (!capable.ok) return { ok: false, code: capable.code, retryable: false, capability: capable.capability };
 
   const inspection = await inspectVentureGitPublisher(env.DB, scope, intent.installation_uid);
   if (inspection.code !== 'venture_git_publisher_disabled' || !('installation' in inspection)) {

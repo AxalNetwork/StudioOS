@@ -397,6 +397,9 @@ catalogue version only in the fixture.
 | `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
 
 - `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
+`research_company_read_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
 `positions_unavailable_6201.test.ts` (D6201) checks each failed Portfolio distributions, KPI definition and submission read against real SQLite without successful empty-set fallbacks.
 `research_project_subject_notes_7818.test.ts` verifies the D7818 contract against synthetic inputs and the canonical migrated schema.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.

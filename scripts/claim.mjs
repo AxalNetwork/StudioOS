@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { capBlockers, formatWip, localWipLabels, parseWipCap, readWip } from './lib/claimWip.mjs';
+import { capBlockers, formatWip, localWipLabels, normalizeWipSlot, parseWipCap, readWip } from './lib/claimWip.mjs';
 import { claimRef, claimMessage, parseClaim, isExpired } from './lib/claims.mjs';
 
 export function githubApi(repo) {
@@ -68,7 +68,7 @@ async function runClaimInternal({ command, issue, slot, agent, session, ttlHours
     if (isExpired(current.claim, now)) { log({ error: 'expired; release and acquire again' }); return 3; }
   }
   if (command === 'claim' && wipReport) {
-    const normalizedSlot = slot?.toUpperCase();
+    const normalizedSlot = normalizeWipSlot(slot);
     const cap = parseWipCap(wipCap);
     let report;
     try { report = await wipReport(); }

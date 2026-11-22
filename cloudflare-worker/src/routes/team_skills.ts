@@ -810,10 +810,11 @@ const refusalWords: Record<AttachCode, string> = {
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
+  capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 };
 const refuseBlocked = (c: C, b: Blocked, extra: Record<string, unknown> = {}) =>
   say(c, ATTACH_STATUS[b.code], b.code, b.code === 'tool_not_approved' && b.tool ? `That skill needs the ${b.tool.label} read tool, which its sponsor has not approved.` : refusalWords[b.code],
-    { ...(b.tool ? { tool: b.tool } : {}), ...extra });
+    { ...(b.tool ? { tool: b.tool } : {}), ...(b.capability ? { capability: b.capability } : {}), ...extra });
 
 async function agentSkillsDto(env: Env, a: AgentRow) {
   const tax = await taxonomy(env);

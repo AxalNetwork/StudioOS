@@ -13,6 +13,15 @@
  *   POST   /pause   { reason, confirm: 'PAUSE' }   the kill switch on
  *   POST   /resume  { reason }                      the kill switch off
  *
+ * D8070 (#8070), capability RBAC (`services/agentCapabilities.ts`):
+ *   GET    /capabilities                                       the matrix: catalogue, policy, each live agent's grants
+ *   POST   /capabilities/grant  { agent_uid, capabilities: [name | <domain>.*], reason ≤ 200 }
+ *                    a wildcard expands here into one row per name; 403 capability_ungrantable for a reserved name,
+ *                    400 capability_unknown, 403 capability_not_offered outside the ceiling, 404 agent_not_found
+ *   POST   /capabilities/revoke { agent_uid, capability, reason ≤ 200 }   404 not_granted. A live run finishes; the next is refused.
+ *   PUT    /capabilities/ceiling { capabilities: [..] | null, reason }    null offers every grantable name
+ *   PUT    /capabilities/enforcement { enforced: boolean, reason }        off: only the reserved names are refused
+ *
  * Every write takes a reason and writes H5's admin audit row (before, after,
  * reason) in the same batch as the change (`aiAdminAuditStatement`), so the
  * change and its audit land together or not at all.
@@ -27,6 +36,10 @@ import {
   PAUSE_WORD, areaModelsOf, capacityCeilingsOf, capsOf, guardrailCounts, readPolicy, readToolsOf, reasonProblem, type Policy, type Problem,
 } from '../services/agents/aiPolicy';
 import { modelById } from '../services/ai/catalogue';
+import {
+  CAPABILITY_REASON_MAX, capabilityMatrix, capabilityOf, capabilityReason, ceilingOf, expandCapabilities, grantStatement, liveGrants,
+  readCapabilityPolicy, revokeStatement,
+} from '../services/agentCapabilities';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -170,6 +183,84 @@ r.post('/resume', async (c) => {
       .bind(Number(admin.id), p.paused.since),
   ]);
   return c.json({ policy: await readPolicy(c.env) });
+});
+
+// ── D8070: capability RBAC ───────────────────────────────────────────────────────────────────────────────────────
+
+const noReason = (c: any) => say(c, { code: 'reason_required', message: `Give a reason of 1 to ${CAPABILITY_REASON_MAX} characters.` });
+const unreadable = (c: any) => refuse(c, 503, { code: 'capability_unreadable', message: 'The agent capability policy could not be read. Nothing was changed.' });
+const capabilityProblem = (c: any, p: { code: string; capability: string }) => p.code === 'capability_ungrantable'
+  ? refuse(c, 403, { code: p.code, message: `${p.capability} is done by a person. No agent can be granted it.`, extra: { capability: p.capability } })
+  : refuse(c, 400, { code: 'capability_unknown', message: 'Name capabilities from the catalogue, such as research.read or research.*.', extra: { capability: p.capability } });
+
+async function liveAgent(c: any, uid: unknown) {
+  if (typeof uid !== 'string' || !/^[a-f0-9]{32}$/.test(uid)) return null;
+  return c.env.DB.prepare("SELECT id, uid FROM team_agents WHERE uid = ? AND status <> 'removed'").bind(uid).first() as Promise<{ id: number; uid: string } | null>;
+}
+
+r.get('/capabilities', async (c) => {
+  await requireSuperAdmin(c);
+  try { return c.json(await capabilityMatrix(c.env)); } catch { return unreadable(c); }
+});
+
+r.post('/capabilities/grant', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const reason = capabilityReason(b.reason); if (!reason) return noReason(c);
+  const names = expandCapabilities(b.capabilities); if (!names.ok) return capabilityProblem(c, names);
+  const agent = await liveAgent(c, b.agent_uid);
+  if (!agent) return refuse(c, 404, { code: 'agent_not_found', message: 'There is no such agent.' });
+  const policy = await readCapabilityPolicy(c.env); if (!policy) return unreadable(c);
+  const outside = policy.ceiling ? names.value.find((n) => !policy.ceiling!.includes(n)) : undefined;
+  if (outside) return refuse(c, 403, { code: 'capability_not_offered', message: `The platform does not offer ${outside} to agents this month.`, extra: { capability: outside } });
+  const before = await liveGrants(c.env, agent.id);
+  const added = names.value.filter((n) => !before.includes(n));
+  if (!added.length) return c.json(await capabilityMatrix(c.env));
+  await write(c, Number(admin.id), 'policy.capability_grant', `agent:${agent.uid}`, before, [...before, ...added].sort(), reason,
+    added.map((n) => grantStatement(c.env, agent.id, n, Number(admin.id), reason)));
+  return c.json(await capabilityMatrix(c.env), 201);
+});
+
+r.post('/capabilities/revoke', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const reason = capabilityReason(b.reason); if (!reason) return noReason(c);
+  const cap = typeof b.capability === 'string' ? capabilityOf(b.capability) : null;
+  if (!cap) return capabilityProblem(c, { code: 'capability_unknown', capability: String(b.capability ?? '') });
+  const agent = await liveAgent(c, b.agent_uid);
+  if (!agent) return refuse(c, 404, { code: 'agent_not_found', message: 'There is no such agent.' });
+  const before = await liveGrants(c.env, agent.id);
+  if (!before.includes(cap.name)) return refuse(c, 404, { code: 'not_granted', message: `This agent does not hold ${cap.name}.` });
+  await write(c, Number(admin.id), 'policy.capability_revoke', `agent:${agent.uid}`, before, before.filter((n) => n !== cap.name), reason,
+    [revokeStatement(c.env, agent.id, cap.name, Number(admin.id), reason)]);
+  return c.json(await capabilityMatrix(c.env));
+});
+
+r.put('/capabilities/ceiling', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const reason = capabilityReason(b.reason); if (!reason) return noReason(c);
+  const next = ceilingOf(b.capabilities); if (!next.ok) return capabilityProblem(c, next);
+  const policy = await readCapabilityPolicy(c.env); if (!policy) return unreadable(c);
+  await write(c, Number(admin.id), 'policy.capability_ceiling', 'policy:capabilities', policy.ceiling, next.value, reason, [
+    c.env.DB.prepare("UPDATE ai_agent_policy SET capability_ceiling_json = ?, updated_by = ?, updated_at = datetime('now') WHERE id = 1")
+      .bind(next.value == null ? null : JSON.stringify(next.value), Number(admin.id)),
+  ]);
+  return c.json(await capabilityMatrix(c.env));
+});
+
+r.put('/capabilities/enforcement', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const reason = capabilityReason(b.reason); if (!reason) return noReason(c);
+  if (typeof b.enforced !== 'boolean') return say(c, { code: 'invalid_enforced', message: 'Say true to enforce capabilities, or false to stop.' });
+  const policy = await readCapabilityPolicy(c.env); if (!policy) return unreadable(c);
+  if (policy.enforced === b.enforced) return say(c, { code: b.enforced ? 'already_enforced' : 'not_enforced', message: b.enforced ? 'Capabilities are already enforced.' : 'Capabilities are not enforced.' }, 409);
+  await write(c, Number(admin.id), 'policy.capability_enforcement', 'policy:capabilities', { enforced: policy.enforced }, { enforced: b.enforced }, reason, [
+    c.env.DB.prepare("UPDATE ai_agent_policy SET capabilities_enforced = ?, updated_by = ?, updated_at = datetime('now') WHERE id = 1")
+      .bind(b.enforced ? 1 : 0, Number(admin.id)),
+  ]);
+  return c.json(await capabilityMatrix(c.env));
 });
 
 export const mount: RouteMount = { path: '/api/admin/ai-agents/policy', router: r };
