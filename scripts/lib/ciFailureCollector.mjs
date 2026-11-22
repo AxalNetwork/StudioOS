@@ -47,20 +47,43 @@ export async function collectEvidence({ api, download, runId, baseSha }) {
     throw new Error('API inventory exceeds page limit');
   }
   async function evidence(run) {
-    const result = [];
+    const result = [], commits = new Map();
+    const validCoordinates = async row => {
+      if (!/^[a-f0-9]{40}$/.test(row.testedSha || '') || (row.headSha ?? row.testedSha) !== run.head_sha) return false;
+      if (row.testedSha === run.head_sha) return true;
+      if (run.event !== 'pull_request' || !/^[a-f0-9]{40}$/.test(baseSha || '')) return false;
+      if (!commits.has(row.testedSha)) {
+        if (commits.size >= 2) return false;
+        let valid = false;
+        try {
+          const commit = await api(`/git/commits/${row.testedSha}`);
+          const parents = commit.parents?.map(p => p.sha);
+          valid = commit.sha === row.testedSha && parents?.length === 2 && new Set(parents).size === 2 && parents.includes(baseSha) && parents.includes(run.head_sha);
+        } catch { warnings.push('Tested merge commit could not be verified; attribution is unknown.'); }
+        commits.set(row.testedSha, valid);
+      }
+      return commits.get(row.testedSha);
+    };
     const artifacts = await pages(`/actions/runs/${run.id}/artifacts`, 'artifacts');
     for (const artifact of artifacts.filter(a => /^ci-failures-(?:worker-\d+-of-\d+|frontend-\d+-of-\d+|rest)-attempt-\d+$/.test(a.name) && !a.expired).slice(0, 30)) {
       if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0 || !artifact.name.endsWith(`-attempt-${run.run_attempt}`) || artifact.workflow_run?.id !== run.id || artifact.workflow_run?.head_sha !== run.head_sha || artifact.size_in_bytes > MAX_BYTES) continue;
       try {
         const rows = readFailureArchive(await download(`/actions/artifacts/${artifact.id}/zip`));
+        const normalized = [];
         for (const row of rows) {
-          if (row.version !== 1 || row.testedSha !== run.head_sha || String(row.runId) !== String(run.id) || String(row.attempt) !== String(run.run_attempt) || !Array.isArray(row.failures) || !Array.isArray(row.files)) continue;
+          if (!row || row.version !== 1 || String(row.runId) !== String(run.id) || String(row.attempt) !== String(run.run_attempt) || !Array.isArray(row.failures) || !Array.isArray(row.files)) throw new Error('invalid evidence record');
+          if (!await validCoordinates(row)) throw new Error('unverified evidence coordinates');
           const cleaned = failureReport(row);
           // Never upgrade invalid/truncated external evidence into a complete report.
           if (cleaned.failures.length !== row.failures.length || cleaned.files.length !== row.files.length) cleaned.complete = false;
-          result.push(cleaned);
+          normalized.push(cleaned);
         }
+        result.push(...normalized);
       } catch { warnings.push('A failure artifact was unreadable; its attribution is unknown.'); }
+    }
+    if (new Set(result.map(r => r.testedSha)).size > 1) {
+      warnings.push('Conflicting tested SHAs in one run attempt; attribution is unknown.');
+      return result.map(r => ({ ...r, complete: false }));
     }
     return result;
   }
@@ -80,7 +103,7 @@ export async function collectEvidence({ api, download, runId, baseSha }) {
   const leaves = jobs.filter(j => ['failure', 'timed_out', 'cancelled'].includes(j.conclusion) && !['landing gate', 'test:drift (full suite)'].includes(j.name));
   for (const job of leaves) {
     const part = /^suite \(([^)]+)\)$/.exec(job.name)?.[1];
-    if (part && current.some(r => r.part === part && r.complete && r.failures.length)) continue;
+    if (part && current.some(r => r.part === part && r.complete && r.failures.length) && !current.some(r => r.part === part && r.status !== 0 && !r.failures.length)) continue;
     const step = job.steps?.find(s => ['failure', 'cancelled'].includes(s.conclusion));
     const clean = s => String(s || 'Not recorded').replace(/[^\w .():/-]/g, '').slice(0, 150);
     result.unknown.push({ kind: 'step', job: clean(job.name), file: 'Not recorded', test: `${clean(job.name)} / ${clean(step?.name)}`, part: clean(part), excerpt: 'Setup, build, guard or cancelled-job evidence unavailable.', repro: 'npm run build && npm run test:guards', jobUrl: /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+\/job\/\d+$/.test(job.html_url || '') ? job.html_url : null });
@@ -92,5 +115,5 @@ export async function collectEvidence({ api, download, runId, baseSha }) {
   if (result.unknown.length && !result.own.length) result.verdict = 'main_health_unknown';
   const fingerprint = infraFingerprint(jobs);
   if (fingerprint) { result.verdict = 'infra_failure'; result.infraFingerprint = fingerprint; }
-  return { ...result, failures: result.own, warnings, testedSha: run.head_sha, runId: run.id, runUrl: run.html_url, baseRunUrl: baseRun?.html_url || null };
+  return { ...result, failures: result.own, warnings, testedSha: new Set(current.map(r => r.testedSha)).size === 1 ? current[0].testedSha : null, headSha: run.head_sha, runId: run.id, runUrl: run.html_url, baseRunUrl: baseRun?.html_url || null };
 }

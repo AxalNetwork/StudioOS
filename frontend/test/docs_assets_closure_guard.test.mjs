@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D176 — the chunk-closure guard over `docs/assets/`.
  *
@@ -74,7 +75,7 @@ test('seeing both forms is a pass, and a trivial corpus is exempt', () => {
 // Wiring — or it is a script nobody runs
 
 test('the guard runs in test:guards and is documented', () => {
-  const pkg = read('package.json');
+  const pkg = guardChain;
   assert.match(pkg, /node scripts\/check-docs-assets-closure\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
   // #6470: scripts/README.md's list is generated from each script's header comment, so the row's text lives there.
@@ -86,7 +87,7 @@ test('the guard runs in test:guards and is documented', () => {
 });
 
 test('it runs before the check that costs a bundle', () => {
-  const chain = JSON.parse(read('package.json')).scripts['test:guards'].split(' && ');
+  const chain = guardChain.split(' && ');
   const at = (name) => chain.findIndex((c) => c.includes(name));
   const me = at('check-docs-assets-closure');
   assert.ok(me > 0, 'the guard is not in the chain');

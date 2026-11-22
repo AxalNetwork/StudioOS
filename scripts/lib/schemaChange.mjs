@@ -1,3 +1,4 @@
+import { GUARDS } from './guardCatalog.mjs';
 /**
  * #6326: the schema-change rules apart from git: a new migration's name and
  * whether its identity is taken, what is wrong with a branch's new migration
@@ -39,25 +40,15 @@ export const MIGRATIONS_DIR = 'cloudflare-worker/sql/migrations/';
 
 /**
  * The schema guards, in `test:guards` order, each with the node flags
- * `package.json` gives it. `migration-immutability-gate.mjs` is not here: it is
+ * the guard catalog gives it. `migration-immutability-gate.mjs` is not here: it is
  * CI-only (its own workflow) and needs `GITHUB_BASE_REF`, so the CLI runs it
  * separately.
  */
-export const SCHEMA_CHECKS = Object.freeze([
-  { script: 'check-sql-migrations.mjs', flags: [] },
-  { script: 'check-sqlite-dialect.mjs', flags: [] },
-  { script: 'check-sqlite-tables.mjs', flags: [] },
-  { script: 'check-sqlite-columns.mjs', flags: [] },
-  { script: 'check-write-router-columns.mjs', flags: [] },
-  { script: 'check-sqlite-table-collisions.mjs', flags: [] },
-  { script: 'check-schema-pair-drift.mjs', flags: ['--no-warnings'] },
-  { script: 'check-migration-declarations.mjs', flags: ['--no-warnings'] },
-  { script: 'check-runtime-schema-declared.mjs', flags: ['--no-warnings'] },
-  { script: 'check-runtime-ddl.mjs', flags: ['--no-warnings'] },
-  { script: 'check-timestamp-comparisons.mjs', flags: [] },
-  { script: 'check-migration-column-shapes.mjs', flags: [] },
-  { script: 'check-schema-readiness.mjs', flags: [] },
-]);
+const SCHEMA_SCRIPTS = new Set(['check-sql-migrations.mjs', 'check-sqlite-dialect.mjs', 'check-sqlite-tables.mjs', 'check-sqlite-columns.mjs', 'check-write-router-columns.mjs', 'check-sqlite-table-collisions.mjs', 'check-schema-pair-drift.mjs', 'check-migration-declarations.mjs', 'check-runtime-schema-declared.mjs', 'check-runtime-ddl.mjs', 'check-timestamp-comparisons.mjs', 'check-migration-column-shapes.mjs', 'check-schema-readiness.mjs']);
+export const SCHEMA_CHECKS = Object.freeze(GUARDS.flatMap(g => {
+  const at = g.command.findIndex(arg => SCHEMA_SCRIPTS.has(arg.split('/').at(-1)));
+  return at < 0 ? [] : [{ script: g.command[at].split('/').at(-1), flags: g.command.slice(1, at), command: g.command }];
+}));
 
 const SLUG = /^[a-z][a-z0-9_]*$/;
 const ISSUE = /^[1-9]\d{0,6}$/;

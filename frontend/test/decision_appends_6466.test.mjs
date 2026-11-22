@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D6466 (#6466): `scripts/check-decision-appends.mjs` fails a change that
  * appends a section to a decision file already on its base, and tells the
@@ -288,7 +289,7 @@ test('the branch that introduces the guard passes', () => {
 });
 
 test('the guard runs in test:guards, beside check-decision-ids, and is documented', () => {
-  const chain = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')).scripts['test:guards'].split(' && ');
+  const chain = guardChain.split(' && ');
   assert.ok(chain.includes('node scripts/check-decision-appends.mjs'), 'the guard is not in test:guards, so nothing runs it on a PR');
   // #6470: scripts/README.md's list is generated from each script's header comment, which opens with the decision.
   assert.equal(indexMode(readFileSync(resolve(process.cwd(), 'scripts/README.md'), 'utf8')), 'generated');

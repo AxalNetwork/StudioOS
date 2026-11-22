@@ -59,6 +59,12 @@ addresses are `../dealPageModel.js` (D1148).
   and the staff commitments table's rules: the closing room's status words,
   search, status, sort and pages of 25, the heading that never counts a
   missing amount, who may act on a row, and the IC gate's words.
+- `DealDocumentsStaff.jsx` and `dealDocumentsModel.js` — D6186 (#6186): the
+  Documents tab for the venture's founder, an Admin and an Operating Partner,
+  in place of the legacy list. The founder gets their data room's counts and
+  pending access requests, each one click from Raise › Data room; staff get a
+  line on how the room opens to them. Every document row says why it cannot
+  be opened, since no route serves its text.
 - `DealCommitmentsStaff.jsx` — D1155: the Commitment tab for the founder
   (DL16, Match to my Mercury), an Admin (DL17a, Record a wire behind the IC
   gate, and D752's shared proof of funds on HQ) and an Operating Partner
