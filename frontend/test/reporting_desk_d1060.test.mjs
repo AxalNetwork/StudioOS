@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  FIGURE_LABELS, KPI_RULES_REQUIRED, STATE_TONE, calendarMonths, calendarRows, dueNext, dueRuleWords, dutyRows, expectedError, moveCell,
+  FIGURE_LABELS, STATE_TONE, calendarMonths, calendarRows, dueNext, dueRuleWords, dutyRows, expectedError, moveCell,
   needsYou, offsetWords, prepareLabel, readOnlyLine, recordStrip, requiredFigures, selectedPanel, stateWord,
 } from '../src/pages/cycles/reporting/deskModel.js';
 import {
@@ -36,7 +36,7 @@ const SHA = 'f'.repeat(64);
 
 const duty = (o) => ({
   uid: 'd1', kind: 'monthly_financials', title: 'Monthly financial statements', cadence: 'monthly', due_rule: 'after_end', due_days: 30,
-  required_figures: [], required_documents: ['unaudited_statements'], defaulted: [], starts_on: '2026-03-12', status: 'active',
+  kpi_rules_required: ['cash_balance','net_burn','runway_months','revenue'], required_figures: [], required_documents: ['unaudited_statements'], defaulted: [], starts_on: '2026-03-12', status: 'active',
   source: { document: 'voting_rights', clause: 'Investors’ Rights Agreement §1.1(a)', kind: 'signed_envelope', signed: true, body_sha256: 'ab' },
   holder: { name: 'Northwind Capital' }, record: { sent: 2, late: 1, missing: 0, waived: 1 }, ...o,
 });
@@ -160,13 +160,10 @@ test('Duties: the due rule, the figures a duty requires (held to the Worker\'s r
   assert.deepEqual(requiredFigures(desk.duties[0]), { labels: ['Cash', 'Net burn', 'Runway', 'Revenue'], from: 'kpi_rules' });
   assert.deepEqual(requiredFigures(desk.duties[1]), { labels: ['MRR', 'Customers'], from: 'document' }, 'an alias is the same figure');
   assert.deepEqual(requiredFigures({ kind: 'quarterly_update' }), { labels: [], from: 'none' });
-  assert.deepEqual(requiredFigures({ kind: 'quarterly_kpi', required_figures: [] }), { labels: ['Cash', 'Net burn', 'Runway', 'Revenue', 'ARR', 'Headcount'], from: 'kpi_rules' }, 'a quarterly KPI duty takes the monthly rules and the quarterly ones');
+  assert.deepEqual(requiredFigures({ kind: 'quarterly_kpi', required_figures: [], kpi_rules_required: ['cash_balance','net_burn','runway_months','revenue','arr','headcount'] }), { labels: ['Cash', 'Net burn', 'Runway', 'Revenue', 'ARR', 'Headcount'], from: 'kpi_rules' }, 'a quarterly KPI duty takes the monthly rules and the quarterly ones');
   // The Worker's own rules and registry, read from its source.
   const src = read('cloudflare-worker/src/services/reportFigures.ts');
-  const rules = /KPI_RULES_REQUIRED[^=]*=\s*Object\.freeze\(\{\s*monthly:\s*\[([^\]]*)\],\s*quarterly:\s*\[([^\]]*)\]/.exec(src);
-  const keys = (s) => s.match(/'([a-z_]+)'/g).map((k) => k.slice(1, -1));
-  assert.deepEqual([...KPI_RULES_REQUIRED.monthly], keys(rules[1]));
-  assert.deepEqual([...KPI_RULES_REQUIRED.quarterly], keys(rules[2]));
+  assert.deepEqual(requiredFigures({kind:'monthly_financials',kpi_rules_required:['headcount']}),{labels:['Headcount'],from:'kpi_rules'},'the stored rule set can change without a frontend seed edit');
   for (const m of src.matchAll(/\{ key: '([a-z_]+)', label: '([^']+)'[^}]*aliases: \[([^\]]*)\]/g)) {
     assert.equal(FIGURE_LABELS[m[1]], m[2], m[1]);
     for (const a of (m[3].match(/'([a-z_]+)'/g) || []).map((k) => k.slice(1, -1))) assert.equal(FIGURE_LABELS[a], m[2], a);

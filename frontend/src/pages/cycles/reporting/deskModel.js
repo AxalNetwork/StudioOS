@@ -215,16 +215,12 @@ export const FIGURE_LABELS = Object.freeze({
   burn_multiple: 'Burn multiple', cash_balance: 'Cash', cash: 'Cash', headcount: 'Headcount', open_roles: 'Open roles', partners_signed: 'Signed partners',
   markets_entering: 'Markets entering', shipped_items: 'Items shipped', runway: 'Runway', runway_months: 'Runway', checklist_done: 'Durability checklist done',
 });
-/** Migration 168's required KPI rules (D1059 §2), which a duty naming no figure requires. A test holds it to the Worker's. */
-export const KPI_RULES_REQUIRED = Object.freeze({ monthly: ['cash_balance', 'net_burn', 'runway_months', 'revenue'], quarterly: ['arr', 'headcount'] });
-
 /** The figures a duty requires, as `requiredFiguresOf` decides them, with where the list comes from. */
 export function requiredFigures(d) {
   const named = list(d?.required_figures).map((k) => FIGURE_LABELS[k]).filter(Boolean);
   if (named.length) return { labels: [...new Set(named)], from: 'document' };
-  const keys = d?.kind === 'monthly_financials' ? KPI_RULES_REQUIRED.monthly
-    : d?.kind === 'quarterly_kpi' ? [...KPI_RULES_REQUIRED.monthly, ...KPI_RULES_REQUIRED.quarterly] : [];
-  return { labels: [...new Set(keys.map((k) => FIGURE_LABELS[k]))], from: keys.length ? 'kpi_rules' : 'none' };
+  const keys = Array.isArray(d?.kpi_rules_required) ? d.kpi_rules_required : [];
+  return { labels: [...new Set(keys.map((k) => FIGURE_LABELS[k] || k.replaceAll('_', ' ')))], from: keys.length ? 'kpi_rules' : 'none' };
 }
 export function requiredFiguresLine(d) {
   const r = requiredFigures(d);

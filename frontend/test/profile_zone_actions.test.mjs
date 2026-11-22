@@ -267,7 +267,7 @@ const PROFILES = {
     // network picker is now supplied by its page.
     // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
     // TWENTY-FOURTH: `research/markets`'s `Edit thesis` (D7171 part 2).
-    handlers: 24,
+    handlers: 25,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -955,6 +955,8 @@ for (const [name, profile] of Object.entries(PROFILES)) {
   test(`${name}: every zone lists exactly the canvas's actions, in the canvas's order`, () => {
     const table = tableLabels(SRC);
     const canvas = canvasOps(profile);
+    // D6213/D6214's approved addendum renames the original Portfolio action.
+    if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].map(label => label === 'Edit rules' ? 'Reporting settings' : label);
     assert.equal(Object.keys(table).length, profile.zones);
     for (const [zone, extra] of Object.entries(profile.offCanvas || {})) {
       for (const label of extra) {

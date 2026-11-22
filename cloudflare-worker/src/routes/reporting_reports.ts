@@ -1,3 +1,4 @@
+import { dutyReportingRuleKeys } from '../services/portfolioReportingRules';
 /**
  * D1059 (#2929, part 3 of #2427) — a report built from the Grow modules, sent
  * with frozen figures, corrected as a new revision, with its statements.
@@ -97,7 +98,7 @@ type ReportRow = {
 type PeriodRow = {
   id: number; uid: string; duty_id: number; period_label: string; period_start: string; period_end: string; due_on: string;
   waived_at: string | null; met_update_id: number | null; met_at: string | null;
-  duty_uid: string; kind: Kind; required_figures: string; holder_user_id: number | null; holder_name: string | null;
+  duty_uid: string; kind: Kind; required_figures: string; kpi_rules_required?: string[]; holder_user_id: number | null; holder_name: string | null;
 };
 
 async function ownSession(c: any, sentence: string) {
@@ -120,12 +121,13 @@ async function loadReport(env: Env, uid: string): Promise<ReportRow | null> {
 
 /** Every period of the venture's active duties with this window, with its duty's terms and holder. */
 async function windowPeriods(env: Env, projectId: number, start: string, end: string): Promise<PeriodRow[]> {
-  return (await env.DB.prepare(
+  const rows = (await env.DB.prepare(
     `SELECT p.id, p.uid, p.duty_id, p.period_label, p.period_start, p.period_end, p.due_on, p.waived_at, p.met_update_id, p.met_at,
             d.uid AS duty_uid, d.kind, d.required_figures, d.holder_user_id, u.name AS holder_name
        FROM reporting_periods p JOIN reporting_duties d ON d.id = p.duty_id LEFT JOIN users u ON u.id = d.holder_user_id
       WHERE d.project_id = ? AND d.status = 'active' AND p.period_start = ? AND p.period_end = ? ORDER BY p.id`,
   ).bind(projectId, start, end).all<PeriodRow>()).results || [];
+  return Promise.all(rows.map(async p => ({...p, kpi_rules_required: await dutyReportingRuleKeys(env,{...p,project_id:projectId},p.period_end)})));
 }
 const isOpen = (p: PeriodRow) => p.met_update_id == null && !p.waived_at;
 const requiredOf = (periods: PeriodRow[]) => new Set(periods.flatMap((p) => requiredFiguresOf(p)));

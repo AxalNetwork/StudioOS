@@ -41,8 +41,10 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx');
 const P = codeOnly(PAGE);
-const POSITIONS = read('cloudflare-worker/src/routes/positions.ts');
 const UPDATES = read('cloudflare-worker/src/routes/portfolio_updates.ts');
+const POSITIONS = read('cloudflare-worker/src/routes/positions.ts');
+const RULES = codeOnly(read('cloudflare-worker/src/services/portfolioReportingRules.ts'));
+const SETTINGS = codeOnly(read('cloudflare-worker/src/routes/portfolio_reporting_settings.ts'));
 const RESEARCH = read('cloudflare-worker/src/routes/research.ts');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const MIGRATION = read('cloudflare-worker/sql/migrations/168_portfolio_marks_distributions.sql');
@@ -154,7 +156,8 @@ test('the rule set is a stored table, and this page was already being handed it'
   const at = POSITIONS.indexOf("r.get('/kpi-compliance'");
   assert.ok(at > 0, 'the compliance route is gone');
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
-  assert.match(handler, /FROM portfolio_kpi_definitions/, 'the route no longer reads the rule set');
+  assert.match(handler, /readReportingRules\(c.env, null, cadence, period!\)/, 'the route no longer reads the period-effective HQ rule set');
+  assert.match(RULES, /FROM portfolio_reporting_rule_sets h/, 'the append-only rule store is no longer read');
   assert.match(handler, /kpi_set: defs\.results \|\| \[\]/, 'the route no longer returns the rule set');
   assert.match(API, /positionsKpiCompliance: \(cadence = 'quarterly'\) =>/, 'the client method changed shape');
   // And the page has always called it. This is the fact that makes the old
@@ -175,7 +178,7 @@ test('the Rules chip is live, and it is a view rather than a predicate that empt
   assert.match(P, /const showingRules = filter === 'rules';/, 'the page does not implement the Rules key');
   // D4817 part 4 (#5311, PF-04): while the reporting read is still answering,
   // the swap draws a skeleton, never an empty rule set.
-  assert.match(P, /\{showingRules\s*\?\s*\(reads\.compliance\.state === 'loading' \? <section className="pf-card"><Skeleton rows=\{3\} \/><\/section> : <RuleSet/, 'the Rules chip no longer opens the rule set');
+  assert.match(P, /\{showingRules\s*\?\s*\(rulesLoading \? <section className="pf-card"><Skeleton rows=\{3\} \/><\/section> : <RuleSet/, 'the Rules chip no longer opens the rule set');
   // The dead predicates that used to return false are not back. `visible` is
   // the only row filter on this page and it may only narrow on `overdue`.
   const visible = P.slice(P.indexOf('const visible = rows.filter'), P.indexOf('\n', P.indexOf('const visible = rows.filter')));
@@ -212,7 +215,8 @@ test('the rows shown are one cadence, and the panel says so', () => {
   // The route filters on a single cadence, so the panel is always a SLICE.
   const at = POSITIONS.indexOf("r.get('/kpi-compliance'");
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
-  assert.match(handler, /WHERE fund_id IS NULL AND cadence = \?/, 'the route no longer filters by cadence');
+  assert.match(handler, /readReportingRules\(c.env, null, cadence, period!\)/, 'the route no longer passes the measured cadence and period');
+  assert.match(RULES, /rules:allRules.filter\(r=>r.cadence===cadence\)/, 'the rules read no longer filters the selected cadence');
 
   // The cadence named on screen is the one the SERVER answered with. A
   // hard-coded word would keep saying "quarterly" after the request changed.
@@ -231,7 +235,7 @@ test('“Carried by” counts stored updates, and a blank arrival is not a carri
   assert.match(body, /value !== undefined && value !== null && String\(value\)\.trim\(\) !== ''/,
     'a blank value now counts as a carried figure');
   // No denominator means no count — never zero out of zero.
-  assert.match(P, /const storedUpdates = reads\.updates\.state !== 'ok' \? null : rows\.map\(\(row\) => row\.update\)\.filter\(Boolean\);/,
+  assert.match(P, /const storedUpdates = reads\.updates\.state !== 'ok' \? null : rows\.filter\(row=>bookProjects\.has\(Number\(row\.projectId\)\)\)\.map\(\(row\) => row\.update\)\.filter\(Boolean\);/,
     'the denominator no longer distinguishes an unreadable update source');
   assert.match(body, /held === null \? <span className="pf-unreadable">Unavailable<\/span>/,
     'an unreadable update source is counted rather than labelled');
@@ -263,19 +267,12 @@ test('the panel invents no value for an absent field', () => {
 test('the three ops reasons are each true about their own object', () => {
   const row = ACTIONS.slice(ACTIONS.indexOf("'portfolio/updates': ["), ACTIONS.indexOf('],', ACTIONS.indexOf("'portfolio/updates': [")));
 
-  // EDIT RULES stays unbuilt, and now for the right reason: the set exists and
-  // has no writer, rather than not existing.
-  // The needles stop at the closing quote rather than the closing brace: an
-  // entry may now carry a `hover:` after its `unbuilt:` — the short line a
-  // reader sees on the disabled control, where `unbuilt` is the engineering
-  // reason kept in the table. What is asserted is the reason's content, which
-  // is what this test has always been about.
-  assert.match(row, /\{ label: 'Edit rules', unbuilt: '[^']*KPI set companies are held to is stored firm-wide and read-only here[^']*'/,
-    'the Edit rules reason no longer names the set that is actually stored');
-  assert.ok(!/'no reminder rules are stored'/.test(row), 'the reason that described a different object is back');
-  // And it is genuinely unwritable: no route anywhere writes the table.
-  const writers = [POSITIONS, UPDATES, RESEARCH].filter((src) => /INSERT INTO portfolio_kpi_definitions|UPDATE portfolio_kpi_definitions/.test(src));
-  assert.equal(writers.length, 0, 'a write path for the KPI set now exists and Edit rules should be built');
+  // D6214 supersedes the historical read-only action: the approved settings
+  // sheet now writes immutable, attributed sets after checking the GP scope.
+  assert.match(row, /\{ label: 'Reporting settings', kind: 'handler', handler: 'reportingSettings' \}/);
+  assert.match(SETTINGS, /requireFundGp/);
+  assert.match(SETTINGS, /INSERT INTO portfolio_reporting_rule_sets/);
+  assert.match(SETTINGS, /revision/);
 
   // CHASE IS LIVE NOW (D464, migration 337). The old reasons were right when
   // written — the only outbound on this desk fired when an update ARRIVED —
@@ -374,7 +371,8 @@ test('the strip, the instrument and the header row still match the artboard', ()
   assert.doesNotMatch(FILTERS, /canvas: 'Parse review'/, 'retired internal working copy returned');
   const ops = /ops:\[([^\]]*)\]/.exec(board);
   for (const label of ops[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''))) {
-    assert.ok(ACTIONS.includes(`label: '${label}'`), `the ops row lost ${label}`);
+    const currentLabel = label === 'Edit rules' ? 'Reporting settings' : label;
+    assert.ok(ACTIONS.includes(`label: '${currentLabel}'`), `the ops row lost ${currentLabel}`);
   }
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Updates eyebrow is back');

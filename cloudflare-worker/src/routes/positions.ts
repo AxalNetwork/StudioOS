@@ -38,6 +38,7 @@ import {
 import { latestProjectMarks, carryingValue, MARK_UNAVAILABLE_REASONS } from '../services/portfolioValuation';
 import { HELD_SCOPE, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { managedFundIds } from '../services/fundGpAccess';
+import { readReportingRules } from '../services/portfolioReportingRules';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -518,14 +519,9 @@ r.get('/kpi-compliance', async (c) => {
     }
 
     const [defs, held, updates] = await Promise.all([
+      readReportingRules(c.env, null, cadence, period!).then(set => ({ success: true, results: set.rules, rule_set: set })).catch(() => null),
       c.env.DB.prepare(
-        `SELECT kpi_key, name, definition, unit, cadence, required, applies_to, sort_order
-           FROM portfolio_kpi_definitions
-          WHERE fund_id IS NULL AND cadence = ?
-          ORDER BY sort_order`,
-      ).bind(cadence).all<any>().catch(() => null),
-      c.env.DB.prepare(
-        `SELECT DISTINCT p.project_id, pr.uid, pr.name
+        `SELECT DISTINCT p.project_id, p.fund_id, pr.uid, pr.name, pr.stage
            FROM portfolio_positions p
            LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
@@ -584,18 +580,37 @@ r.get('/kpi-compliance', async (c) => {
       if (at && (!prev || at > prev)) lastSeen.set(pid, at);
     }
 
-    const companies = (held.results || []).map((h: any) => {
+    // D6214: one read per distinct fund; each company carries its applicable rules and history.
+    if (!hasQueryResults(held)) throw new Error('Positions unreadable');
+    const byProject = new Map<number, any>();
+    for (const h of held.results || []) {
+      const current = byProject.get(Number(h.project_id));
+      if (current) { if (h.fund_id != null) current.fund_ids.add(Number(h.fund_id)); }
+      else byProject.set(Number(h.project_id), { ...h, fund_ids: new Set(h.fund_id == null ? [] : [Number(h.fund_id)]) });
+    }
+    const fundIds = [...new Set([...byProject.values()].flatMap(h => [...h.fund_ids]))] as number[];
+    const ruleSets = new Map<number, Awaited<ReturnType<typeof readReportingRules>>>();
+    try { await Promise.all(fundIds.map(async id => ruleSets.set(id, await readReportingRules(c.env, id, cadence, period!)))); }
+    catch { return c.json({ available: false, reason: 'Required KPIs could not be read.', detail: 'Required KPIs could not be read.' }, 503); }
+    const companies = [...byProject.values()].map((h: any) => {
       const pid = Number(h.project_id);
       const last = lastSeen.get(pid) || null;
       const reportedNow = thisPeriod.has(pid);
+      const sets = [...h.fund_ids].map((id: any) => ruleSets.get(id)!).filter(Boolean);
+      const rules = (sets.length ? sets.flatMap(set => set.rules) : defs!.results).filter((r: any) => r.applies_to === 'all' || r.applies_to === h.stage);
+      const ownSets = sets.filter(set => !set.inherited);
+      const dueDays = ownSets.length ? Math.min(...sets.map(set => set.due_days)) : null;
       return {
         project_id: pid,
         project_uid: h.uid || null,
+        fund_ids: [...h.fund_ids], stage: h.stage || null, kpi_set: rules,
+        rule_revisions: sets.map(set => ({ fund_id: set.fund_id, revision: set.revision, effective_from: set.effective_from })),
         name: h.name || `Startup ${pid}`,
         reported: reportedNow,
         last_reported_at: last,
         days_since_report: daysSince(last, today),
-        ...reportDue(bounds?.until ?? null, dutiesRead ? (dutyDays.get(pid) ?? null) : undefined, reportedNow, today),
+        ...reportDue(bounds?.until ?? null, dutiesRead ? (dutyDays.get(pid) ?? dueDays) : undefined, reportedNow, today),
+        ...(dutiesRead && !dutyDays.has(pid) && dueDays !== null ? { due_basis: 'fund_rules' } : {}),
       };
     });
     const reported = companies.filter(x => x.reported).length;

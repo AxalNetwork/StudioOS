@@ -178,3 +178,7 @@ and keeps nothing. The Statement sheet mounts it in its rail for the chosen
 date, and Edit ticks "Include as a cover note" with the proposal in that box.
 Decision notes: `documentation/architecture/decisions/D6888.md` and
 `documentation/architecture/decisions/D6888-p1.md`.
+
+- `PortfolioReportingSettings.jsx` — D6214: approved reporting-rule sheet with independent cadence reads, GP edits, attribution and revision conflicts.
+
+- `reportingSettings.css` — D6214: reporting-sheet fields using existing Portfolio tokens, with native controls and phone targets.
