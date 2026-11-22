@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Cell } from './CycleModulePage';
 import { feedsOf, repositoriesText, syncLineView } from './codeSystem';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
+import { cellView } from './cycleModel';
 
 /**
  * D686 §5.4 (#1597) — Operating systems' Tools section (`id="tools"`), the
@@ -15,39 +17,54 @@ import { feedsOf, repositoriesText, syncLineView } from './codeSystem';
  * D782 (#2113): above the table, GitHub as the Code system (`tools.code`):
  * its repositories, last sync and what it fed, labelled as coming from the
  * connection. Below it, each sync as a line (`tools.syncs`).
+ *
+ * D5078 (#5078, Build v2 BD12): every tool that feeds Build, connected or not.
+ * The Worker sends each row's action by its state (Manage, Reconnect for its
+ * owner only, Connect) and why it is not connected (`reason`), and the tools
+ * the company has not connected (`not_connected`) with what each would feed.
+ * The sync lines are every tool's, the latest 20, and the heading says so. On a
+ * phone (`phone`, or the phone width) each tool is a card, never a table
+ * scrolled sideways.
  */
-export default function ToolsHistory({ tools }) {
-  // A row's Open is Connect a tool over this page: `under` is where closing it returns (#1597).
+export default function ToolsHistory({ tools, phone: phoneProp }) {
+  // A row's action is Connect a tool over this page: `under` is where closing it returns (#1597).
   const location = useLocation();
+  const phoneWidth = usePhoneWidth();
+  const phone = phoneProp ?? phoneWidth;
   if (!tools || typeof tools !== 'object') return null;
   const under = { under: `${location.pathname}${location.search}` };
   const cols = Array.isArray(tools.cols) ? tools.cols.filter((c) => c && c.key) : [];
-  const rows = Array.isArray(tools.rows) ? tools.rows : [];
+  const connected = Array.isArray(tools.rows) ? tools.rows : [];
+  const missing = Array.isArray(tools.not_connected) ? tools.not_connected : [];
+  const rows = [...connected, ...missing];
   return (
     <section id="tools" className="flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-part-tools" aria-labelledby="tools-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id="tools-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">Tools</h2>
-        {tools.state === 'ok' && Number.isSafeInteger(tools.total) && <span className="text-[11px] text-axal-faint dark:text-gray-500">{tools.total === 1 ? '1 tool' : `${tools.total} tools`}</span>}
+        {tools.state === 'ok' && Number.isSafeInteger(tools.total) && <span className="text-[11px] text-axal-faint dark:text-gray-500" data-testid="tools-count">{tools.total === 1 ? '1 tool connected' : `${tools.total} tools connected`}{missing.length ? ` · ${missing.length} not connected` : ''}</span>}
       </div>
       <CodeSystem code={tools.code} linkState={under} />
       {tools.state === 'not_recorded'
         ? <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="tools-not-recorded">{tools.reason || 'Not recorded'}</p>
-        : rows.length === 0
-          ? <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="tools-none">No tool is connected for this company yet.</p>
-          : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[12px]">
-                <thead><tr>{cols.map((c) => <th key={c.key} scope="col" className="whitespace-nowrap border-b border-axal-hairline px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:border-gray-800 dark:text-gray-400">{c.label}</th>)}</tr></thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={r.id ?? i} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid={`tools-row-${i}`}>
-                      {cols.map((c, j) => <td key={c.key} className="px-2 py-1.5 align-top"><Cell cell={r.cells?.[c.key]} first={j === 0} linkState={under} /></td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        : (
+          <>
+            {connected.length === 0 && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="tools-none">No tool is connected for this company yet.</p>}
+            {rows.length > 0 && (phone ? <ToolCards cols={cols} rows={rows} linkState={under} /> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[12px]">
+                  <thead><tr>{cols.map((c) => <th key={c.key} scope="col" className="whitespace-nowrap border-b border-axal-hairline px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:border-gray-800 dark:text-gray-400">{c.label}</th>)}</tr></thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={r.id ?? i} className={`border-b border-axal-ground last:border-b-0 dark:border-gray-800 ${r.keys?.state === 'failing' ? 'bg-red-50/60 dark:bg-red-950/20' : ''}`.trim()} data-testid={`tools-row-${i}`} data-state={r.keys?.state}>
+                        {cols.map((c, j) => <td key={c.key} className="px-2 py-1.5 align-top"><Cell cell={r.cells?.[c.key]} first={j === 0} linkState={under} /></td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </>
+        )}
       <SyncLines syncs={tools.syncs} />
       {tools.note && <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="tools-note">{tools.note}</p>}
     </section>
@@ -55,6 +72,36 @@ export default function ToolsHistory({ tools }) {
 }
 
 const SUB = 'm-0 text-[11px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400';
+
+/** D5078 (BD12 on a phone): one card per tool, its action a full-width target of at least 44px. */
+function ToolCards({ cols, rows, linkState }) {
+  const label = (key) => cols.find((c) => c.key === key)?.label || key;
+  const facts = ['category', 'feeds', 'last_sync', 'failed_at', 'owner', 'reason'];
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="tools-cards">
+      {rows.map((r, i) => {
+        const action = cellView(r.cells?.action);
+        return (
+          <li key={r.id ?? i} className={`flex min-w-0 flex-col gap-1.5 rounded-lg border px-3 py-2.5 ${r.keys?.state === 'failing' ? 'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' : 'border-axal-hairline dark:border-gray-800'}`} data-testid={`tools-card-${i}`} data-state={r.keys?.state}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <b className="text-[13.5px] text-axal-ink dark:text-gray-100"><Cell cell={r.cells?.tool} plain first /></b>
+              <span className="text-[12px]"><Cell cell={r.cells?.state} plain /></span>
+            </div>
+            <dl className="m-0 grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[12px]">
+              {facts.filter((k) => r.cells?.[k] != null && r.cells[k] !== '').map((k) => (
+                <div key={k} className="contents"><dt className="text-axal-muted dark:text-gray-400">{label(k)}</dt><dd className="m-0 min-w-0 break-words"><Cell cell={r.cells[k]} linkState={linkState} /></dd></div>
+              ))}
+            </dl>
+            {action.href && (
+              <Link to={action.href} state={linkState} data-testid={`tools-card-action-${i}`}
+                className="flex min-h-[44px] items-center justify-center rounded-[10px] border border-axal-hairline bg-white px-3 text-[13px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30">{action.text}</Link>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 const LINE = 'm-0 text-[12px] text-axal-ink/80 dark:text-gray-300';
 
 /** D782: GitHub as the Code system, one block per connection. Nothing when the read carries no `code`. */
@@ -77,6 +124,7 @@ function CodeSystem({ code, linkState }) {
             {sys.source_label && <p className="m-0 text-[11px] text-axal-faint dark:text-gray-500" data-testid="tools-code-source">{sys.source_label}{sys.owner ? ` · ${sys.owner}` : ''}</p>}
             <p className={LINE} data-testid="tools-code-repositories">Repositories: {repositoriesText(sys)}</p>
             <p className={LINE}>Last sync: {sys.last_sync || 'Not yet'}{sys.failed_at ? ` · failed at ${sys.failed_at}` : ''}</p>
+            {sys.reason && <p className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid="tools-code-reason">{sys.reason}</p>}
             <p className={LINE} data-testid="tools-code-feeds">
               Feeds: {feeds.length === 0 ? 'Nothing has arrived in this project yet' : feeds.map((f, j) => (
                 <span key={f.label}>{j > 0 && ' · '}{f.href ? <Link to={f.href} className="hover:underline">{f.text}</Link> : f.text}</span>
@@ -89,13 +137,13 @@ function CodeSystem({ code, linkState }) {
   );
 }
 
-/** D782: each GitHub sync as a line, newest first. */
+/** D782: each sync as a line, newest first. D5078: every tool's, and the heading says how many it keeps. */
 function SyncLines({ syncs }) {
   if (!syncs || typeof syncs !== 'object' || syncs.state === 'not_recorded') return null;
   const rows = Array.isArray(syncs.rows) ? syncs.rows : [];
   return (
     <div className="flex flex-col gap-1.5" data-testid="tools-syncs">
-      <h3 className={SUB}>Syncs</h3>
+      <h3 className={SUB} data-testid="tools-syncs-title">{syncs.label ? `Sync history · ${String(syncs.label).toLowerCase()}` : 'Sync history'}</h3>
       {syncs.state === 'unreadable' || rows.length === 0
         ? <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="tools-syncs-none">{syncs.reason || 'No sync yet.'}</p>
         : (
@@ -104,7 +152,7 @@ function SyncLines({ syncs }) {
               const v = syncLineView(line);
               return (
                 <li key={line?.id ?? i} className="flex flex-col border-b border-axal-ground pb-1 last:border-b-0 dark:border-gray-800" data-testid={`tools-sync-${i}`}>
-                  <span className="text-[11px] text-axal-faint dark:text-gray-500">{v.at || 'Not recorded'} · {line?.provider || 'GitHub'} · {v.state}</span>
+                  <span className="text-[11px] text-axal-faint dark:text-gray-500">{v.at || 'Not recorded'} · {line?.provider || 'Unknown tool'} · {v.state}</span>
                   <span className={v.failed ? 'text-[12px] text-red-700 dark:text-red-300' : LINE}>{v.text}</span>
                   {v.repositories && <span className="text-[11px] text-axal-muted dark:text-gray-400">{v.repositories}</span>}
                 </li>

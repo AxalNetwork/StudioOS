@@ -15,6 +15,7 @@ import RoadmapBoard from '../RoadmapBoard';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 import { lazyStep } from '../lazyStep.jsx';
+import OperatingSystemsHome, { OsCadenceBands } from '../OperatingSystemsHome.jsx';
 
 // D6028 (#6028, BD1, BD2): Build Overview V2, behind its own lazy boundary.
 const BuildOverview = lazyStep(() => import('../BuildOverview'));
@@ -61,7 +62,17 @@ const build = {
   // option A), so the module draws no second door to it.
   tools: toFnMap({
     'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
-    'operating-systems': (q) => ({ label: 'Open the operating cadence', href: `/build/cadence${q}` }),
+    // D5078 (#5078, BD20 C): the operating cadence's one entry is Operating systems › Cadence (OperatingSystemsHome).
+  }),
+  // D5078 (#5078; BD20 A/B/C, BD12, BD24 B): Operating systems owns its page, Systems · Cadence · Tools. Its header's
+  // one action is the first system to reconnect or connect (BD23); its bands draw under Cadence only, and its
+  // connector parts (the Sources region, `placesSources`) under Tools only.
+  homes: toFnMap({
+    'operating-systems': (data, ctx) => ({
+      action: data?.parts?.systems?.next?.href ? { label: data.parts.systems.next.text, href: data.parts.systems.next.href } : null,
+      body: Object.assign((p) => <OperatingSystemsHome {...p} data={data} projectId={ctx.projectId} />, { placesSources: true }),
+      Bands: OsCadenceBands,
+    }),
   }),
   add: toFnMap({}),
   fills: {},
