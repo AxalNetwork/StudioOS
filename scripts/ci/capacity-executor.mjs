@@ -42,7 +42,7 @@ export function resultStore(root,run){
 /** Typed values are captured from S09's private local output descriptor plus its actual exporter/store ports. */
 export function supervisorResult(values,{observedTest,removed,exportedAt,exportDeadline,observedCaptured=false,receiptDeadline=Infinity,now=Date.now}={}){
  need(values&&['success','test_failure','cancelled','timed_out','infrastructure','incomplete_cleanup'].includes(values.category)
-  &&['complete','none','failed','unverified'].includes(values.cleanup)&&['complete','failed','skipped_no_budget','not_configured','not_run'].includes(values.export),'supervisor_shape');
+  &&['complete','none','failed','unverified','unknown'].includes(values.cleanup)&&['complete','failed','skipped_no_budget','not_configured','not_run'].includes(values.export),'supervisor_shape');
  const categories={success:'success',test_failure:'test_failure',cancelled:'cancelled',timed_out:'timed_out',cleanup_failure:'incomplete_cleanup',export_failure:'infrastructure',install_failure:'infrastructure',infrastructure:'infrastructure',unknown:'infrastructure'};
  need(categories[values.result]===values.category,'supervisor_category_mismatch');
  if(observedTest?.status==='success')need(String(values.test_exit)==='0','supervisor_test_truth');

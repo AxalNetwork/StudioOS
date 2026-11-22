@@ -19,7 +19,12 @@ import * as client from '../../scripts/ci/capacity-client.mjs';
 import { ownedPaths } from '../../scripts/ci/runner-execution.mjs';
 import { buildPlan } from '../../scripts/test-drift-parts.mjs';
 import { SqlCapacityStore } from '../../merge-control/src/ciCapacity.ts';
-function fixture(t){t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});return capacityFixture(t,{callbackResults:true,clockInstalled:true});}
+function fixture(t){
+ t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});
+ // The real supervisor derives the earlier Run-wrapper bound from process start, on the same clock.
+ t.mock.getter(performance,'timeOrigin',()=>1_800_000_000_000);
+ return capacityFixture(t,{callbackResults:true,clockInstalled:true});
+}
 const CID='c'.repeat(64),POLICY={version:1,image:'sha256:'+'d'.repeat(64),nodeVersion:'22.23.3',pythonVersion:'3.11.18'};
 function archive(){
  const name='traces/1-1800000000000.trace.json',bytes=Buffer.from('{}'),h=Buffer.alloc(512);
@@ -73,7 +78,7 @@ async function setup(t,{exit=0,lost=false,cleanupFailure=false,long=false,skipEx
  assert.equal(await bridge('verify-plan',env,ports),0);
  return {f,s,env,ports,e,results,store,root,transcript,reports:()=>reports};
 }
-for(const outcome of ['success','failure','lost','cleanup'])test(`D7909 exact c36 bridge ${outcome}: actual supervisor, verified receipts, durable authenticated result`,async t=>{
+for(const outcome of ['success','failure','lost','cleanup'])test(`D7909 exact composed S09 bridge ${outcome}: actual supervisor, verified receipts, durable authenticated result`,async t=>{
  const x=await setup(t,{exit:outcome==='success'?0:9,lost:outcome==='lost',cleanupFailure:outcome==='cleanup'});
  if(outcome==='lost'){await assert.rejects(bridge('run',x.env,x.ports),/acknowledgement lost/);await assert.rejects(bridge('run',x.env,x.ports),/already_recorded/);}else assert.equal(await bridge('run',x.env,x.ports),outcome==='success'?0:9);
  const before=x.results.read();assert.equal(before.result.testStep,outcome==='success'?'success':'failure');assert.equal(before.result.exportComplete,true);assert.equal(before.result.cleanupConfirmed,outcome!=='cleanup');
@@ -95,6 +100,7 @@ test('D7909 supervisor mapping refuses missing export, inconsistent failure and 
  assert.throws(()=>supervisorResult(values,{...proof,removed:false}));assert.throws(()=>supervisorResult(values,{...proof,exportedAt:20}));assert.throws(()=>supervisorResult(values,{...proof,receiptDeadline:30}));
  const failed={category:'test_failure',result:'test_failure',test_exit:'9',cleanup:'failed',export:'failed'};
  assert.deepEqual(supervisorResult(failed,{observedTest:{status:'failure',exitCode:9},removed:false}),{testStep:'failure',executionOutcome:'cleanup_failure',cleanupConfirmed:false,exportComplete:false});
+ assert.deepEqual(supervisorResult({category:'infrastructure',result:'infrastructure',test_exit:'',cleanup:'unknown',export:'not_run'},{observedCaptured:true}),{testStep:'unknown',executionOutcome:'cleanup_failure',cleanupConfirmed:false,exportComplete:false});
 });
 
 test('D7909 24-minute phase transcript stays inside unchanged per-child and shared admission bounds',async t=>{
