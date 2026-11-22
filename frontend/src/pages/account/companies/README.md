@@ -24,6 +24,7 @@ to the owner's canvases: `design/incoming/Companies Projects Page.dc.html` and
 | `CompaniesMoved.jsx` | D1140 (#3020, CMP19): the arrival notices of the move to Portfolio: `CompaniesMovedNotice` (`?moved=`) and Profile and identity's line where "Your companies" was, shown until dismissed on this device. The forwards that used to be here (`/company-settings`, every `/account/companies…` address) are retired (D2319); their components were deleted by #4736. |
 | `CompanySettingsAt.jsx` | D1140, D4152: `/account/portfolio/<uid>/settings`, one header and the General form, for any company the member belongs to; one the member cannot open (the Worker's 404) is `NotYours` ("This company is not yours to open.", Back to Portfolio, no Try again, #4736). `/account/portfolio/settings` opens the active company's; a partner keeps Firm Settings there with a link to it; with no company, `CompanySettingsPage`'s on-ramp. Lazy-loaded by `App.jsx`. |
 | `companiesModel.js` | Pure: the profiles and their tabs, the tab and company addresses, the words, and the derivations from the reads (the cards, the ventures grouped, the invitations, the funds by firm, the engagements, the tab counts); D1139's `LIFECYCLE` words and who may do what (`companyPowers`, `ventureTeam`). |
+| `FormationEntry.jsx` | D6688: shared server-state incorporation door and company formation read, reusing LegalSheet. |
 
 ## The rules for adding here
 
@@ -78,5 +79,3 @@ Worker's `PUBLIC_FIELDS` only, marked when it includes unsaved changes).
 twelve save states, `fieldProblems` (of which `problemOf` is the first) and the
 currency and URL helpers. The save machinery is unchanged: #4960 to #4964 own
 it.
-
-| `FormationEntry.jsx` | D6688: shared server-state incorporation door and company formation read, reusing LegalSheet. |

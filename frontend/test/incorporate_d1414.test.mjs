@@ -342,3 +342,22 @@ test('D6688: an owned prefilled project reports its formation state instead of a
     } finally { await view.close(); }
   }
 });
+
+
+test('D6688: retrying a failed fresh order reuses the project created by this flow', async () => {
+  let attempts = 0;
+  const view = await mount('/incorporate?new=1', { handle: worker({ 'POST /api/legal/incorporation/order': () => ++attempts === 1 ? response({ message: 'Fixture order failed' }, 503) : response({ dev: true, status: 'paid', incorporation_id: 31 }) }) });
+  try {
+    await view.change('incorporate-fresh-name', '[Fresh]');
+    await view.click('incorporate-primary'); await view.click('incorporate-primary');
+    await view.change('incorporate-company-name', '[Fresh Inc.]');
+    const deadline = performance.now() + 10000;
+    while (view.prop('incorporate-primary', 'disabled') && performance.now() < deadline) await view.wait(10);
+    await view.click('incorporate-primary'); await view.click('incorporate-primary');
+    await view.click('incorporate-primary'); await view.click('incorporate-primary');
+    const writes = view.writes();
+    assert.equal(writes.filter(w => w.call === 'POST /api/projects').length, 1);
+    const orders = writes.filter(w => w.call === 'POST /api/legal/incorporation/order');
+    assert.equal(orders.length, 2); assert.ok(orders.every(w => w.body.project_id === 77));
+  } finally { await view.close(); }
+});
