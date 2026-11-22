@@ -7,12 +7,14 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
+import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { correctLp, removeLp } from '../src/services/fundLpMaintenance.ts';
 import router from '../src/routes/fund_lp_maintenance.ts';
 import { LPs } from '../src/models/funds.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { schemaPath, SCHEMA_OPTIONS } from './_schema_once.mjs';
+import { JWT_SECRET } from './_esign_harness.ts';
 const schema = schemaPath();
-const JWT_SECRET = 'synthetic-lp-maintenance-6237-secret';
 function fixture() {
   const dir=mkdtempSync(join(tmpdir(),'lp-maintenance-6237-')), file=join(dir,'fixture.sqlite'); copyFileSync(schema,file);
   const db=new DatabaseSync(file,SCHEMA_OPTIONS);
@@ -120,4 +122,48 @@ test('D6237 commitment precision cannot round a below-call amount up across its 
     assert.equal((await f.call('PATCH',101,{commitment_amount:0.29})).status,200);
     assert.equal(f.db.prepare('SELECT commitment_amount FROM limited_partners WHERE id=101').get()?.commitment_amount,0.29);
   }finally{f.close();}
+});
+
+test('D6237 a legacy fractional-dollar call keeps its exact cent boundary',async()=>{
+  const f=fixture();try{
+    f.db.exec("INSERT INTO capital_calls(limited_partner_id,amount,amount_cents,status) VALUES(100,0.29,NULL,'pending')");
+    assert.equal((await f.call('PATCH',100,{commitment_amount:0.28})).status,409);
+    assert.equal((await f.call('PATCH',100,{commitment_amount:0.29})).status,200);
+    assert.equal(f.row().commitment_amount,0.29);
+  }finally{f.close();}
+});
+test('D6237 local workerd D1 audits only changed RETURNING rows and rolls audit failures back',async()=>{
+  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,compatibilityDate:'2026-01-01',d1Databases:['DB'],script:'export default {fetch(){return new Response("synthetic fixture")}}'}) as any);
+  try{
+    const DB:any=await mf.getD1Database('DB'),env:any={DB};
+    await DB.batch([
+      DB.prepare('CREATE TABLE vc_funds(id INTEGER PRIMARY KEY,lp_count INTEGER,updated_at TEXT)'),
+      DB.prepare('CREATE TABLE limited_partners(id INTEGER PRIMARY KEY,fund_id INTEGER,name TEXT,email TEXT,commitment_amount REAL,status TEXT,updated_at TEXT)'),
+      DB.prepare('CREATE TABLE capital_calls(id INTEGER PRIMARY KEY,limited_partner_id INTEGER,amount REAL,amount_cents INTEGER)'),
+      DB.prepare('CREATE TABLE capital_call_receipts(id INTEGER PRIMARY KEY,limited_partner_id INTEGER)'),
+      DB.prepare("CREATE TABLE activity_logs(id INTEGER PRIMARY KEY,user_id INTEGER,action TEXT NOT NULL,action_type TEXT,entity_type TEXT,entity_id TEXT,metadata TEXT,created_at TEXT DEFAULT(datetime('now')))")
+    ]);
+    await DB.batch([
+      DB.prepare('INSERT INTO vc_funds(id,lp_count) VALUES(1,2)'),
+      DB.prepare("INSERT INTO limited_partners(id,fund_id,name,commitment_amount,status) VALUES(100,1,'Synthetic LP',1000,'committed'),(101,1,'Synthetic removable LP',500,'committed')"),
+      DB.prepare('INSERT INTO capital_calls(id,limited_partner_id,amount,amount_cents) VALUES(900,100,250,25000)')
+    ]);
+    const count=async()=>Number((await DB.prepare('SELECT COUNT(*) AS n FROM activity_logs').first()).n);
+    await assert.rejects(()=>correctLp(env,1,100,40,{commitment_amount:249.99}),{code:'lp_commitment_below_called'});
+    assert.equal(await count(),0,'zero-row UPDATE RETURNING resets a prior nonzero change count');
+    await assert.rejects(()=>removeLp(env,1,100,40),{code:'lp_has_capital_history'});
+    assert.equal(await count(),0,'zero-row DELETE RETURNING records no phantom audit');
+    assert.equal((await DB.prepare('SELECT lp_count FROM vc_funds WHERE id=1').first()).lp_count,2);
+    const changed=await correctLp(env,1,100,40,{commitment_amount:250});
+    assert.equal(changed.commitment_amount,250);assert.equal(await count(),1);
+    await removeLp(env,1,101,40);assert.equal(await count(),2);
+    assert.equal((await DB.prepare('SELECT lp_count FROM vc_funds WHERE id=1').first()).lp_count,1);
+    const logs=await DB.prepare('SELECT user_id,action,entity_id,created_at FROM activity_logs ORDER BY id').all();
+    assert.deepEqual(logs.results.map((r:any)=>[r.user_id,r.action,r.entity_id]),[[40,'lp_corrected','100'],[40,'lp_removed','101']]);
+    assert.ok(logs.results.every((r:any)=>r.created_at));
+    await DB.prepare("CREATE TRIGGER synthetic_audit_failure BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END").run();
+    await assert.rejects(()=>correctLp(env,1,100,40,{name:'Must roll back'}));
+    assert.equal((await DB.prepare('SELECT name FROM limited_partners WHERE id=100').first()).name,'Synthetic LP');
+    assert.equal(await count(),2);
+  }finally{await mf.dispose();}
 });
