@@ -17,6 +17,7 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { exportView } from '../../../lib/csvExport';
 import FromMercury from '../FromMercury';
 import ClosingWorkspace from './ClosingWorkspace';
+import { transferBody, verifierOptions } from './closingWorkspaceModel';
 
 /**
  * Deals · Closing — canvas **ID4**, `/deals/closing`. COLLECTION.
@@ -207,6 +208,15 @@ export default function InvestorClosingZone() {
   const [transfers, setTransfers] = useState(null);
   const [checklists, setChecklists] = useState({});
   const [wireForm, setWireForm] = useState(null);
+  // D6889: the Admins a phone verifier is picked from (`GET /users?role=admin`,
+  // an Admin's read). Read once, when an Admin first opens Record transfer.
+  const [verifiers, setVerifiers] = useState(null);
+  const wireOpen = !!wireForm;
+  const isAdminUser = user?.role === 'admin';
+  useEffect(() => {
+    if (!wireOpen || !isAdminUser || verifiers !== null) return;
+    api.listUsers('admin').then((r) => setVerifiers(Array.isArray(r) ? r : (r?.items || [])), () => setVerifiers(UNAVAILABLE));
+  }, [wireOpen, isAdminUser, verifiers]);
   const [templateForm, setTemplateForm] = useState(null);
   const [itemForms, setItemForms] = useState({});
   const [actionError, setActionError] = useState('');
@@ -367,12 +377,9 @@ export default function InvestorClosingZone() {
     }
     setWireForm({ ...wireForm, busy: true, error: '' });
     try {
-      await api.dealTransferRecord(wireForm.dealId, {
-        amount_cents: cents,
-        reference: wireForm.reference || null,
-        phone_verified: wireForm.phoneVerified,
-        note: wireForm.note || null,
-      });
+      // D6889: the verifier goes only with a phone-verified transfer; the
+      // Worker checks it names an Admin and its refusal shows as given.
+      await api.dealTransferRecord(wireForm.dealId, transferBody({ ...wireForm, cents }));
       setWireForm(null);
       load();
       setWorkspaceKey((k) => k + 1);
@@ -425,7 +432,7 @@ export default function InvestorClosingZone() {
     ? { onClick: () => {}, disabled: true, title: 'Recording a transfer is an operator’s act — a partner or an admin records it.' }
     : !closing.length
       ? { onClick: () => {}, disabled: true, title: 'No deal is at closing, so there is nothing to record a transfer against.' }
-      : { onClick: () => { setActionError(''); setWireForm({ dealId: closing[0].id, amount: '', reference: '', phoneVerified: false, note: '', busy: false, error: '' }); } };
+      : { onClick: () => { setActionError(''); setWireForm({ dealId: closing[0].id, amount: '', reference: '', phoneVerified: false, phoneVerifiedBy: '', note: '', busy: false, error: '' }); } };
 
   const applyTemplate = !canOperate
     ? { onClick: () => {}, disabled: true, title: 'Applying a closing template is an operator’s act — a partner or an admin applies it.' }
@@ -552,11 +559,31 @@ export default function InvestorClosingZone() {
               <input
                 type="checkbox"
                 checked={wireForm.phoneVerified}
-                onChange={(e) => setWireForm({ ...wireForm, phoneVerified: e.target.checked })}
+                onChange={(e) => setWireForm({ ...wireForm, phoneVerified: e.target.checked, phoneVerifiedBy: e.target.checked ? wireForm.phoneVerifiedBy : '' })}
                 data-testid="check-wire-phone"
               />
               Instructions verified by phone
             </label>
+            {isAdminUser ? (
+              <label className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 md:col-span-2">Who confirmed them by phone <span className="font-normal text-gray-500 dark:text-gray-400">· an Admin, optional</span>
+                <select
+                  value={wireForm.phoneVerifiedBy}
+                  disabled={!wireForm.phoneVerified || !Array.isArray(verifiers)}
+                  onChange={(e) => setWireForm({ ...wireForm, phoneVerifiedBy: e.target.value })}
+                  data-testid="select-wire-verifier"
+                  className="mt-1 w-full min-h-[44px] rounded-[7px] border border-gray-200 bg-white px-2 py-1.5 text-[12px] disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 md:min-h-0"
+                >
+                  <option value="">Not recorded</option>
+                  {(Array.isArray(verifiers) ? verifierOptions(verifiers, user) : []).map((o) => <option key={o.id} value={String(o.id)}>{o.label}</option>)}
+                </select>
+                <span className="mt-0.5 block font-normal text-gray-500 dark:text-gray-400" data-testid="wire-verifier-note">
+                  {verifiers === UNAVAILABLE ? 'The list of Admins could not be read, so no verifier can be named. The transfer still records.'
+                    : verifiers === null ? 'Reading the Admins…'
+                      : !wireForm.phoneVerified ? 'Tick “verified by phone” to name who confirmed it.'
+                        : 'It may be you. Left as Not recorded, the transfer still records.'}
+                </span>
+              </label>
+            ) : null}
           </div>
           <textarea
             rows={2}
@@ -598,7 +625,7 @@ export default function InvestorClosingZone() {
           deal={deal}
           user={user}
           onBack={() => setParams({})}
-          onRecordTransfer={(id) => { setActionError(''); setWireForm({ dealId: id, amount: '', reference: '', phoneVerified: false, note: '', busy: false, error: '' }); }}
+          onRecordTransfer={(id) => { setActionError(''); setWireForm({ dealId: id, amount: '', reference: '', phoneVerified: false, phoneVerifiedBy: '', note: '', busy: false, error: '' }); }}
         />
       </>
     );
