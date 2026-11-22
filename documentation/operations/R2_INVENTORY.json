@@ -618,6 +618,18 @@
       "policy_sources": []
     },
     {
+      "id": "files-release-sites",
+      "bucket": "studioos-files",
+      "prefix": "release-sites/",
+      "class": "replaceable",
+      "purpose": "WorkGraph release site records (ids only, D5585-p6): regenerable from the D1 manifest and delivery rows; deleted when a takedown retracts the release",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
       "id": "files-reports",
       "bucket": "studioos-files",
       "prefix": "reports/",

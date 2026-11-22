@@ -194,13 +194,16 @@ test('every read the zone makes is a scoped one', () => {
     'the conditions list stopped riding the decision scope');
   // And the zone touches no store directly — these calls are the whole data
   // layer: the deals, the paper, the open conditions, the transfers, and the
-  // per-deal checklist (D462).
+  // per-deal checklist (D462), plus the Admins a phone verifier is named
+  // from (D6889; `GET /users` is an Admin's read, asked only by an Admin).
   const calls = [...new Set([...Z.matchAll(/api\.([A-Za-z]+)\(/g)].map((m) => m[1]))].sort();
   assert.deepEqual(calls, [
     'dealClosingChecklist', 'dealClosingChecklistAddItem', 'dealClosingChecklistApply',
     'dealClosingChecklistSetItem', 'dealTransferRecord', 'dealsTransfers',
-    'esignList', 'icConditions', 'listDeals',
+    'esignList', 'icConditions', 'listDeals', 'listUsers',
   ], 'the zone gained an API call beyond the scoped reads');
+  assert.match(Z, /if \(!wireOpen \|\| !isAdminUser \|\| verifiers !== null\) return;\s*\n\s*api\.listUsers\('admin'\)/,
+    'the Admins list is read only by an Admin with Record transfer open');
   for (const table of ['esign_envelopes', 'legal_templates']) {
     assert.ok(!fetching().includes(table), `the zone reads ${table} directly, which is the worker's job`);
   }
