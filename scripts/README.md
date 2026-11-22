@@ -38,6 +38,10 @@
 
 ## The guards
 
+| File | Purpose |
+| --- | --- |
+| `plan-network-directory.mjs` | D7672: offline planner for reviewed Airtable/Folk source snapshots; creates a restricted parameterized import plan outside the repository and reports aggregate counts; never contacts a database. |
+
 `npm run test:guards` runs every `check-*.mjs`. They exist because each one
 represents a bug that reached production once:
 
@@ -231,6 +235,7 @@ pull.
 | `build-rail-matrix.mjs` | Not an importer: D764 (#2089). Writes `cloudflare-worker/src/services/ai/railMatrix.json`, one row per canvas page (its kind and router task; since #4313 part 3 no model list, as each page lists its kind's job), from the owner's canvas tables (`design/incoming/airail-every-page-data/canvas.json`) and `lib/railMatrixOverrides.json`. Since D764 PR 3 it also writes one row per option registered in `frontend/src/lib/railOptions/`, with its kind's models. It refuses inputs that break D720 §5's rules, held on each canvas kind's list and every option row. `--check` exits 1 when the committed file is not its output; `rail_matrix_d764.test.ts` runs the same comparison. |
 | `import-global-research-funds.py` | D7326: deterministic additive worldwide manager import from the dated primary-source evidence manifest. `--check` verifies the committed migration; served manager aliases/hosts, explicitly recorded vehicle-number suffixes and retired UIDs suppress duplicates, while existing data and source verdicts remain intact. |
 | `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). `parse_shai` reads the third list from a CSV with that sheet's shape; `fixtures/shai-goldman-sample.csv` is the fixture. Those rows are US cents under the list's own name (1A) and are not written into migration 378. Since D7166 (#7166) the EuroTech list is keyed by vehicle (manager plus fund number) and `eurotech-migration STEM` writes its re-import as a new migration; run with no argument it refuses, because 378 is applied. |
+| `import-register-companies.mjs` | D7316 part 2: offline BRREG/PRH/RIK company compiler. Pins native primary-record projections and source manifests, requires the retained quality-hold ledger and a fresh identity baseline, holds ambiguous identities, and emits only additive SQL/statements plus an audit. Exact admitted objects own SQL and evidence emission; financial metrics stay unknown. Reports the original worldwide gate separately. See `documentation/architecture/decisions/D7316-p2.md`. |
 
 ## Subfolders
 
@@ -243,6 +248,7 @@ pull.
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
 | `landing-bot/` | #6467: the landing bot's shared rules (`rules.mjs`: mode, eligibility, breakers, attempts, budgets, the path guard, give-up text) and `workflowGuard.mjs`, the helper each bot workflow's test calls. No workflow; tests in `frontend/test/landing_bot_core_6467.test.mjs`. |
+| `deploy/` | D8073: deploy provenance. `record-deployment.mjs` writes one row to D1 `deployments` through `POST /api/internal/deployments` for the deploy a run just shipped and appends the same line to the deploy summary; its rules and tests are `lib/deployProvenance.mjs` and `lib/deployProvenance.test.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
 | `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
 | `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |
@@ -363,3 +369,8 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `build-classification-crosswalk.mjs` | D7821: deterministically writes the UK SIC crosswalk seed from its reviewed asset and imported SIC_SECTORS; `--check` verifies it without database access. |
 | `file-recovery-independent.py` | D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof. |
 | `file_recovery_6653_test.py` | D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats. |
+
+| File | Role |
+| --- | --- |
+| `guard-commands.json` | D5505: the single ordered guard command/flag catalog, preflight selection and prerequisite metadata. |
+| `run-guards.mjs` | D5505: full `npm run test:guards`, advisory `npm run test:guards:preflight`, and `--guard <id>` reproduction; emits bounded guard results. |

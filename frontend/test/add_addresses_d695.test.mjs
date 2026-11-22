@@ -283,12 +283,16 @@ test('each cycle has a `/:slug/new` route beside its module page, with the same 
   assert.ok(app.includes('<Route path="/validate/record"'));
 });
 
+const COMPANY_OWN = new Set(['grow/durable-company-building']);
+
 test('every module\'s `/new` resolves to its cycle\'s adding route, and Customer research\'s to Record a session', () => {
   for (const [cycle, modules] of Object.entries(MODULES)) {
     for (const { slug } of modules) {
       const url = `/${cycle}/${slug}/new`;
       // #4853: Pitch's module Add form was a second sharing flow. Its static `/new` route redirects to the Studio's Share tab.
-      const want = cycle === 'raise' && slug === 'pitch-deck' ? '/raise/pitch-deck/new' : `/${cycle}/:slug/new`;
+      // D6122 part 2 (GR-26): Company's `/new` is growCompany.jsx's own adding route, pinned below.
+      const want = cycle === 'raise' && slug === 'pitch-deck' ? '/raise/pitch-deck/new'
+        : COMPANY_OWN.has(`${cycle}/${slug}`) ? `/${cycle}/${slug}/new` : `/${cycle}/:slug/new`;
       assert.equal(bestMatch(url), want, url);
       assert.equal(isCyclePath(url), true, `${url} has the cycle gutter`);
     }
@@ -296,8 +300,12 @@ test('every module\'s `/new` resolves to its cycle\'s adding route, and Customer
   }
   // The forms' own modules, each `?form=` key included, reach the adding route.
   for (const [cycle, bySlug] of Object.entries(FORMS)) {
-    for (const slug of Object.keys(bySlug)) assert.equal(bestMatch(`/${cycle}/${slug}/new`), `/${cycle}/:slug/new`);
+    for (const slug of Object.keys(bySlug)) assert.equal(bestMatch(`/${cycle}/${slug}/new`), COMPANY_OWN.has(`${cycle}/${slug}`) ? `/${cycle}/${slug}/new` : `/${cycle}/:slug/new`);
   }
+  // Company's own `/new` is still the adding route, behind the same guard as `/grow/:slug/new`.
+  assert.ok(readFileSync(new URL('../src/routes/growCompany.jsx', import.meta.url), 'utf8').includes(
+    `<Route path="/grow/durable-company-building/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="durable-company-building" adding/>)} />`));
+  assert.ok(app.includes(`<Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />`));
 });
 
 // ---------- E. The Add link passes its entry's state -------------------------

@@ -4,7 +4,7 @@
 // returned snippet text in its own JSX <mark> highlighter.
 
 import Fuse from 'fuse.js';
-import { SECTIONS, filterSectionsForRole } from '../../pages/docs/sections';
+import { SECTIONS, filterSectionsForRole, guideBodyText } from '../../pages/docs/sections';
 
 // Build a flat list of search records — one per subsection — with a
 // `text` blob fuse can score against. The blob folds in the overview,
@@ -35,11 +35,7 @@ export function buildDocsRecords(role) {
     for (const sub of section.subsections) {
       const text = [
         sub.title,
-        sub.overview || '',
-        ...(sub.beforeYouStart || []),
-        ...(sub.howto || []),
-        ...(sub.tips || []),
-        ...(sub.pitfalls || []),
+        guideBodyText(sub),
         ...((sub.related || []).map(r => r.label)),
       ].join(' \n ');
       records.push({
