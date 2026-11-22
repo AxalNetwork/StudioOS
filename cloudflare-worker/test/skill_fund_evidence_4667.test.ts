@@ -14,7 +14,7 @@
  *     a cut record is conditional and named; a mark from before the quarter is stale; nothing recorded is empty;
  *     none selected and not found are not ready;
  *   · the manual run carries the figures it judged; one with no fund selected is refused before any charge;
- *   · the matrix: the need reads `fund.performance`, and a scheduled session cannot select a fund.
+ *   · the matrix: the need reads `fund.performance`, and a scheduled session can select a fund (D7701).
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/skill_fund_evidence_4667.test.ts
@@ -219,8 +219,7 @@ test('the LP letter\'s need reads fund.performance, a grantable key, and runs on
   assert.deepEqual([need.read, need.expects, need.required], ['fund.performance', 'typed_record', true]);
   assert.ok((READ_KEYS as readonly string[]).includes('fund.performance'), 'a rule book may grant it');
   assert.equal(inputMatrix().find((s) => s.slug === SLUG)!.inputs[0].reader, 'built');
-  // A session's target kinds have no fund, so neither the task context nor a schedule can select one.
-  // Mutation checked: `MANUAL_SELECTION_ONLY` emptied → the scheduled path is claimed supported.
-  assert.deepEqual(pathsFor(SLUG), { default_context: 'unsupported', scheduled: 'unsupported', manual: 'approved_tool_reads_not_exercised_here', selected_record: 'supported' });
+  // D7701: scheduled sessions bind their selected fund before reading and readiness.
+  assert.deepEqual(pathsFor(SLUG), { default_context: 'supported', scheduled: 'supported', manual: 'approved_tool_reads_not_exercised_here' });
   assert.deepEqual(pathsFor('board-meeting-brief')!.scheduled, 'supported', 'a skill that selects nothing is unchanged');
 });

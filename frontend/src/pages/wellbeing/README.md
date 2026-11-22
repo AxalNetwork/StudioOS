@@ -20,6 +20,7 @@ and the expert's practice is `../ExpertEditorPage.jsx`.
 | `GroupSessions.jsx` | D7120 part 2 (canvas `Wellness Member Home`, WLM-07, WLM-07B, WLM-08): the seat panel (opened from a group suggestion's See seats) with what the facilitator and other members learn, a calendar choice and Reserve a seat, and My group seats with Release seat. Reads and writes `wellbeingGroupSessionsApi`; never an attendee list. | `/wellbeing` |
 | `WellnessPresentationPage.jsx` | The public, signed-out Wellness presentation (D7121, PGW01–PGW03), in the public site's frame. Reads nothing live. Registered by `frontend/src/routes/programsWellness.jsx`. | `/programs/wellness` |
 | `wellnessPresentation.js` | That page's map entry (key, page, PDF path, availability, edition) and every word it shows. No React, no API. | — |
+| `wellnessDeck.js` | The five-slide Wellness deck as HTML (D7121 part 2, PGW04–PGW06), on the kit's slide master (`../programs/deck.js`). `scripts/build-wellness-brief.mjs` prints it to `frontend/public/program-briefs/axal-vc-wellness-v1.pdf`; the SPA never imports it. | — |
 | `wellnessPresentation.css` | That page's styles, scoped under `.pgw-page`; light only, as the public site is. | — |
 
 ## Rules
@@ -36,3 +37,4 @@ and the expert's practice is `../ExpertEditorPage.jsx`.
 - `frontend/test/wellbeing_d570.test.mjs` pins all of the above.
 - **Each reflection period is its own record (D7118).** A day's save never touches the week or the month; the page keeps the draft on a failed save and never shows a day without an entry as a 0. `frontend/test/wellbeing_reflections_7118.test.mjs` pins it.
 - **The public presentation shows no one.** `/programs/wellness` names no expert, member, session or entry, and links the workspace only through sign-in; `frontend/test/wellness_presentation_d7121.test.mjs` pins that, the PDF href and its content type.
+- **The public presentation shows no one.** `/programs/wellness` names no expert, member, session or entry, and links the workspace only through sign-in; `frontend/test/wellness_presentation_d7121.test.mjs` pins that, the PDF href and its content type, and that every page of the committed PDF carries exactly its slide's text. After changing a word in `wellnessDeck.js` or the page's purpose, audience or steps, rebuild the PDF with `node scripts/build-wellness-brief.mjs`.

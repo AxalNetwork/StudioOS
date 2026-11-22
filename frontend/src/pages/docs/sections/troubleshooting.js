@@ -100,25 +100,18 @@ export default {
     {
       id: 'integration-disconnected',
       title: 'An integration shows as disconnected',
-      overview:
-        "Connected accounts can drop for a handful of reasons: the studio rotated keys, the provider expired your token, or you revoked access from the provider side. Reconnect from Settings → Integrations.",
+      overview: 'Open Account → Connectors and select the affected provider. Its status, account and company settings tell you what needs attention.',
       howto: [
-        'Open Settings → Integrations.',
-        'Find the disconnected provider; the row shows the last known error.',
-        'Click "Reconnect" and complete the provider’s sign-in flow.',
-        'Re-trigger any sync that was in progress (calendar booking, deal sync, etc.).',
+        'Read the reason beside Needs attention. For Sign-in expired, sign in again with the account used for this connection.',
+        'For Daily limit reached, wait for the provider’s reset. For Last sync failed, check the most recent successful sync and the error before retrying a supported sync.',
+        'For Paused, a missing company or refused permissions, follow the matching row in the connector recovery guide below. If the status cannot be read, refresh before changing anything.',
       ],
-      tips: [
-        'Rotating provider keys on the studio side requires every user to reconnect — it’s a known event, not a bug.',
-        'If reconnect fails repeatedly, check the provider’s status page first.',
-      ],
-      pitfalls: [
-        'Reconnecting with a different account silently swaps which inbox/calendar is used — pick the same account every time.',
-        'Disconnecting an integration is immediate; in-flight syncs will fail.',
-      ],
+      pitfalls: ['Check the original send or booking before repeating an action. A connector error alone cannot tell you whether it reached the provider.'],
       related: [
+        { label: 'Connector status and recovery', href: '#workflows/connector-recovery' },
         { label: 'Integrations overview', href: '#integrations/overview' },
         { label: 'Calendar', href: '#integrations/calendar' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
       ],
     },
     {

@@ -1,5 +1,5 @@
 # D886 owner ruling: Node core and browser adapters; Python is the Zoom sidecar boundary.
-FROM node:22-bookworm-slim AS base
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS base
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/runtime-node
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -10,7 +10,7 @@ RUN npm ci --omit=dev --ignore-scripts \
     && chmod -R a+rX /ms-playwright
 COPY zoom/requirements.txt ./zoom/requirements.txt
 RUN python3 -m venv --system-site-packages /opt/zoom \
-    && /opt/zoom/bin/pip install --no-cache-dir --only-binary=:all: -r zoom/requirements.txt \
+    && /opt/zoom/bin/pip install --no-cache-dir --only-binary=:all: --require-hashes -r zoom/requirements.txt \
     && /opt/zoom/bin/python -c "from gi.repository import GLib; import zoom_meeting_sdk as z; assert all(hasattr(z, name) for name in ('InitSDK','InitParam','AuthContext','CreateAuthService','CreateMeetingService'))" \
     && mkdir -p /tmp/runtime-node && chown node:node /tmp/runtime-node && chmod 700 /tmp/runtime-node
 ENV PATH=/opt/zoom/bin:$PATH
