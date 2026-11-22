@@ -397,7 +397,7 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search })}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, query, onQuery, search })}
           {doors}
           {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>

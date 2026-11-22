@@ -11,6 +11,7 @@ import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
+import FoundingTeamHome from '../FoundingTeamHome';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 import { lazyStep } from '../lazyStep.jsx';
@@ -62,6 +63,7 @@ const build = {
     'operating-systems': (q) => ({ label: 'Open the operating cadence', href: `/build/cadence${q}` }),
   }),
   add: toFnMap({}),
+  homes: toFnMap({ 'founding-team': (data,ctx)=>({ sub:'Agree the split and vesting, and record each founder’s filing.', body:p=><FoundingTeamHome {...p} data={data} projectId={ctx.projectId}/> }) }),
   fills: {},
   // D6031 (#6031, BD8): Prototype / MVP's summary line above its table ("N of M must-haves complete ·
   // target <date> · N blocked", with Set for a missing date), and its phone rows carrying Due, Test, Built and Tested.
