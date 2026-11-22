@@ -23,10 +23,12 @@ const JURISDICTIONS = { jurisdictions: [
   { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'Delaware', est_cost_usd: [500, 1500], time_to_form_days: [1, 7], fundraising_friendly: true, summary: 'The default for VC-backed startups.', pros: ['What US investors expect', 'Settled case law'], cons: ['A yearly franchise tax', 'Needs a US registered agent'] },
   { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'Wyoming', est_cost_usd: [100, 600], time_to_form_days: [1, 7], fundraising_friendly: false, summary: 'A low-cost corporation in the US.', pros: ['Low yearly fees'], cons: ['Less case law'] },
 ] };
+// D6688 (#6688): the Worker's project list carries each project's formation state (D6687); the flow offers only
+// projects that are not incorporated.
 const PROJECTS = { projects: [
-  { id: 2, name: '[Orbit Notes]', my_seat: 'owner', company_uid: null, company_name: null },
-  { id: 3, name: '[Ledgerline]', my_seat: 'owner', company_uid: 'nl', company_name: '[Northwind Labs]' },
-  { id: 4, name: '[Someone else’s]', my_seat: 'cofounder', company_uid: null },
+  { formation_state: 'not_incorporated', id: 2, name: '[Orbit Notes]', my_seat: 'owner', company_uid: null, company_name: null },
+  { formation_state: 'not_incorporated', id: 3, name: '[Ledgerline]', my_seat: 'owner', company_uid: 'nl', company_name: '[Northwind Labs]' },
+  { formation_state: 'not_incorporated', id: 4, name: '[Someone else’s]', my_seat: 'cofounder', company_uid: null },
 ] };
 const QUOTE = { jurisdiction_id: 'us_de_ccorp', label: 'Delaware C-Corp', amount_cents: 94800, currency: 'usd', source: 'catalog',
   registered_agent: { price_id: 'price_ra', amount_cents: 14900, currency: 'usd', interval: 'year', product_name: 'Registered agent' } };

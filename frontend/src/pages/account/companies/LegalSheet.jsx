@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sheet } from '../../../ui';
+import Sheet from '../../../ui/Sheet';
 import { reportError } from '../../../lib/log';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD } from '../../team/teamUi.jsx';
 import * as portfolio from './portfolioAdapter.js';
