@@ -226,3 +226,14 @@ for(const tail of ['after-supervisor','journal-write','delivery'])for(const exit
  const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,exit===9?'failure':'success');assert.equal(row.executionOutcome,exit===9?'completed':'timed_out');
  x.f.result(exit===9?'failure':'success');await x.f.tick();assert.notEqual(x.f.checks[0].conclusion,'success');
 });
+
+test('D7909 cleanup after a lost positive delivery cannot reopen the earlier recorded Run deadline',async t=>{
+ const x=await setup(t),start=Date.now(),deadline=start-120_000+26*60_000-5_000,report=x.ports.report;
+ t.mock.getter(performance,'timeOrigin',()=>start-120_000);
+ x.ports.report=async()=>{throw Error('fixture lost delivery before ACK');};
+ await assert.rejects(bridge('run',x.env,x.ports),/lost delivery/);
+ assert.equal(x.results.read().result.executionOutcome,'completed');assert.equal(x.results.read().ack,null);
+ t.mock.timers.setTime(deadline+1);t.mock.getter(performance,'timeOrigin',()=>Date.now());x.ports.report=report;
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'success');assert.equal(row.executionOutcome,'timed_out');assert.equal(row.cleanupConfirmed,true);
+});
