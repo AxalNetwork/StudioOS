@@ -23,6 +23,8 @@ test('the extended page schema accepts legacy absence but rejects corrupt presen
 test('term values retain recorded zeros and distinguish missing terms with the returned reason', () => {
   const zero = render(React.createElement(FundTerms, { page: { terms: { management_fee: 0, carried_interest: 0 } } }));
   assert.equal((zero.match(/0\.0%/g) || []).length, 2);
+  const recorded = render(React.createElement(FundTerms, { page: { terms: { management_fee: 0.02, carried_interest: 0.2 } } }));
+  assert.match(recorded, /2\.0%/); assert.match(recorded, /20\.0%/);
   const absent = render(React.createElement(FundTerms, { page: { terms: { management_fee: null, management_fee_reason: 'No recorded fee term.' } } }));
   assert.match(absent, /Not recorded/); assert.match(absent, /No recorded fee term/);
 });
