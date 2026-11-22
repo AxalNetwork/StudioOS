@@ -378,3 +378,4 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | --- | --- |
 | `guard-commands.json` | D5505: the single ordered guard command/flag catalog, preflight selection and prerequisite metadata. |
 | `run-guards.mjs` | D5505: full `npm run test:guards`, advisory `npm run test:guards:preflight`, and `--guard <id>` reproduction; emits bounded guard results. |
+| `queue-timeout-report.mjs` | D5975: read archived per-SHA scorecards and report observed latency, coverage and missing healthy-outcome evidence without changing settings. |

@@ -120,7 +120,7 @@ const DOCUMENTED = new Map([
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
   ['scripts/ci',                      'CI evidence, provider boundaries and verified tool acquisition'],
-  ['scripts/ci/runners',              'trusted runner contracts, supervisor lifecycle and inactive hosted verification'],
+  ['scripts/ci/runners',              'Runner bootstrap, supervisor lifecycle, execution boundaries, export and recovery evidence'],
   ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],
   ['scripts/landing-bot/model',       'the landing bot\'s model runner: task caps, edit tools, provider order, patch checks'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
