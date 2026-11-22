@@ -259,6 +259,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
 Prefer scoped business clocks and explicit observable outcomes to a fixed count
 of event-loop turns. The migration inventory and first changed-test command are
@@ -277,5 +278,3 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
-
-| `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
