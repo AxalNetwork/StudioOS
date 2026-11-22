@@ -18,7 +18,7 @@ import {
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const BTN = 'inline-flex min-h-[36px] items-center justify-center whitespace-nowrap rounded-[9px] border px-3.5 text-[12.5px] font-bold max-lg:min-h-[44px]';
-const PRIMARY = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:border-violet-500 dark:bg-violet-600`;
+const PRIMARY = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500`;
 const SECONDARY = `${BTN} border-axal-hairline bg-white text-axal-ink hover:border-axal-violet disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`;
 const LINK = 'font-semibold text-axal-violet-deep hover:underline dark:text-violet-300';
 const MUTED = 'text-axal-muted dark:text-gray-400';
