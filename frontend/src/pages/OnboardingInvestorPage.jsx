@@ -45,7 +45,7 @@ function EntityDetails({ values, set }) {
 }
 
 function ReviewAnswers({ values, edit }) {
-  const display = value => Array.isArray(value) ? value.length ? value.join(', ') : 'None picked' : value || 'Not recorded';
+  const display = value => Array.isArray(value) ? value.length ? value.join(', ') : 'None picked' : value == null || value === '' ? 'Not recorded' : value;
   const type = { angel: 'Angel investor', family_office: 'Family office', institutional: 'Institutional LP', fund_gp: 'Fund GP' };
   const accreditation = { accredited: 'Accredited (US)', qp: 'Qualified Purchaser', non_us: 'Non-US investor', not_sure: 'Not sure yet' };
   const intent = { yes_now: 'Yes, ready to commit this cycle', maybe: 'Open, want more info', deal_only: 'Deal-by-deal only for now', no: 'Not at this time' };
@@ -300,7 +300,7 @@ export default function OnboardingInvestorPage() {
           <TextField
             label="Target LP commitment (USD, optional)"
             type="number"
-            value={values.lp_target_usd}
+            value={values.lp_target_usd == null ? '' : String(values.lp_target_usd)}
             onChange={(x) => set('lp_target_usd', x)}
           />
           <TextArea label="Anything else we should know?" value={values.notes} onChange={(x) => set('notes', x)} rows={3} />

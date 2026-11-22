@@ -170,3 +170,13 @@ test('two immediate finish presses produce one progress write and one completion
     release({}); await m.settle(); assert.equal(m.completes(), 1);
   } finally { globalThis.dispatchEvent = oldDispatch; await m.close(); }
 });
+
+test('a recorded zero target stays zero in review and the editable number field', async () => {
+  for (const step of [6, 7]) {
+    const m = await fixture({ step, data: { ...answers, lp_target_usd: 0 } });
+    try {
+      if (step === 7) assert.ok(m.nodes().some(n => n.tagName === 'DD' && m.props(n)?.children === 0));
+      else assert.ok(m.nodes().some(n => m.props(n)?.type === 'number' && m.props(n)?.value === '0'));
+    } finally { await m.close(); }
+  }
+});
