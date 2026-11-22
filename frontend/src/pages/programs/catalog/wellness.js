@@ -10,9 +10,10 @@ export default {
   pdf: '/program-briefs/axal-vc-wellness-v1.pdf',
   edition: 'Edition 1 · November 2026',
   slides: 5,
+  // The OG registry already shares /programs/wellness with the purpose sentence (D7121); one page, one description.
   og: {
     title: 'Wellness · Programs',
-    description: 'A private weekly check-in, expert discovery and your own 1:1 booking for eligible founders and Administrators.',
+    description: 'A private place in your Axal VC account to check in with yourself each week, find qualified support and book a 1:1 session on your own terms.',
   },
   card: {
     who: 'Founders and Administrators with access to Wellbeing',
