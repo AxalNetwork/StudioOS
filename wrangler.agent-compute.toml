@@ -7,7 +7,7 @@ preview_urls = false
 
 [vars]
 COMPUTE_ENABLED = "off"
-COMPUTE_SCHEDULING_POLICY = "default"
+COMPUTE_SCHEDULING_POLICY = "durable_object"
 
 [observability]
 enabled = true
@@ -21,7 +21,7 @@ preview_urls = false
 
 [env.preview.vars]
 COMPUTE_ENABLED = "off"
-COMPUTE_SCHEDULING_POLICY = "default"
+COMPUTE_SCHEDULING_POLICY = "durable_object"
 
 [[env.preview.services]]
 binding = "BROKER"
@@ -38,20 +38,19 @@ class_name = "DocumentComputeContainer"
 tag = "v1-agent-compute"
 new_sqlite_classes = ["PythonComputeContainer", "DocumentComputeContainer"]
 
-# The owner's Q3=A is preserved. Creating either application requires the
-# separate D4554 scheduling-policy reaffirmation; dry-run creates nothing.
+# Owner answer B (15 November): separate reviewed, disabled preview applications.
+# Named images select the runtime filesystem; resource sizes are selected in code.
+# The owner-run preview/resource gate still precedes application creation.
 [[env.preview.containers]]
 class_name = "PythonComputeContainer"
-scheduling_policy = "default"
-image = "./agent-compute/Dockerfile"
-image_build_context = "./agent-compute"
-instance_type = "basic"
-max_instances = 2
+scheduling_policy = "durable_object"
+[env.preview.containers.images.runtime]
+dockerfile = "./agent-compute/Dockerfile"
+build_context = "./agent-compute"
 
 [[env.preview.containers]]
 class_name = "DocumentComputeContainer"
-scheduling_policy = "default"
-image = "./agent-compute/Dockerfile"
-image_build_context = "./agent-compute"
-instance_type = "standard-1"
-max_instances = 2
+scheduling_policy = "durable_object"
+[env.preview.containers.images.runtime]
+dockerfile = "./agent-compute/Dockerfile"
+build_context = "./agent-compute"
