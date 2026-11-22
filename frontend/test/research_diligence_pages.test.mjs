@@ -177,8 +177,15 @@ const ROOM = {
 const roomView = () => { const l = roomListing(ROOM); return { ...l, folders: l.folders.filter((f) => f.count > 0) }; };
 
 test('#6270: the page builds to the Rooms canvas, both ends', () => {
-  for (const s of ['NDA with this founder', 'Review and sign', 'staged after your previous visit', 'NDA out for signature']) bothEnds(ROOMS_V2, room + read('../src/pages/research/diligenceRead.js'), s);
-  for (const s of ['About this file', 'Staged on', 'Shown when you arrive from the room', 'carried from the room']) bothEnds(ROOMS_V2, file, s);
+  // The page end is pinned as rendered markup, so a docblock that names the words cannot stand in for them.
+  bothEnds(ROOMS_V2, room, 'NDA with this founder', '<div className={eyebrow}>NDA with this founder</div>');
+  bothEnds(ROOMS_V2, room, 'Review and sign', '>Review and sign</Link>');
+  bothEnds(ROOMS_V2, room, 'staged after your previous visit', '`New · staged after your previous visit, ${when(room.last_opened_at)}');
+  bothEnds(ROOMS_V2, read('../src/pages/research/diligenceRead.js'), 'NDA out for signature', "label: 'NDA out for signature'");
+  bothEnds(ROOMS_V2, file, 'About this file', '<div className={eyebrow}>About this file</div>');
+  bothEnds(ROOMS_V2, file, 'Staged on', '>Staged on</dt>');
+  bothEnds(ROOMS_V2, file, 'Shown when you arrive from the room', '>Shown when you arrive from the room</span>');
+  bothEnds(ROOMS_V2, file, 'carried from the room', '`${folder} · carried from the room`');
   // The room is the deal tab's own component (DE10, #5907), searched through the shared DataRoomSearch.
   assert.match(room, /import SharedRoomFiles from '\.\.\/deal\/SharedRoomFiles\.jsx';/);
   assert.match(read('../src/pages/deal/SharedRoomFiles.jsx'), /<DataRoomSearch key=\{projectUid\} projectUid=\{projectUid\} shared allowedFileUids=\{listing\.files\.map/);
