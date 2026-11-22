@@ -1,3 +1,4 @@
+import { verdictEvidenceState } from '../services/verdict';
 /**
  * D659 — `/api/cycles/validate`: the Validate cycle's shared read (#1469's
  * contract) and the manual writes for the records migration 440 added.
@@ -189,6 +190,7 @@ cycleValidate.get('/modules/:slug', async (c) => {
       parts = { ...parts, suggestions: null };
     }
   }
+  if (slug === 'verdict') parts = { ...parts, evidence_state: await verdictEvidenceState(ctx) };
   const google = GOOGLE_MODULE[slug];
   if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
   if (slug === 'demand-signals') {

@@ -3,7 +3,7 @@
  * D695's field format (`forms.js`): the canvas's T, CH and CK kinds, its copy
  * byte for byte with the brackets dropped from its placeholders.
  *
- * - **Decision** is Proceed, Pivot or Stop, Proceed first.
+ * - **Decision** is Proceed, Pivot or Stop, with no initial choice (D6018).
  * - **For** and **Evidence it rests on** are the Worker's choices
  *   (`GET /api/cycles/validate/modules/verdict/form-options`, #1703), read by
  *   `loadOptions` through `cyclesWrite.formOptions`. For starts on The venture,
@@ -81,12 +81,12 @@ export const verdictForm = {
   sub: 'For the venture or one hypothesis. Earlier decisions stay.',
   foot: 'Partners do not see decisions.',
   fields: [
-    { name: 'decision', kind: 'CH', k: 'Decision', required: true, initial: 'proceed',
+    { name: 'decision', kind: 'CH', k: 'Decision', required: true, initial: '',
       options: [{ value: 'proceed', label: 'Proceed' }, { value: 'pivot', label: 'Pivot' }, { value: 'stop', label: 'Stop' }] },
     // The venture until the Worker's choices arrive; they replace this list.
     { name: 'for', kind: 'CH', k: 'For', required: true, initial: 'venture', options: [{ value: 'venture', label: 'The venture' }] },
-    { name: 'reasoning', kind: 'T', k: 'Reasoning', input: 'text', ph: 'Why, in your words', h: '56px', max: 4000 },
-    { name: 'evidence', kind: 'CK', k: 'Evidence it rests on', options: [], note: evidenceNote },
+    { name: 'reasoning', kind: 'T', k: 'Rationale', required: true, input: 'text', ph: 'Why, in your words', h: '56px', max: 4000 },
+    { name: 'evidence', kind: 'CK', k: 'Evidence this decision rests on · pick what you relied on', options: [], note: evidenceNote },
     { name: 'pivot_claim', kind: 'T', k: 'If Pivot: the new hypothesis', input: 'text', ph: 'Claim it starts', max: 500,
       when: { name: 'decision', value: 'pivot' } },
   ],
@@ -97,7 +97,7 @@ export const verdictForm = {
   },
   loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'verdict').then(withSuggestedEvidence),
   toBody: (v) => ({
-    decision: v.decision || 'proceed',
+    decision: v.decision || null,
     for: FOR_VALUE.test(String(v.for ?? '')) ? v.for : 'venture',
     reasoning: str(v.reasoning),
     evidence: Array.isArray(v.evidence) ? v.evidence.map(String) : [],

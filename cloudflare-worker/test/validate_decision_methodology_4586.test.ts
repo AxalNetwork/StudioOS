@@ -176,3 +176,20 @@ test('history keeps its meaning: a decision recorded before v2 is read as v1 and
   assert.deepEqual(content.facts[4], { label: 'Counted', value: null, reason: V1_REASON });
   assert.equal(coverageLine(null), null);
 });
+
+test('V10: live snapshot uses the decision evidence rule and keeps missing results separate from recorded decisions', async()=>{
+ const {verdictEvidenceState}=await import('../src/services/verdict.ts');
+ const {db,env}=await fixture();const h=hypothesis(db,'H1');
+ link(db,h,'experiment',experiment(db,h,'Observed','done','Two paid'));
+ experiment(db,h,'Missing','done',null);
+ const ctx={env,projectId:P,today:'2026-10-02',canWrite:true};
+ const first:any=await verdictEvidenceState(ctx);
+ assert.equal(first.state,'ok');assert.equal(first.coverage.counted,1);assert.equal(first.current,null);
+ assert.equal(first.missing_results,1);assert.equal(first.results_recorded,1);assert.equal(first.experiments_done,2);
+ assert.equal(first.coverage.state,'withheld');
+ const evidence=await ids(env);
+ await recordDecision(env,founder,{id:P},{decision:'stop',for:'venture',reasoning:'Too little demand',evidence},{bar:1});
+ const next:any=await verdictEvidenceState(ctx);assert.equal(next.current.decision,'stop');assert.equal(next.current.reasoning,'Too little demand');
+ assert.equal(next.coverage.state,'withheld','a recorded decision does not change current evidence coverage');
+ db.exec('DROP TABLE hypothesis_experiments');assert.equal((await verdictEvidenceState(ctx)).state,'unreadable');
+});

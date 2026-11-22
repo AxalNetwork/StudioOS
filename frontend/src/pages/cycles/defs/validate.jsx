@@ -17,6 +17,7 @@ import { interviewListOf } from '../../../lib/discoveryEvidence';
 import { useActiveRecording } from '../../../contexts/ActiveRecordingContext';
 import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
+import VerdictHome from '../VerdictHome';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
 import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
@@ -180,6 +181,7 @@ const validate = {
       (projectId, id, body) => cyclesApi.recordAction('validate', projectId, 'customer-research', id, 'set-stage', body)),
   }),
   // The AI fill bands the Validate desk carried, on the module they fill.
+  homes: toFnMap({ verdict: (data,ctx)=>({ sub:'Review the evidence, then choose.', action:null, body:p=><VerdictHome {...p} data={data} projectId={ctx.projectId}/> }) }),
   fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
   // D697 (#1659): the three bottom sections, what the Interviews, Pain map
   // and Hypotheses pages drew. They read nothing: counts are the module
