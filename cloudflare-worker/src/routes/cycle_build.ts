@@ -986,7 +986,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+export async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -1321,7 +1321,7 @@ async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, 
   }
 }
 
-async function context(c: any): Promise<Project | Response> {
+export async function context(c: any): Promise<Project | Response> {
   const user = await requireAuth(c);
   const raw = c.req.query('project');
   if (!raw || !/^\d+$/.test(raw) || Number(raw) < 1) return c.json({ detail: 'Valid project is required' }, 400);
