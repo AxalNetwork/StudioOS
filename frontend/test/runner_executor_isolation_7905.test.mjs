@@ -49,14 +49,19 @@ test('D7905 execution isolation is false until a live container is owned, so rea
   assert.equal(await deps().executionIsolation({ receipt, context, profile: { id: 'linux-x64' } }), false);
 });
 
-test('D7905 staging grants only the candidate UID read on exactly the source tree and plan, never through a link', () => {
+test('D7905 staging grants only the candidate UID read on exactly the source tree and plan, never through a link', async () => {
   const calls = [];
-  aclStage({ source: '/run/src', plan: '/run/plan.json' }, args => calls.push(args));
-  assert.deepEqual(calls, [['-R', '-P', '-m', 'u:10000:rX', '--', '/run/src'], ['-m', 'u:10000:r', '--', '/run/plan.json']]);
+  await aclStage({ source: '/run/src', plan: '/run/plan.json' }, (args, options) => calls.push([args, options.timeout]));
+  assert.deepEqual(calls, [[['-R', '-P', '-m', 'u:10000:rX', '--', '/run/src'], 20000], [['-m', 'u:10000:r', '--', '/run/plan.json'], 20000]]);
+  // S32 F1/F6: each staging call is bounded by the work deadline too, and none runs once it has passed.
+  calls.length = 0;
+  await aclStage({ source: '/s', plan: '/p' }, (args, options) => calls.push(options.timeout), { until: Date.now() + 5000 });
+  assert.ok(calls.length === 2 && calls.every(ms => ms <= 5000 && ms > 0), JSON.stringify(calls));
+  await assert.rejects(aclStage({ source: '/s', plan: '/p' }, () => assert.fail('ran'), { until: Date.now() - 1 }), /engine_budget_exhausted/);
 });
 
 const canRunAs = process.getuid?.() === 0 && spawnSync('/usr/bin/setfacl', ['--version']).status === 0 && spawnSync('/usr/bin/setpriv', ['--version']).status === 0;
-test('D7905 behaviour: under umask 0077 the candidate UID reads the staged inputs and nothing else of the listener', { skip: canRunAs ? false : 'needs root, setfacl and setpriv to switch to the candidate UID' }, () => {
+test('D7905 behaviour: under umask 0077 the candidate UID reads the staged inputs and nothing else of the listener', { skip: canRunAs ? false : 'needs root, setfacl and setpriv to switch to the candidate UID' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'acl-7905-'));
   try {
     const source = join(root, 'source'), plan = join(root, 'plan.json'), secret = join(root, '.credentials');
@@ -69,7 +74,7 @@ test('D7905 behaviour: under umask 0077 the candidate UID reads the staged input
     spawnSync('/usr/bin/chown', ['-hR', '10001:10001', root]);
     const asCandidate = path => spawnSync('/usr/bin/setpriv', ['--reuid=10000', '--regid=10000', '--clear-groups', '/usr/bin/cat', path]).status;
     assert.notEqual(spawnSync('/usr/bin/setpriv', ['--reuid=10000', '--regid=10000', '--clear-groups', '/usr/bin/test', '-r', plan]).status, 0, 'unreadable before staging');
-    aclStage({ source, plan });
+    await aclStage({ source, plan });
     // Inside the container the bind mount starts at the inputs, so the parent's mode does not apply; grant
     // traverse here only to imitate that.
     spawnSync('/usr/bin/setfacl', ['-m', 'u:10000:x', root]);
@@ -82,7 +87,7 @@ test('D7905 behaviour: under umask 0077 the candidate UID reads the staged input
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('D7905 failed staging creates no container', t => {
+test('D7905 failed staging creates no container', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: 1800000000000 });
   const root = mkdtempSync(join(tmpdir(), 'stage-7905-'));
   try {
@@ -90,7 +95,7 @@ test('D7905 failed staging creates no container', t => {
     mkdirSync(source); writeFileSync(plan, '{}');
     const calls = [];
     const job = new JobContainer(POLICY, { engine: args => { calls.push(args); return ''; }, stage: () => { throw new Error('EPERM'); }, namespace: () => true });
-    assert.throws(() => job.create({ version: 1, repository: 'AxalNetwork/StudioOS', profile: 'linux-x64', sourceSha: 'e'.repeat(40), event: 'push', childRunId: 202, childAttempt: 1, generation: 1, requestId: '00000000-0000-4000-8000-000000000001', logicalShard: 'worker-1-of-6', executionDeadline: 1800000600000 }, { source, plan }), /container_input_staging_failed/);
+    await assert.rejects(job.create({ version: 1, repository: 'AxalNetwork/StudioOS', profile: 'linux-x64', sourceSha: 'e'.repeat(40), event: 'push', childRunId: 202, childAttempt: 1, generation: 1, requestId: '00000000-0000-4000-8000-000000000001', logicalShard: 'worker-1-of-6', executionDeadline: 1800000600000 }, { source, plan }), /container_input_staging_failed/);
     assert.equal(calls.length, 0);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

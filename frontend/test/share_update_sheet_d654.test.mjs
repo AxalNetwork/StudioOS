@@ -409,7 +409,7 @@ test('D686: the Updates history: rows, links only with href, the Ask again pill,
   assert.equal(ssr(React.createElement(UpdatesHistory, {})), '');
   const route = cycleRouteText();
   // D6122 (GR-21): the last five, with Write the update in Reporting, then the checklist.
-  assert.match(route, /<UpdatesHistory updates=\{data\?\.parts\?\.updates\} reason=\{data\?\.parts\?\.updates_reason\} onShare=\{ctx\.openAction\}\s*limit=\{5\} more=\{\{ text: 'Write the update in Reporting →'.*\}\} \/>\s*<DurabilityChecklist/);
+  assert.match(route, /<UpdatesHistory updates=\{data\?\.parts\?\.updates\} reason=\{data\?\.parts\?\.updates_reason\} onShare=\{ctx\.canWrite \? ctx\.openAction : undefined\}\s*limit=\{5\} more=\{\{ text: ctx\.canWrite \? 'Write the update in Reporting →' : 'Open Reporting →'.*\}\} \/>\s*<DurabilityChecklist/);
 });
 
 test('D686: Distribution and Partner network draw "From update asks" with a Lead or Partner pill', () => {

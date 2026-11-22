@@ -181,11 +181,11 @@ test('D8010 staged files are created exclusively, never through a link, and end 
   const { writeExclusive } = await import('../../scripts/ci/runners/trace-exporter.mjs');
   const { symlinkSync } = await import('node:fs');
   const root = mkdtempSync(join(tmpdir(), 'excl-7905-')); t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeExclusive(join(root, 'a'), Buffer.from('x'), 0o400);
+  await writeExclusive(join(root, 'a'), Buffer.from('x'), 0o400);
   assert.equal(statSync(join(root, 'a')).mode & 0o777, 0o400);
-  assert.throws(() => writeExclusive(join(root, 'a'), Buffer.from('y'), 0o400), /EEXIST/);
+  await assert.rejects(writeExclusive(join(root, 'a'), Buffer.from('y'), 0o400), /EEXIST/);
   writeFileSync(join(root, 'target'), 'listener secret'); symlinkSync(join(root, 'target'), join(root, 'link'));
-  assert.throws(() => writeExclusive(join(root, 'link'), Buffer.from('y'), 0o400), /EEXIST|ELOOP/);
+  await assert.rejects(writeExclusive(join(root, 'link'), Buffer.from('y'), 0o400), /EEXIST|ELOOP/);
   assert.equal(readFileSync(join(root, 'target'), 'utf8'), 'listener secret');
 });
 
@@ -212,4 +212,78 @@ test('S32 E1: a pause that outlives the budget, or an abort during or before the
     spawnCopy: () => { const c = spawn('/bin/cat', [join(f.root, 'archive.tar')], { stdio: ['ignore', 'pipe', 'ignore'] }); c.once('close', () => { tick = NOW + 60_000; }); return c; } });
   assert.deepEqual(await sealing({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 60_000 }), { state: 'failed', phase: 'seal', reason: 'export_budget_exhausted' });
   assert.equal(existsSync(f.ready), false);
+});
+
+test('S32 E1 whole phase: a hung write, fsync or pause cannot hold the export past its deadline, and nothing publishes later', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const hang = () => { let release; const p = new Promise(resolve => { release = resolve; }); return { p, release: () => release() }; };
+  const setup = options => {
+    const root = mkdtempSync(join(tmpdir(), 'phase-7905-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+    const tarFile = join(root, 'archive.tar'); writeFileSync(tarFile, valid());
+    const stagingRoot = join(root, 'trace-export');
+    const exporter = createTraceExporter({ stagingRoot, engine: () => '', spawnCopy: () => spawn('/bin/cat', [tarFile], { stdio: ['ignore', 'pipe', 'ignore'] }), ...options });
+    return { ready: join(stagingRoot, '202-1-1', 'ready'), go: extra => exporter({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 200, ...extra }) };
+  };
+  const settle = () => new Promise(resolve => setTimeout(resolve, 50));
+  // A write that never returns: the export fails at the deadline; releasing it afterwards publishes nothing.
+  const { writeExclusive } = await import('../../scripts/ci/runners/trace-exporter.mjs');
+  let gate = hang();
+  let f = setup({ write: async (...args) => { await gate.p; return writeExclusive(...args); } });
+  const started = performance.now();
+  assert.deepEqual(await f.go(), { state: 'failed', phase: 'seal', reason: 'export_budget_exhausted' });
+  assert.ok(performance.now() - started < 2000, 'returned at the deadline, not when the write finished');
+  gate.release(); await settle();
+  assert.equal(existsSync(f.ready), false, 'a late write never leads to a ready offer');
+  // A directory fsync that never returns.
+  gate = hang();
+  f = setup({ sync: async () => { await gate.p; } });
+  assert.deepEqual(await f.go(), { state: 'failed', phase: 'seal', reason: 'export_budget_exhausted' });
+  gate.release(); await settle();
+  assert.equal(existsSync(f.ready), false);
+  // An abort while a write hangs is a cancellation, reported at once.
+  gate = hang(); const controller = new AbortController();
+  f = setup({ write: async (...args) => { setTimeout(() => controller.abort(), 10); await gate.p; return writeExclusive(...args); } });
+  assert.deepEqual(await f.go({ signal: controller.signal, deadline: NOW + 60_000 }), { state: 'failed', phase: 'seal', reason: 'export_cancelled' });
+  gate.release(); await settle();
+  assert.equal(existsSync(f.ready), false);
+  // A pause that hangs: the engine call is given the export budget, and the phase stops at the deadline anyway.
+  const seen = [];
+  f = setup({ engine: (args, options) => { seen.push(options); return new Promise(() => {}); } });
+  assert.deepEqual(await f.go(), { state: 'failed', phase: 'quiesce', reason: 'export_budget_exhausted' });
+  assert.ok(seen[0].timeout > 0 && seen[0].timeout <= 200, JSON.stringify(seen));
+  // A stop that lands after the rename says the offer is published but not yet durable.
+  let syncs = 0; gate = hang();
+  f = setup({ sync: async () => { if (++syncs === 3) await gate.p; } });
+  assert.deepEqual(await f.go(), { state: 'failed', phase: 'publish', reason: 'export_budget_exhausted', offer: 'published_unsynced' });
+  assert.equal(existsSync(f.ready), true);
+  gate.release();
+});
+
+test('S32 f13 recheck: a terminal fsync that returns after the deadline or after an abort is never reported complete', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const setup = options => {
+    const root = mkdtempSync(join(tmpdir(), 'terminal-7905-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+    const tarFile = join(root, 'archive.tar'); writeFileSync(tarFile, valid());
+    const stagingRoot = join(root, 'trace-export');
+    const exporter = createTraceExporter({ stagingRoot, engine: () => '', spawnCopy: () => spawn('/bin/cat', [tarFile], { stdio: ['ignore', 'pipe', 'ignore'] }), ...options });
+    return { ready: join(stagingRoot, '202-1-1', 'ready'), go: extra => exporter({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 60_000, ...extra }) };
+  };
+  // The leaf fsync (the third directory sync, after the rename) crosses the deadline but returns normally.
+  let syncs = 0;
+  let f = setup({ sync: async () => { if (++syncs === 3) t.mock.timers.tick(60_000); } });
+  assert.deepEqual(await f.go(), { state: 'failed', phase: 'publish', reason: 'export_budget_exhausted', offer: 'published' });
+  assert.equal(existsSync(join(f.ready, 'COMPLETE.json')), true, 'the offer exists; the report says it was late, not complete');
+  t.mock.timers.reset(); t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  // The run is cancelled while the leaf fsync is in flight, which then returns normally.
+  syncs = 0; const controller = new AbortController();
+  f = setup({ sync: async () => { if (++syncs === 3) controller.abort(); } });
+  const result = await f.go({ signal: controller.signal });
+  assert.deepEqual([result.state, result.phase, result.reason], ['failed', 'publish', 'export_cancelled']);
+  assert.ok(['published', 'published_unsynced'].includes(result.offer), JSON.stringify(result));
+  assert.equal(existsSync(join(f.ready, 'COMPLETE.json')), true);
+  // Control: the same seam with no late event still completes.
+  syncs = 0;
+  f = setup({ sync: async () => { ++syncs; } });
+  assert.equal((await f.go()).state, 'complete');
+  assert.equal(syncs, 3);
 });

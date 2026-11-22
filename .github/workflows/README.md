@@ -10,6 +10,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 
 | Workflow file | Workflow | pull_request | pull_request_target | merge_group | push to main | schedule | Other events |
 |---|---|---|---|---|---|---|---|
+| `admin-drift.yml` | Admin drift | — | — | — | — | read the live admin settings and diff the baseline (advisory, conditional)<br>file or update one issue per drift (advisory, conditional) | `workflow_dispatch` · read the live admin settings and diff the baseline (advisory, conditional)<br>file or update one issue per drift (advisory, conditional) |
 | `agent-compute-image.yml` | General compute image | image (advisory) | — | — | — | — | — |
 | `agent-compute-preview.yml` | General compute preview (owner gated) | — | — | — | — | — | `workflow_dispatch` · gate (advisory, conditional)<br>deploy_disabled_host (advisory) |
 | `agent-gateway-keys.yml` | Agent gateway keys | — | — | — | — | — | `workflow_dispatch` · Verify, store and link the account keys (advisory, conditional) |
@@ -20,6 +21,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `branch-provision.yml` | Provision a branch | — | — | — | — | — | `workflow_dispatch` · provision ${{ inputs.code }} (advisory) |
 | `build-worker-contracts.yml` | Build Worker contracts | Build connector and mapping contracts (advisory, conditional) | — | — | — | — | — |
 | `capacity-planner.yml` | Capacity pilot planner | — | — | — | — | — | `workflow_call` · submit (advisory, conditional) |
+| `capacity-planner.yml` | Inactive capacity planner | — | — | — | — | — | `workflow_call` · submit (advisory, conditional) |
 | `changelog-gate.yml` | CHANGELOG gate | CHANGELOG.md untouched (advisory, conditional) | — | — | — | — | — |
 | `channel-worker-contracts.yml` | Channel Worker contracts | Channel messaging contracts (advisory, conditional) | — | — | — | — | — |
 | `ci-scorecard.yml` | Daily CI scorecard | — | — | — | — | scorecard (advisory) | `workflow_dispatch` · scorecard (advisory) |
@@ -48,6 +50,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `landing-bot-model-round.yml` | Landing bot model round | — | — | — | — | — | `workflow_call` · Edit (round ${{ inputs.round }}) (advisory)<br>Verify (round ${{ inputs.round }}) (advisory, conditional) |
 | `landing-bot-model.yml` | Landing bot model runner | — | — | — | — | — | `workflow_call` · Validate the task (advisory, conditional)<br>round1 (advisory)<br>round2 (advisory, conditional)<br>round3 (advisory, conditional)<br>Publish the passing patch (advisory, conditional)<br>`workflow_dispatch` · Validate the task (advisory, conditional)<br>round1 (advisory)<br>round2 (advisory, conditional)<br>round3 (advisory, conditional)<br>Publish the passing patch (advisory, conditional) |
 | `landing-bot-refresh.yml` | Landing bot serial refresh | — | — | — | — | Refresh inherited-red branches (advisory, conditional) | `workflow_dispatch` · Refresh inherited-red branches (advisory, conditional) |
+| `landing-conflict-indicator.yml` | Landing conflict indicator | — | — | — | Label confirmed conflicts (advisory, conditional) | Label confirmed conflicts (advisory, conditional) | `workflow_dispatch` · Label confirmed conflicts (advisory, conditional) |
 | `landing-feeder.yml` | Feed the merge queue | — | — | — | — | Feed the merge queue (advisory, conditional) | `workflow_dispatch` · Feed the merge queue (advisory, conditional) |
 | `landing-policy.yml` | Landing policy | landing policy (advisory) | — | — | — | — | — |
 | `lfs-budget.yml` | LFS budget | — | — | — | — | Check LFS bandwidth vs 250 GB plan (advisory) | `workflow_dispatch` · Check LFS bandwidth vs 250 GB plan (advisory) |
@@ -331,6 +334,7 @@ It uses synthetic queue responses and has no production credentials.
 
 ## Workflow purpose and credentials
 
+- `admin-drift.yml` · D8082: weekly read-only diff of the live GitHub admin settings (rulesets, environments, Actions permissions, Apps, runner groups) against `documentation/operations/GITHUB_ADMIN_BASELINE.md`; files or updates one `slot:chatgptpro` issue per drifted setting and changes no setting · Monday 04:47 UTC and manual dispatch on main · `check` reads `ADMIN_DRIFT_READ_TOKEN` from `production-ops` (`contents: read` only); `file` has `issues: write` and no secret
 - `agent-compute-image.yml` · D4557: read-only PR image validation; no publishing, credentials or deployment.
 - `agent-compute-preview.yml` · D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement.
 - `agent-stage-a.yml` · D4594 parts 2 and 3 (#4594): hosted Stage A. Creates a throwaway Worker `studioos-s4594-<run>` (workers.dev, no route, no cron) over its own D1, KV, queues, Workflow and R2, runs the #4566 preflight (must be `isolated`), drives one Workflow-path and one manual sponsor-run lifecycle with stubbed inference, reconciles holds, usage and proposals, and deletes everything. Never touches production. `scripts/agent-stage-a.mjs` · manual dispatch only · `CLOUDFLARE_API_TOKEN` (needs **Workers Scripts:Edit, D1:Edit, Workers KV:Edit, Queues:Edit, R2:Edit**, and Workflows), `CLOUDFLARE_ACCOUNT_ID`; repository secrets.

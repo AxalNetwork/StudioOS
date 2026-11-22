@@ -26,6 +26,11 @@
  *
  * It is a controller with injected `win`, `navigator` and `confirmLeave` so a test can drive every branch
  * without a browser; `useLeaveGuard` is the thin React binding.
+ *
+ * D7816 — `keeps(path)`, optional: a destination that keeps the unsaved work (another tab of the same Research
+ * Project, whose page holds the draft) goes through without asking. It is given `{ pathname, search, hash }`:
+ * the router's target for a link or a path `navigate()`, and `win.location` (already moved) for Back and
+ * Forward. With no `keeps`, every move asks, as before.
  */
 import { useContext, useEffect, useRef } from 'react';
 import { UNSAFE_NavigationContext } from 'react-router-dom';
@@ -34,6 +39,14 @@ export const LEAVE_MESSAGE = 'Leave without saving? Your changes will be lost.';
 
 /** The router stamps each history entry with `idx`; the distance between two entries is the difference. */
 const idxOf = (state) => (state && Number.isInteger(state.idx) ? state.idx : null);
+
+/** A router target (a string or a partial path) as `{ pathname, search, hash }`. */
+const pathOf = (to) => {
+  if (typeof to !== 'string') return { pathname: to?.pathname ?? '', search: to?.search ?? '', hash: to?.hash ?? '' };
+  const [rest, hash = ''] = to.split('#');
+  const [pathname, search = ''] = rest.split('?');
+  return { pathname, search: search ? `?${search}` : '', hash: hash ? `#${hash}` : '' };
+};
 
 let armed = null;                 // the one guard that is on, if any
 const gated = new WeakSet();      // windows that already carry the gate
@@ -45,7 +58,7 @@ export function installLeaveGate(win = typeof window !== 'undefined' ? window : 
   win.addEventListener('popstate', (e) => { if (armed) armed.onPop(e); }, true);
 }
 
-export function createLeaveGuard({ win, navigator = null, confirmLeave, message = LEAVE_MESSAGE }) {
+export function createLeaveGuard({ win, navigator = null, confirmLeave, message = LEAVE_MESSAGE, keeps = null }) {
   let on = false;
   let current = null;       // the history idx the router is showing
   let passing = false;      // a popstate we re-dispatched or caused ourselves: let it through
@@ -53,6 +66,10 @@ export function createLeaveGuard({ win, navigator = null, confirmLeave, message 
 
   const ask = () => {
     try { return confirmLeave(message) !== false; } catch { return true; }
+  };
+  const kept = (path) => {
+    if (typeof keeps !== 'function') return false;
+    try { return keeps(path) === true; } catch { return false; }
   };
 
   const beforeUnload = (e) => {
@@ -65,6 +82,8 @@ export function createLeaveGuard({ win, navigator = null, confirmLeave, message 
     if (passing) { passing = false; return; }
     const next = idxOf(e.state ?? win.history?.state);
     const delta = current != null && next != null ? next - current : null;
+    // A move to a destination that keeps the work is not leaving: the router takes it as usual.
+    if (kept(pathOf(win.location))) { current = next ?? current; return; }
     // Take it before the router does, then decide.
     e.stopImmediatePropagation?.();
     if (ask()) {
@@ -90,7 +109,7 @@ export function createLeaveGuard({ win, navigator = null, confirmLeave, message 
       if (typeof navigator[name] !== 'function') continue;
       original[name] = navigator[name];
       navigator[name] = (...args) => {
-        if (!on) return original[name].apply(navigator, args);
+        if (!on || kept(pathOf(args[0]))) return original[name].apply(navigator, args);
         if (!ask()) return undefined;
         // The page is being left on purpose: from here the guard has nothing to protect.
         return original[name].apply(navigator, args);
@@ -129,15 +148,23 @@ export function createLeaveGuard({ win, navigator = null, confirmLeave, message 
   };
 }
 
-/** Guard the current page while `dirty`; `confirmLeave` defaults to the browser's own confirm. */
-export function useLeaveGuard(dirty, message = LEAVE_MESSAGE, confirmLeave = (m) => (typeof window !== 'undefined' ? window.confirm(m) : true)) {
+/**
+ * Guard the current page while `dirty`; `confirmLeave` defaults to the browser's own confirm. `keeps`
+ * (optional, D7816) names the destinations that keep the work and so do not ask.
+ */
+export function useLeaveGuard(dirty, message = LEAVE_MESSAGE, confirmLeave = (m) => (typeof window !== 'undefined' ? window.confirm(m) : true), keeps = null) {
   const nav = useContext(UNSAFE_NavigationContext);
   const guard = useRef(null);
   const confirmRef = useRef(confirmLeave);
   confirmRef.current = confirmLeave;
+  const keepsRef = useRef(keeps);
+  keepsRef.current = keeps;
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    guard.current = createLeaveGuard({ win: window, navigator: nav?.navigator ?? null, confirmLeave: (m) => confirmRef.current(m), message });
+    guard.current = createLeaveGuard({
+      win: window, navigator: nav?.navigator ?? null, confirmLeave: (m) => confirmRef.current(m), message,
+      keeps: (path) => (typeof keepsRef.current === 'function' ? keepsRef.current(path) : false),
+    });
     return () => guard.current?.dispose();
   }, [nav, message]);
   useEffect(() => { guard.current?.set(Boolean(dirty)); }, [dirty]);

@@ -58,7 +58,7 @@ test('#6476: consent: a person queued it and only no-model main merges followed'
 });
 
 const ok = (over = {}) => ({
-  klass: 'flake', consent: { valid: true }, checksGreenOnHead: true, headUnchangedSinceChecks: true,
+  klass: 'flake', mergeable: true, removedAt: new Date(NOW - 10 * 60_000).toISOString(), consent: { valid: true }, checks: 'green', headUnchangedSinceChecks: true,
   eligible: { ok: true, reasons: [] }, breakers: { open: false, reasons: [] }, openAlertTitles: [], requeues: [], pr: 7, now: NOW,
   env: { LANDING_BOT_DAILY_REQUEUES: '10', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.2' },
   queueRuns: Array(20).fill({ conclusion: 'success' }), ...over,
@@ -66,8 +66,12 @@ const ok = (over = {}) => ({
 
 test('#6476: what each class does', () => {
   for (const k of ['cascade', 'flake', 'infrastructure']) assert.equal(decide(ok({ klass: k })).action, 'requeue', k);
-  assert.equal(decide(ok({ klass: 'conflict' })).action, 'keeper');
-  assert.equal(decide(ok({ klass: 'conflict', stillConflicting: false })).action, 'requeue', 'restored once the keeper cleared it');
+  assert.equal(decide(ok({ klass: 'conflict', mergeable: false })).action, 'keeper');
+  assert.equal(decide(ok({ klass: 'conflict', mergeable: true })).action, 'requeue', 'restored once the keeper cleared it');
+  assert.equal(decide(ok({ klass: 'conflict', mergeable: null })).action, 'wait', 'unknown mergeability is not cleared');
+  assert.equal(decide(ok({ klass: 'infrastructure', mergeable: false })).action, 'keeper', 'a new conflict on any class goes to the keeper');
+  assert.equal(decide(ok({ klass: 'cascade', mergeable: null })).action, 'wait');
+  assert.equal(decide(ok({ klass: 'cascade', mergeable: false, consent: { valid: false, reason: 'no consent' } })).action, 'label', 'no keeper without consent');
   assert.deepEqual([decide(ok({ klass: 'own-failure' })).action, decide(ok({ klass: 'own-failure' })).label], ['repair', 'ejected']);
   for (const k of ['manual', 'unknown', 'timeout']) assert.deepEqual([decide(ok({ klass: k })).action, decide(ok({ klass: k })).label], ['label', 'ejected'], k);
   // A flake gets one re-queue and no repair.
@@ -76,10 +80,19 @@ test('#6476: what each class does', () => {
   assert.notEqual(flake.action, 'repair');
 });
 
-test('#6476: every refusal labels instead of re-queueing', () => {
+test('#6476: a refusal that needs the owner labels; one that clears on its own waits (S1)', () => {
   const twice = Array(MAX_REQUEUES_PER_DAY).fill({ pr: 7, at: '2026-11-16T11:00:00Z' });
-  const cases = [
+  const handBack = [
     ['no consent', { consent: { valid: false, reason: 'no person queued this PR' } }, /no person queued/],
+    ['checks failed', { checks: 'failed' }, /a required check failed/],
+    ['not eligible', { eligible: { ok: false, reasons: ['labelled bot:off'] } }, /bot:off/],
+  ];
+  for (const [name, over, reason] of handBack) {
+    const d = decide(ok(over));
+    assert.deepEqual([d.action, d.label], ['label', 'ejected'], name);
+    assert.match(d.reasons.join('; '), reason, name);
+  }
+  const waits = [
     ['third re-queue in a day', { requeues: twice }, /2 re-queues of this PR in 24 hours/],
     ['repo-wide cap', { env: { LANDING_BOT_DAILY_REQUEUES: '1', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.2' }, requeues: [{ pr: 99, at: '2026-11-16T01:00:00Z' }] }, /LANDING_BOT_DAILY_REQUEUES: 1 of 1/],
     ['cap unset', { env: { LANDING_BOT_QUEUE_FAIL_BREAKER: '0.2' } }, /0 of 0/],
@@ -88,13 +101,18 @@ test('#6476: every refusal labels instead of re-queueing', () => {
     ['red main delays', { breakers: { open: true, reasons: ['main is red: its newest completed CI run is failure'] } }, /main is red/],
     ['queue stalled', { openAlertTitles: ['[alert] merge queue stalled'] }, /merge queue stalled is open/],
     ['head changed since green', { headUnchangedSinceChecks: false }, /head changed since the checks/],
-    ['checks not green', { checksGreenOnHead: false }, /not every required check is green/],
-    ['not eligible', { eligible: { ok: false, reasons: ['labelled bot:off'] } }, /bot:off/],
+    ['checks pending', { checks: 'pending' }, /still running/],
+    ['checks unreadable', { checks: 'unknown' }, /could not be confirmed/],
+    ['diff unreadable', { eligible: { ok: false, reasons: ['the diff could not be read'] } }, /diff could not be read/],
   ];
-  for (const [name, over, reason] of cases) {
+  for (const [name, over, reason] of waits) {
     const d = decide(ok(over));
-    assert.equal(d.action, 'label', name);
+    assert.equal(d.action, 'wait', name);
+    assert.equal(d.label, undefined, `${name}: a wait writes no label`);
     assert.match(d.reasons.join('; '), reason, name);
+    // The same condition, on an ejection over a day old, is handed back.
+    const late = decide(ok({ ...over, removedAt: new Date(NOW - 25 * 60 * 60 * 1000).toISOString() }));
+    assert.deepEqual([late.action, late.label], ['label', 'ejected'], `${name}: past the window`);
   }
 });
 

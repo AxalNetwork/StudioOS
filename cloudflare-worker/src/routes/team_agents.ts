@@ -200,6 +200,7 @@ const SKILL_WORDS = {
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
+  capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 } as const;
 
 const validCap = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0 && (v as number) <= CAP_MAX_MICROUSD;
@@ -760,9 +761,20 @@ router.post('/:scope/:id/agents', async (c) => {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     if (!s) return notFound(c);
+    return await addAgentAs(c, s, user, await readBody(c));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D7075 (#7075): the add path, every check in its order, with the caller as
+ * the sponsor. The route above and a recruit's approval (`agent_recruits.ts`)
+ * both come through here, so a recruit is added exactly as a person adds one.
+ * Answers the route's own Response: 201 `{ agent }` or the refusal.
+ */
+export async function addAgentAs(c: C, s: NonNullable<Awaited<ReturnType<typeof loadScope>>>, user: User, b: Record<string, any> | null): Promise<Response> {
+  {
     if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can add agents.');
     if (!planOk(user)) return say(c, 403, 'plan_required', 'Agents come with a paid Founder plan.');
-    const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send the role, the model and the monthly cap.');
     const role = typeof b.role_key === 'string' ? roleOf(b.role_key) : null;
     if (!role) return say(c, 400, 'invalid_role', 'Choose one of the roles.');
@@ -833,8 +845,8 @@ router.post('/:scope/:id/agents', async (c) => {
       await logSkillsChanged(c.env, a!.id, user.id, { added: skillsChecked.wanted.map((w) => ({ uid: w.s.uid, version: w.version })), repinned: [], removed: [] });
     }
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
-  } catch (e) { return mapError(c, e); }
-});
+  }
+}
 
 router.get('/:scope/:id/rulebooks/:role', async (c) => {
   try {

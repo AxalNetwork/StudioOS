@@ -125,6 +125,7 @@ const DOCUMENTED = new Map([
   ['scripts/landing-bot/model',       'the landing bot\'s model runner: task caps, edit tools, provider order, patch checks'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
   ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
+  ['scripts/scan-remediation',        'security alerts reconciled into slot tasks, the seven-day SLA and the weekly digest (D8074)'],
   ['documentation',                   'every hand-written document'],
   ['design',                          'design sources, tokens, and the intake queue'],
   ['infra',                           'what is provisioned outside the repo, and the registry that declares it'],

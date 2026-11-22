@@ -55,10 +55,13 @@ test('GR-04 entry points and existing module, Distribution and Reporting deep li
   const legacy = ['product-improvement', 'revenue-and-traction', 'distribution', 'team-expansion',
     'partner-network', 'market-expansion', 'durable-company-building'];
   for (const slug of legacy) assert.ok(modules.has(slug), slug + ' must remain a recognized Grow module');
+  // D6122 part 2 (GR-26): Company has its own three routes (`growCompany.jsx`), so an advisor or partner reader
+  // reaches the module and its records; the addresses, and so every old link, are unchanged.
+  const own = new Set(['durable-company-building']);
   for (const slug of modules) {
-    check('/grow/' + slug, ['partner-network', 'team-expansion'].includes(slug) ? '/grow/' + slug : '/grow/:slug');
-    check('/grow/' + slug + '/new', '/grow/:slug/new');
-    check('/grow/' + slug + '/record-123', '/grow/:slug/:id');
+    check('/grow/' + slug, ['partner-network', 'team-expansion'].includes(slug) || own.has(slug) ? '/grow/' + slug : '/grow/:slug');
+    check('/grow/' + slug + '/new', own.has(slug) ? '/grow/' + slug + '/new' : '/grow/:slug/new');
+    check('/grow/' + slug + '/record-123', own.has(slug) ? '/grow/' + slug + '/:id' : '/grow/:slug/:id');
   }
   for (const tab of ['channels', 'campaigns', 'calendar', 'ads', 'newsletter', 'prospects', 'inbox', 'results']) {
     check('/grow/distribution/' + tab);
