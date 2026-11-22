@@ -63,7 +63,7 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
         </div>
         <div className="flex items-start gap-2">
           {/* D6966 (PGS07C–D): a program with a presentation in the map links it first, on a phone too. */}
-          <ViewPresentationLink programKey={program} />
+          <ViewPresentationLink programKey={program} registryRow={detailRow(detail) || (meta ? {} : null)} />
           {/* D962: a page that draws its own way in on a phone has no header buttons there (PG20b). */}
           {phone && !actionsOnPhone ? null : actions}
           {CSV_PROGRAMS.includes(program) ? <MoreMenu program={program} title={page.title} /> : null}

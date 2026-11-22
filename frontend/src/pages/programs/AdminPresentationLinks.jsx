@@ -15,6 +15,17 @@ import { Link } from 'react-router-dom';
 import { ArrowUpRight, Presentation } from 'lucide-react';
 import { programFor } from './registry';
 
+// D7121/#7116: global Wellness may retain an existing key or use a collision-safe seed key.
+// Match the same recorded global identity as the seed; a studio row is independent.
+function presentationFor(programKey, registryRow) {
+  if (registryRow) {
+    const wellness = registryRow.studio_only === null && ['wellness', 'wellbeing'].includes(String(registryRow.name || '').trim().toLowerCase());
+    if (wellness) return programFor('wellness');
+    if (programKey === 'wellness') return null;
+  }
+  return programFor(programKey);
+}
+
 const NAME = 'inline-flex min-h-[32px] items-center gap-1.5 text-violet-800 underline decoration-1 underline-offset-[3px] hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-200';
 const HINT = 'font-mono text-[10.5px] font-semibold text-axal-muted dark:text-gray-400';
 const PRES = 'inline-flex min-h-[44px] items-center justify-center gap-[7px] whitespace-nowrap rounded-[9px] border border-violet-300 bg-violet-50 px-3 text-[13px] font-bold text-violet-800 hover:bg-violet-100 sm:min-h-[36px] dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/40';
@@ -23,8 +34,8 @@ const PRES = 'inline-flex min-h-[44px] items-center justify-center gap-[7px] whi
  * A program's name: a link to its presentation when the map has one, else the plain name.
  * `hint` adds the canvas's "Opens the presentation · <address>" line under it.
  */
-export function PresentationName({ programKey, name, className = '', hint = false }) {
-  const program = programFor(programKey);
+export function PresentationName({ programKey, name, className = '', hint = false, registryRow = null }) {
+  const program = presentationFor(programKey, registryRow);
   if (!program) return <span className={className}>{name}</span>;
   return (
     <span className="inline-flex flex-col gap-0.5">
@@ -40,8 +51,8 @@ export function PresentationName({ programKey, name, className = '', hint = fals
  * The catalogue's door for a program with a presentation: each `Open` link inside it reads
  * "Manage program" (or `label`), keeping its address, test id and style. Other doors pass through.
  */
-export function manageDoor(door, programKey, name, label = 'Manage program') {
-  if (!door || !programFor(programKey)) return door;
+export function manageDoor(door, programKey, name, label = 'Manage program', registryRow = null) {
+  if (!door || !presentationFor(programKey, registryRow)) return door;
   const relabel = (el) => {
     if (!React.isValidElement(el)) return el;
     if (el.type === React.Fragment) return React.cloneElement(el, {}, React.Children.map(el.props.children, relabel));
@@ -54,8 +65,8 @@ export function manageDoor(door, programKey, name, label = 'Manage program') {
 }
 
 /** "View presentation" for a program's admin page header; nothing when the program has none. */
-export function ViewPresentationLink({ programKey, full = false }) {
-  const program = programFor(programKey);
+export function ViewPresentationLink({ programKey, full = false, registryRow = null }) {
+  const program = presentationFor(programKey, registryRow);
   if (!program) return null;
   return (
     <Link to={program.canonical} className={`${PRES}${full ? ' w-full' : ''}`} data-testid="programs-view-presentation">
