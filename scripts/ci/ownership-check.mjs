@@ -61,13 +61,16 @@ export function ownedPatterns(body = '', issue) {
 
 const numbers = (text, pattern) => [...new Set([...String(text || '').matchAll(pattern)].map(m => Number(m[1])).filter(positive))];
 const ambiguousTask = () => Object.assign(new Error('ambiguous task attribution'), { code: 'TASK_AMBIGUOUS' });
-/** Tagged branches win. Explicit links disambiguate incidental title references; conflicting evidence is unknown. */
+/** Tagged branches identify tasks unless explicit task links contradict them. Conflicting evidence is unknown. */
 export function taskIssue(pr) {
   const branch = /^agent\/[\w.-]+\/([1-9]\d*)-/.exec(pr.head?.ref || '')?.[1]
     || /^claude\/[\w.-]+-([1-9]\d*)[a-z]?$/i.exec(pr.head?.ref || '')?.[1];
-  if (branch) { if (!positive(branch)) throw ambiguousTask(); return Number(branch); }
   const title = numbers(pr.title, /#([1-9]\d*)\b/g);
   const links = numbers(pr.body, /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\s+of)\s+#([1-9]\d*)\b/gi);
+  if (branch) {
+    if (!positive(branch) || links.some(link => link !== Number(branch))) throw ambiguousTask();
+    return Number(branch);
+  }
   if (links.length > 1 || links.length === 1 && title.length && !title.includes(links[0])) throw ambiguousTask();
   if (links.length === 1) return links[0];
   const fallback = title.length ? title : numbers(pr.body, /#([1-9]\d*)\b/g);

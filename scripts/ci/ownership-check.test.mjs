@@ -26,13 +26,26 @@ test('form headings, bare paths, nested headings, negatives and code fences have
   assert.deepEqual(ownedPatterns('## Owned files\n`a.js`, `b.js`, `src/not/a.js`\n## Next\n`c.js`', 42), ['a.js', 'b.js', 'src/not/a.js']);
   assert.deepEqual(ownedPatterns('### **Files owned**\n`./src/a.ts` and `../escape.js`, `/absolute/a.js`, `$(bad).js`, `https://bad/a.js`', 42), ['src/a.ts']);
 });
-test('the branch is authoritative; unrelated body references cannot exempt another task', () => {
+test('the tagged branch identifies a task; dependencies cannot exempt another task', () => {
   assert.equal(taskIssue(pr), 8075);
-  assert.equal(taskIssue({ ...pr, title: 'Depends on #42', body: 'Closes #43' }), 8075);
+  assert.equal(taskIssue({ ...pr, title: 'Depends on #42', body: 'Depends on #43' }), 8075);
   assert.throws(() => taskIssue({ head: { ref: 'feature/check' }, title: 'Fix #42', body: 'Closes #43' }), { code: 'TASK_AMBIGUOUS' });
   assert.equal(taskIssue({ title: 'Fix check', body: 'Depends on #43\nCloses #42' }), 42);
   assert.equal(taskIssue({ body: 'Related #44' }), 44);
   assert.equal(taskIssue({ title: 'Maintenance' }), null);
+});
+test('tagged branches cannot override contradictory or multiple explicit task links', async () => {
+  for (const ref of ['agent/codex/8075-check', 'claude/session-name-8075', 'claude/session-name-8075c']) {
+    for (const body of ['Closes #43', 'Part of #43', 'Closes #8075\nCloses #43']) {
+      const input = { ...pr, head: { ref }, body };
+      assert.throws(() => taskIssue(input), { code: 'TASK_AMBIGUOUS' });
+      const result = await checkOwnership({ prNumber: 9000, api: async path => { assert.equal(path, '/pulls/9000'); return input; } });
+      assert.equal(result.status, 'unknown');
+      assert.equal(result.issue, null);
+      assert.equal(exitStatus(result, 'enforce'), 1);
+    }
+    assert.equal(taskIssue({ ...pr, head: { ref }, body: 'Part of #8075\nDepends on #43' }), 8075);
+  }
 });
 test('explicit task links beat incidental title references and tagged Claude branches identify their task', () => {
   assert.equal(taskIssue({ title: 'Hold #5719 while doing #8075', body: 'Closes #8075' }), 8075);
