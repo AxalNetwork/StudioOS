@@ -1,7 +1,8 @@
 /** D7811: file-keyed debt ledger; shared helpers own new CSV escaping, private copies stay untouched. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { transformWithOxc } from 'vite';
 import { Parser } from 'acorn';
@@ -43,7 +44,7 @@ PENDING.add('frontend/src/pages/research/marketDirectoryExport.js');
 const SHARED = new Set(['frontend/src/lib/csvExport.js', 'cloudflare-worker/src/services/csv.ts']);
 
 export async function doublesCsvQuotes(source, path) {
-  const code = /\.tsx?$/.test(path) ? (await transformWithOxc(source, path, { jsx: { runtime: 'automatic' } })).code : source;
+  const code = /\.(?:[cm]?ts|tsx)$/.test(path) ? (await transformWithOxc(source, path, { jsx: { runtime: 'automatic' } })).code : source;
   const ast = parser.parse(code, { ecmaVersion: 'latest', sourceType: 'module' });
   let found = false;
   function visit(node) {
@@ -71,7 +72,7 @@ function sources(dir, output = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) sources(path, output);
-    else if (!/\.d\.ts$/.test(path) && /\.(?:js|jsx|ts|tsx)$/.test(path)) output.push([relative(process.cwd(), path).replaceAll('\\', '/'), readFileSync(path, 'utf8')]);
+    else if (!/\.d\.[cm]?ts$/.test(path) && /\.(?:[cm]?[jt]s|[jt]sx)$/.test(path)) output.push([relative(process.cwd(), path).replaceAll('\\', '/'), readFileSync(path, 'utf8')]);
   }
   return output;
 }
@@ -86,4 +87,15 @@ test('a new private copy fails, an owner edit in an existing pending file does n
   assert.deepEqual(await newCopies([['frontend/src/pages/research/marketDirectoryExport.js', code]]), []);
   assert.deepEqual(await newCopies([['frontend/src/newProse.js', '// '+code]]), []);
   assert.deepEqual(await newCopies([[file, `export const cell = s => s.replaceAll('"', '""');`]]), [file]);
+});
+
+test('file discovery catches private copies in ESM, CommonJS and TypeScript module extensions', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'csv-private-7811-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const ext of ['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'mts', 'cts']) {
+    writeFileSync(join(dir, `private.${ext}`), `const cell = s => s.replace(/"/g, '""');`);
+  }
+  writeFileSync(join(dir, 'README.md'), 'Escaping is described here, not implemented.');
+  const found = await newCopies(sources(dir));
+  assert.deepEqual(found.map(path => path.split('.').at(-1)).sort(), ['cjs', 'cts', 'js', 'jsx', 'mjs', 'mts', 'ts', 'tsx']);
 });
