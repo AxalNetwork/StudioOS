@@ -27,13 +27,14 @@ export default function VerdictHome({data, projectId, records, recordsStatus, re
    </section>
   </>}
   <section className={BOX} aria-labelledby="founder-decision-title" data-testid="verdict-founder-decision"><h2 id="founder-decision-title" className="font-bold">Your decision</h2>
+   {p?.state==='ok'&&p.latest?.state==='withheld'&&<div data-testid="verdict-latest-withheld" className="space-y-2 rounded-lg border border-amber-300 p-3 dark:border-amber-800"><p className="font-semibold">Latest recorded choice · {WORD[p.latest.decision]} · Withheld</p><p className="text-[12px]">{p.latest.reasoning||'Rationale not recorded'}</p><p className="text-[12px]">{p.latest.evidence} counted sources. This choice remains in the record and does not replace the current venture decision.</p></div>}
    {p?.state!=='ok'?<p>Current decision unavailable.</p>:current?<>
     <p className="text-[18px] font-bold">{WORD[current.decision]}{current.date?` · ${current.date}`:''}</p><p className="whitespace-pre-wrap text-[13px]">{current.reasoning||'Rationale not recorded'}</p>
     {current.evidence!=null&&<p className="text-[12px]">Rests on {current.evidence} sources recorded with this decision.</p>}
     <div className="flex flex-wrap gap-2"><Link className={ACTION} to={`/validate/verdict/${current.id}?project=${projectId}`}>Review the record</Link>
      {current.decision==='stop'?decisionAction('Reopen…'):current.decision==='pivot'?<Link className={ACTION} to={`/validate?project=${projectId}`}>Update the objective</Link>:write&&<Link className={ACTION} to={`/build/plan?project_id=${projectId}`}>Plan the build</Link>}
     </div>{current.decision==='stop'&&<p className="text-[12px]">This direction is stopped. The evidence stays readable. Reopening is a new decision you record yourself.</p>}
-   </>:<><p>No decision recorded. Computed evidence states do not choose Proceed, Pivot or Stop.</p><div className="flex flex-wrap gap-2"><Link className={ACTION} to={review}>Review evidence first</Link>{!missing&&decisionAction('Record a decision')}</div></>}
+   </>:<><p>{p.latest||records?.total>0?'No current venture decision. Recorded choices remain in the history below.':'No decision recorded. Computed evidence states do not choose Proceed, Pivot or Stop.'}</p><div className="flex flex-wrap gap-2"><Link className={ACTION} to={review}>Review evidence first</Link>{!missing&&decisionAction('Record a decision')}</div></>}
   </section>
   <RecordsTable title="Decision history" records={records} status={recordsStatus} message={recordsMessage} query={query} onQuery={onQuery} onRetry={onRetryRecords} rowHref={rowHref} add={add}/>
  </div>;

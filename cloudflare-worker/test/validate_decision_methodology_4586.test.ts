@@ -188,6 +188,8 @@ test('V10: live snapshot uses the decision evidence rule and keeps missing resul
  assert.equal(first.missing_results,1);assert.equal(first.results_recorded,1);assert.equal(first.experiments_done,2);
  assert.equal(first.coverage.state,'withheld');
  const evidence=await ids(env);
+ await recordDecision(env,founder,{id:P},{decision:'stop',for:'venture',reasoning:'Too little demand',evidence});
+ const withheld:any=await verdictEvidenceState(ctx);assert.equal(withheld.current,null);assert.equal(withheld.latest.decision,'stop');assert.equal(withheld.latest.state,'withheld');
  await recordDecision(env,founder,{id:P},{decision:'stop',for:'venture',reasoning:'Too little demand',evidence},{bar:1});
  const next:any=await verdictEvidenceState(ctx);assert.equal(next.current.decision,'stop');assert.equal(next.current.reasoning,'Too little demand');
  assert.equal(next.coverage.state,'withheld','a recorded decision does not change current evidence coverage');

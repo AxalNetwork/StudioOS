@@ -32,3 +32,8 @@ test('V13: an unreadable snapshot is neither no decision nor no missing evidence
  assert.match(html,/Evidence snapshot unavailable/);assert.match(html,/Current decision unavailable/);
  assert.doesNotMatch(html,/No decision recorded|Material evidence is missing/);
 });
+
+test('V10: a withheld founder choice stays visible without becoming the current decision',()=>{
+ const html=draw({...snapshot,latest:{id:8,decision:'stop',state:'withheld',reasoning:'The budget is absent',evidence:1}});
+ assert.match(html,/Latest recorded choice · Stop · Withheld/);assert.match(html,/The budget is absent/);assert.match(html,/No current venture decision/);assert.doesNotMatch(html,/No decision recorded|Plan the build/);
+});
