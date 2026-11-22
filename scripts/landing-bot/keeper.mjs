@@ -64,7 +64,8 @@ export async function openPrs(gh) {
     const repo = await gh.graph(PRS, { after });
     const conn = repo.pullRequests;
     for (const n of conn.nodes) {
-      const handBacks = (n.timelineItems?.nodes || []).filter((e) => [LABELS.conflict, LABELS.needsSession].includes(e?.label?.name)).map((e) => e.createdAt).sort();
+      // D6476-p5: only the keeper's own hand-back and a session hand-back count; the visible `conflict` label does not.
+      const handBacks = (n.timelineItems?.nodes || []).filter((e) => [LABELS.keeperTried, LABELS.needsSession].includes(e?.label?.name)).map((e) => e.createdAt).sort();
       const committed = n.commits?.nodes?.[0]?.commit?.committedDate ?? null;
       // The later of the head commit's date and the PR's last update: a conservative "head changed" time.
       const changed = [committed, n.updatedAt].filter(Boolean).sort().pop() ?? null;
@@ -210,7 +211,8 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
         summary(`- #${planned.number}: handed back (${m.reason || 'protected files'})`);
         continue;
       }
-      await app.post(`issues/${planned.number}/labels`, { labels: [LABELS.conflict] });
+      // The indicator and the keeper's own record that its merge on this head left conflicts.
+      await app.post(`issues/${planned.number}/labels`, { labels: [LABELS.conflict, LABELS.keeperTried] });
       await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, ['Merging main into this branch leaves conflicts in:', ...files.map((f) => `- \`${f}\``), '', 'The conflict resolver is asked to try; if it cannot, the owning session resolves them.']);
       dispatch.push(planned.number);
       summary(`- #${planned.number}: conflicts in ${files.length} file(s); labelled ${LABELS.conflict}`);

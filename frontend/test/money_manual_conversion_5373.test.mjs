@@ -200,6 +200,8 @@ const ALLOW = [
     "cloudflare-worker/src/services/growCycle.ts": 1,
     // D6104: +1, burn multiple divides the USD-only ledger's cents into project_metrics dollars.
     "cloudflare-worker/src/services/growKpis.ts": 4,
+    // D6103: +1, the KPI export writes a `usd` KPI's whole dollars as cents.
+    "cloudflare-worker/src/services/growExport.ts": 1,
     "cloudflare-worker/src/services/marketReadingRead.ts": 1,
     "cloudflare-worker/src/services/publishSources.ts": 1,
     "cloudflare-worker/src/services/raiseClaims.ts": 1,
