@@ -165,7 +165,13 @@ export const runStepDeadline=(origin=performance.timeOrigin)=>Math.floor(origin)
  * coordinator needs: success | test_failure | cancelled | timed_out | infrastructure | incomplete_cleanup.
  * `cleanupComplete` is always reported too, so a test failure with incomplete cleanup still says so.
  */
-export function classifyOutcome({install,test,exported,cleanup,infrastructure,aborted}){
+/*
+ * S32 (#8009, durable tail): `overran` is true when the run reached its outcome after the lifecycle bound. The
+ * durable-store writes after a verified removal are synchronous local fsyncs that cannot be interrupted or abandoned
+ * without leaving the record's state unknown, so they are not raced; instead, a run that finishes past the bound is
+ * never reported as success. A real test failure, cancellation or timeout keeps its own result and exit.
+ */
+export function classifyOutcome({install,test,exported,cleanup,infrastructure,aborted,overran=false}){
  const realTestFailure=test?.status==='failure'&&Number.isSafeInteger(test.exitCode)&&test.exitCode>0;
  const statuses=[install?.status,test?.status];
  const cancelled=statuses.includes('cancelled')||(aborted&&!realTestFailure&&test?.status!=='success');
@@ -175,7 +181,7 @@ export function classifyOutcome({install,test,exported,cleanup,infrastructure,ab
  const cleanupOk=['complete','none'].includes(cleanup?.state);
  const result=realTestFailure?'test_failure':cancelled?'cancelled':timedOut?'timed_out'
   :infrastructure?'infrastructure':install&&install.status!=='success'?'install_failure'
-  :testPassed&&!cleanupOk?'cleanup_failure':testPassed&&!exportOk?'export_failure':testPassed?'success':'unknown';
+  :testPassed&&!cleanupOk?'cleanup_failure':testPassed&&!exportOk?'export_failure':testPassed&&overran?'deadline_overrun':testPassed?'success':'unknown';
  const category={test_failure:'test_failure',cancelled:'cancelled',timed_out:'timed_out',cleanup_failure:'incomplete_cleanup',success:'success'}[result]??'infrastructure';
  const code=realTestFailure?test.exitCode:cancelled?130:timedOut?124:result==='success'?0:1;
  return {result,category,code,cleanupComplete:cleanupOk};
@@ -277,8 +283,10 @@ export async function runInContainer({job,executionIsolation,admit,recheck=null,
    else cleanup={state:'unverified',retained:true,...reconciled};
   }catch{cleanup={state:'failed',retained:true,...reconciled};}
  }
- const outcome=classifyOutcome({install,test,exported,cleanup,infrastructure,aborted:Boolean(signal?.aborted)});
- log(JSON.stringify({component:'runner-executor',event:'container_outcome',category:outcome.category,result:outcome.result,supervisorExit:outcome.code,cleanupComplete:outcome.cleanupComplete,install,test,export:exported,cleanup,infrastructure}));
+ // Measured after the durable tail (store.write/remove are synchronous local fsyncs): past the bound is not success.
+ const overrunMs=Math.max(0,now()-bound),overran=overrunMs>0;
+ const outcome=classifyOutcome({install,test,exported,cleanup,infrastructure,aborted:Boolean(signal?.aborted),overran});
+ log(JSON.stringify({component:'runner-executor',event:'container_outcome',category:outcome.category,result:outcome.result,supervisorExit:outcome.code,cleanupComplete:outcome.cleanupComplete,install,test,export:exported,cleanup,infrastructure,lifecycle:{overran,overrunMs}}));
  if(output)output({category:outcome.category,result:outcome.result,test_exit:test?.exitCode??'',cleanup:cleanup.state,export:exported.state});
  return outcome.code;
 }
