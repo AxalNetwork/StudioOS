@@ -1,6 +1,7 @@
 /** D7706: the actual sizing page delegates all sizing to one versioned Worker save. */
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import Page, { seedAssumptions, sizingRequest, fmtMoney, marketFigureDefined, marketShare, currentSizingVersion } from '../src/pages/SpinoutLabMarketPage.jsx';
@@ -14,7 +15,7 @@ const user = { id: 1, role: 'founder', spinout_lab_active: 1 };
 const input = { population: '100', acv: '1000', samPct: '0', winRate: '0', capacity: '2', horizonMonths: '24', salesCycleMonths: '3', retentionPct: '80', cagr: '0' };
 const version = { uid: 'v4', version_number: 4, created_at: '2026-11-22T00:00:00Z', current: true, recomputes: true, tam: 100000, sam: 0, som: 0, formula: ['Total from entered accounts and annual revenue', 'Serviceable at entered zero percent', 'Obtainable is the lower sales or win limit', 'Sales capacity set the limit'] };
 const props = (m, id) => { const node = m.nodes().find(n => m.props(n)?.['data-testid'] === id); assert.ok(node, id); return m.props(node); };
-const until = async (m, f) => { const end = Date.now()+5000; while(!f()) { if(Date.now()>end) assert.fail('UI did not settle'); await m.flush(); } };
+const until = async (m, f) => { const end = performance.now()+5000; while(!f()) { if(performance.now()>end) assert.fail('UI did not settle'); await m.flush(); } };
 beforeEach(t => { t.mock.method(globalThis, 'fetch', async () => { throw new Error('Synthetic fixture: network disabled'); }); });
 test('zero and blank inputs stay distinct in the full request, display, readiness and share', () => {
   const empty = seedAssumptions({ tam: 100, sam: 14, som: 8 });
