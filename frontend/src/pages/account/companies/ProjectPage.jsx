@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import FormationEntry from './FormationEntry';
+import { formationEntry } from './companiesModel';
 import { Link } from 'react-router-dom';
 import { Pill } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -7,13 +9,13 @@ import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { projectSettingsPath, projectTeamPath, companyProjectTeamPath, scopeFor, usePublishScope } from '../../../lib/settingsScope.js';
 import { MoveUnderSheet } from '../../team/ProjectSettingsPage.jsx';
 import { managedNote } from '../../team/teamModel.js';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import { BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
 import WorkSummaryCard from '../../work/WorkSummaryCard.jsx';
 import SkillsLink from '../../team/SkillsLink.jsx';
 import { AccessPill } from '../../../ui/ReasonGate';
 import { through } from './portfolioAdapter.js';
 import {
-  ADMIN_LINE, BASE_PATH, READ_ONLY_LINE, accessViewer, companyPathFor, companyProjectsPath, day, hqReadOnly, incorporatePath, jurisdictionName,
+  ADMIN_LINE, BASE_PATH, READ_ONLY_LINE, accessViewer, companyPathFor, companyProjectsPath, day, hqReadOnly, jurisdictionName,
   legalFormWord, seatWord, stageWord, valueFact,
 } from './companiesModel';
 import { CompanyMark, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading, SlugChip, TypeBadge } from './portfolioUi.jsx';
@@ -130,7 +132,7 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
             <p className={`m-0 ${MUTED}`}>{name} is a standalone project. It is not a legal entity. Make it a company when you are ready to incorporate.</p>
             {owner ? (
               <>
-                <Link to={incorporatePath(id)} className={`w-fit ${BTN_PRIMARY}`} aria-describedby="inc-note" data-testid="project-make-company">Make it a company</Link>
+                <FormationEntry entry={formationEntry(row, 'project')} name={name} project onRetry={reread} testId="project-make-company" />
                 <p id="inc-note" className={`m-0 ${MUTED}`}>Opens Incorporate with {name} filled in. Nothing is filed until you submit there.</p>
               </>
             ) : null}

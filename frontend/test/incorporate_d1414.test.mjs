@@ -37,8 +37,8 @@ const JURISDICTIONS = { jurisdictions: [
   { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'Wyoming', est_cost_usd: [100, 600], time_to_form_days: [1, 7], fundraising_friendly: false, summary: 'A low-cost corporation in the US.', pros: ['Low yearly fees'], cons: ['Less case law'] },
 ] };
 const PROJECTS = { projects: [
-  { id: 2, name: '[Orbit Notes]', my_seat: 'owner', company_uid: null, company_name: null },
-  { id: 3, name: '[Ledgerline]', my_seat: 'owner', company_uid: 'nl', company_name: '[Northwind Labs]' },
+  { formation_state: 'not_incorporated', id: 2, name: '[Orbit Notes]', my_seat: 'owner', company_uid: null, company_name: null },
+  { formation_state: 'not_incorporated', id: 3, name: '[Ledgerline]', my_seat: 'owner', company_uid: 'nl', company_name: '[Northwind Labs]' },
   { id: 4, name: '[Someone else’s]', my_seat: 'cofounder', company_uid: null },
 ] };
 const QUOTE = { jurisdiction_id: 'us_de_ccorp', label: 'Delaware C-Corp', amount_cents: 94800, currency: 'usd', source: 'catalog',
@@ -100,6 +100,48 @@ async function mount(url = '/incorporate', { handle = worker() } = {}) {
 }
 
 // ---------------------------------------------------------------- the model
+
+test('D6688: the subject-less route starts at the board and Continue opens the chosen company', async () => {
+  const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', formation_state: 'not_incorporated' };
+  const v = await mount('/incorporate', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }) }) });
+  try {
+    assert.ok(v.has('incorporate-start'));
+    assert.equal(v.prop('incorporate-start-continue', 'disabled'), true);
+    await v.change('incorporate-subject-company:fixture_co', true);
+    assert.equal(v.prop('incorporate-start-continue', 'disabled'), false);
+    await v.click('incorporate-start-continue');
+    assert.match(v.of('incorporate-company-subject'), /Fixture company/);
+    assert.ok(!v.has('incorporate-pick'));
+  } finally { await v.close(); }
+});
+
+test('D6688: the company flow posts company_uid, never creates or orders a project', async () => {
+  const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', formation_state: 'not_incorporated' };
+  const v = await mount('/incorporate?company=fixture_co', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }) }) });
+  try {
+    assert.ok(!v.calls().includes('GET /api/account/projects'));
+    await v.click('incorporate-primary');
+    await v.click('incorporate-primary');
+    await v.wait(700);
+    await v.click('incorporate-primary');
+    await v.click('incorporate-primary');
+    await v.click('incorporate-primary');
+    const orders = v.writes().filter(x => x.call === 'POST /api/legal/incorporation/order');
+    assert.equal(orders.length, 1);
+    assert.equal(orders[0].body.company_uid, 'fixture_co');
+    assert.equal(Object.hasOwn(orders[0].body, 'project_id'), false);
+    assert.ok(!v.writes().some(x => x.call === 'POST /api/projects'));
+  } finally { await v.close(); }
+});
+
+test('D6688: a company already formed, in formation, unreadable or not administered cannot open the form', async () => {
+  for (const fields of [{ formation_state: 'incorporated' }, { formation_state: 'in_formation', formation_order_id: 45 }, { formation_state: 'unreadable' }, { formation_state: 'not_incorporated', my_role: 'Member' }]) {
+    const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', ...fields };
+    const v = await mount('/incorporate?company=fixture_co', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }) }) });
+    try { assert.ok(!v.has('incorporate-flow')); assert.equal(v.writes().length, 0); }
+    finally { await v.close(); }
+  }
+});
 
 test('six steps with Review, and the phone\'s line', () => {
   assert.deepEqual(STEPS.map((s) => s.label), ['Tell us your goals', 'Compare jurisdictions', 'Company details', 'Review', 'Pay & file', 'Done']);
@@ -244,7 +286,7 @@ test('mounted: one block failing is said alone (INC5d); the pick still draws', a
 });
 
 test('mounted: Start fresh posts the project first, standalone, and orders that project', async () => {
-  const v = await mount('/incorporate');
+  const v = await mount('/incorporate?new=1');
   try {
     await v.change('incorporate-fresh-radio', true);
     await v.change('incorporate-fresh-name', '[Fresh]');

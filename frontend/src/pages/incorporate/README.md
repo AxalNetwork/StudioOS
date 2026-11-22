@@ -39,3 +39,5 @@ their import.
   drawn; never on the legal name, identity numbers or signatures.
 - **The device draft is a convenience.** Every `localStorage` read and write
   is in try/catch, and a store that throws still lets the flow go on.
+
+| `IncorporateStart.jsx` | D6688: INC8 subject selection before the existing incorporation flow. |

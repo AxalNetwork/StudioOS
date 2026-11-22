@@ -78,3 +78,5 @@ Worker's `PUBLIC_FIELDS` only, marked when it includes unsaved changes).
 twelve save states, `fieldProblems` (of which `problemOf` is the first) and the
 currency and URL helpers. The save machinery is unchanged: #4960 to #4964 own
 it.
+
+| `FormationEntry.jsx` | D6688: shared server-state incorporation door and company formation read, reusing LegalSheet. |
