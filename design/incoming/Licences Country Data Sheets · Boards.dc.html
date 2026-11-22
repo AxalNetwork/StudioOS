@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences Country Data Sheets · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Licences · Country pricing · #7703 pass 1 B</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Licences · Country Data Sheets — import country data and record observations on the HQ pricing pages</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Licences and Contracts v2 Addendum (boards L23, L24 and L24b, D5303) without forking it: same shell, tokens, chips, tables and sheet. It draws the two sheets behind “Import country data…” on the catalogue and “Record observation…” on a country page, which the Worker already serves (D5016) and no screen opens. Super Admin at HQ only. Every value carries its source, as-of date and reason; every write names the revision it read and changes nothing when the country moved on. A partial import names the countries it skipped and never resends. Not recorded and Unavailable are never drawn as 0. Nothing is proposed by Eadwyn. Boards take the LCD prefix: L41 to L52 are taken.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 19 Nov 2026, 14:30 UTC · checked against main 58ee9d1b73 · country names are real; every figure, source, reference, revision and person ([Iris Chen], [Tom Becker]) is a bracketed, invented sample</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="10">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Licences Country Data Sheets Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LCD-00', 'What the two sheets write and where each value is read', 'The four fields, their units and statuses; the three write routes that exist (D5016), the reads the pages already use, and the two ◇ #7714 pieces: the import-file builder and the consistency check.', [W('LCD00')]],
+      ['LCD-01', 'Import country data sheet · opened by “Import country data…” on L23', 'A choose the file (read in the browser, kept nowhere) · B what this will change: [34] countries, [68] rows of at most 500, each row as the file states it, the revision each country was read at, the reason · C done: [68] recorded for [34] countries, catalogue read again · D partial (207): [61] recorded, Estonia, Ireland, Latvia changed and got nothing; no resend · E refused before anything is written: rows with fields to fix · F more than 500 rows; a country with no revision named.', [F('LCD01', 'A · choose the file', 960), F('LCD01B', 'B · what this will change', 1320), F('LCD01C', 'C · done', 900), F('LCD01D', 'D · partial', 900), F('LCD01E', 'E · rows to fix', 960), C('LCD01F', 'E · over 500 rows · no revision named', 1400, 180)]],
+      ['LCD-02', 'Record observation sheet · opened by “Record observation…” on L24', 'A field, whole-number value with its unit, Recorded or Provisional, source, optional reference, as-of date, reason, and “You are changing revision [9]” · B problems on each field in the Worker’s words · C someone saved first: the Worker’s sentence, typed values kept.', [F('LCD02', 'A · record', 1000), F('LCD02B', 'B · fields to fix', 1080), F('LCD02C', 'C · changed since you read it', 1000)]],
+      ['LCD-03', 'Mark a field Provisional or Not recorded · second mode of the same sheet · ⚑ Q9 A', 'A Provisional keeps the value, offered only when one exists · B Not recorded: a confirm step lists what is cleared, keeps the history and says the market cannot be priced until the field is recorded again · C a rank: Recorded or Not recorded only.', [F('LCD03', 'A · Provisional', 1000), F('LCD03B', 'B · Not recorded, confirm', 1220), F('LCD03C', 'C · a rank', 1000)]],
+      ['LCD-04', 'A value with no history behind it · ◇ #7714 · ⚑ Q8 A', 'A on the country page: “No history row for this value” and “Differs from its latest history row” with both sides and the [2] frozen pricing snapshots that hold it · B on the catalogue: “Values to check · [2]” filters the rows · C nothing to flag: [49] countries and [196] fields checked · D the check failed: Unavailable, no flag, never “all consistent”.', [F('LCD04', 'A · country page', 1060), F('LCD04B', 'B · catalogue filter', 640), C('LCD04C', 'C · nothing to flag', 1400, 120), C('LCD04D', 'D · check failed', 1400, 120)]],
+      ['LCD-05', 'States', 'Each sheet and the check against loading, empty, Not recorded, Unavailable, Refused and saving; the “Super Admin only” page; send failed, where nothing on the page changes and an import says “Read the catalogue again before sending anything”.', [C('LCD05', 'Grid', 1400, 520), F('LCD05B', 'Refused · Super Admin only', 560), C('LCD05C', 'Send failed', 1400, 220)]],
+      ['LCD-06', 'Phone 390', 'Full-height bottom sheets with 44px targets and no table wider than the screen: A import summary · B rows as cards · C the partial result · D record observation · E the Not recorded confirm step · F the flag on a country (◇ #7714).', [P('LCD06A', 'A · import'), P('LCD06B', 'B · rows'), P('LCD06C', 'C · partial'), P('LCD06D', 'D · record'), P('LCD06E', 'E · Not recorded'), P('LCD06F', 'F · flag')]],
+      ['LCD-07', 'Dark · desktop 1440 and phone 390', 'LCD-01 B and D, LCD-02 A, LCD-03 B, LCD-04 A and phone A and D on the dark tokens; states keep their words and glyphs.', [F('LCD07A', '01 B', 1320), F('LCD07B', '01 D', 900), F('LCD07C', '02 A', 1000), F('LCD07D', '03 B', 1220), F('LCD07E', '04 A', 1060), P('LCD07F', 'Phone A'), P('LCD07G', 'Phone D')]],
+      ['LCD-08', 'Main task path and keyboard · clickable', 'Catalogue filtered to incomplete data → import → a partial result → open Denmark → record an observation → the history row appears first. Tab order through each sheet, focus back to the opening button, live-region wording for recorded, partly recorded and nothing was saved.', [F('LCD08', 'Path, Tab order, live region', 900), F('LCD08B', 'Step 6 · the new history row', 820)]],
+      ['LCD-H', 'Handoff', 'Per board: recorded today or ◇ with its issue; ⚑ Q8 and Q9 with option A drawn. Built by #7715, frontend only; LCD-04 waits on #7714.', [W('LCDH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

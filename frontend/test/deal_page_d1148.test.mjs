@@ -167,10 +167,13 @@ test('the wiring: the tab route beside the deal route, tabs as links, and the ca
 });
 
 // D4631 (#4631): the documents list is behind the venture's NDA for an investor; the tab says so, it is not "unreadable".
-test('D4631: the Documents tab tells an investor without the NDA why, and keeps a failed read unreadable', () => {
-  const src = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
-  const tab = src.slice(src.indexOf('function DocumentsTab'), src.indexOf('function DocumentsTab') + 1600);
-  assert.match(tab, /e\?\.code === 'nda_required' \? setNdaNeeded\(true\) : setFailed\(true\)/);
-  assert.match(tab, /data-testid="deal-documents-nda"/);
-  assert.ok(tab.indexOf('if (ndaNeeded)') < tab.indexOf('if (failed)'), 'the NDA reason is checked before the failure');
+// D6186 (#6186): the non-investor tab is `deal/DealDocumentsStaff.jsx`; an Operating Partner meets the same NDA rule there.
+test('D4631: the Documents tab tells a reader without the NDA why, and keeps a failed read unreadable', () => {
+  const page = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
+  assert.ok(!page.includes('function DocumentsTab'), 'the legacy list is gone (D6186)');
+  assert.match(page, /<DealDocumentsStaff deal=\{deal\} viewer=\{viewerOf\(role, user, deal\)\} \/>/);
+  const src = readFileSync(new URL('../src/pages/deal/DealDocumentsStaff.jsx', import.meta.url), 'utf8');
+  assert.match(src, /status: e\?\.code === 'nda_required' \? 'nda' : 'unreadable'/);
+  assert.match(src, /data-testid="deal-documents-nda"/);
+  assert.match(src, /claim="That is not a claim that no documents exist\."/);
 });

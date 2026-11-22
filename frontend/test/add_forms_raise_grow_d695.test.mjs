@@ -106,7 +106,7 @@ const COPY = {
     labels: ['Obligation', 'Kind', 'Due', 'Owner', 'Repeats', 'Remind'],
     // D6790: the owner is a listbox of the company team (No one yet until form-options answers).
     chips: { kind: [['Governance', 'Compliance', 'Risk', 'Culture'], 'governance'], owner_user_id: [['No one yet'], ''], repeats: [['Once', 'Monthly', 'Quarterly', 'Yearly'], 'quarterly'] },
-    checks: { remind: [['14 days before', true], ['The day before', true]] },
+    checks: { remind: [['30 days before', false], ['14 days before', true], ['7 days before', false], ['The day before', true], ['On the day', false]] },
     placeholders: ['Board meeting, filing, review…'],
   },
 };

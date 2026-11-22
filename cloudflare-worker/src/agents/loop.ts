@@ -47,14 +47,14 @@
  * not retry them; a throw is a transient error, retried 3 times.
  */
 import type { Env, User } from '../types';
-import { agentRun as realAgentRun, PROMPT_MAX, runKeyOf, type AgentRunInput, type AgentRunResult } from '../services/agents/agentRun';
+import { agentRun as realAgentRun, PROMPT_MAX, refusalDetail, runKeyOf, type AgentRunInput, type AgentRunResult } from '../services/agents/agentRun';
 import { railByRunKey } from '../services/railProposals';
 import { skillEvidenceForRun, skillSlugOf } from '../services/agents/skillEvidence';
 import { moduleOf } from '../services/agents/catalogue';
 import { logCycleWrite, type CycleWrite } from '../services/cycleActivity';
 import { readOne, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
-import { canRead, effectiveBook, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
+import { canRead, effectiveBook, logEvent, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
 import type { Rules } from '../services/agents/catalogue';
 import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
 import { sessionBlock, sessionSkill } from '../services/agents/sessions';
@@ -159,7 +159,7 @@ export async function load(d: LoopDeps, uid: string): Promise<StepOut> {
  */
 export type Built = {
   ok: true; prompt: string; reads: string[]; notes: number; omitted: string[];
-  scope: Scope; rules: Rules; projectId: number | null; bound: string[]; document: string | null;
+  scope: Scope; rules: Rules; projectId: number | null; bound: string[]; document: string | null; fund: string | null;
 } | { ok: false; status: string; refusal: string; summary: string; pause?: PauseReason };
 
 /** The prompt, built from D1 alone. Every read is wrapped as data. */
@@ -199,7 +199,9 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   // D4667-p3: a session on one data-room document reads that document's text; the reader checks the room's rule again.
   const target = session?.target as { kind?: string; id?: string } | null | undefined;
   const document = target?.kind === 'document' && typeof target.id === 'string' ? `data_room_file:${target.id}` : null;
-  const rc: ReadContext = { scope: s, agent: l.agent, projectId, document };
+  // D7701: the same selected fund binds context and the pre-charge readiness check.
+  const fund = target?.kind === 'fund' && typeof target.id === 'string' ? `vc_fund:${target.id}` : null;
+  const rc: ReadContext = { scope: s, agent: l.agent, projectId, document, fund };
   const reads: { key: string; block: string }[] = [];
   for (const key of rules.reads) {
     const r = await readOne(d.env, key, rc, d.readers);
@@ -240,7 +242,7 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
     else omitted.push(names[i]);
   });
   if (omitted.length) prompt += `\nLeft out for length: ${omitted.join(', ')}.`;
-  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: rules.reads.filter((k) => !omitted.includes(k)), document };
+  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: rules.reads.filter((k) => !omitted.includes(k)), document, fund };
 }
 
 export async function context(d: LoopDeps, uid: string): Promise<StepOut> {
@@ -295,14 +297,22 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   if (sk.kind === 'skill' && !(await railByRunKey(d.env, l.agent.sponsor_user_id, runKeyOf(uid)))) {
     const slug = await skillSlugOf(d.env, sk.uid);
     const checked = await skillEvidenceForRun(d.env, {
-      agent: l.agent, scope: b.scope, rules: b.rules, slug, projectId: b.projectId, bound: b.bound, document: b.document, readers: d.readers, now: d.now().getTime(),
+      agent: l.agent, scope: b.scope, rules: b.rules, slug, projectId: b.projectId, bound: b.bound, document: b.document, fund: b.fund, readers: d.readers, now: d.now().getTime(),
     });
-    if (!checked.ok) return end(d, l, 'run', 'refused', checked.code, checked.message);
+    if (!checked.ok) {
+      // D4536-p4: this refusal ends before agentRun, which writes the event every other refusal has, so it is written here.
+      try {
+        await logEvent(d.env, l.agent.id, l.agent.sponsor_user_id, 'refused',
+          refusalDetail(checked, { module: l.task.module!, option: l.task.option!, skill: sk.uid, skillVersion: sk.version, engine: true }, sk.version));
+      } catch { /* the run still ends refused */ }
+      return end(d, l, 'run', 'refused', checked.code, checked.message);
+    }
     if (slug) readiness = { slug, limits: checked.evidence?.limits ?? [] };
   }
   const r = await d.agentRun(d.env, {
     agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid, engine: true,
     ...(sk.kind === 'skill' ? { skill: sk.uid, skillVersion: sk.version } : {}),
+    ...(b.fund ? { record: b.fund } : {}),
     ...(readiness ? { readiness } : {}),
   });
   if (r.ok) {

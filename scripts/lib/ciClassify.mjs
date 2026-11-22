@@ -16,6 +16,9 @@
  * second, PR-only failure inside it, so an inherited verdict says so, and the PR's own tests in that part still
  * count once main is green again.
  */
+// D5502: production diagnostics and digests use exact-base test evidence.
+// classify() below remains the legacy job-level API for historical scorecards.
+export { compareEvidence as classifyEvidence } from './ciFailures.mjs';
 export const VERDICTS = Object.freeze(['pr_failure', 'inherited_main_failure', 'main_health_unknown', 'infra_failure']);
 
 export const INFRA_STEPS = Object.freeze([

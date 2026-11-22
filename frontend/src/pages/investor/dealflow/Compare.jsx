@@ -13,6 +13,10 @@
  *   - Eadwyn's note: drafted from the bands on press, shown, and saved to the
  *     investor's notes only on Save to notes (`/api/deals/flow/compare-note`).
  *     Discard writes nothing. Eadwyn never changes a score.
+ *   - D6151 (#6151, board DE29): below 768px the chart and the table give way to
+ *     one column: a sticky legend of the ventures in their colours, and each
+ *     section stacked with every venture's value under each row. With two
+ *     ventures every section is open; with three or four, one at a time.
  *   - D6149 (#6149): each card has Remove (the same address without that id),
  *     Add a venture returns to the table with the picks ticked (`&pick=`),
  *     Export CSV writes every row the table shows (`compareSections`), and the
@@ -178,6 +182,71 @@ function download(text) {
   } catch (e) { reportError('DealFlow:csv', e); }
 }
 
+/**
+ * D6151 (DE29): Compare on a phone. The same sections and rows as the table
+ * (`compareSections`), stacked: each row names itself once, then lists every
+ * venture's value beside its colour. A missing value is its word, never a bar.
+ * Two ventures: every section open. Three or four: one section open at a time.
+ */
+export function ComparePhone({ ventures, flowUnknown = false }) {
+  const sections = compareSections(ventures, { flowUnknown });
+  const accordion = ventures.length > 2;
+  const [open, setOpen] = useState(sections[0]?.key ?? null);
+  return (
+    <div className="flex flex-col gap-3 md:hidden" data-testid="dealflow-compare-phone" data-print="hide">
+      <div className="sticky top-0 z-10 bg-gray-50 py-2 dark:bg-gray-950">
+        <ul className="m-0 flex list-none gap-2 overflow-x-auto p-0" aria-label="Ventures compared" data-testid="dealflow-compare-legend">
+          {ventures.map((v, i) => (
+            <li key={v.id} className="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+              <span className={`inline-block h-2.5 w-2.5 rounded-sm ${COMPARE_COLOURS[i].swatch}`} aria-hidden="true" />{v.name}
+            </li>
+          ))}
+        </ul>
+        {accordion && <p className="m-0 mt-1 font-mono text-[11px] text-axal-muted dark:text-gray-400">One section open at a time</p>}
+      </div>
+      {sections.map((section) => {
+        const isOpen = !accordion || open === section.key;
+        return (
+          <section key={section.key} className={BOX} data-testid={`dealflow-compare-phone-${section.key}`}>
+            {accordion ? (
+              <button type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : section.key)}
+                className="-my-2 flex min-h-[44px] w-full items-center justify-between text-left text-[14px] font-bold text-axal-ink dark:text-gray-100"
+                data-testid={`dealflow-compare-phone-toggle-${section.key}`}>
+                {section.label}<span aria-hidden="true" className="text-gray-500">{isOpen ? '▴' : '▾'}</span>
+              </button>
+            ) : <h3 className="m-0 text-[14px] font-bold">{section.label}</h3>}
+            {isOpen && section.rows.map((row) => (
+              <div key={row.key} className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{row.label}</span>
+                {ventures.map((v, i) => {
+                  const c = row.scope ? row.scope.cells[i] : null;
+                  return (
+                    <div key={v.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-2 text-[12.5px]" data-testid={`dealflow-compare-phone-cell-${row.key}-${i}`}>
+                      <span className="flex min-w-0 items-center gap-1.5 text-axal-ink dark:text-gray-100">
+                        <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-sm ${COMPARE_COLOURS[i].swatch}`} aria-hidden="true" /><span className="truncate">{v.name}</span>
+                      </span>
+                      <span className="min-w-0">
+                        {c ? (c.kind === 'scored'
+                          ? <span className="flex items-center gap-1.5">
+                            <span className="h-2 w-16 shrink-0 rounded-sm bg-gray-100 dark:bg-gray-800"><span className={`block h-full rounded-sm ${COMPARE_COLOURS[i].bar} ${OPACITY[c.confidence] ?? 'opacity-55'}`} style={{ width: `${Math.round(barShare(c.band) * 100)}%`, ...(c.low ? HATCH : {}) }} /></span>
+                            <span className={c.best ? 'font-extrabold' : 'font-semibold'}>{c.word}</span>
+                            <span className="text-[11px] text-axal-muted dark:text-gray-400">{c.confidence || 'confidence not recorded'}</span>
+                          </span>
+                          : <span className="italic text-axal-muted dark:text-gray-400">{row.cells[i]}</span>)
+                          : RICH_CELL[row.key] ? RICH_CELL[row.key](v, flowUnknown) : <span className="break-words">{row.cells[i]}</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 /** DLS8/DLS9 from rows already read, each with its scores and fit. */
 export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = false }) {
   // D6149 (#6149): Remove and Add a venture work from the ventures on the page, so a pick that is not on the list drops out.
@@ -227,13 +296,14 @@ export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = fal
             <section className={BOX} aria-labelledby="compare-chart-title">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id="compare-chart-title" className="m-0 text-[14px] font-bold">Scores by scope</h3>
-                <a href="#compare-table" className="text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-print="hide">View as table</a>
+                <a href="#compare-table" className="hidden text-[12.5px] font-semibold text-violet-700 underline md:inline dark:text-violet-300" data-print="hide">View as table</a>
               </div>
               <p className="m-0 text-[13px]" data-testid="dealflow-compare-summary">{compareSummary(ventures)}</p>
               <p className={MUTED} data-print="hide">A bar is a band: Weak, Fair or Strong, never a number. Opacity and the label show confidence. A dashed line marks a scope without a score.</p>
-              <div data-print="hide"><ScopeBars ventures={ventures} /></div>
-              <CompareTable ventures={ventures} flowUnknown={flowUnknown} />
+              <div className="hidden md:block" data-print="hide"><ScopeBars ventures={ventures} /></div>
+              <div className="hidden md:block print:block"><CompareTable ventures={ventures} flowUnknown={flowUnknown} /></div>
             </section>
+            <ComparePhone ventures={ventures} flowUnknown={flowUnknown} />
             <CompareNote key={(ids.length ? ids : ventures.map(v => v.id)).join(',')} ids={ids.length ? ids : ventures.map((v) => v.id)} />
           </>
         )}

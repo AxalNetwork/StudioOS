@@ -1,0 +1,38 @@
+# The scan-remediation filer (D7899): reconciles default-branch Code Scanning
+# alerts with S21's tracker issues. It writes no code and calls no model.
+name: scan-remediation
+kind: platform
+owner: S21
+identity: github-actions  # the workflow token, or the App behind SCAN_REMEDIATION_APP_ID when both its secrets are set; #8061 names no App for it
+capabilities:
+  - code.read
+  - security.read    # code scanning alerts (security-events: read)
+  - issue.read
+  - issue.write      # opens and closes tracker issues (issues: write)
+models:
+  route: none
+  allowed: []
+resources:
+  cpu: none
+  memory: none
+limits:
+  runtime: 15        # minutes: the reconcile job's timeout-minutes
+  tokens: 0
+  parallel_tasks: 1  # concurrency group studioos-code-scanning-remediation
+  child_agents: 0
+  prs: 0             # reads PRs (pull-requests: read), opens none
+network:
+  internet: true
+  egress:
+    - api.github.com
+allowed_paths: []    # writes no repository file
+runner_pool: trusted # main only, in the scan-remediation environment
+approval:
+  external_actions: not-required
+escalation: S21
+status: live         # scheduled every two hours; its runs on 2026-11-21 succeeded
+sources:
+  - .github/workflows/scan-remediation.yml
+  - scripts/scan-remediation/run.mjs
+  - scripts/scan-remediation/trackers.mjs
+  - scripts/scan-remediation/github.mjs

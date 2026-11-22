@@ -395,6 +395,61 @@ against *its own* secret, and the two are not necessarily the same value. Use
 a real production session, or prove secret parity first. Skipping this step has
 already produced one false "production auth is broken" report.
 
+### 5.2 Which build is live, and its provenance (D8073, #8073)
+
+Each production deploy leaves three things behind:
+
+- **The served version.** `GET /api/public/version` answers
+  `{ sha, version_id, built_at, missing }`. Every field comes from the
+  bundle's own bindings and nothing is read from D1:
+  - `sha` comes from `WORKER_DEPLOY_VERSION`, which the deploy already stamps
+    with `GITHUB_SHA`;
+  - `version_id` comes from the `[version_metadata]` binding
+    `CF_VERSION_METADATA`;
+  - `built_at` comes from `WORKER_BUILT_AT`.
+
+  A field the deploy did not stamp is `null`, and `missing` names it.
+  `scripts/check-spa-live.mjs` reads the route on every host. With
+  `SMOKE_EXPECT_SHA` set, the served `sha` must equal it. Unset, it must be a
+  commit sha at all. A host serving another build fails the smoke and names
+  both shas.
+- **The record.** `scripts/deploy/record-deployment.mjs` writes one row to D1
+  `deployments` through `POST /api/internal/deployments` and appends the same
+  line to the run summary. The row holds the sha, the run id, the Worker
+  version id, the attestation URL, `built_at`, `deployed_at` and `rollback_of`.
+  - The route takes `Authorization: Bearer <DEPLOY_RECORD_TOKEN>`, a Worker
+    secret whose GitHub copy is held only by the `production` environment.
+  - Unset, the route answers 503. With a wrong token it answers 401.
+  - A re-run of the same deploy answers the row already there. A re-post
+    that disagrees with that row answers 409.
+- **The attestation.** `actions/attest-build-provenance` signs `docs/` and the
+  Worker bundle. Its URL is what the record's `attestation_url` points at.
+
+**What is live today.** The route, the record, the table and the smoke
+assertion ship with #8073. The deploy workflow lines are #8069's: the
+attestation step, `WORKER_BUILT_AT`, the `[version_metadata]` binding, the
+record step and `SMOKE_EXPECT_SHA`. They are proposed there as a diff, and
+until they land:
+- `version_id` and `built_at` read `null`;
+- the smoke checks only that some sha is served;
+- the record is written by hand from a shell that holds the token, for
+  example after an operator dispatch:
+
+```bash
+DEPLOY_RECORD_TOKEN=... GITHUB_SHA=<sha> GITHUB_RUN_ID=<run id> \
+WRANGLER_DEPLOY_LOG=deploy.log ATTESTATION_URL=<url> \
+node scripts/deploy/record-deployment.mjs
+```
+
+It exits 1, and the summary carries no line, when the record was not
+written. The deploy itself is not undone. Rollback mechanics are out of scope
+here. `rollback_of` only names the recorded deploy that a rollback undid.
+
+**Rollback of this change.** Reverting the PR removes the route, the smoke
+assertion and the script. The `deployments` table stays, unread, because
+migrations are forward-only. Unsetting `DEPLOY_RECORD_TOKEN` alone stops new
+records: the route answers 503.
+
 ---
 
 ## 6. Provisioning a branch — `branch-provision.yml`

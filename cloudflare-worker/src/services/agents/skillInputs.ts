@@ -135,12 +135,8 @@ export const STALE_DAYS = 45;
 /** A required input in one of these leaves nothing to brief from: the skill is `not_ready`. */
 export const HARD: readonly InputStatus[] = Object.freeze(['unavailable_reader', 'missing', 'empty', 'withheld', 'not_granted', 'unreadable']);
 
-/**
- * D4667-p4 — read keys whose evidence exists only for a record the run selects, and that a scheduled session cannot
- * select: a session's target kinds (`agent_duties.target_kind`) have no fund. A skill that requires one runs only on
- * the manual path, whose `record` selects it.
- */
-export const MANUAL_SELECTION_ONLY: readonly string[] = Object.freeze(['fund.performance']);
+/** D7701: document and fund selections are both supported by scheduled sessions. */
+export const MANUAL_SELECTION_ONLY: readonly string[] = Object.freeze([]);
 
 /** Which paths could carry this skill's inputs. Static: it asks no reader. */
 export function pathsFor(slug: string, readers: Partial<Record<string, unknown>> = READERS): PathSupport | null {

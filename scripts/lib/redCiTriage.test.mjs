@@ -276,3 +276,12 @@ test('cancelledRun stays out of the way when a job really failed or nothing was 
     { cancelled: false, line: 'no failed job on this run', next: 'No failed job on this run (success).' });
   assert.equal(noFailureNote({ run: { status: 'in_progress', conclusion: null }, jobs: [], head: 'a' }).next, 'No job has failed yet; the run is still going.');
 });
+
+test('D5505: runner status lines resolve through the catalog and do not duplicate a child diagnostic', () => {
+  const parsed = parseLog('✖ test-clock: failed\n[guard] check-test-clock: failed; exit=2\n[guard] check-api-drift: blocked; exit=-');
+  assert.deepEqual(parsed.guards.map(g => g.name), ['check-test-clock', 'check-api-drift']);
+  assert.equal(parsed.guards[0].status, 'failed'); assert.equal(parsed.guards[0].exitCode, '2');
+  const scripts = { 'test:guards': 'node scripts/run-guards.mjs' };
+  assert.equal(guardCommand('check-test-clock', scripts), 'node --no-warnings scripts/check-test-clock.mjs');
+  assert.equal(guardCommand('does-not-exist', scripts), null);
+});
