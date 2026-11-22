@@ -37,6 +37,8 @@ test('STATUS, files line, dependencies and slot checks parse deterministically',
   assert.deepEqual(dependenciesOf('Depends on #12. blocked by #7, depends on #12; part of #5577'), [7, 12]);
   assert.deepEqual(checkSlot('s39', new Set(['S39'])), { ok: true, slot: 'S39' });
   assert.deepEqual(checkSlot('slot:S05'), { ok: true, slot: 'S05' });
+  assert.deepEqual(checkSlot('slot:ChatGPTPro'), { ok: true, slot: 'chatgptpro' });
+  assert.deepEqual(checkSlot('S39', new Set()), { ok: true, slot: 'S39' });
   assert.equal(checkSlot('Claude').ok, false);
   assert.equal(checkSlot('S00').ok, false);
   assert.match(checkSlot('S40', new Set(['S01'])).reason, /unknown: no slot:S40 label/);
