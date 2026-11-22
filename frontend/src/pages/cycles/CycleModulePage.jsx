@@ -397,8 +397,11 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search })}
-          {doors}
+          {/* D6038 (#6038): a home that lists its own table gets its query, row control, Export and the tool doors; one
+              that sets `drawsTools` draws those doors itself (Company creation's supporting tools, BD11). */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
+            query, onQuery, rowAction, onExport, tools: toolLinks })}
+          {home.drawsTools ? null : doors}
           {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>
       ) : owned ? children : (

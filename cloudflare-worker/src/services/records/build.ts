@@ -1370,6 +1370,9 @@ const companyCreation: ModuleSpec = {
       const rows: Row[] = [];
       // Decision 9: a Lab row is read-only; its link is a row, not an action.
       if (f.source === 'lab') rows.push({ a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${ctx.projectId}` });
+      // #6038 (D6038, BD27 C): an obligation is set on the company's filing calendar by Axal and changes only there,
+      // so the sheet says where and links the way to ask; the founder's one write is the proof upload.
+      if (f.source === 'obligation') rows.push({ a: 'Set by Axal', b: 'Changed only by Axal: ask Axal to change it', href: '/help/tickets' });
       if (f.forHolderId != null) {
         const holder = await ctx.env.DB.prepare(
           'SELECT id, name FROM cap_table_holders WHERE id = ? AND project_id = ? AND founder_role IS NOT NULL',

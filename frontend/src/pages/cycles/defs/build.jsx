@@ -14,6 +14,7 @@ import MvpSummary from '../MvpSummary';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 import { lazyStep } from '../lazyStep.jsx';
+import CompanyCreationHome from '../CompanyCreationHome.jsx';
 
 // D6028 (#6028, BD1, BD2): Build Overview V2, behind its own lazy boundary.
 const BuildOverview = lazyStep(() => import('../BuildOverview'));
@@ -71,6 +72,16 @@ const build = {
     ),
   }),
   phoneRows: toFnMap({ 'prototype-mvp': mvpPhoneRow }),
+  // D6038 (#6038, BD11, BD25, BD26, BD30): Company creation starts from the company: it owns its page
+  // (D6049's `homes`). The header carries no action; the page's one primary is the nearest-deadline filing,
+  // or Start guided incorporation before any company exists. It draws its own supporting tools (`drawsTools`).
+  homes: toFnMap({
+    'company-creation': (data, ctx) => ({
+      sub: 'Know what company exists, what is still to file and by when, and which papers are on record.',
+      action: null,
+      body: Object.assign((p) => <CompanyCreationHome {...p} data={data} projectId={ctx.projectId} />, { drawsTools: true }),
+    }),
+  }),
   // D6043 (#6043): each module's records list as CSV, with the table's own search, filters and sort.
   exportRecords: (projectId, slug, query) => buildModuleExportApi.exportCsv(projectId, slug, query),
   // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
