@@ -401,3 +401,4 @@ catalogue version only in the fixture.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+| `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |

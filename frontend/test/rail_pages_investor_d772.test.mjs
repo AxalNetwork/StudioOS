@@ -124,7 +124,7 @@ test('Fund: each board draws exactly one rail of its own', () => {
 
 test('Fund: every option of the section names itself on its band', () => {
   const rows = rowsOf('Fund');
-  assert.deepEqual(rows.map((o) => o.key), ['draft:lp-reminder']);
+  assert.deepEqual(rows.map((o) => o.key), ['draft:lp-reminder', 'draft:lp-summary', 'draft:quarterly-letter']); // D6242 added the last two
   assertBandsNamed(rows);
 });
 

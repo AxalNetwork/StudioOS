@@ -86,7 +86,7 @@ const ALLOW = [
     "frontend/src/pages/admin/fundAdmin/performanceModel.js": 5,
     "frontend/src/pages/hq/HqFundsPage.jsx": 1,
     "frontend/src/pages/investor/FundLedgerPanel.jsx": 1,
-    "frontend/src/pages/investor/InvestorFundLPs.jsx": 2,
+    "frontend/src/pages/investor/fundLpRecordModel.js": 2, // D6242: the register's dollar figures, moved from InvestorFundLPs.jsx
     "frontend/src/pages/investor/InvestorFundLanding.jsx": 2,
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
     "frontend/src/pages/investor/fundCallsModel.js": 2,
