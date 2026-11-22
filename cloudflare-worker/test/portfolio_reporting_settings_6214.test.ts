@@ -156,10 +156,10 @@ test('desk period requirements retain their own effective rules and isolate a fa
   const base=await call(w,2);
   await call(w,2,'PUT','/10',{rules:base.body.all_rules.map((r:any)=>({...r,required:0})),revision:base.body.revision,due_days:30});
   const duties:any[]=[{id:1,project_id:5,holder_user_id:2,kind:'monthly_financials',required_figures:'[]'},{id:2,project_id:5,holder_user_id:2,kind:'monthly_financials',required_figures:'not json'}];
-  await resolveDutyPeriodRules(w.env,duties,[{duty_id:1,period_label:'October',period_end:'2026-10-31'},{duty_id:1,period_label:'November',period_end:'2026-11-30'},{duty_id:2,period_label:'October',period_end:'2026-10-31'}],'2026-11-20');
-  assert.ok(duties[0].kpi_rules_by_period.October.includes('revenue'));
-  assert.deepEqual(duties[0].kpi_rules_by_period.November,[]);
-  assert.equal(duties[1].kpi_rules_by_period.October,null);
+  await resolveDutyPeriodRules(w.env,duties,[{id:11,duty_id:1,period_label:'October',period_end:'2026-10-31'},{id:12,duty_id:1,period_label:'October',period_end:'2026-11-30'},{id:21,duty_id:2,period_label:'October',period_end:'2026-10-31'}],'2026-11-20');
+  assert.ok(duties[0].kpi_rules_by_period['11'].includes('revenue'));
+  assert.deepEqual(duties[0].kpi_rules_by_period['12'],[]);
+  assert.equal(duties[1].kpi_rules_by_period['21'],null);
   assert.deepEqual(duties[0].kpi_rules_required,[]);
  }finally{w.db.close();}
 });
@@ -180,4 +180,21 @@ test('holding a company does not expose another fund rule set; custom keys remai
  assert.equal(reportingRuleFundId({held:[5],funds:[10]},10),10);
  assert.equal(reportingRuleFundId({held:null,funds:[]},20),20);
  assert.deepEqual(requiredFiguresOf({kind:'monthly_financials',kpi_rules_required:['net_burn','custom_units']}),['net_burn']);
+});
+
+
+test('historical duty reads use bounded queries and a bad legacy seed aborts migration',async()=>{
+ const w=world();try{
+  let queries=0;const original=w.env.DB;
+  w.env.DB={...original,prepare(sql:string){if(sql.includes('FROM portfolio_positions p')||sql.includes('FROM portfolio_reporting_rule_sets h'))queries+=1;return original.prepare(sql);}};
+  const duties=Array.from({length:6},(_,i)=>({id:i+1,project_id:5,holder_user_id:2,kind:'quarterly_kpi',required_figures:'[]'}));
+  const periods=duties.flatMap(d=>Array.from({length:24},(_,i)=>({id:d.id*100+i,duty_id:d.id,period_label:'Repeated display label',period_end:`${2024+Math.floor(i/12)}-${String(i%12+1).padStart(2,'0')}-28`})));
+  await resolveDutyPeriodRules(w.env,duties,periods,'2026-11-20');assert.equal(queries,2,'one book read and one complete rule-history read, independent of 144 periods');
+ }finally{w.db.close();}
+ const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});try{
+  const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');db.exec(tableFromBaseline(baseline,'portfolio_kpi_definitions'));
+  db.exec("INSERT INTO portfolio_kpi_definitions(kpi_key,name,required) VALUES('revenue','Revenue',2)");
+  const migration=readdirSync(new URL('../sql/migrations/',import.meta.url)).find(n=>n.endsWith('_6214_portfolio_reporting_rule_history.sql'))!;
+  assert.throws(()=>db.exec(readFileSync(new URL(`../sql/migrations/${migration}`,import.meta.url),'utf8')),/Reporting rules need repair/);
+ }finally{db.close();}
 });

@@ -129,7 +129,7 @@ function periodsWithState(duties: DutyRow[], periods: PeriodRow[], day: string) 
       expected_on: p.expected_on, expected_note: p.expected_note, waived_at: p.waived_at, sent_at: p.met_at, ...s,
       // D1061: the report that met it, so the reader can open it; null until it is sent.
       report_uid: p.report_uid ?? null,
-      kpi_rules_required: d.kpi_rules_by_period?.[p.period_label] ?? null,
+      kpi_rules_required: d.kpi_rules_by_period?.[String(p.id)] ?? null,
     };
   });
 }

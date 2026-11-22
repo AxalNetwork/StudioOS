@@ -638,6 +638,7 @@ r.get('/kpi-compliance', async (c) => {
       period_default: asked ? null : 'last_completed',
       period_now: currentPeriod(cadence, today),
       timezone: 'UTC',
+      rules_basis: scope.held === null ? 'all_funds' : scope.funds.length ? 'managed_funds' : 'firm_wide',
       kpi_set: defs.results || [],
       companies,
       reported_count: reported,

@@ -5,10 +5,10 @@ export function validateReportingRules(raw: unknown): ReportingRule[] {
  if (!Array.isArray(raw) || raw.length > 100) throw new Error('Choose at most 100 figures.');
  const seen = new Set<string>();
  return raw.map((r: any,index) => {
-  if (!r || typeof r !== 'object' || !/^[a-z][a-z0-9_]{0,63}$/.test(r.kpi_key) || ['constructor','prototype'].includes(r.kpi_key) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100
+  if (!r || typeof r !== 'object' || !/^[a-z][a-z0-9_]{0,63}$/.test(r.kpi_key) || ['constructor','prototype'].includes(r.kpi_key) || typeof r.name !== 'string' || !r.name.trim() || Array.from(r.name.trim()).length > 100
    || !['monthly','quarterly'].includes(r.cadence) || ![0,1].includes(r.required)
-   || typeof r.applies_to !== 'string' || !r.applies_to.trim() || r.applies_to.length > 100
-   || ![r.definition,r.unit].every(v => v === null || typeof v === 'string' && v.length <= 1000)) throw new Error('A figure is invalid. Check its key, name, cadence, scope and required state.');
+   || typeof r.applies_to !== 'string' || !r.applies_to.trim() || Array.from(r.applies_to.trim()).length > 100
+   || ![r.definition,r.unit].every(v => v === null || typeof v === 'string' && Array.from(v).length <= 1000)) throw new Error('A figure is invalid. Check its key, name, cadence, scope and required state.');
   if(seen.has(`${r.cadence}:${r.kpi_key}`))throw new Error(`The key ${r.kpi_key} is used by more than one figure.`);
   seen.add(`${r.cadence}:${r.kpi_key}`);
   return { kpi_key:r.kpi_key,name:r.name.trim(),definition:r.definition,unit:r.unit,cadence:r.cadence,required:r.required,applies_to:r.applies_to.trim(),sort_order:index };
@@ -31,30 +31,51 @@ export async function readReportingRules(env: Env, fundId: number|null, cadence:
   rules:allRules.filter(r=>r.cadence===cadence), all_rules:allRules };
 }
 
+/** Request-local caches keep the desk query count independent of the number of periods. */
+export const reportingRulesCache = () => ({books:new Map<string,Promise<any[]>>(),history:new Map<string,Promise<any[]>>()});
+async function cachedReportingRules(env: Env,fundId:number|null,cadence:'monthly'|'quarterly',period:string,cache:ReturnType<typeof reportingRulesCache>) {
+ const key=String(fundId);
+ if(!cache.history.has(key))cache.history.set(key,(async()=>{
+  const result=await env.DB.prepare(`SELECT h.*,u.name AS updated_by_name FROM portfolio_reporting_rule_sets h LEFT JOIN users u ON u.id=h.updated_by
+   WHERE h.fund_id IS ? OR h.fund_id IS NULL ORDER BY (h.fund_id IS ?) DESC,h.id DESC`).bind(fundId,fundId).all<any>();
+  if(result.success!==true)throw new Error('Reporting rules unreadable');
+  return result.results;
+ })());
+ const column=cadence==='monthly'?'effective_month':'effective_quarter';
+ const row=(await cache.history.get(key)!).find(r=>r[column]<=period);
+ if(!row)throw new Error('Reporting rules not initialized');
+ return {rules:validateReportingRules(JSON.parse(row.rules_json)).filter(r=>r.cadence===cadence)};
+}
+
 /** Rules behind an unsigned figure list; a signed document's explicit figures always win. */
-export async function dutyReportingRuleKeys(env: Env, duty: { kind: string; required_figures?: string|null; project_id: number; holder_user_id: number|null }, day: string) {
+export async function dutyReportingRuleKeys(env: Env, duty: { kind: string; required_figures?: string|null; project_id: number; holder_user_id: number|null }, day: string, cache = reportingRulesCache()) {
  if (!['monthly_financials','quarterly_kpi'].includes(duty.kind)) return [];
  let named: unknown; try { named=JSON.parse(duty.required_figures||'[]'); } catch { throw new Error('Reporting duty unreadable'); }
  if(Array.isArray(named)&&named.length)return [];
- const positions=await env.DB.prepare(`SELECT DISTINCT p.fund_id,pr.stage FROM portfolio_positions p JOIN projects pr ON pr.id=p.project_id
+ const bookKey=`${duty.project_id}:${duty.holder_user_id}`;
+ if(!cache.books.has(bookKey))cache.books.set(bookKey,(async()=>{
+  const positions=await env.DB.prepare(`SELECT DISTINCT p.fund_id,pr.stage FROM portfolio_positions p JOIN projects pr ON pr.id=p.project_id
  JOIN vc_funds f ON f.id=p.fund_id WHERE p.project_id=? AND f.gp_user_id=?`).bind(duty.project_id,duty.holder_user_id).all<any>();
- if(positions.success!==true)throw new Error('Reporting book unreadable');
- const funds=positions.results.length?positions.results:[{fund_id:null,stage:null}];
+  if(positions.success!==true)throw new Error('Reporting book unreadable');
+  return positions.results.length?positions.results:[{fund_id:null,stage:null}];
+ })());
+ const funds=await cache.books.get(bookKey)!;
  const cadences: Array<'monthly'|'quarterly'>=duty.kind==='monthly_financials'?['monthly']:['monthly','quarterly'];
  const keys: string[]=[];
  for(const fund of funds)for(const cadence of cadences){
-  const set=await readReportingRules(env,fund.fund_id,cadence,reportingPeriodNow(cadence,day));
+  const set=await cachedReportingRules(env,fund.fund_id,cadence,reportingPeriodNow(cadence,day),cache);
   for(const rule of set.rules)if(rule.required&&(rule.applies_to==='all'||rule.applies_to===fund.stage))keys.push(rule.kpi_key);
  }
  return [...new Set(keys)];
 }
 
 /** Resolve each measured period independently; one failed set never erases another duty. */
-export async function resolveDutyPeriodRules(env: Env, duties: Array<{id:number;project_id:number;holder_user_id:number|null;kind:string;required_figures?:string|null;kpi_rules_required?:string[]|null;kpi_rules_by_period?:Record<string,string[]|null>}>, periods: Array<{duty_id:number;period_label:string;period_end:string}>, day: string) {
+export async function resolveDutyPeriodRules(env: Env, duties: Array<{id:number;project_id:number;holder_user_id:number|null;kind:string;required_figures?:string|null;kpi_rules_required?:string[]|null;kpi_rules_by_period?:Record<string,string[]|null>}>, periods: Array<{id:number;duty_id:number;period_label:string;period_end:string}>, day: string) {
+ const cache=reportingRulesCache();
  await Promise.all(duties.map(async duty => {
-  const read = async (date: string) => { try { return await dutyReportingRuleKeys(env,duty,date); } catch { return null; } };
+  const read = async (date: string) => { try { return await dutyReportingRuleKeys(env,duty,date,cache); } catch { return null; } };
   duty.kpi_rules_required = await read(day);
-  duty.kpi_rules_by_period = Object.fromEntries(await Promise.all(periods.filter(p=>p.duty_id===duty.id).map(async p=>[p.period_label,await read(p.period_end)])));
+  duty.kpi_rules_by_period = Object.fromEntries(await Promise.all(periods.filter(p=>p.duty_id===duty.id).map(async p=>[String(p.id),await read(p.period_end)])));
  }));
 }
 

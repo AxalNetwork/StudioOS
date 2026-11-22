@@ -13,19 +13,19 @@ CREATE INDEX IF NOT EXISTS idx_portfolio_rule_history ON portfolio_reporting_rul
 -- Fail the migration on incompatible legacy rows instead of deploying an unreadable set.
 CREATE TRIGGER IF NOT EXISTS portfolio_reporting_rules_validate BEFORE INSERT ON portfolio_reporting_rule_sets
 BEGIN
- SELECT CASE WHEN json_type(NEW.rules_json) != 'array' OR json_array_length(NEW.rules_json)>100
+ SELECT RAISE(ABORT,'Reporting rules need repair before migration or save') WHERE json_type(NEW.rules_json) != 'array' OR json_array_length(NEW.rules_json)>100
  OR EXISTS (SELECT 1 FROM json_each(NEW.rules_json) r WHERE
    json_type(r.value,'$.kpi_key') IS NOT 'text' OR length(json_extract(r.value,'$.kpi_key')) NOT BETWEEN 1 AND 64
    OR json_extract(r.value,'$.kpi_key') GLOB '*[^a-z0-9_]*' OR json_extract(r.value,'$.kpi_key') NOT GLOB '[a-z]*'
    OR json_extract(r.value,'$.kpi_key') IN ('constructor','prototype')
-   OR json_type(r.value,'$.name') IS NOT 'text' OR length(trim(json_extract(r.value,'$.name'))) NOT BETWEEN 1 AND 100
+   OR json_type(r.value,'$.name') IS NOT 'text' OR length(trim(json_extract(r.value,'$.name'),char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))) NOT BETWEEN 1 AND 100
    OR json_extract(r.value,'$.cadence') NOT IN ('monthly','quarterly') OR json_type(r.value,'$.cadence') IS NOT 'text'
    OR json_extract(r.value,'$.required') NOT IN (0,1) OR json_type(r.value,'$.required') IS NOT 'integer'
-   OR json_type(r.value,'$.applies_to') IS NOT 'text' OR length(trim(json_extract(r.value,'$.applies_to'))) NOT BETWEEN 1 AND 100
-   OR json_type(r.value,'$.definition') NOT IN ('text','null') OR length(json_extract(r.value,'$.definition'))>1000
-   OR json_type(r.value,'$.unit') NOT IN ('text','null') OR length(json_extract(r.value,'$.unit'))>1000)
+   OR json_type(r.value,'$.applies_to') IS NOT 'text' OR length(trim(json_extract(r.value,'$.applies_to'),char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))) NOT BETWEEN 1 AND 100
+   OR (json_type(r.value,'$.definition') IS NOT 'text' AND json_type(r.value,'$.definition') IS NOT 'null') OR length(json_extract(r.value,'$.definition'))>1000
+   OR (json_type(r.value,'$.unit') IS NOT 'text' AND json_type(r.value,'$.unit') IS NOT 'null') OR length(json_extract(r.value,'$.unit'))>1000)
  OR EXISTS (SELECT 1 FROM json_each(NEW.rules_json) GROUP BY json_extract(value,'$.cadence'),json_extract(value,'$.kpi_key') HAVING count(*)>1)
- THEN RAISE(ABORT,'Reporting rules need repair before migration or save') END;
+;
 END;
 
 INSERT INTO portfolio_reporting_rule_sets(fund_id,rules_json,effective_month,effective_quarter)

@@ -1,4 +1,4 @@
-import { dutyReportingRuleKeys } from '../services/portfolioReportingRules';
+import { dutyReportingRuleKeys, reportingRulesCache } from '../services/portfolioReportingRules';
 /**
  * D1059 (#2929, part 3 of #2427) — a report built from the Grow modules, sent
  * with frozen figures, corrected as a new revision, with its statements.
@@ -127,7 +127,8 @@ async function windowPeriods(env: Env, projectId: number, start: string, end: st
        FROM reporting_periods p JOIN reporting_duties d ON d.id = p.duty_id LEFT JOIN users u ON u.id = d.holder_user_id
       WHERE d.project_id = ? AND d.status = 'active' AND p.period_start = ? AND p.period_end = ? ORDER BY p.id`,
   ).bind(projectId, start, end).all<PeriodRow>()).results || [];
-  return Promise.all(rows.map(async p => ({...p, kpi_rules_required: await dutyReportingRuleKeys(env,{...p,project_id:projectId},p.period_end)})));
+  const cache=reportingRulesCache();
+  return Promise.all(rows.map(async p => ({...p, kpi_rules_required: await dutyReportingRuleKeys(env,{...p,project_id:projectId},p.period_end,cache)})));
 }
 const isOpen = (p: PeriodRow) => p.met_update_id == null && !p.waived_at;
 const requiredOf = (periods: PeriodRow[]) => new Set(periods.flatMap((p) => requiredFiguresOf(p)));

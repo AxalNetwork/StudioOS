@@ -122,6 +122,7 @@ function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, 
   const head = (
     <div className="pf-card-head">
       <h2 id="pf-inbox-title">Reporting obligations</h2>
+      {reads.compliance.value?.rules_basis==='firm_wide'&&<span className="pf-sm">Reporting uses firm-wide collection rules for this view.</span>}
       {inbox.state === 'ok' ? <span className="pf-sm">{inbox.period ? `${inbox.period} · ` : ''}{inbox.cadence ? `${inbox.cadence} cadence` : 'cadence not recorded'}{inbox.inProgress ? ' · period in progress' : ''}</span> : null}
     </div>
   );
