@@ -34,8 +34,8 @@ export async function formationPack(env: Env, formKey: string, options: {
 }): Promise<ObligationPackItem[]> {
   const versionId = options.versionId ?? (await currentVersion(env))?.id;
   if (!versionId) return [];
-  const form = await env.DB.prepare('SELECT id FROM formation_entity_forms WHERE version_id = ? AND form_key = ?')
-    .bind(versionId, formKey).first<{ id: number }>();
+  const form = await env.DB.prepare(`SELECT f.id, j.country FROM formation_entity_forms f JOIN formation_jurisdictions j ON j.id = f.jurisdiction_id AND j.version_id = f.version_id WHERE f.version_id = ? AND f.form_key = ?`)
+    .bind(versionId, formKey).first<{ id: number; country: string }>();
   if (!form) return [];
   const rows = (await env.DB.prepare(`SELECT p.item_key, p.title, p.obligation_phase, p.event_kind, p.recurrence,
       p.due_rule_json, p.source_id, p.checked_on FROM formation_pack_items p
@@ -49,7 +49,7 @@ export async function formationPack(env: Env, formKey: string, options: {
     }
     const due = packDue(rule, options.today, options.registeredOn ?? null);
     return { key: row.item_key, title: row.title, description: null, phase: row.obligation_phase,
-      kind: kinds.has(row.event_kind) && !(row.event_kind === 'franchise_tax' && !formKey.startsWith('us_')) ? row.event_kind : 'other',
+      kind: kinds.has(row.event_kind) && !(row.event_kind === 'franchise_tax' && form.country !== 'US') ? row.event_kind : 'other',
       recurrence: cadences.has(row.recurrence) ? row.recurrence : 'one_time', rule,
       source_id: row.source_id ?? null, checked_on: row.checked_on ?? null, due_date: due,
       reminders: options.projectId != null && due != null };
@@ -68,7 +68,7 @@ export async function formationPack(env: Env, formKey: string, options: {
     const rule = fact.status === 'recorded' && fact.source_id != null && date(fact.checked_on) ? spec : null;
     const due = packDue(rule, options.today, options.registeredOn ?? null);
     out.push({ key, title: spec.title, description: rule != null && typeof spec.description === 'string' ? spec.description : null,
-      phase: 'ongoing', kind: kinds.has(spec.event_type) && !(spec.event_type === 'franchise_tax' && !formKey.startsWith('us_')) ? spec.event_type : 'other',
+      phase: 'ongoing', kind: kinds.has(spec.event_type) && !(spec.event_type === 'franchise_tax' && form.country !== 'US') ? spec.event_type : 'other',
       recurrence: cadences.has(spec.recurrence) ? spec.recurrence : 'one_time', rule,
       source_id: fact.source_id ?? null, checked_on: fact.checked_on ?? null, due_date: due,
       reminders: options.projectId != null && due != null });

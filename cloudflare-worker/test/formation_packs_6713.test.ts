@@ -15,7 +15,7 @@ function fixture(companyOnly = false, formKey = 'us_de_ccorp') {
     INSERT INTO projects(id,name,company_id) VALUES (6713,'Synthetic project',6713);
     INSERT INTO company_profiles(id,uid,company_name) VALUES (6713,'company-packs-6713','Synthetic company');
     INSERT INTO formation_catalogue_versions(id,version,status) VALUES (6713,6713,'draft');
-    INSERT INTO formation_jurisdictions(id,version_id,country) VALUES (6713,6713,'US');
+    INSERT INTO formation_jurisdictions(id,version_id,country) VALUES (6713,6713,'${formKey === 'uk_ltd' ? 'GB' : 'US'}');
     INSERT INTO formation_entity_forms(id,version_id,jurisdiction_id,form_key,label) VALUES (6713,6713,6713,'${formKey}','Synthetic form');
     INSERT INTO formation_sources(id,kind,title,url) VALUES (6713,'registry','Synthetic test evidence','https://example.test/pack');`);
   db.prepare(`INSERT INTO formation_cases(id,uid,user_id,intent,project_id,company_id,track,stage,form_key,catalogue_version_id,hq_owner_user_id)
@@ -97,6 +97,8 @@ test('UK franchise-tax legacy kinds are other, labels survive, and forms without
     const pack = await formationPack(f.env, 'uk_ltd', { versionId: 6713, today: ON, registeredOn: ON });
     assert.equal(pack[0].kind, 'other');
     assert.equal(pack[0].title, 'Corporation tax (CT600)');
+    f.db.exec("UPDATE formation_entity_forms SET form_key='us_named_but_gb' WHERE id=6713");
+    assert.equal((await formationPack(f.env, 'us_named_but_gb', { versionId: 6713, today: ON, registeredOn: ON }))[0].kind, 'other', 'jurisdiction is read from the catalogue, never guessed from a slug');
     assert.deepEqual(await formationPack(f.env, 'not_a_form', { versionId: 6713, today: ON }), []);
   } finally { f.close(); }
 });
