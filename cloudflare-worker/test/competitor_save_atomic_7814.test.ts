@@ -65,9 +65,13 @@ test('a version changing between read and batch holds all guarded writes and the
 test('candidate validation happens before its one write and the subject is refused on both save paths', async t => {
   const db = fixture(); t.after(() => db.close());
   for (const path of ['', '/candidates/c1']) {
-    const before = state(db); const edits = { id: 'c1', name: 'Valid rename', category: 'invalid' };
-    const invalid = path ? edits : { base_version: 1, title: 'Should not persist', candidates: [edits] };
-    assert.equal((await call(db, path, invalid)).status, 400); assert.deepEqual(state(db), before);
+    const before = state(db);
+    for (const category of ['invalid', ['direct'], { value: 'direct' }]) {
+      const edits = { id: 'c1', name: 'Valid rename', category };
+      const invalid = path ? edits : { base_version: 1, title: 'Should not persist', candidates: [edits] };
+      assert.equal((await call(db, path, invalid)).status, 400, `${path}: ${JSON.stringify(category)}`);
+      assert.deepEqual(state(db), before);
+    }
     const self = path ? { name: ' Subject ' } : { base_version: 1, candidates: [{ id: 'c1', name: 'Subject' }] };
     const refused = await call(db, path, self); assert.equal(refused.status, 400); assert.equal(refused.body.error, 'subject_not_candidate'); assert.deepEqual(state(db), before);
   }

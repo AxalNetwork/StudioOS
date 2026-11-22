@@ -778,7 +778,7 @@ competitors.patch('/:id/candidates/:cid', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   if (!['name', 'category', 'summary'].some(field => field in body)) return c.json({ error: 'Nothing on this company was sent to save.' }, 400);
   if (('name' in body && (typeof body.name !== 'string' || !body.name.trim()))
-    || ('category' in body && !['direct', 'adjacent'].includes(String(body.category)))
+    || ('category' in body && (typeof body.category !== 'string' || !['direct', 'adjacent'].includes(body.category)))
     || ('summary' in body && typeof body.summary !== 'string')) return c.json({ error: 'Name and summary must be text; category is direct or adjacent.' }, 400);
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : null;
   const inputs = safeParse(owned[0].inputs_json, {}) as AnalysisInputs;
