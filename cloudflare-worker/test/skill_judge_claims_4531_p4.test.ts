@@ -33,8 +33,8 @@ const refused = (claims: unknown) => {
   if (!r.ok) { assert.equal(r.code, 'case_invalid'); assert.match(r.message, /^Give claims as \{ required: \[\.\.\.\], forbidden: \[\.\.\.\] \}, each claim \{ subject, object, because\?, conditional\? \}/); }
 };
 
-test('the evaluator is version 4', () => {
-  assert.equal(JUDGE_VERSION, 4);
+test('the evaluator is version 5', () => {
+  assert.equal(JUDGE_VERSION, 5);
   assert.deepEqual([...CAUSE_MARKS], ['because', 'since', 'due to', 'owing to', 'given that', 'as a result of', 'for lack of', 'for want of']);
 });
 

@@ -15,6 +15,7 @@ import { proposeRail } from '../railProposals';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
 import { putRecordOrThrow } from '../recordStore';
 import { eraseRecordObjects } from '../recordErasure';
+import { requireCapability } from '../agentCapabilities';
 
 type ComputeEnv = Env & { AGENT_COMPUTE_HOST?: Fetcher; AGENT_COMPUTE_POLICY_JSON?: string };
 export type ComputePolicy = { template: Pick<WorkspaceSpec, 'image_digest' | 'repo_id' | 'base_sha' | 'cpu' | 'allowed_regions' | 'max_cost_microusd'>;
@@ -69,6 +70,9 @@ export async function createComputeRequest(env: ComputeEnv, user: User, taskId: 
   if (!computeConfigured(env)) throw computeFailure('compute_off', 404);
   const { task, agent } = await computeTask(env, taskId, user);
   if (user.id !== agent.sponsor_user_id || task.status !== 'open' || task.source_kind !== 'manual') throw computeFailure('compute_task_not_open');
+  // D8070: dispatching a compute job is the agent's cloud.read.
+  const capable = await requireCapability(env, agent, 'cloud.read');
+  if (!capable.ok) throw computeFailure(capable.code, capable.status);
   const input = raw as { workload: Workload; operation: string; inputs: { name: string; bytes: number }[] };
   const bad = inputsRefusal(input?.workload, input?.inputs);
   if (bad) throw computeFailure(bad.code, bad.status);
@@ -115,7 +119,7 @@ export async function uploadComputeInput(env: ComputeEnv, user: User, requestUid
     ON CONFLICT DO NOTHING`).bind(objectUid, request.uid, user.id, name, key, bytes.length, sha256,
     sqlTime(Date.now() + computePolicy(env)!.artifact_ttl_s * 1000), request.uid).run();
   // D4557 keeps no compute bytes without their row; the object this call just created goes through the one erasure path.
-  if (!Number(saved.meta?.changes)) { await eraseRecordObjects(files(env), key, 'unreferenced'); throw computeFailure('compute_upload_conflict'); }
+  if (!Number(saved.meta?.changes)) { await eraseRecordObjects(files(env), key, 'unreferenced', { db: env.DB }); throw computeFailure('compute_upload_conflict'); }
   await noteStorageLanded(env, ticket);
   return { uid: objectUid };
 }
@@ -286,7 +290,7 @@ export async function computeInternal(env: ComputeEnv, action: string, jobUid: s
   } catch (error) {
     // D4557: a cancelled, revoked or losing completion retains no output bytes. Each key here was created by this call
     // (putRecordOrThrow refuses an existing key), so D6651's one erasure path removes it as unreferenced.
-    for (const key of keys) { await eraseRecordObjects(files(env), key, 'unreferenced'); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE r2_key = ?').bind(key).run(); }
+    for (const key of keys) { await eraseRecordObjects(files(env), key, 'unreferenced', { db: env.DB }); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE r2_key = ?').bind(key).run(); }
     throw error;
   }
   if (env.AGENT_TASK) {
@@ -334,7 +338,7 @@ export async function sweepComputeObjects(env: Env) {
   const rows = (await env.DB.prepare("SELECT uid, r2_key FROM agent_compute_objects WHERE datetime(expires_at) <= datetime('now') ORDER BY expires_at LIMIT 32")
     .all<Pick<ObjectRow, 'uid' | 'r2_key'>>()).results ?? [];
   // D6651: the retention sweep goes through the one record-erasure path.
-  for (const row of rows) { await eraseRecordObjects(files(env), row.r2_key, 'retention_expired'); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(row.uid).run(); }
+  for (const row of rows) { await eraseRecordObjects(files(env), row.r2_key, 'retention_expired', { db: env.DB }); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(row.uid).run(); }
 }
 
 /** R2 cleanup precedes metadata cascades so erasure never strands unaddressable private objects. */
@@ -369,7 +373,7 @@ export async function eraseComputeData(env: ComputeEnv, where: { userId: number 
         .all<Pick<ObjectRow, 'uid' | 'r2_key'>>()).results ?? [];
       if (!objects.length) break;
       // D6651: erasure goes through the one record-erasure path.
-      for (const object of objects) { await eraseRecordObjects(files(env), object.r2_key, 'erasure_request'); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(object.uid).run(); }
+      for (const object of objects) { await eraseRecordObjects(files(env), object.r2_key, 'erasure_request', { db: env.DB }); await env.DB.prepare('DELETE FROM agent_compute_objects WHERE uid = ?').bind(object.uid).run(); }
     }
     await env.DB.prepare('DELETE FROM agent_compute_requests WHERE uid = ?').bind(request.uid).run();
   }

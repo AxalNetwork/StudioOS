@@ -22,6 +22,7 @@ import { CI_CAPACITY_BUDGETS } from "../../merge-control/src/lib/ciCapacityPolic
 import { resolveCatalogProfile } from "../../scripts/ci/runners/catalog.mjs";
 import { main as admissionMain, admitRunnerJob, githubReadApi } from "../../scripts/ci/runner-admission.mjs";
 import { createReceiptReader, submitCapacity, githubOidcToken } from "../../scripts/ci/capacity-client.mjs";
+import { recoveryStore } from '../../scripts/ci/runners/recovery-store.mjs';
 const REPO = "AxalNetwork/StudioOS", PREFIX = "/repos/" + REPO, SOURCE = "a".repeat(40), EXEC = "b".repeat(40);
 const SHARDS = Array.from({ length: 6 }, (_, i) => `worker-${i + 1}-of-6`);
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -480,10 +481,19 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
   if(jointAuthority){
    dependencies.admissionIsolation=dependencies.verifyIsolation;
    dependencies.executionIsolation=async args=>{liveChecks++;return boundary.live===true&&await dependencies.verifyIsolation(args);};
-   dependencies.job={owned:null,create(identity){this.owned={containerId:'fixture-container',identity};this.onOwned(this.owned);boundary.live=true;},async runCandidateInterruptible({receipt,admitted:live,signal}){
+   // #7905: the supervisor records the owned container in a durable recovery store and removes it only once
+   // the engine reports it gone, so the fixture supplies a real store and an exact-removal answer.
+   dependencies.store=recoveryStore({root:join(dir,'containers'),create:true});
+   // The run-step deadline counts from performance.timeOrigin; this fixture mocks Date, so the step starts on that clock too.
+   const mockedOrigin=Date.now();t.mock.getter(performance,'timeOrigin',()=>mockedOrigin);
+   // No engine runs here, so the trace export is a test double, as runner_supervisor_lifecycle_7905 uses.
+   dependencies.exporter=async()=>({state:'complete'});
+   // #7905: install and test each return a phase result, and the boundary instance is re-checked between them.
+   dependencies.job={owned:null,create(identity){this.owned={version:1,id:'f'.repeat(64),owner:'100-1-1',identity};this.onOwned(this.owned);boundary.live=true;},async runCandidateInterruptible({receipt,admitted:live,signal,phase}){
     if(signal.aborted||!boundary.live||JSON.stringify(receipt)!==JSON.stringify(live.identity))throw new Error('fixture_boundary_denied');
-    if(outcome==='failure')throw new Error('candidate_test_failed');
-   },cleanup(){this.owned=null;boundary.live=false;}};
+    const failed=phase==='test'&&outcome==='failure';
+    return {phase,status:failed?'failure':'success',exitCode:failed?23:0,signal:null};
+   },boundaryIdentity(){return boundary.live?{containerId:'f'.repeat(64)}:null;},cleanup(){this.owned=null;boundary.live=false;},verifyRemoved(){return this.owned===null&&boundary.live===false;}};
   }
   t.diagnostic(jointAuthority?'actual S09 authority and container entrypoints':'base entrypoints with real reader/catalog');
   const code=await admissionMain(env,dependencies);
@@ -524,7 +534,8 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
    await f.control().fetch(new Request('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'}));
    await assert.rejects(executionMain('run',cliEnv,dependencies),/superseded_before_execution/);
   }else{
-   assert.equal(await executionMain('run',cliEnv,dependencies),outcome==='failure'?(jointAuthority?1:23):0);
+   // A real test failure exits with the test's own code on both paths (#7905 classifyOutcome).
+   assert.equal(await executionMain('run',cliEnv,dependencies),outcome==='failure'?23:0);
    if(jointAuthority)assert.equal(liveChecks>0,true);
   }
   if(outcome==='revoked')await f.control().fetch(new Request('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'}));

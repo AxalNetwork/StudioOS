@@ -47,7 +47,7 @@ const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:b
 const ICON = 'inline-flex h-10 min-w-[36px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-2 text-axal-ink hover:bg-axal-ground aria-disabled:cursor-not-allowed aria-disabled:text-axal-muted max-sm:min-h-[44px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 dark:aria-disabled:text-gray-500';
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep dark:bg-violet-600 dark:hover:bg-violet-500`;
 
-export default function DeckToolbar({ chip, preflight = null, presentTo = null, readOnly = false, phone = false, onAction, labels, outOfTokens = false, waiting = null, history = null, editors = null, youId = null, showMore = true, reviewTo = null, testId = 'deck-toolbar' }) {
+export default function DeckToolbar({ chip, preflight = null, presentTo = null, readOnly = false, phone = false, onAction, labels, outOfTokens = false, waiting = null, history = null, editors = null, youId = null, showMore = true, reviewTo = null, showExport = false, testId = 'deck-toolbar' }) {
   const [share, setShare] = useState(false);
   const avatars = avatarsOf(editors, youId);
   const editing = editingLine(editors, youId);
@@ -97,7 +97,7 @@ export default function DeckToolbar({ chip, preflight = null, presentTo = null, 
         <Link className={GHOST} to={presentTo} data-testid={`${testId}-present`}><Play size={13} aria-hidden="true" /> Present</Link>
       ) : null}
       {reviewTo && !phone ? <Link className={GHOST} to={reviewTo}>Review</Link> : null}
-      {reviewTo && !readOnly && !phone ? <button type="button" className={GHOST} onClick={()=>onAction?.('export')} data-testid="deck-toolbar-export">Export</button> : null}
+      {showExport && !readOnly && !phone ? <button type="button" className={GHOST} onClick={()=>onAction?.('export')} data-testid="deck-toolbar-export">Export</button> : null}
       {!readOnly && !phone ? (
         <div className="relative" ref={menu.box} onKeyDown={menu.onKeyDown} onBlur={menu.onBlur}>
           <button type="button" ref={menu.opener} className={GHOST} aria-haspopup="menu" aria-expanded={share} onClick={() => setShare((s) => !s)} data-testid={`${testId}-share`}>
