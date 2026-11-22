@@ -388,3 +388,18 @@ test('D6688: absent company access is Refused, a failed company read is Unavaila
     } finally { await view.close(); }
   }
 });
+
+
+test('D6688: a legal-facts refusal never becomes an unavailable read or opens the editor', async () => {
+  const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', formation_state: 'not_incorporated' };
+  for (const [status, body, expected] of [[403, {}, 'Refused'], [404, {}, 'Refused'], [200, { can_edit: false }, 'Refused'], [200, { can_edit: true, archived: true }, 'Refused'], [503, {}, 'Unavailable'], [200, { can_edit: 1 }, 'Unavailable'], [200, { can_edit: true }, 'Edit legal facts']]) {
+    const view = await mount('/incorporate', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }), 'GET /api/company/fixture_co/legal': () => response(body, status) }) });
+    try {
+      await view.change('incorporate-subject-company:fixture_co', true);
+      await view.clickText('Already incorporated? Record its legal facts');
+      assert.match(view.text(), new RegExp(expected));
+      assert.equal(view.has('legal-sheet'), expected === 'Edit legal facts');
+      assert.deepEqual(view.writes(), []);
+    } finally { await view.close(); }
+  }
+});

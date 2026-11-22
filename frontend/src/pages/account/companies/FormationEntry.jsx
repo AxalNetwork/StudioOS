@@ -37,8 +37,8 @@ export default function FormationEntry({ entry, name, uid, project = false, onRe
     const result = await portfolio.legal(uid);
     if (currentUid.current !== uid) return;
     setBusy(false);
-    if (result.available && result.value?.can_edit && !result.value.archived) setLegal(result.value);
-    else setError(true);
+    if (result.available && result.value?.can_edit === true && !result.value.archived) setLegal(result.value);
+    else setError(result.refused || result.notFound || (result.available && (result.value?.can_edit === false || result.value?.archived)) ? 'refused' : 'unavailable');
   };
   if (entry?.state === 'loading') return <p aria-busy="true">Reading incorporation status…</p>;
   if (entry?.state === 'refused') return <DataState state="refused" reason="This company is not available to this account." />;
@@ -49,7 +49,7 @@ export default function FormationEntry({ entry, name, uid, project = false, onRe
   return <div className="flex flex-col items-start gap-2" data-testid="formation-entry">
     {!legalOnly && <Link className={`${BTN_TEXT} min-h-11`} to={entry.href} data-testid={testId}>{project ? 'Convert this project into a company' : `Incorporate ${name}`}</Link>}
     {!project && <button type="button" className={`${BTN_TEXT} min-h-11`} disabled={busy} onClick={editLegal}>{busy ? 'Reading legal facts…' : 'Already incorporated? Record its legal facts'}</button>}
-    {error && <Unreadable what="The editable legal facts" onRetry={editLegal} />}
+    {error === 'refused' ? <DataState state="refused" reason="The legal facts are not available for editing on this account." /> : error && <Unreadable what="The editable legal facts" onRetry={editLegal} />}
     {legal && <LegalSheet uid={uid} companyName={name} legal={legal} onClose={() => setLegal(null)} onSaved={() => { setLegal(null); onSaved(); }} />}
   </div>;
 }
