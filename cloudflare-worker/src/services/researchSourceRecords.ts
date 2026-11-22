@@ -310,16 +310,18 @@ export const SQL = Object.freeze({
   // Counts are recomputed from the run's own rows, so a replayed chunk never counts twice.
   updateCounts: `UPDATE research_source_runs SET
     counts_json = json_object(
-      'outcomes', COALESCE((SELECT json_group_object(outcome, n) FROM (SELECT outcome, COUNT(*) AS n
-        FROM research_source_run_records WHERE run_uid = ?1 GROUP BY outcome)), json('{}')),
+      -- json() around each COALESCE: a JSON subtype does not survive a scalar subquery on every SQLite, and without
+      -- it json_object would store the object as a quoted string.
+      'outcomes', json(COALESCE((SELECT json_group_object(outcome, n) FROM (SELECT outcome, COUNT(*) AS n
+        FROM research_source_run_records WHERE run_uid = ?1 GROUP BY outcome)), '{}')),
       'hash_checked', (SELECT COUNT(*) FROM research_source_run_records WHERE run_uid = ?1 AND hash_checked = 1),
-      'cells', COALESCE((SELECT json_group_object(source_key, json(cols)) FROM (
+      'cells', json(COALESCE((SELECT json_group_object(source_key, json(cols)) FROM (
         SELECT source_key, json_group_object(col, json(kinds)) AS cols FROM (
           SELECT source_key, col, json_object('stored', SUM(kind = 's'), 'withheld', SUM(kind = 'w'), 'blank', SUM(kind = 'b')) AS kinds
           FROM (SELECT rr.source_key AS source_key, je.key AS col, je.value AS kind
             FROM research_source_run_records rr, json_each(rr.cells_json) je WHERE rr.run_uid = ?1)
           GROUP BY source_key, col)
-        GROUP BY source_key)), json('{}'))),
+        GROUP BY source_key)), '{}'))),
     status = CASE WHEN status = 'uncertain' AND NOT EXISTS
       (SELECT 1 FROM json_each(uncertain_chunks_json) WHERE value != ?2) THEN 'running' ELSE status END,
     uncertain_chunks_json = COALESCE((SELECT json_group_array(value) FROM json_each(uncertain_chunks_json) WHERE value != ?2), '[]')
