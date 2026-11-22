@@ -12,6 +12,12 @@ test('PS04 section headings follow real card runs without changing selection ind
  assert.equal((html.match(/data-testid="pitch-card-section"/g)||[]).length,2);assert.ok(html.indexOf('Story')<html.indexOf('Problem'));assert.ok(html.indexOf('Market')<html.indexOf('Appendix'));assert.match(html,/aria-current="true"/);
 });
 test('PS04 document toolbar leaves editing tools in the inspector and retains Share/Export gate callbacks',async()=>{
- const calls=[];const m=await mountForm(h(DeckToolbar,{chip:{text:'Saved'},history:{undo:1,redo:0},showMore:false,reviewTo:'/raise/pitch/review?project_id=7',presentTo:'/raise/pitch/present?project_id=7',onAction:id=>calls.push(id)}));
+ const calls=[];const m=await mountForm(h(DeckToolbar,{chip:{text:'Saved'},history:{undo:1,redo:0},showMore:false,showExport:true,reviewTo:'/raise/pitch/review?project_id=7',presentTo:'/raise/pitch/present?project_id=7',onAction:id=>calls.push(id)}));
  try{assert.equal(m.by('deck-more-open'),undefined);assert.ok(m.text().includes('Review'));await m.click('Export');assert.deepEqual(calls,['export']);await m.click('Share');assert.ok(m.text().includes('Export…'));}finally{await m.unmount();}
+});
+
+test('Export is independent of the optional Review link and unavailable to a reader or phone',()=>{
+ const render=props=>draw(h(DeckToolbar,{showExport:true,...props}));
+ assert.match(render({}),/data-testid="deck-toolbar-export"/);
+ for(const props of [{readOnly:true},{phone:true},{showExport:false,reviewTo:'/review'}]) assert.doesNotMatch(render(props),/data-testid="deck-toolbar-export"/);
 });

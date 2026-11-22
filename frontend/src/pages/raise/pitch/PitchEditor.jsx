@@ -266,7 +266,7 @@ export default function PitchEditor() {
     actionRef.current?.(id);
   }, [readOnly, editorOn]);
   const tools = current?.id ? (
-    <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} preflight={chrome?.preflight ?? null} readOnly={readOnly} phone={phone} showMore={phone || !chrome} reviewTo={`/raise/pitch/review${ventureQuery(projectId)}`}
+    <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} preflight={chrome?.preflight ?? null} readOnly={readOnly} phone={phone} showMore={phone || !chrome} showExport reviewTo={`/raise/pitch/review${ventureQuery(projectId)}`}
       onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} history={chrome?.history ?? null}
       editors={presence.editors} youId={youId} />
   ) : null;

@@ -431,7 +431,8 @@ export const RECORDS = {
       readiness: num(r.readiness) ? `${r.readiness} / 40` : reasonCell(r.readiness_reason),
       weakest_part: r.weakest_part ?? null,
       decision: r.decision == null ? null : `${word(DECISION, r.decision)}${r.decided_on ? ` · ${r.decided_on}` : ''}`,
-    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, MARKET_FIELDS) }),
+    // D6120 (#6120): the row as read, for the Markets page (`MarketsHome.jsx`), which draws its own table.
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, MARKET_FIELDS), market: r }),
     filters: [{ key: 'state', label: 'State', options: options(MARKET_STATE) }],
     sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }],
   },

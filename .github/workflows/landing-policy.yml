@@ -19,6 +19,8 @@ jobs:
     name: landing policy
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      privileged: ${{ steps.tier.outputs.privileged }}
     steps:
       - name: Check out trusted base
         id: base
@@ -29,6 +31,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Report the advisory tier
+        id: tier
         if: ${{ !cancelled() }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -55,3 +58,43 @@ jobs:
             printf 'LANDING_AUTO: `%s`\n\n' "$LANDING_AUTO"
             printf '    %s\n' "$result"
           } >> "$GITHUB_STEP_SUMMARY"
+          # D8067: true when a privileged path changed, false only on a classification that names none;
+          # anything unreadable is true, so the label is never taken off on a guess.
+          privileged=true
+          if printf '%s' "$result" | node -e 'const r = JSON.parse(require("fs").readFileSync(0, "utf8")); process.exit(Array.isArray(r.privileged) && r.privileged.length === 0 ? 0 : 1)'; then
+            privileged=false
+          fi
+          echo "privileged=$privileged" >> "$GITHUB_OUTPUT"
+
+  # D8067: sets or clears pr:privileged from the policy job's answer. It checks out nothing and runs no code
+  # from the repository: only the gh CLI, on this pull request. A fork's token cannot write labels, so a
+  # fork's pull request is skipped rather than failed.
+  label:
+    name: privileged label
+    needs: policy
+    if: ${{ !cancelled() && needs.policy.outputs.privileged != '' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Set or clear pr:privileged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PRIVILEGED: ${{ needs.policy.outputs.privileged }}
+        shell: bash
+        run: |
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
+          # labels-sync.yml creates the label once labels.yml reaches main; until then there is nothing to set.
+          if ! gh api "repos/$GH_REPO/labels/pr%3Aprivileged" --silent 2>/dev/null; then
+            echo "::warning::The pr:privileged label does not exist yet (labels-sync creates it from .github/labels.yml on main); privileged=$PRIVILEGED"
+            exit 0
+          fi
+          has=$(gh pr view "$PR_NUMBER" --json labels --jq '[.labels[].name] | index("pr:privileged") != null')
+          if [[ "$PRIVILEGED" == true && "$has" != true ]]; then
+            gh pr edit "$PR_NUMBER" --add-label 'pr:privileged'
+          elif [[ "$PRIVILEGED" == false && "$has" == true ]]; then
+            gh pr edit "$PR_NUMBER" --remove-label 'pr:privileged'
+          fi
