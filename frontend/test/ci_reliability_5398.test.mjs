@@ -52,17 +52,17 @@ test('main unread, unfinished or cancelled is unknown, never inherited', () => {
   assert.deepEqual(VERDICTS, ['pr_failure', 'inherited_main_failure', 'main_health_unknown', 'infra_failure']);
 });
 
-test('the classifier is its own job, after a PR failure only, read-only, outside the gate and unable to fail', () => {
+test('the classifier is its own job, after failures on every CI event, read-only, outside the gate and unable to fail', () => {
   const ci = read('.github/workflows/ci.yml');
   const gate = ci.slice(ci.indexOf('  gate:\n'), ci.indexOf('\n  classify:'));
   assert.ok(!gate.includes('ci-classify'), 'the required gate is untouched');
   const job = ci.slice(ci.indexOf('  classify:\n'), ci.indexOf('\n  visual:'));
-  assert.match(job, /needs: suite\n\s+if: failure\(\) && github\.event_name == 'pull_request'/);
+  assert.match(job, /needs: \[frontend, worker, verified, plan, suite, fast, landing, visual, drift, og-tags, dev-backend\]\n\s+if: failure\(\)/);
   assert.match(job, /continue-on-error: true/);
   assert.match(job, /permissions:\n\s+contents: read\n\s+actions: read\n\s+issues: read\n\s+steps:/);
   assert.ok(!/: write/.test(job), 'no write permission');
   assert.match(job, /run: node scripts\/ci-classify\.mjs/);
-  assert.match(read('scripts/ci-classify.mjs'), /main\(\)\.catch\(\(e\) => console\.log\(`::warning::/, 'every error exits 0');
+  assert.match(read('scripts/ci-classify.mjs'), /main\(\)\.catch\(\(\) =>/, 'diagnostic errors are caught without changing the gate');
 });
 
 test('the future-clock alert is one issue: open on the first failure, quiet while failing, closed on recovery', () => {

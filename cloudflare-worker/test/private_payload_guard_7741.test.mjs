@@ -7,8 +7,9 @@
  * tracked file's first bytes) and fails on a tracked match, printing the path
  * only. A tripped check is an incident (D7741): the branch is already public.
  *
- * Every path below is an invented string held in memory. No file named like a
- * private payload is committed, as a fixture or otherwise.
+ * Every payload-style name below is invented. Reader cases use only synthetic
+ * bytes in temporary directories, removed afterward. No private payload is
+ * committed, as a fixture or otherwise.
  *
  * Run alone:
  *   node --experimental-strip-types --no-warnings \
@@ -18,7 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { closeSync, existsSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -133,18 +134,22 @@ export function listTrackedFiles(root, { gitEntry = findGitEntry, run = runGit }
   return { status: 'listed', paths: r.stdout.toString('utf8').split('\0').filter(Boolean) };
 }
 
-function readHeadFrom(root) {
+function readHeadFrom(root, { flags = constants, open = openSync, stat = fstatSync, read = readSync } = {}) {
   return (path) => {
-    const full = join(root, path);
-    try {
-      if (!lstatSync(full).isFile()) return null;
-    } catch {
-      return null;
+    if (!Number.isInteger(flags.O_RDONLY) || [flags.O_NOFOLLOW, flags.O_NONBLOCK].some((flag) => !Number.isInteger(flag) || flag <= 0)) {
+      throw new Error('content-head reads require O_RDONLY, O_NOFOLLOW and O_NONBLOCK');
     }
-    const fd = openSync(full, 'r');
+    let fd;
     try {
+      fd = open(join(root, path), flags.O_RDONLY | flags.O_NOFOLLOW | flags.O_NONBLOCK);
+    } catch (error) {
+      if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EISDIR'].includes(error?.code)) return null;
+      throw error;
+    }
+    try {
+      if (!stat(fd).isFile()) return null;
       const buf = Buffer.alloc(CONTENT_HEAD_BYTES);
-      return buf.subarray(0, readSync(fd, buf, 0, CONTENT_HEAD_BYTES, 0));
+      return buf.subarray(0, read(fd, buf, 0, CONTENT_HEAD_BYTES, 0));
     } finally {
       closeSync(fd);
     }
@@ -272,6 +277,124 @@ test('a real checkout whose .git is broken fails with git\'s own reason', () => 
     assert.throws(() => listTrackedFiles(dir), /cannot list tracked files inside the checkout at .*: fatal: .*(not a git repository|valid repository|missing-git-dir)/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- Reading a bounded head from the opened file --------------------------
+
+test('the reader returns at most 4096 bytes and closes regular, short and empty files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pp7960-'));
+  try {
+    let fd;
+    const readHead = readHeadFrom(dir, { open: (...args) => (fd = openSync(...args)) });
+    const cases = [
+      ['large.txt', Buffer.concat([Buffer.alloc(4096, 'a'), Buffer.from('outside the head')]), Buffer.alloc(4096, 'a')],
+      ['short.txt', Buffer.from('synthetic bytes'), Buffer.from('synthetic bytes')],
+      ['empty.txt', Buffer.alloc(0), Buffer.alloc(0)],
+    ];
+    for (const [name, content, expected] of cases) {
+      writeFileSync(join(dir, name), content);
+      assert.deepEqual(readHead(name), expected, name);
+      assert.throws(() => fstatSync(fd), { code: 'EBADF' }, `${name}: descriptor closed`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the reader ignores missing paths, non-files and final-component symlinks', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pp7960-'));
+  try {
+    writeFileSync(join(dir, 'plain.txt'), 'synthetic target');
+    mkdirSync(join(dir, 'folder'));
+    symlinkSync('plain.txt', join(dir, 'link.txt'));
+    let fd;
+    const readHead = readHeadFrom(dir, { open: (...args) => (fd = openSync(...args)) });
+    assert.equal(readHead('missing.txt'), null);
+    assert.equal(readHead('plain.txt/child'), null);
+    assert.equal(readHead('link.txt'), null);
+    assert.equal(readHead('folder'), null);
+    assert.throws(() => fstatSync(fd), { code: 'EBADF' }, 'non-file descriptor closed');
+    assert.equal(readHeadFrom(dir, { open: () => { throw Object.assign(new Error('directory'), { code: 'EISDIR' }); } })('folder'), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('replacing the path after open does not replace the file being checked or read', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pp7960-'));
+  try {
+    writeFileSync(join(dir, 'candidate.txt'), 'the opened file');
+    let fd;
+    const readHead = readHeadFrom(dir, { open: (path, flags) => {
+      fd = openSync(path, flags);
+      renameSync(path, `${path}.opened`);
+      mkdirSync(path);
+      return fd;
+    } });
+    assert.equal(readHead('candidate.txt').toString(), 'the opened file');
+    assert.throws(() => fstatSync(fd), { code: 'EBADF' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a FIFO without a writer is rejected without blocking', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pp7960-'));
+  try {
+    const made = spawnSync('mkfifo', [join(dir, 'pipe')], { encoding: 'utf8' });
+    assert.equal(made.status, 0, made.error?.message ?? made.stderr);
+    // Bound a regression in synchronous open in a child; use the actual reader.
+    const script = `
+      import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
+      import { join } from 'node:path';
+      const CONTENT_HEAD_BYTES = 4096;
+      const readHeadFrom = ${readHeadFrom.toString()};
+      if (readHeadFrom(process.argv[1])('pipe') !== null) process.exitCode = 1;
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, dir], {
+      encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL',
+    });
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('unexpected open errors fail the check instead of looking like absent content', () => {
+  for (const code of ['EACCES', 'EIO']) {
+    const error = Object.assign(new Error('synthetic open failure'), { code });
+    assert.throws(() => readHeadFrom('/invented', { open: () => { throw error; } })('file'), (caught) => caught === error);
+  }
+});
+
+test('metadata and read errors propagate after closing the opened descriptor', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pp7960-'));
+  try {
+    writeFileSync(join(dir, 'plain.txt'), 'synthetic bytes');
+    for (const operation of ['stat', 'read']) {
+      let fd;
+      const error = Object.assign(new Error(`synthetic ${operation} failure`), { code: 'EIO' });
+      const readHead = readHeadFrom(dir, {
+        open: (...args) => (fd = openSync(...args)),
+        [operation]: () => { throw error; },
+      });
+      assert.throws(() => readHead('plain.txt'), (caught) => caught === error);
+      assert.throws(() => fstatSync(fd), { code: 'EBADF' }, `${operation}: descriptor closed`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('unsupported secure-open flags fail before opening a path', () => {
+  for (const name of ['O_RDONLY', 'O_NOFOLLOW', 'O_NONBLOCK']) {
+    const flags = { ...constants, [name]: undefined };
+    assert.throws(() => readHeadFrom('/invented', {
+      flags,
+      open: () => assert.fail('a path must not open without the required flags'),
+    })('file'), /content-head reads require O_RDONLY, O_NOFOLLOW and O_NONBLOCK/);
   }
 });
 

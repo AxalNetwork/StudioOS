@@ -24,14 +24,18 @@ const CSS = readFileSync(new URL('../src/ui/workerRail.css', import.meta.url), '
 
 /** The declarations of every rule whose selector is exactly `selector`, in order. */
 function block(selector) {
-  const re = new RegExp(`(?:^|\\})\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`, 'g');
-  const bodies = [...CSS.matchAll(re)].map((m) => m[1]);
+  // A rule's selector is the text between the previous `}` and its `{`. The
+  // first rule inside an at-rule also carries the at-rule's text, so it never
+  // equals `selector`, as with the regex this replaces.
+  const bodies = CSS.split('}').map((chunk) => chunk.split('{'))
+    .filter((parts) => parts.length === 2 && parts[0].trim() === selector).map((parts) => parts[1]);
   assert.ok(bodies.length > 0, `${selector} has a rule`);
   return bodies.join(';');
 }
 /** A custom property's value; a later rule wins, as in the cascade. Three-digit hex is widened. */
 const prop = (body, name) => {
-  const all = [...body.matchAll(new RegExp(`${name}\\s*:\\s*([^;]+)`, 'g'))];
+  const all = body.split(';').map((decl) => [decl.slice(0, decl.indexOf(':')).trim(), decl.slice(decl.indexOf(':') + 1)])
+    .filter(([key]) => key === name);
   const v = all.at(-1)?.[1]?.trim();
   return /^#[0-9a-f]{3}$/i.test(v || '') ? `#${[...v.slice(1)].map((c) => c + c).join('')}` : v;
 };

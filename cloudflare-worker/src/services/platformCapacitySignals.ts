@@ -13,8 +13,8 @@
  *          indexed count over `ai_budget_reservations` against
  *          `ai_usage_logs.reservation_uid` (`readSettlementSignal`).
  *
- * Not read, with why (`SIGNALS_NOT_READ_HERE`): #4572, #4568, #4571 and #4556
- * shipped no record the Worker can read. They are listed, not invented.
+ * Not read, with why (`SIGNALS_NOT_READ_HERE`): #4572, #4568, #4571, #4556 and
+ * #4591 shipped no record the Worker can read. They are listed, not invented.
  *
  * EVERY SIGNAL SAYS where it came from (`source`), what span it covers
  * (`window`), how it is recorded and sampled (`sampling`), its `unit`, its
@@ -49,20 +49,20 @@ export const SWEEP_SCAN_CAP = 120;
 /** `agents/sweep.ts` REPAIR_MAX: the repair count is capped at this per sweep. */
 export const REPAIR_CAP = 20;
 
-/** Proposed, not approved: the oldest eligible task's age (since it was created). */
+/** Approved 2026-11-21: the oldest eligible task's age (since it was created). */
 export const ELIGIBLE_AGE_THRESHOLDS: Thresholds = {
   warning: 1 * HOUR_S, critical: 6 * HOUR_S, hysteresis: 5 * 60,
-  basis: 'Proposed (#4559 part 3): age since the oldest eligible task was created. Not yet approved by the owner.',
+  basis: 'Age since the oldest eligible task was created (#4559 part 3). Approved by the owner on 2026-11-21.',
 };
-/** Proposed, not approved: the oldest lifecycle repair still owed after a sweep. */
+/** Approved 2026-11-21: the oldest lifecycle repair still owed after a sweep. */
 export const REPAIR_AGE_THRESHOLDS: Thresholds = {
   warning: 1 * HOUR_S, critical: 6 * HOUR_S, hysteresis: 5 * 60,
-  basis: 'Proposed (#4559 part 3): the sweep repairs every 5 minutes, so an hour owed is twelve sweeps. Not yet approved by the owner.',
+  basis: 'The sweep repairs every 5 minutes, so an hour owed is twelve sweeps (#4559 part 3). Approved by the owner on 2026-11-21.',
 };
-/** Warning at the Security page's own freshness rule (D263); critical is proposed. */
+/** Warning at the Security page's own freshness rule (D263); critical approved by the owner on 2026-11-21. */
 export const RESTORE_AGE_THRESHOLDS: Thresholds = {
   warning: DRILL_STALE_AFTER_DAYS * DAY_S, critical: 64 * DAY_S, hysteresis: DAY_S,
-  basis: `Warning when the last passing drill is older than ${DRILL_STALE_AFTER_DAYS} days (the Security page's rule, D263); critical at 64 days is proposed. A failed or absent drill is critical.`,
+  basis: `Warning when the last passing drill is older than ${DRILL_STALE_AFTER_DAYS} days (the Security page's rule, D263); critical at 64 days, approved by the owner on 2026-11-21. A failed or absent drill is critical.`,
 };
 
 /**
@@ -75,10 +75,10 @@ export const RESTORE_AGE_THRESHOLDS: Thresholds = {
  */
 export const SETTLEMENT_WINDOW_S = 24 * HOUR_S;
 export const SETTLEMENT_GRACE_S = 5 * 60;
-/** Proposed, not approved: any settled charge without its usage row is a warning; no critical level is proposed. */
+/** Approved 2026-11-21: any settled charge without its usage row is a warning; there is no critical level. */
 export const SETTLEMENT_WITHOUT_USAGE_THRESHOLDS: Thresholds = {
   warning: 1, critical: Number.MAX_SAFE_INTEGER, hysteresis: 0,
-  basis: 'Proposed (#4559, D4569): any settled charge in the window without its usage row is a warning. No critical level is proposed. Not yet approved by the owner.',
+  basis: 'Any settled charge in the window without its usage row is a warning; there is no critical level (#4559, D4569). Approved by the owner on 2026-11-21.',
 };
 /**
  * The count, bound as (window start, window end, settled at or before), each a
@@ -134,6 +134,7 @@ export const SIGNALS_NOT_READ_HERE = [
   { key: 'd1.runtime_ddl_attempts', reason: '#4568 shipped a build-time ratchet (scripts/check-runtime-ddl.mjs) and an audit; the Worker counts no runtime ALTER attempt.' },
   { key: 'auth.monitor_state', reason: '#4571\'s probe outcome is printed in the GitHub Actions run of magic-link-probe.yml; nothing reaches a Worker binding.' },
   { key: 'ai.gateway_quota_retries', reason: '#4556\'s gateway path has no caller and its switch is off, so it records no attempt; the shared upstream limits are published figures, not counters.' },
+  { key: 'd1.schema_parity', reason: '#4591\'s parity checks (the deploy job "repo can still rebuild production\'s schema" and the dispatch-only schema-rehearsal.yml) print their outcome in the GitHub Actions run; nothing reaches a Worker binding or a D1 row.' },
 ] as const;
 
 type Base = Omit<Metric, 'value' | 'availability' | 'reason' | 'level' | 'last_success_at'>;

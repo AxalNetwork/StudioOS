@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Search and Shortlist · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · #7809 · page 2 of 5 · RCQ-00 to RCQ-08</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Companies — find companies by what they do, see why a result matched, keep a search, and keep a shortlist with reasons</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An addendum to RS-17 A (D7045, the Directory tab on /research/companies), to RS-02 (D3701) and to the project page as RST-01 A and RST-06 A (#7703) leave it on /research/projects/:uid. Nothing landed is redrawn: the boards add a “What it does” search over sourced business facts, the field a name search matched on, a Saved searches menu beside “Copy link to these results”, and a Shortlist panel on the project Overview. Results are in name order with the fact that matched; a company with nothing recorded is counted as needing research, never as a non-match; no fit score, rank or completeness figure appears. States follow Platform States (Unavailable on screen). Violet dashed ◇ tags name the ◇K line and issue that builds a part; amber ⚑ tags mark owner questions 4, 5 and 9, option A drawn. Eadwyn proposes nothing on this page.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · the [3,050]-record directory, every company, source, project, person and figure ([Company A Robotics], [Müster Robotik], [Register A], [Larchmont Ventures II] and the rest) are bracketed, invented samples</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="9">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Search and Shortlist Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RCQ-00', 'Journey and words', 'Find by what a company does, see why a result matched, keep a search, keep a shortlist. The words Matches, Recorded but does not support, Needs research, Matched on and the three shortlist statuses, each mapped to Platform States; the counting rules and the annotation key.', [W('RCQ00')]],
+      ['RCQ-01', 'Search by capability · ◇K6 · #7859', 'RS-17 A with a “What it does” fieldset: an attribute from the twelve of RCT-07 and an optional whole-word term. Only companies with a supporting sourced fact are listed, in name order, each with the fact, its statement type, source and dates; one is On hold with its reason. Beside them, in their own words: [41] recorded but not supporting, [3,003] with nothing recorded (needs research). The search is kept in the address.', [F('RCQ01', 'Directory · Use case: inspection', 1220), C('RCQ01B', 'The attribute picker', 1160, 462)]],
+      ['RCQ-02', 'The matched field under a result · ◇K7 · #7859', 'A name search that also reads other names, legal names, register numbers and websites. A result found by any field but its name carries one line, “Matched on other name: [Company A Robotik] · source [Register A]”. One row per company; precedence name, legal name, other name, identifier, website; “muster” finds [Müster Robotik].', [F('RCQ02', 'Search: robotik', 900), C('RCQ02B', 'Precedence, accents, register number', 1160, 316)]],
+      ['RCQ-03', 'Saved searches · ◇K8 · #7860 · ⚑ question 9', 'For Companies only, a menu beside “Copy link to these results”: Save this search with a name, the list with created and last-run dates, open, rename, delete, the stated cap of 20. A saved search keeps criteria, never results. Opening one whose criterion no longer exists names it and runs nothing until you choose.', [F('RCQ03', 'The menu open', 1220), C('RCQ03B', 'Save, rename, cap, delete', 1160, 371), C('RCQ03C', 'A criterion no longer exists', 1160, 329)]],
+      ['RCQ-04', 'Shortlist panel on a Research Project · ◇K9 · #7850 · ⚑ questions 4 and 5', 'Only the panel is new. The project bar, the six-tab row (RST-01 A) and the Progress card (RST-06 A) are cited in grey. Seven subjects, companies and a fund: name, kind, date added and state as recorded; On hold and Withdrawn in the words of RCT-00; a removed record under the name kept at add. Rationale, a note marked “Only you see this”, Considering, Shortlisted or Set aside, next action and due date, edited in place. Primary action: Add companies.', [F('RCQ04', 'Project Overview with the panel', 1500), C('RCQ04B', 'Editing one subject in place', 1000, 424)]],
+      ['RCQ-05', 'States', 'Loading, empty (no business facts, no saved search, nothing shortlisted), Not recorded, Unavailable (the fact search; the notes while the subjects stay), Refused (an Advisor has no project route, with who can grant it), an archived project read-only; then saving, save failed with the text kept, and a note changed elsewhere refused.', [C('RCQ05', 'Grid', 1440, 1438), C('RCQ05B', 'Saving and save failed', 1160, 293)]],
+      ['RCQ-06', 'Tablet 768 and phone 390', 'Results as cards with the fact or the matched line; the attribute picker and saved searches in sheets; the shortlist as cards with the note behind More. 44 px targets, no table wider than the screen.', [C('RCQ06', 'Tablet 768', 768, 1024), P('RCQ06A', 'Results'), P('RCQ06B', 'What it does · sheet'), P('RCQ06C', 'Saved searches · sheet'), P('RCQ06D', 'Shortlist cards'), P('RCQ06E', 'More · rationale and note')]],
+      ['RCQ-07', 'Dark · desktop 1440 and phone 390', 'RCQ-01 and RCQ-04 on the dark tokens; states keep their words and glyphs.', [F('RCQ07', 'RCQ-01 · dark', 1110), F('RCQ07B', 'RCQ-04 · dark', 1440), P('RCQ07C', 'Results · dark'), P('RCQ07D', 'Shortlist · dark')]],
+      ['RCQ-08', 'Keyboard, focus and handoff', 'Focus order for each new block, where focus returns when a menu, dialog or sheet closes, live announcements; then what main does today, each ◇K line with its issue, the three ⚑ with option A, and the build issues: #7859 RCQ-01 and RCQ-02, #7860 RCQ-03, #7850 RCQ-04, shared RCQ-00 and RCQ-05 to RCQ-08.', [W('RCQ08'), W('RCQ08B')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network External Introduction Requests · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nwi-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nwi-cv.nwi-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nwi-cv *{box-sizing:border-box}
+.nwi-cv a{color:var(--vt);text-decoration:none}
+.nwi-cv button{font-family:var(--sg);cursor:pointer}
+.nwi-cv :focus-visible,.nwi-cv .nwi-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nwi-cv h1,.nwi-cv h2,.nwi-cv h3,.nwi-cv p,.nwi-cv ol,.nwi-cv ul,.nwi-cv dl,.nwi-cv dd,.nwi-cv dt{margin:0;padding:0}
+.nwi-cv ol,.nwi-cv ul{list-style:none}
+.nwi-mo{font-family:var(--mo)}
+.nwi-mu{color:var(--mu)}
+.nwi-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nwi-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nwi-sd .nwi-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nwi-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nwi-sd .nwi-grp{padding:6px 20px 4px}
+.nwi-sd nav{display:flex;flex-direction:column;gap:2px}
+.nwi-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nwi-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nwi-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nwi-mn{min-width:0;display:flex;flex-direction:column}
+.nwi-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nwi-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nwi-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nwi-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nwi-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nwi-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nwi-sp .nwi-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nwi-sp .nwi-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nwi-hdr{display:flex;flex-direction:column;gap:6px}
+.nwi-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nwi-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nwi-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nwi-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nwi-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nwi-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nwi-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nwi-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nwi-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nwi-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nwi-k.nwi-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nwi-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nwi-kv.nwi-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nwi-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nwi-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nwi-c3{grid-column:span 3}
+.nwi-c4{grid-column:span 4}
+.nwi-c5{grid-column:span 5}
+.nwi-c6{grid-column:span 6}
+.nwi-c7{grid-column:span 7}
+.nwi-c8{grid-column:span 8}
+.nwi-c9{grid-column:span 9}
+.nwi-c12{grid-column:span 12}
+.nwi-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nwi-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nwi-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nwi-ch .nwi-sm{font:500 12px var(--mo);color:var(--mu)}
+.nwi-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nwi-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nwi-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nwi-btn.nwi-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nwi-btn.nwi-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nwi-btn.nwi-ask .nwi-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nwi-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nwi-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nwi-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nwi-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nwi-pl.nwi-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nwi-pl.nwi-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nwi-pl.nwi-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nwi-pl.nwi-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nwi-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nwi-nt.nwi-r{background:var(--negBg);border-color:var(--negE)}
+.nwi-nt.nwi-a{background:var(--amBg);border-color:var(--amE)}
+.nwi-nt.nwi-g{background:var(--posBg);border-color:var(--posE)}
+.nwi-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nwi-nt.nwi-r .nwi-ic{background:var(--neg)}
+.nwi-nt.nwi-a .nwi-ic{background:var(--amT)}
+.nwi-nt.nwi-g .nwi-ic{background:var(--pos)}
+.nwi-nt .nwi-bt{margin-left:auto;flex:none}
+.nwi-sk{display:block;border-radius:6px;background:var(--skel)}
+.nwi-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nwi-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nwi-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nwi-tbl .nwi-n{text-align:right;font-family:var(--mo)}
+.nwi-tbl td.nwi-na{color:var(--mu);font-weight:500}
+.nwi-tbl td b{font-weight:700}
+.nwi-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nwi-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nwi-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nwi-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nwi-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nwi-pg .nwi-pb{display:flex;gap:5px;align-items:center}
+.nwi-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nwi-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nwi-st{display:grid;gap:14px 18px}
+.nwi-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nwi-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nwi-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nwi-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nwi-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nwi-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nwi-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nwi-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nwi-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nwi-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nwi-stp span:first-child{border-radius:999px 0 0 999px}
+.nwi-stp span:last-child{border-radius:0 999px 999px 0}
+.nwi-stp span+span{border-left:0}
+.nwi-stp span.nwi-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nwi-stp span.nwi-nx{border-style:dashed}
+.nwi-tl{display:flex;flex-direction:column}
+.nwi-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nwi-tl li:first-child{border-top:0}
+.nwi-tl .nwi-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nwi-tl .nwi-mk.nwi-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nwi-tl .nwi-mk.nwi-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nwi-tl .nwi-mk.nwi-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nwi-tl .nwi-mk.nwi-no{border-style:dashed}
+.nwi-tl .nwi-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nwi-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nwi-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nwi-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nwi-ph .nwi-hrow h1{font-size:22px}
+.nwi-ph .nwi-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nwi-ph .nwi-k{padding:12px 13px}
+.nwi-ph .nwi-kv{font-size:22px}
+.nwi-ph .nwi-btn{min-height:44px}
+.nwi-ph .nwi-lk{min-height:44px}
+.nwi-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nwi-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nwi-lst li:first-child{border-top:0}
+.nwi-lst b{font-size:13.5px}
+.nwi-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nwi-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nwi-bar i{display:block;height:100%;background:var(--vi)}
+.nwi-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nwi-toast a{color:#c4b5fd!important}
+.nwi-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nwi-pr:first-of-type{border-top:0}
+.nwi-pr b{font-size:13px}
+.nwi-pr small{display:block;font-size:12px;color:var(--mu)}
+.nwi-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grp:first-of-type{border-top:0}
+.nwi-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nwi-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nwi-tbl tr.nwi-cur td{background:var(--lav)}
+.nwi-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nwi-sec h3{font-size:13.5px;font-weight:800}
+.nwi-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nwi-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nwi-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nwi-k.nwi-bad{border-color:var(--negE)}
+.nwi-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nwi-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nwi-cv{text-align:left}
+.nwi-cv table{border-spacing:0}
+.nwi-st.nwi-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nwi-sh.nwi-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nwi-sd .nwi-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nwi-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nwi-s.nwi-ur{color:var(--neg)}
+.nwi-s.nwi-rf{color:var(--ink)}
+.nwi-s b{font:800 12px var(--mo)}
+.nwi-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nwi-vd{text-decoration:line-through;color:var(--mu)}
+.nwi-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nwi-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nwi-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nwi-rh .nwi-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nwi-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nwi-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nwi-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nwi-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nwi-src span::before{content:"↳ ";color:var(--vt)}
+.nwi-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nwi-draft p.nwi-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nwi-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nwi-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nwi-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nwi-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nwi-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nwi-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nwi-line b.nwi-mo{font-size:14px}
+.nwi-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grh:first-child{border-top:0;padding-top:0}
+.nwi-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nwi-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nwi-mc .nwi-mh{display:flex;gap:10px;align-items:center}
+.nwi-mc .nwi-mh>div{flex:1;min-width:0}
+.nwi-mc small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nwi-rs span::before{content:"· ";color:var(--mu)}
+.nwi-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nwi-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nwi-strip .nwi-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nwi-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nwi-f{display:flex;flex-direction:column;gap:5px}
+.nwi-f label,.nwi-f .nwi-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nwi-in.nwi-hint{color:var(--mu)}
+.nwi-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nwi-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nwi-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nwi-panel .nwi-dh{padding:16px 20px 12px}
+.nwi-panel .nwi-dc{padding:14px 20px}
+.nwi-panel .nwi-df{padding:12px 20px}
+.nwi-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nwi-pick.nwi-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nwi-pick small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nwi-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nwi-bn.nwi-ro{background:#334155;color:#fff}
+.nwi-bn.nwi-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nwi-bn b{font-weight:800}
+.nwi-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nwi-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nwi-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nwi-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nwi-tile b{font:700 22px var(--mo)}
+.nwi-ph.nwi-fx{height:844px;overflow:hidden}
+.nwi-ph .nwi-pbd{flex:1;min-height:0}
+.nwi-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nwi-stk .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nwi-pc .nwi-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nwi-pc small{font-size:12px;color:var(--mu)}
+.nwi-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nwi-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nwi-doc h2{font-size:17px;font-weight:800}
+.nwi-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nwi-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-doc .nwi-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nwi-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nwi-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nwi-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nwi-lst small{display:block}
+.nwi-lst li>div{min-width:0}
+.nwi-cv td,.nwi-cv th,.nwi-cv dd,.nwi-cv li,.nwi-cv p,.nwi-cv h1,.nwi-cv h2,.nwi-cv h3{color:inherit}
+.nwi-tbl td{color:var(--ink)}
+.nwi-tbl td.nwi-mo{white-space:nowrap}
+.nwi-crop,.nwi-doc{box-sizing:border-box}
+/* NIE · Network Introductions, external requests and operator handoff (#7678). Built on nwi_extra.css (#6256); only new pieces here. */
+.nie-ann{border:1.5px dashed #a78bfa;border-radius:10px;padding:9px 12px;font:500 11.5px var(--sg);line-height:1.55;color:var(--mu);background:transparent}
+.nie-ann code{font:500 11px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px;color:var(--ink)}
+.nie-ann.nie-say{border:1px solid var(--hair);border-left:3px solid var(--vi);background:var(--raised);color:var(--ink);font-size:12px}
+.nie-ann.nie-say b{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);margin-right:6px}
+.nie-now,.nie-prop{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;line-height:1.7;vertical-align:1px}
+.nie-now{border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.nie-prop{border:1px dashed #a78bfa;color:var(--vt);background:var(--lav)}
+.nie-ann .nwi-bk,.nie-ann .nwi-ow{white-space:normal}
+.nwi-cd.nie-bad{border-color:var(--negE)}
+.nwi-cv .nwi-rv dd{min-width:0;overflow-wrap:anywhere}
+/* service type chip: shape + word */
+.nie-ty{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:5px;font:700 10.5px var(--sg);line-height:1.75;white-space:nowrap;border:1px solid var(--hair2);color:var(--ink);background:var(--card)}
+.nie-ty.nie-ax{border-color:var(--lavE);color:var(--vt);background:var(--lav)}
+.nie-ty.nie-tm{border-style:dashed}
+/* four separate fields: stage, target response, contact attempt, introduction */
+.nie-ff{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:var(--card)}
+.nie-ff>div{padding:10px 12px;border-left:1px solid var(--hair);display:flex;flex-direction:column;gap:4px;min-width:0}
+.nie-ff>div:first-child{border-left:0}
+.nie-ff dt{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nie-ff dd{font:700 13px var(--sg);line-height:1.3}
+.nie-ff dd small{display:block;font:500 11px var(--sg);color:var(--mu);margin-top:2px}
+.nie-ff.nie-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.nie-ff.nie-2>div:nth-child(3){border-left:0}
+.nie-ff.nie-2>div:nth-child(n+3){border-top:1px solid var(--hair)}
+/* lanes on the desk */
+.nie-lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.nie-lane{border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-height:64px}
+.nie-lane[aria-current=true]{border-color:var(--vi);box-shadow:0 0 0 1px var(--vi)}
+.nie-lane b{font:700 22px var(--mo);letter-spacing:-.02em}
+.nie-lane span{font:600 12px var(--sg);color:var(--mu)}
+/* scoped note blocks */
+.nie-scope{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--raised)}
+.nie-scope>b{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nie-scope.nie-sh{background:var(--card);border-color:var(--lavE)}
+/* matrices */
+.nie-mx{width:100%;border-collapse:collapse;font-size:11.5px}
+.nie-mx th,.nie-mx td{border-bottom:1px solid var(--hair);padding:6px 8px;text-align:left;vertical-align:top}
+.nie-mx th{font:700 9.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.nie-mx td:first-child{font-weight:700;white-space:nowrap}
+.nie-ck{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.45}
+.nie-ck span:first-child{flex:none;display:grid;place-items:center;width:18px;height:18px;border-radius:4px;border:1.5px solid var(--vi);color:var(--vi);font:800 11px var(--sg);margin-top:1px}
+.nie-mail{border:1px solid var(--hair);border-radius:10px;background:var(--card);overflow:hidden}
+.nie-mail>div{padding:7px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;display:flex;gap:8px}
+.nie-mail>div>i{font-style:normal;flex:none;width:76px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nie-mail>p{padding:10px 12px;font-size:12.5px;line-height:1.55;white-space:pre-line}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "NIE06", "options": ["NIE01", "NIE02", "NIE03", "NIE04", "NIE05", "NIE06", "NIE07", "NIE08", "NIE09", "NIE09B", "NIE10", "NIE22", "NIE10B", "NIE11", "NIE12", "NIE13", "NIE14", "NIE14B", "NIE15", "NIE16", "NIE17", "NIE18", "NIE18B", "NIE19", "NIE20", "NIE21A", "NIE21B", "NIE21C", "NIE21D", "NIE22B", "NIE21E", "NIE21F", "NIEI", "NIEH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'NIE06';
+    /* NIE22 boards draw on the dark tokens; everything else is light. Shell and look copied from nwi.js (#6256) through niq.js (#7065). */
+    const dark = B.indexOf('NIE22') === 0;
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+
+    /* ---------- Platform States (D5129): glyph + word, never colour alone ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const UR = (t) => `<span class="s ur">? Unavailable${t ? ' · ' + t : ''}</span>`;
+    const NONE = `<span class="s">○ None</span>`;
+    const NA = (t) => `<span class="s">∅ Not applicable${t ? ' · ' + t : ''}</span>`;
+    const RF = (t) => `<span class="s rf">⊘ Refused${t ? ' · ' + t : ''}</span>`;
+    const STALE = (t) => `<span class="pl a">◔ Stale · ${t}</span>`;
+    const PROV = (t) => `<span class="pl a">≈ Provisional${t ? ' · ' + t : ''}</span>`;
+    const LOAD = (t) => `<span class="s" role="status">◌ Loading${t ? ' · ' + t : ''}</span>`;
+    const E = `<span class="em" aria-hidden="true">E</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- shell: company/project switcher top-left, sidebar = held licences, Account menu holds Portfolio, Companies, Licences ---------- */
+    const NAVS = {
+      i: ['Home', 'Deals', 'Portfolio', 'Axal VC Fund', 'Network', 'Research', '|', 'Trust', 'Firm Settings'],
+      f: ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'],
+      v: ['Home', 'Advisory', 'Network', 'Research', '|', 'Trust', 'Settings'],
+      a: ['Home', 'Network', 'Research', '|', 'Admin console']
+    };
+    const SW = { i: '[Harbor Lane Capital]', f: '[Kelp Bio]', v: '[Okafor Advisory]', a: '[Axal HQ]' };
+    const GRP = { i: 'Investor', f: 'Founder', v: 'Advisor', a: 'HQ' };
+    const INI = { i: 'IC', f: 'LS', v: 'AO', a: 'RO' };
+    const side = (r) => { const cur = r === 'a' ? 'Admin console' : 'Network'; return `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: ${SW[r]}">${SW[r]} <span aria-hidden="true">▾</span></button><span class="eye grp">${GRP[r]}</span><nav aria-label="${GRP[r]}">${J(NAVS[r].map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`; };
+    const top = (r) => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">${INI[r]}</button></div></div>`;
+    const RAILC = (t) => `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">${t || 'Ask about your network'}</span></aside>`;
+    const railOpen = (c, ph) => `<aside class="rail" aria-label="Eadwyn"><div class="rh"><b><span class="e" aria-hidden="true">E</span>Eadwyn</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">→</button></div><div class="rb">${c}</div><div class="rin"><span>${ph || 'Ask about your network…'}</span><button type="button" class="btn">Ask</button></div></aside>`;
+    const shell = (r, body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh${o.rail ? ' ro' : ''}" style="min-height:${h}px">${side(r)}<div class="mn">${top(r)}<main class="bd">${body}</main></div>${o.rail ? railOpen(o.rail, o.railPh) : RAILC(o.railT)}</div>${o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+    };
+    const TABS = (cur) => `<nav class="ptabs" aria-label="Network">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const HEAD = (o) => `${o.crumb ? `<nav aria-label="Breadcrumb" class="foot">${o.crumb}</nav>` : ''}<header class="hdr"><span class="eye">${o.eye || 'Network · Introductions'}</span><div class="hrow"><div><h1>${o.h1 || 'Introductions'}</h1><p>${o.sub || ''}</p></div><div class="acts">${o.acts !== undefined ? o.acts : DESKACTS}</div></div></header>${o.tab === false ? '' : TABS(o.tab || 'Introductions')}`;
+    const DESKACTS = `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn">Offer one</button><button type="button" class="btn p">Request an introduction</button>`;
+
+    const STP = (n) => `<div class="stp" role="list" aria-label="Steps">${J(['Who', 'Purpose', 'Share', 'Review'].map((t, i) => `<span role="listitem"${i + 1 === n ? ' class="on" aria-current="step"' : ''}>${i + 1 < n ? '✓ ' : ''}${i + 1} ${t}</span>`))}</div>`;
+    const panel = (eye, h, body, foot, w) => `<div class="panel" role="dialog" aria-labelledby="p${h.length}${eye.length}" style="width:${w || 440}px"><div class="dh"><div><span class="eye">${eye}</span><h2 id="p${h.length}${eye.length}">${h}</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">${body}</div><div class="df">${foot}</div></div>`;
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:${dark ? '#a78bfa' : '#7c3aed'};color:${dark ? '#0b1220' : '#fff'};font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:${(o && o.h) || 844}px">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${stk ? `<div class="stk">${stk}</div>` : ''}</div>`;
+    const crop = (w, body) => `<div class="${CV} crop" style="width:${w}px">${body}</div>`;
+    const stcard = (tag, h, body, cls) => `<section class="cd${cls ? ' ' + cls : ''}"><span class="tag">${tag}</span><div class="ch"><h2>${h}</h2></div>${body}</section>`;
+    const ANN = (t) => `<div class="nie-ann">${t}</div>`;
+    const SAY = (t) => `<div class="nie-ann nie-say"><b>Announced</b> “${t}”</div>`;
+    const NOW = (t) => `<span class="nie-now">${t || 'On main today'}</span>`;
+    const PROP = (t) => `<span class="nie-prop">Proposed · ${t}</span>`;
+    const tableHdr = (cols) => `<thead><tr>${J(cols.map((c) => `<th scope="col">${c}</th>`))}</tr></thead>`;
+
+    /* ---------- service type chips ---------- */
+    const TY = {
+      ax: `<span class="nie-ty nie-ax"><span aria-hidden="true">◆</span>Through Axal</span>`,
+      tm: `<span class="nie-ty nie-tm"><span aria-hidden="true">⇄</span>Team request</span>`,
+      cm: `<span class="nie-ty"><span aria-hidden="true">✦</span>Curated match</span>`,
+      qa: `<span class="nie-ty"><span aria-hidden="true">◫</span>Quarterly ask</span>`
+    };
+
+    /* ---------- the four separate fields (lifecycle, target response, contact attempt, introduction) ---------- */
+    const ST = {
+      draft: `<span class="pl">✎ Draft</span>`,
+      ready: `<span class="pl a">! Readiness needed</span>`,
+      unas: `<span class="pl a">◷ Awaiting assignment</span>`,
+      rev: `<span class="pl v">◉ In review</span>`,
+      info: `<span class="pl a">? Needs information</span>`,
+      oready: `<span class="pl v">▸ Outreach ready</span>`,
+      cont: `<span class="pl v">✉ Contacted</span>`,
+      closed: `<span class="pl">■ Closed</span>`,
+      wd: `<span class="pl">⊘ Withdrawn</span>`
+    };
+    const TR = {
+      na: `<span class="s">○ Not asked yet</span>`,
+      wait: `<span class="pl a">◷ Awaiting target</span>`,
+      agr: `<span class="pl g">✓ Agreed</span>`,
+      dec: `<span class="pl">◌ Declined</span>`,
+      unav: `<span class="pl">⊗ Unavailable to proceed</span>`,
+      exp: `<span class="pl">⌛ Expired · no answer</span>`
+    };
+    const DL = {
+      none: `<span class="s">○ No contact yet</span>`,
+      sent: `<span class="pl g">✓ Sent · recorded</span>`,
+      ext: `<span class="pl g">✓ External contact · recorded</span>`,
+      unk: `<span class="pl a">◌ Delivery unknown</span>`,
+      pend: `<span class="pl a">◌ Sent · record pending</span>`,
+      fail: `<span class="pl r">✕ Not sent</span>`
+    };
+    const IN = {
+      not: `<span class="s">○ Not made</span>`,
+      made: `<span class="pl g">✓✓ Introduction made</span>`
+    };
+    const FF = (a, b, c, d, cls) => `<dl class="nie-ff${cls ? ' ' + cls : ''}"><div><dt>Request</dt><dd>${a}</dd></div><div><dt>Target response</dt><dd>${b}</dd></div><div><dt>Contact attempt</dt><dd>${c}</dd></div><div><dt>Introduction</dt><dd>${d}</dd></div></dl>`;
+
+    /* ---------- sample data: fictional, the same on every board ----------
+       Today Sat 21 Nov 2026. Founder [Lena Sato] runs [Kelp Bio] and [Quill Analytics].
+       Her requests through Axal: 12 = Needs you 2 (G2 needs information, G3 draft blocked) + Awaiting Axal 2 (G1 unassigned, G6 in review)
+       + Awaiting target 1 (G4) + History 7 (1 made, 2 declined, 1 expired, 1 no route, 1 withdrawn, 1 closed after made).
+       Team requests 12 (1 asked of you), curated matches 2 awaiting. Operator [Ren Okada] (Axal HQ); second operator [Mila Ferro].
+       Ren's queue: 16 open = 3 unassigned + 6 mine (2 needs requester, 1 outreach ready, 2 awaiting target, 1 delivery unknown) + 7 others. */
+    const RID = '5c2e9a71';
+    const UID = '5c2e9a71-0d4b-4f1e-8a63-92b7e1c04d58';
+    const AT = '2026-11-21 09:12 UTC';
+    const PURPOSE = '[Kelp Bio] opens a seed round in January for its marine-collagen materials line. [Harbor Seed] leads bio-materials seed rounds, and [Priya Nair] led two of them. I would like 30 minutes to ask whether our round fits her mandate.';
+    const PLEN = PURPOSE.length;
+    const NOCOST = `No charge · no price is configured for this service`;
+    const PRIYA = `<div class="pick on"><span class="av">PN</span><div><b>[Priya Nair]</b><small>Partner · [Harbor Seed] · Lisbon · not a member</small><small>Source: NFX Signal import · last seen ${mo('2026-11-12')} · bio-materials, seed</small></div><span class="pl v">✓ Chosen</span></div>`;
+    const PRIYA2 = `<div class="pick"><span class="av">PN</span><div><b>[Priya Nair]</b><small>Product lead · [Loomcraft] · Berlin · not a member</small><small>Source: Folk export · last seen ${mo('2026-09-30')} · developer tools</small></div></div>`;
+
+    /* Lena's desk rows */
+    const G = {
+      g1: { t: '[Priya Nair]', o: '[Harbor Seed]', m: 'not a member', cap: 'Founder · [Kelp Bio]', st: 'unas', tr: 'na', dl: 'none', in: 'not', who: 'Axal · not assigned yet', nx: 'Axal assigns an operator', at: '2026-11-21' },
+      g2: { t: '[Ari Lane]', o: '[Tidepool Labs] · context only', m: 'provisional', cap: 'Founder · [Kelp Bio]', st: 'info', tr: 'na', dl: 'none', in: 'not', who: '[Ren Okada]', nx: 'You: say which [Ari Lane] you mean', at: '2026-11-20' },
+      g3: { t: '[Morgan Vale]', o: '[Elm Studio]', m: 'not a member', cap: 'Founder · [Quill Analytics]', st: 'ready', tr: 'na', dl: 'none', in: 'not', who: 'You', nx: 'You: 2 requirements for [Quill Analytics]', at: '2026-11-19' },
+      g4: { t: '[Jules Avery]', o: '[Elm Studio]', m: 'member', cap: 'Founder · [Kelp Bio]', st: 'cont', tr: 'wait', dl: 'sent', in: 'not', who: '[Ren Okada]', nx: '[Jules Avery] answers Axal', at: '2026-11-18' },
+      g6: { t: '[Nora Lind]', o: '[Larch Health]', m: 'not a member', cap: 'Founder · [Kelp Bio]', st: 'rev', tr: 'na', dl: 'none', in: 'not', who: '[Mila Ferro]', nx: 'Axal checks the target', at: '2026-11-17' }
+    };
+    const HIST = [
+      ['[Hugo Brandt]', 'Founder · [Kelp Bio]', 'closed', 'agr', 'sent', 'made', 'Meeting held', '2026-10-28'],
+      ['[Omar Reyes]', 'Founder · [Kelp Bio]', 'closed', 'dec', 'sent', 'not', '—', '2026-10-21'],
+      ['[Paula Stein]', 'Founder · [Quill Analytics]', 'closed', 'dec', 'ext', 'not', '—', '2026-10-09'],
+      ['[Hana Ito]', 'Founder · [Kelp Bio]', 'closed', 'exp', 'sent', 'not', '—', '2026-09-30'],
+      ['[Leo Marsh]', 'Founder · [Kelp Bio]', 'closed', 'unav', 'none', 'not', 'No route', '2026-09-12'],
+      ['[Ines Duarte]', 'Founder · [Quill Analytics]', 'wd', 'na', 'none', 'not', 'Withdrawn before contact', '2026-08-30'],
+      ['[Kit Moreno]', 'Founder · [Kelp Bio]', 'closed', 'agr', 'sent', 'made', NR('outcome'), '2026-08-14']
+    ];
+    const rowG = (g, o) => `<tr${o && o.cur ? ' class="cur"' : ''}><td><b>${g.t}</b><small>${g.o} · ${g.m}</small></td><td>${TY.ax}</td><td>${g.cap}</td><td>${ST[g.st]}<div style="margin-top:3px">${TR[g.tr]}</div></td><td>${g.who}</td><td>${g.nx}</td><td class="mo">${g.at}</td></tr>`;
+
+    const NEEDS = (o) => `<div class="strip" role="region" aria-label="Needs you now"><b>Needs you now · 3</b><span class="foot" style="flex-basis:100%;margin-top:-6px">Read on its own: filters below never hide these.</span>
+      <div class="pc" style="flex:1"><div class="r1"><b>[Ren Okada] asked which [Ari Lane] you mean</b>${TY.ax}</div><small>Request to [Ari Lane] · ${ST.info} since ${mo('2026-11-20 16:05')}</small><button type="button" class="btn" style="align-self:flex-start">Answer</button></div>
+      <div class="pc" style="flex:1"><div class="r1"><b>Draft to [Morgan Vale] is waiting on readiness</b>${TY.ax}</div><small>As Founder · [Quill Analytics] · 2 requirements · draft kept</small><button type="button" class="btn" style="align-self:flex-start">Resolve requirements</button></div>
+      <div class="pc" style="flex:1"><div class="r1"><b>[Dev Varma] asked you for an introduction</b>${TY.tm}</div><small>To [Ari Lane] · free · from your team (NIT)</small><button type="button" class="btn" style="align-self:flex-start">Open</button></div></div>`;
+    const LANES = (cur) => `<div class="nie-lanes" role="tablist" aria-label="Requests through Axal by who acts next">${J([['you', 'Needs you', 2], ['ax', 'Awaiting Axal', 2], ['tg', 'Awaiting target', 1], ['h', 'History', 7]].map((l) => `<button type="button" role="tab" class="nie-lane" aria-selected="${l[0] === cur}" aria-current="${l[0] === cur}"><b>${l[2]}</b><span>${l[1]}</span></button>`))}</div>`;
+    const AXSEC = (cur) => {
+      const rows = cur === 'h'
+        ? J(HIST.map((h) => `<tr><td><b>${h[0]}</b></td><td>${TY.ax}</td><td>${h[1]}</td><td>${ST[h[2]]}<div style="margin-top:3px">${TR[h[3]]}</div></td><td>${IN[h[5]]}</td><td>${h[6]}</td><td class="mo">${h[7]}</td></tr>`))
+        : cur === 'ax' ? rowG(G.g1, { cur: 1 }) + rowG(G.g6) : cur === 'tg' ? rowG(G.g4) : rowG(G.g2) + rowG(G.g3);
+      const hd = cur === 'h' ? ['Target', 'Service', 'As', 'Request · response', 'Introduction', 'Outcome', 'Closed'] : ['Target', 'Service', 'As', 'Request · response', 'Owner', 'Next', 'Updated'];
+      const n = { you: 2, ax: 2, tg: 1, h: 7 }[cur];
+      return `<section class="cd" aria-labelledby="axh"><div class="ch"><h2 id="axh">Through Axal</h2><span class="sm"><b class="mo">12</b> requests · Axal coordinates the person you name</span></div>${LANES(cur)}
+      <table class="tbl">${tableHdr(hd)}<tbody>${rows}</tbody></table>
+      <div class="cf"><span class="foot">${n} shown of ${n} · end of list</span><span class="foot">Counts come from the server’s totals ${TB('cursor + totals · #7673')}</span></div></section>`;
+    };
+    const KEPT = `<div class="g"><section class="cd c6" aria-labelledby="ft"><div class="ch"><h2 id="ft">From your team</h2><span class="sm"><b class="mo">12</b> requests · 1 asked of you · free</span></div><p class="sub">${TY.tm} Teammates who know the person introduce you from their own mailbox. Unchanged (#7066). <a href="#">Open →</a></p></section>
+      <section class="cd c6" aria-labelledby="cmh"><div class="ch"><h2 id="cmh">Curated matches</h2><span class="sm"><b class="mo">2</b> awaiting · Accept uses 1 credit</span></div><p class="sub">${TY.cm} Matches Axal proposes; both sides agree before anything moves. Unchanged (#7064). <a href="#">Open →</a></p></section></div>`;
+    const DESK = (cur) => `${HEAD({ sub: 'What needs you, what Axal is doing, and who you are waiting on. Team requests and curated matches keep their own groups.' })}${NEEDS()}${AXSEC(cur || 'ax')}${KEPT}`;
+
+    /* ---------- request sheet pieces ---------- */
+    const SEARCH = `${STP(1)}<div class="seg" role="radiogroup" aria-label="Search for"><button type="button" role="radio" aria-checked="true">Person</button><button type="button" role="radio" aria-checked="false">I only know an organization</button></div>
+      <div class="f"><label for="ts">Name</label><span id="ts" class="in">[Priya Nair]</span><span class="foot">2 people found in the directory. Pick by role, organization and source.</span></div>${PRIYA}${PRIYA2}
+      <p class="foot">Someone you cannot see is never listed. The directory record comes from #7676 ${TB('directory search · #7674')}</p>`;
+    const MANUAL = `${STP(1)}<div class="nt"><span class="ic" aria-hidden="true">○</span><div><b>No one called [Hugo Brandt] in the directory.</b> You can still name him. Axal reviews who he is before anyone contacts him.</div></div>
+      <div class="f"><label for="mn">Full name (required)</label><span id="mn" class="in">[Hugo Brandt]</span></div>
+      <div class="f"><label for="mo">Organization (optional)</label><span id="mo" class="in">[Loomcraft] · former</span></div>
+      <div class="f"><label for="mt">Title (optional)</label><span id="mt" class="in">VP Manufacturing, 2019–2025</span></div>
+      <div class="f"><label for="mu">Public professional page (optional)</label><span id="mu" class="in">[public profile URL]</span></div>
+      <div class="f"><label for="mc">How you know of him (required)</label><span id="mc" class="in ta">Spoke at [Loomcraft]’s factory tour in Porto; scaled textile tooling from pilot to 3 plants.</span></div>
+      <div class="acts">${PROV('until Axal reviews')}<span class="foot">No email is asked for.</span></div>`;
+    const ORGONLY = `${STP(1)}<div class="seg" role="radiogroup" aria-label="Search for"><button type="button" role="radio" aria-checked="false">Person</button><button type="button" role="radio" aria-checked="true">I only know an organization</button></div>
+      <div class="f"><label for="oo">Organization</label><span id="oo" class="in">[Tidepool Labs]</span></div>
+      <div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>An organization cannot receive an introduction.</b> [Tidepool Labs] is kept as context. Name a person, or ask Axal to help find the right one.</div></div>
+      <div class="seg" role="radiogroup" aria-label="Who to contact" style="flex-direction:column;align-items:stretch">
+      <button type="button" role="radio" aria-checked="false" style="text-align:left;min-height:40px">○ I know the person’s name</button>
+      <button type="button" role="radio" aria-checked="true" style="text-align:left;min-height:40px">● Help me find the right person at [Tidepool Labs]</button></div>
+      <p class="foot">The request goes to Axal as “person to be identified”. Nobody is contacted until a person is named and reviewed.</p>`;
+    const ROUTE = `<div class="sec"><h3>How to reach [Priya Nair]</h3>
+      <div class="pick"><span class="av">⇄</span><div><b>Ask a teammate</b><small>No teammate has [Priya] recorded. Checked ${mo('09:04')}.</small></div><span class="s">○ None</span></div>
+      <div class="pick on"><span class="av">◆</span><div><b>Through Axal</b><small>Axal reviews your request and contacts [Priya]. ${NOCOST}.</small></div><span class="pl v">✓ Chosen</span></div></div>`;
+    const CAPSEL = (o) => `<fieldset class="f" style="border:0;padding:0;margin:0"><legend class="eye" style="margin-bottom:6px">You are asking as</legend>
+      <div class="seg" role="radiogroup" aria-label="Capacity" style="flex-direction:column;align-items:stretch">
+      <button type="button" role="radio" aria-checked="${o === 'q' ? 'false' : 'true'}" style="text-align:left;min-height:40px">${o === 'q' ? '○' : '●'} Founder · [Kelp Bio] · <span class="pl g">✓ Ready</span></button>
+      <button type="button" role="radio" aria-checked="${o === 'q' ? 'true' : 'false'}" style="text-align:left;min-height:40px">${o === 'q' ? '●' : '○'} Founder · [Quill Analytics] · <span class="pl a">! 2 requirements</span></button></div></fieldset>`;
+    const PURP = (id) => `<div class="f"><label for="pp${id}">Why [Priya Nair], and why now (required)</label><span id="pp${id}" class="in ta">${PURPOSE}</span><span class="cnt">${PLEN} / 1,200</span></div>`;
+    const SHAREDL = `<dl class="rv"><dt>Your profile</dt><dd>[Lena Sato] · Founder and CEO, [Kelp Bio] · Lisbon</dd><dt>Venture</dt><dd>[Kelp Bio] · marine-collagen materials · pre-seed, raising seed in Jan 2027</dd><dt>Brief</dt><dd>Your purpose above, as you wrote it</dd><dt>Attachment</dt><dd>[Kelp Bio] one-pager (PDF, 2 pages) · from Raise</dd></dl>`;
+    const NOTSHARED = `<div class="nie-scope"><b>Never shared by this request</b><span class="sub">Your due-diligence evidence and reviewer notes · your email and phone (until [Priya] agrees) · your private note · your other requests</span></div>`;
+
+    /* confirm (review) used by sheet, tablet, phone, dark */
+    const REVIEW = (o) => {
+      o = o || {};
+      return `${o.nostep ? '' : STP(4)}<dl class="rv">
+      <dt>Target</dt><dd><b>[Priya Nair]</b> · Partner, [Harbor Seed] · <b>not a member</b> · from the directory</dd>
+      <dt>Purpose</dt><dd>${o.short ? 'Seed round fit for [Kelp Bio] · 30 minutes' : PURPOSE}</dd>
+      <dt>You ask as</dt><dd>Founder · [Kelp Bio] · readiness ${mo('r3')} checked ${mo('09:11')}</dd>
+      <dt>Axal shares</dt><dd>Your profile, [Kelp Bio] summary, this brief, the one-pager · <b>with [Priya] only after an operator reviews it</b></dd>
+      <dt>Coordinated by</dt><dd>Axal Introductions service · an operator is assigned after you submit</dd>
+      <dt>Cost</dt><dd>${NOCOST} ${o.tags === false ? '' : TB('policy read · #7673') + ' ' + TO('pricing · A')}</dd>
+      <dt>Timing</dt><dd>No response time is promised</dd></dl>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Submitting asks Axal to coordinate. It sends nothing to [Priya].</b> An operator reviews the request and decides what is sent, and you see when it is.</div></div>`;
+    };
+    const SUBMIT = (s) => s === 'busy' ? `<button type="button" class="btn p" aria-disabled="true" aria-busy="true">Submitting…</button>` : `<button type="button" class="btn p${s === 'fv' ? ' fv' : ''}">Submit request</button>`;
+    const CONFIRMSHEET = `<aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="cs" style="width:600px">
+      <div class="dh"><div><span class="eye">Request an introduction · step 4 of 4</span><h2 id="cs">Review your request</h2></div><button type="button" class="ib" aria-label="Close and return to Introductions">✕</button></div>
+      <div class="dc">${REVIEW()}<div class="sec"><h3>What [Priya] may see after review</h3>${SHAREDL}${NOTSHARED}</div></div>
+      <div class="df"><button type="button" class="btn t">Back</button><span class="foot" style="margin-left:auto">Draft saved ${mo('09:11')}</span>${SUBMIT('fv')}</div></aside>`;
+
+    /* receipt */
+    const RCPT = () => `<dl class="rv">
+      <dt>Request</dt><dd class="mo">${RID} <span class="foot">· ${UID}</span></dd>
+      <dt>Submitted</dt><dd class="mo">${AT}</dd>
+      <dt>Target</dt><dd>[Priya Nair] · [Harbor Seed] · not a member</dd>
+      <dt>As</dt><dd>Founder · [Kelp Bio]</dd>
+      <dt>Readiness</dt><dd>Ready · snapshot ${mo('r3')} taken at submit</dd>
+      <dt>Cost</dt><dd>${NOCOST} · nothing charged</dd>
+      <dt>Owner</dt><dd>${ST.unas} <span class="foot">no operator is named until one is assigned</span></dd></dl>`;
+
+    /* ops (operator) */
+    const OPHEAD = (o) => `<nav aria-label="Breadcrumb" class="foot"><a href="#">Admin console</a> › Network › ${o.crumb || 'Introduction requests'}</nav><header class="hdr"><span class="eye">${o.eye || 'Axal operations · Introductions service'}</span><div class="hrow"><div><h1>${o.h1}</h1><p>${o.sub}</p></div><div class="acts">${o.acts !== undefined ? o.acts : `<button type="button" class="btn ask">${E}Ask</button>`}</div></div></header>`;
+    const QROWS = [
+      ['5c2e9a71', '[Lena Sato]', 'Founder · [Kelp Bio]', '[Priya Nair] · [Harbor Seed]', 'sourced', 'unas', 'na', 'none', '—', '09:12 today'],
+      ['0f6a3e58', '[Ada Okafor]', 'Advisor', '[Tom Becker] · [Northstar Capital]', 'member', 'unas', 'na', 'none', '—', '08:30 today'],
+      ['93d0c1b4', '[Sara Holm]', 'Founder · [Loomcraft]', 'Person to be identified · [Tidepool Labs]', 'org only', 'unas', 'na', 'none', '—', '2026-11-20'],
+      ['7b11e2c0', '[Lena Sato]', 'Founder · [Kelp Bio]', '[Ari Lane] · [Tidepool Labs]', 'provisional', 'info', 'na', 'none', '[Ren Okada]', '2026-11-20'],
+      ['c40f9a12', '[Iris Chen]', 'Investor · [Harbor Lane Capital]', '[Omar Reyes] · [Fjordline Bio]', 'sourced', 'info', 'na', 'none', '[Ren Okada]', '2026-11-19'],
+      ['e5a7d903', '[Dev Varma]', 'Investor · [Harbor Lane Capital]', '[Morgan Vale] · [Elm Studio]', 'sourced', 'oready', 'na', 'none', '[Ren Okada]', '2026-11-19'],
+      ['a3c8b6f1', '[Lena Sato]', 'Founder · [Kelp Bio]', '[Jules Avery] · [Elm Studio]', 'member', 'cont', 'wait', 'sent', '[Ren Okada]', '2026-11-18'],
+      ['d2e4f017', '[Kit Moreno]', 'Founder · [Loomcraft]', '[Paula Stein] · [Harbor Seed]', 'sourced', 'cont', 'wait', 'sent', '[Ren Okada]', '2026-11-17'],
+      ['f81b3a66', '[Theo Grant]', 'Advisor', '[Hana Ito] · [Tidepool Labs]', 'sourced', 'cont', 'na', 'unk', '[Ren Okada]', '2026-11-20']
+    ];
+    const qrow = (r, o) => `<tr${o && r[0] === o ? ' class="cur"' : ''}><td class="mo">${r[0]}</td><td><b>${r[1]}</b><small>${r[2]}</small></td><td><b>${r[3]}</b><small>${r[4] === 'member' ? 'Member' : r[4] === 'sourced' ? 'Directory · sourced' : r[4] === 'org only' ? 'Organization only · no person yet' : PROV('not reviewed')}</small></td><td>${ST[r[5]]}</td><td>${TR[r[6]]}<div style="margin-top:3px">${DL[r[7]]}</div></td><td>${r[8] === '—' ? '<span class="s">○ Unassigned</span>' : r[8]}</td><td class="mo">${r[9]}</td></tr>`;
+
+    let html = '';
+
+    /* ===== Desk ===== */
+    if (B === 'NIE01') html = shell('f', DESK('ax'), { h: 960, railT: 'Ask about introductions' });
+
+    /* ===== Entry points ===== */
+    else if (B === 'NIE02') html = crop(1400, `<div class="g">
+      ${stcard('1 · Introductions primary', 'Request an introduction', `<div class="acts">${DESKACTS}</div><p class="sub">Opens the request sheet empty, at Who. Same sheet for founder, investor and advisor.</p><p class="foot">Context carried: none.</p>`, 'c3')}
+      ${stcard('2 · Person Sheet', '[Priya Nair]', `<p class="sub">Partner · [Harbor Seed] · not a member · NFX Signal import, last seen ${mo('2026-11-12')}</p><div class="acts"><button type="button" class="btn">Add to my network</button><button type="button" class="btn p">Request an introduction</button></div><p class="foot">Context carried: this exact person record (#7676), so namesakes are never re-searched.</p>`, 'c3')}
+      ${stcard('3 · Your private relationship', '[Morgan Vale] · in your book', `<p class="sub">Private to you · last touch ${mo('2026-10-02')}</p><div class="acts"><button type="button" class="btn">Log a touch</button><button type="button" class="btn">Ask Axal to introduce</button></div><p class="foot">Context carried: the person, and that the tie is yours. The private note is not copied into the request.</p>`, 'c3')}
+      ${stcard('4 · An organization’s person row', '[Harbor Seed] · People', `<table class="tbl"><tbody><tr><td><b>[Priya Nair]</b><small>Partner</small></td><td><button type="button" class="btn">Request</button></td></tr><tr><td><b>[Leo Marsh]</b><small>Associate</small></td><td><button type="button" class="btn">Request</button></td></tr></tbody></table><p class="foot">Context carried: the person and [Harbor Seed] as organization context (#7680). The organization is never the recipient.</p>`, 'c3')}</div>
+      ${ANN(`Each entry opens the same request sheet at step 1 with the person preselected. Offer one (accepted ties, #6637/#6748), team requests (#7066), curated matches (#7064) and the investor quarterly ask (#7065) keep their own entry points and names. ${TB('request sheet with a person reference · #7673')}`)}`);
+
+    /* ===== Choose target ===== */
+    else if (B === 'NIE03') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Request an introduction · step 1 of 4', 'Who do you want to meet?', SEARCH + ROUTE, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Continue</button>`, 450)}
+      ${panel('Step 1 · not in the directory', 'Name someone new', MANUAL, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`, 440)}
+      ${panel('Step 1 · only an organization', 'Who at [Tidepool Labs]?', ORGONLY, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`, 440)}</div>
+      ${ANN(`Left: search existing people first, with role, organization, place and source to tell two [Priya Nair]s apart. A teammate path is checked first (<code>GET /api/relationships/who-knows</code>, on main); here nobody has her, so Through Axal is offered. Middle: a person not in the directory is kept as a provisional target; no email, no account and no accepted tie are needed. Right: an organization is context only and never becomes a fake person. ${TB('provisional target record · #7672')}`)}`);
+
+    /* ===== Purpose and capacity: three journeys ===== */
+    else if (B === 'NIE04') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Founder · step 2 of 4', 'What is the introduction for?', `${STP(2)}<p class="sub">To [Priya Nair] · [Harbor Seed] · not a member</p>${CAPSEL()}${PURP('a')}<p class="foot">Draft saved ${mo('09:08')}. You can leave and come back.</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`, 450)}
+      ${panel('Investor · step 2 of 4', 'What is the introduction for?', `${STP(2)}<p class="sub">To [Hugo Brandt] · ${PROV('Axal will review who he is')}</p><fieldset class="f" style="border:0;padding:0;margin:0"><legend class="eye" style="margin-bottom:6px">You are asking as</legend><div class="pick on"><span class="av">IC</span><div><b>Investor · [Harbor Lane Capital]</b><small>Representation confirmed ${mo('2026-09-02')} · Ready</small></div><span class="pl v">✓</span></div></fieldset><div class="f"><label for="pb">Why [Hugo Brandt], and why now (required)</label><span id="pb" class="in ta">Our portfolio company [Tidepool Labs] moves its sensor line from pilot to contract manufacturing in Q1. We are looking for an advisor who has scaled a plant.</span></div><div class="line"><span>Quarterly ask not offered: an ask names only a founder or startup on Axal (#7065)</span></div>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`, 440)}
+      ${panel('Advisor · step 2 of 4', 'What is the introduction for?', `${STP(2)}<p class="sub">To [Tom Becker] · [Northstar Capital] · <b>member</b></p><fieldset class="f" style="border:0;padding:0;margin:0"><legend class="eye" style="margin-bottom:6px">You are asking as</legend><div class="pick on"><span class="av">AO</span><div><b>Advisor · in your own name</b><small>No organization represented · Ready</small></div><span class="pl v">✓</span></div></fieldset><div class="f"><label for="pc">Why [Tom Becker], and why now (required)</label><span id="pc" class="in ta">I advise [Elm Studio] on go-to-market. [Tom] ran operations for two design-tool companies; [Elm Studio] wants an operator’s view before hiring a COO.</span></div><p class="foot">No accepted tie with [Tom] is needed. If you had one, Offer one and a team request stay available as they are.</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`, 440)}</div>
+      ${ANN(`One interaction model for all three. Capacity is chosen per request; a person with two ventures picks which one they represent, and the readiness beside each option comes from the companion contract (#7677, NRD boards). An advisor is never asked for investor diligence fields. ${TB('role-neutral entitlement and capacity list · #7673')}`)}`);
+
+    /* ===== Readiness blocker and return ===== */
+    else if (B === 'NIE05') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Step 4 of 4 · blocked', 'Two requirements before you can submit', `<p class="sub">To [Morgan Vale] · as Founder · [Quill Analytics]</p><div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Not submitted.</b> Your draft, target and purpose are kept.</div></div>
+      <ul class="lst"><li><div><b>Venture profile · [Quill Analytics]</b><small>Stage and current round are not recorded. You complete it.</small></div><a class="btn" href="#">Complete →</a></li>
+      <li><div><b>Company due diligence · [Quill Analytics]</b><small>Not started. Axal reviews it after you submit the documents your policy names.</small></div><a class="btn" href="#">Start →</a></li></ul>
+      <p class="foot">Switch to Founder · [Kelp Bio] (Ready) if this request is really for [Kelp Bio].</p>`, `<button type="button" class="btn t">Save draft and close</button><button type="button" class="btn">Change capacity</button>`, 460)}
+      ${panel('Readiness · [Quill Analytics]', 'Venture profile', `<div class="nt" role="navigation" aria-label="Return"><span class="ic" aria-hidden="true">‹</span><div>You came from your draft to [Morgan Vale]. <a href="#">Return to the introduction</a></div></div><div class="f"><label for="vs">Stage</label><span id="vs" class="in">Seed</span></div><div class="f"><label for="vr">Current round</label><span id="vr" class="in">Raising · seed · opens 2027-02</span></div><p class="foot">The readiness screens belong to #7677 (NRD). Only the return line is part of this canvas.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Save</button>`, 420)}
+      ${panel('Back on the draft', 'Review your request', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Venture profile saved.</b> Back on your draft to [Morgan Vale]: target, purpose and capacity as you left them.</div></div><ul class="lst"><li><div><b>Venture profile</b><small>${'✓ Complete · 09:24'}</small></div></li><li><div><b>Company due diligence</b><small>◉ In review since ${mo('09:31')} · Axal reviewer</small></div></li></ul><p class="sub">Submit stays off until the review is recorded. Your draft stays.</p>${SAY('Venture profile saved. Back on your draft to Morgan Vale. 1 requirement in review.')}`, `<button type="button" class="btn t">Save draft</button><button type="button" class="btn p" aria-disabled="true">Submit request</button>`, 440)}</div>
+      ${ANN(`Browsing, choosing a target and saving a draft never wait on readiness. A blocked submit lists the exact requirements and returns to the same draft. The server rechecks at submit. ${TB('readiness snapshot + return-to-draft link · #7673, #7677')}`)}`);
+
+    /* ===== Confirm ===== */
+    else if (B === 'NIE06') html = shell('f', DESK('ax'), { h: 960, railT: 'Ask about introductions', overlay: CONFIRMSHEET });
+
+    /* ===== Submit states ===== */
+    else if (B === 'NIE07') html = crop(1400, `<div class="g3">
+      ${stcard('1 · Submitting', 'Submit request', `<div class="acts">${SUBMIT('busy')}</div><p class="sub">The button locks on the first click and carries one request key for this draft.</p>${SAY('Submitting your request to Priya Nair.')}`)}
+      ${stcard('2 · Clicked twice', 'Still one request', `<p class="sub">A second click while submitting does nothing. Only one request is sent, with the same key.</p><div class="acts">${SUBMIT('busy')}</div><p class="foot">${TB('idempotency key on submit · #7673')}</p>`)}
+      ${stcard('3 · Response lost', 'We could not confirm the request', `<div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>The connection dropped before an answer.</b> It may or may not be recorded. Nothing is charged twice.</div></div><p class="sub">Your purpose is kept (${PLEN} characters).</p><div class="acts"><button type="button" class="btn">Check what was recorded</button></div><p class="foot">Checking resends the same key; it never makes a second request.</p>`)}
+      ${stcard('4 · Retry finds the receipt', 'Your request was recorded', `<div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Found: submitted at ${mo('09:12')}.</b> Request ${mo(RID)}. Nothing was submitted twice.</div></div><div class="acts"><a class="btn" href="#">Open the receipt</a></div>${SAY('Your request was recorded at 09:12. Request 5c2e9a71.')}`)}
+      ${stcard('5 · Stale edit', 'This draft changed in another tab', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Edited in another tab at ${mo('09:10')}.</b> Your text here is kept beside the newer version.</div></div><p class="sub">Choose which purpose to keep, then review again.</p><div class="acts"><button type="button" class="btn">Keep this tab’s text</button><button type="button" class="btn">Use the newer text</button></div><p class="foot">${TB('draft version check · #7673')}</p>`)}
+      ${stcard('6 · Save failed', 'Not submitted', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>Not submitted. Nothing was charged.</b> The server refused before creating a request.</div></div><p class="sub">Target, capacity, purpose and attachment are kept.</p><div class="acts"><button type="button" class="btn">Try again</button></div>${SAY('Not submitted. Your request is kept.')}`, 'nie-bad')}</div>`);
+
+    /* ===== Receipt ===== */
+    else if (B === 'NIE08') html = shell('f', `${HEAD({ crumb: '<a href="#">Network</a> › <a href="#">Introductions</a> › Through Axal › ' + RID, eye: 'Through Axal · receipt ' + RID, h1: 'Your request to meet [Priya Nair]', sub: `Submitted ${mo(AT)} · as Founder · [Kelp Bio]`, acts: `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn">Withdraw request</button>` })}
+      <div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Request submitted.</b> Request ${mo(RID)}. Nothing has been sent to [Priya]. Focus moved to this heading; Back returns to Introductions.</div></div>
+      ${FF(ST.unas, TR.na, DL.none, IN.not)}
+      <div class="g"><div class="c7" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="rc"><div class="ch"><h2 id="rc">Receipt</h2></div>${RCPT()}</section>
+      <section class="cd" aria-labelledby="nx"><div class="ch"><h2 id="nx">What happens next</h2></div><ul class="tl">
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Request recorded</b><div class="foot">One durable request with this id</div></div><span class="w">${AT}</span></li>
+      <li><span class="mk cur" aria-hidden="true">●</span><div><b>Axal assigns an operator</b><div class="foot">Next actor: Axal. You see their name once assigned.</div></div><span class="w">not yet</span></li>
+      <li><span class="mk no" aria-hidden="true">○</span><div><b>The operator reviews [Priya] and your brief</b><div class="foot">They may ask you for more information</div></div><span class="w">—</span></li>
+      <li><span class="mk no" aria-hidden="true">○</span><div><b>Axal contacts [Priya]</b><div class="foot">Shown only once a send or contact is recorded</div></div><span class="w">—</span></li>
+      <li><span class="mk no" aria-hidden="true">○</span><div><b>[Priya] answers · introduction made</b><div class="foot">Her answer and the introduction are recorded separately</div></div><span class="w">—</span></li></ul></section></div>
+      <div class="c5" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd"><div class="ch"><h2>Shared after review</h2></div>${SHAREDL}${NOTSHARED}</section>
+      ${ANN(`${PROP('the new service')} ${TB('POST general request, receipt read, assignment · #7673')} Nothing on main records a request to a person outside Axal: team requests need a teammate who knows them, asks need a founder on Axal.`)}</div></div>`, { h: 1040, railT: 'Ask about this request' });
+
+    /* ===== Investor and advisor journeys ===== */
+    else if (B === 'NIE09') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Investor · step 4 of 4', 'Review your request', `<dl class="rv"><dt>Target</dt><dd><b>[Hugo Brandt]</b> · former VP Manufacturing, [Loomcraft] · ${PROV('Axal reviews who he is')}</dd><dt>Purpose</dt><dd>Advisor for [Tidepool Labs]’s move to contract manufacturing</dd><dt>You ask as</dt><dd>Investor · [Harbor Lane Capital] · representation confirmed</dd><dt>Axal shares</dt><dd>Your profile, [Harbor Lane Capital], this brief · after review</dd><dt>Cost</dt><dd>${NOCOST}</dd></dl><p class="sub"><b>Your quarterly asks are untouched.</b> ${mo('1')} of ${mo('3')} left in Q4 2026; this service does not use them.</p>`, `<button type="button" class="btn t">Back</button>${SUBMIT()}`, 450)}
+      ${panel('Investor · receipt b81d07c3', 'Your request to meet [Hugo Brandt]', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Submitted ${mo('2026-11-20 16:40 UTC')}.</b> Nothing has been sent to [Hugo].</div></div>${FF(ST.rev, TR.na, DL.none, IN.not, 'nie-2')}<dl class="rv"><dt>Owner</dt><dd>[Mila Ferro] · since ${mo('2026-11-21 08:50')}</dd><dt>Next</dt><dd>Axal confirms who [Hugo Brandt] is</dd></dl>`, `<span></span><a class="btn" href="#">Back to Introductions</a>`, 440)}
+      ${panel('Shell', 'Where the investor sees it', `<p class="sub">[Iris Chen]’s desk shows Through Axal beside From your team, Curated matches and Your asks. Each keeps its own count and unit.</p><ul class="lst"><li><div>${TY.ax}<small>1 awaiting Axal · no charge</small></div></li><li><div>${TY.qa}<small>1 of 3 asks left in Q4 2026 (#7065)</small></div></li><li><div>${TY.cm}<small>4 credits (#7064)</small></div></li><li><div>${TY.tm}<small>free (#7066)</small></div></li></ul>`, `<span></span><span></span>`, 420)}</div>`);
+    else if (B === 'NIE09B') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Advisor · step 4 of 4', 'Review your request', `<dl class="rv"><dt>Target</dt><dd><b>[Tom Becker]</b> · Operating partner, [Northstar Capital] · <b>member</b></dd><dt>Purpose</dt><dd>An operator’s view for [Elm Studio] before it hires a COO</dd><dt>You ask as</dt><dd>Advisor · in your own name</dd><dt>Axal shares</dt><dd>Your advisor profile and this brief · after review</dd><dt>Cost</dt><dd>${NOCOST}</dd></dl><div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>[Tom] is a member, but nothing is sent to his inbox by submitting.</b> Axal reviews first, like any other target.</div></div>`, `<button type="button" class="btn t">Back</button>${SUBMIT()}`, 460)}
+      ${panel('Advisor · receipt 0f6a3e58', 'Your request to meet [Tom Becker]', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Submitted ${mo('2026-11-21 08:30 UTC')}.</b> Nothing has been sent to [Tom].</div></div>${FF(ST.unas, TR.na, DL.none, IN.not, 'nie-2')}<dl class="rv"><dt>Owner</dt><dd><span class="s">○ Not assigned yet</span></dd><dt>Next</dt><dd>Axal assigns an operator</dd></dl>`, `<span></span><a class="btn" href="#">Back to Introductions</a>`, 440)}
+      ${panel('What stays separate', 'Not this service', `<table class="tbl"><tbody><tr><td>${TY.tm}</td><td>A teammate who knows them introduces you, free (#7066)</td></tr><tr><td><span class="nie-ty">⇢ Offer one</span></td><td>Offer one of your accepted ties to another member (#6637, #6748)</td></tr><tr><td>${TY.cm}</td><td>Axal proposes; both agree; 1 credit (#7064)</td></tr><tr><td>${TY.qa}</td><td>Investor to a founder on Axal; 1 ask (#7065)</td></tr></tbody></table><p class="foot">None of them gains permissions from this service.</p>`, `<span></span><span></span>`, 420)}</div>`);
+
+    /* ===== Request detail (requester) ===== */
+    else if (B === 'NIE10' || B === 'NIE22') html = shell('f', `${HEAD({ crumb: '<a href="#">Network</a> › <a href="#">Introductions</a> › Through Axal › a3c8b6f1', eye: 'Through Axal · request a3c8b6f1', h1: 'Your request to meet [Jules Avery]', sub: `[Elm Studio] · member · as Founder · [Kelp Bio] · submitted ${mo('2026-11-16 10:02 UTC')}`, acts: `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn">Withdraw request</button>` })}
+      ${FF(ST.cont + '<small>since 2026-11-18 14:20</small>', TR.wait + '<small>no answer recorded</small>', DL.sent + '<small>by [Ren Okada] · 2026-11-18 14:20</small>', IN.not + '<small>needs [Jules]’s agreement first</small>')}
+      <div class="nt"><span class="ic" aria-hidden="true">→</span><div><b>Next: [Jules Avery] answers Axal.</b> Owner: [Ren Okada], Axal. Follow-up date set by [Ren]: ${mo('2026-11-25')}. This is a plan, not a promised response time.</div></div>
+      <div class="g"><div class="c7" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="ac"><div class="ch"><h2 id="ac">Activity</h2><span class="sm">visible to you</span></div><ul class="tl">
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>You submitted the request</b></div><span class="w">2026-11-16 10:02</span></li>
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Assigned to [Ren Okada]</b></div><span class="w">2026-11-16 11:30</span></li>
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>[Ren] confirmed [Jules Avery] at [Elm Studio]</b></div><span class="w">2026-11-17 09:15</span></li>
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Brief approved for sharing</b><div class="foot">The version below, v2</div></div><span class="w">2026-11-18 13:55</span></li>
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Axal emailed [Jules]</b><div class="foot">Recorded send from the Axal introductions mailbox</div></div><span class="w">2026-11-18 14:20</span></li>
+      <li><span class="mk wa" aria-hidden="true">◷</span><div><b>Waiting for [Jules]’s answer</b></div><span class="w">now</span></li></ul></section>
+      <section class="cd" aria-labelledby="br"><div class="ch"><h2 id="br">Shareable brief · v2</h2><span class="sm">sent to [Jules] on 2026-11-18</span></div><p class="sub">“[Kelp Bio] is choosing a design partner for its materials brand. [Elm Studio]’s work for bio-based brands is the closest fit we have seen. 30 minutes to compare notes?”</p><div class="acts"><button type="button" class="btn">Suggest an edit</button><span class="foot">After contact, an edit goes to [Ren] for review; it is not re-sent by itself.</span></div></section></div>
+      <div class="c5" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd"><div class="ch"><h2>Notes</h2></div>
+      <div class="nie-scope"><b>Your private note · only you</b><span class="sub">“Met [Jules] briefly at Lisbon Design Week 2024.”</span></div>
+      <div class="nie-scope nie-sh"><b>Shared with [Jules] · after review</b><span class="sub">The brief above and your profile summary</span></div>
+      <div class="nie-scope"><b>Axal operator notes</b><span class="sub">Kept by Axal. Not shown to you or to [Jules].</span></div></section>
+      <section class="cd"><div class="ch"><h2>Details</h2></div><dl class="rv"><dt>Request</dt><dd class="mo">a3c8b6f1</dd><dt>Target</dt><dd>[Jules Avery] · Founder, [Elm Studio] · member</dd><dt>As</dt><dd>Founder · [Kelp Bio]</dd><dt>Cost</dt><dd>${NOCOST}</dd><dt>Outcome</dt><dd>${NR('after an introduction')}</dd></dl></section></div></div>`, { h: 960, railT: 'Ask about this request' });
+    else if (B === 'NIE10B') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Needs information · from [Ren Okada]', 'Which [Ari Lane] do you mean?', `<div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>[Ren] asked ${mo('2026-11-20 16:05')}:</b> “Two people named [Ari Lane] are linked to [Tidepool Labs]: the CTO and a former board observer. Which one, and how did you come across them?”</div></div>
+      <div class="f"><label for="an">Your answer (shared with Axal, not with [Ari])</label><span id="an" class="in ta">The CTO. He presented [Tidepool Labs]’s sensor work at the Ocean Tech meetup in October.</span></div>
+      <p class="foot">Your request stays as it is while you answer. Nothing is sent to [Ari].</p>`, `<button type="button" class="btn t">Save draft</button><button type="button" class="btn p">Send answer to Axal</button>`, 460)}
+      ${panel('After you answer', 'Answer sent to [Ren Okada]', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Sent at ${mo('09:40')}.</b> Your request moves back to Axal.</div></div>${FF(ST.rev, TR.na, DL.none, IN.not, 'nie-2')}${SAY('Answer sent. Next: Axal reviews the target.')}`, `<span></span><a class="btn" href="#">Back to Introductions</a>`, 440)}
+      ${panel('Answer could not be saved', 'Not sent', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>Your answer was not sent.</b> It is kept here.</div></div><p class="sub">${ST.info} The request still waits on you.</p>`, `<button type="button" class="btn t">Save draft</button><button type="button" class="btn p">Try again</button>`, 420)}</div>
+      ${ANN(`Requester-visible text, operator-private notes and target-visible content are three scopes with three readers. ${TB('needs-information event and scoped notes · #7673')}`)}`);
+
+    /* ===== Notification deep link ===== */
+    else if (B === 'NIE11') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Notification', 'Axal contacted [Jules Avery]', `<div class="pick on"><span class="av">◆</span><div><b>Your request a3c8b6f1</b><small>Contacted · awaiting target · ${mo('2026-11-18 14:20')}</small></div></div><p class="sub">The link names the request id, never a list position or filter.</p><p class="foot">/network/introductions?kind=general&amp;id=a3c8b6f1</p>`, `<span></span><a class="btn p" href="#">Open</a>`, 400)}
+      ${panel('Opened over your desk', 'Request a3c8b6f1', `<div class="nt"><span class="ic" aria-hidden="true">↗</span><div><b>Opened from your notification.</b> It is outside your History filter; your filters and scroll are unchanged behind it.</div></div>${FF(ST.cont, TR.wait, DL.sent, IN.not, 'nie-2')}<p class="sub">Close returns focus to the History tab where you were.</p>`, `<span></span><button type="button" class="btn">Close</button>`, 440)}
+      ${panel('Lookup outcomes', 'When the record cannot open', `<ul class="lst"><li><div>${RF()}<small>Not yours to read: “This request is not available to you.” Same words whether it exists or not.</small></div></li><li><div>${UR()}<small>The lookup failed: Try again. Never shown as missing.</small></div></li><li><div><span class="s">→ Signed out</span><small>Sign-in keeps the id and opens it after.</small></div></li></ul>`, `<span></span><button type="button" class="btn">Try again</button>`, 420)}</div>
+      ${ANN(`Same pattern as the desk (D7063, NID05). ${TB('scoped lookup GET general request by id · #7673')}`)}`);
+
+    /* ===== Operator queue ===== */
+    else if (B === 'NIE12') html = shell('a', `${OPHEAD({ h1: 'Introduction requests', sub: 'Requests members made through Axal. Assign one, review the target and the requester, then decide what is sent. Nothing here sends by itself.', acts: `<button type="button" class="btn ask">${E}Ask</button>` })}
+      <div class="nie-lanes" role="group" aria-label="Open cases"><div class="nie-lane"><b>3</b><span>Unassigned</span></div><div class="nie-lane"><b>6</b><span>Assigned to me</span></div><div class="nie-lane"><b>7</b><span>Assigned to others</span></div><div class="nie-lane"><b>16</b><span>All open</span></div></div>
+      <section class="cd" aria-labelledby="qu"><div class="ch"><h2 id="qu">Unassigned and mine</h2><div class="seg" role="radiogroup" aria-label="View"><button type="button" role="radio" aria-checked="true">Unassigned and mine</button><button type="button" role="radio" aria-checked="false">Assigned to others</button><button type="button" role="radio" aria-checked="false">All open</button></div></div>
+      <div class="acts"><span class="foot">Mine:</span><span class="pl a">? Needs requester · 2</span><span class="pl v">▸ Outreach ready · 1</span><span class="pl a">◷ Awaiting target · 2</span><span class="pl a">◌ Delivery unknown · 1</span></div>
+      <table class="tbl">${tableHdr(['Request', 'Requester · as', 'Target', 'Stage', 'Response · contact', 'Owner', 'Updated'])}<tbody>${J(QROWS.map((r) => qrow(r, '5c2e9a71')))}</tbody></table>
+      <div class="cf"><span class="foot">9 shown of 16 open · Assigned to others in its own tab</span><button type="button" class="btn">Load 20 more</button></div></section>
+      ${ANN(`${PROP('operator queue')} ${TB('operator entitlement, assignment, queue read with cursor and totals · #7673')} On main the Admin console has network standing (<code>/api/admin/network</code>) and directory profiles (<code>/api/admin/network-profiles</code>), but no queue of member requests. Who may operate is configuration, not a role guess. ${TO('operator entitlement · A: named Super Admin grant')}`)}`, { h: 1090, railT: 'Ask about the queue' });
+
+    /* ===== Case detail ===== */
+    else if (B === 'NIE13') html = shell('a', `${OPHEAD({ crumb: '<a href="#">Introduction requests</a> › 5c2e9a71', eye: 'Case 5c2e9a71 · Through Axal', h1: '[Lena Sato] → [Priya Nair]', sub: `Founder · [Kelp Bio] · submitted ${mo(AT)} · assigned to you ${mo('10:05')}`, acts: `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn">Request information</button><button type="button" class="btn">Mark no route</button><button type="button" class="btn p">Review and contact</button>` })}
+      ${FF(ST.rev, TR.na, DL.none, IN.not)}
+      <div class="g"><div class="c7" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="ti"><div class="ch"><h2 id="ti">Target identity</h2><span class="pl g">✓ Confirmed by you · 10:12</span></div>
+      ${PRIYA.replace('✓ Chosen', '✓ This person')}${PRIYA2.replace('</div></div>', '</div><span class="s">✕ Not this person</span></div>')}
+      <p class="foot">Was ${PROV('until 10:12')}. Source record from the NFX Signal import, run ${mo('nsi-0412')} (#7679).</p></section>
+      <section class="cd" aria-labelledby="ch2"><div class="ch"><h2 id="ch2">Contact channels</h2></div>
+      <table class="tbl">${tableHdr(['Channel', 'Source', 'Freshness', 'Use'])}<tbody>
+      <tr><td><b>Work email</b><small>[work email · from source]</small></td><td>NFX Signal</td><td class="mo">2026-11-12 · 9 days</td><td><span class="pl g">✓ Usable</span></td></tr>
+      <tr><td><b>Public profile page</b></td><td>NFX Signal</td><td class="mo">2026-11-12</td><td>Context only</td></tr>
+      <tr><td><b>Phone</b></td><td>—</td><td>—</td><td>${NR()}</td></tr></tbody></table>
+      <div class="acts"><span class="pl g">✓ Not suppressed · checked 10:06</span><span class="foot">No opt-out or do-not-contact entry for [Priya Nair].</span>${TB('suppression list · #7674')}</div></section>
+      <section class="cd" aria-labelledby="od"><div class="ch"><h2 id="od">Outreach draft</h2><span class="pl">✎ Draft · not sent</span></div>
+      <div class="draft"><div class="cost"><span>Eadwyn drafted after quoting</span><b>[900] tokens</b></div><p class="tx">“Dear [Priya], I coordinate introductions at Axal VC. [Lena Sato], founder of [Kelp Bio], would value 30 minutes on whether its January seed round fits [Harbor Seed]’s bio-materials mandate…”</p><div class="acts"><button type="button" class="btn">Edit</button><button type="button" class="btn t">Discard</button></div></div>
+      <p class="foot">Eadwyn drafts for your review. It cannot send, record consent or record delivery.</p></section></div>
+      <div class="c5" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd"><div class="ch"><h2>Requester readiness</h2><span class="pl g">✓ Ready</span></div><dl class="rv"><dt>Capacity</dt><dd>Founder · [Kelp Bio]</dd><dt>Snapshot</dt><dd class="mo">r3 · taken at submit 09:12</dd><dt>Requirements</dt><dd>4 of 4 met · company diligence reviewed 2026-11-14</dd><dt>Valid until</dt><dd>${NR('policy sets no limit')}</dd></dl><p class="foot">Summary only. Evidence stays in the readiness case (#7677). ${TB('readiness snapshot read · #7673')}</p></section>
+      <section class="cd"><div class="ch"><h2>Request</h2></div><p class="sub">“${PURPOSE}”</p><dl class="rv"><dt>Shares</dt><dd>Profile, [Kelp Bio] summary, brief, one-pager</dd><dt>Cost</dt><dd>${NOCOST}</dd></dl></section>
+      <section class="cd"><div class="ch"><h2>Operator notes</h2><span class="sm">Axal only</span></div><div class="nie-scope"><b>[Ren Okada] · 10:14</b><span class="sub">Strong mandate fit; [Harbor Seed] led 2 bio-materials seeds this year.</span></div><p class="foot">Never shown to [Lena] or [Priya].</p></section>
+      <section class="cd"><div class="ch"><h2>Activity</h2></div><ul class="tl"><li><span class="mk ok" aria-hidden="true">✓</span><div><b>Submitted by [Lena Sato]</b></div><span class="w">09:12</span></li><li><span class="mk ok" aria-hidden="true">✓</span><div><b>Assigned to [Ren Okada] by [Ren Okada]</b></div><span class="w">10:05</span></li><li><span class="mk ok" aria-hidden="true">✓</span><div><b>Identity confirmed</b></div><span class="w">10:12</span></li></ul><p class="foot">Append-only. ${TB('activity log · #7673')}</p></section></div></div>`, { h: 1160, railT: 'Ask about this case' });
+
+    /* ===== Review and contact ===== */
+    else if (B === 'NIE14') html = shell('a', `${OPHEAD({ crumb: '<a href="#">Introduction requests</a> › 5c2e9a71', eye: 'Case 5c2e9a71 · Through Axal', h1: '[Lena Sato] → [Priya Nair]', sub: `Founder · [Kelp Bio] · assigned to you ${mo('10:05')}`, acts: '' })}${FF(ST.oready, TR.na, DL.none, IN.not)}`, { h: 1000, railT: 'Ask about this case', overlay: `<aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="rv" style="width:640px">
+      <div class="dh"><div><span class="eye">Review and contact · case 5c2e9a71</span><h2 id="rv">Send to [Priya Nair]?</h2></div><button type="button" class="ib" aria-label="Close and return to the case">✕</button></div>
+      <div class="dc">
+      <dl class="rv"><dt>Recipient</dt><dd><b>[Priya Nair]</b> · Partner, [Harbor Seed] · identity confirmed 10:12</dd><dt>Channel</dt><dd>Email · [work email · from source] · from the Axal introductions mailbox</dd><dt>Suppression</dt><dd>Not suppressed · checked ${mo('10:38')}</dd></dl>
+      <div class="nie-mail"><div><i>Subject</i><span>Introduction request: [Lena Sato], [Kelp Bio]</span></div><p>Dear [Priya],
+
+I coordinate introductions at Axal VC. [Lena Sato], founder of [Kelp Bio], would value 30 minutes on whether its January seed round fits [Harbor Seed]’s bio-materials mandate. Her note and a two-page summary are attached.
+
+If you are open to it, reply and I will connect you. If not, a short no is welcome and nothing more will follow.
+
+[Ren Okada], Axal VC</p></div>
+      <dl class="rv"><dt>Attachments</dt><dd>[Kelp Bio] one-pager (PDF, 2 pages) · brief v1 approved ${mo('10:36')}</dd><dt>Not attached</dt><dd>Due-diligence evidence, [Lena]’s email and phone, notes</dd></dl>
+      <div class="nie-ck"><span aria-hidden="true">✓</span><span>I reviewed the recipient, channel, message and attachments.</span></div>
+      <p class="foot">Sending records one contact attempt with its own key. A retry finds the same send; it never sends twice. ${TB('outreach send operation · #7673')}</p></div>
+      <div class="df"><button type="button" class="btn t">Back to the case</button><button type="button" class="btn">Record contact made elsewhere</button><button type="button" class="btn p fv">Send to [Priya Nair]</button></div></aside>` });
+    else if (B === 'NIE14B') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Record contact made elsewhere', 'You contacted [Priya] another way', `<div class="f"><label for="xc">How</label><span id="xc" class="in">Phone call</span></div><div class="f"><label for="xt">When (required)</label><span id="xt" class="in mo">2026-11-21 11:05 UTC</span></div><div class="f"><label for="xn">What was said (required)</label><span id="xn" class="in ta">Described [Kelp Bio]’s round; [Priya] asked for the one-pager by email.</span></div><p class="foot">Records a contact event with you as actor. It sends nothing.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Record contact</button>`, 440)}
+      ${panel('Mark no route', 'No way to reach [Leo Marsh]', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>No usable channel.</b> The only email is from a 2024 source and bounced on ${mo('2026-09-10')}.</div></div><div class="f"><label for="nr">Reason shown to the requester (required)</label><span id="nr" class="in ta">We could not find a current way to reach [Leo Marsh]. Nothing was sent.</span></div><p class="foot">Closes the request as Unavailable to proceed, with this reason. The requester can open a new one with more context.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Close as no route</button>`, 440)}
+      ${panel('Request information', 'Ask [Lena] for more', `<div class="f"><label for="ri">Question for [Lena] (she sees this)</label><span id="ri" class="in ta">Two people named [Ari Lane] are linked to [Tidepool Labs]: the CTO and a former board observer. Which one, and how did you come across them?</span></div><p class="foot">The case moves to Needs information. [Lena] is notified with a link to this request.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Send to [Lena]</button>`, 440)}</div>
+      ${ANN(`Approving a case, confirming identity, importing a source or publishing the directory never contacts anyone. Contact happens only through Send (reviewed) or Record contact (a human says it happened). ${TB('external-contact event, no-route close, needs-information · #7673')}`)}`);
+
+    /* ===== Delivery recovery ===== */
+    else if (B === 'NIE15') html = crop(1400, `<div class="g3">
+      ${stcard('Sent · record pending', 'The email went; the case did not update', `<p class="sub">Case 5c2e9a71 · [Priya Nair]</p><dl class="rv"><dt>Mail</dt><dd>${DL.sent} at ${mo('10:41:07')}</dd><dt>Case</dt><dd>${DL.pend}</dd></dl><div class="acts"><button type="button" class="btn p">Update the record</button></div><p class="foot">Updates the case from the recorded send. It sends no second email. There is no Resend.</p><p class="foot">${NOW('pattern from D7066 · /delivery/reconcile')}</p>`)}
+      ${stcard('Delivery unknown', 'Did the email to [Hana Ito] arrive?', `<p class="sub">Case f81b3a66 · [Theo Grant] → [Hana Ito]</p><div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>The mailbox did not confirm the send</b> at ${mo('2026-11-20 15:22')}.</div></div><div class="acts"><button type="button" class="btn">It arrived</button><button type="button" class="btn">It did not arrive</button></div><p class="foot">Check the sent folder first. Only “It did not arrive” allows a new send, after review.</p>`)}
+      ${stcard('Not sent', 'The email was not sent', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>The mail service refused the send.</b> Nothing reached [Priya].</div></div><p class="sub">The draft and attachments are kept. ${DL.fail}</p><div class="acts"><button type="button" class="btn">Back to review</button></div>`, 'nie-bad')}</div>
+      ${ANN(`Same recovery words as teammate delivery (D7066): a confirmed send with a pending record gets Update the record; unknown delivery is reconciled before any new send. ${TB('mail send operations for the Axal mailbox · #7673')}`)}`);
+
+    /* ===== Target response, introduction, outcome ===== */
+    else if (B === 'NIE16') html = crop(1400, `<div class="g3">
+      ${stcard('Later · target answers', '[Priya] agreed', `<p class="sub">Recorded by [Ren Okada] from [Priya]’s reply</p><dl class="rv"><dt>Response</dt><dd>${TR.agr} ${mo('2026-11-24 09:03')}</dd><dt>Evidence</dt><dd>Reply in the Axal mailbox thread</dd><dt>Introduction</dt><dd>${IN.not}</dd></dl><p class="sub"><b>Agreed is not an introduction.</b> Next: [Ren] makes it.</p><div class="acts"><button type="button" class="btn">Record declined</button><button type="button" class="btn p">Make the introduction</button></div>`)}
+      ${stcard('Later · introduction', 'Introduction made', `<dl class="rv"><dt>Introduction</dt><dd>${IN.made} ${mo('2026-11-24 11:20')}</dd><dt>How</dt><dd>One email to [Lena] and [Priya], reviewed and sent by [Ren] · delivery recorded</dd><dt>Shared now</dt><dd>[Lena]’s email, by [Priya]’s agreement</dd><dt>Request</dt><dd>${ST.closed} after an introduction</dd></dl>${SAY('Introduction made. Lena Sato and Priya Nair are connected.')}`)}
+      ${stcard('Later · follow-up and outcome', 'What came of it', `<dl class="rv"><dt>Outcome</dt><dd>${NR('until someone records it')}</dd></dl><div class="seg" role="radiogroup" aria-label="Outcome"><button type="button" role="radio" aria-checked="true">Meeting held</button><button type="button" role="radio" aria-checked="false">No meeting</button><button type="button" role="radio" aria-checked="false">Other</button></div><p class="sub">[Lena] or [Ren] may record it, with a date. Recording an outcome sends nothing.</p><div class="acts"><button type="button" class="btn p">Record outcome</button></div>`)}</div>
+      ${ANN(`Lifecycle, target response, contact attempt and introduction are four fields with four events; no single Pending covers them. Dates after 21 Nov are a labelled sample progression. ${TB('consent evidence, introduction-delivery event, outcome · #7673')}`)}`);
+
+    /* ===== Withdrawal ===== */
+    else if (B === 'NIE17') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Withdraw · before contact', 'Withdraw your request to [Nora Lind]?', `<dl class="rv"><dt>Stage</dt><dd>${ST.rev} · [Mila Ferro]</dd><dt>Contact</dt><dd>${DL.none}</dd><dt>Effect</dt><dd>Axal stops. [Nora] was never contacted and will not be.</dd><dt>Cost</dt><dd>Nothing was charged</dd></dl><p class="sub">Withdrawn is final. You can submit a new request later.</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Withdraw request</button>`, 440)}
+      ${panel('Withdraw · after contact', 'Withdraw your request to [Jules Avery]?', `<dl class="rv"><dt>Contact</dt><dd>${DL.sent} · ${mo('2026-11-18 14:20')}</dd><dt>Already happened</dt><dd>[Jules] received Axal’s email with your brief. It cannot be unsent.</dd><dt>Effect</dt><dd>Axal stops coordinating. [Ren] decides whether to send [Jules] a short close note, and you see it if sent.</dd></dl><p class="foot">${TO('close note after withdrawal · A: operator reviews and sends')}</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Withdraw request</button>`, 440)}
+      ${panel('Withdraw · race', 'Axal had just contacted [Priya]', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>[Ren] sent the email at ${mo('10:41:07')}</b>, before your withdrawal at ${mo('10:41:20')}.</div></div><dl class="rv"><dt>Request</dt><dd>${ST.wd} · after contact</dd><dt>Contact</dt><dd>${DL.sent}</dd></dl><p class="sub">Your withdrawal is recorded. [Priya] has the email; [Ren] is told so a reply is handled honestly.</p>`, `<span></span><button type="button" class="btn">Back to Introductions</button>`, 440)}</div>
+      ${ANN(`Scope → Review → Result. The server orders the two events; the result names both times. ${TB('withdraw with compare-and-set on stage · #7673')}`)}`);
+
+    /* ===== States ===== */
+    else if (B === 'NIE18') html = crop(1400, `<div class="g3">
+      ${stcard('Loading', 'Through Axal', `<span class="sk" style="height:12px;width:60%"></span><span class="sk" style="height:34px"></span><span class="sk" style="height:34px"></span><p class="foot" role="status">Reading your requests… No count is drawn until the read answers.</p>`)}
+      ${stcard('True empty', 'Through Axal', `<p class="sub">${NONE} You have not asked Axal for an introduction. Name a person and Axal coordinates the rest.</p><button type="button" class="btn p" style="align-self:flex-start">Request an introduction</button>`)}
+      ${stcard('No results', 'Who do you want to meet?', `<p class="sub"><b class="mo">0</b> people called “[Ines Dur]” in the directory. The search answered.</p><div class="acts"><button type="button" class="btn">Name someone new</button></div>`)}
+      ${stcard('Missing facts', 'A directory person', `<dl class="rv"><dt>Title</dt><dd>${NR()}</dd><dt>Organization</dt><dd>${NR('kept as context')}</dd><dt>Last seen</dt><dd>${NR('source gave no date')}</dd></dl>`)}
+      ${stcard('Unavailable', 'Through Axal', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Your requests could not be read.</b> Not shown as empty.</div></div><div class="acts"><button type="button" class="btn">Try again</button></div>`, 'nie-bad')}
+      ${stcard('Restricted · support session', 'Through Axal · read-only', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Support session.</b> Submit, answer and withdraw are off; drafts are not saved.</div></div><p class="foot">${TB('refuse support-session writes · #7673')}</p>`)}
+      ${stcard('Refused', 'This request is not available to you', `<p class="sub">${RF()} Not yours, or not for your licence. Nothing about it is shown.</p>`)}
+      ${stcard('Unassigned', 'Awaiting assignment', `<p class="sub">${ST.unas} since ${mo('09:12')}. No operator is named and no time is promised.</p><p class="foot">Never a placeholder name.</p>`)}
+      ${stcard('No channel · operator', 'No way to reach [Leo Marsh]', `<p class="sub">Email: ✕ bounced ${mo('2026-09-10')} · Phone: ${NR()}</p><div class="acts"><button type="button" class="btn">Request information</button><button type="button" class="btn">Mark no route</button></div>`)}</div>`);
+    else if (B === 'NIE18B') html = crop(1400, `<div class="g3">
+      ${stcard('Stale readiness', 'Readiness changed before submit', `<p class="sub">[Tom Becker] · as Operating partner</p><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Readiness expired at ${mo('2026-11-21 00:00')}.</b> Checked ${mo('08:40')} when the draft opened; rechecked at submit.</div></div><p class="sub">${STALE('checked 52 min ago')} Draft kept.</p><div class="acts"><a class="btn" href="#">Renew the requirement →</a></div>`)}
+      ${stcard('Duplicate request', 'You already have an open request', `<p class="sub">To [Priya Nair] as Founder · [Kelp Bio] · request ${mo(RID)} · Awaiting assignment.</p><div class="acts"><a class="btn" href="#">Open it</a><button type="button" class="btn t">Keep this as a draft</button></div><p class="foot">A second open request to the same person in the same capacity is refused. ${TB('#7673')}</p>`)}
+      ${stcard('Declined', '[Omar Reyes] declined', `<dl class="rv"><dt>Response</dt><dd>${TR.dec} ${mo('2026-10-21')}</dd><dt>Reason</dt><dd>${NR('[Omar] gave none')}</dd></dl><p class="sub">Axal will not contact [Omar] again for this request.</p>`)}
+      ${stcard('Expired', 'No answer from [Hana Ito]', `<dl class="rv"><dt>Response</dt><dd>${TR.exp}</dd><dt>Contacted</dt><dd>${mo('2026-09-02')}</dd><dt>Closed</dt><dd>${mo('2026-09-30')} by [Ren Okada]</dd></dl><p class="foot">Expiry is an operator’s recorded close, not a timer ${TO('expiry window · A: operator closes')}</p>`)}
+      ${stcard('Delivery unknown · requester', 'Axal is confirming the email', `<p class="sub">${DL.unk} Axal is checking whether the email to [Hana Ito] arrived. Nothing will be sent twice.</p>`)}
+      ${stcard('Partial failure', 'Introductions', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Awaiting target could not be read.</b> Not zero. Needs you and Awaiting Axal loaded.</div></div><div class="nie-lanes" style="grid-template-columns:repeat(2,1fr)"><div class="nie-lane"><b>2</b><span>Needs you</span></div><div class="nie-lane"><b>?</b><span>Awaiting target · Unavailable</span></div></div><button type="button" class="btn" style="align-self:flex-start">Retry</button>`, 'nie-bad')}
+      ${stcard('Concurrent assignment · operator', 'Already assigned', `<p class="sub">[Mila Ferro] tried to assign 5c2e9a71 at ${mo('10:05:30')}.</p><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>[Ren Okada] took it at ${mo('10:05:02')}.</b> Nothing changed.</div></div><div class="acts"><button type="button" class="btn">Open the case</button></div>`)}
+      ${stcard('Revoked target · operator', 'Target asked not to be contacted', `<p class="sub">${RF('do-not-contact since 2026-11-19')}</p><p class="sub">Review and contact is off. Close with the reason shown to the requester.</p>`)}
+      ${stcard('Eadwyn · operator', 'Draft the outreach', `<div class="draft"><div class="cost"><span>Cost, quoted before drafting</span><b>[900] tokens</b></div><p class="tx">“Dear [Priya], I coordinate introductions…”</p><div class="acts"><button type="button" class="btn">Use</button><button type="button" class="btn t">Discard</button></div></div><p class="foot">Drafts only. ${TB('outreach draft · #7673')}</p>`)}</div>`);
+
+    /* ===== Lifecycle and matrices ===== */
+    else if (B === 'NIE19') {
+      const LC = [
+        ['Draft', 'Requester', 'Edits; target may be provisional; nothing is dispatched'],
+        ['Readiness needed', 'Requester', 'Completes the named requirement and returns to the same draft'],
+        ['Awaiting assignment', 'Axal', 'Durable request exists; an authorized operator takes it'],
+        ['In review', 'Operator', 'Confirms target identity, readiness, channel, suppression'],
+        ['Needs information', 'Requester', 'Answers the operator’s specific question'],
+        ['Outreach ready', 'Operator', 'Brief approved; Review and contact'],
+        ['Contacted', 'Target', 'A recorded send or external-contact event exists'],
+        ['Closed', '—', 'After introduction, decline, expiry or no route; reason shown'],
+        ['Withdrawn', '—', 'Before or after contact; both times kept']
+      ];
+      const AC = [
+        ['Submit', 'Requester', 'Ready for the chosen capacity (rechecked); no open duplicate', 'Target, purpose, capacity, shared fields, cost', 'request.submitted', 'Same key → same receipt; failed save keeps the draft'],
+        ['Assign', 'Operator', 'Operator entitlement; case unassigned', 'Queue row', 'request.assigned', '409 names who took it'],
+        ['Confirm identity', 'Operator', 'Assigned', 'Source records, namesakes', 'target.identity_confirmed', 'Not this person → needs information'],
+        ['Request information', 'Operator', 'Assigned', 'Question (requester-visible)', 'request.needs_information', 'Answer returns it to In review'],
+        ['Send (Review and contact)', 'Operator', 'Identity confirmed; not suppressed; brief approved; reviewed box', 'Recipient, channel, message, attachments', 'contact.sent', 'Record pending → Update the record; unknown → reconcile'],
+        ['Record external contact', 'Operator', 'Assigned', 'Channel, time, summary', 'contact.recorded', 'Edit within the case; append-only'],
+        ['Record target response', 'Operator, or the target if a member', 'Contacted', 'Agreed / Declined + evidence', 'target.responded', 'Correction is a new event'],
+        ['Make the introduction', 'Operator', 'Target agreed', 'Both recipients, message', 'introduction.made', 'As Send'],
+        ['Withdraw', 'Requester', 'Not closed', 'Contact so far, effect', 'request.withdrawn', 'Race returns both times'],
+        ['Mark no route / close expired', 'Operator', 'Assigned', 'Reason shown to requester', 'request.closed', 'Requester can open a new request'],
+        ['Record outcome', 'Requester, operator', 'Introduction made', 'Outcome, date', 'outcome.recorded', 'Not recorded until set']
+      ];
+      const PM = [
+        ['Purpose and brief', '✓ edit until contact', '✓', '✓ the approved version', '⊘', 'read-only'],
+        ['Requester private note', '✓', '⊘', '⊘', '⊘', '⊘'],
+        ['Operator notes', '⊘', '✓', '⊘', '⊘', '⊘'],
+        ['Readiness summary', '✓ own', '✓ summary', '⊘', '⊘', 'read-only'],
+        ['Diligence evidence', '✓ own (#7677)', '⊘ unless reviewer', '⊘', '⊘', '⊘'],
+        ['Target contact channel', '⊘', '✓', '—', '⊘', '⊘'],
+        ['Requester email', '✓', '✓', 'only after agreeing', '⊘', '⊘'],
+        ['Activity', '✓ visible events', '✓ all', 'own response', '⊘', 'read-only']
+      ];
+      html = `<div class="${CV} doc"><div><span class="eye">NIE · #7678 · lifecycle, transitions, permissions</span><h2 style="font-size:22px;margin-top:4px">Four separate fields, each action with its actor, precondition, event and recovery</h2></div>
+      <div class="cols"><div><h3>Request lifecycle → next actor</h3><table class="nie-mx">${tableHdr(['Stage', 'Next actor', 'Meaning'])}<tbody>${J(LC.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`))}</tbody></table></div>
+      <div><h3>The other three fields</h3><table class="nie-mx">${tableHdr(['Field', 'Values'])}<tbody><tr><td>Target response</td><td>Not asked yet · Awaiting target · Agreed · Declined · Unavailable to proceed · Expired</td></tr><tr><td>Contact attempt</td><td>No contact yet · Sent (recorded) · Sent, record pending · Delivery unknown · Not sent · External contact (recorded)</td></tr><tr><td>Introduction</td><td>Not made · Introduction made</td></tr><tr><td>Outcome</td><td>Not recorded · Meeting held · No meeting · Other</td></tr></tbody></table><p class="foot" style="margin-top:6px">Agreed never implies Made. Contacted needs a contact event. No Pending covers more than one field.</p></div></div>
+      <h3>Transitions</h3><table class="nie-mx">${tableHdr(['Action', 'Actor', 'Precondition', 'Visible fields', 'Event', 'Recovery'])}<tbody>${J(AC.map((r) => `<tr>${J(r.map((c) => `<td>${c}</td>`))}</tr>`))}</tbody></table>
+      <h3>Field-level permissions</h3><table class="nie-mx">${tableHdr(['Field', 'Requester', 'Operator', 'Target', 'Other members', 'Support session'])}<tbody>${J(PM.map((r) => `<tr>${J(r.map((c) => `<td>${c}</td>`))}</tr>`))}</tbody></table>
+      <p class="foot">Every event is append-only with actor and time ${TB('#7673')}. Offer one, team requests, curated matches, quarterly asks and the investor NDA handoff keep their own permissions.</p></div>`;
+    }
+
+    /* ===== Tablet ===== */
+    else if (B === 'NIE20') html = `<div class="${CV} tab">${phTop('Introductions').replace('class="pt"', 'class="pt" style="padding:0 12px"')}<main class="bd" style="padding:20px 24px;overflow:hidden">${HEAD({ crumb: '<a href="#">Introductions</a> › Through Axal', eye: 'Through Axal · request a3c8b6f1', h1: 'Your request to meet [Jules Avery]', sub: `[Elm Studio] · member · as Founder · [Kelp Bio]`, acts: `<button type="button" class="btn">Withdraw</button>`, tab: false })}
+      ${FF(ST.cont, TR.wait, DL.sent, IN.not, 'nie-2')}
+      <div class="nt"><span class="ic" aria-hidden="true">→</span><div><b>Next: [Jules Avery] answers Axal.</b> Owner: [Ren Okada]. Follow-up planned ${mo('2026-11-25')}.</div></div>
+      <section class="cd"><div class="ch"><h2>Activity</h2></div><ul class="tl"><li><span class="mk ok" aria-hidden="true">✓</span><div><b>Submitted</b></div><span class="w">11-16 10:02</span></li><li><span class="mk ok" aria-hidden="true">✓</span><div><b>Assigned to [Ren Okada]</b></div><span class="w">11-16 11:30</span></li><li><span class="mk ok" aria-hidden="true">✓</span><div><b>Axal emailed [Jules]</b></div><span class="w">11-18 14:20</span></li><li><span class="mk wa" aria-hidden="true">◷</span><div><b>Waiting for [Jules]’s answer</b></div><span class="w">now</span></li></ul></section>
+      <section class="cd"><div class="ch"><h2>Shareable brief · v2</h2></div><p class="sub">“[Kelp Bio] is choosing a design partner for its materials brand…”</p></section>
+      <section class="cd"><div class="ch"><h2>Notes</h2></div><div class="nie-scope"><b>Your private note · only you</b><span class="sub">“Met [Jules] briefly at Lisbon Design Week 2024.”</span></div><div class="nie-scope"><b>Axal operator notes</b><span class="sub">Not shown to you or to [Jules].</span></div></section></main></div>`;
+
+    /* ===== Phone ===== */
+    else if (B === 'NIE21A') html = phone('Request an introduction', `${STP(1)}<h1 style="font-size:20px;font-weight:800">Who do you want to meet?</h1><div class="f"><label for="ps">Name</label><span id="ps" class="in">[Priya Nair]</span></div>${PRIYA}${PRIYA2}<div class="line"><span>No teammate has [Priya] · Through Axal</span></div>`, '<button type="button" class="btn p">Continue</button>', { back: 1 });
+    else if (B === 'NIE21B') html = phone('Review your request', `${STP(4)}<h1 style="font-size:20px;font-weight:800">Review your request</h1>${REVIEW({ nostep: 1, short: 1, tags: false })}`, SUBMIT(), { back: 1, h: 900 });
+    else if (B === 'NIE21C') html = phone('Request', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Request submitted.</b> Nothing has been sent to [Priya].</div></div><h1 style="font-size:20px;font-weight:800">Your request to meet [Priya Nair]</h1><div class="pc"><span class="eye">Request</span><span class="mo">${RID}</span><span class="eye" style="margin-top:6px">Submitted</span><span class="mo">${AT}</span><span class="eye" style="margin-top:6px">Owner</span><span style="align-self:flex-start">${ST.unas}</span><span class="eye" style="margin-top:6px">Next</span><span>Axal assigns an operator</span><span class="eye" style="margin-top:6px">Cost</span><span>No charge</span></div>`, '<a class="btn p" href="#">Back to Introductions</a>', { back: 1 });
+    else if (B === 'NIE21D' || B === 'NIE22B') html = phone('Request', `<span class="eye">Through Axal · a3c8b6f1</span><h1 style="font-size:20px;font-weight:800">Your request to meet [Jules Avery]</h1>${FF(ST.cont, TR.wait, DL.sent, IN.not, 'nie-2')}<div class="nt"><span class="ic" aria-hidden="true">→</span><div><b>Next: [Jules] answers Axal.</b> Owner: [Ren Okada].</div></div><div class="pc"><span class="eye">Contacted</span><span class="mo">2026-11-18 14:20 UTC</span><span class="eye" style="margin-top:6px">Brief</span><span>v2 · sent to [Jules]</span></div>`, '<button type="button" class="btn">Withdraw</button><button type="button" class="btn p">Suggest an edit</button>', { back: 1 });
+    else if (B === 'NIE21E') html = phone('Needs information', `<span class="pl a" style="align-self:flex-start">? Needs you</span><h1 style="font-size:20px;font-weight:800">Which [Ari Lane] do you mean?</h1><div class="pc"><span class="eye">From [Ren Okada] · Axal</span><span>“Two people named [Ari Lane] are linked to [Tidepool Labs]: the CTO and a former board observer. Which one?”</span></div><div class="f"><label for="pa">Your answer (Axal only)</label><span id="pa" class="in ta">The CTO. He presented at the Ocean Tech meetup in October.</span></div>`, '<button type="button" class="btn p">Send answer to Axal</button>', { back: 1 });
+    else if (B === 'NIE21F') html = phone('Review your request', `<div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Not submitted.</b> 2 requirements for Founder · [Quill Analytics]. Draft kept.</div></div><h1 style="font-size:20px;font-weight:800">Before you submit</h1><div class="pc"><b>Venture profile</b><small>Stage and round not recorded</small><a class="btn" href="#" style="align-self:flex-start">Complete →</a></div><div class="pc"><b>Company due diligence</b><small>Not started</small><a class="btn" href="#" style="align-self:flex-start">Start →</a></div>`, '<button type="button" class="btn">Change capacity</button><button type="button" class="btn p">Save draft</button>', { back: 1 });
+
+    /* ===== Frame index ===== */
+    else if (B === 'NIEI') {
+      const R = [
+        ['NIE01 · desk', 'Requester (founder)', 'Network › Introductions', 'Request an introduction / Answer', 'general list + counts ◇; team, matches (live)'],
+        ['NIE02 · entry points', 'Any member', 'Primary, Person Sheet, relationship, org row', 'Request sheet step 1', 'person ref (#7676) ◇'],
+        ['NIE03 · choose target', 'Requester', 'Step 1', 'Continue', 'who-knows (live); directory search ◇ #7674'],
+        ['NIE04 · purpose and capacity', 'Founder, investor, advisor', 'Step 2', 'Continue', 'capacity list ◇ #7673; readiness (#7677)'],
+        ['NIE05 · blocked and return', 'Requester', 'Submit', 'Complete → Return to introduction', 'readiness snapshot ◇'],
+        ['NIE06 · confirm', 'Requester', 'Step 4', 'Submit request', 'POST general request ◇'],
+        ['NIE07 · submit states', 'Requester', 'Submit', 'Check / Open receipt / Try again', 'idempotency key ◇'],
+        ['NIE08 · receipt', 'Requester', 'After submit', 'Withdraw / wait', 'receipt read ◇'],
+        ['NIE09, 09B · investor, advisor', 'Investor, advisor', 'Step 4', 'Submit request', 'as NIE06'],
+        ['NIE10, 10B · detail, needs info', 'Requester', 'Desk row, notification', 'Answer / Suggest an edit / Withdraw', 'request read, notes ◇'],
+        ['NIE11 · deep link', 'Requester', 'Notification', 'Close → restore', 'scoped lookup ◇'],
+        ['NIE12 · queue', 'Operator', 'Admin console', 'Assign / open case', 'queue ◇, ⚑ entitlement'],
+        ['NIE13 · case', 'Operator', 'Queue row', 'Review and contact', 'case read ◇; Eadwyn draft'],
+        ['NIE14, 14B · contact', 'Operator', 'Review and contact', 'Send / Record contact / No route / Request info', 'send operation ◇'],
+        ['NIE15 · delivery recovery', 'Operator', 'Send result', 'Update the record / It arrived', 'reconcile pattern (D7066)'],
+        ['NIE16 · response, made, outcome', 'Operator, requester', 'Target reply', 'Make the introduction / Record outcome', 'events ◇'],
+        ['NIE17 · withdraw', 'Requester', 'Receipt, detail', 'Withdraw request', 'compare-and-set ◇'],
+        ['NIE18, 18B · states', 'All', 'Any read', 'Retry etc.', 'D5129'],
+        ['NIE20 · tablet; NIE21A–F · phone; NIE22, 22B · dark', 'Requester', 'as desktop', 'sticky primary', 'as desktop']
+      ];
+      html = `<div class="${CV} doc"><div><span class="eye">NIE · #7678 · frame index and accessibility</span><h2 style="font-size:22px;margin-top:4px">Each frame: who acts, where it opens from, what comes next, and what it reads</h2></div>
+      <table class="tbl">${tableHdr(['Frame', 'Actor', 'Entry point', 'Next action', 'Data dependency'])}<tbody>${J(R.map((r) => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`))}</tbody></table>
+      <div class="cols"><div><h3>Keyboard and focus</h3><ul><li>Request sheet: step list, target search (combobox, results as a listbox), route choice, capacity radio group, purpose, shareable preview, Back, Submit. Esc closes and returns focus to the control that opened it.</li><li>Errors: an error summary at the top of the step gets focus and links to each field; fields carry <code>aria-describedby</code>.</li><li>Blocked submit: focus to the alert; Return to introduction restores target, purpose and capacity and focuses Review.</li><li>Desk lanes are a tablist; tables use <code>th scope</code>; the record opened from a link returns focus to the tab you came from.</li><li>Operator case: header actions, then Target identity, Channels, Draft, side panels. The contact sheet traps focus; Send stays off until the review box is checked.</li></ul></div>
+      <div><h3>Announcements (<code>role="status"</code> / <code>alert</code>)</h3><ul><li>“Submitting your request to Priya Nair.”</li><li>“Request submitted. Request 5c2e9a71. Nothing has been sent to Priya.”</li><li>“Not submitted. Your request is kept.”</li><li>“Venture profile saved. Back on your draft to Morgan Vale.”</li><li>“Answer sent. Next: Axal reviews the target.”</li><li>“Introduction made. Lena Sato and Priya Nair are connected.”</li></ul><p class="foot" style="margin-top:6px">Every status carries a glyph and a word. Phone targets are 44 px with the primary in a sticky footer; no horizontal page scroll at 390.</p></div></div></div>`;
+    }
+
+    /* ===== Handoff ===== */
+    else if (B === 'NIEH') html = `<div class="${CV} doc"><div><span class="eye">NIE · #7678 · handoff</span><h2 style="font-size:22px;margin-top:4px">External introduction requests and operator handoff: what exists, what is frontend, what needs the Worker</h2></div>
+      <div class="cols">
+      <div><h3>Checked on main (a2677f7615)</h3><ul>
+      <li><code>routes/relationships.ts</code>: team requests (<code>POST /intro-request</code>, <code>GET /intro-requests</code> with cursor and totals, <code>/:uid</code>, decide, withdraw, outcome, follow-up, <code>/delivery/reconcile</code>, Eadwyn drafts). A target must be in a teammate’s shared book.</li>
+      <li><code>routes/introductions.ts</code>: quarterly ask (<code>/quota</code>, <code>/</code>, <code>/request</code>, investor only, founders and startups on Axal), curated matches (<code>/propositions</code>, accept, decline, credits) and Offer one (<code>/offer-candidates</code>, <code>/offers</code>, D6637).</li>
+      <li><code>routes/admin_network.ts</code>, <code>admin_network_reads.ts</code>, <code>admin_network_profiles.ts</code>: admin standing, reads and directory profiles. No request queue, assignment or outreach.</li>
+      <li><code>NetworkIntroReviewPage.jsx</code> (<code>/network-intro/:token</code>) still calls <code>api.networkIntros.invite</code>, removed with the Secure Introductions family (note in <code>lib/api.js</code>); the page is orphaned and is not reused here.</li>
+      <li>No commit on main for #7672, #7673, #7674, #7676 or #7677.</li></ul>
+      <h3 style="margin-top:12px">Reused</h3><ul><li>Network shell, header, four links, request sheet stepper, record Sheet, desk strip (D7063), delivery recovery words (D7066), state words, the Eadwyn rail (#5130), the Admin console shell.</li></ul>
+      <h3 style="margin-top:12px">Frontend only</h3><ul><li>Type chips, lanes and the four-field status row; the sheet steps, previews and scoped-note layout; tablet, phone and dark. All of it waits on the contracts at right.</li></ul></div>
+      <div><h3>Backend required (◇) · existing or proposed</h3><ul>
+      <li>Proposed #7672/#7674: canonical person reference and provisional target (name, optional organization, title, public URL, context); organization as context only; directory search with source and freshness; suppression list.</li>
+      <li>Proposed #7673: role-neutral entitlement and capacity list (with represented organization); readiness snapshot id and version recorded at submit and rechecked server-side (#7677 supplies it).</li>
+      <li>Proposed #7673: general request create with idempotency key, one open request per target and capacity, durable receipt, scoped read by id, cursor list with totals per lane.</li>
+      <li>Proposed #7673: operator entitlement, assignment with compare-and-set, case read, needs-information, no-route close, append-only activity, requester / operator / target note scopes.</li>
+      <li>Proposed #7673: outreach send from an Axal mailbox with its own operation key and the existing reconcile pattern; external-contact event; target response with evidence; introduction-made event; outcome; withdraw with stage compare-and-set.</li>
+      <li>Proposed #7673: notification deep link to the request id; support-session writes refused; policy read for any charge (none configured today).</li>
+      <li>Existing: <code>/delivery/reconcile</code> and mail send operations (teammate only today); who-knows.</li></ul>
+      <h3 style="margin-top:12px">Owner picks drawn (⚑, option A)</h3><ul><li>Pricing: shown from a policy read; today “No charge”.</li><li>Operator entitlement: a named grant by a Super Admin.</li><li>Close note after withdrawal: the operator reviews and sends it.</li><li>Expiry: an operator’s recorded close, no automatic timer.</li></ul>
+      <h3 style="margin-top:12px">Open</h3><ul><li>Whether a member target may answer in the app as well as by reply (drawn: operator records it).</li></ul></div></div></div>`;
+
+    if (!html) html = '<div>unknown board</div>';
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => x.indexOf('nie-') === 0 ? x : 'nwi-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
