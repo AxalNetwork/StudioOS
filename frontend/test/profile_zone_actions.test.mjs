@@ -142,7 +142,7 @@ const PROFILES = {
     // `Export view` is the builder's export (D7172's scoped export), not a handler.
     handlers: 11,
     // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
-    withheld: { 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
+    withheld: { 'research/companies': ['Compare'], 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
     offCanvas: { 'research/markets': ['Export view', 'New market research'] },
     // NOTHING IS EXCLUDED BUT VALIDATE'S RETIRED ZONES. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
