@@ -467,7 +467,7 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   } catch (e) {
     // D6651: the batch is one transaction, so no row names the object this request just stored: it
     // leaves through the one record-erasure path as `unreferenced`.
-    try { await eraseRecordObjects(files, key, 'unreferenced'); } catch { /* the object is unreferenced either way */ }
+    try { await eraseRecordObjects(files, key, 'unreferenced', { db: ctx.env.DB }); } catch { /* the object is unreferenced either way */ }
     throw e;
   }
   await noteStorageLanded(ctx.env, storage);
