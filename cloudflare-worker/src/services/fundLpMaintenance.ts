@@ -37,7 +37,7 @@ export function lpPatch(body: unknown): Record<string, string | number | null> {
   }
   return patch;
 }
-const called = `(SELECT COALESCE(SUM(COALESCE(cc.amount_cents, ROUND(cc.amount * 100))), 0) FROM capital_calls cc WHERE cc.limited_partner_id = limited_partners.id)`;
+const called = `(SELECT COALESCE(SUM(COALESCE(cc.amount_cents, ROUND(cc.amount * ?))), 0) FROM capital_calls cc WHERE cc.limited_partner_id = limited_partners.id)`;
 async function existing(env: Env, fundId: number, lpId: number) {
   const row = await env.DB.prepare('SELECT * FROM limited_partners WHERE id = ? AND fund_id = ?').bind(lpId, fundId).first<LimitedPartner>();
   if (!row) throw new LpMaintenanceError('lp_not_found', 'LP not found.', 404);
@@ -55,7 +55,8 @@ export async function correctLp(env: Env, fundId: number, lpId: number, actorId:
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE limited_partners SET ${entries.map(([key]) => `${key} = ?`).join(', ')}, updated_at = datetime('now')
       WHERE id = ? AND fund_id = ?${floor} RETURNING *`).bind(...entries.map(([,value]) => value), lpId, fundId,
-        ...(floor ? [dollarsToCents(patch.commitment_amount)] : [])),
+        // The shared parser supplies the USD scale as well as the new amount; legacy aggregation stays atomic.
+        ...(floor ? [dollarsToCents(patch.commitment_amount), dollarsToCents(1)] : [])),
     audit(env, actorId, fundId, lpId, 'lp_corrected', Object.keys(patch)),
   ]);
   const row = result[0].results?.[0];
