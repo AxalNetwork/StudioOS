@@ -65,6 +65,7 @@ export default {
       ],
       tips: [
         'A role change is made by the Axal team: open a support ticket if you need one.',
+        'Admins can impersonate any user from All accounts, under Accounts, for support and debugging.',
       ],
       pitfalls: [
         'Investor accounts cannot create startups — only Founder and Admin roles can.',
