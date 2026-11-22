@@ -153,13 +153,13 @@ test('the Inbox thread names each reply already saved, in its own thread and ven
   const f = fixture();
   const first = await save(f, { reply_key: 'contact:21' });
   // Another venture's item that happens to carry the same contact uid and key is never read here.
-  f.db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, status, contact_uid, origin, reply_key) VALUES ('fb-x', ${PB}, 'x', 'customer', 'open', 'ca1', 'inbox_reply', 'contact:23')`);
+  f.db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, status, contact_uid, origin, reply_key) VALUES ('fb-x', ${PB}, 'x', 'customer', 'open', 'ca1', 'inbox_reply', 'contact:22')`);
   const t = await call(f, FOUNDER, 'GET', `/api/grow/inbox/ca1?project=${PA}`);
   assert.equal(t.status, 200, JSON.stringify(t.body));
   assert.equal(t.body.feedback_state, 'ready');
   const byKey = Object.fromEntries(t.body.thread.messages.map((m: any) => [m.key, m.feedback]));
   assert.deepEqual(byKey['contact:21'], { uid: first.body.uid, status: 'open' });
-  assert.equal(byKey['contact:22'], null);
+  assert.equal(byKey['contact:22'], null, "another venture's item with this thread's contact and key is not this thread's");
   const other = await call(f, FOUNDER, 'GET', `/api/grow/inbox/ca2?project=${PA}`);
   assert.equal(other.body.thread.messages.find((m: any) => m.key === 'contact:23').feedback, null, "a key saved in another venture's thread is not this one's");
   // A reader sees the tag too; it names an item, not a person.
