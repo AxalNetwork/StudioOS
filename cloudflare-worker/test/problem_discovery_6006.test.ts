@@ -39,6 +39,7 @@ function fixture() {
   }
   db.exec(migration('311_revenue_entries.sql'));
   db.exec(migration('440_validate_cycle_stores.sql'));
+  db.exec(migration('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP columns the segment readers select.
   db.exec(migration('438_interview_sessions.sql'));
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(migration('447_assistant_interviews.sql'));
