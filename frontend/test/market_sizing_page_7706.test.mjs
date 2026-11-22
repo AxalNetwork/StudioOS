@@ -41,10 +41,10 @@ async function page(t, options={}) {
   t.mock.method(api,'listProjects',async()=>[project]);
   for(const key of ['miSectorCompass','miFounderLens','miSources','miCitations','miFitFounder']) t.mock.method(api,key,async()=>null);
   t.mock.method(api.competitors,'list',async()=>({analyses:[]}));
-  t.mock.method(api,'getMarketAssumptions',async()=>({assumptions:input}));
+  t.mock.method(api,'getMarketAssumptions',async()=>({assumptions:{...input,...options.assumptions}}));
   t.mock.method(cycleValidateApi,'marketReadiness',async()=>({sources:[]}));
-  t.mock.method(cycleValidateApi,'setMarketMark',async(...args)=>{events.push(['mark',...args]);});
-  t.mock.method(spinoutLab,'complete',async(key)=>{events.push(['milestone',key]); return {};});
+  t.mock.method(cycleValidateApi,'setMarketMark',async(...args)=>{events.push(['mark',...args]);return options.mark?options.mark(...args):{};});
+  t.mock.method(spinoutLab,'complete',async(key)=>{events.push(['milestone',key]); return options.milestone?options.milestone(key):{};});
   t.mock.method(marketSizingApi,'versions',async()=>options.versions?options.versions():({versions:options.version?[options.version]:[]}));
   t.mock.method(marketSizingApi,'version',async()=>({version:options.version}));
   t.mock.method(marketSizingApi,'preview',async(id,body)=>{previews.push({id,body}); return options.preview?options.preview(id,body):{result:version};});
@@ -161,5 +161,55 @@ test('preview waits for a pause, cancels pending inputs and ignores context-only
     await advance();assert.equal(m.previews.length,2);
     await act(async()=>props(m,'input-capacity').onChange({target:{value:'11'}}));
     await m.unmount();await advance();assert.equal(m.previews.length,2,'leaving cancels the pending calculation');
+  } finally {await m.unmount();}
+});
+for(const stage of ['milestone','mark']) test(`a pending ${stage} leaves committed sizing editable and cannot unlock a newer save`,async t=>{
+  const follow=deferred(),next=deferred();let saves=0,milestones=0,marks=0,first,second;
+  const m=await page(t,{
+    save:()=>++saves===1?{version}:next.promise,
+    milestone:()=>++milestones===1&&stage==='milestone'?follow.promise:{},
+    mark:()=>++marks===1&&stage==='mark'?follow.promise:{},
+  });
+  try {
+    await act(async()=>props(m,'button-edit-sizing').onClick());
+    await act(async()=>{first=props(m,'button-save-sizing').onClick();});
+    await until(m,()=>m.events.some(e=>e[0]===stage));
+    await act(async()=>props(m,'button-edit-sizing').onClick());
+    assert.equal(props(m,'button-save-sizing').disabled,false,'the version is committed independently of marks');
+    await act(async()=>{second=props(m,'button-save-sizing').onClick();});
+    assert.equal(saves,2);assert.equal(props(m,'button-save-sizing').disabled,true);
+    await act(async()=>{follow.reject(new Error('Synthetic workflow mark failed'));await first;});
+    assert.equal(props(m,'button-save-sizing').disabled,true,'older follow-up completion cannot release the newer save');
+    assert.doesNotMatch(m.text(),/Couldn’t save/);
+    await act(async()=>{next.resolve({version:{...version,uid:'v5',version_number:5}});await second;});
+    assert.doesNotMatch(m.text(),/Couldn’t save/);
+  } finally {
+    await act(async()=>{follow.resolve({});next.resolve({version});await Promise.allSettled([first,second].filter(Boolean));});
+    await m.unmount();
+  }
+});
+test('a save refusal survives a late preview and edits clear only the field that changed',async t=>{
+  const preview=deferred();
+  const refusal=Object.assign(new Error('Enter both shares'),{data:{fields:['samPct','winRate']}});
+  const m=await page(t,{assumptions:{samPct:'',winRate:''},preview:()=>preview.promise,save:async()=>{throw refusal;}});
+  try {
+    await act(async()=>props(m,'button-edit-sizing').onClick());await until(m,()=>m.previews.length===1);
+    await act(async()=>{await props(m,'button-save-sizing').onClick();});
+    assert.equal(props(m,'input-sam')['aria-invalid'],true);assert.equal(props(m,'input-som')['aria-invalid'],true);
+    await act(async()=>preview.resolve({result:version}));
+    assert.equal(props(m,'input-sam')['aria-invalid'],true,'preview completion cannot erase a save refusal');
+    await act(async()=>props(m,'input-capacity').onChange({target:{value:'9'}}));
+    assert.equal(props(m,'input-sam')['aria-invalid'],true);assert.equal(props(m,'input-som')['aria-invalid'],true);
+    await act(async()=>props(m,'input-sam').onChange({target:{value:'10'}}));
+    assert.equal(props(m,'input-sam')['aria-invalid'],undefined);
+    assert.equal(props(m,'input-som')['aria-invalid'],true,'the untouched share stays marked');
+  } finally {preview.resolve({result:version});await m.unmount();}
+});
+for(const [value,expected] of [['not-a-rate','Unavailable · invalid growth rate'],['Infinity','Unavailable · invalid growth rate'],['-1','Unavailable · invalid growth rate'],['1e308','1e+308%/yr'],[' ','24%/yr (default)']]) test(`stored CAGR ${JSON.stringify(value)} never creates an invalid chart or an invented rate`,async t=>{
+  const m=await page(t,{assumptions:{cagr:value}});
+  try {
+    await until(m,()=>m.text().includes(expected));
+    assert.equal(m.nodes().some(n=>/NaN|Infinity/.test(String(m.props(n)?.d||''))),false);
+    if(expected.startsWith('Unavailable')) assert.doesNotMatch(m.text(),/24%\/yr/);
   } finally {await m.unmount();}
 });

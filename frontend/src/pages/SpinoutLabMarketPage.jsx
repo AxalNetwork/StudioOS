@@ -294,7 +294,9 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const [assume, setAssume] = useState(() => seedAssumptions(null));
   const [sizingSourceId, setSizingSourceId] = useState('');
   const [preview, setPreview] = useState({ state: 'idle', result: null });
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [previewFieldErrors, setPreviewFieldErrors] = useState({});
+  const [saveFieldErrors, setSaveFieldErrors] = useState({});
+  const fieldErrors = { ...previewFieldErrors, ...saveFieldErrors };
   const [versionRead, setVersionRead] = useState({ state: 'loading', version: null });
   const versionRequest = useRef(0);
   const projectIdentity = useRef(null);
@@ -324,13 +326,15 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
     let alive = true;
     const id = project.id;
     setPreview({ state: 'loading', result: null });
-    setFieldErrors({});
     const timer = setTimeout(() => marketSizingApi.preview(id, { assumptions: JSON.parse(previewInputs) }).then(reply => {
-      if (alive && projectIdentity.current === id) setPreview({ state: 'ok', result: reply.result });
+      if (alive && projectIdentity.current === id) {
+        setPreview({ state: 'ok', result: reply.result });
+        setPreviewFieldErrors({});
+      }
     }).catch(error => {
       if (!alive || projectIdentity.current !== id) return;
       setPreview({ state: 'unreadable', result: null, message: error?.message || 'The calculation could not be checked. Try again.' });
-      setFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
+      setPreviewFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
     }), 350);
     return () => { alive = false; clearTimeout(timer); };
   }, [editOpen, project?.id, previewInputs]);
@@ -511,11 +515,17 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
 
   const openEdit = () => {
     setSaveError('');
+    setPreviewFieldErrors({}); setSaveFieldErrors({});
     setEditOpen(true);
   };
 
-  const setA = (k) => (e) => { if (!saving) setAssume((a) => ({ ...a, [k]: e.target.value })); };
-  const setAV = (k, v) => { if (!saving) setAssume((a) => ({ ...a, [k]: v })); };
+  const setAV = (k, v) => {
+    if (saving) return;
+    setAssume(a => ({ ...a, [k]: v }));
+    const clear = errors => { const next = { ...errors }; delete next[k]; return next; };
+    setPreviewFieldErrors(clear); setSaveFieldErrors(clear);
+  };
+  const setA = k => e => setAV(k, e.target.value);
   const toggleSeg = (name) =>
     setAssume((a) => {
       const cur = a.segFilter || [];
@@ -555,7 +565,8 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
     if (!project || savingRef.current) return;
     const id = project.id;
     const request = sizingRequest(assume, sizingSourceId);
-    savingRef.current = true; setSaving(true); setSaveError(''); setFieldErrors({});
+    let committed = false;
+    savingRef.current = true; setSaving(true); setSaveError(''); setSaveFieldErrors({});
     try {
       const reply = await marketSizingApi.saveVersion(id, request);
       if (projectIdentity.current !== id) return;
@@ -567,17 +578,11 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
       versionRequest.current += 1; // A pending history read cannot replace this committed version.
       setVersionRead({ state: 'ok', version });
       setEditOpen(false);
-      // These are separate workflow marks, earned only after the atomic sizing save.
-      try { await markMilestone(user, 'market_sizing_completed'); }
-      catch (error) { reportError('SpinoutLabMarketPage:mark-sizing', error); }
-      try {
-        await cycleValidateApi.setMarketMark(project.id, 'assumptions_reviewed', true);
-        if (projectIdentity.current === id) setAssumptionsReviewed(true);
-      } catch (error) { reportError('SpinoutLabMarketPage:mark-assumptions', error); }
+      committed = true;
     } catch (error) {
       if (projectIdentity.current !== id) return;
       reportError('SpinoutLabMarketPage:save', error);
-      setFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
+      setSaveFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
       setSaveError('Couldn’t save. Your edits are kept here. Nothing changed on the page.');
       const field = sizingFields(error)[0];
       document.getElementById(SIZING_INPUT_IDS[field])?.focus?.();
@@ -585,6 +590,14 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
       savingRef.current = false;
       if (projectIdentity.current === id) setSaving(false);
     }
+    if (!committed) return;
+    // Marks follow the commit without retaining the save lock or changing its outcome.
+    try { await markMilestone(user, 'market_sizing_completed'); }
+    catch (error) { reportError('SpinoutLabMarketPage:mark-sizing', error); }
+    try {
+      await cycleValidateApi.setMarketMark(project.id, 'assumptions_reviewed', true);
+      if (projectIdentity.current === id) setAssumptionsReviewed(true);
+    } catch (error) { reportError('SpinoutLabMarketPage:mark-assumptions', error); }
   };
 
   // ---- Competitors (spec B) ----
@@ -752,13 +765,15 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const version = versionRead.version;
   const versionCurrent = currentSizingVersion(version, project);
 
+  const cagrBlank = String(assume.cagr ?? '').trim() === '';
+  const cagrPct = cagrBlank ? 24 : marketFigureDefined(assume.cagr) ? Number(assume.cagr) : null;
   // ---- Readiness checklist (spec F, design 2181-2192) ----
   const checklist = [
     { label: 'TAM defined', done: marketFigureDefined(project?.tam) },
     { label: 'SAM defined', done: marketFigureDefined(project?.sam) },
     { label: 'SOM defined', done: marketFigureDefined(project?.som) },
     { label: 'Sources added (min 2)', done: citRows.length + founderSources.length >= 2 },
-    { label: 'Market growth rate added', done: Boolean(assume.cagr) },
+    { label: 'Market growth rate added', done: !cagrBlank && cagrPct != null },
     { label: 'Competitive landscape (min 3 competitors)', done: compRows.length >= 3 },
     { label: 'Positioning map completed', done: posDone },
     { label: 'Founder assumptions reviewed', done: assumptionsReviewed },
@@ -775,19 +790,20 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
 
   // ---- Growth outlook (spec E, design 2077-2088) — founder assumptions ----
   // Only a blank CAGR uses the visibly labelled design fallback; a typed zero is zero.
-  const cagrPct = assume.cagr === '' ? 24 : Number(assume.cagr);
   const sparkTamM = ((anim ? anim.tam : Number(project?.tam)) || 0) / 1e6;
   let spark = null;
-  if (sparkTamM > 0) {
+  if (sparkTamM > 0 && cagrPct != null) {
     const pts = [0, 1, 2, 3, 4].map((i) => sparkTamM * Math.pow(1 + cagrPct / 100, i - 2));
-    const max = Math.max(...pts);
-    const min = Math.min(...pts);
-    const pad = 6;
-    const xy = pts.map((v, i) => [pad + i * ((220 - pad * 2) / 4), 48 - pad - ((v - min) / (max - min || 1)) * (48 - pad * 2)]);
-    spark = {
-      path: xy.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
-      dot: xy[2],
-    };
+    if (pts.every(Number.isFinite)) {
+      const max = Math.max(...pts);
+      const min = Math.min(...pts);
+      const pad = 6;
+      const xy = pts.map((v, i) => [pad + i * ((220 - pad * 2) / 4), 48 - pad - ((v - min) / (max - min || 1)) * (48 - pad * 2)]);
+      spark = {
+        path: xy.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
+        dot: xy[2],
+      };
+    }
   }
 
   const compShown = compRows.slice(0, 6); // design caps the grid at 6
@@ -1113,7 +1129,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 dark:text-gray-400">CAGR</span>
                     <span className="inline-flex items-center gap-1 text-[11.5px] font-bold rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                      ↑ {cagrPct}%/yr{assume.cagr === '' ? ' (default)' : ''}
+                      {cagrPct == null ? 'Unavailable · invalid growth rate' : <>↑ {cagrPct}%/yr{cagrBlank ? ' (default)' : ''}</>}
                     </span>
                   </div>
                   {/* Peak window + tailwind have no drawer/backend field yet —
