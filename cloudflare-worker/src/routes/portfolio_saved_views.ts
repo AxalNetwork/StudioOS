@@ -6,7 +6,7 @@ import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 const router = new Hono<{ Bindings: Env }>();
 class Refused extends Error { readonly status: 400 | 404 | 409; constructor(status: 400 | 404 | 409, message: string) { super(message); this.status = status; } }
 export function portfolioViewSpec(page: unknown, raw: unknown) {
-  if (!['overview', 'positions'].includes(String(page)) || !raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Refused(400, 'Choose a Portfolio table and valid settings.');
+  if (typeof page !== 'string' || !['overview', 'positions'].includes(page) || !raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Refused(400, 'Choose a Portfolio table and valid settings.');
   const value = raw as Record<string, unknown>;
   const allowed = page === 'overview' ? ['query', 'sector', 'stage', 'health', 'reporting', 'sort'] : ['query', 'filter', 'stage', 'as_of'];
   if (Object.keys(value).some(key => !allowed.includes(key)) || Object.values(value).some(v => typeof v !== 'string' || v.length > 200)) throw new Refused(400, 'The view settings are invalid.');
@@ -18,17 +18,17 @@ export function portfolioViewSpec(page: unknown, raw: unknown) {
 }
 const nameOf = (raw: unknown) => { if (typeof raw !== 'string' || !raw.trim() || raw.trim().length > 100) throw new Refused(400, 'Give the view a name of at most 100 characters.'); return raw.trim(); };
 const versionOf = (raw: unknown) => { if (!Number.isSafeInteger(raw) || Number(raw) < 1) throw new Refused(400, 'Refresh the view before changing it.'); return Number(raw); };
-const pageOf = (raw: unknown) => { if (!['overview', 'positions'].includes(String(raw))) throw new Refused(400, 'Choose a Portfolio table.'); return String(raw); };
-const shape = (row: any) => ({ uid: row.uid, page: row.page, name: row.name, spec: JSON.parse(row.spec_json), version: row.version, updated_at: row.updated_at });
+const pageOf = (raw: unknown) => { if (typeof raw !== 'string' || !['overview', 'positions'].includes(raw)) throw new Refused(400, 'Choose a Portfolio table.'); return String(raw); };
+const shape = (row: any) => ({ uid: row.uid, page: row.page, name: row.name, spec: JSON.parse(portfolioViewSpec(row.page, JSON.parse(row.spec_json))), version: row.version, updated_at: row.updated_at });
 function failure(c: any, error: any) {
-  const status = error instanceof Refused ? error.status : AUTH_ERROR_STATUSES[error?.message];
+  const status = error instanceof Refused ? error.status : (Object.hasOwn(AUTH_ERROR_STATUSES, error?.message) ? AUTH_ERROR_STATUSES[error.message] : undefined);
   return c.json({ error: status ? error.message : 'Saved views are unreadable. Try again.' }, status || 503);
 }
 router.use('*', async (c, next) => {
+  c.header('Cache-Control', 'no-store');
   const user = await requireAuth(c);
   if (!canViewLpData(user) || (await selectJwt(c))?.payload.impersonated_by) return c.json({ error: 'Only this member can manage their Portfolio views.' }, 403);
   c.set('portfolioViewOwner' as never, Number(user.id) as never);
-  c.header('Cache-Control', 'no-store');
   await next();
 });
 const owner = (c: any): number => c.get('portfolioViewOwner');

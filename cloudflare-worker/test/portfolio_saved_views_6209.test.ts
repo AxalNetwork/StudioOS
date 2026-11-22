@@ -24,7 +24,7 @@ function world() {
 async function call(w:ReturnType<typeof world>,who:number|null,method='GET',path='?page=overview',body?:unknown,extra={}){
  const token=who===null?null:await new SignJWT({user_id:who,...extra}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
  const r=await w.app.request(`/api/portfolio-saved-views${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})},w.env);
- return {status:r.status,body:await r.json() as any};
+ return {status:r.status,cache:r.headers.get('cache-control'),body:await r.json() as any};
 }
 test('private CRUD, page isolation and stale writes use real bound SQLite predicates',async()=>{
  const w=world();try{
@@ -44,6 +44,19 @@ test('anonymous, non-investor and impersonation cannot manage personal settings'
 });
 test('settings validation accepts retired predicates, refuses unbounded and unknown commands',()=>{
  for(const page of ['overview','positions'])assert.doesNotThrow(()=>portfolioViewSpec(page,{stage:'retired'}));
- for(const [page,spec] of [['other',{}],['overview',{query:'x'.repeat(201)}],['overview',{sort:'sql'}],['positions',{filter:'sql'}],['positions',{as_of:'2026-02-30'}],['positions',{as_of:'9999-99-99'}],['overview',{owner_user_id:'2'}]])assert.throws(()=>portfolioViewSpec(page,spec));
+ for(const [page,spec] of [['other',{}],[['overview'],{}],['overview',{query:'x'.repeat(201)}],['overview',{sort:'sql'}],['positions',{filter:'sql'}],['positions',{as_of:'2026-02-30'}],['positions',{as_of:'9999-99-99'}],['overview',{owner_user_id:'2'}]])assert.throws(()=>portfolioViewSpec(page,spec));
 });
 test('database failure is unreadable rather than an empty list',async()=>{const w=world();w.db.exec('DROP TABLE portfolio_saved_views');try{assert.equal((await call(w,1)).status,503);}finally{w.db.close();}});
+
+test('quota is atomic per member and page; denials are never cacheable',async()=>{
+ const w=world();try{
+  const insert=w.db.prepare("INSERT INTO portfolio_saved_views(uid,owner_user_id,page,name,spec_json) VALUES(?,1,'overview','Saved','{}')");
+  for(let n=0;n<100;n++)insert.run(n.toString(16).padStart(32,'0'));
+  assert.equal((await call(w,1,'POST','',{page:'overview',name:'Limit',spec:{}})).status,409);
+  assert.equal((await call(w,1,'POST','',{page:'positions',name:'Separate page',spec:{}})).status,201);
+  assert.equal((await call(w,2,'POST','',{page:'overview',name:'Separate member',spec:{}})).status,201);
+  for(const who of [null,3])assert.equal((await call(w,who)).cache,'no-store');
+  assert.equal((await call(w,1,'PATCH','/invalid',{name:'Name',version:1})).status,404);
+  assert.equal((await call(w,1,'POST','',{page:['overview'],name:'Name',spec:{}})).status,400);
+ }finally{w.db.close();}
+});
