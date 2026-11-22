@@ -464,6 +464,12 @@ export function quarterlyReportModel({
 
 /** A frozen `{ cents }` line as dollars, or Not recorded. */
 const frozenValue = (line) => (line && Number.isFinite(line.cents) ? usd(line.cents / 100) : NOT_RECORDED);
+const frozenExactValue = (line) => {
+  if (!line || !Number.isSafeInteger(line.cents)) return NOT_RECORDED;
+  const cents = BigInt(line.cents), absolute = cents < 0n ? -cents : cents;
+  const amount = `$${(absolute / 100n).toLocaleString('en-US')}.${String(absolute % 100n).padStart(2, '0')}`;
+  return cents < 0n ? `(${amount})` : amount;
+};
 const frozenWhy = (line) => (line && line.cents == null && typeof line.reason === 'string' ? line.reason : null);
 const frozenRatio = (r) => (r && Number.isFinite(r.value) ? `${r.value.toFixed(2)}×` : NOT_RECORDED);
 
@@ -474,12 +480,13 @@ const frozenRatio = (r) => (r && Number.isFinite(r.value) ? `${r.value.toFixed(2
  * exposure, progression, concentration, key dates) are empty, which the PDF
  * draws as Not recorded.
  */
-export function frozenSections({ statement, figures, providers = {} }) {
+export function frozenSections({ statement, figures, providers = {}, exactMoney = false }) {
+  const valueOf = exactMoney ? frozenExactValue : frozenValue;
   const st = statement || {};
   const al = st.allocated || {};
   const ff = figures?.fund_figures || {};
   const totals = figures?.totals || {};
-  const row = (k, line, source, opts = {}) => ({ k, v: frozenValue(line), source, why: frozenWhy(line), ...opts });
+  const row = (k, line, source, opts = {}) => ({ k, v: valueOf(line), source, why: frozenWhy(line), ...opts });
   const feesLine = al.expenses?.cents != null && al.management_fee?.cents != null
     ? { cents: al.expenses.cents + al.management_fee.cents }
     : { cents: null, reason: al.expenses?.reason || al.management_fee?.reason || NOT_RECORDED };
@@ -502,7 +509,7 @@ export function frozenSections({ statement, figures, providers = {} }) {
   const reconciliation = ties
     ? { paidCallsTotal: Number(ties.receipts_cents || 0) / 100, investedAmount: Number(ties.recorded_invested_cents || 0) / 100, ties: !!ties.ties }
     : { paidCallsTotal: 0, investedAmount: 0, ties: true };
-  const cell = (k, line, note) => ({ k, v: frozenValue(line), note: frozenWhy(line) || note, tone: '#18181b' });
+  const cell = (k, line, note) => ({ k, v: valueOf(line), note: frozenWhy(line) || note, tone: '#18181b' });
   const headline = [
     cell('Committed capital', totals.commitments, figures ? `${figures.lp_count} LPs in this report` : NOT_RECORDED),
     cell('Called to date', totals.called_to_date, 'From the capital calls'),
@@ -510,24 +517,27 @@ export function frozenSections({ statement, figures, providers = {} }) {
     cell('Investment value', ff.investment_value, 'Recorded marks'),
     cell('Net asset value', ff.nav, figures?.nav_basis || NOT_RECORDED),
   ];
-  const fundSummary = [
+  const fundSummaryRows = [
     { k: 'LPs in this report', v: figures ? String(figures.lp_count) : NOT_RECORDED },
-    { k: 'Distributions this quarter', v: frozenValue(totals.distributions_in_quarter) },
-    { k: 'Fund cash', v: frozenValue(ff.cash) },
-    { k: 'Recorded liabilities', v: frozenValue(ff.liabilities) },
+    { k: 'Distributions this quarter', v: valueOf(totals.distributions_in_quarter) },
+    { k: 'Fund cash', v: valueOf(ff.cash) },
+    { k: 'Recorded liabilities', v: valueOf(ff.liabilities) },
     { k: 'Books closed for the quarter', v: figures ? (figures.books_closed ? 'Yes' : 'No') : NOT_RECORDED },
+  ];
+  const fundSummary = [
+    ...fundSummaryRows,
     { k: 'Your DPI', v: frozenRatio(st.ratios?.dpi) },
     { k: 'Your net TVPI', v: frozenRatio(st.ratios?.tvpi) },
     { k: 'Your RVPI', v: frozenRatio(st.ratios?.rvpi) },
   ];
   const fees = [
-    { k: 'Management fee · this quarter', v: frozenValue(ff.management_fee) },
-    { k: 'Fund expenses · this quarter', v: frozenValue(ff.expenses) },
+    { k: 'Management fee · this quarter', v: valueOf(ff.management_fee) },
+    { k: 'Fund expenses · this quarter', v: valueOf(ff.expenses) },
     { k: 'Carried interest', v: 'Not accrued' },
-    { k: 'Allocated to your account (quarter)', v: frozenValue(feesLine), strong: true },
+    { k: 'Allocated to your account (quarter)', v: valueOf(feesLine), strong: true },
   ];
   return {
-    headline, capitalAccount, reconciliation, fundSummary, fees,
+    headline, capitalAccount, reconciliation, fundSummary, fundSummaryRows, fees,
     portfolio: [], portfolioTotals: null, deployBars: [], cohorts: [], exposure: [], progression: [], concentration: [], keyDates: [],
     reserve: [{ k: 'Reserve position', v: NOT_RECORDED }],
     admin: [
@@ -561,15 +571,15 @@ export function quarterlyReportFilename(vm) {
 export function issuedFundRows(figures) {
   if (!figures) return [];
   if (figures.source === 'report_pack') {
-    const frozen = frozenSections({ figures });
-    return [...frozen.headline, ...frozen.fundSummary.filter(row => !row.k.startsWith('Your '))]
+    const frozen = frozenSections({ figures, exactMoney: true });
+    return [...frozen.headline, ...frozen.fundSummaryRows]
       .map(row => ({ ...row, why: row.why || row.note }));
   }
   const totals = figures.totals || {};
   return [['Committed capital', 'committed'], ['Invested capital', 'invested'], ['Called to date', 'called'], ['Collected capital', 'collected'], ['Net asset value', 'nav']].map(([k, key]) => {
     const cents = totals[`${key}_cents`];
     const recorded = Number.isSafeInteger(cents) && cents >= 0;
-    return { k, v: recorded ? `$${(BigInt(cents) / 100n).toLocaleString('en-US')}.${String(BigInt(cents) % 100n).padStart(2, '0')}` : NOT_RECORDED,
+    return { k, v: recorded ? frozenExactValue({ cents }) : NOT_RECORDED,
       why: recorded ? null : totals[`${key}_reason`] || 'This figure was not frozen when the report was issued.' };
   });
 }

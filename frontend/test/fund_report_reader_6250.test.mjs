@@ -6,7 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { PeriodReader } from '../src/pages/FundReportPeriodPage.jsx';
 import { issuedFundRows, frozenSections } from '../src/lib/quarterlyReportViewModel.js';
-import { mountForm } from './_form_d695.mjs';
+import { readFileSync } from 'node:fs';
+import { mountForm, mutationCheck } from './_form_d695.mjs';
 const data = { can_manage: false, fund: { id: 7, name: 'Recorded fund' }, totals: { committed_cents: 999999 }, period: {
   id: 2, period: 'Q2 2026', status: 'issued', period_start: '2026-04-01', period_end: '2026-06-30',
   issued_at: '2026-07-08T10:00:00Z', issued_by_name: 'Recorded issuer', corrects_period_id: 1, corrected_by_period_id: 3,
@@ -19,7 +20,8 @@ test('reader typesets safe narrative with issuer, frozen amounts and reciprocal 
   for (const text of ['Recorded fund', 'Recorded issuer', '2026-07-08T10:00:00Z', 'Launch', 'Recorded development.', 'Next quarter.', 'Recorded event.', '$123.45', 'No frozen investments.', 'Not recorded', '&lt;script&gt;']) assert.ok(html.includes(text), text);
   for (const id of [1, 3]) assert.ok(html.includes(`/funds/7/reporting/${id}`));
   assert.doesNotMatch(html, /<script|<input|<textarea|Save draft|Issue a correcting period|9,999/);
-  assert.match(render({ ...data, can_manage: true }), /Issue a correcting period/);
+  assert.match(render({ ...data, can_manage: true, period: {...data.period,corrected_by_period_id:null} }), /Issue a correcting period/);
+  assert.doesNotMatch(render({...data,can_manage:true}), /Issue a correcting period|Your capital statement and PDF/);
 });
 test('legacy missing snapshot and issuer stay absent; no live totals or fabricated actor', () => {
   const html = render({ ...data, period: { ...data.period, figures: null, figures_reason: 'No snapshot was recorded.', issued_by_name: null } });
@@ -32,12 +34,33 @@ test('legacy missing snapshot and issuer stay absent; no live totals or fabricat
 test('report-pack reader uses the existing PDF frozen model without LP-specific rows', () => {
   const figures = { source: 'report_pack', lp_count: 2, totals: { commitments: { cents: 125000 } }, books_closed: true };
   const rows = issuedFundRows(figures);
-  assert.deepEqual(rows[0].v, frozenSections({ figures }).headline[0].v);
-  assert.equal(rows[0].v, '$1,250');
+  assert.deepEqual(rows[0].v, frozenSections({ figures, exactMoney:true }).headline[0].v);
+  assert.equal(rows[0].v, '$1,250.00');
   assert.ok(rows.every(row => !row.k.startsWith('Your ')));
+  assert.equal(new Set(rows.map(row=>row.k)).size,rows.length);
 });
 test('Print invokes the browser print action', async () => {
   const view = await mountForm(React.createElement(PeriodReader, { data }));
   const previous = window.print; let calls = 0; window.print = () => { calls += 1; };
   try { await view.click('Print'); assert.equal(calls, 1); } finally { window.print = previous; await view.unmount(); }
+});
+
+test('reader mutations prove figure, attribution, narrative, correction and manager boundaries',async()=>{
+ const source=readFileSync(new URL('../src/pages/FundReportPeriodPage.jsx',import.meta.url),'utf8').replace("import './fundPage.css';",'');
+ const verify=async module=>{
+  const html=renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(module.PeriodReader,{data})));
+  for(const text of ['$123.45','Recorded issuer','&lt;script&gt;','/funds/7/reporting/3'])assert.ok(html.includes(text),text);
+  assert.doesNotMatch(html,/Issue a correcting period/);
+  const manager=renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(module.PeriodReader,{data:{...data,can_manage:true,period:{...data.period,corrected_by_period_id:null}}})));
+  assert.match(manager,/Issue a correcting period/);
+  assert.doesNotMatch(manager,/Your capital statement and PDF/);
+ };
+ await mutationCheck(source,'pages/FundReportPeriodPage.jsx',verify,[
+  ['const figures = issuedFundRows(report.figures);','const figures = issuedFundRows(null);'],
+  ['value={report.issued_by_name}','value={report.issued_by}'],
+  ['link(report.corrected_by_period_id)','link(report.corrects_period_id)'],
+  ['<p key={index}>{entry}</p>','<p key={index}>Removed</p>'],
+  ['data.can_manage && !report.corrected_by_period_id','!data.can_manage && !report.corrected_by_period_id'],
+  ['!data.can_manage && <Link to="/spinout-lab/investor-workspace#reports"','data.can_manage && <Link to="/spinout-lab/investor-workspace#reports"'],
+ ]);
 });

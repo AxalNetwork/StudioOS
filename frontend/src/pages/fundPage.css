@@ -51,11 +51,17 @@
   .fd-report-event { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 @media print {
-  body:has(.fd-report-reader) * { visibility: hidden; }
-  body .fd-report-reader, body .fd-report-reader * { visibility: visible; }
-  body .fd-report-reader { position: absolute; inset: 0 auto auto 0; width: 100%; display: block; color: #000; background: #fff; }
+  /* Keep the reader and its ancestor chain in normal flow; remove all other app chrome. */
+  body:has(.fd-report-reader) *:not(:has(.fd-report-reader)):not(.fd-report-reader):not(.fd-report-reader *) { display: none !important; }
+  html:has(.fd-report-reader), body:has(.fd-report-reader), body:has(.fd-report-reader) :has(.fd-report-reader) {
+    position: static !important; display: block !important; width: auto !important; height: auto !important;
+    min-height: 0 !important; max-height: none !important; margin: 0 !important; padding: 0 !important;
+    overflow: visible !important; transform: none !important; contain: none !important; background: #fff !important;
+  }
+  body .fd-report-reader { display: block; width: 100%; }
   body .fd-report-reader .fd-card { background: #fff; color: #000; border: 0; box-shadow: none; }
-  body .fd-report-reader .fd-card dt, body .fd-report-reader small { color: #333; }
+  body .fd-report-reader .fd-card * { color: #000 !important; }
   .fd-report-event { break-inside: avoid; }
   .fd-report-reader h3 { break-after: avoid; }
+  .fd-report-reader p { orphans: 3; widows: 3; }
 }

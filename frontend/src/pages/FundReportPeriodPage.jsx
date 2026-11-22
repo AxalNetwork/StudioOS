@@ -11,7 +11,7 @@ import { fundReportingApi } from '../lib/api/fundReporting.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { readableFund, readablePeriod, useFundReport } from '../hooks/useFundReport';
-import { issuedFundRows } from '../lib/quarterlyReportViewModel.js';
+import { fmtDate, issuedFundRows } from '../lib/quarterlyReportViewModel.js';
 import { FundReadState, Recorded } from './FundPage';
 import { fundDraftsApi } from '../lib/api/fundDrafts.js';
 import FundDraftBand from './FundDraftBand';
@@ -31,40 +31,42 @@ export default function FundReportPeriodPage({ role = 'investor', reading: suppl
     rail={<WorkerRail role="investor" workspace="Fund reporting" stance="GP-authored reporting" coverage={data ? ['Recorded reporting period'] : []}
       note="Issuing freezes the report. A correction is recorded as a separate period." />}>
     {reading.loading || reading.error || !data || denied ? <FundReadState reading={denied ? { ...reading, error: { status: 403 } } : reading} />
-      : data.period.status === 'issued' || !data.can_manage ? <PeriodReader data={data} />
+      : data.period.status === 'issued' ? <PeriodReader data={data} onChanged={reading.reload} />
       : <PeriodEditor key={`${data.fund.id}:${data.period.id || 'new'}:${data.period.revision || params.get('corrects') || ''}`}
         data={data} onDeleted={() => navigate(`/funds/${data.fund.id}`, { replace: true })} onSaved={(id) => { if (String(id) === periodId) reading.reload(); else navigate(`/funds/${data.fund.id}/reporting/${id}`, { replace: true }); }} />}
   </WorkspaceShell></div>;
 }
 
 /** D6250: the issued document reads only its frozen period, never today's fund totals. */
-export function PeriodReader({ data }) {
+export function PeriodReader({ data, onChanged = () => {} }) {
+  const { user } = useAuth();
   const { period: report, fund } = data;
   const figures = issuedFundRows(report.figures);
   const link = id => `/funds/${fund.id}/reporting/${id}`;
+  const label = id => data.periods?.find(row => row.id === id)?.period || `period ${id}`;
   return <>
     <nav className="fd-actions fd-report-tools" aria-label="Report actions">
       <Link to={`/funds/${fund.id}`}>Back to fund</Link>
       <button type="button" onClick={() => window.print()}>Print</button>
-      <Link to="/spinout-lab/investor-workspace#reports">Your capital statement and PDF</Link>
-      {data.can_manage && <Link to={`/funds/${fund.id}/reporting/new?corrects=${report.id}`}>Issue a correcting period</Link>}
+      {!data.can_manage && <Link to="/spinout-lab/investor-workspace#reports">Your capital statement and PDF</Link>}
+      {data.can_manage && !report.corrected_by_period_id && <Link to={`/funds/${fund.id}/reporting/new?corrects=${report.id}`}>Issue a correcting period</Link>}
     </nav>
     <div className="fd-report-reader">
       <article className="fd-card fd-report-letter" aria-label="Report letter">
         <header className="fd-report-mast"><div><small>Quarterly report to limited partners</small><h2>{fund.name}</h2>
-          <p>{report.period} · <Recorded value={report.period_start} reason="The start date was not recorded." /> – <Recorded value={report.period_end} reason="The end date was not recorded." /></p></div>
-          <dl><div><dt>Issued · read-only</dt><dd><Recorded value={report.issued_at} reason="The issue timestamp was not recorded." /></dd></div>
+          <p>{report.period} · <ReportDate value={report.period_start} reason="The start date was not recorded." /> – <ReportDate value={report.period_end} reason="The end date was not recorded." /></p></div>
+          <dl><div><dt>Issued · read-only</dt><dd><ReportDate value={report.issued_at} stamp reason="The issue timestamp was not recorded." /></dd></div>
           <div><dt>Issued by</dt><dd><Recorded value={report.issued_by_name} reason={report.issued_by_name_reason || 'The issuer’s name was not recorded.'} /></dd></div>
           {data.can_manage && <div><dt>{report.lps_notified_at ? 'LPs notified at' : 'LP notices'}</dt><dd>
             {report.lps_notified_at && <time dateTime={report.lps_notified_at}>{fundReportDeliveryTime(report)} · </time>}{fundReportDeliveryLabel(report)}
           </dd></div>}</dl></header>
-        {report.corrects_period_id && <p role="note">This report corrects <Link to={link(report.corrects_period_id)}>{report.corrects_period || `period ${report.corrects_period_id}`}</Link>. The original remains issued.</p>}
-        {report.corrected_by_period_id && <p role="note">Corrected by <Link to={link(report.corrected_by_period_id)}>period {report.corrected_by_period_id}</Link>. This report remains issued and readable.</p>}
+        {report.corrects_period_id && <p role="note">This report corrects <Link to={link(report.corrects_period_id)}>{report.corrects_period || label(report.corrects_period_id)}</Link>. The original remains issued.</p>}
+        {report.corrected_by_period_id && <p role="note">Corrected by <Link to={link(report.corrected_by_period_id)}>{label(report.corrected_by_period_id)}</Link>. This report remains issued and readable.</p>}
         {Object.entries(SECTIONS).map(([section, title]) => <section key={section} aria-label={title}><h3>{title}</h3>
           {!report.narrative[section].length && <Recorded value={null} reason="No content was recorded in this section." />}
           {report.narrative[section].map((entry, index) => section === 'letter' || section === 'outlook'
             ? <p key={index}>{entry}</p>
-            : <div className="fd-report-event" key={index}><time dateTime={entry.date || entry.d}>{entry.date || entry.d}</time><div>{section === 'developments' && <h4>{entry.title}</h4>}<p>{entry.body || entry.e}</p></div></div>)}
+            : <div className="fd-report-event" key={index}><ReportDate value={entry.date || entry.d} reason="The event date was not recorded." /><div>{section === 'developments' && <h4>{entry.title}</h4>}<p>{entry.body || entry.e}</p></div></div>)}
         </section>)}
         <p className="fd-report-foot">Issuing cannot be undone. Record a correcting period to change this report.</p>
       </article>
@@ -74,7 +76,14 @@ export function PeriodReader({ data }) {
         <p>These figures are frozen at issue. Missing figures are not recalculated from today’s records.</p>
       </aside>
     </div>
+    {data.can_manage && user?.role === 'admin' && <PackCard data={data} user={user} onChanged={onChanged} />}
   </>;
+}
+
+function ReportDate({ value, stamp = false, reason }) {
+  const at = parseStamp(value);
+  return at === null ? <Recorded value={null} reason={reason} />
+    : <time dateTime={value}>{stamp ? new Date(at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC' : fmtDate(value)}</time>;
 }
 
 const SECTIONS = { letter: 'Letter', developments: 'Key developments', outlook: 'Outlook', subsequent: 'Subsequent events' };
