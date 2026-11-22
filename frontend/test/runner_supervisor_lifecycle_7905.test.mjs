@@ -570,3 +570,35 @@ test('S32 F1/F3: removal that starts late still ends by the bound: inspect, rm a
   assert.ok(removal.every(c => c.timeout > 0 && c.at + c.timeout <= step), JSON.stringify(removal));
   assert.equal(JSON.parse(logs.find(l => l.includes('container_outcome'))).cleanup.state, 'complete');
 });
+
+test('S32 durable tail: a run whose synchronous store work ends past the lifecycle bound is never reported as success', async t => {
+  const step = NOW + 400_000;
+  const run = async ({ test = 'exit 0' } = {}) => {
+    t.mock.timers.reset(); t.mock.timers.enable({ apis: ['Date'], now: NOW });
+    const f = engineFixture(t);
+    const job = new JobContainer(POLICY, { engine: f.engine, spawnEngine: realSpawn({ install: 'exit 0', test }), stage: () => {}, namespace: () => true });
+    // S32's model: the export returns, and inspect, rm and the absence check finish, 1ms before the bound;
+    // then 60s of durable-store work runs around the real, synchronous record removal.
+    const exporter = async () => { t.mock.timers.tick(step - 1 - Date.now()); return { state: 'complete' }; };
+    const real = recoveryStore({ root: f.storeRoot, create: true });
+    const store = { ...real, remove: owner => { t.mock.timers.tick(60_000); real.remove(owner); } };
+    const logs = [], outputs = [];
+    const code = await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store, exporter, log: l => logs.push(l), output: o => outputs.push(o), stepDeadline: step });
+    return { code, f, outputs, o: JSON.parse(logs.find(l => l.includes('container_outcome'))) };
+  };
+  let r = await run();
+  assert.deepEqual([r.code, r.o.result, r.o.category, r.o.cleanup.state, r.o.lifecycle], [1, 'deadline_overrun', 'infrastructure', 'complete', { overran: true, overrunMs: 59_999 }]);
+  assert.deepEqual(records(r.f), [], 'the removal itself completed and was recorded');
+  assert.equal(r.outputs[0].result, 'deadline_overrun');
+  // A real test failure observed before the overrun keeps its raw exit.
+  r = await run({ test: 'exit 3' });
+  assert.deepEqual([r.code, r.o.result], [3, 'test_failure']);
+});
+
+test('S32 durable tail: classification keeps success only inside the bound', () => {
+  const ok = { state: 'complete' }, pass = { status: 'success', exitCode: 0 };
+  assert.deepEqual(classifyOutcome({ install: pass, test: pass, exported: ok, cleanup: ok, overran: false }), { result: 'success', category: 'success', code: 0, cleanupComplete: true });
+  assert.deepEqual(classifyOutcome({ install: pass, test: pass, exported: ok, cleanup: ok, overran: true }), { result: 'deadline_overrun', category: 'infrastructure', code: 1, cleanupComplete: true });
+  assert.deepEqual(classifyOutcome({ install: pass, test: { status: 'failure', exitCode: 4 }, exported: ok, cleanup: ok, overran: true }).code, 4);
+  assert.deepEqual(classifyOutcome({ install: pass, test: { status: 'cancelled' }, exported: ok, cleanup: ok, overran: true, aborted: true }).code, 130);
+});
