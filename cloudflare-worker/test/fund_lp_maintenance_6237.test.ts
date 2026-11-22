@@ -154,6 +154,7 @@ test('D6237 local workerd D1 audits only changed RETURNING rows and rolls audit 
     await assert.rejects(()=>removeLp(env,1,100,40),{code:'lp_has_capital_history'});
     assert.equal(await count(),0,'zero-row DELETE RETURNING records no phantom audit');
     assert.equal((await DB.prepare('SELECT lp_count FROM vc_funds WHERE id=1').first()).lp_count,2);
+    assert.equal((await DB.prepare('SELECT updated_at FROM vc_funds WHERE id=1').first()).updated_at,null,'a refused removal does not touch the fund timestamp');
     const changed=await correctLp(env,1,100,40,{commitment_amount:250});
     assert.equal(changed.commitment_amount,250);assert.equal(await count(),1);
     await removeLp(env,1,101,40);assert.equal(await count(),2);
