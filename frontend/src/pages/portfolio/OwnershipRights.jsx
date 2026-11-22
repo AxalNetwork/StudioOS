@@ -24,6 +24,8 @@ import {
   nothingRecorded, requestRows, rightsRows,
 } from './rightsModel';
 import { NOT_RECORDED } from './portfolioModel';
+// D6907 part 2: Eadwyn's proposal of a right that is in the signed paper but not recorded (PRM18 rail).
+import ClauseProposals from './ClauseProposals';
 
 function Holding({ cells }) {
   return (
@@ -161,6 +163,9 @@ export default function OwnershipRights({ uid, position, route, duties, reportsH
     retry('rights');
   };
 
+  // Kept outside `body` so a refreshed rights read does not unmount Eadwyn's card; null while the rights are unread.
+  const proposable = read.state === 'ok' && canAsk ? askableTypes(rightsRows(read.value, duties)) : null;
+
   let body;
   if (read.state === 'loading') {
     body = <Skeleton rows={3} />;
@@ -206,6 +211,10 @@ export default function OwnershipRights({ uid, position, route, duties, reportsH
         <p className="pf-sm">Each right names its document and clause, or says {NOT_RECORDED_AT_CLOSING}. Nothing here is inferred. To change a right, the document is amended.</p>
         {body}
       </section>
+      {canAsk ? (
+        <ClauseProposals uid={uid} askable={proposable}
+          onSent={(type) => { setSent(`Sent to HQ: ${RIGHT_WORDS[type]}, from Eadwyn’s proposal. HQ answers on this page: Recorded, or Declined with a reason.`); retry('rights'); }} />
+      ) : null}
     </>
   );
 }
