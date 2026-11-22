@@ -64,4 +64,6 @@ and a link in `documentation/README.md`.
 | `RUNNER_CAPACITY_RUNBOOK.md` | D7888: staged runner capacity proof, eligibility-first drain, private budget controls and hosted rollback; preparation only. |
 | `RUNNER_CAPACITY_EVIDENCE_7888.md` | D7888: sanitized existing-run observations and explicit missing live-proof evidence. |
 | `production-credential-inventory.json` | D7145 job, trigger, credential and environment assignments checked in CI. |
+| `GITHUB_ADMIN_BASELINE.md` | D8082: the GitHub admin settings `slot:chatgptpro` set (rulesets, environments, Actions, Apps, runner groups; cloud names and quotas), which the weekly read-only `admin-drift.yml` checks, filing one issue per drift. |
 | [Production credentials](PRODUCTION_CREDENTIALS.md) | D7145 environment setup, token permissions, verification and retirement. |
+| `runner-image-8008/` | Review the Linux candidate runtime contract, offline image inputs and qualification evidence gates (D8008). |

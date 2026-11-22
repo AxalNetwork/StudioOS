@@ -17,6 +17,7 @@ a public price list: no real person, venture, figure or credential.
 | `chromiumTaggedDeck.ts` | D1578: a synthetic page printed by Chromium with `tagged: true`, as base64 | `deck_tagged_exports_d1578.test.ts` |
 | `ai_gateway_4556.json` | D4556: the AI Gateway slice's price, ZDR, logging and limit facts, each with its Cloudflare page and the date read | `ai_gateway_slice_4556.test.ts` |
 | `accounting/` | D5833 (#5833): synthetic QuickBooks Online and Xero balance-sheet and profit-and-loss reports, in each provider's JSON shape, with negative, zero, empty and unreadable cells and two fiscal periods | `financial_statements_5833.test.ts` |
+| `fund_facts_7843/` | D7843 (#7843): an invented reviewed manifest of fund statements, its invented list reviews (`reviews.sql`, not a migration) and the SQL `scripts/import-fund-facts.mjs` compiles from them (`compiled.sql`, checked with `--check`) | `research_fund_facts_7843.test.ts` |
 
 ## Rules
 

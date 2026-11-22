@@ -21,6 +21,7 @@ import { CONNECTOR_METADATA } from '../src/integrations/registry.ts';
 import { ensureIntegrationsSchema } from '../src/integrations/registry.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const baseline = read('../sql/schema_baseline.sql');
@@ -53,6 +54,7 @@ const PRESENTATION = {
 
 async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  applySuppressionLedger(db); // D6654
   for (const t of ['users', 'founders', 'projects', 'user_company_links', 'pitch_decks', 'data_room_files', 'raise_prospects', 'contacts', 'activity_logs']) db.exec(tableFromBaseline(baseline, t));
   for (const [f, t] of [['442_raise_cycle_stores', 'data_room_files'], ['463_raise_record_stores', 'data_room_files'], ['596_data_room_file_source', 'data_room_files'],
     ['539_pitch_deck_editor', 'pitch_decks'], ['442_raise_cycle_stores', 'raise_prospects'], ['463_raise_record_stores', 'raise_prospects'], ['607_raise_money_cents', 'raise_prospect_events']] as const) {

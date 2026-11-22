@@ -248,7 +248,7 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
 
   if (deleteKeys.length && !dry) {
     // D6651: orphans past the grace window and tombstoned bytes past retention go through the one record-erasure path.
-    await eraseRecordObjects(bucket, deleteKeys, 'retention_expired');
+    await eraseRecordObjects(bucket, deleteKeys, 'retention_expired', { db: env.DB });
     s.cost.r2ClassA++;
     writes.push(env.DB.prepare(
       `UPDATE work_graph_blobs SET deleted_at = ?

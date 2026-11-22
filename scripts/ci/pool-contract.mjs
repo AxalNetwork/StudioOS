@@ -57,6 +57,10 @@ export const EXCEPTIONS = [
     reason: 'D5502: posts the CI failure digest comment on the failing pull request; it runs only after a failure and reads no secret.',
   },
   {
+    workflow: 'landing-policy.yml', job: 'label', allow: ['write:pull-requests'], expires: '2027-01-31', owner: '#8067',
+    reason: 'D8067: sets or clears the pr:privileged label from the policy job\'s output; it checks out nothing, runs no repository code, reads no secret and skips forks.',
+  },
+  {
     workflow: 'codeql.yml', job: 'analyze', allow: ['write:security-events'], expires: '2027-01-31', owner: '#8072',
     reason: 'Uploads the pull request’s CodeQL SARIF so its findings show on the PR (D721); the token can write code-scanning results only.',
   },
