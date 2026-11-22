@@ -10,9 +10,11 @@ required checks, provider resources or shard counts.
 | `job-container.mjs` | D7905: inactive trusted-host Linux container boundary, actual inspection adapter and exact-ID cleanup; Mac and enrollment remain blocked pending canary. |
 | `executor-isolation.mjs` | D7905: binds the container boundary to the trusted executor for `linux-x64` only: a pre-checkout readiness port and the live-container adapter. Not isolation proof by itself. |
 | `recovery-store.mjs` | D7905: durable exact-container ownership records in the listener's private state directory, outside run and workspace directories; removed only after the engine reports the container gone. |
-| `trace-exporter.mjs` | D7905/D8010: bounded streaming USTAR reader and the supervisor's exporter: pause, `docker cp` of `/work/traces`, private 0400 stage, `COMPLETE.json` last, published as `ready`. Never extracts. |
+| `trace-exporter.mjs` | D7905/D8010: bounded streaming USTAR reader and the supervisor's exporter: pause, `docker cp` of `/work/traces`, private 0400 stage, generated COMPLETE.json last, published as `ready`. Never extracts. |
 | `profiles.json` | Schema v1 profile enums, shared AND labels and reviewed archive digests; hosted Ubuntu is a separate pool. |
 | `ephemeral-supervisor.mjs` | D7889: pure one-job enrollment/drain proposals and filtered environment; no live issuer or process launcher. |
+| `hosted-verification.mjs` | D8007: inactive trusted-reader verification port; requires current target-job, boundary and included-eligibility evidence. |
+| `hosted-verification-8007.fixture.mjs` | D8007: manual exact-revision fixtures with simulated provider/native facts; never hosted readiness evidence. |
 
 Start at [RUNNER_BOOTSTRAP.md](../../../documentation/operations/RUNNER_BOOTSTRAP.md).
 Install/verify need no runner token, provider API or fleet manager. Register/start
