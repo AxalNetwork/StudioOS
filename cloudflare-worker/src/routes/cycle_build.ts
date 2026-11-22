@@ -991,7 +991,7 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
   const order = await env.DB.prepare(
-    `SELECT id, status, paid_at, packet_ready_at, filed_on, jurisdiction_id, company_name, registered_agent_name
+    `SELECT id, status, paid_at, packet_ready_at, filed_on, jurisdiction_id
        FROM incorporations WHERE project_id = ? AND status != 'pending_payment'
       ORDER BY created_at DESC, id DESC LIMIT 1`,
   ).bind(p.id).first<any>();

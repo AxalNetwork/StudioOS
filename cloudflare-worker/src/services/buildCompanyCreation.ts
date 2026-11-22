@@ -37,7 +37,7 @@ import { readSlots } from '../routes/company_documents';
 import { viewerIsMember } from './companyAccess';
 
 type Order = { id: number; status: string; paid_at: string | null; packet_ready_at: string | null; filed_on: string | null;
-  jurisdiction_id: string | null; company_name?: string | null; registered_agent_name?: string | null } | null;
+  jurisdiction_id: string | null } | null;
 type Step = { id: number; title: string; due_date: string | null; state: string; proof_file_key: string | null; kind: string | null; for_holder_id: number | null };
 type ProjectRef = { id: number; company_id: number | null; entity_id: number | null };
 
@@ -76,6 +76,9 @@ export const FORMED_SOURCE = Object.freeze({
  */
 export async function entitySummary(env: Env, p: ProjectRef, order: Order, steps: Step[]) {
   try {
+    // The order's own names, read here so a store without them fails this block only, not the module (BD29).
+    const named = order ? await env.DB.prepare('SELECT company_name, registered_agent_name FROM incorporations WHERE id = ?')
+      .bind(order.id).first<{ company_name: string | null; registered_agent_name: string | null }>() : null;
     const track = order ? await env.DB.prepare(
       `SELECT c.track FROM formation_case_orders o JOIN formation_cases c ON c.id = o.case_id
         WHERE o.incorporation_id = ? ORDER BY c.id DESC LIMIT 1`,
@@ -87,11 +90,11 @@ export async function entitySummary(env: Env, p: ProjectRef, order: Order, steps
       'SELECT name, jurisdiction, incorporation_date FROM entities WHERE id = ?',
     ).bind(p.entity_id).first<any>();
     const FROM_ORDER = 'The incorporation order';
-    const name = first(fact(order?.company_name, FROM_ORDER, ''), fact(company?.legal_name, FORMED_SOURCE.company, ''),
+    const name = first(fact(named?.company_name, FROM_ORDER, ''), fact(company?.legal_name, FORMED_SOURCE.company, ''),
       fact(company?.company_name, FORMED_SOURCE.company, ''), fact(entity?.name, FORMED_SOURCE.entity, 'No company name is recorded.'));
     const jurisdiction = first(fact(order?.jurisdiction_id, FROM_ORDER, ''), fact(company?.jurisdiction, FORMED_SOURCE.company, ''),
       fact(entity?.jurisdiction, FORMED_SOURCE.entity, 'No jurisdiction is recorded.'));
-    const agent = first(fact(order?.registered_agent_name, FROM_ORDER, ''),
+    const agent = first(fact(named?.registered_agent_name, FROM_ORDER, ''),
       fact(company?.registered_agent_name, FORMED_SOURCE.company, 'No registered agent is recorded.'));
     const filedOn = order && order.status === 'filed' ? day(order.filed_on) : null;
     const notFormed = order ? (order.status === 'packet_ready' ? 'Not filed with the state yet: the packet is ready or with the registry.' : 'Not filed with the state yet.')
