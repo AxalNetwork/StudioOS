@@ -47,17 +47,3 @@ for `railMatrixOverrides.json`).
 
 <!-- files:begin -->
 <!-- files:end -->
-| `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |
-| `networkDirectoryPlan.mjs` | D7672: pure source-classified Network directory planner; emits parameterized batches, provenance, held conflicts and aggregate reconciliation without accounts, memberships, ties or book writes. |
-
-| `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
-| `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
-| `runnerSupervisor.test.mjs` | D7889: ephemeral enrollment, credential inheritance and eligibility-first drain actions; kept outside the Merge Control import boundary. |
-| `ciFailures.mjs` | D5502: bounded test identities, safe reproductions and exact-base evidence attribution. |
-| `ciFailureReporter.mjs` | D5502: node:test JSONL evidence beside TAP without assertion values or stacks. |
-| `ciFailureCollector.mjs` | D5502: bounded Actions artifact reads, archive validation and tested-base comparison. |
-| `ciFailures.test.mjs` | D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. |
-| `guardCatalog.mjs` | D5505: ordered catalog access shared by guard readers and wiring tests. |
-| `guardRunner.mjs` | D5505: independent guard execution, prerequisites, process-group interruption and bounded metadata. |
-| `guardRunner.test.mjs` | D5505: multi-failure, prerequisite, real signal, clean-run and preserved-command contracts. |
-| `guardEvidence5505.test.mjs` | D5505: guard evidence normalization, exact-command inheritance and rest-part continuation. |
