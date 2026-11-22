@@ -1334,5 +1334,5 @@ export async function verdictEvidenceState(ctx: Ctx) {
       results_recorded: (results.results||[]).filter(e=>!!e.result?.trim()).length,
       missing_results: (results.results||[]).filter(e=>!e.result?.trim()).length,
       current: current ? { id:Number(current.id), decision:current.decision, reasoning:current.reasoning, date:day(current.decided_at), evidence:isOldRoute(current)?null:Number(current.evidence_count) } : null };
-  } catch { return { state:'unreadable' }; }
+  } catch (err) { console.warn('[verdict] evidence snapshot unreadable:', (err as Error)?.message); return { state:'unreadable' }; }
 }
