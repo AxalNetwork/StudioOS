@@ -2,6 +2,9 @@
 import { pathToFileURL } from 'node:url';
 import { githubApi } from './github.mjs';
 import { loadTrackers } from './trackers.mjs';
+import { ALERT_SOURCES } from './sources.mjs';
+import { breachPass, digestText, isDigestRun, openSecurityTasks } from './sla.mjs';
+import { webhookDelivery } from '../health-alert-transport.mjs';
 
 const OPEN_PER_RUN = 5;
 const CLOSURES_PER_RUN = 20;
@@ -82,6 +85,53 @@ export async function reconcile(api, options, dependencies = {}) {
   return candidates.length;
 }
 
+/**
+ * D8074: Dependabot and secret-scanning alerts follow the Code Scanning loop: one tracker per alert, routed to
+ * S21, closed only when GitHub reports the alert resolved. Returns null when this credential cannot read the source.
+ */
+export async function reconcileSource(api, source, options, dependencies = {}) {
+  const { runNumber } = options;
+  if (!positive(runNumber)) throw new Error('Invalid run number');
+  let open;
+  try {
+    open = await api.pages(source.list);
+  } catch (error) {
+    // The workflow token has no Dependabot or secret-scanning read; only the App credential does.
+    if ([403, 404].includes(error.status) && !error.limited) {
+      console.log(`${source.name}: not readable with this credential (HTTP ${error.status}); skipped.`);
+      return null;
+    }
+    throw error;
+  }
+  if (!open.every(a => positive(a.number) && source.open(a))) throw new Error(`Unreadable ${source.name} inventory`);
+  const trackers = await (dependencies.loadTrackers ?? loadTrackers)(api, { ...options, source });
+  const openNumbers = new Set(open.map(a => a.number));
+  const checkResolved = trackers.trackedNumbers().filter(n => !openNumbers.has(n));
+  const candidates = [...windowOf(openNumbers, OPEN_PER_RUN, runNumber), ...windowOf(checkResolved, CLOSURES_PER_RUN, runNumber)];
+  let failed = 0;
+  for (const number of candidates) {
+    try {
+      const alert = await api.request('GET', source.get(number));
+      if (alert.number !== number) throw new Error('Mismatched alert identity');
+      if (source.resolved(alert, options.defaultBranch)) {
+        await trackers.closeFixed(alert);
+        continue;
+      }
+      if (!source.open(alert)) continue;
+      const { issue, actionable } = await trackers.ensure(number, alert);
+      if (!actionable || alert.assignees?.length) continue;
+      await trackers.markReady(issue);
+    } catch (error) {
+      // Neither the alert nor the response body is logged: this repository's Actions logs are public.
+      console.error(`${source.name} alert ${number}: reconciliation failed${Number.isInteger(error.status) ? ` (HTTP ${error.status})` : ''}.`);
+      if (error.limited || [401, 429].includes(error.status)) throw error;
+      failed++;
+    }
+  }
+  if (failed) throw new Error(`${failed} ${source.name} alert operations need retry`);
+  return candidates.length;
+}
+
 async function main(env) {
   if (env.GITHUB_REPOSITORY !== 'AxalNetwork/StudioOS' || env.GITHUB_REF !== 'refs/heads/main'
       || !['workflow_dispatch', 'schedule'].includes(env.GITHUB_EVENT_NAME)) throw new Error('Untrusted workflow context');
@@ -91,11 +141,30 @@ async function main(env) {
   if (repository.default_branch !== 'main') throw new Error('Default branch changed');
   const raw = env.SCAN_ALERT || '';
   if (raw && !/^[1-9]\d*$/.test(raw)) throw new Error('Invalid target');
-  const n = await reconcile(api, {
+  const options = {
     owner, repo, defaultBranch: 'main', botLogin: env.SCAN_REMEDIATION_BOT_LOGIN || 'github-actions[bot]',
-    runNumber: Number(env.GITHUB_RUN_NUMBER), alertNumber: raw ? Number(raw) : undefined,
-  });
-  console.log(`Reconciled a window of ${n} alerts.`);
+    runNumber: Number(env.GITHUB_RUN_NUMBER),
+  };
+  const now = new Date();
+  if (isDigestRun(env)) {
+    // The weekly digest carries counts only; it reads trackers, never alerts.
+    const text = digestText(await openSecurityTasks(api, options), now);
+    const sent = await webhookDelivery({ url: env.SLACK_GITHUB_WEBHOOK_URL })({ text });
+    console.log(`Weekly security digest: ${sent.state}${sent.code ? ` (${sent.code})` : ''}.`);
+    if (!['acknowledged', 'retry'].includes(sent.state) || (sent.state === 'retry' && sent.code !== 'not_configured')) {
+      throw new Error('Digest delivery was not acknowledged');
+    }
+    return;
+  }
+  const n = await reconcile(api, { ...options, alertNumber: raw ? Number(raw) : undefined });
+  console.log(`Reconciled a window of ${n} Code Scanning alerts.`);
+  if (raw) return;
+  for (const source of ALERT_SOURCES) {
+    const m = await reconcileSource(api, source, options);
+    if (m !== null) console.log(`Reconciled a window of ${m} ${source.name} alerts.`);
+  }
+  const breached = await breachPass(api, { ...options, now });
+  console.log(`SLA pass: ${breached} task(s) newly past seven days.`);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main(process.env).catch(error => {
