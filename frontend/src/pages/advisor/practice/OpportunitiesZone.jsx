@@ -77,7 +77,7 @@ export default function OpportunitiesZone() {
     // Each source settles its own state. A slow template/profile read must
     // never keep the request log on a skeleton.
     await Promise.all([
-      readEveryPage(page => api.listMyAdvisorBookings(undefined, page)).then(bookings => {
+      readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).then(bookings => {
         if (current()) setState(s => ({ ...s, loading: false, error: '', bookings: bookings.items, partial: partialLine(bookings) }));
       }).catch(error => {
         if (current()) setState(s => ({ ...s, loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'), bookings: [] }));

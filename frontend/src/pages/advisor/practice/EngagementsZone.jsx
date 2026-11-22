@@ -107,7 +107,7 @@ export default function EngagementsZone() {
     const current = () => epoch === readEpoch.current;
     setState(s => ({ ...s, loading: true, error: '' }));
     setActivityLoading(true); setCandidatesRead(null); setCandidates([]);
-    const primary = readEveryPage(page => api.listMyAdvisorEngagements(page)).then(read => {
+    const primary = readEveryPage((page) => api.listMyAdvisorEngagements(page)).then(read => {
       if (!current()) return;
       setPartial(partialLine(read));
       setState({ loading: false, error: '', items: read.items, totals: read.first?.totals || null });
@@ -123,7 +123,7 @@ export default function EngagementsZone() {
       });
       setCandidates([...seen.values()].sort((a, b) => a.name.localeCompare(b.name)));
     });
-    const work = readEveryPage(page => api.listMyAdvisorDeliverables(page)).catch(() => null).then(read => {
+    const work = readEveryPage((page) => api.listMyAdvisorDeliverables(page)).catch(() => null).then(read => {
       if (current()) setDeliverables(read ? read.items : null);
     });
     await Promise.all([held, work]);
