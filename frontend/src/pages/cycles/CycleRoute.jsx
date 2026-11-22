@@ -981,7 +981,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const defRowAction = fnOf(def.rowActions, slug);
     // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
     // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
-    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
+    // D6865 part 2 (#6891): Grow › Feedback's home also reads the venture's query and whether Eadwyn is on here.
+    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), search: q, fillsOn: Boolean(fillsOn) }) ?? null;
     const Bands = home?.Bands || PlainBands;
     body = (
       <ModulePage

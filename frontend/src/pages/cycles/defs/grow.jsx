@@ -16,7 +16,8 @@ import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
 import UpdateAskReplies from '../UpdateAskReplies';
 import FeedbackThemes from '../FeedbackThemes';
-import FeedbackLoop from '../FeedbackLoop';
+import FeedbackTab, { addFeedbackAction } from '../FeedbackTab';
+import { api as mainApi } from '../../../lib/api';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import PartnershipsCoMarketing from '../PartnershipsCoMarketing';
@@ -43,6 +44,13 @@ const fromTiktok = (slug, data, ctx) => <GrowFromTiktok slug={slug} part={data?.
  * and the jobs board keeps its own editor. The metric log, Talent and the
  * compliance calendar stay one tool link away.
  */
+/** D6865 part 2 (#6891, GR-21C): Eadwyn's feedback-theme placements, through the existing proposal routes. */
+const FEEDBACK_PROPOSALS = {
+  list: (projectId) => mainApi.listValidateProposals(projectId),
+  accept: (id) => mainApi.acceptValidateProposal(id),
+  discard: (id) => mainApi.discardValidateProposal(id),
+};
+
 const grow = {
   Overview: GrowOverview,
   moduleName: (slug) => growModuleTitle(slug),
@@ -66,6 +74,17 @@ const grow = {
     ),
   }),
   recordPage: toFnMap({ 'durable-company-building': (record,ctx) => <DurableCompanyRecord record={record} {...ctx}/> }),
+  // D6865 part 2 (#6891, GR-21, GR-27): Customers › Feedback owns its page (D6049): the counts, themes, the selected
+  // theme's items with their record chip and origin, the weight and Close the loop, Eadwyn's placements, and Add
+  // feedback as the one primary action (none while nothing is recorded: the empty state carries it).
+  homes: toFnMap({
+    'product-improvement': (data, ctx) => ({
+      sub: 'What customers, investors and your team ask for, grouped by theme, and who to tell when it ships.',
+      action: addFeedbackAction(data, ctx.search),
+      body: (p) => <FeedbackTab {...p} data={data} projectId={ctx.projectId} reload={ctx.reload} fillsOn={ctx.fillsOn}
+        api={cyclesWrite} proposals={FEEDBACK_PROPOSALS} />,
+    }),
+  }),
   fills: { 'product-improvement': 'feedback_theme' },
   // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
   // applicant ranking on Team expansion. D4493 retired Distribution's
@@ -103,10 +122,9 @@ const grow = {
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
     // D6098 (#6098): Rename or merge a theme; `parts.themes` reaches writers only.
-    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26).
+    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26); D6865 part 2
+    // (#6891) draws them in the Feedback tab's own page (`homes` above), so they are not repeated here.
     'product-improvement': (data, ctx) => (<>
-      <FeedbackLoop counts={data?.parts?.counts} themes={data?.parts?.themes} projectId={ctx.projectId}
-        api={cyclesWrite.grow} reload={ctx.reload} />
       <FeedbackThemes themes={data?.parts?.themes}
         onRename={ctx.projectId ? (body) => cyclesWrite.grow.feedbackTheme(ctx.projectId, body).then((out) => { ctx.reload(); return out; }) : undefined} />
       <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />

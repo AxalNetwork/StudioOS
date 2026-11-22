@@ -368,7 +368,12 @@ export const RECORDS = {
       theme: r.theme ?? null,
       roadmap_item: r.roadmap_item_label ?? null,
       status: pill(FEEDBACK_STATUS, r.status),
-    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['status', 'theme', 'roadmap_item_ref', 'roadmap_item_label']) }),
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['status', 'theme', 'roadmap_item_ref', 'roadmap_item_label']),
+    // D6865 part 2 (#6891, GR-21): the Feedback tab draws its own rows (the linked-customer chip, the origin) from these.
+    // A writer-only field the read did not send (an advisor's) stays absent, so the tab draws no chip and no name.
+    feedback: { uid: r.uid ?? null, body: r.body ?? null, source: r.source ?? null, theme: r.theme ?? null, status: r.status ?? null,
+      roadmap_item_label: r.roadmap_item_label ?? null, origin: r.origin ?? null, created_at: r.created_at ?? null,
+      ...Object.fromEntries(['from_name', 'from_company', 'contact'].filter((k) => Object.hasOwn(r, k)).map((k) => [k, r[k] ?? null])) } }),
     filters: [{ key: 'status', label: 'Status', options: options(FEEDBACK_STATUS) }],
     sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
   },

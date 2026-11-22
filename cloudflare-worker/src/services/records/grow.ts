@@ -348,6 +348,13 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
   statuses: opts(FEEDBACK_STATUS, LABEL),
   themes: await feedbackThemes(rc.env, rc.projectId),
   roadmap_items: await roadmapItems(rc.env, rc.projectId),
+  // D6865 part 2 (#6891, GR-21B, GR-24, GR-25): the Add feedback and Save as feedback sheets' "Customer record"
+  // chooser, from the venture's own contacts (newest first, at most 200), as Edit's is. A writer's read (`cycle_records.ts`).
+  contacts: ((await rc.env.DB.prepare(
+    'SELECT uid, name, email, organization, audience, status FROM contacts WHERE project_id = ? ORDER BY COALESCE(last_activity_at, created_at) DESC, id DESC LIMIT 200',
+  ).bind(rc.projectId).all<{ uid: string; name: string | null; email: string; organization: string | null; audience: string; status: string | null }>()).results || [])
+    .map((p) => ({ value: String(p.uid), label: [p.name || p.email, p.organization, capital(p.audience)].filter(Boolean).join(' · '),
+      name: p.name ?? null, email: p.email ?? null, organization: p.organization ?? null, audience: p.audience, status: p.status ?? null })),
 }));
 
 // ── Distribution — id: the channel's uid ────────────────────────────────────
