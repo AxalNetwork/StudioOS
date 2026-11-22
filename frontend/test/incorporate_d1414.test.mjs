@@ -93,6 +93,7 @@ async function mount(url = '/incorporate', { handle = worker() } = {}) {
     text: () => textOf(document.body),
     of: (id) => { const n = byId(id); assert.ok(n, `no ${id}`); return textOf(n); },
     has: (id) => Boolean(byId(id)), prop: (id, k) => props(byId(id))?.[k],
+    clickText: async label => { const n = walk(document.body).find(n => props(n)?.onClick && textOf(n).trim().endsWith(label)); assert.ok(n, `no button ${label}`); await act(async () => props(n).onClick({})); await settle(); },
     click: (id) => fire(id, 'onClick'), change: (id, v) => fire(id, 'onChange', { target: { value: v, checked: v } }),
     wait: async (ms) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)); }); await settle(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
@@ -360,4 +361,30 @@ test('D6688: retrying a failed fresh order reuses the project created by this fl
     const orders = writes.filter(w => w.call === 'POST /api/legal/incorporation/order');
     assert.equal(orders.length, 2); assert.ok(orders.every(w => w.body.project_id === 77));
   } finally { await view.close(); }
+});
+
+
+test('D6688: Retry preserves the start-board project selection', async () => {
+  let reads = 0;
+  const view = await mount('/incorporate', { handle: worker({ 'GET /api/account/companies': () => ++reads === 1 ? response({ message: 'Fixture list failed' }, 503) : response({ companies: [] }) }) });
+  try {
+    await view.change('incorporate-subject-project:2', true);
+    await view.clickText('Retry');
+    assert.equal(reads, 2);
+    assert.equal(view.prop('incorporate-subject-project:2', 'checked'), true);
+    assert.equal(view.prop('incorporate-start-continue', 'disabled'), false);
+  } finally { await view.close(); }
+});
+
+test('D6688: absent company access is Refused, a failed company read is Unavailable, and Retry rereads', async () => {
+  for (const failed of [false, true]) {
+    let reads = 0;
+    const view = await mount('/incorporate?company=fixture_co', { handle: worker({ 'GET /api/account/companies': () => { reads++; return failed ? response({ message: 'Fixture read failed' }, 503) : response({ companies: [] }); } }) });
+    try {
+      assert.match(view.text(), failed ? /Unavailable/ : /Refused/);
+      assert.equal(view.has('incorporate-flow'), false);
+      if (failed) { await view.clickText('Retry'); assert.equal(reads, 2); }
+      assert.deepEqual(view.writes(), []);
+    } finally { await view.close(); }
+  }
 });

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Pill from '../../ui/Pill.jsx';
 import { Unrecorded, Unreadable } from '../../ui/Honesty.jsx';
 import IncorporateStart from './IncorporateStart';
-import FormationEntry from '../account/companies/FormationEntry';
+import FormationEntry, { useCompanyFormation } from '../account/companies/FormationEntry';
 import { formationEntry } from '../account/companies/companiesModel';
 import { orderSubject } from './incorporateAdapter';
 import { api } from '../../lib/api';
@@ -330,22 +330,13 @@ export default function IncorporateFlow({ embedded = false }) {
 }
 
 function CompanySubjectFlow({ uid, embedded, user }) {
-  const [read, setRead] = useState({ loading: true, row: null });
   const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let live = true;
-    setRead({ loading: true, row: null });
-    accountCompaniesApi.companies().then(result => {
-      if (live) setRead({ loading: false, row: result?.companies?.find(row => row.uid === uid) ?? null });
-    }).catch(() => { if (live) setRead({ loading: false, row: null }); });
-    return () => { live = false; };
-  }, [uid, tick]);
-  if (read.loading) return <div className={CARD} aria-busy="true">Reading company incorporation status…</div>;
-  const entry = formationEntry(read.row);
+  const entry = useCompanyFormation(uid, tick);
+  if (entry.state === 'loading') return <div className={CARD} aria-busy="true">Reading company incorporation status…</div>;
   if (entry.state !== 'not_incorporated' || !entry.allowed) return <div className={CARD}>
-    {entry.state === 'incorporated' ? <p>This company is already incorporated.</p> : entry.state === 'not_incorporated' ? <p>Only an Admin of this company can incorporate it.</p> : <FormationEntry entry={entry} name={read.row?.company_name || 'this company'} uid={uid} onRetry={() => setTick(n => n + 1)} />}
+    {entry.state === 'incorporated' ? <p>This company is already incorporated.</p> : <FormationEntry entry={entry} name={entry.row?.company_name || 'this company'} uid={uid} onRetry={() => setTick(n => n + 1)} showRefusal />}
   </div>;
-  return <MemberIncorporateFlow embedded={embedded} user={user} subjectCompany={read.row} />;
+  return <MemberIncorporateFlow embedded={embedded} user={user} subjectCompany={entry.row} />;
 }
 
 function MemberIncorporateFlow({ embedded = false, user, subjectCompany = null }) {

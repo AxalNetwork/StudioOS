@@ -42,9 +42,10 @@ export default function IncorporateStart({ initialPick = null }) {
   const [projects, setProjects] = useState({ loading: true, items: [] });
   const [pick, setPick] = useState(initialPick);
   const navigate = useNavigate();
+  useEffect(() => { setPick(initialPick); }, [initialPick]);
   useEffect(() => {
     let live = true;
-    setCompanies({ loading: true, items: [] }); setProjects({ loading: true, items: [] }); setPick(initialPick);
+    setCompanies({ loading: true, items: [] }); setProjects({ loading: true, items: [] });
     const read = async (loader, key, set) => {
       try { const result = await loader(); if (!Array.isArray(result?.[key])) throw Error(); if (live) set({ loading: false, items: result[key] }); }
       catch { if (live) set({ loading: false, error: true, items: [] }); }
@@ -52,7 +53,7 @@ export default function IncorporateStart({ initialPick = null }) {
     read(accountCompaniesApi.companies, 'companies', setCompanies);
     read(accountCompaniesApi.projects, 'projects', setProjects);
     return () => { live = false; };
-  }, [tick, initialPick]);
+  }, [tick]);
   const go = () => {
     if (pick === 'fresh') navigate('/incorporate?new=1');
     else { const [kind, id] = (pick || '').split(':'); if (id) navigate(incorporatePath(id, kind)); }

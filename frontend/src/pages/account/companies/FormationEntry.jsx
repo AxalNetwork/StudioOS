@@ -14,11 +14,14 @@ export function useCompanyFormation(uid, tick = 0) {
     let live = true;
     setState({ uid, loading: true, row: null });
     accountCompaniesApi.companies().then(result => {
-      if (live) setState({ uid, loading: false, row: result?.companies?.find(row => row.uid === uid) ?? null });
+      if (!Array.isArray(result?.companies)) throw Error('Companies unreadable');
+      const row = result.companies.find(row => row.uid === uid) ?? null;
+      if (live) setState({ uid, loading: false, row, refused: row === null });
     }).catch(() => { if (live) setState({ uid, loading: false, row: null }); });
     return () => { live = false; };
   }, [uid, tick]);
-  return state.uid !== uid || state.loading ? { state: 'loading' } : formationEntry(state.row);
+  if (state.uid !== uid || state.loading) return { state: 'loading' };
+  return state.refused ? { state: 'refused', allowed: false, href: null } : { ...formationEntry(state.row), row: state.row };
 }
 
 export default function FormationEntry({ entry, name, uid, project = false, onRetry, onSaved = () => {}, onLegal, legalOnly = false, testId, showRefusal = false }) {
@@ -38,6 +41,7 @@ export default function FormationEntry({ entry, name, uid, project = false, onRe
     else setError(true);
   };
   if (entry?.state === 'loading') return <p aria-busy="true">Reading incorporation status…</p>;
+  if (entry?.state === 'refused') return <DataState state="refused" reason="This company is not available to this account." />;
   if (!entry || entry.state === 'unreadable') return <Unreadable what={`The incorporation status of ${name}`} onRetry={onRetry} />;
   if (entry.state === 'incorporated') return null;
   if (entry.state === 'in_formation') return <p className="m-0 text-sm" data-testid="formation-order">In formation{entry.href ? <> · <Link className={`${BTN_TEXT} min-h-11`} to={entry.href}>Open</Link></> : null}</p>;
