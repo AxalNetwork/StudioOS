@@ -54,7 +54,7 @@ export function analyse(artifacts, deadlineMinutes = undefined) {
   return { deadlineMinutes, artifacts: artifacts.length, candidates: observations.size, outcomes, latency: stats(all), lastCheckWait: stats(waits), lastCheckRuntime: stats(runtimes),
     missingTimings: observations.size-measured, mergedWithTiming: { n: mergedTimed, laterThanDeadline: deadlineMinutes === null ? null : mergedLate },
     healthyCompletions: { value: null, reason: 'The artifact does not include required-check conclusions; merged is not proof all required checks passed.' },
-    confirmedExpiryRecords: { n: observations.size, value: expired },
+    confirmedExpiryRecords: { observedCandidates: observations.size, expired },
     coverage: { spanDays: span, coveredDays: covered, gapDays: span-covered, intervals: union.map(([a,b]) => ({start:new Date(a).toISOString(),end:new Date(b).toISOString()})) },
     busiestObservedDay: daily.reduce((best,d) => !best || d.candidates>best.candidates ? d:best,null), daily,
     recommendation: 'Insufficient evidence: fewer than seven covered days and/or incomplete required-check outcomes. No settings change justified by this report.' };

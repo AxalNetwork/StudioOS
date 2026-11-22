@@ -11,7 +11,7 @@ test('latency percentiles use one SHA once and do not conflate merged with confi
  assert.equal(r.candidates,3); assert.equal(r.missingTimings,1);
  assert.deepEqual(r.mergedWithTiming,{n:2,laterThanDeadline:1});
  assert.equal(r.healthyCompletions.value,null);
- assert.deepEqual(r.confirmedExpiryRecords,{n:3,value:1});
+ assert.deepEqual(r.confirmedExpiryRecords,{observedCandidates:3,expired:1});
  assert.equal(r.lastCheckWait.p50,10); assert.equal(r.lastCheckRuntime.max,1);
 });
 test('newer observation completes a pending candidate and overlapping windows do not create covered days',()=>{
