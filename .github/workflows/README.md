@@ -19,6 +19,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `beta-readiness-reaudit.yml` | Beta Readiness Re-audit Reminder | — | — | — | — | open-tracking-issue (advisory) | `workflow_dispatch` · open-tracking-issue (advisory) |
 | `branch-provision.yml` | Provision a branch | — | — | — | — | — | `workflow_dispatch` · provision ${{ inputs.code }} (advisory) |
 | `build-worker-contracts.yml` | Build Worker contracts | Build connector and mapping contracts (advisory, conditional) | — | — | — | — | — |
+| `capacity-planner.yml` | Inactive capacity planner | — | — | — | — | — | `workflow_call` · submit (advisory, conditional) |
 | `changelog-gate.yml` | CHANGELOG gate | CHANGELOG.md untouched (advisory, conditional) | — | — | — | — | — |
 | `channel-worker-contracts.yml` | Channel Worker contracts | Channel messaging contracts (advisory, conditional) | — | — | — | — | — |
 | `ci-scorecard.yml` | Daily CI scorecard | — | — | — | — | scorecard (advisory) | `workflow_dispatch` · scorecard (advisory) |
@@ -47,6 +48,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `landing-bot-model-round.yml` | Landing bot model round | — | — | — | — | — | `workflow_call` · Edit (round ${{ inputs.round }}) (advisory)<br>Verify (round ${{ inputs.round }}) (advisory, conditional) |
 | `landing-bot-model.yml` | Landing bot model runner | — | — | — | — | — | `workflow_call` · Validate the task (advisory, conditional)<br>round1 (advisory)<br>round2 (advisory, conditional)<br>round3 (advisory, conditional)<br>Publish the passing patch (advisory, conditional)<br>`workflow_dispatch` · Validate the task (advisory, conditional)<br>round1 (advisory)<br>round2 (advisory, conditional)<br>round3 (advisory, conditional)<br>Publish the passing patch (advisory, conditional) |
 | `landing-bot-refresh.yml` | Landing bot serial refresh | — | — | — | — | Refresh inherited-red branches (advisory, conditional) | `workflow_dispatch` · Refresh inherited-red branches (advisory, conditional) |
+| `landing-conflict-indicator.yml` | Landing conflict indicator | — | — | — | Label confirmed conflicts (advisory, conditional) | Label confirmed conflicts (advisory, conditional) | `workflow_dispatch` · Label confirmed conflicts (advisory, conditional) |
 | `landing-feeder.yml` | Feed the merge queue | — | — | — | — | Feed the merge queue (advisory, conditional) | `workflow_dispatch` · Feed the merge queue (advisory, conditional) |
 | `landing-policy.yml` | Landing policy | landing policy (advisory)<br>privileged label (advisory, conditional) | — | — | — | — | — |
 | `lfs-budget.yml` | LFS budget | — | — | — | — | Check LFS bandwidth vs 250 GB plan (advisory) | `workflow_dispatch` · Check LFS bandwidth vs 250 GB plan (advisory) |

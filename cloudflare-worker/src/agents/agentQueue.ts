@@ -21,7 +21,8 @@
  */
 import type { Env, JobMessage } from '../types';
 import { moveTask, runByUid, scopeOfRow } from './engine';
-import { agentRuntime } from './runtime';
+import { agentRuntime, scopeName } from './runtime';
+import { admitModelStart, budgetFor, readModelBudgets, type BudgetVerdict, type ModelBudgets } from './modelBudget';
 import type { AgentRow } from '../services/agents/teams';
 
 export const AGENT_RUN_JOB = 'agent_run';
@@ -47,23 +48,127 @@ const startWithRuntime: StartRun = async (env, run) => {
   await rt.startRun(scopeOfRow(run.agent), run.uid);
 };
 
-export async function agentQueueConsumer(batch: Batch, env: Env, _ctx: ExecutionContext, start: StartRun = startWithRuntime): Promise<void> {
-  for (const m of batch.messages) {
-    const uid = runUidOf(m.body);
-    if (!uid) { console.warn('[agent-queue] not_an_agent_run'); m.ack(); continue; }
-    try {
-      const run = await runByUid(env, uid);
-      // Gone, or already past `admitted`: a redelivery, or a run that ended. Nothing to start.
-      if (!run || run.status !== 'admitted') { m.ack(); continue; }
-      const agent = await env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(run.agent_id).first<AgentRow>();
-      if (!agent) { m.ack(); continue; }
-      await start(env, { uid, agent });
-      m.ack();
-    } catch {
-      console.warn('[agent-queue] start_failed');
-      m.retry({ delaySeconds: 30 });
+/**
+ * D7077 (#7077): a batch's runs are started TOGETHER (`Promise.allSettled`), not one after
+ * another, and each message keeps its own outcome: a start that throws is retried in 30 s
+ * exactly as before, and never fails or delays the others. Two messages naming one run are
+ * dispatched once and share the outcome. The acks and retries are applied in message order
+ * after every start has settled.
+ *
+ * Before a start, the run's model must fit the platform budget (`modelBudget.ts`, off unless
+ * `AGENT_MODEL_RPM` is set). A throttled message is NOT retried, which would spend the
+ * queue's 3 retries and end the run `queue_exhausted` at the DLQ: it is sent again with a
+ * delay to the next minute and acknowledged. If that send fails, it is retried instead, and
+ * the sweep's resend of runs still `admitted` after 5 minutes stays the backstop.
+ */
+export type QueueOutcome =
+  | { kind: 'ack'; admittedAgeSec?: number }
+  | { kind: 'throttled'; model: string; reason: 'model_full' | 'scope_share'; delaySeconds: number }
+  | { kind: 'retry' };
+
+export type AgentQueueDeps = { now?: () => Date };
+
+/** Metric label keys a dispatch metric may carry. A model is labelled only by the knob's own keys. */
+export const DISPATCH_LABEL_KEYS = ['model', 'reason'] as const;
+
+const sqlTimeMs = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const ms = Date.parse(`${value.replace(' ', 'T').replace(/Z$/, '')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+async function dispatchOne(env: Env, uid: string, start: StartRun, budgets: ModelBudgets | null, now: () => Date, flags: { budgetUnavailable: number }): Promise<QueueOutcome> {
+  const run = await runByUid(env, uid);
+  // Gone, or already past `admitted`: a redelivery, or a run that ended. Nothing to start.
+  if (!run || run.status !== 'admitted') return { kind: 'ack' };
+  const agent = await env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(run.agent_id).first<AgentRow>();
+  if (!agent) return { kind: 'ack' };
+  if (budgets) {
+    let verdict: BudgetVerdict;
+    try { verdict = await admitModelStart(env, budgets, agent.model_id, scopeName(scopeOfRow(agent)), now()); }
+    catch { console.warn('[agent-queue] model_budget_unavailable'); flags.budgetUnavailable += 1; verdict = { ok: true, counted: false }; }
+    if (!verdict.ok) {
+      const label = budgetFor(budgets, agent.model_id)?.label ?? '*';
+      return { kind: 'throttled', model: label, reason: verdict.reason, delaySeconds: verdict.retryAfterSec };
     }
   }
+  await start(env, { uid, agent });
+  const admitted = sqlTimeMs(run.created_at);
+  return { kind: 'ack', admittedAgeSec: admitted == null ? undefined : Math.max(0, Math.floor((now().getTime() - admitted) / 1000)) };
+}
+
+export async function agentQueueConsumer(batch: Batch, env: Env, _ctx: ExecutionContext, start: StartRun = startWithRuntime, deps: AgentQueueDeps = {}): Promise<void> {
+  const now = deps.now ?? (() => new Date());
+  const budgets = readModelBudgets(env);
+  const messages = batch.messages;
+  const outcomes: QueueOutcome[] = new Array(messages.length);
+  const groups = new Map<string, number[]>();
+  messages.forEach((m, i) => {
+    const uid = runUidOf(m.body);
+    if (!uid) { console.warn('[agent-queue] not_an_agent_run'); outcomes[i] = { kind: 'ack' }; return; }
+    groups.set(uid, [...(groups.get(uid) ?? []), i]);
+  });
+  const flags = { budgetUnavailable: 0 };
+  const uids = [...groups.keys()];
+  const settled = await Promise.allSettled(uids.map((uid) => dispatchOne(env, uid, start, budgets, now, flags)));
+  const resend: Array<{ i: number; delaySeconds: number }> = [];
+  settled.forEach((s, k) => {
+    const idx = groups.get(uids[k])!;
+    if (s.status === 'rejected') { console.warn('[agent-queue] start_failed'); for (const i of idx) outcomes[i] = { kind: 'retry' }; return; }
+    idx.forEach((i, j) => {
+      // A throttled run is sent again once; its duplicates in this batch are only acknowledged.
+      if (s.value.kind === 'throttled' && j === 0) resend.push({ i, delaySeconds: s.value.delaySeconds });
+      outcomes[i] = j === 0 ? s.value : { kind: 'ack' };
+    });
+  });
+  const resent = await Promise.allSettled(resend.map(({ i, delaySeconds }) => {
+    if (!env.AGENT_QUEUE) return Promise.reject(new Error('agent_queue_unbound'));
+    return env.AGENT_QUEUE.send(messages[i].body, { delaySeconds });
+  }));
+  const resendFailed = new Set(resend.filter((_, k) => resent[k].status === 'rejected').map((r) => r.i));
+  messages.forEach((m, i) => {
+    const o = outcomes[i];
+    if (o.kind === 'retry') m.retry({ delaySeconds: 30 });
+    else if (o.kind === 'throttled' && resendFailed.has(i)) { console.warn('[agent-queue] throttle_resend_failed'); m.retry({ delaySeconds: o.delaySeconds }); }
+    else m.ack();
+  });
+  await recordDispatchMetrics(env, now(), messages, outcomes, flags.budgetUnavailable);
+}
+
+/**
+ * D7077 — the dispatch's low-cardinality metrics, one batch at a time, into `system_metrics` like the
+ * sweep's and the repair's. Labels are only `DISPATCH_LABEL_KEYS`: a model as the knob names it and a
+ * throttle reason. Never a run, task, agent, scope, user, prompt or output.
+ */
+async function recordDispatchMetrics(env: Env, now: Date, messages: Batch['messages'], outcomes: QueueOutcome[], budgetUnavailable: number): Promise<void> {
+  const rows: Array<[string, number, Record<string, string>?]> = [];
+  const started = outcomes.filter((o) => o.kind === 'ack' && o.admittedAgeSec !== undefined) as Array<{ kind: 'ack'; admittedAgeSec: number }>;
+  const failed = outcomes.filter((o) => o.kind === 'retry').length;
+  if (started.length) {
+    rows.push(['agent_dispatch_started', started.length]);
+    rows.push(['agent_dispatch_admitted_to_started_seconds', Math.max(...started.map((o) => o.admittedAgeSec))]);
+  }
+  if (failed) rows.push(['agent_dispatch_start_failed', failed]);
+  if (budgetUnavailable) rows.push(['agent_dispatch_budget_unavailable', budgetUnavailable]);
+  const ages = messages.map((m) => (m.timestamp instanceof Date ? m.timestamp.getTime() : NaN)).filter(Number.isFinite);
+  if (ages.length) rows.push(['agent_dispatch_queue_age_seconds', Math.max(0, Math.floor((now.getTime() - Math.min(...ages)) / 1000))]);
+  const throttled = new Map<string, { model: string; reason: string; n: number }>();
+  for (const o of outcomes) {
+    if (o.kind !== 'throttled') continue;
+    const k = `${o.model}\u0000${o.reason}`;
+    const t = throttled.get(k) ?? { model: o.model, reason: o.reason, n: 0 };
+    t.n += 1;
+    throttled.set(k, t);
+  }
+  for (const t of throttled.values()) rows.push(['agent_dispatch_throttled', t.n, { model: t.model, reason: t.reason }]);
+  if (rows.length) await recordRepairMetrics(env, rows.map(([name, value, labels]) => [name, value, dispatchLabels(labels)]));
+}
+
+/** Keeps only the allowed label keys. */
+export function dispatchLabels(labels: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of DISPATCH_LABEL_KEYS) if (labels && typeof labels[k] === 'string') out[k] = labels[k].slice(0, 128);
+  return out;
 }
 
 /**
