@@ -13,6 +13,8 @@ test('normSlot: the standard slots and assigned later ones such as s39 (D5617)',
   assert.equal(normSlot('S37'), 'S37');
   assert.equal(normSlot('s38'), 'S38');
   assert.equal(normSlot('s39'), 'S39');
+  assert.equal(normSlot('ChatGPTPro'), 'chatgptpro');
+  assert.ok(isSlotLabel('slot:chatgptpro', 'CHATGPTPRO'));
   assert.equal(normSlot('S00'), null);
   assert.equal(normSlot('S100'), null);
   assert.equal(normSlot('slot:S05'), null);

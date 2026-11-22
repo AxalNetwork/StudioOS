@@ -36,6 +36,7 @@ The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because th
 
 | Workflow | Job | Triggers | Environment |
 | --- | --- | --- | --- |
+| `admin-drift.yml` | `check` | schedule, manual | `production-ops` |
 | `agent-compute-preview.yml` | `deploy_disabled_host` | manual | `agent-compute-preview` |
 | `agent-gateway-keys.yml` | `keys` | manual | `production-ops` |
 | `agent-stage-a.yml` | `stage-a` | manual | `production-ops` |
