@@ -38,6 +38,8 @@ import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
 const VerdictRecordWithPlan = lazyStep(() => import('../BuildPlan'), 'VerdictRecordWithPlan');
+// D5998 (#5998): Validate's V2 overview (boards V1, V2, V13), as Grow's and Build's own.
+const ValidateOverview = lazyStep(() => import('../ValidateOverview'));
 
 /**
  * A quiet Export button: the CSV downloads, or the Worker's sentence shows
@@ -151,6 +153,7 @@ export function RecordMount({ projectId, interviewId, setupKey, onClose, onStart
 
 const validate = {
   modules: MODULES.validate,
+  Overview: ValidateOverview,
   // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
   // click opens it over this page (`onOpen`); a new tab or a deep link follows
   // the href to the same place. The interview comes with it, or is made at Start.

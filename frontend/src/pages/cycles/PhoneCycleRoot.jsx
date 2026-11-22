@@ -33,7 +33,8 @@ const plainTap = (e) => !e.defaultPrevented && (e.button ?? 0) === 0 && !e.metaK
 
 // D6028 (#6028, BD2): `after` is drawn between the focus and the index (Build's Needs attention), and
 // `planLine` replaces the plan row's line with the plan's own counts.
-export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '', after = null, planLine = null }) {
+// D5998 (#5998, V2): `before` is drawn above the focus (Validate's "Trying to learn").
+export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '', before = null, after = null, planLine = null }) {
   const name = CYCLE_NAMES[cycle] || cycle;
   const overview = `${name} · Overview`;
   // D4602 (#4602, BD2): Build's tabs sit above every state, so the plan is reachable while the overview loads or fails.
@@ -109,6 +110,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   return (
     <div data-testid="phone-root" data-cycle={cycle}>
       {nav}
+      {before}
       {focus && (
         <section data-testid="phone-focus" aria-labelledby="phone-focus-title">
           <div className="flex min-h-[40px] items-center justify-between gap-2">
