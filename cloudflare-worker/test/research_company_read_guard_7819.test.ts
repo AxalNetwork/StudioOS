@@ -22,7 +22,10 @@ export const PENDING_READERS = [
   'services/researchCompanyDirectory.ts',
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
-export const MAINTENANCE_WRITERS: string[] = [];
+export const MAINTENANCE_WRITERS: string[] = [
+  // D7820 (#7820): an admin-only read (uid, name, source_name) for the review routes; it writes nothing to the table.
+  'cloudflare-worker/src/services/researchCompanyReview.ts',
+];
 const OWN = 'cloudflare-worker/src/services/researchCompanyRead.ts';
 export function withoutComments(source: string, path = 'file.ts') {
   return transformSync(source, {
