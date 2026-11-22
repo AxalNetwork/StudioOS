@@ -181,7 +181,7 @@ r.post('/company-creation/data-room', async (c) => {
       ]);
     } catch (e) {
       console.error('[company-creation] paper not filed', (e as Error)?.name);
-      await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
+      await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => {});
       skipped.push({ kind, reason: 'It could not be added. Try again in a moment.' });
       continue;
     }
