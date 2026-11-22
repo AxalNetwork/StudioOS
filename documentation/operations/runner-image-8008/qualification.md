@@ -1,15 +1,20 @@
 # Evidence gates for S09/S18 and coordinator (#8008)
 
 **Qualification pending.** All commands below are a prepared procedure unless
-listed as executed in `evidence.json`. Do not execute build/download/publication
-or node operations during #5719's hold. No alternative route around a managed
-denial is allowed. The owner chooses approved builder/tools and immutable inputs;
+listed as executed in `evidence.json`. The owner authorized draft source
+publication on 22 November 2026; #5719 is closed. Actual build/scan/native work
+requires the complete `operator_input_record` in `qualification-progress.json` and current operating
+authorization. No alternative route around a managed denial is allowed.
+The owner chooses approved builder/tools and immutable inputs;
 no tool tag, package version or signing identity is guessed here.
 
 ## 1. Source and input review
 
 Recheck `contract.md` against the exact executor revision the owner will deploy.
-Record differences from all four manifest source revisions. Reuse S18's recipe
+Record differences from every manifest source revision. The source preflight
+requires those actual Git objects; missing objects are a refusal, not an assumed
+receipt. The c36 private intake remains verified and stays in its approved
+channel. Obtain/reconcile the final published candidate or approved handoff. Reuse S18's recipe
 if it has become available; retire this template rather than creating a second
 builder. Resolve each `missing_inputs` entry through explicit reviewed evidence.
 Record the official distro archive/snapshot, every system package's version,
@@ -148,9 +153,19 @@ UTC time. Source review, reproducibility, SBOM completeness, scan acceptance,
 signature/provenance verification, image approval and actual-node proof are
 separate records. The final image status stays **qualification pending** until
 real immutable build and accepted scan evidence exist; an approved image still
-does not authorize node enablement while other parent gates or #5719 remain.
+does not authorize node enablement while other parent or current operating gates remain.
 
 Return S18 the recipe/input blockers and S09 the contract/integration findings.
-The coordinator owns any append-only shared README registration, PR publication,
-admin actions and rollout. No parent claim, branch, workflow or lifecycle file
+The owner authorized the shared README registration and this S31 preparation
+draft. The coordinator retains admin actions and rollout. S39 retains sole
+combined integration ownership. No parent claim, branch, workflow or lifecycle file
 changes in this child.
+
+## 6. One operator input record
+
+Supply the completed six-part `operator_input_record` in `qualification-progress.json` through the established
+private handoff: approved builder/rootfs or immutable OCI evidence, reviewed image
+digest, exact engine/security baseline, intended-node baseline and tooling, current
+bounded operating reference/window/shutdown owner, and final designated combined
+source. All six are currently NOT SUPPLIED. Reconcile that exact final source
+separately from the verified older c36 receipt before running native gates.

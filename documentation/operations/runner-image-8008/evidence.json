@@ -509,7 +509,7 @@
     "release-signature/attestation policy authentication; official HTTPS metadata and runtime archive checksums have been corroborated"
   ],
   "image_status": "qualification pending",
-  "publication": "none; #5719 hold",
+  "publication": "Draft source publication authorized by owner; exact remote head/tree and PR receipt are recorded in the latest issue STATUS and local handoff.",
   "limitations": [
     "Earlier folder-doc failures are retained as historical evidence. Ignored generated modules were produced using the generator API where necessary. The owner subsequently authorized the shared operations README registration; it is now included, and the latest documentation guard exits 0.",
     "Engine range reconciliation is a static Linux/glibc selection check, not an npm install or native ABI qualification.",
@@ -519,5 +519,100 @@
   "updated_utc": "2026-11-21T23:26:27.750619+00:00",
   "shared_readme_registration": "Completed locally with explicit owner authorization; documentation guard passes.",
   "qualification_follow_up": "Verified acquired runtime hashes/static ELF and current published-source compatibility recorded in qualification-progress.json. Native builder/rootfs/node inputs requested from operator; no actual image build, scan or native runtime result exists.",
-  "s09_source_delivery": "Received cumulative c36bf920 snapshot and verified packet checksums, Git head/parent/tree, profiles and syntax; requirements reconciled. Exact source delivery is no longer missing. Native builder/rootfs and intended-node baseline remain unsupplied."
+  "s09_source_delivery": "Received cumulative c36bf920 snapshot and verified packet checksums, Git head/parent/tree, profiles and syntax; requirements reconciled. Exact source delivery is no longer missing. Native builder/rootfs and intended-node baseline remain unsupplied.",
+  "draft_publication_preparation": {
+    "recorded_utc": "2026-11-22T11:12:09.275411+00:00",
+    "status": "Owner-authorized draft source publication; actual qualification pending",
+    "previous_package_commit": "18fcd5151bdbc7af8063cc045c656da189c2f434",
+    "verified_repository_main": "66a705b7ade7e3188f62f34bdb3e58345d8902d5",
+    "backlog_issue_5719": "closed",
+    "merged_prs": [
+      7972,
+      7981,
+      8055
+    ],
+    "planner_pr_8148": {
+      "pr": 8148,
+      "state": "open, unmerged, ready for review",
+      "head": "29eb838db6a703b9413f06089b40f1130f94c4b9",
+      "owner": "S39 reconciles actual landed/selected immutable revision"
+    },
+    "operator_input_record": "qualification-progress.json:operator_input_record",
+    "actual_qualification_gates": {
+      "native_reproducible_build": "NOT RUN",
+      "build_provenance": "NOT RUN",
+      "image_sbom": "NOT RUN",
+      "immutable_image_scan": "NOT RUN",
+      "signature_and_attestation_verification": "NOT RUN",
+      "image_approval": "NOT RUN",
+      "native_runtime_compatibility": "NOT RUN",
+      "actual_node_isolation_and_cleanup": "NOT RUN"
+    },
+    "scope": "Preparation publication only; no installation, build, scan, native execution, dispatch, registry publication or activation performed",
+    "checks": [
+      {
+        "check": "offline source preflight",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication, operator_engine_baseline"
+      },
+      {
+        "check": "missing build-input refusal",
+        "exit": 2,
+        "status": "EXPECTED REFUSAL; build not run",
+        "stdout_or_stderr": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nREFUSED build context: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication, operator_engine_baseline"
+      },
+      {
+        "check": "folder documentation",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described."
+      },
+      {
+        "check": "decision IDs through exported API",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "PASS decision IDs (2297 files; exported API actually executed)"
+      },
+      {
+        "check": "decision append guard through exported API",
+        "exit": 0,
+        "status": "PASS",
+        "stdout_or_stderr": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines."
+      },
+      {
+        "check": "Python AST and JSON parsing",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "check": "native probe shell syntax only",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "check": "Git whitespace",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "check": "public-reference/credential-pattern review of publication files",
+        "exit": 0,
+        "status": "PASS"
+      }
+    ],
+    "not_run": [
+      "image build",
+      "provenance/SBOM production",
+      "image scan",
+      "signature verification",
+      "native probe execution",
+      "node compatibility/isolation tests",
+      "full application build/drift for preparation-only publication update"
+    ]
+  },
+  "historical_publication_record": {
+    "recorded_utc": "2026-11-21T14:11:15.962111+00:00",
+    "publication": "none; #5719 hold"
+  }
 }

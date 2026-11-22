@@ -3,7 +3,9 @@
 **Image status: qualification pending.** This is an offline review package for
 S09 (#7905/#7885) and S18 (#7889), not a fleet builder or a qualified image.
 No build, scan, signature verification, registry publication or real-node test
-has run. `AGENT_ENGINE=off`; the #5719 publication hold remains in force.
+has run. `AGENT_ENGINE=off`. The owner authorized source publication as a draft on
+22 November 2026; #5719 is closed. Actual qualification remains blocked on the
+six inputs in the `operator_input_record` in `qualification-progress.json`.
 
 | File | Purpose |
 | --- | --- |
@@ -15,10 +17,16 @@ has run. `AGENT_ENGINE=off`; the #5719 publication hold remains in force.
 | `qualification.md` | Separate source, reproducible build, SBOM, scan, approval and actual-node evidence gates. |
 | `evidence.json` | Actual local commands, exit codes and unavailable tools; no fixture represents live evidence. |
 | `qualification-progress.json` | Acquired runtime byte/ELF evidence, current source audit and outstanding native build/scan/node gates. |
-| `draft-description.md` | Local review description and shared-file integration handoff. |
+| `draft-description.md` | Draft publication description and qualification limitations. |
 
 From repository root, source-only review is
 `python3 documentation/operations/runner-image-8008/verify-inputs.py`.
+The preflight requires every referenced source commit object. The older c36
+object was verified through the approved private intake; a public clone without
+it fails closed. Keep that packet in its approved channel. Use the final
+published S09/S39 candidate or approved source handoff and reconcile it before
+qualification; no repeat c36 delivery to S31 is requested.
+
 `--context /absolute/offline/context` additionally requires immutable build
 inputs and verifies their bytes. It currently refuses with exit 2 because the
 rootfs and system package pins have not been supplied. A passing source check
@@ -36,5 +44,10 @@ its recipe, layers, scan exceptions and alternative download routes.
 
 Local patch and bundle checksums are delivered separately on #8008 to avoid a
 self-referential artifact hash. The owner-authorized shared operations README
-entry is included. The coordinator owns integration and any later publication.
+entry is included. S31 is authorized to publish this preparation draft; S39 owns combined integration.
 A prepared child does not close #7905 or authorize runner activation.
+
+The independently verified source is the older S09 c36 checkpoint. A reported
+newer executor or a scoped correction does not qualify a final combined tree.
+The operator record requests that exact final candidate and current operating
+reference; no source re-delivery of c36 is requested.

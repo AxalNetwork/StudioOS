@@ -448,7 +448,7 @@
     "intended-node native runtime, six worker shards and isolation/cleanup evidence",
     "operator-approved intended node OS/kernel/Docker/security baseline; later S39 composition requires its own exact-revision reconciliation"
   ],
-  "operator_coordination": "S09 source received and verified at c36bf920. Operator-approved builder/rootfs and intended node baseline remain unsupplied, as confirmed by the operator continuation task. No live infrastructure action, dispatch or publication.",
+  "operator_coordination": "One six-part operator record requested in operator-input-record.json. c36 receipt remains verified; exact final combined candidate and native inputs remain missing. Draft source publication is authorized; actual qualification stays pending.",
   "s09_source_intake": {
     "status": "VERIFIED source intake only",
     "packet": {
@@ -728,5 +728,113 @@
       "evidence_class": "source reconciliation only; not build, scan, image approval or native compatibility"
     },
     "independent_checks_not_claimed": "Retained S09 author test/mutation logs were checksum-verified, not rerun. No independent native execution or actual Docker behavior has been measured."
+  },
+  "draft_publication_preparation": {
+    "recorded_utc": "2026-11-22T11:12:09.275411+00:00",
+    "status": "Owner-authorized draft source publication; actual qualification pending",
+    "previous_package_commit": "18fcd5151bdbc7af8063cc045c656da189c2f434",
+    "verified_repository_main": "66a705b7ade7e3188f62f34bdb3e58345d8902d5",
+    "backlog_issue_5719": "closed",
+    "merged_prs": [
+      7972,
+      7981,
+      8055
+    ],
+    "planner_pr_8148": {
+      "pr": 8148,
+      "state": "open, unmerged, ready for review",
+      "head": "29eb838db6a703b9413f06089b40f1130f94c4b9",
+      "owner": "S39 reconciles actual landed/selected immutable revision"
+    },
+    "operator_input_record": "qualification-progress.json:operator_input_record",
+    "actual_qualification_gates": {
+      "native_reproducible_build": "NOT RUN",
+      "build_provenance": "NOT RUN",
+      "image_sbom": "NOT RUN",
+      "immutable_image_scan": "NOT RUN",
+      "signature_and_attestation_verification": "NOT RUN",
+      "image_approval": "NOT RUN",
+      "native_runtime_compatibility": "NOT RUN",
+      "actual_node_isolation_and_cleanup": "NOT RUN"
+    },
+    "scope": "Preparation publication only; no installation, build, scan, native execution, dispatch, registry publication or activation performed"
+  },
+  "operator_input_record": {
+    "schema_version": 1,
+    "issue": 8008,
+    "recorded_utc": "2026-11-22T11:12:09.275411+00:00",
+    "image_status": "qualification pending",
+    "image_qualified": false,
+    "record_kind": "Unfilled operator input request; preparation only",
+    "handling": "Complete the infrastructure/security/operating references in the established private handoff. Publish only nonsecret source identities, statuses and evidence hashes.",
+    "responsible_owners": {
+      "environment_and_authorization": "Operator with S18/S38",
+      "final_integration_candidate": "S39 with S09 executor ownership"
+    },
+    "inputs": [
+      {
+        "id": "approved_builder_or_oci",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Existing approved native Linux amd64 builder plus reviewed rootfs and immutable component/tool pins, or operator-produced immutable OCI artifacts with build, SBOM, accepted scan and provenance evidence. Identify the approval and evidence references."
+      },
+      {
+        "id": "reviewed_image_digest",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Reviewed immutable linux/amd64 candidate manifest digest, OCI archive/config identities and the mapping to the engine image ID. An unapproved template with a null digest is not a candidate."
+      },
+      {
+        "id": "exact_engine_security_baseline",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Exact container engine/version and effective security configuration used for qualification, with its reviewed baseline reference."
+      },
+      {
+        "id": "intended_node_baseline",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Intended-node architecture, OS/kernel, engine/security configuration, resource limits and required tooling. Distinct-machine pilot proof remains a separate later gate."
+      },
+      {
+        "id": "current_bounded_authorization",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Current bounded qualification reference/runbook, operating window, resource/time/spend bounds, stop conditions and named shutdown responsibility. Historical operating approval is not renewed."
+      },
+      {
+        "id": "final_executor_integration_revision",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "One final S39-designated immutable combined candidate head/tree/base and prerequisites, actual source receipt, executor revision incorporated, review delta and applicable planner/caller revision."
+      }
+    ],
+    "verified_older_source": {
+      "head": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "tree": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3",
+      "status": "Actual receipt and source checks verified previously; not final combined/native acceptance"
+    },
+    "newer_reported_checkpoint": {
+      "head": "f13fa4bda352a52b9f25411c2e2580c1a1888abc",
+      "tree": "5be6c934eb27c6043279e42a95b7c0c435555c54",
+      "status": "Coordinator acknowledged receipt; not independently received/reconciled by S31 and not a designated final combined candidate"
+    },
+    "planner_dependency": {
+      "pr": 8148,
+      "state": "open, unmerged, ready for review",
+      "head": "29eb838db6a703b9413f06089b40f1130f94c4b9",
+      "owner": "S39 reconciles actual landed/selected immutable revision"
+    },
+    "gates": {
+      "native_reproducible_build": "NOT RUN",
+      "build_provenance": "NOT RUN",
+      "image_sbom": "NOT RUN",
+      "immutable_image_scan": "NOT RUN",
+      "signature_and_attestation_verification": "NOT RUN",
+      "image_approval": "NOT RUN",
+      "native_runtime_compatibility": "NOT RUN",
+      "actual_node_isolation_and_cleanup": "NOT RUN"
+    },
+    "authorization": "Owner authorized owned-branch normal pushes and draft PR publication, including ordinary automatic CI, on 2026-11-22. Actual build/native work still requires the input record and current authorization. No activation, dispatch, provisioning, registry publication, permissions change, queue, merge or deployment is authorized."
   }
 }

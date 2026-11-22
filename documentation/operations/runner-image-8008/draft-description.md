@@ -1,43 +1,65 @@
-# Prepare Linux runtime image qualification evidence (#8008)
+## Objective
 
-Part of #7905. Local review only during #5719; no PR has been published.
+Publish the existing Linux runtime qualification preparation for review while its actual qualification remains pending.
 
-The published executor needs a pinned native Linux image before real-node
-isolation can be proved. This package records its runtime, paths, two UIDs,
-environment/mount restrictions and source revisions; inventories existing
-recipes; supplies an offline scratch/rootfs recipe template and input checker;
-and separates build reproducibility, SBOM/scan, signature/provenance, approval
-and actual-node tests. `D8008` records the child decision.
+Part of #8008. Supports #7905, #7885 and #7909; this PR does not close them.
 
-**Image status: qualification pending.** No image was acquired, built, scanned,
-signed, published or enabled. Exact rootfs/system and tool pins, upstream
-authentication, immutable build evidence and actual-node proof are missing.
-The denied #5566 image is excluded. AGENT_ENGINE remains off.
+**Image status: qualification pending.** This package does not establish a usable, built, scanned or natively tested runtime.
 
-Validation and actual command exits are recorded in `evidence.json`. The source
-check is not native qualification. Child files and the owner-authorized shared
-operations README registration are edited: executor,
-bootstrap, profiles, workflows, `infra/runners/` and S18 lifecycle are untouched.
-Source hashes/pins, 364 selected Node engine ranges, Python/shell syntax and
-decision checks pass. Build-input preflight refuses with exit 2 as expected.
-The shared operations README entry is now included; the documentation guard's
-latest result is recorded in `evidence.json`.
-Docker, BuildKit, syft, trivy, cosign and shellcheck are unavailable locally.
+## Implementation
 
-Actual qualification follow-up corroborated the runtime pins against official
-HTTPS release metadata, acquired and verified both archives, identified bundled
-npm 10.9.9 and inventoried 11 x86_64 ELF files without executing them. Current
-published main `270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0` preserves the runtime
-pins/container predicate and passes all 364 selected Node engine checks. S18's
-current published image metadata remains unapproved with null digests. Delivered S09
-source c36bf920 is now independently ingested and its image/engine requirements
-reconciled. Approved native builder/rootfs, intended-node baseline and actual
-build/scan/native evidence are still required from the operator.
-`qualification-progress.json` contains actual evidence and remaining gates.
+Preserve the runtime/UID/path/mount contract, offline recipe and fail-closed input checker, component/provenance inventory, prepared native probe, evidence records and qualification procedure. Add one six-part operator input record and record the owner's explicit draft-publication authorization. The historical #5719 publication hold is closed.
 
-Coordinator handoff: integrate the local patch/bundle after review and when the
-publication hold permits. S18 owns builder integration; S09 owns adapter and
-real-node proof. The owner explicitly authorized completing the append-only
-`documentation/operations/README.md` entry in this local handoff.
+S31 previously verified actual receipt of S09 c36 (`c36bf920613ff28bb7c3571d78994cf1a5d7f18c`, tree `1b87eae7f4e4de9f6ed1b23f7770930450f47fa3`). This preparation retains that identity. Coordinator acknowledgment of f13 and the earlier S39 checkpoints does not constitute S31 receipt or qualification of a final designated combined candidate. Any newer candidate needs separate exact-revision reconciliation. Source preflight requires the referenced Git objects; a public clone without the private c36 object refuses. The previously received private packet is not published by this PR.
 
-Prepared deliverables do not establish #7905 readiness or close that parent.
+The operator must supply one completed input record through the established private handoff:
+
+1. Existing approved Linux amd64 builder/rootfs, or immutable OCI artifacts with build, SBOM, accepted scan and provenance evidence.
+2. Reviewed immutable candidate image digest and archive/config/engine-ID mapping.
+3. Exact engine/version and effective security baseline.
+4. Intended-node architecture, OS/kernel, engine/security configuration, resource limits and required tooling.
+5. Current bounded qualification reference/runbook, operating window, stop conditions and shutdown responsibility.
+6. Final S39-designated executor/integration revision, prerequisites and verified source receipt.
+
+All six remain NOT SUPPLIED. Actual build, provenance/SBOM, scan, signature verification, image approval and native/actual-node gates remain NOT RUN.
+
+## Files changed
+
+- `documentation/operations/runner-image-8008/`: contract, component inventory, offline recipe/input checker, native probe, evidence, qualification procedure, blank operator input record and review description.
+- `documentation/architecture/decisions/D8008.md`: source identities, separated evidence gates and publication authorization.
+- `documentation/operations/README.md`: previously owner-authorized append-only package registration.
+
+## Testing
+
+Current reruns:
+- Offline source/profile/lock preflight: EXIT=0. This verifies the recorded older source, not a qualified image or a final combined revision.
+- Build-input preflight: expected refusal EXIT=2 for the still-missing inputs; no build attempted.
+- Python AST, all package JSON and native-probe shell syntax: EXIT=0. The probe was not executed.
+- Folder documentation, decision IDs and decision-appends through their exported APIs, and whitespace: EXIT=0.
+- Published-file scope and public-reference review completed; detailed private packets remain outside this PR.
+
+Historical archive/ELF/engine-range and c36 intake checks are retained with their original identities and timestamps. They were not promoted to current native evidence. Full application build/drift and all actual image/native gates were not run for this preparation-only publication update.
+
+Historical checks and current reruns are distinguished in the evidence. Source/preparation checks do not establish image or node qualification. No new runtime logic or assertion-only tests were added in this publication update.
+
+## Risks
+
+Preparation artifacts only. Any eventual use requires complete immutable input review and current operating authorization. The offline build-input preflight remains fail-closed. The denied #5566 image remains excluded.
+
+S09 executor, S39 composition, S18 lifecycle/fleet-builder files, workflows, bootstrap, profiles and `infra/runners/` are unchanged. Admission and pilot controls remain disabled, `AGENT_ENGINE=off`, Mac execution disabled, hosted CI/required-check consumers and resource limits unchanged. No registry publication, live dispatch, installation, provisioning, permissions change, ready/queue/merge, deployment or activation is included.
+
+## Dependencies
+
+Verified current facts: #5719 closed; #7972, #7981 and #8055 merged. #8148 remains open and ready for review at `29eb838db6a703b9413f06089b40f1130f94c4b9`; S39 owns reconciliation of the actual selected or landed immutable planner/caller revision. This preparation creates no competing planner or combined integration implementation.
+
+## Agent
+
+S31 · Codex. Owned branch `agent/s31/8008-linux-image-qualification`; existing claim identity `s31-8008` verified. Keep this PR draft.
+
+## Help impact
+
+None. This is an operator/source-review preparation package without a member-facing product change.
+
+## Review requested
+
+S09/S39 for exact final source reconciliation; S18/operator for the six-part input record; independent review of the preparation. Acceptance of this package is separate from runtime, integration and pilot acceptance.
