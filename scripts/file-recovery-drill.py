@@ -31,10 +31,11 @@ BACKED_UP_AT = '2026-01-01T00:00:00+00:00'
 
 
 class SyntheticStore:
-    def __init__(self, prefix='synthetic-contracts/'):
+    def __init__(self, prefix='synthetic-contracts/', written_at=None):
         self.source = {prefix + 'one': b'Synthetic contract v1', prefix + 'suppressed': b'Synthetic erasure record',
                        'personal/not-eligible': b'Must never be copied'}
-        self.last_modified = {key: BACKED_UP_AT for key in self.source}
+        # No write time unless one is given: a store without source metadata is a case of its own (D6653).
+        self.last_modified = {key: written_at for key in self.source} if written_at else {}
         self.archive = {}
 
     def list(self, prefix):
@@ -102,7 +103,7 @@ def drill(ledger=None):
     ledger = ledger or SqliteLedger()
     run = str(uuid.uuid4())
     prefix = 'synthetic-contracts/' if ledger.name == 'sqlite' else f'synthetic-drill-{run}/'
-    store = SyntheticStore(prefix)
+    store = SyntheticStore(prefix, written_at=BACKED_UP_AT)
     registry = {'version': 1, 'classes': [{'prefix': prefix, 'locked_copy': 'yes', 'class': 'record', 'bucket': 'studioos-files',
                 'retention_basis': 'synthetic-only-drill', 'retention_days': recovery.RETENTION_DAYS}]}
     manifest = recovery.snapshot(store, registry)

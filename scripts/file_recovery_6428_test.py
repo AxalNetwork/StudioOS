@@ -179,7 +179,7 @@ class Suppression(unittest.TestCase):
     """D6654: the suppression ledger, the restore that reads it first, and the locked-copy filter."""
 
     def backed_up(self):
-        s = drill.SyntheticStore(); m = r.snapshot(s, registry())
+        s = drill.SyntheticStore(written_at=drill.BACKED_UP_AT); m = r.snapshot(s, registry())
         return s, m
 
     def test_an_erased_key_is_absent_after_restore_from_a_copy_that_still_holds_it(self):
