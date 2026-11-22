@@ -103,7 +103,7 @@ export function RaiseOverviewBody({ raw, search = '', readOnly = false, onRetry,
   return (
     <>
       <RaiseJourney view={journey} />
-      <RaiseReadinessSummary view={readiness} search={s} onRetry={onRetryCard ? () => onRetryCard('fundraising-readiness') : onRetry} />
+      <RaiseReadinessSummary view={readiness} search={s} readOnly={readOnly} onRetry={onRetryCard ? () => onRetryCard('fundraising-readiness') : onRetry} />
       <RaiseNextActions view={nextActionsView(raw, s)} readOnly={readOnly} onRetry={onRetry} />
       <RaiseMaterials split={split} rows={split.table.map((c) => statusRow(c, s))} activity={raw?.investor_activity} search={s} readOnly={readOnly} onRetryCard={onRetryCard} />
       <RaiseInvestorActivity view={activity} openHref={moduleHref('capital-relationships', s)} addHref={capRelAddHref(s)} readOnly={readOnly} />

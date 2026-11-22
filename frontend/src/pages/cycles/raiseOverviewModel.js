@@ -121,16 +121,27 @@ export function journeyView(raw, search = '') {
 
 // ---------- Readiness (RA-04 summary, RA-07 detailed) ---------------------
 
-/** RA-16 (D6049): Product-market fit is supporting evidence, shown on Fundraising readiness, never an area here. */
-const PMF = /^product[- ]market fit$/i;
+/** RA-16 (D6049): Product-market fit is supporting evidence, shown on Fundraising readiness, never an area here. Matched by key (D8257). */
+const PMF_KEY = 'pmf';
+
+/**
+ * D8257 (#8257): an area's status as the Worker states it (`readinessAreaStatus`, RA-23's rule, the one
+ * Fundraising readiness draws). A bar from a read that carries none falls back to its score alone.
+ */
+export const AREA_STATUSES = ['ready', 'attention', 'missing', 'stale', 'unavailable', 'not_recorded'];
+/** The statuses that need attention, as Fundraising readiness counts them. Not recorded is coverage, not a gap. */
+export const NEEDS_ATTENTION = new Set(['missing', 'attention', 'stale', 'unavailable']);
+const statusOf = (i, score) => (AREA_STATUSES.includes(i.status) ? i.status : score == null ? 'not_recorded' : 'ready');
+const isDay = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /**
  * The readiness areas from the Fundraising readiness card's bar chart (`readinessCard`, D663): each area's
- * newest score out of 10, or null when nothing assessed it. Product-market fit is left out (RA-16).
+ * key, newest score out of 10 (null when nothing scored it), status and the day it was last scored
+ * (D8257). Product-market fit is left out by its key (RA-16); no rule here matches an area by its label.
  *   { state: 'loading' }                       no read yet
  *   { state: 'unavailable', reason }           the card could not be read
  *   { state: 'none', next }                    no area is scored yet (an empty card)
- *   { state: 'ready', areas, assessed, total, unassessed, next }
+ *   { state: 'ready', areas, assessed, total, unassessed, attention, stale, next }
  */
 export function readinessView(raw) {
   if (!raw) return { state: 'loading' };
@@ -143,11 +154,37 @@ export function readinessView(raw) {
   const hbar = card.state === 'ok' && Array.isArray(card.series) ? card.series.find((s) => s?.kind === 'hbar' && Array.isArray(s.items)) : null;
   if (!hbar) return { state: 'none', next };
   const areas = hbar.items
-    .filter((i) => i && typeof i.label === 'string' && !PMF.test(i.label.trim()))
-    .map((i) => ({ label: i.label, score: isNum(i.value) ? i.value : null }));
+    .filter((i) => i && typeof i.label === 'string' && i.key !== PMF_KEY)
+    .map((i) => {
+      const score = isNum(i.value) ? i.value : null;
+      return { key: typeof i.key === 'string' && i.key ? i.key : null, label: i.label, score, status: statusOf(i, score), assessedAt: isDay(i.assessed_at) ? i.assessed_at : null };
+    });
   if (!areas.length) return { state: 'none', next };
-  const assessed = areas.filter((a) => a.score != null);
-  return { state: 'ready', areas, assessed: assessed.length, total: areas.length, unassessed: areas.filter((a) => a.score == null).map((a) => a.label), next };
+  const assessed = areas.filter((a) => a.status !== 'not_recorded');
+  return {
+    state: 'ready', areas, assessed: assessed.length, total: areas.length,
+    unassessed: areas.filter((a) => a.status === 'not_recorded').map((a) => a.label),
+    attention: areas.filter((a) => NEEDS_ATTENTION.has(a.status)).length,
+    stale: areas.filter((a) => a.status === 'stale'),
+    next,
+  };
+}
+
+/** RA-01: "3 need attention", "1 needs attention", or "None needs attention" (D8257, as Fundraising readiness counts). */
+export const attentionWords = (v) => (v.attention ? `${v.attention} ${v.attention === 1 ? 'needs' : 'need'} attention` : 'None needs attention');
+
+/**
+ * RA-09 Stale (D8257): the areas whose evidence changed since they were scored, and the oldest of
+ * their scoring days. Null when none is stale.
+ */
+export function staleReadiness(v) {
+  if (v?.state !== 'ready' || !v.stale?.length) return null;
+  const days = v.stale.map((a) => a.assessedAt).filter(Boolean).sort();
+  return {
+    names: v.stale.map((a) => a.label),
+    since: days[0] || null,
+    sentence: `${listWords(v.stale.map((a) => a.label))} ${v.stale.length === 1 ? 'was' : 'were'} assessed before ${v.stale.length === 1 ? 'its' : 'their'} evidence changed. Re-assess to update.`,
+  };
 }
 
 /** "6 of 8 areas assessed". */
