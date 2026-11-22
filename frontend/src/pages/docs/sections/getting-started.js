@@ -54,24 +54,23 @@ export default {
       id: 'roles',
       title: 'Account roles explained',
       overview:
-        "Every account has one of five roles: Founder, Investor, Partner (service provider), Advisor, or Admin. Your role decides which sidebar groups you see, which dashboards open by default, and which features are gated to you.",
+        "Every account holds one role. Registration offers four: Founder, Investor (limited partners included), Operating Partner and Advisor. A new account is an Explorer until the Axal team has reviewed the membership and the agreement is signed; the team then gives the account its role. Admin is a staff-only role for the Axal team: it cannot be chosen at registration. Your role decides which sidebar groups you see, which dashboard opens and which features are open to you.",
       howto: [
-        'Founder — applying or running a startup; full access to Build, Validate & Grow, and Capital tools.',
-        'Investor — limited partner or co-investor; sees the Investor Portal, Pipeline, and Portfolio Health.',
-        'Partner — service provider; lists services in the Marketplace, responds to Needs Board RFPs, runs Office Hours.',
-        'Advisor — domain expert; books office-hour slots, takes mentee engagements, writes reflections.',
-        'Admin — studio operator; sees everything plus the admin pages and a “View as” role switcher.',
+        'Founder — runs a venture; the founder workspace (Validate, Build, Raise and Grow) opens once the membership agreement is signed.',
+        'Investor — a limited partner or co-investor; sees the investor workspace and portfolio.',
+        'Operating Partner — a service provider or operator; lists services and responds to member needs.',
+        'Advisor — a domain expert; the advisor profile is chosen after the account exists and confirmed before you can subscribe.',
+        'Explorer — every new account until its membership is reviewed and the agreement is signed.',
+        'Admin (staff only) — the Axal team; sees the admin pages. Not offered at registration.',
       ],
       tips: [
-        'A role change requires admin approval today — open a support ticket if you need one.',
-        'Admins can impersonate any user from All accounts, under Accounts, for support and debugging.',
+        'A role change is made by the Axal team: open a support ticket if you need one.',
       ],
       pitfalls: [
-        'Multi-role accounts default to a single primary role; switching roles can hide data you expect to see.',
         'Investor accounts cannot create startups — only Founder and Admin roles can.',
       ],
       related: [
-        { label: 'Settings → Profile', href: '#account/settings-overview' },
+        { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
         { label: 'Settings', href: '#account/settings-overview' },
       ],
     },
@@ -102,24 +101,23 @@ export default {
       id: 'onboarding',
       title: 'Onboarding walkthrough',
       overview:
-        "Onboarding takes 4–8 questions tailored to your role. Your answers seed your dashboard, scoring inputs (founders), commitment terms (investors), or service catalog entries (partners). You can skip optional steps and return later.",
+        "We create your account when you request your signup link. Confirm your email to sign in. The Axal team reviews your membership and sends an agreement to sign. After you sign it, the team enables your workspace. Until then the account is an Explorer, and no review time is promised.",
       howto: [
-        'Pick your persona — the wizard branches based on the answer.',
-        'Answer the 4–8 role-specific questions (industry, stage, goals, time commitment).',
-        'Confirm your timezone and preferred locale.',
-        'Land on your role’s dashboard with personalized cards and a “Next steps” checklist.',
+        'Account created — request your signup link on /register; the account exists from that moment.',
+        'Email confirmed — open the link in the email to confirm your address and sign in.',
+        'Membership reviewed and agreement sent — the Axal team reviews your membership and sends a membership agreement to sign.',
+        'Agreement signed — sign the membership agreement the team sent you.',
+        'Workspace enabled — once it is signed, the team gives your account its role and your workspace opens.',
       ],
       tips: [
-        'You can re-run onboarding any time from Settings → Profile → Re-run onboarding.',
-        'Onboarding answers also drive the Advisor Match and Partner Match algorithms.',
+        'After you sign in, a short chat asks which describes your interest (founder, investor, operator or service partner) so the team can match the right agreement.',
       ],
       pitfalls: [
-        'Skipping the timezone step makes calendar invites land in UTC — set it before booking your first session.',
-        'Partial onboarding leaves your dashboard generic; finish the wizard for the personalized layout.',
+        'Signing in before the agreement is signed shows the Explorer view: your role’s workspace is not open yet.',
       ],
       related: [
-        { label: 'Inviting your team', href: '#getting-started/invite-team' },
-        { label: 'Settings overview', href: '#account/settings-overview' },
+        { label: 'Account roles explained', href: '#getting-started/roles' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
       ],
     },
     {
