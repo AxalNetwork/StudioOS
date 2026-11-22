@@ -26,7 +26,7 @@ export function analyse(artifacts, deadlineMinutes = undefined) {
   }
   const days = new Map(), all = [], waits = [], runtimes = [], outcomes = {};
   let expired = 0, mergedTimed = 0, mergedLate = 0, measured = 0;
-  for (const { row, end } of observations.values()) {
+  for (const { row } of observations.values()) {
     const date = row.requestedAt.slice(0, 10);
     const day = days.get(date) ?? { date, candidates: 0, latencies: [], expired: 0 };
     days.set(date, day); day.candidates++;
