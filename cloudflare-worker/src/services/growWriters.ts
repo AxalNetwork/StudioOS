@@ -588,16 +588,49 @@ function termsFields(b: Body, prev: Row = {}) {
   };
 }
 
+/**
+ * D8254 (#8254): the markets a body names (`markets`: market uids), each the venture's own. Absent means unchanged
+ * (null); an empty list unlinks every market. A uid that is not this venture's market is a 400 before anything is written.
+ */
+async function partnerMarketIds(env: Env, pid: number, b: Body): Promise<number[] | null> {
+  if (!has(b, 'markets')) return null;
+  const raw = b.markets;
+  const list = raw == null || raw === '' ? [] : Array.isArray(raw) ? raw : [raw];
+  const uids = [...new Set(list.map((x) => String(x ?? '').trim()).filter(Boolean))];
+  if (uids.length > 100) throw new Refused(400, 'A partner links up to 100 markets', 'markets');
+  if (!uids.length) return [];
+  const res = await env.DB.prepare(`SELECT id, uid FROM markets WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))`)
+    .bind(pid, JSON.stringify(uids)).all<{ id: number; uid: string }>();
+  const found = new Map((res.results || []).map((m) => [String(m.uid), Number(m.id)]));
+  const missing = uids.find((u) => !found.has(u));
+  if (missing) throw new Refused(400, 'Choose markets of this venture', 'markets');
+  return uids.map((u) => found.get(u) as number);
+}
+
+/** Replaces the partner's links with `marketIds`, as statements for the caller's batch. */
+function partnerMarketStatements(env: Env, partnerId: number, marketIds: number[], userId: number) {
+  return [
+    env.DB.prepare(`DELETE FROM growth_partner_markets WHERE partner_id = ? AND market_id NOT IN (SELECT value FROM json_each(?))`).bind(partnerId, JSON.stringify(marketIds)),
+    ...(marketIds.length ? [env.DB.prepare(`INSERT OR IGNORE INTO growth_partner_markets (partner_id, market_id, created_by) SELECT ?, value, ? FROM json_each(?)`)
+      .bind(partnerId, userId, JSON.stringify(marketIds))] : []),
+  ];
+}
+
 export async function addPartner(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
   const name = str(b.name, 200);
   if (!name) throw new Refused(400, 'A partner has a name', 'name');
   const t = termsFields(b);
+  const marketIds = await partnerMarketIds(env, pid, b);
   const id = newUid();
   await env.DB.prepare(
     `INSERT INTO growth_partners (uid, project_id, name, type, stage, terms, terms_kind, terms_pct, terms_amount_cents, terms_currency,
        renewal_on, contact_name, contact_email, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, pid, name, oneOf(b.type, PARTNER_TYPES, 'type', true), oneOf(b.stage, PARTNER_STAGES, 'stage') ?? 'talking', t.terms,
     t.terms_kind, t.terms_pct, t.terms_amount_cents, t.terms_currency, t.renewal_on, t.contact_name, t.contact_email, user.id).run();
+  if (marketIds?.length) {
+    const made = await env.DB.prepare('SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?').bind(id, pid).first<{ id: number }>();
+    if (made) await env.DB.batch(partnerMarketStatements(env, made.id, marketIds, user.id));
+  }
   await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: id, action: 'grow_partner_added', summary: 'Partner added' });
   return { uid: id };
 }
@@ -605,6 +638,7 @@ export async function addPartner(env: Env, pid: number, user: User, b: Body): Pr
 export async function updatePartner(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
   const row = await owned<Row & { id: number }>(env, 'SELECT * FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
   const t = termsFields(b, row);
+  const marketIds = await partnerMarketIds(env, pid, b);
   let name = row.name;
   if (has(b, 'name')) { name = str(b.name, 200); if (!name) throw new Refused(400, 'A partner has a name', 'name'); }
   await env.DB.prepare(
@@ -612,6 +646,7 @@ export async function updatePartner(env: Env, pid: number, user: User, uid: stri
        renewal_on = ?, contact_name = ?, contact_email = ?, updated_at = ? WHERE id = ?`,
   ).bind(name, has(b, 'type') ? oneOf(b.type, PARTNER_TYPES, 'type', true) : row.type, has(b, 'stage') ? oneOf(b.stage, PARTNER_STAGES, 'stage', true) : row.stage,
     t.terms, t.terms_kind, t.terms_pct, t.terms_amount_cents, t.terms_currency, t.renewal_on, t.contact_name, t.contact_email, nowIso(), row.id).run();
+  if (marketIds) await env.DB.batch(partnerMarketStatements(env, row.id, marketIds, user.id));
   await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_updated', summary: 'Partner updated' });
   return { uid };
 }
