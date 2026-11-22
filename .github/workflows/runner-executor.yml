@@ -92,6 +92,8 @@ jobs:
           EXECUTOR_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           REQUEST_ID: ${{ inputs.request_id }}
           LEASE_GENERATION: ${{ inputs.generation }}
           PART: ${{ inputs.part }}
@@ -119,12 +121,16 @@ jobs:
           EXECUTOR_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
         run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" verify-plan
       - name: Install admitted Worker dependencies
+        if: inputs.profile != 'linux-x64'
         working-directory: studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}-source/cloudflare-worker
         run: npm ci
       - name: Install admitted root dependencies
+        if: inputs.profile != 'linux-x64'
         working-directory: studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}-source
         run: npm ci
       - name: Run admitted Worker shard
@@ -135,6 +141,8 @@ jobs:
           EXECUTOR_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
         run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" run
       - name: Upload test traces

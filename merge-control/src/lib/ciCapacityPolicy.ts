@@ -1,6 +1,7 @@
 /** D7887: bounded CI pool routing, immutable execution receipts, and full-set result authority. */
 export const CI_CAPACITY_VERSION = 1 as const;
 export type CiProfile = 'hosted' | 'linux-x64' | 'macos-arm64';
+export type SelfHostedProfile = 'linux-x64' | 'macos-arm64';
 export type CiEvent = 'push' | 'merge_group';
 export const CI_CAPACITY_BUDGETS = Object.freeze({
   externalStartMs: 90_000,
@@ -17,6 +18,8 @@ export type CapacityBudgets = { [K in keyof typeof CI_CAPACITY_BUDGETS]: number 
 export type CapacityPolicy = {
   version: typeof CI_CAPACITY_VERSION;
   maxExternalWorkerShards: number;
+  /** Compatibility with the later runtime config: the reverted pool must remain disabled. */
+  maxIncludedWorkerShards?: number;
   minimumHostedWorkerShards: number;
   approvedGroupId: number;
   budgets: CapacityBudgets;
@@ -131,7 +134,8 @@ export function validateCapacityPolicy(policy: CapacityPolicy): void {
   const b = policy.budgets;
   if (policy.version !== CI_CAPACITY_VERSION || !positive(policy.approvedGroupId)
       || !Number.isSafeInteger(policy.maxExternalWorkerShards) || policy.maxExternalWorkerShards < 0
-      || policy.maxExternalWorkerShards > 2 || !positive(policy.minimumHostedWorkerShards)) {
+      || policy.maxExternalWorkerShards > 2 || !positive(policy.minimumHostedWorkerShards)
+      || (policy.maxIncludedWorkerShards !== undefined && policy.maxIncludedWorkerShards !== 0)) {
     throw new Error('capacity_policy_refused');
   }
   if (Object.keys(b).length !== Object.keys(CI_CAPACITY_BUDGETS).length

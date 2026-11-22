@@ -119,6 +119,9 @@ test('manual: a required input withheld by its source\'s rule is refused skill_n
     nothingCharged(f);
     const ev = f.w.db.prepare("SELECT detail_json FROM team_agent_events WHERE kind = 'refused'").get() as any;
     assert.equal(JSON.parse(ev.detail_json).code, 'skill_not_ready');
+    // D4536-p4: the refusal names the skill and its pinned version, marked for skill analytics; no `engine` on a manual run.
+    // Mutation checked: `refused` given no version → version null; the marker dropped → outcome_v undefined.
+    assert.deepEqual([JSON.parse(ev.detail_json).skill, JSON.parse(ev.detail_json).outcome_v, JSON.parse(ev.detail_json).engine], [{ uid: SKILL_UID, version: 1 }, 1, undefined]);
     // Only the task loop's engine run hands its check over; a manual run naming one is checked all the same.
     // Mutation checked: `readiness` taken on any run → this forged one skips the check and the run goes ahead.
     assert.equal((await manual(f.w, { readiness: { slug: 'cash-runway-snapshot', limits: [] } }) as any).code, 'skill_not_ready');
@@ -234,8 +237,8 @@ test('scheduled: withheld, never connected and unreadable sources end the run sk
   for (const [label, o, readers] of [
     ['withheld', { sponsor: ADMIN }, READERS],
     ['never connected', { facts: false }, READERS],
-    // The context step and the run step's context read it; then the source fails, at the check.
-    ['unreadable', {}, { ...READERS, 'mercury.balances': flaky(2) }],
+    // The run step's context reads it once (D7076: the context step reads nothing); then the source fails, at the check.
+    ['unreadable', {}, { ...READERS, 'mercury.balances': flaky(1) }],
   ] as const) {
     const f = skillWorld(o as Opts);
     try {
@@ -246,6 +249,12 @@ test('scheduled: withheld, never connected and unreadable sources end the run sk
       assert.equal(s.inner.state.charges, 0, `${label}: nothing held or charged`);
       const run = f.w.db.prepare('SELECT status, refusal FROM agent_task_runs WHERE uid = ?').get(s.uid) as any;
       assert.deepEqual([run.status, run.refusal], ['refused', 'skill_not_ready'], label);
+      // D4536-p4: agentRun never ran, so the loop writes the refusal event, with the session's skill, marked as the engine's.
+      // Mutation checked: the loop's logEvent removed → no event, and the rates would never see this refusal.
+      const ev = f.w.db.prepare("SELECT detail_json FROM team_agent_events WHERE kind = 'refused'").all() as any[];
+      assert.equal(ev.length, 1, `${label}: one refused event`);
+      const detail = JSON.parse(ev[0].detail_json);
+      assert.deepEqual([detail.code, detail.skill?.uid, detail.outcome_v, detail.engine], ['skill_not_ready', SKILL_UID, 1, true], label);
       assert.equal((f.w.db.prepare('SELECT status FROM scope_tasks WHERE id = 200').get() as any).status, 'open', `${label}: the task is open again`);
     } finally { f.w.close(); }
   }

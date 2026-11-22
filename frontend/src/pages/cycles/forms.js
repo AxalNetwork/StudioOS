@@ -365,7 +365,9 @@ const market = {
 
 const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Compliance'], ['risk', 'Risk'], ['culture', 'Culture']]);
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
-const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
+const REMIND_PRESETS = [30, 14, 7, 1, 0];
+const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
+const remindField = { note: 'At most three reminders.', kind: 'CK', name: 'remind', k: 'Remind', opts: REMIND_PRESETS.map(n=>({value:String(n),label:reminderLabel(n),checked:n===14||n===1})) };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
 // D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
 const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
@@ -1129,8 +1131,6 @@ const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
 /** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
 const KEEP_TYPED_OWNER = '__typed';
 // #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
-const REMIND_PRESETS = [30, 14, 7, 1, 0];
-const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
 const editObligation = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-obligation',
@@ -1472,16 +1472,18 @@ const SINCE = 'since';
 const segmentFields = [
   { kind: 'T', name: 'name', k: 'Segment', ph: 'Segment name', required: true, max: 120 },
   { kind: 'T', name: 'who_they_are', k: 'Who they are', ph: 'Role at company type, size, where', max: 1000 },
+  { kind: 'T', name: 'context', k: 'Context', ph: 'When and where the need arises', max: 1000 },
   { kind: 'T', name: 'job_to_be_done', k: 'Job to be done', ph: 'What they are trying to get done', max: 1000 },
   { kind: 'CH', name: 'urgency', k: 'Urgency', opts: URGENCY, def: 2 },
   { kind: 'T', name: 'value_promised', k: 'Value promised', ph: 'What changes for them', max: 1000 },
+  { kind: 'T', name: 'value_source', k: 'Source for the value', ph: 'The evidence behind the promised value', max: 1000 },
   { kind: 'CH', name: 'score_against', k: 'Score against', opts: [{ value: 'all', label: 'All interviews' }, { value: SINCE, label: 'Interviews since a date' }], def: 0 },
   // The second chip reveals its date (decision 2).
   { kind: 'T', name: 'score_since', k: 'Interviews since', input: 'date', required: true, when: { name: 'score_against', value: SINCE } },
 ];
 const segmentBody = (v) => ({
-  name: str(v.name), who_they_are: str(v.who_they_are), job_to_be_done: str(v.job_to_be_done),
-  urgency: v.urgency || null, value_promised: str(v.value_promised),
+  name: str(v.name), who_they_are: str(v.who_they_are), context: str(v.context), job_to_be_done: str(v.job_to_be_done),
+  urgency: v.urgency || null, value_promised: str(v.value_promised), value_source: str(v.value_source),
   score_since: v.score_against === SINCE ? str(v.score_since) : null,
 });
 const segment = {
@@ -1747,7 +1749,7 @@ const editSegment = {
   fields: segmentFields,
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'job_to_be_done', 'urgency', 'value_promised', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;

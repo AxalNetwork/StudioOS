@@ -1,7 +1,8 @@
 /**
  * D4817 part 1 (#5311, PF-01): the pure model the Portfolio v2 frame and its
  * boards share. No React, no fetch, no clock: every date it compares against
- * comes from a Worker answer (`kpi-compliance`'s `as_of`), never from the
+ * comes from a Worker answer (the positions read's `today`, D6226, or
+ * `kpi-compliance`'s `as_of`), never from the
  * browser, so the same reads always draw the same page.
  *
  * A read is one of three things, and the model never folds them together:
@@ -85,7 +86,14 @@ export function daysBetween(from, to) {
 /** A settled `Promise.allSettled` entry, checked against the shape its board needs. */
 export function readOf(settled, shapeOk = () => true) {
   if (!settled) return { state: 'loading' };
-  if (settled.status === 'rejected') return { state: 'unreadable' };
+  if (settled.status === 'rejected') {
+    const failure = settled.reason?.data;
+    // D6201: retain the route's explicit unavailable reason, without treating it as data.
+    if (failure?.available === false && typeof failure.reason === 'string') {
+      return { state: 'unreadable', unavailable: true, reason: failure.reason };
+    }
+    return { state: 'unreadable' };
+  }
   const value = settled.value;
   if (value == null || typeof value !== 'object' || !shapeOk(value)) return { state: 'unreadable' };
   return { state: 'ok', value };
@@ -132,6 +140,9 @@ export const DEFINITIONS = {
  */
 function metric(key, label, read, pick) {
   if (read.state === 'loading') return { key, label, value: null, state: 'loading', note: DEFINITIONS[key] };
+  if (read.state === 'unreadable' && read.unavailable) {
+    return { key, label, value: UNAVAILABLE, state: 'unavailable', note: DEFINITIONS[key], reason: read.reason };
+  }
   if (read.state === 'unreadable') {
     return { key, label, value: UNREADABLE, state: 'unreadable', note: DEFINITIONS[key], reason: 'Performance could not be read.' };
   }
@@ -248,7 +259,7 @@ export function healthFor(position, health) {
 /** One company's reporting obligation for the measured period: `{ state, period, last, reason }`. */
 export function reportingFor(position, compliance) {
   if (compliance.state === 'loading') return { state: 'loading' };
-  if (compliance.state !== 'ok') return { state: 'Unreadable', reason: 'Reporting could not be read.' };
+  if (compliance.state !== 'ok') return { state: 'Unreadable', reason: compliance.reason || 'Reporting could not be read.' };
   const c = compliance.value;
   const period = c.population?.period ?? c.period ?? null;
   const row = c.companies.find((x) => Number(x.project_id) === Number(position.project_id));
@@ -704,15 +715,26 @@ export function basisLabel(basis) {
 
 /**
  * The date a mark's age is measured against: the book's own as-of date when
- * one is chosen, else the Worker's `as_of` on the reporting read. Never the
- * browser clock. Null when neither is known, and the page says so.
+ * one is chosen, else the positions read's own `today` (the Worker's UTC
+ * date, D6226), else the Worker's `as_of` on the reporting read when the
+ * positions read carries no `today`. Never the browser clock. Null when none
+ * is known, and the page says so.
  */
-export function markReference(asOf, compliance) {
+export function markReference(asOf, compliance, positions) {
   if (asOf) return { date: asOf, state: 'ok', source: 'as_of' };
+  const own = workerToday(positions);
+  if (own) return { date: own, state: 'ok', source: 'positions' };
   if (compliance.state === 'loading') return { date: null, state: 'loading' };
   if (compliance.state !== 'ok') return { date: null, state: 'unreadable' };
   const d = compliance.value.as_of || null;
   return d ? { date: d, state: 'ok', source: 'worker' } : { date: null, state: 'not_recorded' };
+}
+
+/** The Worker's own UTC date on a positions read (`today`, D6226), or null when it carries none. */
+export function workerToday(read) {
+  if (!read || read.state !== 'ok' || !read.value || Array.isArray(read.value)) return null;
+  const d = read.value.today;
+  return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
 /** A mark older than two quarters at `reference`; null when either date is missing. */
@@ -1236,6 +1258,42 @@ export function lastChaseOf(projectId, chases) {
     count: mine.length,
     items: mine.map((x, i) => ({ key: x.uid || `${x.created_at}-${i}`, date: day(x.created_at), by: x.chased_by_name || null })),
   };
+}
+
+/**
+ * D7650 (#7650): why the Worker did not chase a company, in words. The codes are
+ * `POST /portfolio/chase`'s `skips[].reason`; an unknown code is said as such,
+ * never read as chased.
+ */
+export function chaseSkipText(skip) {
+  const reason = skip?.reason;
+  if (reason === 'no_obligation') return 'no reporting obligation in your book';
+  if (reason === 'not_due') return skip.due_date && day(skip.due_date) ? `not due until ${day(skip.due_date)}` : 'not due yet';
+  if (reason === 'already_reported') return skip.period ? `already reported for ${periodName(skip.period) || skip.period}` : 'already reported for this period';
+  if (reason === 'unreadable') return 'its reporting obligation could not be read';
+  return 'skipped by the Worker';
+}
+
+/**
+ * D7650 (#7650): what a chase did, from the Worker's answer. A company counts as
+ * chased only when it is in `chased`; each skipped one is named with its reason.
+ * `nameOf(projectId)` gives the company's name. Returns the note the page shows.
+ */
+export function chaseOutcomeOf(result, nameOf = () => null) {
+  const chased = Array.isArray(result?.chased) ? result.chased : [];
+  const fresh = chased.filter((c) => !c.already).length;
+  const already = chased.filter((c) => c.already).length;
+  const skips = Array.isArray(result?.skips) ? result.skips : [];
+  const listed = new Set(skips.map((s) => Number(s.project_id)));
+  // A skipped id the Worker gave no reason for is still not chased.
+  const bare = (Array.isArray(result?.skipped) ? result.skipped : []).filter((id) => !listed.has(Number(id))).map((id) => ({ project_id: id }));
+  const skipped = [...skips, ...bare].map((s) => ({
+    project_id: Number(s.project_id),
+    name: nameOf(Number(s.project_id)) || `Company ${s.project_id}`,
+    reason: s.reason || null,
+    text: chaseSkipText(s),
+  }));
+  return { chased: fresh, already, skipped };
 }
 
 /**

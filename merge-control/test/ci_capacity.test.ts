@@ -504,3 +504,11 @@ test('D7903 child uniqueness is transactional and old receipts acquire durable i
   assert.equal(upgraded.ownsChild(activeAttempt(before.shards[0]).childRunId!),true);
   assert.equal(upgraded.newerParent(12,0),true);
 });
+
+test('the reverted included pool accepts legacy disabled configuration and refuses every enabled value', () => {
+  validateCapacityPolicy(policy());
+  validateCapacityPolicy({ ...policy(), maxIncludedWorkerShards: 0 });
+  for (const maxIncludedWorkerShards of [1, -1, 0.5, Number.NaN]) {
+    assert.throws(() => validateCapacityPolicy({ ...policy(), maxIncludedWorkerShards }), /capacity_policy_refused/);
+  }
+});

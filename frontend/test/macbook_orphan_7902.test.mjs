@@ -92,7 +92,7 @@ test('a post-dispatch HTTP error and unconfirmed cancellation retain separate re
 test('the real API boundary records status without reading or disclosing an error response body',async()=>{
  let bodyRead=false;
  const api=githubApi('synthetic',{fetchImpl:async()=>({ok:false,status:403,text:async()=>{bodyRead=true;return 'private response';}})});
- await assert.rejects(()=>api('GET',`${ROOT}/actions/runs/201`),error=>error instanceof GitHubRequestError&&error.status===403&&error.message==='github_request_failed');
+ await assert.rejects(()=>api('GET',`${ROOT}/actions/runs/201`),error=>(error instanceof GitHubRequestError)&&error.status===403&&error.message==='github_request_failed');
  assert.equal(bodyRead,false);
 });
 

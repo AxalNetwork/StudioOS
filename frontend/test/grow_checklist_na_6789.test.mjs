@@ -69,5 +69,5 @@ test('D6789: the Company card and the page agree on the count', () => {
 test('D6789: the page wires Not applicable to PUT /checklist/:key with not_applicable', () => {
   const src = readFileSync(resolve('frontend/src/lib/api/cycleWrites.js'), 'utf8');
   assert.match(src, /checklistNotApplicable: \(projectId, key, na\) => request\(`\/cycles\/grow\/checklist\/\$\{seg\(key\)\}`, \{ method: 'PUT', body: JSON.stringify\(\{ project: projectId, not_applicable: na === true \}\) \}\)/);
-  assert.match(readFileSync(resolve('frontend/src/pages/cycles/defs/grow.jsx'), 'utf8'), /onNotApplicable=\{ctx\.projectId \? \(key, na\) => cyclesWrite\.grow\.checklistNotApplicable\(ctx\.projectId, key, na\)/);
+  assert.match(readFileSync(resolve('frontend/src/pages/cycles/defs/grow.jsx'), 'utf8'), /onNotApplicable=\{ctx\.canWrite && ctx\.projectId \? \(key, na\) => cyclesWrite\.grow\.checklistNotApplicable\(ctx\.projectId, key, na\)/);
 });

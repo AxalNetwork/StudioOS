@@ -9,8 +9,13 @@
  *                 request, marked with the effect's idempotency key; retracted by deleting that comment.
  *   stream        the `STREAM` binding of `services/learningStream.ts`: the release is recorded on the named video's
  *                 `meta` under the effect's key, with signed playback kept on; retracted by removing that record.
- *   signed_document, website_cdn, external_distribution
- *                 refuse with `target_not_configured` on every call and call nothing (D5585-p3 §2 says why each).
+ *   signed_document  `services/workGraphReleaseSigning.ts` (part 4, D5585-p4): an e-sign envelope the release owner
+ *                 signs, through the native e-sign service; retracted by voiding it.
+ *   website_cdn   `services/workGraphReleaseDistribution.ts` (part 6, D5585-p6): a write-once site record in WorkGraph's
+ *                 prefix of the R2 `FILES` bucket, for a public release only; retracted by deleting it.
+ *   external_distribution
+ *                 `services/workGraphReleaseDistribution.ts` (part 6): over injected channels. None is registered on
+ *                 main, so it refuses `target_not_configured` and calls nothing (D5585-p6 §2).
  *
  * EVERY ADAPTER:
  *   - reads its credentials from the existing bindings and refuses (`target_not_configured`) without a call when one
@@ -30,6 +35,10 @@ import { STREAM_UID_RE, streamOf } from './learningStream';
 import { drainEffects, type DeliveryResult, type EffectHandler } from './workGraphEffects';
 import type { BlobCost } from './workGraphBlobs';
 import { EFFECT_TARGETS, type EffectTarget } from './workGraphReleases';
+import { signedDocumentAdapter } from './workGraphReleaseSigning';
+import {
+  RELEASE_DISTRIBUTION_CHANNELS, externalDistributionAdapter, websiteCdnAdapter, type ReleaseDistributionChannels,
+} from './workGraphReleaseDistribution';
 import {
   DeliveryRetry, releaseEffectHandlers,
   type ReleaseAdapters, type ReleaseDeliveryAdapter, type ReleaseDeliveryRequest,
@@ -200,14 +209,17 @@ export function streamAdapter(env: Env, meter: ProviderMeter): ReleaseDeliveryAd
 // The adapters and the drain
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** The real adapter of every target, over the env's existing bindings. */
-export function releaseAdapters(env: Env, meter: ProviderMeter): Required<ReleaseAdapters> {
+/**
+ * The real adapter of every target, over the env's existing bindings. `channels` are the external distribution
+ * channels: none on main (D5585-p6 §2), so that target refuses `target_not_configured`; tests inject fakes.
+ */
+export function releaseAdapters(env: Env, meter: ProviderMeter, channels: ReleaseDistributionChannels = RELEASE_DISTRIBUTION_CHANNELS): Required<ReleaseAdapters> {
   return {
     github_pr: githubPrAdapter(env, meter),
     stream: streamAdapter(env, meter),
-    signed_document: unconfiguredAdapter(),
-    website_cdn: unconfiguredAdapter(),
-    external_distribution: unconfiguredAdapter(),
+    signed_document: signedDocumentAdapter(env, meter),
+    website_cdn: websiteCdnAdapter(env, meter),
+    external_distribution: externalDistributionAdapter(channels, meter),
   };
 }
 
@@ -226,11 +238,15 @@ export type ReleaseDrainResult =
  */
 export async function drainReleaseEffects(
   env: Env,
-  opts: { limit?: number; handlers?: Readonly<Record<string, EffectHandler>>; adapters?: ReleaseAdapters } = {},
+  opts: {
+    limit?: number; handlers?: Readonly<Record<string, EffectHandler>>; adapters?: ReleaseAdapters;
+    /** External distribution channels for the real adapter (tests; none on main). */
+    distributionChannels?: ReleaseDistributionChannels;
+  } = {},
 ): Promise<ReleaseDrainResult> {
   if (!releaseDeliveryEnabled(env)) return { ok: false, code: 'release_delivery_off' };
   const meter = new ProviderMeter();
-  const map: Record<string, EffectHandler> = { ...(opts.handlers ?? {}), ...releaseEffectHandlers(opts.adapters ?? releaseAdapters(env, meter)) };
+  const map: Record<string, EffectHandler> = { ...(opts.handlers ?? {}), ...releaseEffectHandlers(opts.adapters ?? releaseAdapters(env, meter, opts.distributionChannels)) };
   const r = await drainEffects(env, map, { limit: opts.limit, kinds: Object.keys(map) });
   return { ok: true, results: r.results, cost: r.cost, providerRequests: meter.requests, providerRequestsByTarget: { ...meter.byTarget } };
 }

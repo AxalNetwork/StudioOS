@@ -729,6 +729,7 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
   const recovery = anchor === 'account/auth-recovery';
   const beforeYouStart = Array.isArray(sub.beforeYouStart) ? sub.beforeYouStart : [];
   const howto = Array.isArray(sub.howto) ? sub.howto : [];
+  const recoveryRows = sub.recoveryRows || [];
   const tips = Array.isArray(sub.tips) ? sub.tips : [];
   const pitfalls = Array.isArray(sub.pitfalls) ? sub.pitfalls : [];
   // A related link is `#<area>/<guide>`; one the viewer cannot read (an admin
@@ -802,6 +803,25 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
                 {howto.map((step, i) => <li key={i}>{step}</li>)}
               </ol>
             </section>
+          )}
+          {recoveryRows.length > 0 && (
+            <table id="recovery" className="w-full scroll-mt-6 border-collapse text-left text-sm text-gray-700 dark:text-gray-300">
+              <caption className="pb-2 text-left text-lg font-bold text-gray-900 dark:text-gray-100">Connector status and next action</caption>
+              <thead>
+                <tr className="border-b border-gray-300 dark:border-gray-700">
+                  <th scope="col" className="py-2 pr-3">Status</th>
+                  <th scope="col" className="py-2">What to do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recoveryRows.map(({ status, action }) => (
+                  <tr key={status} className="border-b border-gray-200 align-top dark:border-gray-800">
+                    <th scope="row" className="py-2 pr-3 font-semibold">{status}</th>
+                    <td className="py-2">{action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
 
           {tips.length > 0 && (

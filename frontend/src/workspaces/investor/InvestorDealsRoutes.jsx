@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
+import {useAuth} from '../../hooks/useAuthSync';
 import WorkspaceShell from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, ROUND_CALLS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
@@ -88,6 +89,7 @@ const ZONE_LINES = {
 
 export default function InvestorDealsRoutes() {
   const location = useLocation();
+  const {role}=useAuth();
   const bucket = bucketForPath('investor', location.pathname);
   // Same root opt-out as NetworkWorkspace, ResearchWorkspace,
   // AdvisorBucketRoutes and PartnerBucketRoutes: `zoneForPath` answers a bucket
@@ -113,6 +115,7 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
+      sectionNav={role==='partner'?<nav aria-label="Deals"><Link className="inline-flex min-h-11 items-center text-sm font-bold" to="/deals/commit">Commit</Link></nav>:undefined}
       title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : isRoundCalls ? ROUND_CALLS_TITLE : undefined}
       activeSlug={isRoot || isCompare || isRooms || isRoundCalls ? null : undefined}
       bucketPath={isRoundCalls ? '/deals' : undefined}

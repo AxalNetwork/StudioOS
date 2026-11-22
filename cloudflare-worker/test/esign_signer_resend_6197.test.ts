@@ -26,6 +26,7 @@ import { SENDER, RECIPIENT, STRANGER, ADMIN, freshDb, envFor, fakeR2, call } fro
 import { makeD1 as makeBaselineD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import esign from '../src/routes/esign.ts';
+import { RELEASE_SIGN_DOC_TYPE, releaseSignBody } from '../src/services/workGraphReleaseSigning.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
 const recipients = (db: any) => db.prepare('SELECT * FROM esign_recipients ORDER BY id').all();
@@ -34,7 +35,7 @@ const audit = (db: any, action: string) =>
 
 // ---------- Gmail, stubbed at fetch (as esign_send_for_signature_d411 does) ----------
 const GMAIL = { GMAIL_CLIENT_ID: 'test-client', GMAIL_CLIENT_SECRET: 'test-secret-not-real', GMAIL_REFRESH_TOKEN: 'test-refresh-not-real' };
-let mail: { to: string; text: string }[] = [];
+let mail: { to: string; subject: string; text: string }[] = [];
 let mailFails = false;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
@@ -50,7 +51,8 @@ globalThis.fetch = (async (input: any, init?: any) => {
     const raw = Buffer.from(String(body.raw).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
     const parts = [...raw.matchAll(/Content-Transfer-Encoding: base64\r?\n\r?\n([A-Za-z0-9+/=\r\n]+)/g)]
       .map((m) => Buffer.from(m[1].replace(/\s+/g, ''), 'base64').toString('utf8'));
-    mail.push({ to: (/^To: (.*)$/m.exec(raw)?.[1] ?? '').trim(), text: parts.join('\n') });
+    const subject = Buffer.from(/^Subject: =\?UTF-8\?B\?(.*)\?=\r?$/m.exec(raw)?.[1] ?? '', 'base64').toString('utf8');
+    mail.push({ to: (/^To: (.*)$/m.exec(raw)?.[1] ?? '').trim(), subject, text: parts.join('\n') });
     return new Response(JSON.stringify({ id: 'm' + mail.length }), { status: 200 });
   }
   return realFetch(input, init);
@@ -83,6 +85,30 @@ test('the signer gets their own link again in their inbox, and never in the resp
   const [row] = audit(db, 'signing_link_resent');
   assert.equal(row.signer_id, RECIPIENT);
   assert.equal(JSON.parse(row.meta).recipient_id, recipients(db)[0].id);
+});
+
+test('D5585-p5: a release envelope is resent and reminded with the release email; an agreement keeps the agreement email', async () => {
+  const db = freshDb(); const e = mailEnv(db);
+  const nda = await sentToInvestor(e);
+  assert.equal((await call(e, 'POST', `/${nda}/resend`, RECIPIENT, {})).status, 200);
+  assert.equal(mail.length, 1);
+  assert.match(mail[0].subject, /^Your Closing Binder is ready: /, 'the agreement email is unchanged');
+  assert.ok(mail[0].text.includes('has verified your partner profile'));
+
+  mail = [];
+  const db2 = freshDb(); const e2 = mailEnv(db2);
+  const id = await sentToInvestor(e2);
+  const digest = 'd'.repeat(64);
+  const body = releaseSignBody({ idempotencyKey: 'release:m-9:signed_document:r', lineAssetUid: 'line-9', manifestUid: 'm-9', digest, ref: 'r' });
+  db2.prepare(`UPDATE esign_envelopes SET document_type = ?, document_body = ? WHERE id = ?`).run(RELEASE_SIGN_DOC_TYPE, body, id);
+  assert.equal((await call(e2, 'POST', `/${id}/resend`, RECIPIENT, {})).status, 200);
+  assert.equal((await call(e2, 'POST', `/${id}/remind`, SENDER, {})).status, 200);
+  assert.equal(mail.length, 2);
+  for (const m of mail) {
+    assert.equal(m.subject, `Sign release line-9 (sha256:${digest.slice(0, 12)})`);
+    assert.ok(m.text.includes('m-9') && m.text.includes(`sha256:${digest}`) && m.text.includes('/esign/'));
+    assert.ok(!/partner profile|Closing Binder/.test(m.text + m.subject), 'a release was mailed the agreement email');
+  }
 });
 
 test('the sender, a stranger and an admin who is not the recipient get the 404 a missing id gets, and nothing is sent', async () => {

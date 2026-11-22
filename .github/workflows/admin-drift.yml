@@ -1,0 +1,71 @@
+name: Admin drift
+# D8082 (#8082): compare the live GitHub admin settings with
+# documentation/operations/GITHUB_ADMIN_BASELINE.md every week. `check` reads with
+# a read-only token (GET only) and holds no write token; `file` holds only
+# `issues: write` and no secret, and files or updates one slot:chatgptpro issue
+# per drifted setting. Neither job changes a setting.
+on:
+  schedule:
+    - cron: '47 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-drift
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: read the live admin settings and diff the baseline
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production-ops
+      deployment: false
+    permissions:
+      contents: read
+    outputs:
+      report: ${{ steps.read.outputs.report }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Read with GET only; fail closed when the token cannot read an expected setting
+        id: read
+        env:
+          ADMIN_DRIFT_READ_TOKEN: ${{ secrets.ADMIN_DRIFT_READ_TOKEN }}
+        run: |
+          report="$RUNNER_TEMP/admin-drift.json"
+          status=0
+          node scripts/ops/check-github-admin.mjs --report "$report" || status=$?
+          # 0: no drift, 2: drift (the next job files it), anything else: the check could not run.
+          if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then exit "$status"; fi
+          echo "report=$(cat "$report")" >> "$GITHUB_OUTPUT"
+
+  file:
+    name: file or update one issue per drift
+    needs: check
+    if: needs.check.outputs.report != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: One issue per drift key, labelled slot:chatgptpro and state:ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMIN_DRIFT_REPORT: ${{ needs.check.outputs.report }}
+        run: node scripts/ops/check-github-admin.mjs --file-issues

@@ -54,7 +54,9 @@ export function plan(prs, ctx) {
     if (changed === null || now - changed < quiet * 60_000) reasons.push(`its head changed under ${quiet} minutes ago`);
     const labels = names(pr?.labels);
     const handedBack = time(pr?.handedBackAt);
-    if ((labels.includes(LABELS.conflict) || labels.includes(LABELS.needsSession)) && (handedBack === null || changed === null || changed <= handedBack)) {
+    // D6476-p5: the keeper's own hand-back (bot:keeper-tried) or a session hand-back, never the PR-list `conflict`
+    // indicator, which any reader may add and which must not stop a keeper run that is otherwise allowed.
+    if ((labels.includes(LABELS.keeperTried) || labels.includes(LABELS.needsSession)) && (handedBack === null || changed === null || changed <= handedBack)) {
       reasons.push('handed back; waiting for the session to push');
     }
     const e = eligible(pr, { env, event: ctx.event, dispatchPr: ctx.dispatchPr, repo: ctx.repo, files: pr?.files ?? null, kind: KIND, breakers: ctx.breakers });

@@ -273,7 +273,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   const route = cycleRouteText();
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
-  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
+  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
   assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
@@ -319,7 +319,7 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   assert.deepEqual(Object.entries(EDITS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery']);
   const route = cycleRouteText();
-  assert.match(route, /rowAction=\{!narrativeAdmin && edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
+  assert.match(route, /rowAction=\{!narrativeAdmin && !companyReadOnly && edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
   // D4630: the key names the venture too, so a venture change remounts the form.
   assert.match(route, /<FormLightbox key=\{`edit-\$\{projectId\}-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
@@ -474,6 +474,12 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
   assert.match(text(draw({ kind: 'rows', items: [{ label: 'Mismatches', value: null }] })), /Mismatches Not recorded/);
   assert.match(text(draw({ kind: 'big', value: '57%', label: 'need-to-have' })), /57% need-to-have/);
   assert.match(draw({ kind: 'line', values: [1, 2, 3], target: 5, mark: 1, mark_label: 'ship' }), /stroke-dasharray="5 4"[\s\S]*ship/);
+  // D6025 (#6025): Prototype / MVP's burn-up by ISO week, as the Worker writes it: the labels are drawn as given,
+  // in order, a dot for each real point and none for the Ship slot, the mark at the Ship slot.
+  const weekly = draw({ kind: 'line', values: [1, 2, null, 3], target: 4, labels: ['W45', 'W46', 'Ship', 'W48'].map((label, at) => ({ at, label })), mark: 2, mark_label: 'Ship 2026-11-20' });
+  assert.match(text(weekly), /Ship 2026-11-20 W45 W46 Ship W48 $/);
+  assert.equal((weekly.match(/<circle/g) || []).length, 3);
+  assert.match(weekly, /<line x1="350" y1="8" x2="350"/, 'the Ship mark at the third of four slots');
   assert.match(draw({ kind: 'stack', rows: [{ label: 'A', parts: [1, 1] }], tones: ['v1', 'v2'], legend: [{ label: 'Strong', tone: 'v1' }] }), /fill-axal-violet[\s\S]*Strong/);
   assert.equal((draw({ kind: 'dots', values: [true, false, true] }).match(/title="Held"/g) || []).length, 2);
   assert.equal((draw({ kind: 'heat', rows: [{ label: 'M1', cells: [1, null, 0.5] }] }).match(/<rect/g) || []).length, 2, 'a missing cell is not drawn');

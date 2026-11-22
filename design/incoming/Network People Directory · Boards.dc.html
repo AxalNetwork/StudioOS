@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network People Directory · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network › People · #7676 · part of #7675 · addendum to #7058, #7060, #5310 and the #7069 canvases</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network People — one shared directory of people, with a private relationship overlay for each viewer</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A people-first directory shared by Relationships, Introductions and Organizations. Each person has one canonical ID that exists without an Axal account; account membership, source records and the viewer’s own relationship are three separate attributes. The Person Sheet keeps a shared professional profile (affiliations with status and source, public links, focus, observed dates, conflicts and correction requests) apart from a dashed private area (your notes, last interaction, follow-ups and the permission-aware team warm path). A listing or an import never becomes a tie, a warm path, a score, consent, an endorsement or a diligence result. People search has three counted scopes (Discoverable, My relationships, Team relationships), true totals across pages, and unknown values in their own group. Add a missing person keeps a provisional target private until a steward reviews it; duplicates need evidence on both sides, never a name, and a merge keeps the old ID as a redirect. It copies the shell, header, links, Person Sheet and state words of #4799 and #6256 (Platform States D5129, one Eadwyn rail #5130); keys carry the NPD prefix. Violet dashed ◇ tags mark backend work (#7672, #7674, #7678, #7679, #7680, #7681); amber ⚑ tags mark owner picks drawn as option A. Tags are not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · [Lena Sato] at [Kelp Bio], [Iris Chen] at [Harbor Lane Capital], [Rhea Mercer] and every person, firm, list and figure (2,418 discoverable, 65 and 212 in her scopes, 137 + 41 matches) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network People Directory Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NPD-00', 'The shared person model', 'Person ID, optional account link and the viewer’s private relationship as three attributes; the vocabulary DIR owns; where the same person opens; owner picks Q1 to Q3.', [W('NPD00')]],
+      ['NPD-01', 'People search', 'Founder [Lena Sato]. People as a fifth Network link (⚑ Q1), three counted scopes, filter chips kept in the address, a person-first table with membership and source marks, true totals and pages of 50, and 41 people with geography Not recorded in their own group (⚑ Q2).', [F('NPD01', false, 1260)]],
+      ['NPD-01B', 'Scopes, filters and counting', 'My relationships (her book, linked to directory IDs) and Team relationships (only what teammates share). Then how unknown values, offered filters, totals and the NFX Signal coverage counts (extracted, reconciled, published) work.', [C('NPD01B', 'My relationships · Team relationships', 1400, 470), C('NPD01C', 'Unknown values · filters · totals · source coverage', 1400, 301)]],
+      ['NPD-02', 'Person Sheet', '[Rhea Mercer], an external investor listed in NFX Signal, Folk and Airtable as one person: two concurrent affiliations and a former one, a sourced-profile notice, Not recorded biography, then Lena’s private record and [Dev Varma]’s warm path. Then sources with list memberships, and observed dates kept apart from interactions.', [F('NPD02', 'Opened from People', 1180), C('NPD02B', 'Sources and history', 1400, 380)]],
+      ['NPD-03', 'One person, four entries, changing viewers', 'The same sheet from People, Relationships, an organization and an introduction request; the private area for Lena, [Iris Chen] and a support session. Then Iris’s view in full: no private record and no team path, as None.', [C('NPD03', 'Cross-section proof', 1400, 351), F('NPD03B', 'Viewer [Iris Chen], investor', 1180)]],
+      ['NPD-04', 'Sources, conflicts and corrections', 'An inspectable conflict (Partner from two sources, Principal from a stale one) with the precedence rule; Suggest a correction for a steward; sent, waiting, applied and not sent.', [C('NPD04', false, 1400, 523), C('NPD04B', 'Correction results', 1400, 170)]],
+      ['NPD-05', 'Four actions and their effects', 'Add to my relationships, Request introduction (the one primary, by person ID), Suggest a correction and Invite to Axal, each with what it contacts and what main has; saved, pending, failed with entries kept, and already saved.', [C('NPD05', false, 1400, 496)]],
+      ['NPD-06', 'Add a missing person', 'From a search with no result: name plus optional organization, title and public URL, and why this is the person. It stays a provisional target private to Lena until a steward publishes, matches or keeps it private.', [F('NPD06', false, 1080), C('NPD06B', 'Provisional → steward → outcome', 1400, 347)]],
+      ['NPD-07', 'Duplicates and merge (HQ steward)', 'Evidence on both sides (email exact; a name is never evidence; a competing fact kept), two same-name [Morgan Vale]s kept separate, then Scope → Review → Result with a stable redirect, and imports that cannot overwrite a member.', [F('NPD07', false, 1080), C('NPD07B', 'Merge, redirect, member-controlled facts', 1400, 359)]],
+      ['NPD-08', 'Claim and link an account', '[Ada Okafor] finds her sourced profile, verifies, waits while the link is under review, then is linked to the same person ID. Refused, what changes, and what is never offered.', [C('NPD08', false, 1400, 383)]],
+      ['NPD-09', 'Data states', 'Loading, true empty, no filter result, missing fact, stale (with and without an age), unreadable source, second page failed, conflict, partial, provisional, directory unavailable and not applicable. None is drawn as 0.', [C('NPD09', false, 1400, 434)]],
+      ['NPD-10', 'Scope and access matrix', 'Shared profile, own notes, authorized team summary, restricted private field, permitted steward edit and refused support mutation, for five viewers; nothing hidden reaches counts, previews or duplicate suggestions.', [C('NPD10', false, 1400, 471)]],
+      ['NPD-11', 'Deep links', 'A notification to the exact person through sign-in, a merged ID redirect, one sentence for every unavailable ID, and Copy link.', [C('NPD11', false, 1400, 277)]],
+      ['NPD-12', 'Tablet 768', 'People with the Person Sheet as an overlay, light and dark; Eadwyn collapses to the E in the top bar.', [C('NPD12', 'Light', 768, 1120), C('NPD12B', 'Dark', 768, 1120)]],
+      ['NPD-13', 'Phone 390', 'A readable list with the scope select and filter chips, the filter sheet, the full-height Person Sheet (shared, then private) with Request introduction pinned, and a later page failing; list and sheet in dark. 44 px targets.', [P('NPD13A', 'People'), P('NPD13B', 'Filters'), P('NPD13C', 'Person · shared'), P('NPD13D', 'Person · private'), P('NPD13E', 'Later page failed · not available'), P('NPD13F', 'People · dark'), P('NPD13G', 'Person · dark')]],
+      ['NPD-14', 'Dark desktop', 'People with the Person Sheet on the dark tokens, and the state marks; each keeps its glyph and word.', [F('NPD14', false, 1180), C('NPD14B', 'State marks · dark', 1400, 165)]],
+      ['NPD-15', 'Accessibility', 'Keyboard order, the sheet’s focus trap and return, announcements for results and saves, semantics, long-name wrapping and 44 px targets.', [W('NPD15')]],
+      ['NPD-16', 'Board notes', 'For each board: viewer role, data scope, entry and return, existing source or new dependency, next action and failure recovery.', [W('NPD16')]],
+      ['Handoff', 'Handoff', 'Checked on main, requires engineering (◇), owner picks (⚑), frontend only and what is preserved.', [W('NPDH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -17,6 +17,10 @@ source records for Validate's review (#5829). No webhook.
   response with its ledger rows, the checkpoint after each whole page, the
   24 hour overlap, 429/401/404 handling, provider-deletion reconciliation,
   backfill, withdrawal, mapping replacement and the form's counts.
+- `signature.ts` — stable semantic mapping identity, independent of titles and choice order.
+- `reviewCleanup.ts` — retract derived evidence in the source removal's batch, retaining tombstones.
+- `review.ts` — versioned same-venture targets, private proposals, explicit review and separate counts (D5829).
+- `reviewCounts.ts` — per-form completed, matching-answer and confirmed-signal reconciliation.
 
 The rules for adding to this folder:
 

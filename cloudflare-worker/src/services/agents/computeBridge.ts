@@ -1,4 +1,5 @@
 /** D4557 part 2: the privileged Worker broker, scoped R2 manifests and existing Workflow handoff; no second scheduler. */
+import { containmentEvidenceSchema } from './workspaceContainment';
 import type { Env, User } from '../../types';
 import { engineMode, haltedAll } from '../../agents/runtime';
 import { runByUid, type RunRow } from '../../agents/engine';
@@ -14,6 +15,7 @@ import { proposeRail } from '../railProposals';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
 import { putRecordOrThrow } from '../recordStore';
 import { eraseRecordObjects } from '../recordErasure';
+import { requireCapability } from '../agentCapabilities';
 
 type ComputeEnv = Env & { AGENT_COMPUTE_HOST?: Fetcher; AGENT_COMPUTE_POLICY_JSON?: string };
 export type ComputePolicy = { template: Pick<WorkspaceSpec, 'image_digest' | 'repo_id' | 'base_sha' | 'cpu' | 'allowed_regions' | 'max_cost_microusd'>;
@@ -43,6 +45,8 @@ export function computePolicy(env: ComputeEnv): ComputePolicy | null {
       || policy.template.allowed_regions[0] !== 'global'
       || !['python', 'document_convert', 'spreadsheet'].every(workload => Number.isSafeInteger(policy.job_cost_ceiling_microusd?.[workload as Workload])
         && policy.job_cost_ceiling_microusd[workload as Workload] > 0)) return null;
+    const containment = containmentEvidenceSchema.safeParse(policy.provider.containment);
+    if (!containment.success || containment.data.source !== 'owner_registry' || containment.data.provider !== 'cloudflare') return null;
     return policy;
   } catch { return null; }
 }
@@ -66,6 +70,9 @@ export async function createComputeRequest(env: ComputeEnv, user: User, taskId: 
   if (!computeConfigured(env)) throw computeFailure('compute_off', 404);
   const { task, agent } = await computeTask(env, taskId, user);
   if (user.id !== agent.sponsor_user_id || task.status !== 'open' || task.source_kind !== 'manual') throw computeFailure('compute_task_not_open');
+  // D8070: dispatching a compute job is the agent's cloud.read.
+  const capable = await requireCapability(env, agent, 'cloud.read');
+  if (!capable.ok) throw computeFailure(capable.code, capable.status);
   const input = raw as { workload: Workload; operation: string; inputs: { name: string; bytes: number }[] };
   const bad = inputsRefusal(input?.workload, input?.inputs);
   if (bad) throw computeFailure(bad.code, bad.status);

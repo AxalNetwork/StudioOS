@@ -330,3 +330,16 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # literal; 62a7171032 assembles it at run time, so the squashed commit holds
 # no literal; this entry covers the PR's own history only.
 4d6854891ea6194cea00a2d89559e6f863ebc6db:cloudflare-worker/test/error_privacy_7256.test.ts:generic-api-key:18
+# #7926: ic_voting_closed_7920's first commit used a fixture secret gitleaks reads as
+# generic-api-key; the next commit switches to the standard test value. This covers that
+# PR commit only.
+9615940a3a9931caba3418527f7cd295ec27be07:cloudflare-worker/test/ic_voting_closed_7920.test.ts:generic-api-key:8
+# D5570 part 2 (#5570): the Durable Object instance name in the admission store
+# test's first commit (the unsafeUniqueKey option's string), Miniflare's label
+# for the fixture's object. It was never a credential. The next commit names it
+# through DO_INSTANCE_NAME, so no later commit carries the literal. Scoped to the
+# one finding, as D334's entry is.
+65a0e12e1f5b8b4b141908164344f62a07d9c8eb:cloudflare-worker/test/workspace_admission_store_5570.test.mjs:generic-api-key:18
+# The same string, quoted in the comment above as first written (commit d3fc770); the
+# next commit rewords the comment, so no later commit carries it. Scoped to that line.
+d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338

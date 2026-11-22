@@ -2,6 +2,11 @@
   "repository": "AxalNetwork/StudioOS",
   "workflows": [
     {
+      "id": null,
+      "path": ".github/workflows/admin-drift.yml",
+      "channel": "#axalvc-actions-admin-drift"
+    },
+    {
       "id": 416675427,
       "path": ".github/workflows/agent-compute-image.yml",
       "channel": "#axalvc-actions-agent-compute-image"
@@ -45,6 +50,11 @@
       "id": 383619772,
       "path": ".github/workflows/build-worker-contracts.yml",
       "channel": "#axalvc-actions-build-worker-contracts"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/capacity-planner.yml",
+      "channel": "#axalvc-actions-capacity-planner"
     },
     {
       "id": 389078766,
@@ -185,6 +195,11 @@
       "id": null,
       "path": ".github/workflows/landing-bot-refresh.yml",
       "channel": "#axalvc-actions-landing-bot-refresh"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-conflict-indicator.yml",
+      "channel": "#axalvc-actions-landing-conflict-indicator"
     },
     {
       "id": null,

@@ -22,6 +22,7 @@ can be read to find out what a rule actually is.
 | `mutationCheck.mjs` | #6326: the mutation check's rules apart from the file system: spec validation (repository-relative paths, never `docs/`, `node_modules/`, `.git/` or the test itself; `find` exactly once), the loader argv for each test folder (mirrors `test:worker`, `test:frontend`, `test:meeting-bot`, `test:merge-control`, `test:retention`), failed test names from TAP, the caught/wrong failure/equivalent/survived/timeout verdict and the summary line. Owned by `../mutation-check.mjs`; tested in `mutationCheck.test.mjs`. |
 | `schemaChange.mjs` | #6326: the schema-change rules apart from git: a new migration's name and whether its identity is taken, what is wrong with a branch's new migration names (a refused name, a shared stamp and issue, a future stamp, another issue, a new number), what in their SQL needs a second look (CREATE without IF NOT EXISTS, NOT NULL with no default, drop, rename, transaction), runtime DDL in added Worker lines, and the schema guard list. Owned by `../schema-change.mjs`; tested in `schemaChange.test.mjs`. |
 | `githubAlerts.mjs` | GitHub health alerts for Slack: which transitions open or close an `[alert] ...` issue (main red, reviewer calling no model, Actions queue backed up), the failing tests in a future-clock TAP log, and the Slack text. Owned by `../github-alerts.mjs`. |
+| `futureClockNames.mjs` | D7124: the nightly future-clock failures as names, files and parts for the reporter's job log and step summary, the break date, and the alert issue's `Latest failing run` line. No name reaches the issue or Slack (D5663). |
 | `migrationPlan.mjs` | The migration ledger's shape, the baseline cutoff, and what to do with each file — apply, mark, or skip. Owned by `../migrate-d1.mjs`. |
 | `rollbackClass.mjs` | D7151 (#7151): a release's rollback class — `auto`, `auto-additive` or `manual` — from its pending D1 statements (each with file and line), its Durable Object migration tags against the live one, and the live version's bindings it drops; unknown is manual. Owned by `../release-rollback-class.mjs`; tested in `rollbackClass.test.mjs`. |
 | `migrationTargets.mjs` | Which database a migration run touches, and which database may never be bootstrapped. One `--branch <code>` target per subsidiary, each naming the config that declares it. |
@@ -107,10 +108,22 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `flakyTests.test.mjs` | D6464: classification, expiry, the one-retry rule and the runner's reporter wiring. |
 | `sectionIncidentIssue.mjs` | D5984 (#5984): the one public template for a section-incident GitHub bug: the fixed cases, the marker, the title, body and labels, the power-of-two count milestone and its receipt comment. No episode, Slack or customer field reaches it. Owned by `../section-triage.mjs` and `cloudflare-worker/src/services/sectionIncidentIssue.ts` (typed by `sectionIncidentIssue.d.mts`). |
 | `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |
+| `productionCredentials.test.mjs` | D7145 tests the credential inventory, deployment environments and the temporary PR preview exception. |
+| `productionEnvironment.test.mjs` | D7145 runtime-policy response and release-step ordering regression fixtures. |
 | `scanTrackerIssueBody.mjs` | D7283: public Code Scanning tracker instructions from validated coordinates; finding evidence stays in a private export or protected alert. Owned by `../scan-remediation/trackers.mjs`. |
 | `scanTrackerIssueBody.test.mjs` | D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. |
 
 | `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |
+| `networkDirectoryPlan.mjs` | D7672: pure source-classified Network directory planner; emits parameterized batches, provenance, held conflicts and aggregate reconciliation without accounts, memberships, ties or book writes. |
 
 | `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
 | `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
+| `runnerSupervisor.test.mjs` | D7889: ephemeral enrollment, credential inheritance and eligibility-first drain actions; kept outside the Merge Control import boundary. |
+| `ciFailures.mjs` | D5502: bounded test identities, safe reproductions and exact-base evidence attribution. |
+| `ciFailureReporter.mjs` | D5502: node:test JSONL evidence beside TAP without assertion values or stacks. |
+| `ciFailureCollector.mjs` | D5502: bounded Actions artifact reads, archive validation and tested-base comparison. |
+| `ciFailures.test.mjs` | D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. |
+| `guardCatalog.mjs` | D5505: ordered catalog access shared by guard readers and wiring tests. |
+| `guardRunner.mjs` | D5505: independent guard execution, prerequisites, process-group interruption and bounded metadata. |
+| `guardRunner.test.mjs` | D5505: multi-failure, prerequisite, real signal, clean-run and preserved-command contracts. |
+| `guardEvidence5505.test.mjs` | D5505: guard evidence normalization, exact-command inheritance and rest-part continuation. |

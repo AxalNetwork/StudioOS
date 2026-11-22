@@ -47,6 +47,10 @@ async function mountPage(Page, path) {
   globalThis.fetch = async (u) => {
     const url = String(u);
     if (/\/api\/projects(\?|$)/.test(url)) return json({ items: [{ id: 41, name: 'Example One' }, { id: 19, name: 'Example Two' }] });
+    if (url.includes('/cycles/grow/modules/team-expansion')) return json({
+      card: { state: 'ok', as_of: '2026-11-19', series: { talent: { headcount: 7, plan: { period: '2026-12', target: 9 }, open_roles: 1, offers: 0 } } },
+      records: { rows: [{ id: 12, title: 'Growth lead', status: 'published', applicants: 2, in_offer: 0, in_interview: 1 }], total: 1, page: 1, page_size: 20 },
+    });
     if (/\/api\/jobs(\?|$)/.test(url)) return json({ jobs: [] });
     if (/\/api\/comarketing\/founder\/by-project\//.test(url)) return json({ pitches: [], attributions: [] });
     return json({});
@@ -58,7 +62,10 @@ async function mountPage(Page, path) {
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  const words = (n) => n.childNodes?.length ? n.childNodes.map(words).join(' ') : n.textContent;
   return {
+    text: () => words(container),
+    links: () => walk(container).map((n) => props(n).href).filter(Boolean),
     href: (id) => byId(id)?.getAttribute?.('href') ?? byId(id)?.attributes?.href ?? props(byId(id)).href ?? null,
     async close() {
       await act(async () => root.unmount());
@@ -73,7 +80,11 @@ test('Talent links to Team expansion with the venture kept: canonical, legacy an
   for (const [name, q, expected] of QUERIES) {
     const v = await mountPage(FounderGrowTalent, '/grow/talent' + q);
     try {
-      assert.equal(v.href('link-grow-talent-roles'), '/grow/team-expansion' + expected, name);
+      assert.equal(v.href('link-grow-talent-roles'), '/grow/team-expansion/new' + expected, name);
+      assert.ok(v.links().includes('/grow/team-expansion/12' + expected));
+      assert.match(v.text(), /Headcount.*7.*Team roster.*Hiring plan.*9 by December 2026/);
+      assert.match(v.text(), /Offers out.*0.*Applications.*offer stage/);
+      assert.match(v.text(), /Growth lead.*Published.*2.*1 in interview/);
     } finally { await v.close(); }
   }
 });
