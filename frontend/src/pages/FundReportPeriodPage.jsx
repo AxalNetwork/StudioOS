@@ -49,7 +49,7 @@ export function PeriodReader({ data, onChanged = () => {} }) {
       <Link to={`/funds/${fund.id}`}>Back to fund</Link>
       <button type="button" onClick={() => window.print()}>Print</button>
       {!data.can_manage && <Link to="/spinout-lab/investor-workspace#reports">Your capital statement and PDF</Link>}
-      {data.can_manage && !report.corrected_by_period_id && <Link to={`/funds/${fund.id}/reporting/new?corrects=${report.id}`}>Issue a correcting period</Link>}
+      {data.can_manage && user?.role !== 'admin' && !report.corrected_by_period_id && <Link to={`/funds/${fund.id}/reporting/new?corrects=${report.id}`}>Issue a correcting period</Link>}
     </nav>
     <div className="fd-report-reader">
       <article className="fd-card fd-report-letter" aria-label="Report letter">
