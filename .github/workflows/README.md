@@ -21,7 +21,6 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `branch-provision.yml` | Provision a branch | — | — | — | — | — | `workflow_dispatch` · provision ${{ inputs.code }} (advisory) |
 | `build-worker-contracts.yml` | Build Worker contracts | Build connector and mapping contracts (advisory, conditional) | — | — | — | — | — |
 | `capacity-planner.yml` | Capacity pilot planner | — | — | — | — | — | `workflow_call` · submit (advisory, conditional) |
-| `capacity-planner.yml` | Inactive capacity planner | — | — | — | — | — | `workflow_call` · submit (advisory, conditional) |
 | `changelog-gate.yml` | CHANGELOG gate | CHANGELOG.md untouched (advisory, conditional) | — | — | — | — | — |
 | `channel-worker-contracts.yml` | Channel Worker contracts | Channel messaging contracts (advisory, conditional) | — | — | — | — | — |
 | `ci-scorecard.yml` | Daily CI scorecard | — | — | — | — | scorecard (advisory) | `workflow_dispatch` · scorecard (advisory) |
