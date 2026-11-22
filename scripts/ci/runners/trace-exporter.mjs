@@ -118,6 +118,8 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
   need(typeof stagingRoot === 'string' && stagingRoot.startsWith('/'), 'export_stage_unconfigured');
   return async ({ receipt, container, observedTest, signal, deadline }) => {
     let phase = 'stage';
+    // S32 E1: cancellation and the absolute budget are re-checked at every transition, before publication too.
+    const alive = () => { need(!signal?.aborted, 'export_cancelled'); need(deadline - now() > 0, 'export_budget_exhausted'); };
     try {
       need(CONTAINER.test(container?.id ?? '') && OWNER.test(container?.owner ?? ''), 'export_container_invalid');
       const identity = receiptIdentity(receipt);
@@ -131,8 +133,10 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
       mkdirSync(pending, { mode: 0o700 }); mkdirSync(traces, { mode: 0o700 });
       for (const dir of [leaf, pending, traces]) privateDir(dir, uid);
       phase = 'quiesce';
+      alive();
       engine(['pause', container.id]);
       phase = 'copy';
+      alive();
       const files = [];
       const reader = ustarReader({ limits, onFile: file => {
         writeExclusive(join(traces, file.name.slice('traces/'.length)), file.bytes, 0o400);
@@ -146,6 +150,7 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
         const timer = setTimeout(() => stop('export_budget_exhausted'), Math.max(1, deadline - now()));
         const abort = () => stop('export_cancelled');
         signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) abort();
         child.stdout.on('data', chunk => { if (failed) return; try { reader.push(chunk); } catch (error) { stop(error instanceof ExportRefusal ? error.code : 'export_write_failed'); } });
         child.once('error', () => stop('export_engine_unavailable'));
         child.once('close', code => {
@@ -156,6 +161,7 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
         });
       });
       phase = 'seal';
+      alive();
       need(readdirSync(traces).length === files.length, 'export_inventory_mismatch');
       const envelope = { schema: 'studioos.trace-export.v1', evidenceClass: 'native-unqualified', receipt: identity,
         container: { id: container.id, owner: container.owner }, observedTest: structuredClone(observedTest ?? null),
@@ -167,6 +173,7 @@ export function createTraceExporter({ stagingRoot, engine, spawnCopy = dockerCop
       // Node exposes no rename-no-replace. The leaf is private to this uid and was created exclusively above, so
       // only this supervisor can race here; an existing ready entry still refuses.
       need(!(() => { try { lstatSync(ready); return true; } catch { return false; } })(), 'export_competing_offer');
+      alive();
       renameSync(pending, ready); syncDir(leaf);
       return { state: 'complete', ready, files: files.length, bytes: transport.expandedBytes };
     } catch (error) {

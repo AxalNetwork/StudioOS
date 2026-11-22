@@ -5,6 +5,7 @@ import { appendFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSyn
 import { dirname, join, resolve } from 'node:path';
 import { availableParallelism, totalmem } from 'node:os';
 import { EXECUTION_BUDGETS } from './runner-admission.mjs';
+import { REMOVAL_RESERVE_MS } from './runners/job-container.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { buildPlan, validatePlan } from '../test-drift-parts.mjs';
@@ -150,8 +151,12 @@ export async function withCancellation(body,{signals=process}={}){
  finally{signals.removeListener('SIGINT',cancel);signals.removeListener('SIGTERM',cancel);}
 }
 
-/** Cleanup needs enough lease left for exact inspect+rm (two 30s engine calls); export must leave it. */
-const REMOVAL_RESERVE_MS=60000;
+/**
+ * S32 F1/F3: removal is inspect, rm and the absence check (3 x 30s). The Linux Run step is wrapped at 26 minutes from
+ * its start; process start (performance.timeOrigin) less a small margin bounds that conservatively.
+ */
+export const LINUX_RUN_STEP_MS=26*60000, RUN_STEP_MARGIN_MS=5000;
+export const runStepDeadline=(origin=performance.timeOrigin)=>Math.floor(origin)+LINUX_RUN_STEP_MS-RUN_STEP_MARGIN_MS;
 
 /**
  * Proposed supervisor exit (D8010): a real nonzero TEST exit first; then cancelled 130, timed out 124; zero only
@@ -187,9 +192,12 @@ export function requireExecutionBoundary(dependencies){
  * then verified exact-ID removal. Ownership evidence is written to the durable store before start and removed
  * only once the engine reports the exact container gone; any failed or uncertain removal keeps it.
  */
-export async function runInContainer({job,executionIsolation,admit,recheck=null,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null}){
+export async function runInContainer({job,executionIsolation,admit,recheck=null,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null,stepDeadline=null}){
  need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function'&&store,'container_profile_mismatch');
  const identity=current.identity;
+ // The earlier of the receipt and the step wrapper bounds work, export and removal alike.
+ const bound=Number.isSafeInteger(stepDeadline)?Math.min(identity.executionDeadline,stepDeadline):identity.executionDeadline;
+ job.workDeadline=bound;
  let record=null,infrastructure=null,install=null,test=null,exported={state:exporter?'not_run':'not_configured'},cleanup={state:'none'};
  job.onOwned=owned=>{store.write(owned);record=owned;};
  try{
@@ -212,10 +220,12 @@ export async function runInContainer({job,executionIsolation,admit,recheck=null,
  }catch(error){infrastructure=/^[a-z_]+$/.test(error?.message??'')?error.message:'unexpected';}
  // Capture/export while the container still exists, only inside the lease and never eating the removal reserve.
  if(exporter&&record&&job.owned){
-  if(identity.executionDeadline-now()<=REMOVAL_RESERVE_MS)exported={state:'skipped_no_budget'};
-  else{try{exported=await exporter({receipt:identity,container:{id:record.id,owner:record.owner},observedTest:test,signal,deadline:identity.executionDeadline-REMOVAL_RESERVE_MS});}
+  if(bound-now()<=REMOVAL_RESERVE_MS)exported={state:'skipped_no_budget'};
+  else{try{exported=await exporter({receipt:identity,container:{id:record.id,owner:record.owner},observedTest:test,signal,deadline:bound-REMOVAL_RESERVE_MS});}
    catch{exported={state:'failed'};}}
  }
+ // S32 C3: a create whose ID never came back may have left an engine object; that is not a clean 'none'.
+ if(!record&&job.createAttempted)cleanup={state:'unknown',reason:'create_unconfirmed'};
  if(record){
   try{
    job.cleanup(identity);
@@ -300,7 +310,7 @@ export async function main(mode,env=process.env,dependencies={}){
    const job=requireExecutionBoundary(dependencies);
    const {executionIsolation,job:_job,admissionIsolation:_pre,store:_store,exporter:_exporter,...rest}=dependencies;
    const exporter=dependencies.exporter??(await import('./runners/trace-exporter.mjs')).createTraceExporter({stagingRoot:join(paths.temp,'trace-export'),engine:job.engine});
-   return runInContainer({job,executionIsolation,current,paths,planPath,signal,store:dependencies.store,exporter,
+   return runInContainer({job,executionIsolation,current,paths,planPath,signal,store:dependencies.store,exporter,stepDeadline:runStepDeadline(),
     recheck:()=>executionIsolation({receipt:current.identity,context,profile:current.profile,phase:'execute',signal}),
     output:env.GITHUB_OUTPUT?values=>appendFileSync(env.GITHUB_OUTPUT,Object.entries(values).map(([k,v])=>`${k}=${v}\n`).join('')):null,
     admit:verifyIsolation=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation,context,phase:'execute',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])})});
