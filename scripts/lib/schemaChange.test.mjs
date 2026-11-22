@@ -1,3 +1,4 @@
+import { guardChain } from './guardCatalog.mjs';
 // #6326: the schema-change skill's naming, SQL and runtime-DDL rules.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -176,8 +177,7 @@ test('summarise passes only when every guard passed', () => {
 });
 
 test('SCHEMA_CHECKS names guards that test:guards runs, in its order', async () => {
-  const { readFileSync } = await import('node:fs');
-  const guards = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts['test:guards'];
+  const guards = guardChain;
   let at = -1;
   for (const c of SCHEMA_CHECKS) {
     const i = guards.indexOf(`node ${c.flags.length ? `${c.flags.join(' ')} ` : ''}scripts/${c.script}`);

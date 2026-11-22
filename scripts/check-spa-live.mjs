@@ -109,6 +109,9 @@
  *                    NON-exempt `/api/*` path probed to prove the rate-limit
  *                    middleware itself still answers (default a synthetic
  *                    /api/__smoke/rate-limited — see below)
+ *   SMOKE_EXPECT_SHA the commit sha the deploy just shipped (D8073). Set, every
+ *                    host's `GET /api/public/version` must serve exactly it;
+ *                    unset, it must serve some commit sha
  *   SMOKE_CONNECTORS_STRICT
  *                    `1` fails the run when a catalogue OAuth connector has no
  *                    client or its readiness is unreadable; otherwise that is
@@ -123,6 +126,7 @@
  */
 
 import { probeUnsignedWebhook } from './lib/webhookGuard.mjs';
+import { VERSION_PATH, versionVerdict } from './lib/deployProvenance.mjs';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assetPath, assetProblem, entriesFromLedger, entryRefsFromHtml, parseViteMapDeps } from './lib/spaChunks.mjs';
@@ -601,6 +605,29 @@ async function checkApiRouting(base, probePath = API_PROBE_PATH) {
   return lastErr;
 }
 
+// D8073 — `GET /api/public/version` names the build that answers, from the
+// bundle's own bindings. With SMOKE_EXPECT_SHA set (the deploy job sets it to
+// the sha it shipped) the served sha must be that one; otherwise it must be a
+// commit sha at all. Returns { ok, sha, reason }.
+async function checkServedVersion(base) {
+  const url = base.replace(/\/$/, '') + VERSION_PATH;
+  let verdict = { ok: false, sha: null, reason: 'not checked' };
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, body } = await fetchOnce(url);
+      verdict = versionVerdict(status, body, process.env.SMOKE_EXPECT_SHA || '');
+      if (verdict.ok) return verdict;
+    } catch (err) {
+      verdict = { ok: false, sha: null, reason: `request failed: ${err?.message || err}` };
+    }
+    if (attempt < RETRIES) {
+      console.log(`[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${verdict.reason})`);
+      await sleep(RETRY_MS);
+    }
+  }
+  return verdict;
+}
+
 // D722 — `GET /api/auth/google/config` is what /login reads to decide between
 // Google's window and the redirect. It is a pure read of the deployment's env,
 // rate-limit exempt, so it must answer on every deploy; a host where it does
@@ -853,6 +880,19 @@ async function main() {
       } else {
         const mode = res.popup ? "Google's window" : res.configured ? 'redirect (window off)' : 'not configured';
         console.log(`[spa-live] PASS  ${apiUrl} (Continue with Google: ${mode})`);
+      }
+    }
+
+    // D8073 — the served build is the deployed build.
+    {
+      const apiUrl = base.replace(/\/$/, '') + VERSION_PATH;
+      const res = await checkServedVersion(base);
+      if (!res.ok) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${res.reason}`);
+        failures.push(`${apiUrl} — ${res.reason}`);
+      } else {
+        const how = process.env.SMOKE_EXPECT_SHA ? 'the deployed sha' : 'SMOKE_EXPECT_SHA unset, shape only';
+        console.log(`[spa-live] PASS  ${apiUrl} (serves ${res.sha.slice(0, 12)}: ${how})`);
       }
     }
 

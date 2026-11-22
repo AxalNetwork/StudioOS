@@ -9,9 +9,10 @@ on:
   schedule:
     - cron: '31 0 * * 4'
 
+# D8072: a pull request's jobs hold a read-only token; only the SARIF upload
+# below writes, and only code-scanning results.
 permissions:
   contents: read
-  security-events: write
   actions: read
 
 # Match CodeQL's main/schedule coalescing and cancel superseded PR scans.
@@ -75,6 +76,10 @@ jobs:
     if: needs.scope.outputs.scan == 'true'
     name: code scanning takes uploads?
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
     timeout-minutes: 5
     outputs:
       upload: ${{ steps.ask.outputs.upload }}
@@ -106,6 +111,10 @@ jobs:
     needs: [scope, visibility]
     if: needs.scope.outputs.scan == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     # The scan itself takes ~4m40s on this repo and the rule packs grow. A
     # timeout is a cancellation, and a cancelled job used to still reach the
     # upload below (`always()` runs on cancel) — so the cap was one of the

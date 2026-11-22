@@ -66,6 +66,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `PORTFOLIO_UX_AUDIT_2026-11-09.md`, `portfolio-ux-2026-11-09/` | #4816: the investor Portfolio's screens, journeys and states captured from the current build with synthetic data, findings graded against the evidence, the proposed information architecture and state model, and the gaps in the Portfolio v2 canvas (D4817). The folder holds the capture script, its fixtures and the screenshots. |
 | `LEARNING_COVERAGE_2026-11-10.md` | #4650 part 4: the Learning curriculum coverage record. Coverage of the founder, investor, advisor and partner journeys is unknown until a Super Admin opens it in the studio, because no agent read production; it explains how to read the four states (D4650). |
 | `worker-shards-2026-11-21-8012/` | #8012: dated offline replay of the existing duration planner for 6/8/12 Worker parts, verified historical timing provenance, current-source inventory differences and prediction limits. |
+| `RESEARCH_COMPANIES_REGISTERS_2026-11-19.md` | D7316 part 2: applied 25,500-company BRREG/PRH/RIK batch, retained quality holds, native legal forms, pinned hashes, local rehearsal and ten passed bounded production checks; the prior baseline is excluded from delivery and original worldwide coverage remains unmet. |
 
 ## Adding one
 

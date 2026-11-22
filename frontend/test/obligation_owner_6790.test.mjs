@@ -136,3 +136,8 @@ test('Calendar → Compliance draws the owner the Worker sends', () => {
   assert.deepEqual(ownerLine({ compliance: { owner: 'Cai Moreno' } }), { name: 'Cai Moreno', missing: null });
   assert.equal(ownerLine({ compliance: { owner: null } }).name, 'Not recorded');
 });
+
+test('D6122 Add obligation offers every stored reminder preset and submits selected days',async()=>{
+ const {calls,w}=writeTable();const ui=await mount(add,{w,submit:v=>add.submit(w,P,v)});
+ try{assert.deepEqual(ui.chips('remind'),['30','14','7','1','0']);assert.deepEqual(ui.picked('remind'),['14','1']);await ui.input('title','Synthetic filing');await ui.input('due_at','2026-12-12');await ui.choose('remind','30');await ui.submit();assert.deepEqual([...calls.at(-1)[2].remind_days].sort((a,b)=>b-a),[30,14,1]);}finally{await ui.unmount();}
+});
