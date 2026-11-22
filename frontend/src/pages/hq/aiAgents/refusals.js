@@ -109,6 +109,16 @@ export const POLICY_REFUSALS = {
   // D7074: the capacity ceilings (aiPolicy.ts capacityCeilingsOf).
   invalid_ceiling: 'Each ceiling is a whole number in its range, up to 500 elastic runs and 50 lanes, or blank to stop offering it.',
   lanes_need_run_ceiling: 'Set the per-run ceiling first. Sub-agents share their agent’s monthly cap, and without a per-run ceiling one run’s cost has no bound.',
+  // D8070: the capability matrix.
+  capability_ungrantable: 'That capability is done by a person. No agent can be granted it.',
+  capability_unknown: 'Name capabilities from the catalogue, such as research.read or research.*.',
+  capability_not_offered: 'The platform does not offer that capability to agents this month. Change the ceiling first.',
+  capability_unreadable: 'The capability policy could not be read. Nothing was changed; try again.',
+  agent_not_found: 'That agent is not on the roster any more.',
+  not_granted: 'This agent does not hold that capability.',
+  invalid_enforced: 'Choose whether capabilities are enforced.',
+  already_enforced: 'Capabilities are already enforced.',
+  not_enforced: 'Capabilities are not enforced.',
   forbidden: 'Only a Super Admin can do this.',
 };
 export const policyRefusal = (e) => wordsFor(POLICY_REFUSALS, e, 'The change could not be saved. Read the current policy before trying again.');
