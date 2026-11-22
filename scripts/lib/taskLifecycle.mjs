@@ -16,15 +16,21 @@ export const OWNER = 'guillaumelauzier';
 /** Renew a claim once less than this is left of its TTL. */
 export const RENEW_WITHIN_HOURS = 6;
 
+/** The named admin slot (D8059): console configuration on GitHub and the clouds, never a build task. */
+export const ADMIN_SLOT = 'chatgptpro';
+
 /**
- * `S05`, `s5` or `s39` → `S05` / `S39`; anything else → null. The standard
- * slots are S01 to S37 (AGENTS.md), but D5617 keeps explicitly assigned later
- * slots such as `s38` and `s39`, which have labels, issues and claim refs, so
- * any `S1` to `S99` is accepted. `claim.mjs` stores the slot as typed, so
- * compare stored slots through this, never as raw strings.
+ * `S05`, `s5` or `s39` → `S05` / `S39`; the admin slot in any case →
+ * `chatgptpro`; anything else → null. The standard slots are S01 to S39
+ * (AGENTS.md, D8059); D5617 keeps explicitly assigned later numbers, which
+ * have labels, issues and claim refs, so any `S1` to `S99` is accepted.
+ * `claim.mjs` stores the slot as typed, so compare stored slots through
+ * this, never as raw strings.
  */
 export function normSlot(value) {
-  const m = /^S(\d{1,2})$/i.exec(String(value ?? '').trim());
+  const text = String(value ?? '').trim();
+  if (text.toLowerCase() === ADMIN_SLOT) return ADMIN_SLOT;
+  const m = /^S(\d{1,2})$/i.exec(text);
   if (!m) return null;
   const n = Number(m[1]);
   return n >= 1 ? `S${String(n).padStart(2, '0')}` : null;

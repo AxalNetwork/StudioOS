@@ -41,7 +41,7 @@ const CI = '.github/workflows/ci.yml';
 const FORMS = '.github/ISSUE_TEMPLATE';
 
 const STATE_LABELS = ['state:ready', 'state:in-progress', 'state:blocked', 'state:review'];
-const SLOT_LABELS = Array.from({ length: 37 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
+const SLOT_LABELS = [...Array.from({ length: 39 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`), 'slot:chatgptpro'];
 
 /** The block every agent posts. AGENTS.md carries it to be reproduced exactly. */
 const STATUS_BLOCK = [
@@ -199,7 +199,7 @@ function formLabels(src) {
 
 // ---------- .github/labels.yml ----------
 
-test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S37', () => {
+test('labels.yml declares the four state labels, needs-decision, slot:S01 to slot:S39 and the admin slot', () => {
   const names = declaredLabels().map((l) => l.name);
   const missing = [...STATE_LABELS, 'needs-decision', ...SLOT_LABELS].filter((n) => !names.includes(n));
   assert.deepEqual(missing, [],
@@ -347,7 +347,7 @@ test('blank issues stay open, and security reports go to a private advisory', ()
 test('retired labels map to declared labels, including case-only renames', () => {
   const names = declaredLabels().map(l => l.name);
   const rows = at('.github/labels-retired.yml').split('\n').filter(l => l.startsWith('"'));
-  assert.equal(rows.length, 9);
+  assert.equal(rows.length, 11);
   for (const row of rows) {
     const match = /^"([^"]+)": "([^"]+)"$/.exec(row);
     assert.ok(match);

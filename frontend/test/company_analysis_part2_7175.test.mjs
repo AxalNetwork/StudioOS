@@ -269,7 +269,7 @@ test('panel: after a run focus lands on Results; JSON and Markdown open the prev
   const realFetch = globalThis.fetch;
   const asked = [];
   let answer = () => new Response('{"id":"run-p"}', { status: 200, headers: { 'content-type': 'application/json', 'X-Analysis-Version': '2' } });
-  globalThis.fetch = async (u) => { asked.push(String(u)); return answer(String(u)); };
+  globalThis.fetch = async (u) => { asked.push(String(u)); return answer(); };
   const m = await mount(React.createElement(CompetitorAnalysis, { chromeless: true }), '/research/companies?tab=analyses');
   const spy = spyFocus();
   const files = [];
