@@ -63,6 +63,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `merge-control-deploy.yml` | Merge Control deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
 | `migration-immutability.yml` | Migration immutability | applied migrations unchanged (required context) | — | applied migrations unchanged (required context) | applied migrations unchanged (required context) | — | — |
 | `ossf-scorecard.yml` | OpenSSF Scorecard | — | — | — | — | OpenSSF Scorecard (advisory) (advisory, conditional) | `workflow_dispatch` · OpenSSF Scorecard (advisory) (advisory, conditional) |
+| `ownership.yml` | Ownership | ownership (advisory) | — | — | — | — | — |
 | `post-deploy-smoke.yml` | post-deploy SPA smoke | — | — | — | — | live SPA smoke (advisory) | `workflow_dispatch` · live SPA smoke (advisory) |
 | `pr-overlap.yml` | Advisory PR overlap | — | — | — | — | report (advisory, conditional) | `workflow_dispatch` · report (advisory, conditional) |
 | `pr-preview-deploy.yml` | PR preview deploy | — | — | — | — | — | `workflow_run` · resolve the pull request (advisory, conditional)<br>deploy the preview Worker (advisory, conditional)<br>delete the preview Worker (advisory, conditional) |
