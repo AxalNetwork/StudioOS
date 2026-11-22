@@ -133,7 +133,7 @@ export function SavedViewFields({ views, activeUid, onPick, onSave, onDelete, cl
  * scopes (board). Each change is still the address (`settingsHref`); the
  * button names the saved view in use.
  */
-export function ViewSettings({ view, views, activeUid, sort, onSort, columns, onColumns, defaults, cards, onCards, onPick, onSave, onDelete }) {
+export function ViewSettings({ view, views, activeUid, sort, onSort, columns, onColumns, defaults, cards, onCards, onPick, onSave, onDelete, csv = null }) {
   const active = (views?.items || []).find((v) => v.uid === activeUid) || null;
   return (
     <Popover label={active ? `View settings · ${active.name}` : 'View settings'} testId="dealflow-view-settings" wide align="right" tap>
@@ -149,9 +149,28 @@ export function ViewSettings({ view, views, activeUid, sort, onSort, columns, on
             <span className={EYE}>{view === 'table' ? 'Columns' : 'Card scopes'}</span>
             {view === 'table' ? <ColumnFields columns={columns} onColumns={onColumns} defaults={defaults} /> : <CardScopeFields cards={cards} onCards={onCards} />}
           </section>
+          {view === 'table' && csv && <ExportCsvField csv={csv} close={close} />}
         </div>
       )}
     </Popover>
+  );
+}
+
+/**
+ * D6150 (#6150): Export CSV, the table as filtered and sorted, every row rather than one page, in the visible
+ * columns. While the scores or a visible fit cannot be read it is not offered, and says why.
+ */
+export function ExportCsvField({ csv, close }) {
+  return (
+    <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" aria-label="Export">
+      <span className={EYE}>Export</span>
+      <button type="button" className={`${TOOL} ${TAP} w-fit disabled:cursor-not-allowed disabled:opacity-50`} disabled={!csv.ok}
+        title={csv.ok ? undefined : csv.why} aria-describedby="dealflow-csv-note"
+        onClick={() => { csv.onExport(); close?.(); }} data-testid="dealflow-export-csv">Export CSV</button>
+      <span id="dealflow-csv-note" className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="dealflow-export-csv-note">
+        {csv.ok ? `All ${csv.count} ${csv.count === 1 ? 'row' : 'rows'} these filters match, in the columns shown. Scores are bands, never numbers.` : csv.why}
+      </span>
+    </section>
   );
 }
 
