@@ -25,6 +25,9 @@ They do not change production application state.
 | `macbook-worker.mjs` | Delegate one Worker shard with startup/completion bounds, real-failure propagation and standard hosted fallback (D7881). |
 | `agent-provenance.mjs` | Check the identity-chain trailers on every commit an `agent/**` pull request adds and write its provenance artifact (D8068). |
 | `agent-provenance.test.mjs` | Hold the trailer parser to AGENTS.md § "Identity trailers" and run the check on fixture repositories (D8068). |
+| `ownership-check.mjs` | Read-only, advisory-first check of changed paths against active tasks' explicit ownership (D8075). |
+| `ownership-check.test.mjs` | Ownership parser, glob, API completeness and workflow contract regressions (D8075). |
+| `ownership-fixtures.json` | Full public task-body snapshots used to catch ownership wording drift (D8075). |
 | `capacity-client.mjs` | D7973: default-off submission and fresh OIDC receipt reader without a hosted waiter. |
 | `capacity-planner.mjs` | D7973: trusted reusable planner, original event/exact plan validation and one-shot submission. |
 

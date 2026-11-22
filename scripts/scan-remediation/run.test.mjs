@@ -107,7 +107,7 @@ test('real tracker reconciliation writes only one issue and its ready label acro
   });
   assert.equal(await reconcile(api, options), 1);
   assert.equal(await reconcile(api, options), 1);
-  assert.deepEqual(issue.labels.map(label => label.name), ['bug', 'slot:S21', 'state:ready']);
+  assert.deepEqual(issue.labels.map(label => label.name), ['bug', 'slot:S21', 'sla:7d', 'state:ready']);
   assert.deepEqual(requests.filter(([method]) => method !== 'GET'), [
     ['POST', '/issues'], ['POST', '/issues/900/labels'],
   ]);
