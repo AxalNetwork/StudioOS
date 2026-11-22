@@ -51,7 +51,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `landing-bot-refresh.yml` | Landing bot serial refresh | — | — | — | — | Refresh inherited-red branches (advisory, conditional) | `workflow_dispatch` · Refresh inherited-red branches (advisory, conditional) |
 | `landing-conflict-indicator.yml` | Landing conflict indicator | — | — | — | Label confirmed conflicts (advisory, conditional) | Label confirmed conflicts (advisory, conditional) | `workflow_dispatch` · Label confirmed conflicts (advisory, conditional) |
 | `landing-feeder.yml` | Feed the merge queue | — | — | — | — | Feed the merge queue (advisory, conditional) | `workflow_dispatch` · Feed the merge queue (advisory, conditional) |
-| `landing-policy.yml` | Landing policy | landing policy (advisory) | — | — | — | — | — |
+| `landing-policy.yml` | Landing policy | landing policy (advisory)<br>privileged label (advisory, conditional) | — | — | — | — | — |
 | `lfs-budget.yml` | LFS budget | — | — | — | — | Check LFS bandwidth vs 250 GB plan (advisory) | `workflow_dispatch` · Check LFS bandwidth vs 250 GB plan (advisory) |
 | `macbook-worker.yml` | MacBook Worker | — | — | — | — | — | `workflow_dispatch` · Worker shard on MacBook (advisory, conditional) |
 | `magic-link-insert-probe.yml` | magic-link insert probe | — | — | — | — | magic-link insert (advisory) | `workflow_dispatch` · magic-link insert (advisory) |
@@ -63,6 +63,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `merge-control-deploy.yml` | Merge Control deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
 | `migration-immutability.yml` | Migration immutability | applied migrations unchanged (required context) | — | applied migrations unchanged (required context) | applied migrations unchanged (required context) | — | — |
 | `ossf-scorecard.yml` | OpenSSF Scorecard | — | — | — | — | OpenSSF Scorecard (advisory) (advisory, conditional) | `workflow_dispatch` · OpenSSF Scorecard (advisory) (advisory, conditional) |
+| `ownership.yml` | Ownership | ownership (advisory) | — | — | — | — | — |
 | `post-deploy-smoke.yml` | post-deploy SPA smoke | — | — | — | — | live SPA smoke (advisory) | `workflow_dispatch` · live SPA smoke (advisory) |
 | `pr-overlap.yml` | Advisory PR overlap | — | — | — | — | report (advisory, conditional) | `workflow_dispatch` · report (advisory, conditional) |
 | `pr-preview-deploy.yml` | PR preview deploy | — | — | — | — | — | `workflow_run` · resolve the pull request (advisory, conditional)<br>deploy the preview Worker (advisory, conditional)<br>delete the preview Worker (advisory, conditional) |
