@@ -35,7 +35,7 @@
 @media (max-width: 640px) { .fd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fd-two { grid-template-columns: minmax(0, 1fr); } .fd-number { font-size: 17px; } .fd-actions a { flex: 1 1 calc(50% - 10px); text-align: center; } }
 
 /* D6250: the approved report letter and frozen-figures side column. */
-.fd-report-reader { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.fd-report-reader { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 16px; align-items: start; }
 .fd-report-mast { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e4e5ec; padding-bottom: 16px; }
 .fd-report-letter { padding: 24px; }
 .fd-report-letter h2 { font-size: 22px; }
