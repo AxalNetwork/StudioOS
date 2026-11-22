@@ -25,6 +25,9 @@ import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePo
 import NotionInterviewImport from '../NotionInterviewImport';
 import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection, ThemeRecordParts } from '../ValidateSections';
 import HypothesisRecord from '../HypothesisRecord';
+// D5998 (#5998): Validate's V2 overview (boards V1, V2, V13), mounted through `Overview` as Grow's and Build's are.
+// Imported statically: its lead (`ValidateLead`, `ValidateObjective`, `PmfChip`) is already in the route's bundle.
+import ValidateOverview from '../ValidateOverview';
 import { painThemesApi } from '../../../lib/api/painThemes.js';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
@@ -38,8 +41,6 @@ import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
 const VerdictRecordWithPlan = lazyStep(() => import('../BuildPlan'), 'VerdictRecordWithPlan');
-// D5998 (#5998): Validate's V2 overview (boards V1, V2, V13), as Grow's and Build's own.
-const ValidateOverview = lazyStep(() => import('../ValidateOverview'));
 
 /**
  * A quiet Export button: the CSV downloads, or the Worker's sentence shows
