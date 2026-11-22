@@ -48,7 +48,7 @@ test('D6237 a GP corrects only the register, and the linked account stays untouc
     assert.equal(audit.entity_id,'100');assert.ok(audit.created_at);assert.equal(JSON.parse(audit.metadata).fund_id,1);
   }finally{f.close();}
 });
-for(const body of [{fund_id:2},{user_id:41},{invested_amount:0},{lpa_signed:1},{status:'invented'},{commitment_amount:-1},{commitment_amount:'0'},{email:'not an address'},{}]) test(`D6237 refuses a closed-field or invalid patch ${JSON.stringify(body)}`,async()=>{
+for(const body of [{fund_id:2},{fund_id:'2'},{user_id:41},{user_id:'41'},{invested_amount:0},{lpa_signed:1},{status:'invented'},{commitment_amount:-1},{commitment_amount:'0'},{email:'not an address'},{}]) test(`D6237 refuses a closed-field or invalid patch ${JSON.stringify(body)}`,async()=>{
   const f=fixture();try{const result=await f.call('PATCH',100,body);assert.equal(result.status,400,JSON.stringify(result.body));assert.equal(f.row().commitment_amount,1000);assert.equal(f.row().name,'Register identity');assert.deepEqual(f.audits(),[]);}finally{f.close();}
 });
 for(const method of ['PATCH','DELETE']) test(`D6237 ${method} hides a foreign LP exactly like a missing LP and refuses another GP`,async()=>{
