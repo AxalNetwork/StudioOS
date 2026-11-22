@@ -392,7 +392,7 @@ test('AF23 and the wiring: Sources a bottom sheet, Preview full height, 44px tar
   assert.ok(!/\b(window\.)?(alert|confirm|prompt)\(/.test(panel));
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
   assert.match(route, /fill=\{fillFor\(formOpen\)\}/);
-  assert.match(route, /: moduleFill \? <FillModule /);
+  assert.match(route, /: !companyReadOnly && moduleFill \? <FillModule /);
   const lightbox = readFileSync(new URL('../src/pages/cycles/FormLightbox.jsx', import.meta.url), 'utf8');
   assert.match(lightbox, /const result = await onSubmit\(sent, memory\.current\);\n\s*await afterSave\(result, sent\);/, 'record only after the form’s own Save');
 });

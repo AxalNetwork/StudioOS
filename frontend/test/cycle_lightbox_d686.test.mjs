@@ -257,7 +257,7 @@ test('one mechanism: each cycle names its path and Mount; opening pushes state.u
   assert.doesNotMatch(route, /sheetOpen|def\.sheet|onClick: open/);
   assert.equal((route.match(/<Mount projectId=\{projectId\}/g) || []).length, 1, 'one mount for every cycle');
   // D697: the parts' context also carries the table's query and the one dialog mount.
-  assert.match(route, /fnOf\(def\.parts, slug\)\?\.\(module, \{ projectId, reload: reloadPart, openAction, query, openDialog, role: user\?\.role \?\? null \}\)/);
+  assert.match(route, /fnOf\(def\.parts, slug\)\?\.\(module, \{ projectId, reload: reloadPart, openAction, query, openDialog, role: user\?\.role \?\? null, canWrite: !companyReadOnly \}\)/);
   assert.match(route, /const reloadPart = \(options\) => \{[\s\S]*?setReload\(\(n\) => n \+ 1\);\s*\};/, 'a part still re-reads the cycle module');
   assert.match(route, /if \(!lightbox && dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/, 'a change reloads once the lightbox is gone, not behind it');
   const close = route.slice(route.indexOf('const closeAction = () => {'), route.indexOf('};', route.indexOf('const closeAction = () => {')));

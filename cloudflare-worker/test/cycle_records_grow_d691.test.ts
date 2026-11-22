@@ -199,6 +199,10 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const role = await rec(db, 'team-expansion', 31);
   assert.deepEqual(role.body.facts.slice(1, 3).map((f: any) => f.value), [2, 1]);
   const ob = await rec(db, 'durable-company-building', 51);
+  assert.equal(ob.body.parts.meeting, true, 'D6122: only the persisted board_meeting type gets the meeting strip');
+  db.prepare("UPDATE compliance_events SET event_type = 'tax' WHERE id = 51").run();
+  assert.equal((await rec(db, 'durable-company-building', 51)).body.parts.meeting, false);
+  db.prepare("UPDATE compliance_events SET event_type = 'board_meeting' WHERE id = 51").run();
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
   assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null]]);

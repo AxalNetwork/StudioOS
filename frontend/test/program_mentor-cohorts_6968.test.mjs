@@ -25,7 +25,13 @@ import { PROGRAMS as REGISTRY, HOW_IT_RUNS } from '../src/pages/admin/programs/p
 import CONTENT, { SIGN_IN_HREF, ADVISE_HREF, LICENCE_HREF, FOR_ADVISORS_HREF, JOURNEY_ALT, STAGES, OUTSIDE } from '../src/pages/programs/content/mentor-cohorts.js';
 
 const h = React.createElement;
-const renderedText = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const renderedText = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+
+test('D7962: rendered text preserves literal entities and ordinary characters', () => {
+  const words = `Literal &quot; &#39; &#x27; &amp; &amp;quot; with "quotes", 'apostrophes' & text`;
+  const html = renderToStaticMarkup(h('p', null, h('strong', null, 'Start'), ' ', words, ' ', h('em', null, 'End')));
+  assert.equal(renderedText(html), `Start ${words} End`);
+});
 const read = (p) => readFileSync(p, 'utf8');
 const at = (path, el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, el));
 const MENTOR = programFor('mentor-cohorts');
