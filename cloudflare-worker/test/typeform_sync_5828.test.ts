@@ -55,7 +55,7 @@ const formDef = (id: string) => ({
   ],
 });
 const response = (id: string, hoursAgo: number, kind: 'chYes' | 'chNo') => ({
-  response_id: id, token: id, response_type: 'completed', submitted_at: new Date(Date.now() - hoursAgo * 3600_000).toISOString(),
+  response_id: id, token: id, response_type: 'completed', submitted_at: new Date(Date.now() - hoursAgo * 3600_000).toISOString(), // clock-ok: relative
   metadata: { user_agent: 'FIXTURE-METADATA-AGENT' }, hidden: { respondent: 'FIXTURE-HIDDEN-RESPONDENT-ZED' },
   answers: [
     { field: { id: 'fldKind', type: 'multiple_choice' }, type: 'choice', choice: { id: kind, label: kind === 'chYes' ? 'Yes' : 'No' } },
@@ -104,7 +104,7 @@ async function world(env0: Record<string, string> = {}) {
     INSERT INTO projects (id, name, company_id, founder_id) VALUES (${PROJECT}, 'Synthetic venture', ${COMPANY}, 100), (${UNBOUND}, 'Unbound venture', ${COMPANY}, 100);
     INSERT INTO project_members (project_id, user_id, role, status) VALUES (${PROJECT}, ${TEAMMATE}, 'cofounder', 'accepted'), (${PROJECT}, ${ADVISOR}, 'advisor', 'accepted');
     INSERT INTO user_company_links (uid, company_id, user_id) VALUES ('ucl-owner', ${COMPANY}, ${OWNER}), ('ucl-mate', ${COMPANY}, ${TEAMMATE});`);
-  const far = Date.now() + 7 * 24 * 3600_000;
+  const far = Date.now() + 7 * 24 * 3600_000; // clock-ok: relative
   const connect = async (id: number, user: number, region: unknown, token: string) => {
     const uid = `typeform-5828-${id}`;
     const enc = await encryptCredentials(env, uid, { access_token: token, refresh_token: 'SYNTHETIC-REFRESH', expires_at: far, ...(region === undefined ? {} : { region }) } as any);
@@ -208,7 +208,7 @@ test('3. the sync row follows the binding: one active row, history kept per form
   const w = await world();
   await run(w);
   const fields = formFields(formDef(FORM_A));
-  assert.equal(await setTypeformMappings(w.env, w.syncIdOf(FORM_A), fields, [{ field_id: 'fldKind', kind: 'waitlist', choices: ['chYes'] }], new Date().toISOString()), true);
+  assert.equal(await setTypeformMappings(w.env, w.syncIdOf(FORM_A), fields, [{ field_id: 'fldKind', kind: 'waitlist', choices: ['chYes'] }], new Date().toISOString()), true); // clock-ok: relative
   w.db.exec(`INSERT INTO hypotheses (id, project_id, code, claim) VALUES (301, ${PROJECT}, 'H1', 'Synthetic claim')`);
   const backfilled = await run(w, OWNER, { project: PROJECT, backfill: true });
   assert.equal(backfilled.body.result.new_answers, 2, 'the backfill re-read the history for the new mapping');
@@ -267,7 +267,7 @@ test('4. a lost binding, a revoked grant, a refresh in progress and no recorded 
   w.tf.status = 0;
 
   // A grant written without a data center is never routed to a guessed one.
-  const bare = await encryptCredentials(w.env, `typeform-5828-${MINE}`, { access_token: EU_TOKEN, refresh_token: 'SYNTHETIC-REFRESH', expires_at: Date.now() + 3600_000 } as any);
+  const bare = await encryptCredentials(w.env, `typeform-5828-${MINE}`, { access_token: EU_TOKEN, refresh_token: 'SYNTHETIC-REFRESH', expires_at: Date.now() + 3600_000 } as any); // clock-ok: relative
   w.db.prepare('UPDATE integrations SET credentials_enc = ? WHERE id = ?').run(bare, MINE);
   const calls = w.tf.calls.length;
   const unknown = await run(w);
