@@ -67,7 +67,7 @@ export async function formationPack(env: Env, formKey: string, options: {
     if (out.some(item => item.key === key)) continue;
     const rule = fact.status === 'recorded' && fact.source_id != null && date(fact.checked_on) ? spec : null;
     const due = packDue(rule, options.today, options.registeredOn ?? null);
-    out.push({ key, title: spec.title, description: typeof spec.description === 'string' ? spec.description : null,
+    out.push({ key, title: spec.title, description: rule != null && typeof spec.description === 'string' ? spec.description : null,
       phase: 'ongoing', kind: kinds.has(spec.event_type) && !(spec.event_type === 'franchise_tax' && !formKey.startsWith('us_')) ? spec.event_type : 'other',
       recurrence: cadences.has(spec.recurrence) ? spec.recurrence : 'one_time', rule,
       source_id: fact.source_id ?? null, checked_on: fact.checked_on ?? null, due_date: due,
@@ -117,7 +117,8 @@ export function handoffPackEvidenceStatement(env: Env, caseId: number, stage: 'a
     evidence_json = (SELECT evidence_json FROM formation_case_stages WHERE case_id = ? AND stage = 'registered'),
     owner_user_id = COALESCE(owner_user_id, (SELECT CASE WHEN ? = 'handed_off' THEN user_id ELSE hq_owner_user_id END FROM formation_cases WHERE id = ?))
     WHERE case_id = ? AND stage = ? AND evidence_json IS NULL
-      AND EXISTS (SELECT 1 FROM formation_case_stages WHERE case_id = ? AND stage = 'registered' AND evidence_json IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM formation_case_stages WHERE case_id = ? AND stage = 'registered'
+        AND CASE WHEN json_valid(evidence_json) THEN json_type(evidence_json, '$.pack_items') END = 'array')
       AND EXISTS (SELECT 1 FROM formation_cases WHERE id = ? AND stage = ? AND revision = ? AND closed_at IS NULL)`)
     .bind(caseId, stage, caseId, caseId, stage, caseId, caseId, stage, revision);
 }

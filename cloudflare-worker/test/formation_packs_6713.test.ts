@@ -128,6 +128,21 @@ test('published v1 provisional rules remain undated until actual source evidence
     const rows = await formationPack(f.env, 'us_de_ccorp', { versionId: 1, today: ON, registeredOn: ON, projectId: 6713 });
     assert.equal(rows.length, STANDARD_EVENTS.us_de_ccorp.length);
     assert.ok(rows.every(row => row.due_date === null && row.reminders === false));
+    assert.ok(rows.every(row => row.description === null), 'unsourced timing/cost prose is not presented as a recorded obligation');
     assert.deepEqual(rows.map(row => row.title), STANDARD_EVENTS.us_de_ccorp.map(row => row.title));
+  } finally { f.close(); }
+});
+
+
+test('an existing v2 stage without pack evidence is not copied or treated as a pack', async () => {
+  const f = fixture();
+  try {
+    f.db.exec('UPDATE formation_cases SET form_key=NULL WHERE id=6713');
+    assert.equal((await transition(f.env, 6713, 'registered', { party: 'hq', userId: 6714 })).ok, true);
+    f.db.exec("UPDATE formation_case_stages SET evidence_json='not-json' WHERE case_id=6713 AND stage='registered'");
+    assert.equal((await transition(f.env, 6713, 'activating', { party: 'hq', userId: 6714 })).ok, true);
+    const row = f.db.prepare("SELECT evidence_json,owner_user_id FROM formation_case_stages WHERE case_id=6713 AND stage='activating'").get()!;
+    assert.equal(row.evidence_json, null);
+    assert.equal(row.owner_user_id, null);
   } finally { f.close(); }
 });
