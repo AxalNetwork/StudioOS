@@ -71,6 +71,7 @@ export async function main(mode,env=process.env,ports={}){
  // Persist the original Run-process bound; a cleanup process must never reopen it with a fresh timeOrigin.
  const fenceLateSuccess=()=>{
   if(record?.result?.testStep==='success'&&record.result.executionOutcome==='completed'
+    &&(mode==='run'||record.ack!==JSON.stringify(record.result))
     &&Date.now()>=Math.min(record.receipt.executionDeadline,record.completionDeadline??record.receipt.executionDeadline)){
    record.result={...record.result,executionOutcome:'timed_out'};save();
   }

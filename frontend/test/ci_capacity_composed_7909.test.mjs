@@ -96,6 +96,7 @@ for(const outcome of ['success','failure','lost','cleanup'])test(`D7909 exact co
 test('D7909 supervisor mapping refuses missing export, inconsistent failure and late success',()=>{
  const values={category:'success',result:'success',test_exit:'0',cleanup:'complete',export:'complete'},proof={observedTest:{status:'success',exitCode:0},removed:true,exportedAt:10,exportDeadline:20,receiptDeadline:100,now:()=>30};
  assert.equal(supervisorResult(values,proof).testStep,'success');
+ assert.equal(supervisorResult({...values,category:'infrastructure',result:'deadline_overrun'},proof).executionOutcome,'timed_out','an explicit supervisor overrun remains a timeout even before the receipt deadline');
  for(const change of [{export:'not_configured'},{cleanup:'none'},{test_exit:'9'},{category:'test_failure'}])assert.throws(()=>supervisorResult({...values,...change},proof));
  assert.throws(()=>supervisorResult(values,{...proof,removed:false}));assert.throws(()=>supervisorResult(values,{...proof,exportedAt:20}));assert.equal(supervisorResult(values,{...proof,receiptDeadline:30}).executionOutcome,'timed_out');
  const failed={category:'test_failure',result:'test_failure',test_exit:'9',cleanup:'failed',export:'failed'};
@@ -236,4 +237,14 @@ test('D7909 cleanup after a lost positive delivery cannot reopen the earlier rec
  t.mock.timers.setTime(deadline+1);t.mock.getter(performance,'timeOrigin',()=>Date.now());x.ports.report=report;
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
  const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'success');assert.equal(row.executionOutcome,'timed_out');assert.equal(row.cleanupConfirmed,true);
+});
+
+
+test('D7909 a completed acknowledged Run is not retroactively expired by a later cleanup process',async t=>{
+ const x=await setup(t),start=Date.now(),deadline=start-120_000+26*60_000-5_000;
+ t.mock.getter(performance,'timeOrigin',()=>start-120_000);
+ assert.equal(await bridge('run',x.env,x.ports),0);assert.equal(x.results.read().ack,JSON.stringify(x.results.read().result));
+ t.mock.timers.setTime(deadline+1);t.mock.getter(performance,'timeOrigin',()=>Date.now());
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);assert.equal(x.reports(),1,'cleanup must not reopen an already completed in-budget delivery');
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'success');assert.equal(row.executionOutcome,'completed');
 });
