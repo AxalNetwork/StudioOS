@@ -135,44 +135,35 @@ export async function rebuildUsersRoleCheckForExploring(env: Env): Promise<Users
 
 /** Prepare the investor role and its users column on legacy databases (#5343). */
 const INVESTOR_SCHEMA_READY = new WeakMap<object, boolean>();
-const INVESTOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 
 export async function ensureInvestorSchema(env: Env): Promise<void> {
   const key = bindingKey(env);
   if (INVESTOR_SCHEMA_READY.get(key)) return;
-  const pending = INVESTOR_SCHEMA_IN_FLIGHT.get(key);
-  if (pending) return pending;
-
-  const started = (async () => {
+  // D7587: keep completed readiness only; pending D1 I/O belongs to its request.
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)");
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type)");
+    await runSchemaBootstrap(env, ['ALTER TABLE users ADD COLUMN investor_id INTEGER']);
+    await rebuildUsersRoleCheckForInvestor(env);
+    // Promote partner users with an LP record to investor; create investor row.
     try {
       await env.DB.exec(
-        "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        "UPDATE users SET role = 'investor' WHERE role = 'partner' AND id IN (SELECT DISTINCT u.id FROM users u JOIN limited_partners lp ON lp.user_id = u.id OR lower(lp.email) = lower(u.email))"
       );
-      await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)");
-      await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type)");
-      await runSchemaBootstrap(env, ['ALTER TABLE users ADD COLUMN investor_id INTEGER']);
-      await rebuildUsersRoleCheckForInvestor(env);
-      // Promote partner users with an LP record to investor; create investor row.
-      try {
-        await env.DB.exec(
-          "UPDATE users SET role = 'investor' WHERE role = 'partner' AND id IN (SELECT DISTINCT u.id FROM users u JOIN limited_partners lp ON lp.user_id = u.id OR lower(lp.email) = lower(u.email))"
-        );
-        await env.DB.exec(
-          "INSERT INTO investors (uid, user_id, investor_type, accreditation_status) SELECT lower(hex(randomblob(16))), u.id, 'lp', 'verified' FROM users u WHERE u.role = 'investor' AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)"
-        );
-        await env.DB.exec(
-          "UPDATE users SET investor_id = (SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1) WHERE role = 'investor' AND investor_id IS NULL"
-        );
-      } catch (e) {
-        console.warn('[boot] investor promote step skipped:', (e as Error).message);
-      }
-      INVESTOR_SCHEMA_READY.set(key, true);
-    } catch (cause) {
-      throw new Error('investor_schema_not_ready', { cause });
-    } finally {
-      INVESTOR_SCHEMA_IN_FLIGHT.delete(key);
+      await env.DB.exec(
+        "INSERT INTO investors (uid, user_id, investor_type, accreditation_status) SELECT lower(hex(randomblob(16))), u.id, 'lp', 'verified' FROM users u WHERE u.role = 'investor' AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)"
+      );
+      await env.DB.exec(
+        "UPDATE users SET investor_id = (SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1) WHERE role = 'investor' AND investor_id IS NULL"
+      );
+    } catch (e) {
+      console.warn('[boot] investor promote step skipped:', (e as Error).message);
     }
-  })();
-  INVESTOR_SCHEMA_IN_FLIGHT.set(key, started);
-  return started;
+    INVESTOR_SCHEMA_READY.set(key, true);
+  } catch (cause) {
+    throw new Error('investor_schema_not_ready', { cause });
+  }
 }

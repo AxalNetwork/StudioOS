@@ -26,7 +26,13 @@ import { FixedPanel, resolveKey } from '../src/pages/programs/ProgramKeyPage.jsx
 import CONTENT, { ANATOMY, CLAIM_REASONS, STEPS, SIGN_IN_HREF, PARTNER_SIGN_IN_HREF } from '../src/pages/programs/content/perks.js';
 
 const h = React.createElement;
-const renderedText = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const renderedText = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+
+test('D7962: rendered text preserves literal entities and ordinary characters', () => {
+  const words = `Literal &quot; &#39; &#x27; &amp; &amp;quot; with "quotes", 'apostrophes' & text`;
+  const html = renderToStaticMarkup(h('p', null, h('strong', null, 'Start'), ' ', words, ' ', h('em', null, 'End')));
+  assert.equal(renderedText(html), `Start ${words} End`);
+});
 const read = (p) => readFileSync(p, 'utf8');
 const PK = programFor('perks');
 const PDF = 'frontend/public/program-briefs/axal-vc-perks-v1.pdf';

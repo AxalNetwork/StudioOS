@@ -1,3 +1,4 @@
+import { guardChain } from './guardCatalog.mjs';
 /**
  * #6326 — the add-worker-endpoint preflight's rules, driven with in-memory files.
  *
@@ -36,7 +37,7 @@ test('the lists name files and scripts that exist on this checkout', () => {
   for (const t of ALWAYS_TESTS) assert.ok(existsSync(join(ROOT, t)), t);
   const auth = readFileSync(join(ROOT, 'cloudflare-worker/src/auth.ts'), 'utf8');
   for (const [, names] of GATES) for (const n of names) assert.match(auth, new RegExp(`export async function ${n}\\b`), n);
-  const guards = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['test:guards'];
+  const guards = guardChain;
   for (const cmd of [...GUARDS, ...GUARDS_IF.flatMap((g) => g.cmds)]) {
     const script = /scripts\/[\w-]+\.mjs/.exec(cmd)[0];
     assert.ok(existsSync(join(ROOT, script)), script);
