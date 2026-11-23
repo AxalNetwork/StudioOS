@@ -5,7 +5,7 @@ S09 (#7905/#7885) and S18 (#7889), not a fleet builder or a qualified image.
 No build, scan, signature verification, registry publication or real-node test
 has run. `AGENT_ENGINE=off`. The owner authorized source publication as a draft on
 22 November 2026; #5719 is closed. Actual qualification remains blocked on the
-six inputs in the `operator_input_record` in `qualification-progress.json`.
+remaining environment/authority inputs in the `operator_input_record` in `qualification-progress.json`.
 
 | File | Purpose |
 | --- | --- |
@@ -47,7 +47,12 @@ self-referential artifact hash. The owner-authorized shared operations README
 entry is included. S31 is authorized to publish this preparation draft; S39 owns combined integration.
 A prepared child does not close #7905 or authorize runner activation.
 
-The independently verified source is the older S09 c36 checkpoint. A reported
-newer executor or a scoped correction does not qualify a final combined tree.
-The operator record requests that exact final candidate and current operating
-reference; no source re-delivery of c36 is requested.
+The current independently received and statically reconciled S39 candidate is
+`8c11fb864c3466fec684ec6bb92409d33973b2ec`, tree
+`45e1f3acb44fe6bb0a346df867430d34b70128d2`. It supersedes the received
+`7214b4c3` checkpoint by two corrections across eight files. Merged executor #8231 and
+the actual planner/caller pin are verified. The historical c36 receipt remains
+verified and is not requested again. See `qualification-progress.json` under
+`source_reconciliation` for separate source, interface and native gate results.
+The completed current operator record has not been received by S31; no immutable
+image identity or native acceptance is inferred from source availability.
