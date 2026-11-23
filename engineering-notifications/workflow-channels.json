@@ -267,6 +267,11 @@
       "channel": "#axalvc-actions-ossf-scorecard"
     },
     {
+      "id": null,
+      "path": ".github/workflows/ownership.yml",
+      "channel": "#axalvc-actions-ownership"
+    },
+    {
       "id": 295717983,
       "path": ".github/workflows/post-deploy-smoke.yml",
       "channel": "#axalvc-actions-post-deploy-smoke"

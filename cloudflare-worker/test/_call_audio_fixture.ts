@@ -16,6 +16,7 @@ import sessions from '../src/routes/founder_validate_sessions.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { AUDIO_PREFIX } from '../src/services/interviewSessions.ts';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 export const JWT_SECRET = 'd877-fixture-only-signing-secret-0123456789';
 export const mig = (n: string) => readFileSync(new URL(`../sql/migrations/${n}`, import.meta.url), 'utf8');
@@ -58,6 +59,7 @@ export function fixture({ monthMicro = 500_000_000 } = {}) {
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql']) db.exec(mig(m));
   db.exec(mig('489_interview_findings.sql'));
   db.exec(mig('530_call_audio_retention.sql'));
+  applySuppressionLedger(db); // D6654: the record-erasure path writes its ledger row.
   db.prepare('UPDATE users SET founder_id = 100 WHERE id = 2').run();
   db.prepare('UPDATE users SET founder_id = 300 WHERE id = 3').run();
   db.exec(`INSERT INTO projects VALUES (${PROJECT}, 'Venture', 100);

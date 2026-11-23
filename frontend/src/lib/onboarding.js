@@ -97,3 +97,10 @@ export function investorProfilePayload(values) {
     lp_target_usd: values.lp_target_usd || null, notes: values.notes || null,
   };
 }
+// D6131: v2 has seven questions plus Review. Old progress used eight
+// questions (and an earlier ninth slider step); preserve its actual question.
+export function investorResumeStep(progress) {
+  const n = Number.isInteger(progress?.step) ? progress.step : 0;
+  if (progress?.data?._investor_onboarding_version === 2) return Math.max(0, Math.min(7, n));
+  return [0, 1, 2, 3, 3, 5, 4, 6][Math.max(0, Math.min(7, n))];
+}

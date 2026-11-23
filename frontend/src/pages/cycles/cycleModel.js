@@ -411,3 +411,17 @@ export function pickOwnerAction(row, first, open) {
   if (row?.keys?.owner !== 'none' || typeof open !== 'function') return null;
   return { text: 'Pick owner', label: `Pick an owner for ${first && !first.nr ? first.text : 'this obligation'}`, onClick: open };
 }
+
+/**
+ * D6046 (#6046, Raise V2 RA-03): Raise › Overview's one primary action, the Worker's `primary_action`
+ * (D6045), which chooses it from recorded state (Prepare to raise → Build pitch → Share with investor →
+ * Add investor) and never from the readiness score. None while the read is not here, for a staff read
+ * (the Worker sends null), when the rule could not be worked out (`{ state: 'unreadable' }`), or when its
+ * address is not an in-app path. Module pages keep their own actions (`defs/raise.jsx`); this is the Overview's.
+ */
+export function raisePrimaryAction(raw) {
+  const a = raw?.primary_action;
+  if (!a || a.state !== 'ok' || typeof a.label !== 'string' || !a.label) return null;
+  const href = safeHref(a.href);
+  return href ? { key: a.key ?? null, label: a.label, href, rule: typeof a.rule === 'string' ? a.rule : null } : null;
+}

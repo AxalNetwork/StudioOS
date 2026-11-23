@@ -207,7 +207,8 @@ test('the sheet asks business questions first, and the rule types are disclosed'
   const sheet = between(zone, 'export function FitRuleSheet(', 'function FitRulesTable(');
   assert.match(sheet, /useState\(initial\?\.kind \|\| 'best_fit'\)/, 'a new rule no longer starts as a great-fit profile');
   assert.match(sheet, /aria-expanded=\{advanced\}[\s\S]*Advanced rule types/, 'the rule types are no longer behind a disclosure');
-  assert.match(sheet, /\{advanced && \(\s*<Field label="Rule type"/, 'the rule type is shown before it is asked for');
+  // D4844: the Offers field (`OfferField`), with its own error.
+  assert.match(sheet, /\{advanced && \(\s*<OfferField label="Rule type"/, 'the rule type is shown before it is asked for');
   assert.ok(sheet.indexOf('copy.who') < sheet.indexOf('copy.says') && sheet.indexOf('copy.says') < sheet.indexOf('Can we point them somewhere else?'),
     'the questions are no longer in the canvas’s order: who, what to say, where to point them');
   // “Not yet” stays apart from a decline, and the sheet says which strengths scoring reads.
