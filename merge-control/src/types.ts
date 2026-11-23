@@ -5,6 +5,9 @@ export type Env = MergeControlBindings & {
   GITHUB_APP_ID?: string;
   GITHUB_INSTALLATION_ID?: string;
   GITHUB_APP_PRIVATE_KEY?: string;
+  CAPACITY_OWNER_TOKEN?: string;
+  /** Separate org-read credential; never added to the repository App token request. */
+  CAPACITY_INVENTORY_TOKEN?: string;
 };
 export interface Delivery {
   delivery: string; repo: string; event: string; action: string;
