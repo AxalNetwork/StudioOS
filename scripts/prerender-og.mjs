@@ -42,6 +42,8 @@ import { fileURLToPath } from 'node:url';
 import { OG_ROUTES, ogTagsFor, staticBodyFor } from '../frontend/src/lib/ogRegistry.js';
 import { DOOR_LINKS } from '../frontend/src/lib/siteLinks.js';
 import { programOgRoutes } from './lib/programCatalog.mjs';
+// D6996 (#6996): each public Help Center guide's own page, from the guide index.
+import { helpOgRoutes } from './lib/helpGuides.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -174,6 +176,8 @@ async function main() {
   // D6966 (#6966): each program presentation's own page, from its map entry, after the registry's
   // routes (a program's page that is also a registry path keeps the program's title).
   const routes = [...OG_ROUTES, ...(await programOgRoutes())];
+  // D6996 (#6996): each public Help Center guide's own page, after the registry's routes.
+  routes.push(...helpOgRoutes());
   const shellFile = path.join(OUT_DIR, 'index.html');
   if (!fs.existsSync(shellFile)) {
     console.error(

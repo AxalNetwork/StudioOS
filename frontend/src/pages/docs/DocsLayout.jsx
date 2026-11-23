@@ -17,6 +17,8 @@ import { statusChip } from '../../lib/ticketScreens';
 import { reportError } from '../../lib/log';
 import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
 import { guidePlacement, helpAreas } from './guidePlacement';
+import { helpGuideMeta } from './helpMeta';
+import { usePageMeta } from '../../lib/seo';
 import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
 import {
@@ -1175,6 +1177,20 @@ export default function DocsLayout() {
   const restrictedAnchors = useMemo(() => adminOnlyAnchors(), []);
   const isAdmin = role === 'admin';
   const route = parseGuidePath(location.pathname);
+
+  // D6996 (#6996): the head says which page this is, as its prerendered HTML does. A guide this viewer can read
+  // takes its own title and description (`helpMeta.js`); an address with no such guide names none and is noindex;
+  // the home and the directory take the registry's /help entry. No pageview beacon: this page never sent one.
+  const guideSection = route ? visibleSections.find((s) => s.id === route.area) : null;
+  const guideSub = guideSection?.subsections.find((s) => s.id === route.guide) || null;
+  const guideMeta = guideSub ? helpGuideMeta(guideSection, guideSub) : null;
+  usePageMeta({
+    path: guideMeta ? guideMeta.path : location.pathname,
+    title: guideMeta?.title,
+    description: guideMeta?.description,
+    robots: route && !guideMeta ? 'noindex' : undefined,
+    analytics: false,
+  });
 
   // `#<area>/<guide>` was every guide's address until each had its own page,
   // and it is in notifications already sent, the advisor's tools and people's
