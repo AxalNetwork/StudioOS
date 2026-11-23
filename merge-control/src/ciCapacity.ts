@@ -21,12 +21,22 @@ export interface CapacityStore {
   prune(before: number): void;
   save(request: CapacityRequest): void;
 }
+/** D8339: what a settled request still has outstanding, from evidence the store does not hold.
+ * `owed`: a result is still to be published or corrected; the request stays, whatever its age.
+ * `revisable`: published, but the publisher may still lower it while the request is kept; it leaves by age only.
+ * `final`: nothing can change; it may also leave by count. `superseded` is read from the parent fence. */
+export type CapacityEvidence = 'owed' | 'revisable' | 'final';
+export type CapacityEvictionGuard = (request: CapacityRequest, superseded: boolean) => CapacityEvidence;
+const leaseEnd = (request: CapacityRequest) => Math.max(request.deadline,
+  ...request.shards.flatMap(shard => shard.attempts.flatMap(a => [a.startDeadline, a.executionDeadline, a.cancelDeadline ?? 0])));
 
 /** Bounded full receipts, indexed work and compact permanent identity fences. */
 export class SqlCapacityStore implements CapacityStore {
   private readonly storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
-  constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>) {
-    this.storage = storage;
+  private readonly evictable: CapacityEvictionGuard | null;
+  /** Without a guard, receipts leave by age alone, published or not, and a full store refuses, as before D8339. */
+  constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>, evictable: CapacityEvictionGuard | null = null) {
+    this.storage = storage; this.evictable = evictable;
     storage.transactionSync(() => {
       storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_requests (
         id TEXT PRIMARY KEY, parent TEXT NOT NULL UNIQUE, state TEXT NOT NULL)`);
@@ -72,11 +82,39 @@ export class SqlCapacityStore implements CapacityStore {
   }
   prune(before: number): void {
     this.storage.transactionSync(() => {
+      // Parent, request and child tombstones survive receipt retention: no identity can be reused.
+      if (this.evictable) { this.retain(before, this.evictable); return; }
       this.storage.sql.exec(`DELETE FROM ci_capacity_requests WHERE id IN
         (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)`, before);
       this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?', before);
-      // Parent, request and child tombstones survive receipt retention: no identity can be reused.
     });
+  }
+  /** D8339: with a guard, age and count removal share one test. One pass over settled history, oldest
+   * completion first: a request older than the age limit leaves unless something is owed; at the cap, the
+   * oldest `final` request leaves to make room for one admission. A request stays while a lease of its own
+   * is open or the guard cannot answer. Finding nothing leaves the store full, and the caller refuses
+   * `capacity_storage_bound`. The pass reads at most 1,000 requests and stops at the first request inside
+   * the age limit once the store is below the cap. */
+  private retain(before: number, guard: CapacityEvictionGuard): void {
+    // The cutoff is the caller's clock less the age limit, so this is the caller's clock.
+    const now = before + CAPACITY_RETENTION_MS;
+    let count = this.count();
+    const settled = this.storage.sql.exec<{ id: string; completed_at: number }>(`SELECT id, completed_at FROM ci_capacity_index
+      WHERE pending = 0 ORDER BY completed_at, id LIMIT 1000`).toArray();
+    for (const { id, completed_at } of settled) {
+      const aged = completed_at <= before;
+      if (!aged && count < CAPACITY_REQUEST_LIMIT) break;
+      const request = this.get(id);
+      if (!request || !(leaseEnd(request) <= now)) continue;
+      const s = request.submission;
+      let evidence: CapacityEvidence = 'owed';
+      try { evidence = guard(request, this.newerParent(s.parentRunId, s.parentAttempt)); }
+      catch { /* Unreadable publication evidence keeps the request. */ }
+      if (evidence !== 'final' && !(aged && evidence === 'revisable')) continue;
+      this.storage.sql.exec('DELETE FROM ci_capacity_requests WHERE id = ?', id);
+      this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE id = ?', id);
+      count--;
+    }
   }
   private index(request: CapacityRequest): void {
     const s = request.submission;
