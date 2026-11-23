@@ -11,6 +11,9 @@
  * `market_intel_source_runs` is declared here as there. Every statement runs
  * through `runSchemaBootstrap`, which reads the table's columns first and
  * issues no `ADD COLUMN` for one that is already there.
+ *
+ * D7708 — `market_intel_indexes` declares `window_start`, `window_end` and
+ * `source_mix_json` of migration `*_7708_market_intel_index_window.sql`.
  */
 import type { Env } from '../../types';
 import { bindingKey, runSchemaBootstrap } from '../../util/schemaBootstrap';
@@ -60,12 +63,20 @@ export async function ensureMarketIntelSchema(env: Env): Promise<void> {
        delta_pct REAL,
        source_count INTEGER NOT NULL DEFAULT 0,
        computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+       basis TEXT,
+       window_start TEXT,
+       window_end TEXT,
+       source_mix_json TEXT,
        UNIQUE(sector, geo, period_key, dimension)
      )`,
     `CREATE INDEX IF NOT EXISTS idx_mi_idx_sector_period ON market_intel_indexes(sector, period_key)`,
     // D538 / migration 379 — 'live' on index rows computed from live rows
     // only. runSchemaBootstrap skips it when the column is there.
     `ALTER TABLE market_intel_indexes ADD COLUMN basis TEXT`,
+    // D7708 — the window a point covers and the mix it used. runSchemaBootstrap skips a column already there.
+    `ALTER TABLE market_intel_indexes ADD COLUMN window_start TEXT`,
+    `ALTER TABLE market_intel_indexes ADD COLUMN window_end TEXT`,
+    `ALTER TABLE market_intel_indexes ADD COLUMN source_mix_json TEXT`,
     `CREATE TABLE IF NOT EXISTS market_intel_quota (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        source_key TEXT NOT NULL,

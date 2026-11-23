@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
@@ -25,6 +25,11 @@ import { createRecordGate } from './recordGate.js';
  * NDA, issues a single-use two-minute link and logs `download`. The history
  * below is that log, the reader's rows only, and each line says a link was
  * issued: whether it was followed is not recorded, so it is not claimed.
+ *
+ * #6270 (canvas IRV-04): the file's staged date comes from the file read; its
+ * folder is carried from the room (router state), as the canvas draws it. The
+ * file read does not name a folder, so a file opened from a direct link says
+ * where the folder is shown rather than guessing one.
  */
 
 const ghostBtn = 'inline-block rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-bold text-axal-ink '
@@ -35,6 +40,9 @@ const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal
 
 export default function DiligenceFile({ role = 'investor' }) {
   const { grantUid, fileUid } = useParams();
+  // #6270: `undefined` — not arrived from the room; `null` — the room listed it outside every folder.
+  const carried = useLocation()?.state;
+  const folder = carried && Object.prototype.hasOwnProperty.call(carried, 'folder') ? carried.folder : undefined;
   const [data, setData] = useState(null);
   const [roomRef, setRoomRef] = useState(null);
   const [state, setState] = useState('loading'); // loading | ready | gated | missing_file | missing_room | unreadable
@@ -191,6 +199,24 @@ export default function DiligenceFile({ role = 'investor' }) {
               {notice ? <p className="mt-2 text-[12px] font-semibold text-red-700 dark:text-red-300">{notice}</p> : null}
             </Card>
 
+            <Card data-testid="file-facts">
+              <div className={eyebrow}>About this file</div>
+              <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-2 text-[12px] sm:grid-cols-2">
+                <div className="min-w-0">
+                  <dt className="text-[11px] text-axal-muted">Staged on</dt>
+                  <dd className="font-semibold text-axal-ink dark:text-gray-100" data-testid="file-staged">{day(file.created_at) ?? <Unrecorded />}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[11px] text-axal-muted">Folder</dt>
+                  <dd className="break-words font-semibold text-axal-ink dark:text-gray-100" data-testid="file-folder">
+                    {folder === undefined
+                      ? <span className="font-normal text-axal-muted">Shown when you arrive from the room</span>
+                      : folder === null ? 'Not in a folder' : `${folder} · carried from the room`}
+                  </dd>
+                </div>
+              </dl>
+            </Card>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Card>
                 <div className={eyebrow}>Size</div>
@@ -225,8 +251,8 @@ export default function DiligenceFile({ role = 'investor' }) {
               {data.downloads.length ? (
                 <ul className="mt-2.5 space-y-1.5">
                   {data.downloads.map((d, i) => (
-                    <li key={`${d}-${i}`} className="flex flex-wrap items-baseline gap-2.5 text-[12px]">
-                      <span className="w-[130px] shrink-0 text-[11px] text-axal-muted">{when(d)}</span>
+                    <li key={`${d}-${i}`} className="flex min-w-0 flex-col gap-1 text-[12px] sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-2.5">
+                      <span className="shrink-0 text-[11px] text-axal-muted sm:w-[130px]">{when(d)}</span>
                       <Pill tone="neutral">download</Pill>
                       <span className="text-axal-muted">link issued to you</span>
                     </li>

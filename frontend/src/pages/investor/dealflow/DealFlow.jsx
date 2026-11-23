@@ -34,8 +34,9 @@ import {
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, attentionOf, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
-  passAnswersInvitation, settingsOfSpec, sortRows, viewChanged,
+  passAnswersInvitation, settingsOfSpec, sortRows, viewChanged, csvAvailability, flowCsv, flowCsvName,
 } from './flowModel';
+import { downloadCsv, stamp } from '../../../lib/csvExport';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
 import { FlowTable, PhoneCards } from './FlowTable';
 import {
@@ -369,6 +370,17 @@ export default function DealFlow({ view, scope }) {
   const ownerCtx = { me: owners.data?.scope === 'firm' ? me : null, busy, onAssign: (row, id) => { if (!busy) assignOwner(row, id); } };
 
   const viewList = views.kind === 'unreadable' ? 'failed' : views.data;
+  // D6150: Export CSV writes `shown` (every filtered, sorted row), never only the page on screen.
+  const csvState = csvAvailability({ rows: shown, columns: settings.columns, scores, fits });
+  const csv = view === 'table' && scope !== 'new' ? {
+    ...csvState, count: shown.length,
+    onExport: () => {
+      try {
+        const { header, rows: lines } = flowCsv(shown, settings.columns);
+        downloadCsv(flowCsvName({ viewName: activeView?.name || null, scope, day: stamp() }), header, lines);
+      } catch (e) { reportError('DealFlow:csv', e); }
+    },
+  } : null;
   const controls = lists && (
     <div className="flex flex-col gap-2" data-testid="dealflow-controls">
       <div className="flex flex-wrap items-center gap-2">
@@ -385,7 +397,7 @@ export default function DealFlow({ view, scope }) {
             columns={settings.columns} onColumns={(columns) => setSettings({ columns })} defaults={DEFAULT_COLUMNS}
             cards={settings.cards} onCards={(cards) => setSettings({ cards })}
             onPick={(v) => (v ? navigate(settingsHref({ ...settingsOfSpec(v.spec), viewUid: v.uid })) : navigate(viewHref({ view, scope })))}
-            onSave={() => setDialog({ kind: 'save' })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} />
+            onSave={() => setDialog({ kind: 'save' })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} csv={csv} />
         </div>
       </div>
       <FilterChips filters={settings.filters} onFilters={(filters) => setSettings({ filters })} />

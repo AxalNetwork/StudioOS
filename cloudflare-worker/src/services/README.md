@@ -577,6 +577,12 @@ withdrawal. Every outcome is a sentence on the session (`digest_status`,
 columns and pending `validate_proposals`, and every model call goes through
 `aiRouter.run`.
 
+D6713: `formationPacks.ts` reads pinned/current catalogue obligations, keeps
+unsourced deadlines unknown, and prepares idempotent project-step/company-event
+inserts for the registered-case transaction. Company-only coverage remains
+`reminders:false`. `entityObligations.ts` uses the catalogue in production;
+its legacy pure schedule helper remains a compatibility/parity fixture.
+
 D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,
 seeded events and new-venture action are preserved; TypeScript maps `due_date`
@@ -740,3 +746,5 @@ D1456 (#4014): interview processing persists its actual failed step and clears i
 D4811 (#4811): `templateSafety.ts` is the one predicate for a legal template's Restricted overlay (its slug in `COUNSEL_REVIEW_SLUGS`) and Incomplete overlay (a stub or a blank body). Every route that generates from, uses or publishes a template refuses through `templateUseRefusal` with 409 (`template_restricted`, or the existing `template_has_no_body`); reading, editing, previewing and withdrawing are never refused.
 
 `meta/` reads the shared Meta app credentials for WhatsApp and Facebook.
+
+D6703: `formationPrefill.ts` projects minimal intake fields and store provenance, normalizing country names/codes without guessing cities. `formationState.ts` also reads unpaid open v2 cases as `draft_case`, after incorporated and paid-order evidence.

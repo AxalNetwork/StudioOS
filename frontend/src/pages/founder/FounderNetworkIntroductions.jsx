@@ -9,6 +9,7 @@ import './founderNetworkIntroductions.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { LensLink } from '../../workspaces/lens';
+import FounderInvestorAsks from './FounderInvestorAsks';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -117,6 +118,8 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
       <div className="fn-rel-tabs"><Link data-testid="link-open-network-introductions-workspace" to={workspace}>Open introductions <ChevronRight size={13} /></Link></div>
       <div className="fn-rel-stats"><Stat label="Tracked" value={rows.length} note="Propositions addressed to you" /><Stat label="Accepted" value={landed} note="You accepted; the other side's answer is not returned" /><Stat label="Given / received" value="Not recorded" mono={false} note="no record says which side asked for an introduction" /><Stat label="Stalled" value={stalled} note="Explicitly expired records" /></div>
       <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Introduction ledger</h2></div><span>State is stored · direction and outcome are not</span></div><IntroductionTable rows={visible} filter={filter} /><p className="fn-rel-note">Which side asked for an introduction is not recorded anywhere, so this ledger does not claim it: every row here is a proposition addressed to you. Only explicitly expired records are counted as stalled; pending age is not treated as proof that an introduction died.</p></section>
+      {/* D6261: investor asks addressed to this founder, the one place here with an answer to give. */}
+      <FounderInvestorAsks />
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Introduction context</h2></div><span>Partially unavailable</span></div><strong>Connector and downstream outcomes are not recorded.</strong><p>The source proves who participated, direction, acceptance state, and connection state. It does not identify who carried the introduction or whether a call, hire, referral, or other real-world outcome followed.</p></section>
     </>}
   </section>{!embedded && <IntroductionRail rows={rows} landed={landed} stalled={stalled} error={error} />}</div></main>;
@@ -131,12 +134,12 @@ function IntroductionRail({ rows, landed, stalled, error }) {
   return <WorkerRail
     workspace="Network"
     className="fn-rel-rail"
-    stance="Read-only introduction ledger"
-    note="This view does not request, offer, accept, decline, message, export, or draft introductions."
+    stance="Introduction ledger"
+    note="This view does not request, offer, message or draft introductions. It accepts or declines an investor's ask only when you click."
     coverage={[error ? 'Source unavailable' : `${rows.length} tracked introduction${rows.length === 1 ? '' : 's'}`]}
     coverageNote={error ? 'The secure introductions source could not be read.' : `${landed} accepted or connected · ${stalled} explicitly stalled.`}
     unavailable={[['Double-opt-in draft', 'No AI writing or send action is enabled.'], ['Downstream outcome', 'The ledger does not record calls, hires, or referrals.']]}
-    footer="Read-only summary · no automated actions"
+    footer="No automated actions"
   />;
 }
 function IntroductionSkeleton() { return <div className="fn-rel-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }
