@@ -260,8 +260,8 @@ private registries, destination checks, canary receipts and rollback.
       live copying from this checklist alone: the `FILE_RECOVERY_REGISTRY`
       repository variable must name the approved record-class registry and
       `FILE_RECOVERY_ENABLED` remains off until its retention basis and exact
-      prefix lock are verified. Live restore additionally awaits #6654's
-      suppression adapter. See `documentation/operations/INCIDENT_RESPONSE.md`
+      prefix lock are verified. Live restore reads the D6654 suppression
+      ledger (`record_suppression_ledger`) first through the D1 API. See `documentation/operations/INCIDENT_RESPONSE.md`
       § Backups & Recovery. No values are recorded here.
 - [ ] D6653 independent file recovery: owner-provisioned `DR_COPY_ENDPOINT`,
       `DR_COPY_BUCKET`, optional `DR_COPY_REGION`, and age public recipient

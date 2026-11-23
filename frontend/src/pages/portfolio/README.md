@@ -137,6 +137,17 @@ What changed's "Save as my note" lands. A failed read is Unreadable with a
 Retry, never "no notes"; a failed save keeps the text with the sentence for
 the refusal's code (`NOTE_SENTENCES`). Decision notes:
 `documentation/architecture/decisions/D6222.md`.
+D6221 (#6221, canvas D6220 EW-01 to EW-14) draws the Exit Waterfall
+(`../WaterfallPage.jsx` at `/portfolio/waterfall`) in the same frame, with no
+tab current. `waterfallModel.js` is its pure half: carry by relationship
+(`carryOf`: the fund row, an LP's own record, or Not recorded with a labelled
+assumption), the inputs and the simulate body (`inputErrors`, `bodyOf`), the
+1× / 2× / 3× chips (`presetsOf`), the tiers, the four figures with Not
+computable in place of the engine's 0 (`figuresOf`), the per-LP rows, the
+saved scenarios, what changed since one was loaded, compare as saved
+(`compareOf`) and the two CSV files. `waterfall.css` holds its styles on the
+frame's tokens. An LP reads no scenario list and no other LP's row. Decision
+notes: `documentation/architecture/decisions/D6221.md`.
 D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
 "Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
 rules (the most pressing open period, its obligation facts, who may act from

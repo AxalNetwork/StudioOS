@@ -63,13 +63,16 @@ function acceptedKeys() {
 const SERIALIZED = serializedKeys();
 const ACCEPTED = acceptedKeys();
 
-test('D1317: an offering’s detail opens as the shared right-side Sheet at 640px; New and Edit offering stay centred', () => {
+test('D1317: an offering’s detail opens as the shared right-side Sheet at 640px; D4844: New and Edit service open the shared Sheet too', () => {
   assert.match(PAGE, /import Sheet from '\.\.\/ui\/Sheet\.jsx';/);
   const detail = PAGE.slice(PAGE.indexOf('function OfferingDetailModal('), PAGE.indexOf('\n}\n', PAGE.indexOf('function OfferingDetailModal(')));
   assert.match(detail, /<Sheet label=\{offering\.title \|\| 'Offering'\} title=\{offering\.title\}[\s\S]*?width=\{640\} testId="service-offering-detail">/);
   assert.doesNotMatch(detail, /<Modal/);
   // #4843 part 3 (D4843-p3, OF-02b): the editor defines a service, a commercial offer.
-  assert.match(PAGE, /<Modal title=\{offering \? 'Edit service' : 'New service'\}/);
+  // D4844 (#4844): it is the shared Sheet now, not the bespoke centred overlay.
+  const editor = PAGE.slice(PAGE.indexOf('export function OfferingSheet('), PAGE.indexOf('// Stripe Connect onboarding tab'));
+  assert.match(editor, /<Sheet\s[\s\S]*?title=\{offering \? \(offering\.title \|\| 'Edit service'\) : 'New service'\}/);
+  assert.doesNotMatch(PAGE, /function Modal\(|fixed inset-0/, 'a bespoke fixed overlay came back');
 });
 
 test('the worker still serializes the fields this page is built on', () => {
@@ -101,10 +104,10 @@ test('the page writes no offering field the worker does not read', () => {
   // The payload the editor sends, and the per-row toggle beside it. A field a
   // handler does not name is not rejected — it is dropped — so this is the only
   // thing standing between a filled-in form and a row that lost half of it.
-  const at = PAGE.indexOf('function OfferingFormModal');
+  const at = PAGE.indexOf('export function OfferingSheet');
   assert.ok(at > 0, 'the offering editor is gone or renamed');
   const modal = PAGE.slice(at);
-  const state = modal.slice(modal.indexOf('useState({'), modal.indexOf('});'));
+  const state = modal.slice(modal.indexOf('const initial = {'), modal.indexOf('\n  };'));
   const fields = [...state.matchAll(/^\s{4}([a-z_]+):/gm)].map((m) => m[1]);
   assert.ok(fields.length >= 3, `only ${fields.length} form fields found — the parser is not parsing`);
   for (const field of fields) {

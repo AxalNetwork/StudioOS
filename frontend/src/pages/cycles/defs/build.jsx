@@ -11,10 +11,12 @@ import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
+import RoadmapBoard from '../RoadmapBoard';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 import { lazyStep } from '../lazyStep.jsx';
 import CompanyCreationHome from '../CompanyCreationHome.jsx';
+import OperatingSystemsHome, { OsCadenceBands } from '../OperatingSystemsHome.jsx';
 
 // D6028 (#6028, BD1, BD2): Build Overview V2, behind its own lazy boundary.
 const BuildOverview = lazyStep(() => import('../BuildOverview'));
@@ -57,10 +59,29 @@ const build = {
   // order, one line per connector (buildParts.jsx). GitHub's are D782's;
   // Vercel's and Lovable's lines wait there for their tasks.
   parts: toFnMap(buildPartsMap()),
+  // D6036 (#6036): Product roadmap's board links /build/roadmap itself, as Dependencies and Scenarios (D6034 part 2,
+  // option A), so the module draws no second door to it.
   tools: toFnMap({
-    'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
     'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
-    'operating-systems': (q) => ({ label: 'Open the operating cadence', href: `/build/cadence${q}` }),
+    // D5078 (#5078, BD20 C): the operating cadence's one entry is Operating systems › Cadence (OperatingSystemsHome).
+  }),
+  // D5078 (#5078; BD20 A/B/C, BD12, BD24 B): Operating systems owns its page, Systems · Cadence · Tools. Its header's
+  // one action is the first system to reconnect or connect (BD23); its bands draw under Cadence only, and its
+  // connector parts (the Sources region, `placesSources`) under Tools only.
+  homes: toFnMap({
+    'operating-systems': (data, ctx) => ({
+      action: data?.parts?.systems?.next?.href ? { label: data.parts.systems.next.text, href: data.parts.systems.next.href } : null,
+      body: Object.assign((p) => <OperatingSystemsHome {...p} data={data} projectId={ctx.projectId} />, { placesSources: true }),
+      Bands: OsCadenceBands,
+    }),
+    // D6038 (#6038, BD11, BD25, BD26, BD30): Company creation starts from the company: it owns its page
+    // (D6049's `homes`). The header carries no action; the page's one primary is the nearest-deadline filing,
+    // or Start guided incorporation before any company exists. It draws its own supporting tools (`drawsTools`).
+    'company-creation': (data, ctx) => ({
+      sub: 'Know what company exists, what is still to file and by when, and which papers are on record.',
+      action: null,
+      body: Object.assign((p) => <CompanyCreationHome {...p} data={data} projectId={ctx.projectId} />, { drawsTools: true }),
+    }),
   }),
   add: toFnMap({}),
   fills: {},
@@ -70,18 +91,10 @@ const build = {
     'prototype-mvp': (module, { projectId, reload }) => (
       <MvpSummary facts={module?.facts} save={(date) => cyclesWrite.build.mvpTarget(projectId, date)} onSaved={reload} />
     ),
+    // D6036 (#6036, BD25, BD26, BD30): the figure strip, Board and Timeline above the roadmap's list.
+    'product-roadmap': (module, { query, onQuery, search }) => <RoadmapBoard module={module} query={query} onQuery={onQuery} search={search} />,
   }),
   phoneRows: toFnMap({ 'prototype-mvp': mvpPhoneRow }),
-  // D6038 (#6038, BD11, BD25, BD26, BD30): Company creation starts from the company: it owns its page
-  // (D6049's `homes`). The header carries no action; the page's one primary is the nearest-deadline filing,
-  // or Start guided incorporation before any company exists. It draws its own supporting tools (`drawsTools`).
-  homes: toFnMap({
-    'company-creation': (data, ctx) => ({
-      sub: 'Know what company exists, what is still to file and by when, and which papers are on record.',
-      action: null,
-      body: Object.assign((p) => <CompanyCreationHome {...p} data={data} projectId={ctx.projectId} />, { drawsTools: true }),
-    }),
-  }),
   // D6043 (#6043): each module's records list as CSV, with the table's own search, filters and sort.
   exportRecords: (projectId, slug, query) => buildModuleExportApi.exportCsv(projectId, slug, query),
   // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
