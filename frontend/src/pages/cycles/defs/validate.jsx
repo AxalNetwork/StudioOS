@@ -17,6 +17,7 @@ import { interviewListOf } from '../../../lib/discoveryEvidence';
 import { useActiveRecording } from '../../../contexts/ActiveRecordingContext';
 import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
+import ValidateExperiments from '../ValidateExperiments';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
 import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
@@ -251,6 +252,7 @@ const validate = {
           onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
           // Only until #1656 registers New hypothesis as the table's Add (decision 20).
           onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
+        <ValidateExperiments part={data?.parts?.experiments} canWrite={data?.parts?.can_write} onRetry={ctx.reload} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1605 (#3731): PostHog experiments and surveys; the hypothesis and direction are the founder's. */}
         <ValidateExperimentsPosthog projectId={ctx.projectId}

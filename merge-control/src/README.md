@@ -14,6 +14,7 @@
 | `ciCapacity.ts` | D7887: inactive durable capacity coordinator core and isolated SQL store; injected verified adapters. |
 | `ciCapacityCompact.ts` | D8348: compact record of a passing request, its projection, table, sticky failure and bounded expiry; inactive until a consumer is supplied. |
 | `ciCapacityRetention.ts` | D8339, D8348: read-only publication evidence (owed, revisable, final) for full requests and compact records; not yet wired into the runtime. |
+| `ciCapacityRetention.ts` | D8339: read-only publication evidence (owed, revisable, final) for the store's retention; not yet wired into the runtime. |
 | `ciCapacityAuth.ts` | D7973: bounded signed GitHub OIDC identity and body reads. |
 | `ciCapacityGithub.ts` | D7973: bounded App-backed provenance, inventory, dispatch, observation and cancellation ports. |
 | `ciCapacityTransport.ts` | D7973: authenticated exact-plan submission and owned receipt retrieval. |
