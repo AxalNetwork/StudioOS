@@ -12,8 +12,8 @@ import AuthShell, { AuthCard } from '../components/auth/AuthShell';
 import { registrationRef } from '../lib/referralRef';
 import { subscribe as subscribeConsent } from '../lib/cookieConsent';
 import { planIntentFrom } from '../lib/planIntent';
-import { LANES, LANE_ROLE, MEMBERSHIP_STEPS, REGISTER_ACTIONS, registerHeading } from '../lib/registerCopy';
-import { RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
+import { LANE_ROLE, MEMBERSHIP_STEPS, REGISTER_ACTIONS, laneForVisit, registerHeading } from '../lib/registerCopy';
+import { RegistrationContext, RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -85,15 +85,14 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const l = params.get('lane');
-    if (l && LANES.includes(l)) {
-      setLane(l);
-      try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: l, ts: Date.now() })); } catch {}
-    } else {
-      try {
-        const saved = safeReadJSON('gvpn:intent', null);
-        if (saved?.lane) setLane(saved.lane);
-      } catch {}
+    // #6984 (X2): the address's lane always wins and is stored with its time; a stored lane is used only when the
+    // address names none and it is under 24 hours old (`laneForVisit`), so an old click does not head a plain link.
+    let saved = null;
+    try { saved = safeReadJSON('gvpn:intent', null); } catch {}
+    const visit = laneForVisit(window.location.search, saved);
+    if (visit.lane) setLane(visit.lane);
+    if (visit.store) {
+      try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: visit.lane, ts: Date.now() })); } catch {}
     }
     const p = params.get('product');
     if (p === 'spinout-lab') setProductIntent('spinout-lab');
@@ -340,6 +339,8 @@ export default function RegisterPage() {
           {step === 1 && (
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">{heading.title}</h2>
+              {/* #6984 (X2): the role and the plan this sign-up carries, one line; the plan only as the catalogue returned it. */}
+              <RegistrationContext lane={lane} selection={planIntent ? selection : null} />
               {/* Task #10 — audit's exact subhead copy (fix 10). */}
               <p className="text-sm text-gray-600 mb-2">{heading.desc}</p>
               {/* #4578: the steps after this page, so "create an account" is not read as membership. */}

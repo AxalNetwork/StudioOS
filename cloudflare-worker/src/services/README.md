@@ -746,3 +746,5 @@ D1456 (#4014): interview processing persists its actual failed step and clears i
 D4811 (#4811): `templateSafety.ts` is the one predicate for a legal template's Restricted overlay (its slug in `COUNSEL_REVIEW_SLUGS`) and Incomplete overlay (a stub or a blank body). Every route that generates from, uses or publishes a template refuses through `templateUseRefusal` with 409 (`template_restricted`, or the existing `template_has_no_body`); reading, editing, previewing and withdrawing are never refused.
 
 `meta/` reads the shared Meta app credentials for WhatsApp and Facebook.
+
+D6703: `formationPrefill.ts` projects minimal intake fields and store provenance, normalizing country names/codes without guessing cities. `formationState.ts` also reads unpaid open v2 cases as `draft_case`, after incorporated and paid-order evidence.

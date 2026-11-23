@@ -398,6 +398,9 @@ catalogue version only in the fixture.
 | `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
 | `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
 
+`research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
 `research_company_read_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
 
 `research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
