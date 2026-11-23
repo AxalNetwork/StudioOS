@@ -82,8 +82,9 @@ test('the one record delete logs its reason and a count, never a key', async (t)
   await putRecord(bucket as any, 'research/0/b.pdf', 'b');
   const lines: string[] = [];
   t.mock.method(console, 'log', (line: string) => { lines.push(line); });
-  await eraseRecordObjects(bucket as any, ['research/0/a.pdf', 'research/0/b.pdf'], 'owner_removed');
-  await eraseRecordObjects(bucket as any, [], 'purge');
+  const db = { prepare: () => ({ bind: () => ({}) }), batch: async () => [] } as any;  // D6654's ledger: record_erasure_6654.test.ts
+  await eraseRecordObjects(bucket as any, ['research/0/a.pdf', 'research/0/b.pdf'], 'owner_removed', { db });
+  await eraseRecordObjects(bucket as any, [], 'purge', { db });
   assert.equal(bucket.store.size, 0);
   assert.deepEqual(lines.map((l) => JSON.parse(l)), [{ event: 'record_objects_erased', reason: 'owner_removed', count: 2 }]);
   assert.ok(!lines.join('').includes('research/'), 'no key is logged');

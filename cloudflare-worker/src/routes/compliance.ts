@@ -1,4 +1,5 @@
 import { holdsLicence } from '../services/accountLicences';
+import { formationPack } from '../services/formationPacks';
 /**
  * T12 — Compliance calendar (port of backend/app/api/routes/compliance.py).
  *
@@ -39,6 +40,7 @@ type StandardEventSpec = {
   recurrence: 'annual' | 'quarterly' | 'monthly' | 'one_time';
 };
 
+/** Legacy reference for compatibility and catalogue parity tests; production reads formationPack. */
 export const STANDARD_EVENTS: Record<string, StandardEventSpec[]> = {
   us_de_ccorp: [
     { event_type: 'franchise_tax', title: 'Delaware franchise tax + annual report',
@@ -95,28 +97,6 @@ export const STANDARD_EVENTS: Record<string, StandardEventSpec[]> = {
 };
 
 /**
- * Compute next occurrence of a fixed-calendar deadline (e.g. March 1).
- * Returns this year's date if still upcoming, otherwise next year.
- * Day clamps to 28 on invalid (Feb 30 etc).
- */
-function nextOccurrence(today: Date, dueMonth: number, dueDay: number): string {
-  const tryBuild = (year: number, day: number) => {
-    const d = new Date(Date.UTC(year, dueMonth - 1, day));
-    // Reject day-overflow (e.g. Feb 30 → Mar 2): rebuild clamped to 28.
-    if (d.getUTCMonth() !== dueMonth - 1) {
-      return new Date(Date.UTC(year, dueMonth - 1, 28));
-    }
-    return d;
-  };
-  const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  let candidate = tryBuild(today.getUTCFullYear(), dueDay);
-  if (candidate.getTime() < todayUTC.getTime()) {
-    candidate = tryBuild(today.getUTCFullYear() + 1, dueDay);
-  }
-  return candidate.toISOString().slice(0, 10);
-}
-
-/**
  * T12 — Idempotent seeder for the standard recurring compliance events of
  * a freshly-incorporated entity. Mirrors
  * `backend/app/api/routes/compliance.py:seed_standard_events_for_jurisdiction`.
@@ -143,12 +123,10 @@ export async function seedStandardEventsForJurisdiction(
     incorporationDate?: string | null;  // ISO 'YYYY-MM-DD'
   },
 ): Promise<Array<{ id: number; event_type: string; title: string; due_date: string }>> {
-  const catalogue = STANDARD_EVENTS[opts.jurisdictionId];
+  const catalogue = await formationPack(env, opts.jurisdictionId, {
+    today: opts.incorporationDate ?? new Date().toISOString().slice(0, 10), registeredOn: opts.incorporationDate ?? null, projectId: opts.projectId,
+  });
   if (!catalogue || !catalogue.length) return [];
-
-  const today = opts.incorporationDate
-    ? new Date(`${opts.incorporationDate}T00:00:00Z`)
-    : new Date();
 
   const created: Array<{ id: number; event_type: string; title: string; due_date: string }> = [];
   for (const spec of catalogue) {
@@ -157,14 +135,8 @@ export async function seedStandardEventsForJurisdiction(
     // this, a single failing INSERT would propagate up and the outer
     // try/catch in legal.ts would discard every other event in the run.
     try {
-      let due: string;
-      if (spec.due_month != null && spec.due_day != null) {
-        due = nextOccurrence(today, spec.due_month, spec.due_day);
-      } else {
-        const offset = spec.offset_days ?? 365;
-        const d = new Date(today.getTime() + offset * 86_400_000);
-        due = d.toISOString().slice(0, 10);
-      }
+      if (spec.due_date == null) continue;
+      const due = spec.due_date;
 
       // INSERT OR IGNORE so a UNIQUE collision (already seeded) is a no-op.
       const result = await env.DB.prepare(
@@ -176,7 +148,7 @@ export async function seedStandardEventsForJurisdiction(
         opts.projectId,
         opts.entityId,
         opts.jurisdictionLabel,
-        spec.event_type,
+        spec.kind,
         spec.title,
         spec.description ?? null,
         due,
@@ -190,13 +162,13 @@ export async function seedStandardEventsForJurisdiction(
         const row = await env.DB.prepare(
           `SELECT id, event_type, title, due_date FROM compliance_events
             WHERE project_id = ? AND event_type = ? AND due_date = ?`,
-        ).bind(opts.projectId, spec.event_type, due).first<{ id: number; event_type: string; title: string; due_date: string }>();
+        ).bind(opts.projectId, spec.kind, due).first<{ id: number; event_type: string; title: string; due_date: string }>();
         if (row) created.push(row);
       }
     } catch (e) {
       console.warn(
         'seedStandardEvents: skipped event for project',
-        { event_type: spec.event_type, project_id: opts.projectId },
+        { event_type: spec.kind, project_id: opts.projectId },
         (e as Error)?.message,
       );
     }

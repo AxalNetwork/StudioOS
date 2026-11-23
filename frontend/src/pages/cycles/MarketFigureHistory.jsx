@@ -45,7 +45,7 @@ export default function MarketFigureHistory({ part }) {
               <li key={r.id} className="border-t border-axal-hairline py-2 text-[12.5px] dark:border-gray-800" data-testid="market-history-row">
                 <div className="font-semibold text-axal-ink dark:text-gray-100">{l.figure} · {l.value}</div>
                 <div className="text-axal-muted dark:text-gray-400">
-                  {l.how} · {l.sourceUrl
+                  {r.sizing_version != null ? `Version ${r.sizing_version} · ` : ''}{l.how} · {l.sourceUrl
                     ? <a href={l.sourceUrl} target="_blank" rel="noreferrer noopener" className="underline">{l.source}</a>
                     : l.source} · {l.who} · {l.when}
                 </div>
