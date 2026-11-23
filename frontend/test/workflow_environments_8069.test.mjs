@@ -29,6 +29,7 @@ export const OIDC_CONSUMERS = [
   /\buses:\s*aws-actions\/configure-aws-credentials@/, // #8064: AWS role assumption
   /\buses:\s*azure\/login@/, // #8064: Azure federated credential
   /\buses:\s*actions\/attest-build-provenance@/, // #8073: Sigstore keyless signing
+  /\bvars\.CI_CAPACITY_AUDIENCE\b/, // D7909: scripts/ci/capacity-client.mjs requests the token for this audience
 ];
 /**
  * Jobs that read a cloud credential without an environment, each with why and who removes it.
@@ -66,8 +67,12 @@ const grantsIdToken = (permissions) => permissions === 'write-all' || (permissio
 /** Whether a job exchanges its OIDC token: itself, or through a local reusable workflow whose job does (to a depth of 4). */
 function usesOidc(job, load, depth = 0) {
   if (OIDC_CONSUMERS.some((re) => re.test(YAML.stringify(job)))) return true;
-  if (depth >= 4 || typeof job.uses !== 'string' || !job.uses.startsWith('./.github/workflows/')) return false;
-  const text = load(job.uses.slice('./.github/workflows/'.length));
+  if (depth >= 4 || typeof job.uses !== 'string') return false;
+  // A local call, or this repository's own workflow pinned at a commit (D8335's capacity planner pin). The pinned
+  // copy is read from the tree: a pin moves only to a commit on main, so the tree carries the reviewed text.
+  const m = job.uses.match(/^(?:\.\/|AxalNetwork\/StudioOS\/)\.github\/workflows\/([\w.-]+\.ya?ml)(?:@[0-9a-f]{40})?$/);
+  if (!m || (job.uses.startsWith('AxalNetwork/') && !job.uses.includes('@'))) return false;
+  const text = load(m[1]);
   if (!text) return false;
   return Object.values(YAML.parse(text).jobs || {}).some((j) => grantsIdToken(j.permissions) && usesOidc(j, load, depth + 1));
 }
@@ -164,6 +169,14 @@ test('D8069 rule: id-token: write needs an OIDC login in the same job, or a call
   const callee = wf('  b:\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write\n    steps:\n      - run: echo "$ACTIONS_ID_TOKEN_REQUEST_URL"\n');
   assert.deepEqual(problems('x.yml', caller, (n) => (n === 'callee.yml' ? callee : null)), []);
   assert.equal(problems('x.yml', caller, () => wf('  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n')).length, 1);
+  const pinned = wf('  a:\n    permissions:\n      id-token: write\n    uses: AxalNetwork/StudioOS/.github/workflows/callee.yml@' + 'a'.repeat(40) + '\n');
+  assert.deepEqual(problems('x.yml', pinned, (n) => (n === 'callee.yml' ? callee : null)), [], 'this repository\'s workflow pinned at a commit is followed');
+  const foreign = wf('  a:\n    permissions:\n      id-token: write\n    uses: someone/else/.github/workflows/callee.yml@' + 'a'.repeat(40) + '\n');
+  assert.equal(problems('x.yml', foreign, (n) => (n === 'callee.yml' ? callee : null)).length, 1, 'another repository\'s workflow is never read from this tree');
+  const unpinned = wf('  a:\n    permissions:\n      id-token: write\n    uses: AxalNetwork/StudioOS/.github/workflows/callee.yml@main\n');
+  assert.equal(problems('x.yml', unpinned, (n) => (n === 'callee.yml' ? callee : null)).length, 1, 'a branch ref is not a reviewed pin');
+  const capacity = wf('  a:\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write\n    env:\n      AUD: ${{ vars.CI_CAPACITY_AUDIENCE }}\n    steps:\n      - run: node scripts/ci/capacity-executor.mjs admit\n');
+  assert.deepEqual(problems('x.yml', capacity), [], 'the capacity client requests the token for its audience (D7909)');
 });
 
 test('D8069 rule: the preview environment never reads the generic token name', () => {
