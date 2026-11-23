@@ -8,6 +8,12 @@ export interface Env {
   TYPEFORM_APP_APPROVED?: string;
   TYPEFORM_CLIENT_ID?: string;
   TYPEFORM_CLIENT_SECRET?: string;
+  /** D5834: `1` once the owner's Intuit app is approved; the QuickBooks connector is off until then. */
+  QUICKBOOKS_APP_APPROVED?: string;
+  QUICKBOOKS_CLIENT_ID?: string;
+  QUICKBOOKS_CLIENT_SECRET?: string;
+  /** D5834: `production` reads Intuit's production API; anything else is the sandbox. */
+  QUICKBOOKS_ENVIRONMENT?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
