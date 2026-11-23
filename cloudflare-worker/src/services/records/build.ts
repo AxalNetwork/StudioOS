@@ -467,7 +467,7 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   } catch (e) {
     // D6651: the batch is one transaction, so no row names the object this request just stored: it
     // leaves through the one record-erasure path as `unreferenced`.
-    try { await eraseRecordObjects(files, key, 'unreferenced'); } catch { /* the object is unreferenced either way */ }
+    try { await eraseRecordObjects(files, key, 'unreferenced', { db: ctx.env.DB }); } catch { /* the object is unreferenced either way */ }
     throw e;
   }
   await noteStorageLanded(ctx.env, storage);
@@ -534,6 +534,11 @@ async function feedbackThemes(ctx: RecordContext) {
     `SELECT theme, SUM(CASE WHEN status = 'open' AND roadmap_item_ref IS NULL THEN 1 ELSE 0 END) AS open_unlinked
        FROM product_feedback WHERE project_id = ? AND theme IS NOT NULL AND trim(theme) <> '' GROUP BY theme ORDER BY lower(theme) LIMIT 100`,
   ).bind(ctx.projectId).all<Any>()).map(r => ({ value: r.theme, label: r.theme, open_unlinked: Number(r.open_unlinked ?? 0) })), empty: NONE_YET };
+}
+/** #6036: the venture's features an item can link to (Add item and Edit item's Feature), in Solution design's order. */
+async function featureChoices(ctx: RecordContext) {
+  return rowsOf(await ctx.env.DB.prepare('SELECT id, title FROM mvp_features WHERE project_id = ? ORDER BY sort_order, id LIMIT 200')
+    .bind(ctx.projectId).all<Any>()).map(r => ({ value: String(r.id), label: r.title }));
 }
 async function roadmapItems(ctx: RecordContext) {
   return { options: rowsOf(await ctx.env.DB.prepare('SELECT id, objective, kanban_status FROM roadmap_okrs WHERE project_id = ? ORDER BY sort_order, id LIMIT 200')
@@ -1077,7 +1082,7 @@ const productRoadmap: ModuleSpec = {
       form: { title: 'Edit item', cta: 'Save', fields: [
         ...itemFields({ title: o.objective, column: o.kanban_status, kpi_key: o.kpi_key, feedback_theme: o.feedback_theme,
           owner_user_id: o.owner_user_id, target_date: o.target_date, owners: await owners(ctx) }, withCurrent(optionsOf(COLUMN_LABEL), o.kanban_status)),
-        { key: 'feature_id', label: 'Feature', kind: 'CH', value: idValue(o.feature_id) },
+        { key: 'feature_id', label: 'Feature', kind: 'CH', value: idValue(o.feature_id), options: await featureChoices(ctx) },
       ] },
       references: body => references(body, [['feature_id', 'mvp_features']]),
       execute: (c, _id, body) => viaRoute(c, patchRoadmap, item, formBody(jsonOf(body), [...ITEM_KEYS, 'feature_id'], ITEM_CLEARABLE)) });
@@ -1090,7 +1095,9 @@ const productRoadmap: ModuleSpec = {
   async formOptions(ctx) {
     const items = await roadmapItems(ctx);
     return { kpi_key: await kpiOptions(ctx), feedback_theme: await feedbackThemes(ctx), waits_on_id: items, blocks_id: items,
-      owner_user_id: await ownerOptions(ctx), column: { options: COLUMN_OPTIONS } };
+      owner_user_id: await ownerOptions(ctx), column: { options: COLUMN_OPTIONS },
+      // #6036: Add item's Feature. "Nothing" stays the frontend's first choice; an item may link no feature.
+      feature_id: { options: await featureChoices(ctx), empty: NONE_YET } };
   },
 };
 

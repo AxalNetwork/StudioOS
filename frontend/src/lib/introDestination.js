@@ -23,7 +23,9 @@
  */
 
 export const INTRO_ZONE = '/network/introductions';
-export const INTRO_KINDS = ['proposition', 'request'];
+// D6261 (#6261): `ask` is an investor's quota intro ask (`investor_introductions`),
+// answered by its founder and withdrawn by its investor on this same zone.
+export const INTRO_KINDS = ['proposition', 'request', 'ask'];
 
 /** The zone slug a `?tab=` value names, for a legacy link that landed on `/network`. */
 export const LEGACY_TABS = ['relationships', 'introductions', 'organizations'];
