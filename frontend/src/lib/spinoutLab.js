@@ -163,6 +163,19 @@ export function useCohortPlaces() {
 }
 
 /**
+ * The places half of a cohort read (`useCohortRecord`'s value), pure: the
+ * same answer `useCohortPlaces` gives, for a surface that already holds the
+ * record and should not read the brief twice (D6992:
+ * `components/site/LabProgramCard.jsx`).
+ */
+export function placesFromRecord(record) {
+  const retry = record?.retry;
+  if (record?.status !== 'ok') return { status: record?.status || 'loading', places: null, retry };
+  const n = record.cohort?.places;
+  return n == null ? { status: 'error', places: null, retry } : { status: 'ok', places: n, retry };
+}
+
+/**
  * D385 — the open cohort AS THE SERVER NAMES IT, from the public
  * `GET /spinout-lab/brief`: its name ("November 2026"), start, end,
  * application deadline and places.

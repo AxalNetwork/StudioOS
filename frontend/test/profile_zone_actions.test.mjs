@@ -142,7 +142,7 @@ const PROFILES = {
     // `Export view` is the builder's export (D7172's scoped export), not a handler.
     handlers: 11,
     // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
-    withheld: { 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
+    withheld: { 'research/companies': ['Compare'], 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
     offCanvas: { 'research/markets': ['Export view', 'New market research'] },
     // NOTHING IS EXCLUDED BUT VALIDATE'S RETIRED ZONES. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
@@ -181,7 +181,8 @@ const PROFILES = {
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
     // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
-    withheld: { 'portfolio/positions': ['Add follow-on'], 'research/markets': ['New deep-dive', 'Export', 'Cite in a memo'] },
+    // D6269 (#6269): `New request` is asked on its deal (Documents, then Ask for access); the v2 Rooms canvas draws none.
+    withheld: { 'portfolio/positions': ['Add follow-on'], 'research/markets': ['New deep-dive', 'Export', 'Cite in a memo'], 'research/diligence': ['New request'] },
     // #6276 adds a visible-row CSV beside the original canvas controls.
     offCanvas: { 'research/benchmarking': ['Export'], 'research/markets': ['Export view', 'Edit thesis'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
