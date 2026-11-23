@@ -243,6 +243,7 @@ private registries, destination checks, canary receipts and rollback.
       `/status` reads. Only the independent observer receives this credential.
 
 - [ ] `WORKGRAPH_INGEST_TOKEN` – the HQ WorkGraph snapshot ingest (D5580 part 4, #5580). The hourly `pr-overlap.yml` job posts its advisory snapshot to `POST /api/admin/workgraph/snapshots` with this value as a bearer token, compared in constant time. Generate 48+ random characters (`openssl rand -hex 32`) and set the **same** value in two places: the Worker (`npx wrangler secret put WORKGRAPH_INGEST_TOKEN --config wrangler.toml --env production`) and the GitHub Actions secret of the same name (below). Unset on the Worker, the ingest answers 503 `workgraph_ingest_not_configured`; unset in Actions, the job skips the post with a notice. Either way the snapshot stays in the run's artifact, and `GET /api/admin/workgraph/in-flight` (Super Admin) says no scan has been posted. Rotation: put the new value in both places; a post between the two answers 401 and the next hourly run succeeds. Rollback: delete the Worker secret. Never logged.
+- [ ] `DEPLOY_RECORD_TOKEN` – the deploy provenance record (D8073, #8073). `scripts/deploy/record-deployment.mjs` posts one row per production deploy to `POST /api/internal/deployments` with this value as a bearer token, compared in constant time. Generate 48+ random characters (`openssl rand -hex 32`) and set the **same** value on the Worker (`npx wrangler secret put DEPLOY_RECORD_TOKEN --config wrangler.toml --env production`) and in the GitHub `production` environment (below). Unset on the Worker, the route answers 503 `deploy_record_not_configured` and nothing is recorded; the deploy itself is unaffected. Rotation: put the new value in both places; a record posted between the two answers 401 and can be re-posted by hand (the route is idempotent). Rollback: delete the Worker secret. Never logged.
 
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
@@ -259,8 +260,8 @@ private registries, destination checks, canary receipts and rollback.
       live copying from this checklist alone: the `FILE_RECOVERY_REGISTRY`
       repository variable must name the approved record-class registry and
       `FILE_RECOVERY_ENABLED` remains off until its retention basis and exact
-      prefix lock are verified. Live restore additionally awaits #6654's
-      suppression adapter. See `documentation/operations/INCIDENT_RESPONSE.md`
+      prefix lock are verified. Live restore reads the D6654 suppression
+      ledger (`record_suppression_ledger`) first through the D1 API. See `documentation/operations/INCIDENT_RESPONSE.md`
       § Backups & Recovery. No values are recorded here.
 - [ ] D6653 independent file recovery: owner-provisioned `DR_COPY_ENDPOINT`,
       `DR_COPY_BUCKET`, optional `DR_COPY_REGION`, and age public recipient
@@ -279,6 +280,7 @@ private registries, destination checks, canary receipts and rollback.
       No value or live activation is implied. See the D6653 section in
       `documentation/operations/INCIDENT_RESPONSE.md`.
 - [ ] `WORKGRAPH_INGEST_TOKEN` – optional, the same value as the Worker secret of that name (above); `pr-overlap.yml` posts each hourly snapshot with it (D5580 part 4).
+- [ ] `DEPLOY_RECORD_TOKEN` – the same value as the Worker secret of that name (above), in the `production` environment only, never a repository secret; the deploy job's record step reads it (D8073; the step lands through #8069).
 - [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
       independent receiver's observer secret. It is neither the Slack token nor
       the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`

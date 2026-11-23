@@ -26,6 +26,7 @@
  * `fc_legacy_<order id>` on both paths, so the two cannot make two cases.
  */
 import type { Env } from '../types';
+import { registrationPackStatements, handoffPackEvidenceStatement } from './formationPacks';
 import { ensureIncorporationsSchema } from './incorporations';
 import { logAdminAction } from './adminAudit';
 
@@ -241,6 +242,7 @@ export async function transition(
   const caseBinds = [c.id, c.stage, c.revision];
   const orderBinds = order ? [order.id, order.status] : [];
 
+  const packSeedToken = to === 'registered' && c.track === 'v2' ? crypto.randomUUID() : null;
   const statements: D1PreparedStatement[] = [];
   const filing = payload.filingAsRead;
   const eventSql = filing
@@ -248,7 +250,7 @@ export async function transition(
     : (order ? EVENT_INSERT_WITH_ORDER : EVENT_INSERT_NO_ORDER);
   statements.push(env.DB.prepare(eventSql).bind(
     c.id, actor.userId ?? null, actor.party, c.stage, to, nextRevision, payload.visibility ?? 'hq_only',
-    JSON.stringify({ ...(payload.detail || {}), incorporation_id: order?.id ?? null, status_from: order?.status ?? null, status_to: toStatus }),
+    JSON.stringify({ ...(payload.detail || {}), ...(packSeedToken ? { pack_seed_token: packSeedToken } : {}), incorporation_id: order?.id ?? null, status_from: order?.status ?? null, status_to: toStatus }),
     ...caseBinds, ...orderBinds, ...(filing ? [filing.id, filing.state] : []),
   ));
   const set = payload.orderSet || {};
@@ -266,6 +268,8 @@ export async function transition(
   if (RECORDED.has(c.stage)) statements.push(env.DB.prepare(STAGE_COMPLETE).bind(c.id, c.stage, STAGE_ROLE[c.stage], actor.userId ?? null, ...after));
   if (RECORDED.has(to)) statements.push(env.DB.prepare(STAGE_OPEN).bind(c.id, to, STAGE_ROLE[to], ...after));
   statements.push(...(payload.extra || []));
+  if (packSeedToken) statements.push(...await registrationPackStatements(env, c.id, nextRevision, packSeedToken, typeof payload.orderSet?.filed_on === 'string' ? payload.orderSet.filed_on : null));
+  if (c.track === 'v2' && (to === 'activating' || to === 'handed_off')) statements.push(handoffPackEvidenceStatement(env, c.id, to, nextRevision));
 
   const results = await env.DB.batch(statements);
   if (!(Number(results[caseIndex]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'case_moved' };

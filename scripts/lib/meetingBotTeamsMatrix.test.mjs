@@ -24,6 +24,36 @@ test('the repository passes every row', () => {
   assert.ok(teamsMatrix(base).length >= 20);
 });
 
+test('D8003: the base image requires a complete digest and retains its Node, slim and stage constraints', () => {
+  const digest = '0123456789abcdef'.repeat(4);
+  const valid = `FROM node:22-bookworm-slim@sha256:${digest} AS base`;
+  const baseFrom = base.dockerfile.split('\n').find(line => line.startsWith('FROM '));
+  const withFrom = from => ({ ...base, dockerfile: once(base.dockerfile, baseFrom, from) });
+  for (const from of [valid, `FROM node:24-trixie-slim@sha256:${'f'.repeat(64)} AS base`]) {
+    assert.deepEqual(failing(withFrom(from)), [], from);
+  }
+  for (const [name, from] of [
+    ['missing digest', 'FROM node:22-bookworm-slim AS base'],
+    ['empty digest', valid.replace(digest, '')],
+    ['short digest', valid.replace(digest, digest.slice(1))],
+    ['long digest', valid.replace(digest, digest + '0')],
+    ['uppercase digest', valid.replace(digest, digest.toUpperCase())],
+    ['nonhex digest', valid.replace(digest, 'g' + digest.slice(1))],
+    ['wrong algorithm', valid.replace('@sha256:', '@sha512:')],
+    ['untagged image', `FROM node@sha256:${digest} AS base`],
+    ['floating tag', `FROM node:latest@sha256:${digest} AS base`],
+    ['floating Node major', valid.replace('node:22-', 'node:latest-')],
+    ['Node minor version', valid.replace('node:22-', 'node:22.1-')],
+    ['not slim', valid.replace('-slim@', '@')],
+    ['different image', valid.replace('FROM node:', 'FROM alpine:')],
+    ['different stage', valid.replace(' AS base', ' AS runtime')],
+    ['commented instruction', '# ' + valid],
+    ['trailing content', valid + ' extra'],
+  ]) {
+    assert.deepEqual(failing(withFrom(from)), ['both:browser_pinned'], name);
+  }
+});
+
 const prodSiteBinding = '[[env.production.durable_objects.bindings]]\nname = "MEETING_BOT_CONTAINER"\nclass_name = "MeetingBotContainer"\nscript_name = "studioos-meeting-bot"';
 const previewDo = '[[env.preview.durable_objects.bindings]]\nname       = "PIPELINE_ROOM"';
 const previewBotOff = '# D886: preview needs its own explicit enablement.\nMEETING_BOT = "off"';

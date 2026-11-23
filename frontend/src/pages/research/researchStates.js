@@ -31,6 +31,7 @@
  */
 // The one definition lives in `lib/absence.js` (absence_helpers_single_definition test).
 import { NOT_RECORDED } from '../../lib/absence.js';
+import { SOURCE_GONE, sourceKeyOf } from './roomLibraryModel.js';
 
 export { NOT_RECORDED };
 
@@ -61,7 +62,9 @@ export function answerabilityOf(d) {
   }
   if (inAsk) return { label: 'Answerable', tone: 'ok', glyph: '✓', why: null };
   let why = 'Not answerable until indexed.';
-  if (d?.source === 'client') why = 'Indexed in their library, not yours.';
+  // D6913 (RS-16): a room reference whose grant no longer reaches the file is out of Ask, its passages deleted.
+  if (d?.room?.lost_at) why = SOURCE_GONE;
+  else if (d?.source === 'client') why = 'Indexed in their library, not yours.';
   else if (d?.index_state === 'pending') why = 'Being read now.';
   return { label: 'Not answerable', tone: 'neutral', glyph: '⊘', why };
 }
@@ -150,6 +153,8 @@ export function libraryFiltersFrom(params) {
   return {
     q: get('q'), type: get('type'), index: get('index'), answerable: get('answerable'),
     collection: get('collection'), view: get('view') || 'all',
+    // D6913 (RS-14): the Source filter, beside the kind filters.
+    source: get('source'),
   };
 }
 
@@ -166,7 +171,7 @@ export function librarySearchFor(params, patch) {
 
 /** True when the reader has narrowed the list in any way. */
 export function isFiltered(f) {
-  return Boolean(f.q || f.type || f.index || f.answerable || f.collection || (f.view && f.view !== 'all'));
+  return Boolean(f.q || f.type || f.index || f.answerable || f.collection || f.source || (f.view && f.view !== 'all'));
 }
 
 /**
@@ -183,6 +188,7 @@ export function filterLibrary(items, f, members = null) {
     if (f.index && indexKeyOf(d) !== f.index) return false;
     if (f.answerable && answerabilityKeyOf(d) !== f.answerable) return false;
     if (f.collection && !(members || []).includes(d.uid)) return false;
+    if (f.source && sourceKeyOf(d) !== f.source) return false;
     return true;
   });
 }

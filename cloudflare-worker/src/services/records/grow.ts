@@ -940,6 +940,43 @@ const ENTRY_STEP_EDIT = ['text', 'owner_name', 'due_on'] as const;
 /** The step a row names is checked in its own store (the venture's), then against this market by the writer. */
 const stepRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'market_entry_steps', id: refOf(field(body, 'step')) }];
 
+/**
+ * D6120 (#6120, GR-22, GR-27): the market record's own values, unformatted, for the Markets record page: each
+ * part's score and source, readiness, the decision and its day, the attached country, the size, the entry steps
+ * (with due and done days, so the page can say Overdue), the localisation checks and the replies to a market ask.
+ * Each store is read on its own: a failed one is `null` with its `*_state` 'unreadable', never an empty list.
+ */
+async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof readiness>) {
+  const read = async <T>(run: () => Promise<T>): Promise<T | null> => { try { return await run(); } catch { return null; } };
+  const steps = await read(async () => ((await rc.env.DB.prepare(
+    'SELECT uid, text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30',
+  ).bind(m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), text: String(x.text), owner_name: x.owner_name ?? null, due_on: x.due_on ?? null, done_at: x.done_at ?? null })));
+  const stepsTotal = await read(async () => Number((await rc.env.DB.prepare('SELECT COUNT(*) AS n FROM market_entry_steps WHERE market_id = ?').bind(m.id).first<{ n: number }>())?.n ?? 0));
+  const ticks = await read(async () => new Map(((await rc.env.DB.prepare('SELECT key, done_at FROM market_localisation WHERE market_id = ?')
+    .bind(m.id).all<{ key: string; done_at: string | null }>()).results || []).map((r) => [r.key, r.done_at])));
+  // A country read that fails is `false`; one the store no longer lists is `null` (the code is kept and shown).
+  const country = m.geography_ref ? await read(async () => (await rc.env.DB.prepare('SELECT code, name, region FROM research_countries WHERE code = ?')
+    .bind(m.geography_ref).first<{ code: string; name: string; region: string | null }>()) ?? undefined).then((c) => (c === null ? false : c ?? null)) : null;
+  const replies = await read(async () => ((await rc.env.DB.prepare(
+    `SELECT r.uid, r.name, r.message, r.created_at FROM update_ask_replies r
+       JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
+      WHERE u.project_id = ? AND a.kind = 'market' AND a.link_ref = CAST(? AS TEXT) ORDER BY r.id DESC LIMIT 20`,
+  ).bind(rc.projectId, m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), name: x.name ?? null, message: x.message ?? null, created_at: x.created_at ?? null })));
+  return {
+    state: m.state, decision: m.decision ?? null, decided_on: m.decided_on ?? null,
+    scores: MARKET_PARTS.map(([k, l]) => ({ key: k, part: l, score: m[`${k}_score`] ?? null, source: m[`${k}_source`] ?? null })),
+    readiness: rd.score, missing: rd.missing, weakest: rd.weakest,
+    geography_ref: m.geography_ref ?? null,
+    country: country ? { code: country.code, name: country.name, region: country.region ?? null } : null,
+    country_state: !m.geography_ref ? 'none' : country === false ? 'unreadable' : country ? 'ok' : 'unlisted',
+    size: m.size_cents != null ? { cents: m.size_cents, currency: m.size_currency ?? null, source: m.size_source ?? null } : null,
+    steps, steps_total: stepsTotal, steps_state: steps && stepsTotal != null ? 'ok' : 'unreadable',
+    localisation: ticks ? LOCALISATION_KEYS.map((k) => ({ key: k, label: label(k), done_at: ticks.get(k) ?? null })) : null,
+    localisation_state: ticks ? 'ok' : 'unreadable',
+    replies, replies_state: replies ? 'ok' : 'unreadable',
+  };
+}
+
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
   if (!m) throw vanished();
@@ -951,6 +988,7 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     pills: [pill(m.state), ...(m.decision ? [{ text: label(m.decision), tone: m.decision === 'enter' ? 'ok' : 'grey' }] : [])],
     facts: [part('demand', 'Demand evidence'), part('regulation', 'Regulation'), part('partners', 'Partners'), part('cost', 'Cost to enter')],
     createdBy: m.created_by, createdAt: m.created_at,
+    parts: { market: await marketParts(rc, m, rd) },
   }, { m });
 }, [
   section('entry-plan', 'Entry plan', async (rc, _id, record) => {
@@ -1077,6 +1115,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   const repeats = REPEATS_OF[String(e.recurrence)] ?? null;
   return keep({
     title: String(e.title),
+    parts: { meeting: e.event_type === 'board_meeting' },
     sub: joined(label(kind), `due ${dMon(e.due_date) ?? e.due_date}`, owner),
     pills: [pill(state), ...(repeats ? [{ text: label(repeats), tone: 'grey' }] : [])],
     facts: [

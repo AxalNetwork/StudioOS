@@ -1,3 +1,4 @@
+import { guardChain } from './guardCatalog.mjs';
 /**
  * #6326: the `red-ci-triage` skill's decisions, apart from GitHub. Which CI
  * failure digest comment on a PR is the current one, which open `[alert]`
@@ -212,6 +213,13 @@ export function parseLog(text) {
     const lint = /^\s+(\d+):(\d+)\s+error\s+(.+?)\s{2,}(\S+)\s*$/.exec(line);
     if (lint && lintFile) { out.lint.push({ file: lintFile, line: Number(lint[1]), message: lint[3], rule: lint[4] }); continue; }
     if (line.trim() === '') lintFile = null;
+    const recorded = /^\[guard\] ([a-z][a-z0-9-]*): (failed|blocked|interrupted|not_run); exit=([\d-]+)/.exec(line);
+    if (recorded) {
+      const existing = out.guards.find(g => [g.name, `check-${g.name}`, `build-${g.name}`].includes(recorded[1]));
+      if (existing) { existing.name = recorded[1]; existing.status = recorded[2]; existing.exitCode = recorded[3]; }
+      else out.guards.push({ name: recorded[1], message: `${recorded[2]}; exit=${recorded[3]}`, details: [] });
+      continue;
+    }
     const guard = /^✖ ([\w.-]+):\s*(.*)$/.exec(line);
     if (guard) {
       const details = [];
@@ -270,7 +278,7 @@ export function reproduceTypes(file) {
 
 /** The `test:guards` step that prints `✖ <name>:`, e.g. `test-clock` → `node --no-warnings scripts/check-test-clock.mjs`. */
 export function guardCommand(name, scripts) {
-  const steps = String(scripts?.['test:guards'] || '').split(' && ').map((s) => s.trim());
+  const steps = String(scripts?.['test:guards'] === 'node scripts/run-guards.mjs' ? guardChain : scripts?.['test:guards'] || '').split(' && ').map((s) => s.trim());
   const base = String(name).replace(/\.mjs$/, '');
   const wanted = [`${base}.mjs`, `check-${base}.mjs`, `build-${base}.mjs`];
   return steps.find((s) => s.split(/\s+/).some((w) => wanted.some((n) => w === `scripts/${n}` || w.endsWith(`/${n}`)))) || null;

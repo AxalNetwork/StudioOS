@@ -34,6 +34,8 @@
  * qualifying text are stored; logs carry error names and codes only.
  */
 import type { Env } from '../../types';
+import { mappingSignature } from './signature';
+import { retractTypeformReviews } from './reviewCleanup';
 import { TypeformReadError, answerFor, formFields, regionOf, responseHead, responsesLink, typeformRead, RESPONSE_ID, type FetchLike, type FormField, type ReadTarget, type TypeformErrorCode } from './api';
 import { qualifyingAnswer, typeformMapping, MAX_MAPPINGS, type MappingRule } from './mappings';
 
@@ -67,7 +69,7 @@ interface SyncRow {
   checkpoint_submitted_at: string | null; retry_after: string | null; config_json: string | null;
   provider_key: string; integration_status: string;
 }
-interface ActiveMapping { id: number; field_id: string; field_type: string; rule: MappingRule; keep_text: boolean }
+interface ActiveMapping { id: number; field_id: string; field_type: string; rule: MappingRule; keep_text: boolean; signature: string }
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const changes = (r: any) => Number(r?.meta?.changes ?? 0);
@@ -100,7 +102,7 @@ const releaseLease = (env: Env, id: number, owner: string) => env.DB.prepare(
 /** Hold each mapping to the form as it is now: a rename keeps the field id; a deleted or retyped field is flagged. */
 async function reviewMappings(env: Env, syncId: number, fields: FormField[], nowIso: string): Promise<{ active: ActiveMapping[]; flagged: string[] }> {
   const rows = (await env.DB.prepare(
-    'SELECT id, field_id, field_type, field_title, rule_json, keep_text, status FROM typeform_field_mappings WHERE sync_id = ? ORDER BY id',
+    'SELECT id, field_id, field_type, field_title, kind, rule_json, keep_text, status FROM typeform_field_mappings WHERE sync_id = ? ORDER BY id',
   ).bind(syncId).all<any>()).results || [];
   const active: ActiveMapping[] = []; const flagged: string[] = [];
   for (const row of rows) {
@@ -113,7 +115,7 @@ async function reviewMappings(env: Env, syncId: number, fields: FormField[], now
     if (status !== 'active') { flagged.push(String(row.field_id)); continue; }
     let rule: MappingRule = {};
     try { rule = JSON.parse(row.rule_json || '{}'); } catch { flagged.push(String(row.field_id)); continue; }
-    active.push({ id: Number(row.id), field_id: String(row.field_id), field_type: String(row.field_type), rule, keep_text: Number(row.keep_text) === 1 });
+    active.push({ id: Number(row.id), field_id: String(row.field_id), field_type: String(row.field_type), rule, keep_text: Number(row.keep_text) === 1, signature: mappingSignature(row) });
   }
   return { active, flagged };
 }
@@ -145,12 +147,12 @@ async function writeResponse(env: Env, row: SyncRow, item: any, head: NonNullabl
       const key = ledgerKey(row.form_id, row.project_id, head.response_id, m.field_id);
       answerAt.push(statements.length);
       statements.push(env.DB.prepare(
-        `INSERT INTO typeform_answers (response_row_id, mapping_id, field_id, answer_text, created_at)
-         SELECT r.id, ?, ?, ?, ? FROM typeform_responses r
+        `INSERT INTO typeform_answers (response_row_id, mapping_id, field_id, answer_text, created_at, mapping_signature)
+         SELECT r.id, ?, ?, ?, ?, ? FROM typeform_responses r
           WHERE r.sync_id = ? AND r.response_id = ? AND r.status = 'active' AND r.response_type = 'completed'
             AND NOT EXISTS (SELECT 1 FROM connector_fed_items f WHERE f.integration_id = ? AND f.external_id = ?)
          ON CONFLICT (response_row_id, mapping_id) DO NOTHING`,
-      ).bind(m.id, m.field_id, hit.text, nowIso, row.id, head.response_id, row.integration_id, key));
+      ).bind(m.id, m.field_id, hit.text, nowIso, m.signature, row.id, head.response_id, row.integration_id, key));
       statements.push(env.DB.prepare(
         `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id, first_seen_at, last_seen_at)
          SELECT ?, ?, ?, ?, ?, 'typeform_answers', a.id, ?, ? FROM typeform_answers a JOIN typeform_responses r ON r.id = a.response_row_id
@@ -262,8 +264,10 @@ export async function syncTypeformForm(env: Env, deps: ImportDeps, key: SyncKey)
 // ---------------------------------------------------------------------------
 
 /** The batch that removes a response's local answers and keeps their ledger rows, unlinked, so no re-sync lands them. */
-function unlinkAnswers(env: Env, integrationId: number, responseRowId: number) {
+async function unlinkAnswers(env: Env, integrationId: number, responseRowId: number) {
+  const ids = (await env.DB.prepare('SELECT id FROM typeform_answers WHERE response_row_id = ?').bind(responseRowId).all<{ id: number }>()).results || [];
   return [
+    ...retractTypeformReviews(env, ids.map(r => r.id)),
     env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL
                      WHERE integration_id = ? AND local_table = 'typeform_answers' AND local_id IN (SELECT id FROM typeform_answers WHERE response_row_id = ?)`)
       .bind(integrationId, responseRowId),
@@ -312,7 +316,7 @@ export async function reconcileTypeformDeletions(env: Env, deps: ImportDeps, key
           out.missing_once += 1;
         } else if (now - Date.parse(r.upstream_missing_at) >= RECONCILE_CONFIRM_MS) {
           await env.DB.batch([
-            ...unlinkAnswers(env, sync.integration_id, r.id),
+            ...await unlinkAnswers(env, sync.integration_id, r.id),
             env.DB.prepare("UPDATE typeform_responses SET status = 'provider_deleted' WHERE id = ? AND status = 'active'").bind(r.id),
           ]);
           out.provider_deleted += 1;
@@ -352,6 +356,7 @@ export async function withdrawTypeformAnswer(env: Env, scope: Scope, answerId: n
   ).bind(answerId, scope.integrationId, scope.projectId).first<{ id: number }>();
   if (!row) return false;
   await env.DB.batch([
+    ...retractTypeformReviews(env, [answerId]),
     env.DB.prepare("UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND local_table = 'typeform_answers' AND local_id = ?").bind(scope.integrationId, answerId),
     env.DB.prepare('DELETE FROM typeform_answers WHERE id = ?').bind(answerId),
   ]);
@@ -366,7 +371,7 @@ export async function withdrawTypeformResponse(env: Env, scope: Scope, formId: s
   ).bind(scope.integrationId, scope.projectId, formId, responseId).first<{ id: number }>();
   if (!row) return false;
   await env.DB.batch([
-    ...unlinkAnswers(env, scope.integrationId, row.id),
+    ...await unlinkAnswers(env, scope.integrationId, row.id),
     env.DB.prepare("UPDATE typeform_responses SET status = 'withdrawn' WHERE id = ?").bind(row.id),
   ]);
   return true;
@@ -384,14 +389,22 @@ export async function setTypeformMappings(env: Env, syncId: number, fields: Form
   if (mappings.some((m) => !m) || new Set(mappings.map((m) => m!.field_id)).size !== mappings.length) return false;
   const sync = await env.DB.prepare('SELECT integration_id FROM typeform_form_syncs WHERE id = ?').bind(syncId).first<{ integration_id: number }>();
   if (!sync) return false;
-  const keep = mappings.map((m) => m!.field_id);
-  const gone = ((await env.DB.prepare('SELECT id, field_id FROM typeform_field_mappings WHERE sync_id = ?').bind(syncId).all<{ id: number; field_id: string }>()).results || [])
-    .filter((r) => !keep.includes(r.field_id));
-  const statements = gone.flatMap((g) => [
+  const gone = ((await env.DB.prepare('SELECT id, field_id, field_type, kind, rule_json, keep_text FROM typeform_field_mappings WHERE sync_id = ?').bind(syncId).all<any>()).results || [])
+    .filter((r) => {
+      const next = mappings.find(m => m!.field_id === r.field_id);
+      return !next || mappingSignature(r) !== mappingSignature({ ...next, rule_json: JSON.stringify(next.rule) });
+    });
+  const ids: number[] = [];
+  for (const g of gone) {
+    const rows = (await env.DB.prepare('SELECT id FROM typeform_answers WHERE mapping_id = ?').bind(g.id).all<{ id: number }>()).results || [];
+    ids.push(...rows.map(r => r.id));
+  }
+  const statements = [...retractTypeformReviews(env, ids), ...gone.flatMap((g) => [
     env.DB.prepare("UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND local_table = 'typeform_answers' AND local_id IN (SELECT id FROM typeform_answers WHERE mapping_id = ?)")
       .bind(sync.integration_id, g.id),
+    env.DB.prepare('DELETE FROM typeform_answers WHERE mapping_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM typeform_field_mappings WHERE id = ?').bind(g.id),
-  ]);
+  ])];
   for (const m of mappings as NonNullable<typeof mappings[number]>[]) {
     const title = fields.find((f) => f.id === m.field_id)?.title ?? null;
     statements.push(env.DB.prepare(

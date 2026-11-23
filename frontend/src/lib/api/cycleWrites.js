@@ -135,6 +135,11 @@ export function makeCycleWrites(request) {
       deleteTiktokFact: (projectId, id, kind) => request(`/cycles/grow/tiktok/facts/${seg(id)}?${new URLSearchParams({ project: String(projectId), kind: kind === 'account' ? 'account' : 'video' })}`, { method: 'DELETE' }),
       acceptTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
       dismissTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      // D5862 (#5862): the venture's linked Facebook Page (D5859 sync and delete, D5860 the channel proposal).
+      syncFacebook: (projectId) => request('/cycles/grow/facebook/sync', { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      deleteFacebookFact: (projectId, id) => request(`/cycles/grow/facebook/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
+      acceptFacebookProposal: (projectId, id) => request(`/cycles/grow/facebook/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      dismissFacebookProposal: (projectId, id) => request(`/cycles/grow/facebook/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
     },
     // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
     // FormData body (Upload proof) goes as it is.

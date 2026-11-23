@@ -5,6 +5,7 @@ import { Unreadable } from '../../../ui';
 import DataRoomDialog from './DataRoomDialog.jsx';
 import { ReportShareRows } from './ReportShares.jsx';
 import AdvisorGrantSection from '../AdvisorGrantSection.jsx';
+import LibrarySwitch from './LibrarySwitch.jsx';
 import { day, roomCan } from './dataRoomModel';
 import {
   COFOUNDER_LINE, FILTERS, NDA_LINE, NDA_WORD, REVOKE_LINE, STATE_WORD,
@@ -344,6 +345,8 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
         </div>
       </section>
       <NdaStrip room={room} canNda={canNda} onAct={act} />
+      {/* D6913 part 2 (RS-17): the founder's per-room switch for investors' own Library and Ask (D6869). */}
+      {projectUid ? <LibrarySwitch projectUid={projectUid} /> : null}
       <section className={`${CARD} flex flex-col gap-1.5 px-4 py-3`} data-testid="access-report-shares">
         <h3 className={`m-0 text-[14px] font-extrabold ${INK}`}>Scoring report shared with</h3>
         <p className={`m-0 text-[12px] ${MUTED}`}>Read only. These accounts can open the scoring report, not the files. Each link is made and revoked from the report’s Share button in Fundraising readiness.</p>
