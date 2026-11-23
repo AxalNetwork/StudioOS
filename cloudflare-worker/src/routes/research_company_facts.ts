@@ -10,7 +10,8 @@
  * refusal never says whether the company exists. The record is read through researchCompanyRead
  * (D7819): an unserved record (absent, excluded or withdrawn) returns no facts. #7824 registers both
  * reads with its access module when it lands. A failed read is a 503, never an empty list.
- * Mounted ahead of research.ts, which owns `/company-directory/:uid`.
+ * Mounted ahead of research.ts, which owns `/company-directory/:uid`: it precedes
+ * research_client_prep.ts, which research_client_prep_4574 keeps immediately ahead of research.ts.
  */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
@@ -20,7 +21,7 @@ import { readCompanyByUid } from '../services/researchCompanyRead';
 import { companyCompleteness, companyFacts, readCompanyFactRows } from '../services/researchCompanyFacts';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
-import research from './research';
+import clientPrep from './research_client_prep';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -63,5 +64,5 @@ router.get('/company-directory/:uid/completeness', async (c) => {
   return c.json(companyCompleteness(got.record, got.facts));
 });
 
-export const mount: RouteMount = { path: '/api/research', router: router, before: [research] };
+export const mount: RouteMount = { path: '/api/research', router: router, before: [clientPrep] };
 export default router;
