@@ -3,9 +3,22 @@ import { createPrivateKey, sign } from 'node:crypto';
 import { boundedJson } from './ciCapacityAuth.ts';
 import type { CapacityPorts } from './ciCapacity.ts';
 import type { CiSubmission, CiAttempt, ExecutionReceipt, CiProvenance, ChildObservation, CapacityInventory, SelfHostedProfile } from './lib/ciCapacityPolicy.ts';
+import { receiptMatches, CapacityDispatchRefused } from './lib/ciCapacityPolicy.ts';
+import type { CapacityIdentity } from './ciCapacityAuth.ts';
+/** D8009: supervisor-owned result evidence, not an artifact or payload supplied by candidate code. */
+export type CapacityExecutionResult = {
+  receipt: ExecutionReceipt; jobId: number; observedAt: number;
+  testStep: ChildObservation['testStep']; executionOutcome: NonNullable<ChildObservation['executionOutcome']>;
+  cleanupConfirmed: boolean;
+  exportComplete?: boolean;
+};
+export type CapacityExecutionResultReader = (receipt: ExecutionReceipt, jobId: number) => Promise<CapacityExecutionResult | null>;
 export type CapacityApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 export type CapacityConfig = {
   repository: string; repositoryId: number; executorSha: string; approvedGroupId: number;
+  /** Reusable planner is independently pinned; avoids a circular caller/commit self-pin. */
+  plannerSha?: string;
+  childWorkflowSha?: string;
   prerequisiteJobs: string[]; fullSuiteJobs: string[];
   /** Linux milestone only; broadening profiles requires a separate reviewed cutover. */
   selfHostedProfiles: SelfHostedProfile[];
@@ -25,25 +38,48 @@ export async function capacityGithubClient(env: { REPOSITORY: string; GITHUB_APP
   const jwt = `${payload}.${sign('RSA-SHA256', Buffer.from(payload), createPrivateKey(env.GITHUB_APP_PRIVATE_KEY!)).toString('base64url')}`;
   const auth = await boundedJson(await fetcher(`https://api.github.com/app/installations/${env.GITHUB_INSTALLATION_ID}/access_tokens`, {
     method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${jwt}`,Accept:'application/vnd.github+json','User-Agent':'StudioOS-Capacity'},
-    body:JSON.stringify({repositories:[env.REPOSITORY.split('/')[1]],permissions:{actions:'write',checks:'write',contents:'read',organization_self_hosted_runners:'read'}}),
+    body:JSON.stringify({repositories:[env.REPOSITORY.split('/')[1]],permissions:{actions:'write',checks:'write',contents:'read'}}),
   }), 16*1024) as Row;
   need(typeof auth.token==='string' && auth.token.length>0, 'capacity_app_token_missing');
   let calls=0; const deadline=Date.now()+60000;
   return async(method,path,body)=>{
     need(++calls<=100 && Date.now()<deadline && ['GET','POST','PATCH'].includes(method), 'capacity_api_budget');
-    const repo=`/repos/${env.REPOSITORY}/`, org=`/orgs/${env.REPOSITORY.split('/')[0]}/actions/runner-groups/`;
-    need((path.startsWith(repo)||path.startsWith(org)) && /^[\w./?=&%_-]+$/.test(path) && !path.includes('\\')
-      && (!path.includes('..') || new RegExp(`^${repo}compare/[a-f0-9]{40}\\.\\.\\.[a-f0-9]{40}\\?per_page=100$`).test(path)), 'capacity_api_path');
+    const repo=`/repos/${env.REPOSITORY}/`;
+    need(path.startsWith(repo) && /^[\w./?=&%_-]+$/.test(path) && !path.includes('\\')
+      && (!path.includes('..') || /^compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}\?per_page=100$/.test(path.slice(repo.length))), 'capacity_api_path');
     const response=await fetcher(`https://api.github.com${path}`,{method,redirect:'error',signal:AbortSignal.timeout(Math.min(10000,deadline-Date.now())),headers:{Authorization:`Bearer ${auth.token}`,Accept:'application/vnd.github+json','User-Agent':'StudioOS-Capacity','X-GitHub-Api-Version':'2026-03-10','Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
     if(response.status===204||response.status===202)return null;
     return boundedJson(response,2*1024*1024);
   };
 }
+/** Independent fixed-scope inventory client. Absence refuses inventory, never borrows repo-App authority. */
+export function capacityInventoryClient(env: { REPOSITORY: string; CAPACITY_INVENTORY_TOKEN?: string }, fetcher: typeof fetch = fetch): CapacityApi {
+  const token = env.CAPACITY_INVENTORY_TOKEN;
+  need(env.REPOSITORY === 'AxalNetwork/StudioOS' && typeof token === 'string' && token.length > 0, 'capacity_inventory_unconfigured');
+  const base = '/orgs/AxalNetwork/actions/runner-groups/5';
+  let calls = 0; const deadline = Date.now() + 30_000;
+  return async (method, path, body) => {
+    need(method === 'GET' && body === undefined && ++calls <= 7 && Date.now() < deadline
+      && (path === base || /^\/orgs\/AxalNetwork\/actions\/runner-groups\/5\/(?:repositories|runners)\?per_page=100&page=[1-3]$/.test(path)), 'capacity_inventory_scope');
+    return boundedJson(await fetcher(`https://api.github.com${path}`, { method: 'GET', redirect: 'error',
+      signal: AbortSignal.timeout(Math.min(10_000, deadline - Date.now())), headers: { Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json', 'User-Agent': 'StudioOS-Capacity-Inventory', 'X-GitHub-Api-Version': '2026-03-10' } }), 2 * 1024 * 1024);
+  };
+}
 export class GithubCapacityPorts implements CapacityPorts {
   readonly api: CapacityApi; readonly config: CapacityConfig; readonly now: () => number;
-  constructor(api: CapacityApi, config: CapacityConfig, now: () => number = Date.now) {
+  private resultReader?: CapacityExecutionResultReader;
+  private inventoryApi: CapacityApi;
+  private requireExecutionResult: boolean;
+  constructor(api: CapacityApi, config: CapacityConfig, now: () => number = Date.now, resultReader?: CapacityExecutionResultReader,
+    inventoryApi: CapacityApi = async () => { throw new Error('capacity_inventory_unconfigured'); },requireExecutionResult=false) {
     this.api=api;this.config=config;this.now=now;
+    this.resultReader=resultReader;
+    this.inventoryApi=inventoryApi;
+    this.requireExecutionResult=requireExecutionResult;
     need(/^[\w.-]+\/[\w.-]+$/.test(config.repository)&&Number.isSafeInteger(config.repositoryId)&&config.repositoryId>0&&SHA.test(config.executorSha)&&config.approvedGroupId===5,'capacity_config_refused');
+    need(config.childWorkflowSha===undefined||SHA.test(config.childWorkflowSha),'capacity_child_pin_refused');
+    need(config.plannerSha===undefined||SHA.test(config.plannerSha),'capacity_planner_pin_refused');
     need(Array.isArray(config.selfHostedProfiles)&&config.selfHostedProfiles.length===1&&config.selfHostedProfiles[0]==='linux-x64','capacity_linux_milestone_policy');
     need(Array.isArray(config.prerequisiteJobs)&&config.prerequisiteJobs.length>0&&config.prerequisiteJobs.length<=16&&new Set(config.prerequisiteJobs).size===config.prerequisiteJobs.length&&config.prerequisiteJobs.every(n=>typeof n==='string'&&n.length>0&&n.length<=120),'capacity_prerequisites_refused');
     need(Array.isArray(config.fullSuiteJobs)&&config.fullSuiteJobs.length<=32&&new Set(config.fullSuiteJobs).size===config.fullSuiteJobs.length&&config.fullSuiteJobs.every(n=>typeof n==='string'&&n.length>0&&n.length<=120),'capacity_full_suite_manifest_refused');
@@ -51,10 +87,10 @@ export class GithubCapacityPorts implements CapacityPorts {
   private path(path: string) { return `/repos/${this.config.repository}/${path}`; }
   private get(path: string) { return this.api('GET',this.path(path)) as Promise<Row>; }
   private repo(repo: Row) { return repo?.full_name===this.config.repository&&repo?.id===this.config.repositoryId; }
-  async pages(path: string,key: string): Promise<Row[]> {
+  async pages(path: string,key: string,api: CapacityApi = this.api): Promise<Row[]> {
     const rows: Row[]=[];let total: number|undefined;
     for(let page=1;page<=3;page++){
-      const data=await this.api('GET',`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`) as Row;
+      const data=await api('GET',`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`) as Row;
       need(Array.isArray(data?.[key])&&Number.isSafeInteger(data.total_count)&&data.total_count>=0&&data.total_count<=300,'capacity_incomplete_page');
       if(total===undefined)total=data.total_count;
       need(total===data.total_count&&data[key].length<=100,'capacity_page_changed');
@@ -110,7 +146,7 @@ export class GithubCapacityPorts implements CapacityPorts {
     const final=await this.get('git/ref/heads/main');need(final.object?.sha===main,'capacity_main_changed');
   }
   async verify(s: CiSubmission): Promise<CiProvenance> {
-    need(s.executorSha===this.config.executorSha&&s.shards.length===6&&SHARDS.every(name=>s.shards.includes(name))
+    need(s.executorSha===this.config.executorSha&&(s.childWorkflowSha??s.executorSha)===(this.config.childWorkflowSha??this.config.executorSha)&&s.shards.length===6&&SHARDS.every(name=>s.shards.includes(name))
       &&JSON.stringify([...s.prerequisites].sort())===JSON.stringify([...this.config.prerequisiteJobs].sort()),'capacity_manifest_refused');
     const run=await this.get(`actions/runs/${s.parentRunId}`);
     need(this.parentIdentity(run,s)&&await this.parent(s),'capacity_parent_refused');
@@ -127,11 +163,11 @@ export class GithubCapacityPorts implements CapacityPorts {
   }
   async inventory(): Promise<CapacityInventory> {
     const org=this.config.repository.split('/')[0],base=`/orgs/${org}/actions/runner-groups/${this.config.approvedGroupId}`;
-    const group=await this.api('GET',base) as Row;
+    const group=await this.inventoryApi('GET',base) as Row;
     need(group.id===this.config.approvedGroupId&&group.name==='StudioOS Worker Pool'&&group.visibility==='selected'&&group.allows_public_repositories===true&&group.restricted_to_workflows===true,'capacity_group_unapproved');
     need(Array.isArray(group.selected_workflows)&&group.selected_workflows.length===1&&group.selected_workflows[0]===`${this.config.repository}/${EXECUTOR}@refs/heads/main`,'capacity_group_workflow_unapproved');
-    const repositories=await this.pages(`${base}/repositories`,'repositories');need(repositories.length===1&&this.repo(repositories[0]),'capacity_group_repositories');
-    const runners=await this.pages(`${base}/runners`,'runners');
+    const repositories=await this.pages(`${base}/repositories`,'repositories',this.inventoryApi);need(repositories.length===1&&this.repo(repositories[0]),'capacity_group_repositories');
+    const runners=await this.pages(`${base}/runners`,'runners',this.inventoryApi);
     return {observedAt:this.now(),complete:true,runners:runners.flatMap(r=>{
       // Every authority row must be readable, even when it is not eligible for this milestone.
       need(r&&Number.isSafeInteger(r.id)&&r.id>0&&['linux','osx','win'].includes(r.os)
@@ -160,26 +196,29 @@ export class GithubCapacityPorts implements CapacityPorts {
     });
   }
   private title(a: Readonly<CiAttempt>|ExecutionReceipt) {return `Worker executor | ${a.requestId} | ${a.logicalShard} | generation ${a.generation}`;}
-  private child(run: Row,a: Readonly<CiAttempt>|ExecutionReceipt) {
-    return run?.event==='workflow_dispatch'&&run.path===EXECUTOR&&run.head_sha===a.executorSha&&run.head_branch==='main'&&run.run_attempt===1&&this.repo(run.repository)&&this.repo(run.head_repository)&&run.display_title===this.title(a);
+  private child(run: Row,a: Readonly<CiAttempt>|ExecutionReceipt,exactSha=true) {
+    return run?.event==='workflow_dispatch'&&run.path===EXECUTOR&&SHA.test(run.head_sha??'')&&(!exactSha||run.head_sha===(a.childWorkflowSha??a.executorSha))&&run.head_branch==='main'&&run.run_attempt===1&&this.repo(run.repository)&&this.repo(run.head_repository)&&run.display_title===this.title(a);
   }
   async dispatch(a: Readonly<CiAttempt>): Promise<number> {
     need(a.profile!=='macos-arm64','capacity_profile_disabled');
-    const main=await this.get('git/ref/heads/main');need(main.object?.sha===a.executorSha,'capacity_dispatch_main_moved');
+    const main=await this.get('git/ref/heads/main');if(main.object?.sha!==(a.childWorkflowSha??a.executorSha))throw new CapacityDispatchRefused('capacity_dispatch_main_moved');
     // Dispatch has no retry: a timeout/204 is reconciled through the persisted discovery intent.
     const dispatched=await this.api('POST',this.path('actions/workflows/runner-executor.yml/dispatches'),{ref:'main',inputs:{request_id:a.requestId,generation:String(a.generation),part:a.logicalShard,profile:a.profile}}) as {workflow_run_id?:number}|null;
     if(Number.isSafeInteger(dispatched?.workflow_run_id)&&dispatched!.workflow_run_id!>0)return dispatched!.workflow_run_id!;
     throw new Error('capacity_dispatch_discovery_required');
   }
-  async discover(a: Readonly<CiAttempt>): Promise<number|null> {
-    const runs=await this.pages(this.path(`actions/workflows/runner-executor.yml/runs?event=workflow_dispatch&head_sha=${a.executorSha}`),'workflow_runs');
-    const matches=runs.filter(r=>this.child(r,a));return matches.length===1?matches[0].id:null;
+  async discover(a: Readonly<CiAttempt>): Promise<number|{childRunId:number;rejectedWorkflowSha:string}|null> {
+    const runs=await this.pages(this.path('actions/workflows/runner-executor.yml/runs?event=workflow_dispatch'),'workflow_runs');
+    const matches=runs.filter(r=>this.child(r,a,false));
+    if(matches.length!==1)return null;
+    return matches[0].head_sha===(a.childWorkflowSha??a.executorSha)?matches[0].id:{childRunId:matches[0].id,rejectedWorkflowSha:matches[0].head_sha};
   }
-  async observe(receipt: ExecutionReceipt): Promise<ChildObservation|null> {
+  async observe(receipt: ExecutionReceipt,rejectedWorkflowSha?:string): Promise<ChildObservation|null> {
     const run=await this.get(`actions/runs/${receipt.childRunId}`);
-    if(run.id!==receipt.childRunId||!this.child(run,receipt))return null;
+    const expectedSha=rejectedWorkflowSha??receipt.childWorkflowSha??receipt.executorSha;
+    if(run.id!==receipt.childRunId||!this.child(run,receipt,!rejectedWorkflowSha)||run.head_sha!==expectedSha)return null;
     const jobs=await this.pages(this.path(`actions/runs/${receipt.childRunId}/attempts/1/jobs`),'jobs');
-    if(jobs.some(j=>j.run_id!==receipt.childRunId||j.run_attempt!==1||j.head_sha!==receipt.executorSha))return null;
+    if(jobs.some(j=>j.run_id!==receipt.childRunId||j.run_attempt!==1||j.head_sha!==expectedSha))return null;
     const selected=jobs.filter(j=>j.name==='Admitted Worker shard');if(selected.length!==1)return null;
     const job=selected[0], steps=Array.isArray(job.steps)?job.steps.filter((s:Row)=>s.name==='Run admitted Worker shard'):[];
     if(steps.length!==1||!['queued','in_progress','completed'].includes(run.status))return null;
@@ -190,12 +229,53 @@ export class GithubCapacityPorts implements CapacityPorts {
       :profile==='github-8'?labels.includes('studioos-bench-linux-8')&&!labels.includes('self-hosted')
       :['self-hosted','studioos-worker-v1',profile==='linux-x64'?'Linux':'macOS',profile==='linux-x64'?'X64':'ARM64'].every(l=>labels.includes(l));
     if(!target)return null;
+    if(rejectedWorkflowSha){
+      // Never use tests from an unreviewed revision. Only independent no-test/cleanup proof can release it.
+      const proof=await this.resultReader?.(receipt,job.id);
+      if(run.status!=='completed'||job.status!=='completed'||!proof||!receiptMatches(proof.receipt,receipt)||proof.jobId!==job.id
+        ||proof.testStep!=='not_run'||proof.cleanupConfirmed!==true||!Number.isSafeInteger(proof.observedAt)
+        ||proof.observedAt>this.now()||this.now()-proof.observedAt>30_000)return null;
+      return {receipt,workflowPath:EXECUTOR,workflowAttempt:1,jobId:job.id,runnerProfile:profile,status:'completed',
+        conclusion:'cancelled',jobConclusion:'cancelled',testStep:'not_run',startedAt:null,cleanupConfirmed:true,executionOutcome:'setup_failure'};
+    }
     const outcome=(v:unknown)=>['success','failure','cancelled','timed_out'].includes(String(v))?v as 'success'|'failure'|'cancelled'|'timed_out':null;
-    const testStep=step.status==='completed'&&step.conclusion==='failure'?'failure':step.status==='completed'&&step.conclusion==='success'?'success':step.status==='completed'&&step.conclusion==='skipped'?'not_run':step.status==='queued'?'not_run':'unknown';
-    return {receipt,workflowPath:EXECUTOR,workflowAttempt:1,jobId:job.id,runnerProfile:profile,status:run.status,conclusion:outcome(run.conclusion),jobConclusion:outcome(job.conclusion),testStep,startedAt:Number.isFinite(Date.parse(job.started_at))?Date.parse(job.started_at):null};
+    // The wrapper includes setup, timeout and teardown: its failure alone cannot prove a failed test.
+    let testStep: ChildObservation['testStep']=step.status==='completed'&&step.conclusion==='success'?'success':step.status==='completed'&&step.conclusion==='skipped'?'not_run':step.status==='queued'?'not_run':'unknown';
+    const jobEnd=Date.parse(job.completed_at),stepEnd=Date.parse(step.completed_at);
+    const completedAt=run.status==='completed'&&job.status==='completed'&&Number.isFinite(jobEnd)&&Number.isFinite(stepEnd)&&stepEnd<=jobEnd?jobEnd:null;
+    let cleanupConfirmed=completedAt!==null&&run.conclusion==='success'&&job.conclusion==='success'&&testStep==='success';
+    let executionOutcome: NonNullable<ChildObservation['executionOutcome']>=cleanupConfirmed?'completed':'unknown';
+    let exportComplete: boolean|undefined;
+    if(this.resultReader){
+      const evidence=await this.resultReader(structuredClone(receipt),job.id),now=this.now();
+      // Missing evidence keeps unknown truth. Malformed/misbound evidence cannot fall back to a pass.
+      if(evidence!==null){
+        if(!evidence||!evidence.receipt||!receiptMatches(evidence.receipt,receipt)||evidence.jobId!==job.id
+          ||!Number.isSafeInteger(evidence.observedAt)||evidence.observedAt>now||now-evidence.observedAt>30_000
+          ||!['success','failure','not_run','unknown'].includes(evidence.testStep)
+          ||!['completed','setup_failure','timed_out','cleanup_failure','export_failure','unknown'].includes(evidence.executionOutcome)
+          ||typeof evidence.cleanupConfirmed!=='boolean'||(evidence.exportComplete!==undefined&&typeof evidence.exportComplete!=='boolean'))return null;
+        testStep=evidence.testStep;cleanupConfirmed=evidence.cleanupConfirmed;executionOutcome=evidence.executionOutcome;exportComplete=evidence.exportComplete;
+      }else if(this.requireExecutionResult){testStep='unknown';cleanupConfirmed=false;executionOutcome='unknown';}
+    }else if(this.requireExecutionResult){testStep='unknown';cleanupConfirmed=false;executionOutcome='unknown';
+    }
+    return {receipt,workflowPath:EXECUTOR,workflowAttempt:1,jobId:job.id,runnerProfile:profile,status:run.status,conclusion:outcome(run.conclusion),jobConclusion:outcome(job.conclusion),testStep,startedAt:Number.isFinite(Date.parse(job.started_at))?Date.parse(job.started_at):null,completedAt,cleanupConfirmed,executionOutcome,exportComplete};
   }
-  async cancel(receipt: ExecutionReceipt): Promise<void> {
-    const run=await this.get(`actions/runs/${receipt.childRunId}`);need(run.id===receipt.childRunId&&this.child(run,receipt),'capacity_cancel_identity');
+  /** Verify the target job independently; a JWT check_run_id is not an Actions job ID. */
+  async resultJob(receipt: ExecutionReceipt,identity: CapacityIdentity): Promise<number> {
+    need(/^[1-9][0-9]{0,14}$/.test(identity.check_run_id??'')
+      &&identity.runner_environment===(receipt.profile==='linux-x64'?'self-hosted':'github-hosted'),'capacity_result_job_claim');
+    const run=await this.get(`actions/runs/${receipt.childRunId}`);
+    need(run.id===receipt.childRunId&&this.child(run,receipt),'capacity_result_run');
+    const jobs=await this.pages(this.path(`actions/runs/${receipt.childRunId}/attempts/1/jobs`),'jobs');
+    need(jobs.every(j=>j.run_id===receipt.childRunId&&j.run_attempt===1&&j.head_sha===(receipt.childWorkflowSha??receipt.executorSha)),'capacity_result_jobs');
+    const matches=jobs.filter(j=>j.name==='Admitted Worker shard'&&j.check_run_url===`https://api.github.com/repos/${this.config.repository}/check-runs/${identity.check_run_id}`);
+    need(matches.length===1&&Number.isSafeInteger(matches[0].id)&&matches[0].id>0,'capacity_result_job');
+    return matches[0].id;
+  }
+  async cancel(receipt: ExecutionReceipt,rejectedWorkflowSha?:string): Promise<void> {
+    const run=await this.get(`actions/runs/${receipt.childRunId}`);need(run.id===receipt.childRunId&&this.child(run,receipt,!rejectedWorkflowSha)
+      &&run.head_sha===(rejectedWorkflowSha??receipt.childWorkflowSha??receipt.executorSha),'capacity_cancel_identity');
     if(run.status!=='completed')await this.api('POST',this.path(`actions/runs/${receipt.childRunId}/cancel`));
   }
 }

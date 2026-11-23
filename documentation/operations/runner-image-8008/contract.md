@@ -8,12 +8,22 @@ Reviewed source is immutable, not the workstation's installed runtime:
 | Chosen newer main | `d990215df2ed696f6b7572b904afe2c96a653f7b` | Local package base; component manifest records file SHA256s. |
 | #7981 | `db11f2f3da613f3542d2bf8f736acaa35735457d` | Profiles, job-container and runner-execution match chosen main. |
 | #7972 | `513da8c5bf32eda4a4e8818f6fbbcd9bed63275c` | Also reviewed its executor-isolation adapter; host admission requires Docker and `/usr/bin/setfacl`. |
-| Qualification follow-up main | `270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0` | Profile and verifiedContainer predicate unchanged; ACL/adapter now published. Exact unpublished S09 artifact still requested. |
-| Delivered S09 qualification source | `c36bf920613ff28bb7c3571d78994cf1a5d7f18c` | Verified cumulative bundle; parent cc3c3367, base 4d604798, tree 1b87eae7. This snapshot supersedes the earlier keeper/export contract below. Profiles remain byte-identical. |
+| Qualification follow-up main | `270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0` | Profile and verifiedContainer predicate unchanged; ACL/adapter now published. Historical snapshot before the now-verified c36 delivery. |
+| Delivered S09 qualification source | `c36bf920613ff28bb7c3571d78994cf1a5d7f18c` | Verified cumulative bundle; parent cc3c3367, base 4d604798, tree 1b87eae7. Historical verified receipt; the current integrated contract below supersedes its lifecycle timing. Profiles remain byte-identical. |
 
 The c36 source is now received and independently checked, not an outstanding
 input. Exact file hashes and intake commands are in `qualification-progress.json`.
-A later S39 composition needs reconciliation at its own exact revision.
+The current S39 composition has now been independently received and reconciled:
+head `8c11fb864c3466fec684ec6bb92409d33973b2ec`, tree
+`45e1f3acb44fe6bb0a346df867430d34b70128d2`, based on current main
+`4ea24068f07974b05c5cc53df5150aecbe12e32b`. The merged #8231 executor
+`af71f2261b5f7a1fee65464b147f8625dd86eb1d` and published d323 source are
+ancestors; all reviewed native executor files match that merged executor.
+The workflow caller pins planner `19927c8960ec01377ff25d6d5a081ae8db080df5`;
+the selected definition has the same blob `4f7dfaca48403d2d0b9cc9e83403ebca48525a8d`.
+#8148 and #8233 are merged. Profiles and root lock are unchanged from c36;
+the Worker lock is refreshed in the component inventory. These are source facts,
+not native image approval or independent whole-integration acceptance.
 
 Inventory `git ls-tree -r --name-only <revision>` at all four references, including
 Dockerfile/Containerfile, runner/image and rootfs paths: no candidate Linux job
@@ -51,7 +61,7 @@ Static inspection of the acquired archives identifies the ELF interpreter
 libstdc++ and Tcl/Tk. These findings are recorded in qualification-progress.json;
 they do not establish that any rootfs supplies the required ABIs.
 
-The host-only runner 2.338.2, root-owned policy, Docker at
+The profile-pinned host-only runner 2.338.2, root-owned policy, Docker at
 `/usr/local/bin/docker`, `setfacl` and Docker's init are not candidate-image
 components. They belong to S09/S18's host qualification. Do not install or mount
 the listener, credentials, engine socket or enrollment material in this image.
@@ -59,10 +69,10 @@ the listener, credentials, engine socket or enrollment material in this image.
 ## Runtime identity and metadata
 
 The keeper is `10001:10001`; image Config.User must agree. Entrypoint is
-overridden to `/bin/sh`, with the exact c36 command:
+overridden to `/bin/sh`, with the exact selected integrated command:
 
 ```sh
-exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) ))"
+exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) - 1 ))"
 ```
 
 POSIX shell arithmetic, `date +%s` and `exec sleep` are required. Integer clock
@@ -75,7 +85,7 @@ are the contract. No image-declared volumes or additional mounts are allowed.
 Container Env must have exactly six entries: `PATH=/usr/local/bin:/usr/bin:/bin`,
 `HOME=/work/home`, `LANG=C.UTF-8`, `CI=true`, `TZ=UTC`, and
 `STUDIOOS_JOB_DEADLINE=<positive absolute epoch seconds>`.
-Creation checks remaining time >90000ms and <=1590000ms, then rechecks the finish
+Creation checks remaining receipt time >150000ms and <=1590000ms, then rechecks the finish
 reserve after staging. The environment contract no longer uses MAX_SECONDS.
 Inherited base-image environment entries would fail `verifiedContainer`.
 The scratch-rootfs template deliberately declares no ENV or VOLUME.
@@ -122,8 +132,8 @@ node scripts/test-drift-parts.mjs "$PART" --plan-file /input-plan.json
 
 Each `worker-1-of-6` through `worker-6-of-6` must qualify independently from
 clean tmpfs. Install and test run as separate exec phases in the same verified
-container, rechecked before testing. Each phase uses the remaining absolute
-deadline minus the 90000ms finish reserve, not a fresh 25 minutes per phase.
+container, rechecked before testing. Each phase uses the earlier receipt/Run-wrapper
+lifecycle bound minus the 150000ms finish reserve, not a fresh 25 minutes per phase.
 The supervisor retains the container through capture/export and preserves raw
 test exits separately from engine failure. No auth tokens are in this synthetic candidate environment.
 Network bridge/TLS/npm registry availability are prerequisites, not isolation
@@ -133,14 +143,14 @@ without substituting packages from the Darwin workstation.
 Source review is not proof of wiring. The original package base lacked the
 #7972 executor-isolation adapter; it is present on the later follow-up main.
 The delivered c36 workflow removes host candidate install steps and supplies
-the lifecycle/export path. Its future S39 composition still needs exact-revision
-review and real-node acceptance. This child edits neither
+the lifecycle/export path. Its selected S39 composition is now statically reconciled at 8c11; real-node
+acceptance remains NOT RUN. This child edits neither
 executor nor workflow and claims no end-to-end isolation. Mac and hosted lanes
 remain separately unqualified.
 
 ## Delivered engine and host requirements
 
-c36 pins `/usr/local/bin/docker`, but no exact engine/client/server version or
+The selected source pins `/usr/local/bin/docker`, but no exact engine/client/server version or
 binary digest. It also supplies no approved candidate image config ID or OCI
 manifest digest; those must come from the reviewed operator policy/build evidence.
 Record and qualify those operator inputs rather than inventing
@@ -150,7 +160,7 @@ pause/freezer the exact container, preserve its tmpfs, and stream
 inspect -> exact rm -> independent absence verification; unreadable state is
 not absence. Record real engine exit/error behavior, not mocked English errors.
 
-The actual copied bytes must pass c36's `ustarReader`: uncompressed USTAR
+The actual copied bytes must pass the selected `ustarReader`: uncompressed USTAR
 `ustar\0` / `00`, no prefix field, GNU/PAX extensions, links, nested files or
 unexpected members; direct trace files are UID/GID 10000 and mode 0600 or 0644.
 Limits are 4096 files, 1MiB/file, 64MiB expanded, 80MiB archive and 2MiB seal.
@@ -162,7 +172,36 @@ The trusted host also needs `/usr/bin/setfacl`, readable `/proc` namespace
 metadata, and private recovery/export storage supporting exclusive no-follow
 opens, fsync of files/directories and atomic rename. Recovery state is outside
 disposable job staging and never candidate-mounted. ACL calls have a source
-20s limit; the supervisor's 60s removal and 90s finish reserves are source
+20s limit; the supervisor's 90s removal and 150s finish reserves are source
 constants, not established native latency bounds. S32's prior budget/cancellation
 findings need disposition against the final composition. No host operating
 window or engine/security baseline is supplied by this source packet.
+
+
+## Integrated lifecycle delta from historical c36
+
+The frozen 8c11 candidate retains 7214's native executor, workflow, configuration
+and planner bytes. Its two-commit/eight-file delta corrects the listener result journal,
+client acquisition identity and service formatting, with regression tests and
+its own decision. S31 read the actual delta; other owners retain independent
+security and complete-source acceptance.
+
+Against c36, the current native contract has interruptible 30-second engine
+calls and 20-second ACL calls, bounded by each phase's remaining time. Candidate
+work ends 150 seconds before the earlier receipt/Run-wrapper bound: 60 seconds
+for export, then 90 seconds for inspect, exact removal and absence verification.
+An interrupted engine client leaves the daemon effect uncertain. A durable
+create intent precedes creation; unknown ownership or unreadable absence cannot
+become successful cleanup. Export pause/copy/write/fsync are bounded as a whole;
+a late fsync cannot establish successful publication. The one-second keeper
+subtraction addresses integer truncation but requires native timing observations.
+
+The selected result journal records acknowledgement arrival and a separate returned-write
+durability observation. A provisional matching acknowledgement is insufficient;
+positive retirement requires both observations to be ordered and within the
+original completion bound. Legacy matching acknowledgement text alone
+is insufficient proof. This interface is statically reconciled; actual crash,
+restart, storage durability, cancellation latency, paused-container USTAR output
+and absence behavior remain native qualification gates. The source continues to
+label export evidence `native-unqualified`. The old source's 90-second total
+finish reserve and keeper command are not the current contract.
