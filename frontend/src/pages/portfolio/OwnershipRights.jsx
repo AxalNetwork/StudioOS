@@ -13,10 +13,16 @@
  *   unreadable     they could not be read: Retry, and no ask, because whether a request is already open is unknown
  *   none           no duty and no right is recorded (PRM19 a): said plainly, with "Ask HQ to record a right…"
  *   rows           the seven rows; a right with no row reads "Not recorded at closing" with "Ask HQ to record…"
+ *
+ * D6908: the Pro rata row's "What you can do" also reads the company's live round and the caller's own offer
+ * (`portfolioProRataApi.get`, `proRataOfferModel.js`): "Series A is live · offer to you: up to $310,000 · respond by
+ * 30 Nov 2026" with Open the round →, "Offer not recorded" with the round still linked, or "No live round". That read
+ * is separate: when it fails, the row says so with Retry and the rights stand.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { portfolioRightsApi } from '../../lib/api/portfolioRights';
+import { portfolioProRataApi } from '../../lib/api/portfolioProRata';
 import { usePortfolioReads } from './usePortfolioReads';
 import { Skeleton, SourceFailure } from './PortfolioParts';
 import {
@@ -24,6 +30,7 @@ import {
   nothingRecorded, requestRows, rightsRows,
 } from './rightsModel';
 import { NOT_RECORDED } from './portfolioModel';
+import { PRO_RATA_SHAPE, proRataAction } from './proRataOfferModel';
 // D6907 part 2: Eadwyn's proposal of a right that is in the signed paper but not recorded (PRM18 rail).
 import ClauseProposals from './ClauseProposals';
 
@@ -100,7 +107,28 @@ function Requests({ rows }) {
   );
 }
 
-function RightsTable({ rows, canAsk, onAsk, reportsHref }) {
+/** D6908: the live round and the caller's own offer, beside the Pro rata row's other action. */
+function ProRataAction({ action, onRetry }) {
+  if (action.kind === 'loading') return <span className="pf-sm" data-testid="rights-pro-rata-round-loading">Reading the live round…</span>;
+  if (action.kind === 'unreadable') {
+    return (
+      <span className="pf-sm" data-testid="rights-pro-rata-round-unreadable">
+        {action.line} <button type="button" className="pf-btn is-quiet" onClick={onRetry} data-testid="button-retry-pro-rata">Retry</button>
+      </span>
+    );
+  }
+  if (action.kind === 'none') return <span className="pf-sm" data-testid="rights-pro-rata-no-round">{action.line}</span>;
+  return (
+    <span className="pf-rights-round" data-testid="rights-pro-rata-round">
+      <span data-testid="rights-pro-rata-offer" data-recorded={action.offerRecorded ? 'yes' : 'no'}>{action.line}</span>
+      {action.href
+        ? <Link className="pf-btn is-quiet" to={action.href} data-testid="rights-pro-rata-open-round">Open the round →</Link>
+        : action.hrefNote ? <small data-testid="rights-pro-rata-no-page">{action.hrefNote}</small> : null}
+    </span>
+  );
+}
+
+function RightsTable({ rows, canAsk, onAsk, reportsHref, proRata, onRetryProRata }) {
   return (
     <div className="pf-table-wrap">
       <table className="pf-table pf-rights-table" data-testid="rights-table">
@@ -131,6 +159,7 @@ function RightsTable({ rows, canAsk, onAsk, reportsHref }) {
                 </td>
                 <td data-label="Recorded">{r.terms || <span className="pf-not-recorded">{NOT_RECORDED_AT_CLOSING}</span>}</td>
                 <td data-label="You can">
+                  {r.type === 'pro_rata' && proRata ? <ProRataAction action={proRata} onRetry={onRetryProRata} /> : null}
                   {r.state === 'recorded' ? <span className="pf-sm">Read only</span>
                     : r.open ? <span className="pf-chip is-pending" data-testid={`rights-open-${r.type}`}>Requested{r.open.since ? ` · ${r.open.since}` : ''}</span>
                       : canAsk ? <button type="button" className="pf-btn" onClick={() => onAsk(r.type)} data-testid={`button-rights-ask-${r.type}`}>Ask HQ to record…</button>
@@ -150,7 +179,11 @@ function RightsTable({ rows, canAsk, onAsk, reportsHref }) {
  * `duties` `{ state, count }` from the duties read; `reportsHref` the company's Reports tab.
  */
 export default function OwnershipRights({ uid, position, route, duties, reportsHref, canAsk = true }) {
-  const sources = useMemo(() => ({ rights: { call: () => portfolioRightsApi.company(uid), shape: RIGHTS_SHAPE } }), [uid]);
+  const sources = useMemo(() => ({
+    rights: { call: () => portfolioRightsApi.company(uid), shape: RIGHTS_SHAPE },
+    // D6908: read on its own, so a failed round read leaves the rights standing and says so in the Pro rata row.
+    proRata: { call: () => portfolioProRataApi.get(uid), shape: PRO_RATA_SHAPE },
+  }), [uid]);
   const { reads, retry } = usePortfolioReads(sources);
   const [asking, setAsking] = useState(null);
   const [sent, setSent] = useState(null);
@@ -187,7 +220,8 @@ export default function OwnershipRights({ uid, position, route, duties, reportsH
             <p className="pf-sm">The duties read succeeded and returned none; HQ recorded no right at closing. If a document you signed grants one, ask HQ to record it.</p>
           </div>
         ) : (
-          <RightsTable rows={rows} canAsk={canAsk && askable.length > 0} onAsk={(t) => { setSent(null); setAsking({ type: t }); }} reportsHref={reportsHref} />
+          <RightsTable rows={rows} canAsk={canAsk && askable.length > 0} onAsk={(t) => { setSent(null); setAsking({ type: t }); }} reportsHref={reportsHref}
+            proRata={proRataAction(reads.proRata)} onRetryProRata={() => retry('proRata')} />
         )}
         {asking ? (
           <AskForm types={askable} start={asking.type} onSend={send} onCancel={() => setAsking(null)} />

@@ -110,8 +110,11 @@ export const PARTNER_ZONE_ACTIONS = {
   // The SECOND is still exact. Nothing in this product publishes a proof page:
   // `is_published` is computed for the firm's own reading, and there is no
   // public route that renders it, so there is nothing to preview.
+  // D4844 (#4844): NOT THE PRIMARY ANY MORE. Proof's one primary is `+ Add
+  // proof` in the zone's heading (OF-03 draws it alone in amber); asking for
+  // consent is about a result that already exists, so it is a secondary op.
   'offers/proof': [
-    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent', primary: true },
+    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent' },
     { label: 'Preview public page', unbuilt: 'no public proof page is published yet, so there is nothing to preview' },
     { label: 'Export', kind: 'export' },
   ],

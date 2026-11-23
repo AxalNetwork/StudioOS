@@ -202,8 +202,14 @@ finish technical mitigation.
    Set `FILE_RECOVERY_REGISTRY` to the reviewed registry file path and enable
    `FILE_RECOVERY_ENABLED=true` only after the operator checks and counsel
    approval. The workflow stays disabled otherwise. No live configuration has
-   been changed by this implementation. Live restore must apply #6654's current
-   suppression ledger and remains blocked until its adapter exists. D6653 adds
+   been changed by this implementation. Live restore applies the D6654 suppression
+   ledger first: `python3 scripts/file-recovery.py restore --run-id <snapshot>
+   --target <fresh private dir> --d1-database-id <id>` reads every
+   `record_suppression_ledger` row through the D1 API before it reads any archive
+   object, skips every erased key and refuses a request for one. The synthetic
+   drill (`python3 scripts/file-recovery-drill.py`, hosted on preview as the
+   `suppression-drill` dispatch mode) proves an object erased after its backup is
+   not restored. D6653 adds
    the optional independent copy and the missed-run alert, configured below.
 6. Add GitHub Actions secrets:
    - `CLOUDFLARE_API_TOKEN` (D1:edit + R2:read+write + Workers:edit)
@@ -270,7 +276,12 @@ its local source, and restores/decrypts/checks only that fixture from the
 outside copy. It cannot select a live member record and never advances the
 live backup heartbeat. Retain the run link and its redacted counts/heartbeat
 receipt. This is transport recovery evidence, not evidence that live record
-classes or the #6654 suppression-aware live restore have been enabled.
+classes have been enabled. The D6654 suppression drill is separate: the
+`suppression-drill` dispatch mode (`FILE_RECOVERY_PREVIEW_DRILL_ENABLED=true`,
+`FILE_RECOVERY_PREVIEW_D1_ID` and a preview-only D1 token in
+`FILE_RECOVERY_PREVIEW_D1_TOKEN`) writes one synthetic ledger row to the preview
+D1 and shows the restore skipping that object; it refuses the production
+database.
 
 | Hosted file proof | Outcome | Heartbeat / restore evidence |
 |---|---|---|
