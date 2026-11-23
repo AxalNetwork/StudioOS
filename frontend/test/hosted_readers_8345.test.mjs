@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { CapacityRequestBudget } from '../../merge-control/src/lib/ciCapacityAuthPolicy.ts';
-import { SqlCapacityBudgetStore } from '../../merge-control/src/ciCapacityRuntime.ts';
+import '../../merge-control/test/runtime-loader.mjs';
+const { SqlCapacityBudgetStore } = await import('../../merge-control/src/ciCapacityRuntime.ts');
 import { createHostedReaders, hostedGithubRead, hostedReaderFactory } from '../../scripts/ci/runners/hosted-readers.mjs';
 import { createHostedVerification } from '../../scripts/ci/runners/hosted-verification.mjs';
 import { createReceiptReader, githubOidcToken } from '../../scripts/ci/capacity-client.mjs';
@@ -382,4 +383,30 @@ test('readiness requires the exact trusted JobContainer profile, not a lookalike
     await readers.readProvenance(w.args);
     await assert.rejects(readers.readBoundaryReadiness(w.args), /job_unconfigured/);
   }
+});
+
+test('bridge snapshot age is bounded before isolation even when reader documents are fresh', async t => {
+  for (const age of [-1, 29_000, 30_000, 30_001, 31_000]) await t.test(String(age), async t => {
+    const w = world(t); w.native.owned = null;
+    t.mock.method(globalThis, 'fetch', w.options.issuerFetch);
+    const env = { GITHUB_REPOSITORY: REPO, EXECUTOR_SHA: EXEC, CHILD_WORKFLOW_SHA: EXEC, GITHUB_WORKFLOW_SHA: EXEC,
+      GITHUB_RUN_ID: '202', GITHUB_RUN_ATTEMPT: '1', PROFILE: 'hosted', CI_CAPACITY_AUDIENCE: w.claims.aud,
+      GH_TOKEN: 'fixture-only', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://fixture.actions.githubusercontent.com/token', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-only' };
+    const accepted = age >= 0 && age <= 30_000;
+    const code = await bridge('admit', env, { results: { read: () => null }, store: {},
+      authority: { readReceipt: w.options.readReceipt },
+      isolationFactory(profileId, options) {
+        return hostedExecutorDependencies({ ...options, profileId, boundaryJob: () => w.native });
+      },
+      async admit(_env, dependencies) {
+        const input = { request: { requestId: w.receipt.requestId, shard: w.receipt.logicalShard,
+          generation: w.receipt.generation, profile: w.receipt.profile }, context: w.args.context, phase: 'execute' };
+        await dependencies.readReceipt(input);
+        t.mock.timers.setTime(NOW + age);
+        assert.equal(await dependencies.verifyIsolation(w.args), accepted, `snapshot age ${age}`);
+        if (accepted) await dependencies.readReceipt(input);
+        return accepted ? 0 : 1;
+      } });
+    assert.equal(code, accepted ? 0 : 1);
+  });
 });
