@@ -626,7 +626,10 @@ export function useDirectoryExport(markets, params) {
   const ctl = marketExport({ status: markets.status, count, query: view.q, sort: view.sort,
     sortLabel: MARKET_SORTS.find((x) => x.value === view.sort)?.label });
   const rows = async () => {
-    if ((markets.data?.items?.length || 0) >= count && !markets.request?.offset) return markets.data?.items || [];
+    // D7710: a row carries its read's time into the file.
+    if ((markets.data?.items?.length || 0) >= count && !markets.request?.offset) {
+      return (markets.data?.items || []).map((m) => ({ ...m, read_at: markets.data?.read_at ?? null }));
+    }
     return collectMarkets({ request: markets.request, fetchPage: (p) => researchMarketsApi.list(p) });
   };
   return { ctl, rows };
