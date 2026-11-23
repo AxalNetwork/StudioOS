@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
@@ -8,7 +8,10 @@ import { useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { StatedLimit } from '../advisor/expertise/kit';
-import { activityLine, day, fileSize, roomFileState, when } from './diligenceRead';
+import { activityLine, day, folderNameOf, memoExport, roomFileState, roomNdaState, stagedSinceLastVisit, when } from './diligenceRead';
+import SharedRoomFiles from '../deal/SharedRoomFiles.jsx';
+import { roomListing } from '../deal/dealWorkModel.js';
+import { tabHref } from '../dealPageModel';
 import { SharedEvidence } from '../cycles/evidence/InvestorEvidence';
 import { createRecordGate } from './recordGate.js';
 import RoomDeals from './RoomDeals';
@@ -26,6 +29,14 @@ import { AddToLibrarySheet, RoomFileLibrary, RoomLibraryNote, useRoomLibrary } f
  *
  * WHAT IS BEHIND AN NDA IS A COUNT. The worker never sends those names, so
  * there is nothing here to hide — no placeholder row, no greyed-out filename.
+ * #6270: nor a folder whose every file is withheld — a folder with no file
+ * listed here is not drawn, so a group heading or a folder count never stands
+ * for a withheld file either.
+ *
+ * #6270 (canvas IRV-03): the files are the deal tab's own room component
+ * (`SharedRoomFiles`, DE10 #5907), grouped by folder, searched through the
+ * shared `DataRoomSearch` (hits only from the listing), each with its staged
+ * date and a New pill when it was staged after the visit before this one.
  *
  * A GRANT THAT IS NOT YOURS AND ONE THAT DOES NOT EXIST ANSWER THE SAME WAY
  * (`room_not_found`), and so does this page: "This room is not open to you."
@@ -35,7 +46,6 @@ import { AddToLibrarySheet, RoomFileLibrary, RoomLibraryNote, useRoomLibrary } f
 const ghostBtn = 'inline-block rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[12px] font-bold '
   + 'text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/50';
 const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
-const th = 'text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint';
 
 function Tile({ k, v, sub, warn }) {
   return (
@@ -54,6 +64,67 @@ function Tile({ k, v, sub, warn }) {
     </Card>
   );
 }
+
+const ndaTone = { on_file: 'text-emerald-700 dark:text-emerald-300', out_for_signature: 'text-amber-800 dark:text-amber-300', none: 'text-axal-ink dark:text-gray-100' };
+
+/**
+ * #6270: where the NDA with this founder stands, and where to review and sign it. The room read
+ * carries no envelope, so the link is the deal's Data room tab, where Sign NDA and the envelope
+ * live (DE10) — drawn only when a deal on this company is one you may open.
+ */
+function RoomNda({ nda, withheld, deals }) {
+  const st = roomNdaState(nda);
+  const deal = (Array.isArray(deals) ? deals : []).find((d) => d && d.id != null) || null;
+  const needsSigning = st && st.status !== 'on_file' && (withheld > 0 || st.status === 'out_for_signature');
+  return (
+    <Card data-testid="room-nda">
+      <div className={eyebrow}>NDA with this founder</div>
+      {st ? (
+        <>
+          <div className={`mt-1.5 text-[15px] font-extrabold ${ndaTone[st.status]}`} data-testid="room-nda-state">{st.label}</div>
+          <p className="mt-1 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{st.line}</p>
+        </>
+      ) : <div className="mt-2"><Unrecorded /></div>}
+      {needsSigning && deal ? (
+        <Link to={tabHref(deal.id, 'documents')} className={`${ghostBtn} mt-2.5`} data-testid="room-nda-sign">Review and sign</Link>
+      ) : null}
+      {needsSigning && !deal ? (
+        <p className="mt-2 text-[11.5px] text-axal-muted" data-testid="room-nda-no-link">
+          An NDA is signed from a deal’s Data room tab, and no deal on this company is open to you.
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+/** #6270 (IRV-03C): Copy and Export, on an accepted memo only. Export hands over a plain-text file. */
+function MemoCopyExport({ item, company }) {
+  const [said, setSaid] = useState('');
+  const out = memoExport({ company, body: item.body, acceptedAt: item.accepted_at });
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(out.text); setSaid('Copied.'); }
+    catch { setSaid('This browser did not allow copying. Use Export instead.'); }
+  };
+  const save = () => {
+    try {
+      const url = URL.createObjectURL(new Blob([out.text], { type: 'text/plain;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = out.filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setSaid(`Exported as ${out.filename}.`);
+    } catch { setSaid('The memo could not be exported here. Use Copy instead.'); }
+  };
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2" data-testid="room-memo-actions">
+      <button type="button" className={memoBtn} onClick={copy} data-testid="room-memo-copy">Copy</button>
+      <button type="button" className={memoBtn} onClick={save} data-testid="room-memo-export">Export</button>
+      {said ? <span role="status" className="text-[10.5px] text-gray-700 dark:text-gray-300">{said}</span> : null}
+    </span>
+  );
+}
+const memoBtn = 'inline-flex items-center rounded-[7px] border border-gray-200 bg-white px-[11px] py-1.5 text-[11px] font-bold text-gray-700 '
+  + 'hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600';
 
 /** This room, as the profiles' option inventories name it (`lib/railOptions`). */
 const ZONE_FILE = 'pages/research/DiligenceRoom.jsx';
@@ -97,6 +168,16 @@ export default function DiligenceRoom({ role = 'investor' }) {
   // Read only inside the ready branch, where the worker always sends the count.
   const withheld = room ? room.withheld_behind_nda : null;
   const base = `/research/diligence/${encodeURIComponent(grantUid)}`;
+  const navigate = useNavigate();
+  // #6270: the listing the room component draws — the read's own files, and only folders that hold one.
+  const listing = useMemo(() => {
+    if (!room) return null;
+    const l = roomListing(room);
+    return { ...l, folders: l.folders.filter((f) => f.count > 0) };
+  }, [room]);
+  const rawByUid = useMemo(() => new Map((room?.files || []).map((f) => [f.uid, f])), [room]);
+  const newCount = (room?.files || []).filter((f) => stagedSinceLastVisit(f.created_at, room.last_opened_at) === true).length;
+  const fileHref = (uid) => `${base}/files/${encodeURIComponent(uid)}`;
 
   return (
     <WorkspaceShell
@@ -171,7 +252,6 @@ export default function DiligenceRoom({ role = 'investor' }) {
                       : <><Unrecorded /> <span className="ml-1 text-axal-muted">You have not opened this room before</span></>}
                   </p>
                 </div>
-                <a href="#open-to-you" className={ghostBtn}>Open the room →</a>
               </div>
             </Card>
 
@@ -191,29 +271,7 @@ export default function DiligenceRoom({ role = 'investor' }) {
               information too, so the two numbers stand apart rather than as a percentage.
             </p>
 
-            <Card>
-              <div className={eyebrow}>Scope</div>
-              <div className="mt-2.5 overflow-x-auto">
-                <table className="w-full min-w-[520px] text-left text-[12px]">
-                  <thead>
-                    <tr>
-                      {['Company', 'Open to you', 'In the room', 'Behind an NDA', 'You last opened'].map((h) => (
-                        <th key={h} className={`${th} pb-2`}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-t border-axal-hairline dark:border-gray-800">
-                      <td className="py-2.5 font-bold text-axal-ink dark:text-gray-100">{room.project.name}</td>
-                      <td className="py-2.5 font-mono">{room.file_open}</td>
-                      <td className="py-2.5 font-mono">{room.file_total}</td>
-                      <td className={`py-2.5 font-mono ${withheld > 0 ? 'text-amber-800 dark:text-amber-300' : ''}`}>{withheld}</td>
-                      <td className="py-2.5 text-axal-muted">{room.last_opened_at ? day(room.last_opened_at) : <Unrecorded />}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <RoomNda nda={room.nda} withheld={withheld} deals={room.deals} />
 
             <Card id="open-to-you" data-testid="room-open-files">
               <div className="flex items-baseline justify-between gap-3">
@@ -222,37 +280,35 @@ export default function DiligenceRoom({ role = 'investor' }) {
               </div>
               {fileState === 'open' && (
                 <>
-                  <div className="mt-2.5 overflow-x-auto">
-                    <table className="w-full min-w-[420px] text-left text-[12px]">
-                      <thead>
-                        <tr>
-                          <th className={`${th} pb-2`}>File</th>
-                          <th className={`${th} pb-2`}>Size</th>
-                          <th className={`${th} pb-2`}>You last downloaded</th>
-                          <th className={`${th} pb-2`}>Library</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {room.files.map((f) => (
-                          <tr key={f.uid} className="border-t border-axal-hairline dark:border-gray-800">
-                            <td className="py-2.5">
-                              <Link
-                                to={`${base}/files/${encodeURIComponent(f.uid)}`}
-                                className="font-semibold text-indigo-700 hover:underline dark:text-indigo-300"
-                              >
-                                {f.name}
-                              </Link>
-                              {f.visibility === 'nda' ? <Pill tone="warn" className="ml-2">NDA · signed</Pill> : null}
-                            </td>
-                            <td className="py-2.5 text-[11px] text-axal-muted">{fileSize(f.size_bytes) ?? <Unrecorded />}</td>
-                            <td className="py-2.5 text-[11px] text-axal-muted">
-                              {f.last_downloaded_at ? when(f.last_downloaded_at) : <Unrecorded />}
-                            </td>
-                            <td className="py-2.5"><RoomFileLibrary file={f} read={library.read} onAdd={setAdding} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <p className="mt-1.5 text-[11.5px] text-axal-muted" data-testid="room-new-line">
+                    {room.last_opened_at
+                      ? `New · staged after your previous visit, ${when(room.last_opened_at)} · ${newCount} ${newCount === 1 ? 'file' : 'files'}`
+                      : 'This is your first visit, so no file is marked new.'}
+                  </p>
+                  <div className="mt-2.5 min-w-0">
+                    <SharedRoomFiles
+                      key={room.project.uid}
+                      projectUid={room.project.uid}
+                      listing={listing}
+                      rawFiles={room.files}
+                      withheld={withheld}
+                      grouped
+                      addedLabel="Staged "
+                      fileLink={(f, { folder }) => ({ to: fileHref(f.uid), state: { folder } })}
+                      onOpen={(f) => navigate(fileHref(f.uid), { state: { folder: folderNameOf(listing.folders, f.folder_uid) } })}
+                      onDownload={(f) => navigate(fileHref(f.uid))}
+                      rowExtra={(f) => {
+                        const r = rawByUid.get(f.uid) || {};
+                        return (
+                          <span className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-axal-muted">
+                            {stagedSinceLastVisit(r.created_at, room.last_opened_at) === true ? <Pill tone="info" data-testid="room-file-new">New</Pill> : null}
+                            {r.visibility === 'nda' ? <Pill tone="warn">NDA · signed</Pill> : null}
+                            <span>{r.last_downloaded_at ? `Link issued ${when(r.last_downloaded_at)}` : 'Not downloaded'}</span>
+                            <RoomFileLibrary file={f} read={library.read} onAdd={setAdding} />
+                          </span>
+                        );
+                      }}
+                    />
                   </div>
                   <RoomLibraryNote read={library.read} />
                   {adding ? <AddToLibrarySheet file={adding} room={room} onClose={() => setAdding(null)} onAdded={() => library.reload()} /> : null}
@@ -312,10 +368,10 @@ export default function DiligenceRoom({ role = 'investor' }) {
                   {room.activity.map((a, i) => {
                     const line = activityLine(a);
                     return (
-                      <li key={`${a.created_at}-${i}`} className="flex flex-wrap items-baseline gap-2.5 text-[12px]">
-                        <span className="w-[130px] shrink-0 text-[11px] text-axal-muted">{when(a.created_at)}</span>
+                      <li key={`${a.created_at}-${i}`} className="flex min-w-0 flex-col gap-1 text-[12px] sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-2.5">
+                        <span className="shrink-0 text-[11px] text-axal-muted sm:w-[130px]">{when(a.created_at)}</span>
                         <Pill tone="neutral">{line.verb}</Pill>
-                        {line.what ? <span className="text-axal-ink dark:text-gray-100">{line.what}</span> : null}
+                        {line.what ? <span className="min-w-0 break-words text-axal-ink dark:text-gray-100">{line.what}</span> : null}
                       </li>
                     );
                   })}
@@ -343,6 +399,7 @@ export default function DiligenceRoom({ role = 'investor' }) {
               empty="A short memo on what this room holds and what is thin, drafted from the counts and file names above. Nothing behind the NDA is named to it."
               nothingToDraft="This room is not open to you, so there is nothing to draft over."
               foot="Accept writes your memo. It does not email the founder or request files."
+              acceptedActions={(item) => <MemoCopyExport item={item} company={room.project.name} />}
             />
           </>
         )}

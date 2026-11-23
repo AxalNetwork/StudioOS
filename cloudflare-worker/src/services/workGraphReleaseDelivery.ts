@@ -49,6 +49,9 @@ export interface ReleaseDeliveryRequest {
   /** The outbox effect's key: the provider must make its write conditional on it. */
   idempotencyKey: string;
   target: EffectTarget;
+  /** The effect's own tenant and company (part 6): the handler has checked the manifest is theirs before any call. */
+  tenantId: number;
+  companyId: number;
   /** The target's own id (`owner/repo#12`, a Stream uid, an envelope, a site, a channel). */
   ref: string;
   lineAssetUid: string;
@@ -166,7 +169,7 @@ async function handle(effect: EffectContext, env: Pick<Env, 'DB'>, adapters: Rel
   const adapter = adapters[target];
   if (!adapter) throw new DeliveryRetry('no_adapter');
   const req: ReleaseDeliveryRequest = {
-    op, idempotencyKey: effect.idempotencyKey, target, ref, lineAssetUid: line, manifestUid: manifest, digest,
+    op, idempotencyKey: effect.idempotencyKey, target, tenantId, companyId, ref, lineAssetUid: line, manifestUid: manifest, digest,
     audience: op === 'publish' ? man.audience : null,
     components: op === 'publish' ? body.components.map((c) => ({ asset: c.asset, revision: c.revision, digest: c.digest, role: c.role, source: c.source })) : [],
   };

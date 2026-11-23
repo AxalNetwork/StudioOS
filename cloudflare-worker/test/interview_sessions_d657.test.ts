@@ -34,6 +34,7 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
   const db = f.db;
+  applySuppressionLedger(db); // D6654: the record-erasure path writes its ledger row.
   db.exec(`
     ALTER TABLE users ADD COLUMN founder_id INTEGER;
     ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;
@@ -1059,6 +1060,7 @@ import { checkSummary } from '../src/services/interviewStructuring.ts';
 
 import { withGuard } from './_guard_stub.mjs';
 import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 /** A recorded, stopped session with `n` chunks, the queue captured. */
 async function recordedForProcessing(f: any, n: number, opts: { consent?: boolean } = {}) {
   // structureSession re-checks the member's account (D684's writableSession).

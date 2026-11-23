@@ -108,6 +108,13 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/observations/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_observations_7716.test.ts",
+    "note": "D7716: an observation is a sourced public statistic (provider, source URL, usage note), not a member's record; every signed-in user may read any one, and a request with no sign-in is refused with 401 (tested on all four routes)."
+  },
   "GET /api/research/sectors/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

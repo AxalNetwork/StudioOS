@@ -44,11 +44,12 @@ test('the market chart carries the band text the Worker read gives', () => {
 
 test('History lists each change with who and when, and says so when it cannot', () => {
   const rows = [
-    { id: 2, figure: 'tam', value: 5.5e9, method: 'typed', source_title: null, source_url: null, set_by_name: 'Ada Admin', set_at: '2026-11-15 10:02:00' },
+    { id: 2, sizing_version: 4, figure: 'tam', value: 5.5e9, method: 'typed', source_title: null, source_url: null, set_by_name: 'Ada Admin', set_at: '2026-11-15 10:02:00' },
     { id: 1, figure: 'tam', value: 5e9, method: 'top_down', source_title: 'Synthetic industry report 2026', source_url: 'https://example.com/r', set_by_name: 'Fay Founder', set_at: '2026-11-14 09:00:00' },
   ];
   const text = html({ rows });
   assert.match(text, /History/);
+  assert.match(text, /Version 4/);
   assert.match(text, /Total addressable · \$5\.5B/);
   assert.match(text, /Typed · No source named · Ada Admin · 2026-11-15/);
   assert.match(text, /Top-down · Synthetic industry report 2026 · Fay Founder · 2026-11-14/);
@@ -67,7 +68,8 @@ test('the Lab sizing save names its method and a stored source by id, never by t
   assert.equal(sizingSourceSeed({ figures: { tam: { market_source_id: 7 } }, sources: [] }), '', 'a removed source is not offered');
   assert.equal(sizingSourceSeed({ sources: [{ id: 7 }] }), '');
   const page = codeOnly(raw('frontend/src/pages/SpinoutLabMarketPage.jsx'));
-  assert.match(page, /api\.updateProject\(project\.id, \{ tam, sam, som, market_figure_source: sizingProvenance\(f\.methodology, sizingSourceId\) \}\)/);
+  assert.match(page, /marketFigureSource: sizingProvenance\(assumptions\.methodology, sourceId\)/);
+  assert.match(page, /marketSizingApi\.saveVersion\(id, request\)/);
   assert.match(page, /data-testid="select-sizing-source"/);
   const defs = codeOnly(raw('frontend/src/pages/cycles/defs/validate.jsx'));
   assert.match(defs, /<MarketFigureHistory part=\{data\?\.parts\?\.market_history\} \/>/);
