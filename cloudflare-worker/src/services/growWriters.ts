@@ -144,6 +144,32 @@ async function contactOf(env: Env, pid: number, raw: unknown): Promise<string | 
   return String(row.uid);
 }
 
+/**
+ * D6865 part 2 (#6891, GR-24): the Inbox message a feedback item is saved from
+ * (`services/growInbox.ts` keys). A recorded reply (`contact:<id>`) must be an
+ * inbound reply of the linked contact in this venture; a mailbox message
+ * (`mail:<digest>`) is a digest of mail Axal never stores, so only its shape is
+ * checked. Either way it is matched inside its own thread only (`contact_uid`).
+ */
+export const REPLY_KEY = /^(?:contact:[1-9][0-9]{0,18}|mail:[a-f0-9]{64})$/;
+async function replyKeyOf(env: Env, pid: number, raw: unknown, contactUid: string | null, origin: string): Promise<string | null> {
+  if (raw == null || raw === '') return null;
+  if (typeof raw !== 'string' || !REPLY_KEY.test(raw)) throw new Refused(400, 'Choose the reply to save', 'reply_key');
+  if (origin !== 'inbox_reply') throw new Refused(400, 'Only an Inbox reply is saved with a reply', 'reply_key');
+  if (!contactUid) throw new Refused(400, 'A reply is saved with the person who sent it', 'contact_uid');
+  if (raw.startsWith('contact:')) {
+    const reply = await env.DB.prepare(
+      `SELECT r.id FROM contact_replies r JOIN contacts c ON c.id = r.contact_id
+        WHERE r.id = ? AND c.uid = ? AND c.project_id = ? AND r.direction = 'inbound'`,
+    ).bind(Number(raw.slice(8)), contactUid, pid).first<{ id: number }>();
+    if (!reply) throw new Refused(404, 'That reply is not in this person’s Inbox thread', 'reply_key');
+  }
+  const saved = await env.DB.prepare('SELECT uid FROM product_feedback WHERE project_id = ? AND contact_uid = ? AND reply_key = ?')
+    .bind(pid, contactUid, raw).first<{ uid: string }>();
+  if (saved) throw new Refused(409, 'That reply is already saved as feedback', 'reply_key', { uid: String(saved.uid) });
+  return raw;
+}
+
 export async function addFeedback(
   env: Env, pid: number, user: User, b: Body, options: { sourceProposalId?: number | null } = {},
 ): Promise<{ uid: string }> {
@@ -158,6 +184,7 @@ export async function addFeedback(
   // D6865: a PostHog proposal is a survey answer; a body that names no origin was typed.
   const origin = oneOf(b.origin, FEEDBACK_ORIGINS, 'origin') ?? (sourceProposalId != null ? 'posthog_survey' : 'typed');
   const contactUid = await contactOf(env, pid, b.contact_uid);
+  const replyKey = await replyKeyOf(env, pid, b.reply_key, contactUid, origin);
   if (sourceProposalId != null) {
     const existing = await env.DB.prepare('SELECT uid FROM product_feedback WHERE uid = ? AND project_id = ?')
       .bind(id, pid).first<{ uid: string }>();
@@ -165,12 +192,13 @@ export async function addFeedback(
   }
   await env.DB.prepare(
     `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label,
-       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin, reply_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, pid, text, source, str(b.from_name, 200), email(b.from_email, 'from_email'), str(b.from_company, 200), str(b.theme, 80),
     item?.ref ?? null, item?.label ?? str(b.roadmap_item_label, 200), flag(b.notify_on_ship),
-    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin).run();
-  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged', summary: 'Feedback logged' });
+    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin, replyKey).run();
+  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged',
+    summary: replyKey ? 'Feedback saved from an Inbox reply' : origin === 'interview' ? 'Feedback saved from an interview' : 'Feedback logged' });
   return { uid: id };
 }
 
