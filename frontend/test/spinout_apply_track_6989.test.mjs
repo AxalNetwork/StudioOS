@@ -88,13 +88,13 @@ test('6989: RegisterPage draws the Lab heading, the programme line and the stage
 const step1 = (basics) => renderToStaticMarkup(React.createElement(ApplyStep, {
   step: 1, basics: { ...emptyBasics(), ...basics }, answers: emptyAnswers(), setBasics: () => {}, setAnswers: () => {},
 }));
-const pressed = (html, id) => new RegExp(`data-testid="apply-track-${id}" aria-pressed="true"`).test(html);
+const pressed = (html, id) => html.includes(`data-testid="apply-track-${id}" aria-pressed="true"`);
 
 test('6989: the application preselects the carried starting point, and none when none was carried', () => {
   const html = step1({ track: 'fit' });
   assert.ok(pressed(html, 'fit'));
   assert.ok(!pressed(html, 'form') && !pressed(html, 'line'));
-  for (const t of LAB_TRACKS) assert.match(html, new RegExp(`>${t.name}<`));
+  for (const t of LAB_TRACKS) assert.ok(html.includes(`>${t.name}<`), t.name);
   const none = step1({ track: '' });
   assert.ok(LAB_TRACKS.every((t) => !pressed(none, t.id)), 'nothing is chosen for the applicant');
 });
