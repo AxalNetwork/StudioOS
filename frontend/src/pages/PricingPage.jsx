@@ -32,7 +32,7 @@ import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
-  PRICING_TABS, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
+  PRICING_TABS, closingRegisterPath, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
   storageGroup, modelUsage, priceOf, usd,
 } from '../lib/pricingModel';
 import {
@@ -674,7 +674,7 @@ export function PricingBody({ user = null }) {
               <div className="axp-closing-s">{CLOSING.line}</div>
             </div>
             <div className="axp-closing-a">
-              <Link to="/register" className="axp-btn axp-btn-white">Get started</Link>
+              <Link to={closingRegisterPath(tab)} className="axp-btn axp-btn-white" data-testid="pricing-closing-start">Get started</Link>
               <Link to="/contact" className="axp-btn axp-btn-ghost">Talk to us</Link>
             </div>
           </div>

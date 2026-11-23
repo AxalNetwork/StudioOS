@@ -123,7 +123,7 @@ test('every Build module exports its own columns', async () => {
   const db = seeded();
   const want: Record<string, string> = {
     'prototype-mvp': 'Must-have,Test,State,Owner,Due,Built,Tested',
-    'product-roadmap': 'Item,Column,Moves,Owner,Date',
+    'product-roadmap': 'Item,Column,State,Moves,Owner,Date',
     'founding-team': 'Founder,Role,Equity,Vesting,Agreement',
     'company-creation': 'Filing,Jurisdiction,Due,State,Proof',
     'operating-systems': 'System,Provider,State,Last sync,Used by',
