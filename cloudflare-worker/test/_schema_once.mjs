@@ -164,7 +164,11 @@ const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
  * `sqlite_sequence`. The handle keeps the options the test opened it with.
  */
 export function loadSchema(db, opts = {}) {
-  const path = schemaPath(opts);
+  return loadSchemaFile(db, schemaPath(opts));
+}
+
+/** `loadSchema` from a given built file (#8377: a test that builds its own variants, once each). */
+export function loadSchemaFile(db, path) {
   const alias = `schema_once_${process.pid}`;
   db.prepare(`ATTACH DATABASE ? AS ${alias}`).run(path);
   try {
