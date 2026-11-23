@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { BarChart3, Heart, Lock, AlertTriangle, ExternalLink, Star } from 'lucide-react';
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
@@ -7,15 +7,23 @@ import { api } from '../lib/api';
 import { Card, Pill, RailFrame, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
 import {
   CANVAS_SCORES, MORE_SCORES, TOPICS, MAX_TAGS, NOT_STORED_REASON, HISTORY_ROW_CAP,
-  isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
-  answeredCount, pastWeeks, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
+  isDay, weekStart, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
   resourceKind, resourceFacts, safeHref, homeCoverage, countRange,
   canMemberCancel, storedStars, MEMBER_CANCELLABLE, AGGREGATE_SCORE_KEYS, resourceHref,
 } from './wellbeing/wellbeingModel';
-import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
+import { BTN, FIELD, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
+import { PeriodCards, PrivateLine, ReflectionView, useTodayReflections } from './wellbeing/Reflections';
+import { SuggestionsSection } from './wellbeing/WellnessSuggestions';
+import { MyGroupSeats } from './wellbeing/GroupSessions';
+import { TAB_WORDS, cadenceOfParam } from './wellbeing/reflectionsModel';
 
 /**
  * /wellbeing — the member's Wellbeing home (canvas `wb-home`, D570).
+ *
+ * D7118 part 2 (canvas `Wellness Member Home`, WLM-01 to WLM-03): the home opens with "Take a moment to check in",
+ * then Today, This week and This month (`wellbeing/Reflections.jsx`), each its own record; `?period=today|week|month`
+ * opens one directly. The weekly check-in card below (`CheckinCard`, `PastWeeksCard`) no longer writes from the
+ * home: its rows read as Earlier check-ins in the reflections' history. The components stay for their tests.
  *
  * Four cards on the canvas's two columns: this week's check-in, my past weeks,
  * my bookings and resources. Each reads on its own, so one failed read never
@@ -529,29 +537,16 @@ export default function WellbeingPage() {
   const isAdmin = role === 'admin';
   const showAggregate = isAdmin && viewMode === 'admin';
 
-  const [history, setHistory] = useState({ status: 'loading', checkins: [], today: null });
-  const [form, setForm] = useState(() => formFromEntry(null));
-  const [save, setSave] = useState(IDLE_SAVE);
+  // D7118 part 2: Today, This week and This month are their own records; the weekly check-in card is retired here.
+  const [params] = useSearchParams();
+  const cadence = cadenceOfParam(params.get('period'));
+  const reflections = useTodayReflections();
+  const [seatsVersion, setSeatsVersion] = useState(0);
   const [bookings, setBookings] = useState({ status: 'loading', rows: [] });
   const [tab, setTab] = useState('upcoming');
   const [rated, setRated] = useState({});
   const [resources, setResources] = useState({ status: 'loading', rows: [] });
   const [expanded, setExpanded] = useState(false);
-
-  const loadHistory = useCallback(async () => {
-    setHistory((h) => ({ ...h, status: 'loading' }));
-    try {
-      const r = await api.wellbeingMyCheckins();
-      const checkins = Array.isArray(r?.checkins) ? r.checkins : [];
-      const today = isDay(r?.today) ? r.today : utcToday();
-      setHistory({ status: 'ready', checkins, today });
-      // The form starts from what this week already holds, so a save sends
-      // every stored value back rather than erasing the ones not touched.
-      setForm(formFromEntry(thisWeekEntry(checkins, today)));
-    } catch {
-      setHistory({ status: 'unreadable', checkins: [], today: null });
-    }
-  }, []);
 
   const loadBookings = useCallback(async () => {
     setBookings((b) => ({ ...b, status: 'loading' }));
@@ -575,52 +570,9 @@ export default function WellbeingPage() {
 
   useEffect(() => {
     if (isInvestor) return;
-    loadHistory();
     loadBookings();
     loadResources();
-  }, [isInvestor, loadHistory, loadBookings, loadResources]);
-
-  const entry = history.status === 'ready' ? thisWeekEntry(history.checkins, history.today) : null;
-  const weeks = useMemo(
-    () => (history.status === 'ready' ? pastWeeks(history.checkins, history.today) : []),
-    [history],
-  );
-
-  const setScore = (field, value) => {
-    setSave(IDLE_SAVE);
-    setForm((f) => ({ ...f, values: { ...f.values, [field]: value } }));
-  };
-  const setNote = (note) => { setSave(IDLE_SAVE); setForm((f) => ({ ...f, note })); };
-  const toggleTopic = (tag) => {
-    setSave(IDLE_SAVE);
-    setForm((f) => {
-      const tags = f.tags.includes(tag) ? f.tags.filter((t) => t !== tag) : [...f.tags, tag].slice(0, MAX_TAGS);
-      return { ...f, tags };
-    });
-  };
-
-  const submit = async () => {
-    if (history.status !== 'ready') return;
-    const body = buildCheckinPayload({ ...form, entry });
-    if (!answeredCount(body)) {
-      setSave({ ...IDLE_SAVE, error: 'Answer at least one score before saving.' });
-      return;
-    }
-    setSave({ ...IDLE_SAVE, saving: true });
-    try {
-      const saved = await api.wellbeingSubmit(body);
-      setSave({
-        ...IDLE_SAVE,
-        ok: entry ? 'Updated this week’s check-in.' : `Saved for the week of ${formatDay(weekStart(history.today))}.`,
-        // D574 — the route says whether this save was encrypted.
-        encrypted: typeof saved?.stored_encrypted === 'boolean' ? saved.stored_encrypted : null,
-      });
-      await loadHistory();
-    } catch (e) {
-      const fields = e?.status === 400 && e?.data?.fields && typeof e.data.fields === 'object' ? e.data.fields : {};
-      setSave({ ...IDLE_SAVE, fieldErrors: fields, error: e?.message || 'The check-in could not be saved.' });
-    }
-  };
+  }, [isInvestor, loadBookings, loadResources]);
 
   // D574 — cancelling asks first, then reloads the list from the route.
   const [cancels, setCancels] = useState({});
@@ -679,26 +631,29 @@ export default function WellbeingPage() {
       data-testid="wellbeing-home"
     >
       <section className="min-w-0 space-y-4" aria-label="Wellbeing">
-        <PageHeader
-          title="Wellbeing"
-          sub="A weekly check-in, your bookings with experts, and resources. Check-ins are stored encrypted; only you can read them."
-        />
-        {showAggregate && <AdminAggregate />}
+        {cadence ? (
+          <>
+            <nav aria-label="Breadcrumb" className="text-xs text-stone-600 dark:text-gray-400"><Link to="/wellbeing" className="font-semibold text-axal-violet">Wellness</Link> › {TAB_WORDS[cadence]}</nav>
+            <ReflectionView cadence={cadence} read={reflections.read} timezone={reflections.timezone} onRetry={reflections.reload} onChanged={reflections.reload} />
+          </>
+        ) : (
+          <>
+            <header className="rounded-axal bg-gradient-to-br from-stone-800 to-stone-900 px-5 py-6 text-white dark:from-gray-900 dark:to-black" data-testid="wellbeing-invitation">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-stone-200">Wellness · private to you</span>
+              <h1 className="mt-1 text-2xl font-extrabold">Take a moment to check in</h1>
+              <p className="mt-1 max-w-2xl text-sm text-stone-100">A quiet place to reflect, on your own terms. Choose a moment below; nothing here is scored, and only you can read what you write.</p>
+            </header>
+            {showAggregate && <AdminAggregate />}
+            <PeriodCards read={reflections.read} timezone={reflections.timezone} onRetry={reflections.reload} />
+            {/* D7119 part 2 (WLM-05): suggestions from the member's own choices only. */}
+            <SuggestionsSection onSeats={() => setSeatsVersion((v) => v + 1)} />
+          </>
+        )}
+        {cadence ? null : (
         <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-          <CheckinCard
-            status={history.status}
-            today={history.today}
-            entry={entry}
-            form={form}
-            save={save}
-            onScore={setScore}
-            onNote={setNote}
-            onTopic={toggleTopic}
-            onSave={submit}
-            onRetry={loadHistory}
-          />
           <div className="space-y-4">
-            <PastWeeksCard status={history.status} weeks={weeks} onRetry={loadHistory} />
+            {/* D7120 part 2: the member's own group seats, beside their 1:1 bookings. */}
+            <MyGroupSeats version={seatsVersion} />
             <MyBookingsCard
               status={bookings.status}
               bookings={bookings.rows}
@@ -720,6 +675,8 @@ export default function WellbeingPage() {
             />
           </div>
         </div>
+        )}
+        {cadence ? null : <PrivateLine />}
       </section>
     </RailFrame>
   );

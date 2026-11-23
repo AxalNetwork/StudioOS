@@ -8,6 +8,7 @@ import { researchSectorsApi } from '../../lib/api/researchSectors';
 import { sizeOf, backingOf } from './fundDirectoryRead';
 import { useResearchLinks } from './researchLinks.js';
 import MarketsBack from './MarketsBack.jsx';
+import { againstText, GLOBAL_CONTEXT, windowText } from './indexWindow.js';
 
 const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
 const READS = { demand: 'Demand for the work', supply: 'What is being built', capital: 'Capital activity', talent: 'Talent activity', research: 'Research activity', sentiment: 'Public discussion' };
@@ -65,7 +66,7 @@ export function SectorProfileView({ loading = false, error = false, data = null,
   const funds = data.funds || [];
   return <div data-testid="tracked-sector-profile" className="space-y-8 text-axal-ink dark:text-gray-100">
     <div className="space-y-3"><p className="text-xs font-bold uppercase tracking-wider text-axal-muted">Tracked sector · worldwide</p>
-      <p className="text-sm text-axal-muted">Monthly indexes from cited live sources. A missing month remains a gap; the current month is month to date.</p>
+      <p className="text-sm text-axal-muted">One point a month from cited live sources. Each point is the score over the 30 days before it was last computed, and names that window. A missing month remains a gap.</p>
       <nav aria-label="Sector sections" className="flex flex-wrap gap-2">{[
         ['companies', `${data.company_count} directory companies`], ['funds', `${data.fund_count} funds`],
         ['signals', `${signals.length} signals`], ['submarkets', `${submarkets.length} taxonomy markets`], ['build', 'What to build'],
@@ -78,16 +79,17 @@ export function SectorProfileView({ loading = false, error = false, data = null,
         return <Card key={dimension}><figure aria-label={`${titleCase(dimension)} monthly index`}>
           <figcaption className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="font-semibold">{titleCase(dimension)}</h3><p className="text-xs text-axal-muted">{READS[dimension]}</p></div>
             <div className="text-right"><span className="text-2xl font-semibold">{fact(d?.value)}</span>
-              <p className="text-xs text-axal-muted">{missing(d?.change) ? 'Change not recorded' : `${d.change > 0 ? '+' : ''}${d.change}% vs previous month`}</p></div></figcaption>
+              <p className="text-xs text-axal-muted">{missing(d?.change) ? 'Change not recorded' : `${d.change > 0 ? '+' : ''}${d.change}% ${againstText(d.change_against)}`}</p></div></figcaption>
+          {d?.context_only ? <p data-testid="sector-global-context" className="mt-2 text-xs font-semibold text-axal-muted">{GLOBAL_CONTEXT}</p> : null}
           {missing(d?.value) ? <p className="my-6 text-sm text-axal-muted">Not recorded · {d?.reason || 'No live source yet for this dimension.'}</p>
             : <div className="mt-3 h-36 min-w-0"><ResponsiveContainer width="100%" height="100%"><LineChart data={points}>
               <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="period" tick={{ fontSize: 10 }} /><YAxis domain={[0, 100]} width={28} tick={{ fontSize: 10 }} />
               <Tooltip /><Line type="linear" dataKey="value" stroke="var(--color-axal-violet)" connectNulls={false} isAnimationActive={false} />
             </LineChart></ResponsiveContainer></div>}
           <details className="mt-3 text-xs"><summary className="cursor-pointer">Monthly values and gaps</summary><ul className="mt-2 space-y-1">{points.map((p) => <li key={p.period}>
-            {p.period}: {missing(p.value) ? `Not recorded · ${p.reason}` : `${p.value} · ${p.sources} sources`}{p.month_to_date ? ' · month to date' : ''}
+            {p.period}: {missing(p.value) ? `Not recorded · ${p.reason}` : `${p.value} · ${p.sources} providers · ${windowText(p)}`}{p.latest_point ? ' · latest point, recomputed by each refresh' : ''}
           </li>)}</ul></details>
-          <p className="mt-3 border-t border-axal-hairline pt-3 text-xs text-axal-muted dark:border-gray-700">Latest live period {fact(d?.period)} · computed {fact(d?.computed_at)}</p>
+          <p className="mt-3 border-t border-axal-hairline pt-3 text-xs text-axal-muted dark:border-gray-700">Latest point {fact(d?.period)} · {missing(d?.value) ? 'window not recorded' : windowText(d)} · computed {fact(d?.computed_at)}</p>
         </figure></Card>;
       })}</div>
     </section>
@@ -95,9 +97,12 @@ export function SectorProfileView({ loading = false, error = false, data = null,
       <Card><div className="divide-y divide-axal-hairline dark:divide-gray-700">{DIMENSIONS.map((dimension) => {
         const d = dimensions[dimension];
         const mix = d?.points?.find((p) => p.period === d.period)?.source_mix || [];
-        return <div key={dimension} className="grid gap-3 py-4 sm:grid-cols-2"><h3 className="font-semibold">{titleCase(dimension)} · {fact(d?.period)}</h3>
-          {!mix.length ? <p className="text-sm text-axal-muted">Not recorded · No cited source rows for this month.</p> : <ul className="space-y-2">{mix.map((s) => <li key={s.source_key} className="text-sm">
-            {s.name} · {s.rows} rows · {missing(s.share) ? 'Share not recorded' : `${Math.round(s.share * 100)}%`} · latest {s.latest}
+        return <div key={dimension} className="grid gap-3 py-4 sm:grid-cols-2"><div><h3 className="font-semibold">{titleCase(dimension)} · {fact(d?.period)}</h3>
+          <p className="text-xs text-axal-muted">{missing(d?.value) ? 'Window not recorded' : windowText(d)}</p></div>
+          {!mix.length ? <p className="text-sm text-axal-muted">Not recorded · No source mix is stored for this point.</p> : <ul className="space-y-2">{mix.map((s) => <li key={s.source_key} className="text-sm">
+            <span className="font-semibold">{s.name || s.source_key}</span>
+            <span className="block text-xs">Share of weight {missing(s.share) ? 'not recorded' : `${Math.round(s.share * 100)}%`} · Distinct observations {fact(s.observations)}</span>
+            {s.scope === 'context' ? <span className="block text-xs text-axal-muted">Copied to every sector · covers {fact(s.coverage_area)} · period {s.period_from && s.period_to ? (s.period_from === s.period_to ? s.period_from : `${s.period_from} to ${s.period_to}`) : 'not recorded'}</span> : null}
           </li>)}</ul>}</div>;
       })}</div></Card>
     </section>

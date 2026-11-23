@@ -153,3 +153,12 @@ of this application. Live browser and public site-API behavior were not checked
 in production; the filter/detail service results above are local. The original
 worldwide/regional coverage gate remains unmet, and registry-reported websites
 remain unverified for current reachability and ownership.
+
+## 22 November evidence follow-up
+
+[D7316 part 3](../architecture/decisions/D7316-p3.md) records the owner's
+instruction to retain the 11,000 held rows. S1 subsequently reported 10,122
+additional inserts after this audit's original cohort. Their reported counts
+and outstanding retained-package evidence are recorded separately in the
+[22 November reconciliation](RESEARCH_COMPANIES_EVIDENCE_2026-11-22.md).
+This audit's original receipts do not verify those later inserts.

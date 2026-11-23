@@ -126,6 +126,11 @@ async function sha256(text: string): Promise<string> {
 /** Open in Lovable: every check first, then the row and the activity line together, then the link. */
 export async function launchPrompt(env: Env, user: User, cycle: LovableCycle, projectId: number, body: Record<string, unknown>) {
   const ref = recordOf(cycle, projectId, body.record);
+  if (cycle === 'validate') {
+    const experiment = await env.DB.prepare('SELECT status, stopped_at FROM hypothesis_experiments WHERE id = ? AND project_id = ?').bind(Number(ref.id), projectId).first<{status:string;stopped_at:string|null}>();
+    if (!experiment) throw new LovableError('not_found', 404, 'This experiment is not on this venture.');
+    if (experiment.status !== 'planned' || experiment.stopped_at) throw new LovableError('experiment_not_planned', 422, 'Only a planned experiment can be opened in Lovable.');
+  }
   const prompt = promptOf(body.prompt);
   const d = await drafted(env, cycle, projectId, ref);
   const findings = await privacyFindings(env, projectId, prompt);
