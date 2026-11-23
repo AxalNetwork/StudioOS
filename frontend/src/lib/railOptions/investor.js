@@ -19,7 +19,7 @@
  *
  * An option that runs no model (a CRUD write, a client-side CSV export, the
  * Network's heuristic propositions) is not listed, and the rail lists none.
- * Boards with no row offer no such option today: Deals, Axal VC Fund, Fund, Overview, LPs, Distributions, Reporting, Network and its
+ * Boards with no row offer no such option today: Deals, Axal VC Fund, Overview, Distributions, Reporting, Network and its
  * three boards, Benchmarking and Markets.
  */
 export const INVESTOR_RAIL_OPTIONS = Object.freeze([
@@ -48,6 +48,12 @@ export const INVESTOR_RAIL_OPTIONS = Object.freeze([
   // Fund
   { page: 'Investor · Fund · Capital calls', key: 'draft:lp-reminder', label: 'Draft the reminder', kind: 'write', handler: 'draft',
     source: { file: 'pages/investor/InvestorFundCalls.jsx', match: 'surface="funds/calls"' } },
+  // D6242 (#6242): one LP's summary on their record drawer, and a draft period's letter. A period's page,
+  // `/funds/:id/reporting/:periodId`, answers the Fund board's key (lib/railPages.js), so its row is on that page.
+  { page: 'Investor · Fund · LPs', key: 'draft:lp-summary', label: 'Summarise this LP', kind: 'numbers', handler: 'draft',
+    source: { file: 'pages/investor/InvestorFundLPs.jsx', match: 'surface="funds/lps"' } },
+  { page: 'Investor · Fund', key: 'draft:quarterly-letter', label: 'Draft the letter', kind: 'write', handler: 'draft',
+    source: { file: 'pages/FundReportPeriodPage.jsx', match: 'surface="funds/reporting"' } },
   // Research
   { page: 'Investor · Research', key: 'ask:evidence', label: 'Find evidence', kind: 'research', handler: 'form',
     source: { file: 'pages/investor/InvestorResearchWorkspace.jsx', match: 'api.research.ask(' } },
@@ -84,7 +90,7 @@ export const INVESTOR_BOARD_FILES = Object.freeze([
   'pages/investor/InvestorPortfolioValueAdd.jsx', 'pages/SpinoutLabLpWorkspacePage.jsx',
   'pages/investor/InvestorFundLanding.jsx', 'pages/investor/InvestorFundLPs.jsx',
   'pages/investor/InvestorFundCalls.jsx', 'pages/investor/InvestorFundAccounting.jsx',
-  'pages/investor/InvestorFundReporting.jsx', 'pages/investor/InvestorNetworkWorkspace.jsx',
+  'pages/investor/InvestorFundReporting.jsx', 'pages/FundReportPeriodPage.jsx', 'pages/investor/InvestorNetworkWorkspace.jsx',
   'pages/investor/InvestorResearchWorkspace.jsx', 'pages/research/AskZone.jsx',
   'pages/research/DiligenceZone.jsx', 'pages/research/DiligenceRoom.jsx', 'pages/research/DiligenceFile.jsx',
   'pages/research/BenchmarkingZone.jsx', 'pages/research/BenchmarkDetail.jsx',
