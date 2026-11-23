@@ -19,7 +19,53 @@
 
 const TEST_FILE = /\.(?:test|spec)\.[^/]+$|(?:^|\/)test_[^/]+\.py$/;
 const TEST = /(?:^|\/)(?:tests?|__tests__)(?:\/|$)|\.(?:test|spec)\.[^/]+$|(?:^|\/)test_[^/]+\.py$/;
-const SENSITIVE = /(?:^|\/)(?:\.github|scripts|merge-control|attached_assets)(?:\/|$)|^cloudflare-worker\/(?:sql|src\/middleware)\/|(?:^|\/)(?:AGENTS\.md|CLAUDE\.md|CODEOWNERS|package[^/]*\.json|wrangler[^/]*\.toml|[^/]*(?:lockfile|\.lock(?:\.json)?|[-_.]lock\.(?:json|yaml|yml)))(?:$|\/)/i;
+/**
+ * D8067 (#8067): the privileged paths, the one list every gate reads. T2 below, the landing bot's PROTECTED
+ * (`scripts/landing-bot/rules.mjs`), the generated CODEOWNERS block and the ruleset's file-path condition
+ * (`scripts/check-privileged-paths.mjs`, for #8060) all come from it. Each entry is a gitignore-style glob, so
+ * CODEOWNERS and the ruleset take it as written: `**` crosses folders, `*` stays inside one name, and a name also
+ * covers everything under a folder of that name. Matching here ignores case; CODEOWNERS does not (D8067).
+ */
+const LOCK_SUFFIXES = ['-', '_', '.'].flatMap((sep) => ['json', 'yaml', 'yml'].map((ext) => `**/*${sep}lock.${ext}`));
+// The product Worker's folder, spelled in parts: Merge Control names its paths as patterns and never imports from
+// it, and control.test.ts holds every file here to not even spelling its source folder out (D5618).
+const WORKER = ['cloudflare-worker', 'src'].join('/');
+export const PRIVILEGED_PATHS = Object.freeze([
+  ['**/.github', 'CI workflows, labels, Dependabot and CODEOWNERS: the gates themselves'],
+  ['**/scripts', 'the build, check, landing and release scripts every gate runs'],
+  ['**/merge-control', 'the Merge Control Worker and this classifier'],
+  ['**/attached_assets', 'legal templates, specs and other binary sources'],
+  ['cloudflare-worker/sql/**', 'the D1 schema and its migrations'],
+  [`${WORKER}/middleware/**`, 'the Worker\'s auth and request middleware'],
+  ['**/AGENTS.md', 'the agents\' task protocol'],
+  ['**/CLAUDE.md', 'the architecture truth'],
+  ['**/CODEOWNERS', 'who reviews what'],
+  ['**/.gitattributes', 'merge drivers and the diff and binary rules'],
+  ['**/package*.json', 'dependencies and npm scripts'],
+  ['**/wrangler*.toml', 'a Worker\'s deploy contract and bindings'],
+  ['**/npm-shrinkwrap.json', 'a pinned dependency tree'],
+  ['**/*lockfile', 'a pinned dependency tree'],
+  ['**/*.lock', 'a pinned dependency tree'],
+  ['**/*.lockb', 'a pinned dependency tree'],
+  ...LOCK_SUFFIXES.map((glob) => [glob, 'a pinned dependency tree']),
+].map(([glob, why]) => Object.freeze({ glob, why })));
+
+/** One glob as a RegExp: `**\/` is any folders or none, a trailing `/**` everything below, `*` one name's part. */
+export function globRegExp(glob) {
+  const body = glob.replace(/\/\*\*$/, '\u0001').replace(/^\*\*\//, '\u0002').split('*')
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*');
+  const re = body.replace('\u0002', '(?:.*/)?').replace('\u0001', '/.+');
+  return new RegExp(`^${re}${glob.endsWith('/**') ? '' : '(?:/.+)?'}$`, 'i');
+}
+export const PRIVILEGED = Object.freeze(PRIVILEGED_PATHS.map(({ glob }) => globRegExp(glob)));
+/** Whether a path is privileged; an unreadable path is. */
+export const isPrivileged = (path) => typeof path !== 'string' || !path || PRIVILEGED.some((re) => re.test(path));
+/** The changed files (and renames' old paths) that are privileged, sorted. */
+export function privilegedFiles(files) {
+  const hit = new Set();
+  for (const f of files ?? []) for (const p of [f?.path, f?.previousPath]) if (p !== undefined && isPrivileged(p)) hit.add(String(p));
+  return [...hit].sort();
+}
 const SENSITIVE_NAME = /auth|session|permissions?|tenan(?:t|cy)|billing|money|payment|stripe|entitlement|pricing|subscription|cap.?table|fund.?fee|remittance|valuation|sign.?in|mfa|oauth|access.?control|legal.?template/i;
 const LEAF_UI = /^frontend\/src\/(?:components|icons|styles)\//;
 const ORDINARY = /^(?:cloudflare-worker\/src\/(?:agents|contracts|data|durable-objects|integrations|mcp|models|probes|routes|rpc|services|templates|util)|backend\/app\/(?:api\/routes|services)|frontend\/src\/(?:brand|contexts|data|decks|hooks|lib|pages|routes|services|templates|ui|workspaces))\//;
@@ -49,7 +95,7 @@ function changedLines(patch) {
 const readable = (patch) => /^@@ /m.test(patch);
 
 function pathPolicy(path, status, patch = '') {
-  if (SENSITIVE.test(path) || SENSITIVE_NAME.test(path)) return ['T2', 'protected path'];
+  if (isPrivileged(path) || SENSITIVE_NAME.test(path)) return ['T2', 'protected path'];
   if (TEST.test(path)) {
     if (!TEST_FILE.test(path)) return ['T2', 'test helper or fixture'];
     if (status === 'A') return ['T0', 'added test'];

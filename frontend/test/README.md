@@ -1,5 +1,7 @@
 # frontend/test — what the frontend guarantees
 
+`ci_capacity_auth_composition_8011.test.mjs` exercises the inactive capacity runtime's signed authentication, SQLite admission and trusted reader continuation through the Node platform adapter. `ci_capacity_transport.test.mjs` retains the real Linux profile/executor composition and its success, failure, revocation and incomplete-result cases. Neither suite is live provider or deployed Workers-runtime evidence.
+
 ```
 node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'
 ```
@@ -267,6 +269,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
+`company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
 `portfolio_unavailable_6201.test.mjs` (D6201) keeps explicit route failure reasons on financial figures and reporting, and excludes failed reads from chase rows.
 `icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
@@ -279,3 +282,4 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
 
 | `revenue_metrics_5952.test.mjs` | D5952: quarterly ledger metric states, currency/period joins, per-licence receipts and AI, automatic promo report and coverage metadata; rendered components over synthetic envelopes. |
+| `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |

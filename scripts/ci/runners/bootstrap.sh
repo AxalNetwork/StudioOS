@@ -456,11 +456,13 @@ def main(directory, argv):
         if args.action=='status':
             existing=registration(root,registry,state)
             print(json.dumps({'identity':state['identity'],'profile':args.profile,'local_registration':bool(existing),'service_active':service(root,state,directory/'bootstrap.sh','status'),'online_idle_eligibility':'unverified_operator_inventory_required'}));return 0
-        if args.action in ('register','start'): isolation_enrollment_gate()
         if args.action=='register':
             existing=registration(root,registry,state)
             if existing:
                 private_files(root);print(json.dumps({'identity':state['identity'],'registration':'existing_not_duplicated','online_idle_eligibility':'unverified_operator_inventory_required'}));return 0
+        # A complete existing enrollment is a read-only acknowledgment, never admission.
+        # New registration and every start still require the independently proved canary.
+        if args.action in ('register','start'): isolation_enrollment_gate()
         require(args.approval_file is not None,'private_operator_receipt_required')
         trusted_file(args.approval_file,private=True)
         receipt=approval(json_file(args.approval_file),registry,state,enrollment=args.action in ['register','start'])

@@ -1,20 +1,32 @@
-/** D547 — tracked sectors, read through the D533 crosswalk and D538 live-data boundary. */
+/**
+ * D547 — tracked sectors, read through the D533 crosswalk and D538 live-data boundary.
+ *
+ * D7708 — each point returns the window its score covers and the source mix it
+ * used, both stored beside the point at compute time and read back as stored.
+ * A point written before D7708 reads "Window not recorded" and has no mix; a
+ * change names the previous point's window too.
+ */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { SECTORS } from '../services/market_intel/aggregator';
-import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
+import { SECTORS, previousPeriodKey } from '../services/market_intel/aggregator';
+import { liveIndexSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
+import { storedWindow, WINDOW_NOT_RECORDED, type ScoreMix } from '../services/market_intel/scoring';
 import { getSource } from '../services/market_intel/registry';
 import '../services/market_intel/sources/index';
 import { listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector, mapFundFocus, mapSignalTags } from '../services/researchTaxonomy';
 import { presentFund, SERVED_FUNDS, type DirectoryRow } from '../services/researchFundDirectory';
 
 const researchSectors = new Hono<{ Bindings: Env }>();
+/** D7708 — what a source mix is, as the sector read returns it. */
+export const SOURCE_MIX_BASIS = 'Each provider\'s share of the weight the score used over its window, with its count of distinct observations. Stored when the score was computed.';
 export const SECTOR_DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const;
 export const sectorSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const sectors = SECTORS.map((name) => ({ name, slug: sectorSlug(name) }));
-interface IndexRow { sector: string; period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number; computed_at: string }
-interface MixRow { sector: string; period: string; source_key: string; rows: number; latest: string }
+interface IndexRow {
+  sector: string; period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number; computed_at: string;
+  window_start?: string | null; window_end?: string | null; source_mix_json?: string | null;
+}
 interface Company { uid: string; name: string; country: string | null; sector: string | null; founded_year: number | null; employee_count: number | null; as_of: string; source_url: string }
 interface Signal { id: string; title: string; type: string; thesis: string; why_now: string; build_opportunity: string; region: string; country: string; confidence_score: number; tags: string; updated_at: string }
 
@@ -26,33 +38,52 @@ export function sectorPeriods(now = new Date()): string[] {
   });
 }
 
-function sourceMix(rows: MixRow[], dimension: string) {
-  const contributing = rows.filter((r) => getSource(r.source_key)?.dimensions.some((d) => d === dimension));
-  const total = contributing.reduce((n, r) => n + r.rows, 0);
-  return contributing.map((r) => ({
-    source_key: r.source_key, name: getSource(r.source_key)!.display_name,
-    rows: r.rows, share: total ? r.rows / total : null, latest: r.latest,
-  })).sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name));
+/**
+ * D7708 — the mix a point stored, with each provider's display name. Read back
+ * as stored: shares are of the weight the score used, beside each provider's
+ * count of distinct observations. A provider no longer registered keeps its key
+ * and no name.
+ */
+function presentMix(mix: ScoreMix | null) {
+  if (!mix) return [];
+  return mix.entries.map((e) => ({ ...e, name: getSource(e.source_key)?.display_name ?? null }));
 }
 
-export function sectorSeries(indexes: IndexRow[], mix: MixRow[], periods: string[]) {
+export function sectorSeries(indexes: IndexRow[], periods: string[]) {
   return Object.fromEntries(SECTOR_DIMENSIONS.map((dimension) => {
     const points = periods.map((period) => {
       const row = indexes.find((r) => r.dimension === dimension && r.period_key === period
         && r.source_count > 0 && Number.isFinite(r.value));
+      const win = row ? storedWindow(row) : null;
       return {
         period, value: row?.value ?? null, change: row?.delta_pct ?? null,
         computed_at: row?.computed_at ?? null, basis: row ? 'live' : null,
         reason: row ? null : NO_LIVE_SOURCE_REASON, sources: row?.source_count ?? null,
-        month_to_date: period === periods.at(-1),
-        source_mix: sourceMix(mix.filter((r) => r.period === period), dimension),
+        window_start: win?.window_start ?? null, window_end: win?.window_end ?? null,
+        window_reason: row ? win!.window_reason : null,
+        // The newest point is overwritten by each refresh until the month turns.
+        latest_point: period === periods.at(-1),
+        context_only: win?.source_mix ? win.source_mix.context_only : null,
+        source_mix: presentMix(win?.source_mix ?? null),
       };
     });
-    const latest = [...points].reverse().find((p) => p.value !== null);
+    // A change compares this point with the previous month's point: name both windows. The previous
+    // point may not be in this read (a value no surface may show); its window then reads not recorded.
+    const withChange = points.map((p, i) => {
+      const before = i > 0 && points[i - 1].value !== null ? points[i - 1] : null;
+      return { ...p, change_against: p.change == null ? null : {
+        period: before?.period ?? previousPeriodKey(p.period),
+        window_start: before?.window_start ?? null, window_end: before?.window_end ?? null,
+        window_reason: before?.window_start ? null : WINDOW_NOT_RECORDED,
+      } };
+    });
+    const latest = [...withChange].reverse().find((p) => p.value !== null);
     return [dimension, {
-      value: latest?.value ?? null, change: latest?.change ?? null,
+      value: latest?.value ?? null, change: latest?.change ?? null, change_against: latest?.change_against ?? null,
       period: latest?.period ?? null, computed_at: latest?.computed_at ?? null,
-      basis: latest ? 'live' : null, reason: latest ? null : NO_LIVE_SOURCE_REASON, points,
+      window_start: latest?.window_start ?? null, window_end: latest?.window_end ?? null, window_reason: latest?.window_reason ?? null,
+      context_only: latest?.context_only ?? null,
+      basis: latest ? 'live' : null, reason: latest ? null : NO_LIVE_SOURCE_REASON, points: withChange,
     }];
   }));
 }
@@ -73,19 +104,14 @@ async function directory(env: Env) {
 }
 
 async function indexData(env: Env, name: string | null, periods: string[]) {
-  // Request values are bound; the shared live predicates interpolate only fixed SQL literals.
-  const [indexes, mix] = await Promise.all([
-    env.DB.prepare(`SELECT sector, period_key, dimension, value, delta_pct, source_count, computed_at
+  // Request values are bound; the shared live predicate interpolates only a fixed SQL literal.
+  // D7708 — the mix is the one stored beside each point; no second read recomputes it.
+  const indexes = await env.DB.prepare(`SELECT sector, period_key, dimension, value, delta_pct, source_count, computed_at,
+      window_start, window_end, source_mix_json
       FROM market_intel_indexes WHERE (? IS NULL OR sector = ?) AND geo = 'global'
       AND ${liveIndexSql()} AND period_key >= ? AND period_key <= ? ORDER BY period_key`)
-      .bind(name, name, periods[0], periods.at(-1)).all<IndexRow>(),
-    env.DB.prepare(`SELECT sector, substr(ts, 1, 7) AS period, source_key, COUNT(*) AS rows, MAX(ts) AS latest
-      FROM market_intel_rows WHERE (? IS NULL OR sector = ?) AND substr(ts, 1, 7) >= ? AND substr(ts, 1, 7) <= ?
-      AND ${liveRowSql()}
-      GROUP BY sector, substr(ts, 1, 7), source_key`)
-      .bind(name, name, periods[0], periods.at(-1)).all<MixRow>(),
-  ]);
-  return { indexes: indexes.results || [], mix: mix.results || [] };
+    .bind(name, name, periods[0], periods.at(-1)).all<IndexRow>();
+  return { indexes: indexes.results || [] };
 }
 
 function inSector(data: Awaited<ReturnType<typeof directory>>, name: string) {
@@ -103,7 +129,7 @@ researchSectors.get('/sectors', async (c) => {
     return c.json({ items: sectors.map((s) => {
       const members = inSector(data, s.name);
       return { ...s, company_count: members.companies.length, fund_count: members.funds.length,
-        dimensions: sectorSeries(index.indexes.filter((r) => r.sector === s.name), index.mix.filter((r) => r.sector === s.name), periods) };
+        dimensions: sectorSeries(index.indexes.filter((r) => r.sector === s.name), periods) };
     }), total: sectors.length });
   } catch { return c.json({ error: 'sector_unreadable', message: 'Unreadable', reason: 'The sector directory could not be read. Try again.' }, 503); }
 });
@@ -137,8 +163,8 @@ researchSectors.get('/sectors/:slug', async (c) => {
       return { ...safe, confidence_score: confidence_score > 0 ? confidence_score : null,
         confidence_reason: confidence_score > 0 ? null : 'No confidence measurement is recorded.' };
     });
-    return c.json({ ...sector, dimensions: sectorSeries(index.indexes, index.mix, periods),
-      source_mix_basis: 'Cited live observations by calendar month; shares count rows, not index weights.',
+    return c.json({ ...sector, dimensions: sectorSeries(index.indexes, periods),
+      source_mix_basis: SOURCE_MIX_BASIS,
       company_count: members.companies.length,
       companies: members.companies.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 50).map((co) => ({ ...co,
         country_code: mapCompanyCountry(co.country, data.overrides).targets[0] ?? null })),
