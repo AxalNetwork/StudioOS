@@ -18,6 +18,7 @@
  */
 import type { Env } from '../types';
 import { sourceFetched } from './competitorAnalysis';
+import { readCompanyByUid } from './researchCompanyRead';
 
 /** The kinds a project may attach. The table holds no constraint on kind; this list is the check. */
 export const ATTACHMENT_KINDS = ['competitor_analysis'] as const;
@@ -131,8 +132,10 @@ async function subjectOf(env: Env, uid: unknown): Promise<AnalysisCopy['subject'
   const id = str(uid);
   if (!id) return null;
   try {
-    const row = await env.DB.prepare('SELECT name FROM research_company_directory WHERE uid = ?').bind(id).first<{ name: string }>();
-    return row ? { uid: id, name: row.name, read: 'ok' } : { uid: id, name: null, read: 'not_found' };
+    // D7819: the reviewed read service, so a withdrawn or excluded company is never named in a copy.
+    const row = (await readCompanyByUid(env, id)) as { name?: unknown } | null | undefined;
+    const name = typeof row?.name === 'string' ? row.name : null;
+    return name ? { uid: id, name, read: 'ok' } : { uid: id, name: null, read: 'not_found' };
   } catch {
     return { uid: id, name: null, read: 'unreadable' };
   }

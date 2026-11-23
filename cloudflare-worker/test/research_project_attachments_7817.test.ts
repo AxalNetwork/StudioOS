@@ -379,3 +379,24 @@ test('buildCopy and citableSource: the copy records each source, and only a fetc
   assert.equal(citableSource(copy, 's2'), null);
   assert.equal(citableSource(null, 's1'), null);
 });
+
+test('the copy names its subject company only through the reviewed read: a withdrawn company is not named (D7819)', async () => {
+  const f = fixture();
+  f.db.exec(`INSERT INTO research_company_directory (uid, name, website, source_url, as_of) VALUES
+      ('co-ok', 'Acme Scheduling', 'https://acme.example', 'https://acme.example', '2026-11-01'),
+      ('co-gone', 'Withdrawn Co', 'https://gone.example', 'https://gone.example', '2026-11-01');
+    INSERT INTO research_company_reviews (uid, status, reason_code, reviewer, reviewed_on) VALUES
+      ('co-gone', 'withdrawn', 'source_withdrawn', 'reviewer', '2026-11-02');`);
+  const uid = await newProject(f);
+  const subjectOf = async (company: string) => {
+    f.db.prepare("UPDATE competitor_analyses SET subject_uid = ? WHERE id = 'an-1'").run(company);
+    f.db.exec("DELETE FROM research_project_attachments");
+    const made = await attach(f, uid);
+    assert.equal(made.status, 201);
+    return (await call(f, 'GET', `/${uid}/attachments/${made.body.item.uid}`)).body.item.copy.subject;
+  };
+  // Mutation checked: read research_company_directory directly again → the withdrawn company is named.
+  assert.deepEqual(await subjectOf('co-ok'), { uid: 'co-ok', name: 'Acme Scheduling', read: 'ok' });
+  assert.deepEqual(await subjectOf('co-gone'), { uid: 'co-gone', name: null, read: 'not_found' });
+  assert.deepEqual(await subjectOf('co-missing'), { uid: 'co-missing', name: null, read: 'not_found' });
+});
