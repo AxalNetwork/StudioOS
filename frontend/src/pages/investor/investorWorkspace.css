@@ -60,6 +60,8 @@
   --inv-seam: #5eead4; --inv-seam-soft: #0d2b2e; --inv-seam-line: #164e50;
 }
 .dark .investor-workspace .investor-subtitle { color: #c0bdcb; }
+/* D4815-p16 (#5917, DE16): the badge's #3730a3 read 1.6:1 on its dark ground. */
+.dark .investor-workspace .investor-product { color: #c7d2fe; }
 
 .investor-deals-layout { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--fwr-track, 276px) + var(--fwr-ask, 0px)); background: #f7f7f9; }
 .investor-deals-main { min-width: 0; padding: 22px 20px 30px; }

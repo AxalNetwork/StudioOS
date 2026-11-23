@@ -180,6 +180,8 @@ test('workflow uses hosted read-only PR execution, forces advisory bootstrap and
   assert.match(source, /name: ownership/); assert.match(source, /LANDING_OWNERSHIP_CHECK=advisory/);
   assert.match(source, /node --test scripts\/ci\/ownership-check.test.mjs/);
   assert.match(source, /working-directory: candidate/); assert.match(source, /node candidate\/scripts\/ci\/ownership-check.mjs/);
+  // #8246: a candidate branched before the parser landed tests the base parser that reports.
+  assert.match(source, /if \[\[ -f candidate\/scripts\/ci\/ownership-check\.mjs \]\]; then\n\s+cd candidate\n\s+else\n/);
 });
 test('summary escapes API-supplied filenames and bounds large overlap tables', () => {
   const row = { issue: 8075, owner: 42, file: '<b>|`bad`\n&.js\r::warning::synthetic', patterns: ['<b>|`bad`\n&.js'] };

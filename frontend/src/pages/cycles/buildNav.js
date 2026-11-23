@@ -6,8 +6,9 @@
  * which described the page rather than the job.
  *
  * `BUILD_DESTINATIONS`: the Build-level pages, after Overview and before the
- * modules: Plan, Progress, then Tools. Tools keeps its current address (the
- * Tools section of Operating systems) until #5078 makes it one page.
+ * modules: Plan, Progress, then Tools. Tools' address is Operating systems ›
+ * Tools (`/build/operating-systems#tools`): D5078 (#5078) made it that page's
+ * Tools section, beside Systems and Cadence, so there is one list of tools.
  */
 export const BUILD_OUTCOMES = Object.freeze({
   'solution-design': 'Decide what you are building, and tie every feature to the evidence behind it.',

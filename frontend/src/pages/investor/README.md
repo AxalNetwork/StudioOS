@@ -30,6 +30,9 @@ the generic route wrapper once a canvas has graduated.
   sums in `portfolioReportsModel.js`, pure. D6224 (#6224): Figures offers
   "Download figures (CSV)", built in the browser from the same rows, with no
   read of its own.
+- `WaterfallRail.jsx` (D6221, #6221) is the Exit Waterfall's rail
+  (`../WaterfallPage.jsx`, `/portfolio/waterfall`): the Portfolio boards'
+  `WorkerRail` in its `pf-rail` frame, with the page's note only.
 - `PortfolioReports.jsx` (D1061, #2931) is RPT9 at the top of Portfolio ›
   Reports (`InvestorPortfolioUpdates.jsx`): four tiles and one row per company
   the investor signed into, from `GET /api/reporting/portfolio`, with filters
@@ -269,3 +272,5 @@ live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
 
 - `settings/` holds the investor Firm Settings editor (#6287).
 - `fund/` holds the Axal VC Fund workspace's section components and navigation (#6130).
+
+- `FundPerformanceDetail.jsx` holds the GP-only read-only quarterly history and dated position marks on `/funds/performance` (D6253).
