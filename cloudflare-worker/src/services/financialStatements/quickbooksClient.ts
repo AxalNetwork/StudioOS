@@ -18,10 +18,11 @@
  * statement or an identifier must not reach an operator log.
  */
 import type { Basis, Period, Report } from './contract';
+import { PRODUCTION_API, SANDBOX_API } from '../../integrations/quickbooksOAuth';
 
 export const HOSTS = Object.freeze({
-  sandbox: 'https://sandbox-quickbooks.api.intuit.com',
-  production: 'https://quickbooks.api.intuit.com',
+  sandbox: SANDBOX_API,
+  production: PRODUCTION_API,
 });
 export type QuickBooksEnvironment = keyof typeof HOSTS;
 

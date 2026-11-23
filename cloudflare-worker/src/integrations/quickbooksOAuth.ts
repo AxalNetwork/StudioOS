@@ -18,6 +18,9 @@ export const QUICKBOOKS_SCOPES = ['com.intuit.quickbooks.accounting'] as const;
 export const AUTHORIZE_URL = 'https://appcenter.intuit.com/connect/oauth2';
 export const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 export const REVOKE_URL = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
+/** The accounting API hosts a grant reads; the report client picks one by the connection's environment. */
+export const PRODUCTION_API = 'https://quickbooks.api.intuit.com';
+export const SANDBOX_API = 'https://sandbox-quickbooks.api.intuit.com';
 
 export interface QuickBooksApp { id: string; secret: string }
 export interface QuickBooksTokens { access_token: string; refresh_token: string; expires_in: number; refresh_expires_in: number | null }
