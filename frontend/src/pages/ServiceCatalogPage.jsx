@@ -6,17 +6,22 @@ import React, { useEffect, useState } from 'react';
 // `check-unused-imports` is CodeQL-backed and would have reported all five.
 import {
   Search, Filter, Briefcase, ShieldCheck,
-  AlertCircle, X, Check, ExternalLink, Package,
+  AlertCircle, Check, ExternalLink,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
+import { DataState } from '../ui';
 import OfferPages from '../ui/OfferPages.jsx';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { NotRecorded } from '../workspaces/canvasKit';
-import { Pill, NotMeasured } from './partner/kit';
+import {
+  NotMeasured, OfferEmpty, OfferField, OfferHeading, OfferStatus,
+  offerButtonClass, offerDangerButtonClass, offerGhostButtonClass, offerInputClass,
+} from './partner/kit';
+import { writeFailureField, writeFailureText } from './partner/offers/useGuardedWrite';
 import { CATALOG_FOOT, LISTING_STATES, inListing, listingCounts, priceBasis, requestsLine } from './partner/offers/catalogModel.js';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
@@ -290,6 +295,8 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const [menuFor, setMenuFor] = useState(null);
   const [filter, setFilter] = useState('all');
   const [result, setResult] = useState(null);
+  const [saved, setSaved] = useState('');
+  const [actionError, setActionError] = useState('');
   const request = React.useRef(0);
 
   async function load(page = result?.page ?? 1) {
@@ -321,14 +328,16 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   useEffect(() => { load(); /* eslint-disable-line */ }, []);
 
   async function toggleListed(o) {
+    setActionError(''); setSaved('');
     try {
       await api.updateServiceOffering(o.id, { is_active: !o.is_active });
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setActionError(`${o.title} was not ${o.is_active ? 'unlisted' : 'listed'}. ${writeFailureText(e)}`); }
   }
   async function remove(o) {
     if (!window.confirm(`Remove "${o.title}"? If it has service requests or market readings, it will be unlisted and those records will be kept. Otherwise it will be deleted.`)) return;
-    try { await api.deleteServiceOffering(o.id); load(); } catch (e) { setError(e.message); }
+    setActionError(''); setSaved('');
+    try { await api.deleteServiceOffering(o.id); load(); } catch (e) { setActionError(`${o.title} was not removed. ${writeFailureText(e)}`); }
   }
 
   // Gated on ROLE, not on `partner_id`. The tab is only offered to a partner or
@@ -345,11 +354,12 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const visible = byModel.filter(inListing(listing, catalogState));
   const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
   const counts = listingCounts(rows, catalogState);
-  const edit = (o) => { setMenuFor(null); setEditing(o); setShowForm(true); };
+  const edit = (o) => { setMenuFor(null); setSaved(''); setEditing(o); setShowForm(true); };
+  const openNew = () => { setSaved(''); setEditing(null); setShowForm(true); };
 
   const handlers = {
     newService: {
-      onClick: () => { setEditing(null); setShowForm(true); },
+      onClick: openNew,
       title: 'add a service to the catalog',
     },
   };
@@ -362,10 +372,8 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     const line = requestsLine(o);
     return line ?? <NotMeasured label="Not recorded" why="This row predates request counts, so none is stated." testId={`catalog-requests-${o.id}`} />;
   };
-  const statePill = (o) => {
-    const state = catalogState(o);
-    return <Pill tone={state === 'Live' ? 'ok' : state === 'Draft' ? 'warn' : 'neutral'}>{state}</Pill>;
-  };
+  // D4844: an icon and the word, never the colour alone (OF-10's status chip).
+  const statePill = (o) => <OfferStatus state={catalogState(o)} testId={`catalog-state-${o.id}`} />;
   const rowMenu = (o) => (
     <span className="relative inline-block">
       <button type="button" aria-label={`More actions for ${o.title}`} aria-expanded={menuFor === o.id}
@@ -402,17 +410,37 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
         />
       )}
 
-      <div>
-        <h2 className="text-lg font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Catalog</h2>
-        <p className="mt-1 text-[12.5px] text-gray-600 dark:text-gray-400">The services your firm sells through Axal.</p>
-      </div>
+      {/* D4844: the zone's one primary, New service, is the toolbar's; the
+          heading carries none, so it is never drawn twice. */}
+      <OfferHeading title="Catalog" blurb="The services your firm sells through Axal." />
 
-      {error && <ErrorBox message={error} />}
-      {loading && <div className="text-sm text-gray-500">Loading…</div>}
+      {saved && <p role="status" className="flex items-start gap-1.5 text-[13px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="catalog-saved"><span aria-hidden="true">✓</span>{saved}</p>}
+      {/* D4844: the read's loading and failed states are #5129's (`DataState`),
+          worded as OF-08 words them; a failed write is its own line below. */}
+      {actionError && (
+        <p role="alert" className="flex items-start gap-1.5 text-[13px] font-semibold text-red-700 dark:text-red-300" data-testid="catalog-action-error">
+          <span aria-hidden="true">✕</span>{actionError}
+        </p>
+      )}
+      {error && (
+        <DataState state="unavailable" size="block" what="Your catalog" announce="always" onRetry={() => load()}
+          claim="Nothing here is out of date; it just isn’t shown." data-testid="catalog-error" />
+      )}
+      {loading && (
+        <div role="status" aria-busy="true" data-testid="catalog-loading">
+          <span className="sr-only">Loading your catalog…</span>
+          <DataState state="loading" size="block" />
+        </div>
+      )}
 
-      {!loading && rows.length === 0 ? (
-        <Empty icon={Package} text="No services yet. Add your first service to appear in the catalogue." />
-      ) : (
+      {!loading && !error && rows.length === 0 ? (
+        <OfferEmpty
+          testId="catalog-empty"
+          title="Show founders what your firm sells"
+          body="Add a service with what it delivers and how it is priced. Priced services can be quoted, and founders can request them from the catalog."
+          action={<button type="button" className={offerButtonClass} onClick={openNew}>Add your first service</button>}
+        />
+      ) : rows.length === 0 ? null : (
         <>
           <div role="radiogroup" aria-label="Listing state" className="inline-flex flex-wrap gap-1 rounded-lg border border-axal-hairline p-1 dark:border-gray-800"
             data-testid="catalog-listing">
@@ -427,8 +455,8 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
           {result?.total > result?.page_size && <p className="text-[12px] text-gray-600 dark:text-gray-400">Counts and filters apply to this page.</p>}
 
           <section className="overflow-hidden rounded-xl border border-axal-hairline dark:border-gray-800" data-testid="service-catalog">
-            <table className="hidden w-full text-left text-[13px] sm:table">
-              <thead className="bg-gray-50 text-[11px] uppercase tracking-[.06em] text-axal-faint dark:bg-gray-900/40">
+            <table className="hidden w-full text-left text-[14px] sm:table">
+              <thead className="bg-gray-50 text-[12px] uppercase tracking-[.06em] text-gray-600 dark:bg-gray-900/40 dark:text-gray-400">
                 <tr>
                   <th scope="col" className="px-3 py-2">Service</th>
                   <th scope="col" className="px-3 py-2">Engagement model</th>
@@ -443,7 +471,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
                   <tr key={o.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`catalog-row-${o.id}`}>
                     <td className="px-3 py-2.5">
                       <b className="block text-[14px]">{o.title}</b>
-                      <small className="text-[12px] text-axal-muted">{CAT_LABEL[o.category] || o.category}</small>
+                      <small className="text-[12px] text-gray-600 dark:text-gray-400">{CAT_LABEL[o.category] || o.category}</small>
                     </td>
                     <td className="px-3 py-2.5">{modelOf(o) ?? <NotRecorded />}</td>
                     <td className="px-3 py-2.5 text-right font-mono">{priceCell(o)}</td>
@@ -461,15 +489,15 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
                     <div><b className="block text-[14px]">{o.title}</b><small className="text-[12px] text-axal-muted">{CAT_LABEL[o.category] || o.category}</small></div>
                     {statePill(o)}
                   </div>
-                  <p className="text-[12.5px]">{modelOf(o) ?? 'Model not recorded'} · {priceCell(o)}</p>
-                  <p className="text-[12.5px]">{requestsCell(o)}</p>
+                  <p className="text-[13px]">{modelOf(o) ?? 'Model not recorded'} · {priceCell(o)}</p>
+                  <p className="text-[13px]">{requestsCell(o)}</p>
                   <div className="flex items-center justify-end">{editButton(o)}{rowMenu(o)}</div>
                 </li>
               ))}
             </ul>
           </section>
           {!visible.length && (
-            <p className="text-[12px] text-gray-600 dark:text-gray-300" data-testid="catalog-view-empty">No service is in this view.</p>
+            <p className="text-[13px] text-gray-600 dark:text-gray-300" data-testid="catalog-view-empty">No service is in this view.</p>
           )}
           <p className="text-[12px] text-gray-600 dark:text-gray-400" data-testid="catalog-foot">{CATALOG_FOOT}</p>
         </>
@@ -489,11 +517,13 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
       />
 
       {showForm && (
-        <OfferingFormModal
+        <OfferingSheet
           offering={editing}
           user={user}
           fillOn={role === 'partner'}
-          onClose={() => { setShowForm(false); setEditing(null); load(); }}
+          onClose={() => { setShowForm(false); setEditing(null); }}
+          onSaved={(title) => { setShowForm(false); setEditing(null); setSaved(`${title || 'The service'} is saved.`); load(); }}
+          onDelete={(o) => { setShowForm(false); setEditing(null); remove(o); }}
         />
       )}
     </div>
@@ -518,9 +548,32 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
  *
  * `description` is the same field as the store's `summary`; only the name
  * differed, so it is renamed rather than removed. `listed` is `is_active`.
+ *
+ * D4844 (#4844, OF-02b): THE SERVICE SHEET. The editor is the shared `Sheet`
+ * (dialog semantics, a named title, focus kept inside and returned to the
+ * opener, Escape, an inert page, a full-screen sheet on a phone), not the
+ * bespoke fixed overlay it was. Every field has a visible label and its own
+ * error tied to it; a failed save keeps every entry and says so, with the
+ * fixed sentence for the failure (never the server's raw text) and Try again;
+ * Saving… is said on the button while the write is in flight; Delete sits on
+ * the left of the footer, away from Save. Closing a sheet with unsaved edits
+ * (Escape, the ×, the scrim) asks first.
  */
-function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
-  const [form, setForm] = useState({
+export const OFFERING_FIELDS = Object.freeze(['title', 'category', 'price_usd', 'engagement_model', 'summary']);
+
+/** The form's own checks, before anything is sent: field → sentence. */
+export function offeringErrors(form) {
+  const errors = {};
+  if (!String(form.title || '').trim()) errors.title = 'Give the service a name.';
+  const price = String(form.price_usd ?? '').trim();
+  if (price !== '' && (!Number.isFinite(Number(price)) || Number(price) < 0)) {
+    errors.price_usd = 'Enter the price in dollars, such as 48000, or leave it blank while it is a draft.';
+  }
+  return errors;
+}
+
+export function OfferingSheet({ offering, onClose, onSaved, onDelete = null, user = null, fillOn = false }) {
+  const initial = {
     title: offering?.title || '',
     summary: offering?.summary || '',
     category: offering?.category || 'legal',
@@ -530,9 +583,13 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
     // and saving cannot round a price a fraction away from itself.
     price_usd: offering?.price_cents != null ? String(offering.price_cents / 100) : '',
     engagement_model: offering?.engagement_model || '',
-  });
+  };
+  const [form, setForm] = useState(initial);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [failure, setFailure] = useState(null);
+  const firstField = React.useRef(null);
+  const summaryId = `offering-summary-${React.useId().replace(/:/g, '')}`;
   // D1595 (#3868) / D1424 (#3700): Ask on the summary only, in the partner's
   // own shell. An Add form hangs under the caller (`owner:<id>`); an Edit
   // form reads its own record. Price, title and category are never filled.
@@ -545,15 +602,33 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
     values: { summary: form.summary },
     onValues: (v) => setForm((f) => ({ ...f, ...v })),
   });
+  const set = (key) => (e) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, [key]: value }));
+    setErrors((x) => (x[key] ? { ...x, [key]: undefined } : x));
+  };
+  const dirty = OFFERING_FIELDS.some((k) => form[k] !== initial[k]);
+  // Escape, the × and the scrim close a clean sheet at once; one holding
+  // unsaved entries asks first, because closing it throws the entries away.
+  const requestClose = () => {
+    if (!busy && dirty && typeof window !== 'undefined' && typeof window.confirm === 'function'
+      && !window.confirm('Close without saving? What you typed here will be lost.')) return;
+    onClose();
+  };
 
   async function save() {
-    setBusy(true); setError(null);
+    const found = offeringErrors(form);
+    setErrors(found);
+    setFailure(null);
+    if (Object.keys(found).length) return;
+    setBusy(true);
     try {
       // An empty price is null, not zero: an offering priced on enquiry does
       // not cost nothing, and the column is nullable for exactly that.
       const payload = {
         ...form,
-        price_usd: form.price_usd === '' ? null : Number(form.price_usd),
+        title: form.title.trim(),
+        price_usd: String(form.price_usd).trim() === '' ? null : Number(form.price_usd),
         // Empty means unset, and unset is what the Model column draws as `Not
         // recorded`. Sending '' would be refused by the column's CHECK; sending
         // a default would be this form deciding how a firm charges.
@@ -561,42 +636,86 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
       };
       const saved = offering ? await api.updateServiceOffering(offering.id, payload) : await api.createServiceOffering(payload);
       await fill.afterSave(saved?.id ?? offering?.id);
-      onClose();
-    } catch (e) { setError(e.message); setBusy(false); }
+      (onSaved || onClose)(payload.title);
+    } catch (e) {
+      // Every entry stays where it is. A refusal that names one of this form's
+      // fields puts its sentence on that field; anything else is the fixed
+      // sentence for the failure, never the response's own text.
+      const field = writeFailureField(e);
+      const text = writeFailureText(e, 'That did not save.');
+      if (field && OFFERING_FIELDS.includes(field)) setErrors({ [field]: text });
+      setFailure(text);
+      setBusy(false);
+    }
   }
 
+  const footer = (
+    <div className="flex flex-wrap items-center gap-2">
+      {offering && onDelete && (
+        <button type="button" className={offerDangerButtonClass} disabled={busy} onClick={() => onDelete(offering)}
+          data-testid="offering-delete">Delete service…</button>
+      )}
+      <div className="ml-auto flex gap-2">
+        <button type="button" className={offerGhostButtonClass} onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="button" className={offerButtonClass} disabled={busy} aria-busy={busy || undefined} onClick={save}
+          data-testid="offering-save">
+          {busy ? 'Saving…' : (offering ? 'Save service' : 'Add service')}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <Modal title={offering ? 'Edit service' : 'New service'} onClose={onClose} wide>
-      <div className="space-y-3 text-sm">
-        <Field label="Service name">
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
+    <Sheet
+      title={offering ? (offering.title || 'Edit service') : 'New service'}
+      eyebrow={offering ? 'Catalog · edit service' : 'Catalog · new service'}
+      sub={offering ? 'Changes show in the catalog when you save.' : 'A service with no price stays a draft until you price it.'}
+      onClose={requestClose}
+      width={560}
+      phone="sheet"
+      initialFocus={firstField}
+      testId="offering-sheet"
+      footer={footer}
+    >
+      <div className="flex flex-col gap-4 p-5" data-testid="offering-form">
+        <OfferField label="Service name" error={errors.title}>
+          <input ref={firstField} className={offerInputClass} value={form.title} maxLength={200} onChange={set('title')} />
+        </OfferField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <OfferField label="Category" error={errors.category}>
+            <select className={offerInputClass} value={form.category} onChange={set('category')}>
               {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
             </select>
-          </Field>
-          <Field label="Price (USD)">
-            <input type="number" value={form.price_usd} onChange={(e) => setForm({ ...form, price_usd: e.target.value })} placeholder="Leave blank for “on enquiry”" className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
-          </Field>
+          </OfferField>
+          <OfferField label="Price (USD)" optional error={errors.price_usd}
+            hint="Leave it blank for a draft: a service with no price is not quoted.">
+            <input className={`${offerInputClass} font-mono`} inputMode="decimal" value={form.price_usd} onChange={set('price_usd')} />
+          </OfferField>
         </div>
         {/* MIGRATION 227's COLUMN, AND THE ARTBOARD'S `Model`. Blank is a real
             choice: a firm that has not decided how a service is charged should
             not have this form decide for it, and the catalog draws the absence
             rather than guessing "Fixed". */}
-        <Field label="How is it sold?">
-          <select value={form.engagement_model} onChange={(e) => setForm({ ...form, engagement_model: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
+        <OfferField label="How is it sold?" error={errors.engagement_model}>
+          <select className={offerInputClass} value={form.engagement_model} onChange={set('engagement_model')}>
             <option value="">Not recorded</option>
             {MODELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-        </Field>
+        </OfferField>
         <FillFormBar fill={fill} />
         <div>
           <FillLabel fill={fill} name="summary" label="What do you deliver?" value={form.summary}>
-            <label htmlFor="offering-summary" className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">What do you deliver?</label>
+            <label htmlFor={summaryId} className="block text-[13px] font-semibold text-axal-ink dark:text-gray-100">What do you deliver?</label>
           </FillLabel>
-          <textarea id="offering-summary" rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
+          <textarea id={summaryId} rows={4} className={offerInputClass} value={form.summary} onChange={set('summary')}
+            aria-describedby={errors.summary ? `${summaryId}-help ${summaryId}-error` : `${summaryId}-help`}
+            aria-invalid={errors.summary ? 'true' : undefined} />
+          <span id={`${summaryId}-help`} className="mt-1 block text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">The outcome a founder buys, in a sentence or two.</span>
+          {errors.summary && (
+            <span id={`${summaryId}-error`} className="mt-1 flex items-start gap-1 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-field-error="">
+              <span aria-hidden="true">✕</span>{errors.summary}
+            </span>
+          )}
         </div>
         {/* NO `Deliverables` FIELD. `service_offerings` has no column for it and
             neither handler reads one, so five rows of typing went into the
@@ -607,15 +726,18 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
             toggles it per row with a control that says which way it is going —
             a second copy in this modal was a duplicate that wrote a field name
             the handler ignores, so the toggle here silently did nothing. */}
-        {error && <ErrorBox message={error} />}
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-700">Cancel</button>
-          <button disabled={busy} onClick={save} className="px-4 py-1.5 text-sm rounded-md bg-violet-600 hover:bg-violet-700 text-white">
-            {busy ? 'Saving…' : (offering ? 'Save changes' : 'Publish offering')}
-          </button>
-        </div>
+        {failure && (
+          <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+            data-testid="offering-failure">
+            <span aria-hidden="true" className="font-extrabold">!</span>
+            <div>
+              <b>Couldn’t save.</b> Everything you typed is still here. {failure}{' '}
+              <button type="button" className="font-semibold underline" onClick={save} disabled={busy}>Try again</button>
+            </div>
+          </div>
+        )}
       </div>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -698,23 +820,10 @@ export function StripeTab() {
 // ---------------------------------------------------------------------------
 // Shared bits (small clones of NeedsBoardPage helpers — kept local for clarity)
 // ---------------------------------------------------------------------------
-function Modal({ title, onClose, children, wide }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className={`bg-white rounded-2xl shadow-xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-          <button onClick={onClose}><X size={18} /></button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  );
-}
 function Field({ label, children }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{label}</div>
+      <div className="text-[12px] uppercase tracking-wide text-gray-500 mb-1">{label}</div>
       {children}
     </div>
   );

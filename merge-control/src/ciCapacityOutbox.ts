@@ -5,7 +5,10 @@ import type { CapacityApi, CapacityConfig } from './ciCapacityGithub.ts';
 import type { Aggregate } from './lib/ciCapacityPolicy.ts';
 export const PILOT_CHECK = 'ci-capacity/worker-pilot';
 export const FULL_CHECK = 'ci-capacity/full-suite';
-type Intent = { requestId: string; mode: 'pilot'|'full-suite'; checkId: number|null; phase: 'new'|'creating'|'known'; sent: string|null; failed: boolean };
+type Intent = { requestId: string; mode: 'pilot'|'full-suite'; checkId: number|null; phase: 'new'|'creating'|'known'; sent: string|null; failed: boolean;
+  createAttempts?: number; lastCreateAt?: number; absentSince?: number };
+/** GitHub has no check-run idempotency key. Retry only a bounded, repeatedly observed absence. */
+export const PUBLICATION_CREATE_LIMIT = 2;
 export class CapacityOutbox {
   private storage: DurableObjectStorage;private api: CapacityApi;private config: CapacityConfig & {appId:number};
   constructor(storage: DurableObjectStorage, api: CapacityApi, config: CapacityConfig & { appId: number }) {
@@ -65,15 +68,22 @@ export class CapacityOutbox {
       pending=true;
       try {
         if(intent.phase==='creating'){
-          // A crash after POST is resolved by exact App/external identity; never repeat an ambiguous create.
+          // A landed POST is adopted. A missing POST may recover only after bounded absence observation.
           const data=await this.api('GET',`/repos/${this.config.repository}/commits/${request.submission.sourceSha}/check-runs?check_name=${encodeURIComponent(name)}&filter=all&per_page=100`) as {check_runs:{id:number;external_id:string;app:{id:number};name:string;head_sha:string}[];total_count:number};
           if(!Array.isArray(data.check_runs)||data.total_count!==data.check_runs.length||data.total_count>100)throw new Error('publication_incomplete_checks');
           const matches=data.check_runs.filter(c=>c.external_id===id&&c.app?.id===this.config.appId&&c.name===name&&c.head_sha===request.submission.sourceSha);
-          if(matches.length!==1)continue;
-          intent.checkId=matches[0].id;intent.phase='known';save();
+          if(matches.length>1)continue;
+          if(matches.length===0){
+            const now=Date.now();intent.createAttempts??=1;intent.lastCreateAt??=now;intent.absentSince??=now;save();
+            if(!Number.isSafeInteger(intent.createAttempts)||intent.createAttempts<1||intent.createAttempts>=PUBLICATION_CREATE_LIMIT
+              ||!Number.isSafeInteger(intent.lastCreateAt)||!Number.isSafeInteger(intent.absentSince)
+              ||now-intent.lastCreateAt<60_000||now-intent.absentSince<15_000)continue;
+            intent.phase='new';save();
+          }else{intent.checkId=matches[0].id;intent.phase='known';save();}
         }
         if(intent.phase==='new'){
-          intent.phase='creating';save();
+          if((intent.createAttempts??0)>=PUBLICATION_CREATE_LIMIT)continue;
+          intent.phase='creating';intent.createAttempts=(intent.createAttempts??0)+1;intent.lastCreateAt=Date.now();delete intent.absentSince;save();
           const created=await this.api('POST',`/repos/${this.config.repository}/check-runs`,{name,head_sha:request.submission.sourceSha,external_id:id,status:'in_progress',output:{title:'Awaiting verified capacity results',summary:'Submission and dispatch are not test success.'}}) as {id:number};
           if(!Number.isSafeInteger(created?.id)||created.id<=0)throw new Error('publication_invalid_id');
           intent.checkId=created.id;intent.phase='known';save();

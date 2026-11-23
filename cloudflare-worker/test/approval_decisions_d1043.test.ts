@@ -413,7 +413,8 @@ test('failed R2 deletion keeps the credential key and review version available f
 test('a failed metadata deletion can retry the already removed R2 object without losing its key', async () => {
   const f = fixture(); const put = await upload(f); const uid = put.body.files[0].uid;
   const batch = f.env.DB.batch.bind(f.env.DB); let attempts = 0;
-  f.env.DB.batch = async (stmts: any[]) => { if (++attempts === 1) throw new Error('Synthetic database outage'); return batch(stmts); };
+  // D6654: the first batch is the erasure's suppression-ledger row; the second is the metadata deletion that fails.
+  f.env.DB.batch = async (stmts: any[]) => { if (++attempts === 2) throw new Error('Synthetic database outage'); return batch(stmts); };
   assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 503);
   assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_credential_files').n, 1); assert.equal(f.objects.size, 0);
   assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 200);

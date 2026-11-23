@@ -111,9 +111,12 @@ test('4. the route mounts both on Prototype / MVP only, from Build\'s def; the w
   assert.equal(el.type, MvpSummary);
   assert.deepEqual(el.props.facts, { done: 1, total: 2, blocked: 0, target_date: null });
   for (const slug of ['solution-design', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems']) {
-    assert.equal(fnOf(build.aboveRecords, slug), null, slug);
+    // D6036 (#6036): Product roadmap draws its own board above the list; none of the others has a line there.
+    if (slug !== 'product-roadmap') assert.equal(fnOf(build.aboveRecords, slug), null, slug);
     assert.equal(fnOf(build.phoneRows, slug), null, slug);
   }
+  const { default: RoadmapBoard } = await import('../src/pages/cycles/RoadmapBoard.jsx');
+  assert.equal(fnOf(build.aboveRecords, 'product-roadmap')({ facts: {} }, { query: {}, onQuery() {}, search: '' }).type, RoadmapBoard);
   assert.match(read('frontend/src/lib/api/cycleWrites.js'), /mvpTarget: \(projectId, date\) => request\(`\/cycles\/build\/project\/target\?\$\{q\(projectId\)\}`, \{ method: 'PATCH', body: JSON\.stringify\(\{ mvp_target_date: date \}\) \}\)/);
   assert.match(read('cloudflare-worker/src/routes/cycle_build.ts'), /app\.patch\('\/project\/target'/);
 });

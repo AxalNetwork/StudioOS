@@ -15,6 +15,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { SECTION_KEYS } from '../src/services/useOfFunds/plan.ts';
 import { planTables } from '../src/services/useOfFunds/exportPlan.ts';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 const secret = 'synthetic-d6084-test-jwt-not-a-credential';
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -30,6 +31,7 @@ const TODAY = '2026-11-14';
 
 function fixture({ files = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  applySuppressionLedger(db); // D6654
   for (const name of ['founders', 'users', 'projects', 'activity_logs', 'user_company_links', 'company_profiles', 'super_admins', 'mi_pro_subscriptions',
     'roadmap_okrs', 'integrations', 'cap_table_scenarios', 'financial_models', 'raise_rounds', 'raise_prospects', 'raise_pro_rata', 'raise_closes',
     'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'data_room_files']) db.exec(tableFromBaseline(baseline, name));

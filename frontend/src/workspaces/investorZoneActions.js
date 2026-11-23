@@ -283,11 +283,11 @@ export const INVESTOR_ZONE_ACTIONS = {
   // specified actions each, an empty row on screen, and a test excluding them
   // for a reason that had stopped being true. The gap was shipped, not deferred.
   'research/diligence': [
-    // The zone's own StatedLimit argues this one, and the note says the same
-    // thing it does: "a request button that wrote nowhere would be worse than
-    // the conversation it replaced."
-    // Data-room requests live on the deal’s Documents tab; this list shows granted rooms.
-    { label: 'New request', unbuilt: 'a room is asked for on its deal: open the deal, then Documents, then Ask for access. The founder decides, and you get a notice either way', hover: 'Ask for a data room from the deal’s Documents tab.' },
+    // D6269 (#6269): `New request` is withheld, not drawn disabled. A request
+    // is made on its deal (Documents, then Ask for access), where the founder
+    // can answer it, and this list has no one deal to open; the Investor
+    // Research v2 Rooms canvas (IRV-02) draws no such control. The page's
+    // Requests block lists what came of yours.
     // D6266: a room already shows the deals on its company that you may open; there is nothing to attach by hand.
     { label: 'Attach to deal', unbuilt: 'a room shows the deals on its company that you are invited to or committed on, with their stage and a link; there is nothing to attach by hand', hover: 'Each room already shows its deal when you are invited to it.' },
     { label: 'Export', kind: 'export' },

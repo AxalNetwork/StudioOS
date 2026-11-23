@@ -178,7 +178,7 @@ r.post('/snapshot',async c=>{
     console.error('[use-of-funds] snapshot not filed:',(e as Error).name);
     // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
     // the one record-erasure path as `unreferenced`.
-    await eraseRecordObjects(c.env.FILES,key,'unreferenced').catch(()=>{});
+    await eraseRecordObjects(c.env.FILES,key,'unreferenced', { db: c.env.DB }).catch(()=>{});
     return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},500);
   }
   await noteStorageLanded(c.env,storage);
