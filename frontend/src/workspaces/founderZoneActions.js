@@ -255,7 +255,6 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
   'research/companies': [
     { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },
-    { label: 'Compare', unbuilt: 'companies open one at a time; no comparison view is stored' },
     { label: 'Export', kind: 'export' },
   ],
   // THIS KEY WAS MISSING AND THE ROW DREW NOTHING. `profile_zone_actions`

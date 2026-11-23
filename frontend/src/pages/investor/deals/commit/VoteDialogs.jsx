@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import Sheet from '../../../../ui/Sheet';
 import { api } from '../../../../lib/api';
-import { recusalBody, VOTE_WORDS as RECORD_WORDS, voteWord } from '../../../icDecisionModel';
+import { recusalBody, VOTE_WORDS as RECORD_WORDS } from '../../../icDecisionModel';
 import { VOTE_CHOICES, voteBody, voteOffer, refusalWords } from './commitVoteModel';
 
 const FIELD = 'mt-1 w-full rounded-[8px] border border-gray-300 bg-white p-2.5 text-[12.5px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -113,7 +113,7 @@ export function RecuseDialog({ decision, mine, onClose, onSaved }) {
         </p>
         {mine && mine.vote !== 'recused' ? (
           <p className="text-[12px] text-amber-800 dark:text-amber-300" data-testid="recuse-replaces">
-            You voted {voteWord(mine.vote)}. Recusing replaces that vote.
+            You voted {RECORD_WORDS[mine.vote] || mine.vote}. Recusing replaces that vote.
           </p>
         ) : null}
         <label className="block text-[12px] font-bold text-gray-900 dark:text-gray-100">
@@ -148,7 +148,7 @@ export function YourVote({ decision, user, onSaved, renderMark }) {
       <h2 className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Your vote</h2>
       {offer.mine ? (
         <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-gray-800 dark:text-gray-200" data-testid="commit-my-vote">
-          {renderMark ? renderMark(offer.mine.vote) : voteWord(offer.mine.vote)}
+          {renderMark ? renderMark(offer.mine.vote) : (RECORD_WORDS[offer.mine.vote] || offer.mine.vote)}
           {offer.mine.rationale ? <span className="text-gray-600 dark:text-gray-400">“{offer.mine.rationale}”</span> : null}
         </p>
       ) : null}

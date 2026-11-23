@@ -11,8 +11,48 @@
  * it into a float. A figure that was not sent is null and prints as absent,
  * never as zero.
  */
-import { formatCents } from './fundCallsModel';
-import { titleCase } from '../../lib/absence';
+import { formatCents, percent } from './fundCallsModel.js';
+import { titleCase } from '../../lib/absence.js';
+
+/**
+ * D6242 (#6242): the register row's own figures, in the register's dollars, as
+ * the register and the drawer print them. They live here, not in the page, so
+ * Eadwyn's LP summary (`services/fundLpComms.ts`) quotes the same strings the
+ * drawer shows: one function on both sides.
+ */
+const centsOrNull = (value) => (value == null || value === '' ? null : Number(value));
+export const lpCommitmentDollars = (lp) => lp?.commitment_cents != null ? centsOrNull(lp.commitment_cents) / 100 : lp?.commitment_amount != null ? Number(lp.commitment_amount) : null;
+export const lpPaidDollars = (lp) => lp?.paid_cents != null ? centsOrNull(lp.paid_cents) / 100 : lp?.invested_amount != null ? Number(lp.invested_amount) : null;
+/** Whole dollars, as the register prints them, or "Unavailable". */
+export const registerMoney = (value) => (value == null || !Number.isFinite(Number(value)) ? 'Unavailable' : `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`);
+
+/** The drawer's Commitment block figures from the register row (D6236), the share against the register's total. */
+export function lpFigures(lp, totalCommitted) {
+  const commitment = lpCommitmentDollars(lp);
+  return {
+    commitment: registerMoney(commitment),
+    share: percent(commitment, totalCommitted) ?? 'Unavailable',
+    paid: registerMoney(lpPaidDollars(lp)),
+  };
+}
+
+/** D6242: the sentences "Summarise this LP" shows in place of running, when the drawer already knows it would not. */
+export const LP_SUMMARY_WAIT = 'Reading this LP’s calls and comms log first.';
+export const LP_SUMMARY_UNREAD = 'This LP’s calls or comms log could not be read here, so a summary would quote figures this page does not show. Retry the read first.';
+export const LP_SUMMARY_NOTHING = 'This LP has no commitment above zero, no call line, no receipt and no logged message, so there is nothing to summarise.';
+
+/**
+ * Why the LP summary cannot run yet, or null when it can: it reads only what the drawer shows, so it waits for the
+ * drawer's own ledger and comms reads, and does not run over a failed one or over an LP with nothing recorded.
+ */
+export function lpSummaryBlocked(lp, ledger, comms) {
+  if (ledger?.status === 'loading' || comms?.status === 'loading') return LP_SUMMARY_WAIT;
+  if (ledger?.status !== 'ready' || comms?.status !== 'ready') return LP_SUMMARY_UNREAD;
+  const { lines, loose } = callLines(ledger.data?.entries);
+  const logged = comms.data?.items || [];
+  if (!(Number(lpCommitmentDollars(lp)) > 0) && !lines.length && !loose.length && !logged.length) return LP_SUMMARY_NOTHING;
+  return null;
+}
 
 /** `?lp=` as an LP id, or null. */
 export function lpParam(raw) {

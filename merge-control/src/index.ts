@@ -1,14 +1,25 @@
 /** D5618: independent authenticated webhook ingress, queue dispatch, status and fenced issue claims. */
 import { RepoControl } from './repoControl.ts';
+import { CapacityControl } from './ciCapacityRuntime.ts';
 import { POLICY_VERSION } from './policy.ts';
 import { limitedBody, ownerAuthorized, webhook } from './webhook.ts';
 import type { Delivery, Env } from './types.ts';
 import type { LeaseInput } from './lib/lease.ts';
-export { RepoControl };
+export { RepoControl, CapacityControl };
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
     try {
+      if (path.startsWith('/capacity/')) {
+        const owner = (path === '/capacity/switch' && request.method === 'POST') || (path === '/capacity/status' && request.method === 'GET');
+        const caller = request.method === 'POST' && ['/capacity/submit', '/capacity/receipt', '/capacity/outcome'].includes(path);
+        if (!owner && !caller) return new Response('not found', { status: 404 });
+        if (owner && !ownerAuthorized(request, env.CAPACITY_OWNER_TOKEN)) return new Response('unauthorized', { status: 401 });
+        // Default-off admission. Owned outcome reports remain authenticated and bounded during draining.
+        if (caller && path !== '/capacity/outcome' && String(env.CAPACITY_ENABLED) !== 'true') return Response.json({ error: 'capacity_disabled' }, { status: 503 });
+        if (caller && !/^Bearer [A-Za-z0-9_.-]{1,16384}$/.test(request.headers.get('authorization') ?? '')) return new Response('unauthorized', { status: 401 });
+        return await env.CAPACITY_CONTROL.getByName(env.REPOSITORY).fetch(request);
+      }
       if (path === '/webhook' && request.method === 'POST') return await webhook(request, env);
       if (!ownerAuthorized(request, env.OWNER_TOKEN)) return new Response('unauthorized', { status: 401 });
       const control = env.REPO_CONTROL.getByName(env.REPOSITORY);

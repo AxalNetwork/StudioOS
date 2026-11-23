@@ -12,12 +12,13 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, StatedLimit } from '../../advisor/expertise/kit';
 import { ICDecisionsList, OpenDecisionSheet } from '../../ICDecisionsPage';
-import {ballotOf, tallyText as tallyWords, VOTE_WORDS as RECORD_WORDS} from '../../icDecisionModel';
+import {ballotOf, tallyText as tallyWords} from '../../icDecisionModel';
 import Sheet from '../../../ui/Sheet';
 import { YourVote } from './commit/VoteDialogs';
 import { rosterLine, refusalWords } from './commit/commitVoteModel';
 export {ballotOf} from '../../icDecisionModel';
 import FromMercury from '../FromMercury';
+import { CommitPhone, CommitRefused } from './CommitPhone';
 
 /**
  * Deals · Commit — the Investment committee page, `/deals/commit`.
@@ -72,6 +73,11 @@ import FromMercury from '../FromMercury';
  * `commit/VoteDialogs.jsx`. `/deals/commit?decision=<uid>` forwards to the
  * decision record at `/deals/commit/<uid>` (D6154), where the admin's Record
  * position action stays.
+ *
+ * ON A PHONE (D6151 part 3, board DE27) the decision is drawn by
+ * `CommitPhone.jsx` below 768px, from the same read, with a sticky Vote; the
+ * strip, the decision card and the conditions table are the desktop view, from
+ * 768px up. A refused read (403) is said as a refusal, not a failure (DE27 E).
  */
 
 /**
@@ -91,6 +97,8 @@ export function rationaleNote(rationale) {
 }
 
 export const UNAVAILABLE = Symbol('unavailable');
+/** A 403 from the committee read: this account may not use the committee (DE27 E). */
+export const REFUSED = Symbol('refused');
 
 /** The newest decision the committee has not decided, or null (DE07b). */
 export function openDecisionOf(room) {
@@ -596,12 +604,12 @@ export default function InvestorCommitZone() {
 
   const load = useCallback(() => {
     setRoom(null);
-    api.icCommitRoom().then(setRoom, () => setRoom(UNAVAILABLE));
+    api.icCommitRoom().then(setRoom, (cause) => setRoom(cause?.status === 403 ? REFUSED : UNAVAILABLE));
     api.icConditions().then((r) => setMore(byUid(r?.items)), () => setMore(UNAVAILABLE));
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const ready = room && room !== UNAVAILABLE;
+  const ready = room && room !== UNAVAILABLE && room !== REFUSED;
   const decisions = ready ? room.decisions : null;
   /** The decision on the card: the newest one not yet decided (DE07), or none (DE07b). */
   const current = useMemo(() => (ready ? openDecisionOf(room) : null), [ready, room]);
@@ -982,6 +990,7 @@ export default function InvestorCommitZone() {
       {opening && (
         <OpenDecisionSheet onClose={() => setOpening(false)} onOpened={() => { setOpening(false); setView('current'); load(); }} />
       )}
+      {room === REFUSED ? <CommitRefused /> : (
       <ZoneBody
         loading={room === null}
         error={room === UNAVAILABLE ? 'The committee record could not be read.' : ''}
@@ -990,21 +999,40 @@ export default function InvestorCommitZone() {
         empty={<NoOpenDecision onOpen={() => setOpening(true)} />}
       >
         <div className="space-y-4">
-          {current && view !== 'decisions' ? <CommitStrip room={room} decision={current} /> : null}
+          {current && view !== 'decisions' ? (
+            // The strip is the desktop view on the Current view; the phone draws the tally instead (DE27).
+            <div className={view === 'current' ? 'hidden md:block' : ''} data-testid="commit-strip-wrap">
+              <CommitStrip room={room} decision={current} />
+            </div>
+          ) : null}
 
           {/* ══ DE07: the decision, its conditions and its minutes ══ */}
           {view === 'current' && (
             current ? (
               <>
                 <div className="flex justify-end"><OpenDecisionButton onOpen={() => setOpening(true)} /></div>
-                <DecisionCard decision={current} />
-                <YourVote decision={current} user={user} onSaved={load} renderMark={(vote) => <VoteMark vote={vote} />} />
-                <div className="grid gap-4 lg:grid-cols-12">
-                  <div className="min-w-0 lg:col-span-8">
-                    <ConditionsCard conditions={conditions.filter((cond) => cond.decision_uid === current.uid)} more={more} control={resolveControl} error={condActionError} />
-                  </div>
-                  <div className="min-w-0 lg:col-span-4">
-                    <MinutesCard minutes={minutesBlock} forDecision={sameMeeting} decisionLabel={minutesDecision}>{minutesControl}</MinutesCard>
+                {/* ══ DE27: the same decision on a phone, below 768px ══ */}
+                <CommitPhone
+                  decision={current}
+                  user={user}
+                  conditions={conditions.filter((cond) => cond.decision_uid === current.uid)}
+                  control={resolveControl}
+                  conditionError={condActionError}
+                  // Closing admits admins and investors (App.jsx); a partner enters Commit only (D6154).
+                  closingTo={user?.role === 'partner' ? null : current.deal_id ? `/deals/closing?deal=${encodeURIComponent(current.deal_id)}` : '/deals/closing'}
+                  minutes={<MinutesCard minutes={minutesBlock} forDecision={sameMeeting} decisionLabel={minutesDecision}>{minutesControl}</MinutesCard>}
+                  onVoted={load}
+                />
+                <div className="hidden space-y-4 md:block" data-testid="commit-desktop">
+                  <DecisionCard decision={current} />
+                  <YourVote decision={current} user={user} onSaved={load} renderMark={(vote) => <VoteMark vote={vote} />} />
+                  <div className="grid gap-4 lg:grid-cols-12">
+                    <div className="min-w-0 lg:col-span-8">
+                      <ConditionsCard conditions={conditions.filter((cond) => cond.decision_uid === current.uid)} more={more} control={resolveControl} error={condActionError} />
+                    </div>
+                    <div className="min-w-0 lg:col-span-4">
+                      <MinutesCard minutes={minutesBlock} forDecision={sameMeeting} decisionLabel={minutesDecision}>{minutesControl}</MinutesCard>
+                    </div>
                   </div>
                 </div>
                 <HowThisWorks />
@@ -1053,6 +1081,7 @@ export default function InvestorCommitZone() {
         {/* D840 (#2349): capacity from the investor's own Mercury, on this page only. */}
         <FromMercury section="commit" />
       </ZoneBody>
+      )}
     </>
   );
 }

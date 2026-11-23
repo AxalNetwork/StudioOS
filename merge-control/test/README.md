@@ -8,5 +8,7 @@
 | `runtime-loader.mjs` | Node-only platform base-class adapter and stand-in for the build's `policy_version` define; never imported by production. |
 | `runner_scale_7889.test.ts` | D7889: simulated 1/5/10/50 stages, CAS/restart, drain races, lifecycle budgets, complete inventory and credential-free supervisor actions. |
 | `ci_capacity.test.ts` | D7887: deterministic capacity, real SQLite recovery, timeout/fallback, provenance and aggregate tests. |
+| `ci_capacity_auth_policy_8011.test.ts` | D8011: fake clock/network/crypto boundaries test bounded key refresh, durable reservations and verified receipt progress. |
+| `ci_capacity_retention_8339.test.ts` | D8339: guarded age and count retention of the request store against real SQLite and the real publication outbox; nothing owed is removed and every identity fence survives. |
 
 Wrangler local-runtime smoke checks and packaging are recorded in D5618.
