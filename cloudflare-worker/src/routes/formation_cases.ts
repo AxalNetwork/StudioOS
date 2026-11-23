@@ -12,7 +12,7 @@ import { ensureIncorporationsSchema } from '../services/incorporations';
 import { currentVersion, catalogueForm } from '../services/formationCatalogue';
 import { formationRules, type FormationAnswers, type ComparisonRule } from '../services/formationRules';
 import { transition } from '../services/formationCase';
-import { templateApprovedFor } from '../services/formationGates';
+import { jurisdictionIsCountry } from '../services/formationGates';
 import { logAdminAction } from '../services/adminAudit';
 import { formationCountry, formationPrefill, type FormationPrefill, type IntakeFounder } from '../services/formationPrefill';
 
@@ -133,6 +133,24 @@ async function optionsOn(env: Env) {
 async function digest(value: string) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(b => b.toString(16).padStart(2,'0')).join('');
 }
+type WaiverNotice = { template_key: string; text: string; sha256: string; source_id: number; checked_on: string };
+type ComparisonOutput = ReturnType<typeof formationRules> & { waiver_notices: Record<string, WaiverNotice> };
+/** Only the exact currently approved template body can be shown or accepted as a waiver. */
+async function approvedWaiver(env: Env, versionId: number, formKey: string): Promise<WaiverNotice | null> {
+  const row = await env.DB.prepare(`SELECT f.value AS template_key, f.source_id, f.checked_on, j.country, t.body_md
+    FROM formation_form_facts f JOIN formation_entity_forms e ON e.id = f.form_id
+    JOIN formation_jurisdictions j ON j.id = e.jurisdiction_id JOIN formation_sources s ON s.id = f.source_id
+    JOIN legal_templates t ON t.slug = f.value AND t.is_active = 1 AND t.is_stub = 0
+    WHERE e.version_id = ? AND e.form_key = ? AND f.fact_key = 'structure_waiver_template'
+      AND f.status = 'recorded' AND s.kind = 'counsel'`).bind(versionId,formKey)
+    .first<{template_key:string;source_id:number;checked_on:string;country:string;body_md:string}>();
+  if (!row?.body_md?.trim() || row.body_md.length > 20000) return null;
+  const hash = await digest(row.body_md);
+  const reviews = await env.DB.prepare("SELECT jurisdiction FROM legal_reviews WHERE object_kind = 'template' AND object_ref = ? AND version_sha256 = ? AND decision = 'approved'")
+    .bind(row.template_key,hash).all<{jurisdiction:string}>();
+  return reviews.results.some(r => jurisdictionIsCountry(r.jurisdiction,row.country))
+    ? {template_key:row.template_key,text:row.body_md,sha256:hash,source_id:row.source_id,checked_on:row.checked_on} : null;
+}
 const editable = (row: Case) => !row.closed_at && !row.hold_reason && ['draft','options_shown','chosen','structure_review'].includes(row.stage);
 
 formationCases.get('/:uid/options', async c => {
@@ -148,11 +166,15 @@ formationCases.get('/:uid/options', async c => {
   const rules = (await c.env.DB.prepare("SELECT rule_json FROM formation_rules WHERE version_id = ? AND kind = 'recommend' ORDER BY position, rule_key LIMIT 501").bind(version.id).all<{rule_json:string}>()).results;
   if (keys.length > 100 || rules.length > 500) return refuse(c,409,{code:'catalogue_limit',message:'The comparison catalogue exceeds its supported size.'});
   const forms = await Promise.all(keys.map(k => catalogueForm(c.env,k.form_key,{version})));
-  let output: ReturnType<typeof formationRules>;
-  try { output = formationRules(JSON.parse(answers.answers_json) as FormationAnswers, {version:version.version,status:version.status,forms:forms.filter(f => f !== null),rules:rules.map(r => JSON.parse(r.rule_json) as ComparisonRule)}, c.req.query('open') || null); }
+  let output: ComparisonOutput;
+  try { output = {...formationRules(JSON.parse(answers.answers_json) as FormationAnswers, {version:version.version,status:version.status,forms:forms.filter(f => f !== null),rules:rules.map(r => JSON.parse(r.rule_json) as ComparisonRule)}, c.req.query('open') || null), waiver_notices:Object.create(null)}; }
   catch { return refuse(c,409,{code:'comparison_not_recorded',message:'The published comparison rules do not cover these recorded answers.'}); }
+  for (const option of output.options) if (option.path === 'specialist' && option.waiver_eligible) {
+    const notice = await approvedWaiver(c.env,version.id,option.form_key);
+    if (notice) output.waiver_notices[option.form_key] = notice;
+  }
   const uid = `fs_${crypto.randomUUID()}`;
-  const noticeHash = await digest(JSON.stringify(output.notice));
+  const noticeHash = await digest(JSON.stringify({notice:output.notice,waiver_notices:output.waiver_notices}));
   const saved = await c.env.DB.prepare(`INSERT INTO formation_case_suggestions(uid,case_id,answers_uid,catalogue_version_id,output_json,notice_key,notice_version,notice_hash,created_by)
     SELECT ?,id,?,?,?,?,?,?,? FROM formation_cases WHERE id = ? AND revision = ? AND closed_at IS NULL AND hold_reason IS NULL
     AND ? = (SELECT uid FROM formation_case_answers WHERE case_id = ? ORDER BY id DESC LIMIT 1)`)
@@ -171,7 +193,7 @@ formationCases.post('/:uid/memos', async c => {
   if (!row) return refuse(c,404,{code:'formation_case_not_found',message:'That formation case is not available.'});
   if (!await optionsOn(c.env)) return refuse(c,403,{code:'options_off',message:'Options are not switched on.'});
   const b = await c.req.json().catch(() => null);
-  if (!b || !['document','author_name','firm','licensing_body','country','memo_date','partner_acknowledgement'].every(k => typeof b[k] === 'string' && b[k].trim() && b[k].length <= (k === 'document' ? 20000 : k === 'partner_acknowledgement' ? 2000 : 200)) || !/^[A-Z]{2}$/.test(b.country) || !/^\d{4}-\d{2}-\d{2}$/.test(b.memo_date) || Number.isNaN(Date.parse(b.memo_date)) || new Date(b.memo_date).toISOString().slice(0,10) !== b.memo_date || !row.partner_id || b.partner_id !== row.partner_id)
+  if (!b || typeof b.answers_uid !== 'string' || b.answers_uid.length > 100 || b.partner_acknowledged !== true || !['document','author_name','firm','licensing_body','country','memo_date','partner_acknowledgement'].every(k => typeof b[k] === 'string' && b[k].trim() && b[k].length <= (k === 'document' ? 20000 : k === 'partner_acknowledgement' ? 2000 : 200)) || !/^[A-Z]{2}$/.test(b.country) || !/^\d{4}-\d{2}-\d{2}$/.test(b.memo_date) || Number.isNaN(Date.parse(b.memo_date)) || new Date(b.memo_date).toISOString().slice(0,10) !== b.memo_date || !row.partner_id || b.partner_id !== row.partner_id)
     return refuse(c,400,{code:'structure_memo_invalid',message:'Record the document, professional credentials, date and accepting partner acknowledgement.'});
   const uid = `fm_${crypto.randomUUID()}`;
   const saved = await c.env.DB.prepare(`INSERT INTO formation_case_memos(uid,case_id,answers_uid,document,author_name,firm,licensing_body,country,memo_date,partner_id,acknowledged_by,partner_acknowledgement)
@@ -189,11 +211,11 @@ formationCases.post('/:uid/choice', async c => {
   if (!await optionsOn(c.env)) return refuse(c,403,{code:'options_off',message:'Options are not switched on.'});
   if (!editable(row)) return refuse(c,409,{code:'formation_case_locked',message:'This case cannot record a choice now.'});
   const b = await c.req.json().catch(() => null);
-  if (!b || b.revision !== row.revision || typeof b.own_reason !== 'string' || !b.own_reason.trim() || b.own_reason.length > 4000) return refuse(c,400,{code:'choice_invalid',message:'Name the case revision and record your reason.'});
+  if (!b || !['suggestion_uid','form_key','notice_hash'].every(k => typeof b[k] === 'string' && b[k].length > 0 && b[k].length <= 100) || !/^[a-f0-9]{64}$/.test(b.notice_hash) || !['self','structure_memo','waiver'].includes(b.confirmation) || (b.confirmation === 'structure_memo' && typeof b.memo_uid !== 'string') || b.revision !== row.revision || typeof b.own_reason !== 'string' || !b.own_reason.trim() || b.own_reason.length > 4000) return refuse(c,400,{code:'choice_invalid',message:'Name the case revision and record your reason.'});
   const shown = await c.env.DB.prepare(`SELECT uid,answers_uid,catalogue_version_id,output_json,notice_hash FROM formation_case_suggestions WHERE uid = ? AND case_id = ?
     AND answers_uid = (SELECT uid FROM formation_case_answers WHERE case_id = ? ORDER BY id DESC LIMIT 1)`).bind(b.suggestion_uid,row.id,row.id).first<{uid:string;answers_uid:string;catalogue_version_id:number;output_json:string;notice_hash:string}>();
   if (!shown || b.notice_hash !== shown.notice_hash) return refuse(c,409,{code:'choice_evidence_changed',message:'Compare the current answers and confirm the notice shown.'});
-  const output = JSON.parse(shown.output_json) as ReturnType<typeof formationRules>;
+  const output = JSON.parse(shown.output_json) as ComparisonOutput;
   const option = output.options.find(o => o.form_key === b.form_key);
   if (!option) return refuse(c,400,{code:'form_not_shown',message:'Open the form to compare it before choosing it.'});
   if (option.path === 'specialist') {
@@ -202,10 +224,10 @@ formationCases.post('/:uid/choice', async c => {
       if (!memo) return refuse(c,409,{code:'structure_memo_required',message:'An acknowledged structure memo from the accepting partner is required.'});
     } else if (b.confirmation === 'waiver') {
       if (!option.waiver_eligible || ![4,5,10,11,13].includes(option.scenario)) return refuse(c,409,{code:'waiver_not_available',message:'This case requires a structure memo.'});
-      const waiver = await c.env.DB.prepare(`SELECT f.value FROM formation_form_facts f JOIN formation_entity_forms e ON e.id = f.form_id JOIN formation_sources s ON s.id = f.source_id
-        WHERE e.version_id = ? AND e.form_key = ? AND f.fact_key = 'structure_waiver_template' AND f.status = 'recorded' AND s.kind = 'counsel'`).bind(shown.catalogue_version_id,option.form_key).first<{value:string}>();
-      const form = await catalogueForm(c.env,option.form_key,{version: {id:shown.catalogue_version_id,version:output.catalogue_version,status:'published',published_at:null}});
-      if (!waiver || !form || !await templateApprovedFor(c.env,waiver.value,form.jurisdiction.country)) return refuse(c,409,{code:'waiver_not_available',message:'No counsel-approved waiver is recorded for this form.'});
+      const shownNotice = output.waiver_notices?.[option.form_key];
+      const current = await approvedWaiver(c.env,shown.catalogue_version_id,option.form_key);
+      if (!shownNotice || !current || current.sha256 !== shownNotice.sha256 || b.waiver_notice_hash !== shownNotice.sha256)
+        return refuse(c,409,{code:'waiver_not_available',message:'Compare and confirm the exact counsel-approved waiver before choosing.'});
     } else return refuse(c,409,{code:'structure_memo_required',message:'An acknowledged structure memo is required.'});
   } else if (b.confirmation !== 'self') return refuse(c,400,{code:'choice_confirmation_invalid',message:'Record your own choice.'});
   const uid = `fc_choice_${crypto.randomUUID()}`;

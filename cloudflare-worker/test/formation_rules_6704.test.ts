@@ -60,7 +60,7 @@ test('same answers/version are byte-identical; costs never select Estonia; expli
 });
 
 const SECRET='synthetic-formation-6704-secret-only'.repeat(2);
-async function setup() {
+async function setup(scenario=12,withWaiver=false) {
   const db=openSchema();
   db.exec(`INSERT INTO founders(id,name,email) VALUES(9904,'Fixture','fixture6704@example.test');
     INSERT INTO users(id,name,email,role,founder_id) VALUES(9904,'Fixture','fixture6704@example.test','founder',9904),(9905,'Other','other6704@example.test','founder',NULL),(9906,'HQ','hq6704@example.test','admin',NULL);
@@ -74,7 +74,14 @@ async function setup() {
     INSERT INTO formation_catalogue_versions(id,version,status) VALUES(9904,9904,'draft');
     INSERT INTO formation_jurisdictions(id,version_id,country) VALUES(9904,9904,'GB');
     INSERT INTO formation_entity_forms(id,version_id,jurisdiction_id,form_key,label,offer_mode) VALUES(9904,9904,9904,'gb_ltd','Fixture form','orderable');`);
-  db.prepare("INSERT INTO formation_rules(version_id,rule_key,kind,rule_json) VALUES(9904,'fixture','recommend',?)").run(JSON.stringify(catalogue().rules[0]));
+  db.prepare("INSERT INTO formation_rules(version_id,rule_key,kind,rule_json) VALUES(9904,'fixture','recommend',?)").run(JSON.stringify({...catalogue().rules[0],scenario}));
+  if (withWaiver) {
+    const body='SYNTHETIC WAIVER — FIXTURE ONLY';
+    const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+    db.exec("INSERT INTO formation_sources(id,kind,title) VALUES(9904,'counsel','Synthetic counsel fixture'); INSERT INTO formation_form_facts(version_id,form_id,fact_key,value,status,source_id,checked_on) VALUES(9904,9904,'structure_waiver_template','waiver6704','recorded',9904,'2026-11-20')");
+    db.prepare("INSERT INTO legal_templates(slug,title,category,body_md,version,is_active,is_stub) VALUES('waiver6704','Synthetic waiver','formation',?,1,1,0)").run(body);
+    db.prepare("INSERT INTO legal_reviews(object_kind,object_ref,version,version_sha256,review_type,jurisdiction,reviewer_id,requested_by,decision,decided_by,decided_at) VALUES('template','waiver6704',1,?,'initial','GB',9906,9906,'approved',9906,'2026-11-20')").run(hash);
+  }
   db.exec("UPDATE formation_catalogue_versions SET status='published',is_current=1,published_by=9904,published_at='2026-11-20' WHERE id=9904");
   const jti=grantWriteBar(db,9906);
   const app=new Hono<any>();app.route('/api/formation/cases',router);app.onError((e,c)=>c.json({error:e.message}, (AUTH_ERROR_STATUSES[e.message] || 500) as any));
@@ -121,10 +128,11 @@ test('a changed simple choice appends rows; database refuses mutation of shown a
 test('memo requires named professional and HQ-recorded accepting partner acknowledgement; only that answers set can pass chosen',async t=>{
   const f=await setup();t.after(()=>f.db.close());
   f.db.exec("UPDATE feature_flags SET enabled=1 WHERE key='formation_options' AND scope='global'; UPDATE formation_cases SET partner_id=9904 WHERE id=9904");
-  const b={answers_uid:'answers6704',document:'Synthetic signed structure memo',author_name:'Fixture Professional',firm:'Fixture Firm',licensing_body:'Fixture Licensing Body',country:'GB',memo_date:'2026-11-20',partner_id:9904,partner_acknowledgement:'Acknowledged by the accepting fixture partner'};
+  const b={answers_uid:'answers6704',document:'Synthetic signed structure memo',author_name:'Fixture Professional',firm:'Fixture Firm',licensing_body:'Fixture Licensing Body',country:'GB',memo_date:'2026-11-20',partner_id:9904,partner_acknowledged:true,partner_acknowledgement:'Acknowledged by the accepting fixture partner'};
   assert.equal((await f.req('POST','/memos',b)).status,403,'founder cannot attest partner acknowledgement');
   for(const field of ['document','author_name','firm','licensing_body','country','memo_date','partner_acknowledgement']) assert.equal((await f.req('POST','/memos',{...b,[field]:''},9906)).status,400,field);
   assert.equal((await f.req('POST','/memos',{...b,partner_id:9905},9906)).status,400);
+  assert.equal((await f.req('POST','/memos',{...b,partner_acknowledged:false},9906)).status,400);
   const memo=await f.req('POST','/memos',b,9906);assert.equal(memo.status,200,JSON.stringify(memo.body));
   const shown=(await f.req('GET','/options')).body;
   const choice={revision:0,suggestion_uid:shown.suggestion_uid,notice_hash:shown.notice_hash,form_key:'gb_ltd',own_reason:'Fixture professional memo checked',confirmation:'structure_memo',memo_uid:memo.body.memo_uid};
@@ -155,4 +163,23 @@ test('a racing first choice or changed choice cannot append under another reques
     assert.equal(f.db.prepare('SELECT count(*) n FROM formation_case_choices WHERE case_id=9904').get()!.n,0,stage);
     assert.equal(f.db.prepare('SELECT count(*) n FROM formation_case_events WHERE case_id=9904').get()!.n,1,stage);
   }
+});
+
+test('a permitted specialist waiver must be shown, acknowledged by its hash, and still approved byte for byte',async t=>{
+  const f=await setup(4,true);t.after(()=>f.db.close());
+  f.db.exec(`UPDATE feature_flags SET enabled=1 WHERE key='formation_options' AND scope='global';
+    INSERT INTO formation_case_answers(uid,case_id,case_revision,answers_json,prefill_json,created_by) VALUES('waiver6704',9904,1,'{"founders":[{"residence_country":"GB"}],"operating_countries":["GB"],"management_country":"GB","cross_border":true}','{}',9904);
+    UPDATE formation_cases SET revision=1 WHERE id=9904;`);
+  const shown=(await f.req('GET','/options')).body;
+  const notice=shown.waiver_notices.gb_ltd;
+  assert.equal(notice.text,'SYNTHETIC WAIVER — FIXTURE ONLY');
+  const body={revision:1,suggestion_uid:shown.suggestion_uid,notice_hash:shown.notice_hash,form_key:'gb_ltd',own_reason:'Synthetic waiver choice',confirmation:'waiver'};
+  assert.equal((await f.req('POST','/choice',body)).body.error,'waiver_not_available');
+  f.db.exec("UPDATE legal_templates SET body_md='Changed fixture body' WHERE slug='waiver6704'");
+  assert.deepEqual((await f.req('GET','/options')).body.waiver_notices,{});
+  const changedHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('Changed fixture body')))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  f.db.prepare("INSERT INTO legal_reviews(object_kind,object_ref,version,version_sha256,review_type,jurisdiction,reviewer_id,requested_by,decision,decided_by,decided_at) VALUES('template','waiver6704',2,?,'amendment','GB',9906,9906,'approved',9906,'2026-11-20')").run(changedHash);
+  assert.equal((await f.req('POST','/choice',{...body,waiver_notice_hash:notice.sha256})).body.error,'waiver_not_available');
+  f.db.exec("UPDATE legal_templates SET body_md='SYNTHETIC WAIVER — FIXTURE ONLY' WHERE slug='waiver6704'");
+  assert.equal((await f.req('POST','/choice',{...body,waiver_notice_hash:notice.sha256})).status,200);
 });
