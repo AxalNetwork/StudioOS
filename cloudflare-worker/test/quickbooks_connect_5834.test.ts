@@ -37,6 +37,9 @@ import { AUTHORIZE_URL, QUICKBOOKS_SCOPES, REVOKE_URL, TOKEN_URL, quickbooksAuth
 import { HOSTS } from '../src/services/financialStatements/quickbooksClient.ts';
 import { personalFixture } from './_mercury_personal_d713.ts';
 
+/** Every test runs on this instant (Date only); no test reads the real clock. */
+const CLOCK = Date.UTC(2026, 10, 23, 12);
+const clock = (ctx: any) => ctx.mock.timers.enable({ apis: ['Date'], now: CLOCK });
 const COMPANY = 77;
 const KEY = 'quickbooks';
 const REALM = '9130350000000001';
@@ -147,11 +150,12 @@ async function connected(t: T, who = 10) {
 const leak = (text: string) => assert.doesNotMatch(text, /qb-(access|refresh)-|fixture-intuit-secret|9130350000000001/, 'no token, secret or realm id');
 const expire = async (t: T, r: any) => {
   const creds = await decryptCredentials(t.env, r.uid, r.credentials_enc);
-  const enc = await encryptCredentials(t.env, r.uid, { ...creds, expires_at: Date.now() - 1000 });
+  const enc = await encryptCredentials(t.env, r.uid, { ...creds, expires_at: CLOCK - 1000 });
   t.db.prepare('UPDATE integrations SET credentials_enc = ? WHERE id = ?').run(enc, r.id);
 };
 
-test('1. descriptor, scope and authorize URL; not ready, and nothing sent, without the approval flag', async () => {
+test('1. descriptor, scope and authorize URL; not ready, and nothing sent, without the approval flag', async (ctx) => {
+  clock(ctx);
   const url = new URL(quickbooksAuthorizeUrl('client-x', 'https://app.example.test/cb', 'signed+state='));
   assert.equal(url.origin + url.pathname, AUTHORIZE_URL);
   assert.deepEqual(Object.fromEntries(url.searchParams), {
@@ -175,7 +179,8 @@ test('1. descriptor, scope and authorize URL; not ready, and nothing sent, witho
   assert.equal(t.qb.calls.length, 0);
 });
 
-test('2. sign in end to end: realm from the callback, venture from the state, environment from the deployment', async () => {
+test('2. sign in end to end: realm from the callback, venture from the state, environment from the deployment', async (ctx) => {
+  clock(ctx);
   const t = await setup();
   const s = await start(t);
   assert.equal(new URL(s.body.authorize_url).origin + new URL(s.body.authorize_url).pathname, AUTHORIZE_URL);
@@ -199,7 +204,8 @@ test('2. sign in end to end: realm from the callback, venture from the state, en
   assert.equal(JSON.parse(row(prod).config_json).environment, 'production');
 });
 
-test('3. no venture, a venture the member cannot edit, and a missing or malformed realm connect nothing', async () => {
+test('3. no venture, a venture the member cannot edit, and a missing or malformed realm connect nothing', async (ctx) => {
+  clock(ctx);
   for (const [who, project, extra, reason] of [
     [10, null, `&realmId=${REALM}`, 'quickbooks_venture_required'],
     [12, 1, `&realmId=${REALM}`, 'quickbooks_venture_refused'],
@@ -216,7 +222,8 @@ test('3. no venture, a venture the member cannot edit, and a missing or malforme
   }
 });
 
-test('4. rotation: one refresh under concurrency, the rotated token kept, a spent one never sent; a revoked grant says so', async () => {
+test('4. rotation: one refresh under concurrency, the rotated token kept, a spent one never sent; a revoked grant says so', async (ctx) => {
+  clock(ctx);
   const t = await setup();
   const r = await connected(t);
   const real = globalThis.fetch;
@@ -246,7 +253,8 @@ test('4. rotation: one refresh under concurrency, the rotated token kept, a spen
   globalThis.fetch = real;
 });
 
-test('5. the route: the read hides the realm; a sync writes; refusals keep their own codes', async () => {
+test('5. the route: the read hides the realm; a sync writes; refusals keep their own codes', async (ctx) => {
+  clock(ctx);
   const t = await setup();
   const r = await connected(t);
   const read = await req(t, 10, '/api/quickbooks/connection');
@@ -283,7 +291,8 @@ test('5. the route: the read hides the realm; a sync writes; refusals keep their
   leak(revoked.text);
 });
 
-test('6. disconnect revokes at Intuit; a failed revoke keeps the connection; an unknown token counts as revoked', async () => {
+test('6. disconnect revokes at Intuit; a failed revoke keeps the connection; an unknown token counts as revoked', async (ctx) => {
+  clock(ctx);
   const t = await setup();
   const r = await connected(t);
   t.qb.revokeStatus = 503;
@@ -306,7 +315,8 @@ test('6. disconnect revokes at Intuit; a failed revoke keeps the connection; an 
   assert.equal(row(u), undefined);
 });
 
-test('7. the flag is checked again at the callback; a fresh token needs no lease; a refresh finished meanwhile is reused', async () => {
+test('7. the flag is checked again at the callback; a fresh token needs no lease; a refresh finished meanwhile is reused', async (ctx) => {
+  clock(ctx);
   const t = await setup();
   const s = await start(t);
   t.env.QUICKBOOKS_APP_APPROVED = '';
@@ -324,7 +334,7 @@ test('7. the flag is checked again at the callback; a fresh token needs no lease
 
   // This caller read an expired token; by the time it holds the lease, another refresh has stored a fresh one.
   await expire(u, row(u));
-  const fresh = await encryptCredentials(u.env, r.uid, { access_token: 'qb-access-other', refresh_token: 'qb-refresh-other', expires_at: Date.now() + 3_600_000 });
+  const fresh = await encryptCredentials(u.env, r.uid, { access_token: 'qb-access-other', refresh_token: 'qb-refresh-other', expires_at: CLOCK + 3_600_000 });
   const kv = u.env.RATE_LIMITS;
   let swapped = false;
   u.env.RATE_LIMITS = { ...kv, get: async (k: string) => {
