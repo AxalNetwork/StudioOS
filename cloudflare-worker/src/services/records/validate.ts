@@ -1425,7 +1425,7 @@ const demand: ModuleSpec = {
 
 // ── Experiments and evidence: one hypothesis ─────────────────────────────────
 
-const EXPERIMENT_STATUS: Record<string, [string, string]> = { planned: ['Planned', 'grey'], running: ['Running', 'vio'], done: ['Done', 'ok'] };
+const EXPERIMENT_STATUS: Record<string, [string, string]> = { planned: ['Planned', 'grey'], running: ['Running', 'vio'], done: ['Done', 'ok'], stopped: ['Stopped', 'grey'] };
 const EVIDENCE_KIND: Record<string, string> = { interview: 'Interview', signal: 'Demand signal', metric: 'KPI', experiment: 'Experiment' };
 
 type HypothesisData = { h: Any; claim: ReturnType<typeof claimsOf>[number] | null; links: LinkRow[]; model: PainGroupModel };
@@ -1511,7 +1511,7 @@ const experiments: ModuleSpec = {
       key: 'experiments', title: 'Experiments',
       read: async (ctx, id) => {
         const res = await ctx.env.DB.prepare(
-          'SELECT id, title, method, target, result, status FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id',
+          'SELECT * FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id',
         ).bind(Number(id), ctx.projectId).all<Any>();
         // D1082 (#2947): each row's last Build in Lovable, from D1068's handoff store. Its own read: a
         // failure leaves the experiments drawn, with no "Opened in Lovable on" line.
@@ -1525,11 +1525,11 @@ const experiments: ModuleSpec = {
         const writer = canWrite(ctx.project, ctx.user);
         return {
           rows: (res.results || []).map((x) => {
-            const [word, tone] = EXPERIMENT_STATUS[String(x.status)] ?? ['Planned', 'grey'];
-            return { a: String(x.title), b: joined(x.method, x.target ? `target ${x.target}` : null, x.result), c: word, tone,
+            const [word, tone] = x.stopped_at ? ['Stopped', 'grey'] : x.status === 'done' ? [x.result?.trim() ? 'Completed with result' : 'Result needed', x.result?.trim() ? 'ok' : 'warn'] : EXPERIMENT_STATUS[String(x.status)] ?? ['Not recorded', 'grey'];
+            return { a: String(x.title), b: joined(x.method, x.target ? `Success bar: ${x.target}` : null, x.result, x.result_direction), c: word, tone,
               action: { key: 'experiment-status', body: { experiment_id: Number(x.id) } },
               lovable: { cycle: 'validate' as const, project_id: ctx.projectId, record: { kind: 'experiment', id: String(x.id) },
-                can_launch: writer && String(x.status) === 'planned', opened_at: opened.get(String(x.id)) ?? null } };
+                can_launch: writer && String(x.status) === 'planned' && !x.stopped_at, opened_at: opened.get(String(x.id)) ?? null } };
           }),
           empty: 'No experiment yet.',
           action: 'add-experiment',
@@ -1673,12 +1673,13 @@ const experiments: ModuleSpec = {
           { key: 'experiment_id', label: 'Experiment', kind: 'CH', required: true,
             options: (experimentsRes.results || []).map((x) => ({ value: String(x.id), label: x.title })) },
           { key: 'status', label: 'Status', kind: 'CH', required: true, options: EXPERIMENT_STATUSES.map((s) => ({ value: s, label: EXPERIMENT_STATUS[s][0] })) },
-          { key: 'result', label: 'Result', kind: 'T' },
+          { key: 'result', label: 'Observed result', kind: 'T' },
+          { key: 'result_direction', label: 'Direction', kind: 'CH', options: [{ value: '', label: 'Not recorded' }, { value: 'supports', label: 'Supports' }, { value: 'contradicts', label: 'Contradicts' }, { value: 'inconclusive', label: 'Inconclusive' }] },
         ] },
         references: (body) => [{ store: 'hypothesis_experiments', id: refId(field(body, 'experiment_id')) }],
         execute: (c, _id, body) => refusing(async () => {
           await setExperimentStatus(c.env, { projectId: c.projectId, userId: userId(c), hypothesisId,
-            experiment_id: field(body, 'experiment_id'), status: field(body, 'status'), result: field(body, 'result') });
+            experiment_id: field(body, 'experiment_id'), status: field(body, 'status'), result: field(body, 'result'), result_direction: field(body, 'result_direction') });
           return { ok: true };
         }),
       });

@@ -28,6 +28,7 @@ They do not change production application state.
 | `queue-capacity-audit.mjs` | D8013: bounded GET-only queue, current-attempt and exact-ref review evidence. |
 | `queue-capacity-audit-8013.test.mjs` | D8013: provenance, incomplete evidence, stale snapshots and read-only transport tests. |
 | `queue-capacity-audit-8013.fixture.mjs` | D8013: synthetic rerun and aggregate-job observations for offline diagnosis. |
+| `capacity-scale-model.mjs` | D8333: pure sizing model for the capacity pool: enforced ceilings, coordinator API load, queue wait, slots and machines for a target. |
 | `ownership-check.mjs` | Read-only, advisory-first check of changed paths against active tasks' explicit ownership (D8075). |
 | `ownership-check.test.mjs` | Ownership parser, glob, API completeness and workflow contract regressions (D8075). |
 | `ownership-fixtures.json` | Full public task-body snapshots used to catch ownership wording drift (D8075). |

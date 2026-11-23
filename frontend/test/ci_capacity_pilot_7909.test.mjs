@@ -325,7 +325,8 @@ const jobDigest=job=>createHash('sha256').update(JSON.stringify(job)).digest('he
 
 test('D7909 literal pinned caller leaves the ordinary hosted graph and queue matrix independent',()=>{
  const current=yaml(readFileSync('.github/workflows/ci.yml','utf8')),caller=current.jobs['capacity-submit'];
- assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@19927c8960ec01377ff25d6d5a081ae8db080df5');
+ // D8335 (#8335): a main commit. The first pin (19927c89) lived only on the merged branch and stopped resolving when it was deleted.
+ assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875');
  assert.equal(caller.needs,'plan');assert.equal(caller.permissions['id-token'],'write');
  for(const guard of ["github.event_name == 'push'","github.event_name != 'merge_group'","vars.CI_CAPACITY_ENABLED == 'true'","github.repository == 'AxalNetwork/StudioOS'","needs.plan.outputs.capacity_submission != ''"])assert.ok(caller.if.includes(guard),guard);
  for(const [name,digest] of Object.entries(BASE_JOB_DIGESTS)){
@@ -336,7 +337,7 @@ test('D7909 literal pinned caller leaves the ordinary hosted graph and queue mat
  assert.equal(caller.with.submission,'${{ needs.plan.outputs.capacity_submission }}');
  assert.equal(caller.with.executor_sha,'${{ vars.CI_CAPACITY_EXECUTOR_SHA }}');
  assert.equal(caller.with.child_workflow_sha,'${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}');
- // 4f7dfaca… is `git rev-parse 19927c8960ec01377ff25d6d5a081ae8db080df5:.github/workflows/capacity-planner.yml`.
+ // 4f7dfaca… is `git rev-parse cb63d3997d5770892934932b3c7a534485a8a875:.github/workflows/capacity-planner.yml`, the same blob the first pin (19927c89) held.
  assert.equal(execFileSync('git',['hash-object','.github/workflows/capacity-planner.yml'],{encoding:'utf8'}).trim(),'4f7dfaca48403d2d0b9cc9e83403ebca48525a8d','the literal pin must contain the exact prepared planner');
  const config=readFileSync('wrangler.merge-control.toml','utf8');
  assert.match(config,/CAPACITY_ENABLED = "false"/);assert.match(config,/CAPACITY_PUBLICATION = "pilot"/);assert.match(config,/CAPACITY_CONFIG = ""/);
