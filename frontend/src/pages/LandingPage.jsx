@@ -5,6 +5,7 @@ import PublicFooter from '../components/PublicFooter';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
 import { DOOR_LINKS } from '../lib/siteLinks';
+import { HOME_HEADLINE, HOME_OFFER, HOME_PRIMARY } from '../lib/siteHome';
 import { LAB_WEEKS, openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
 import { numberWordCap } from '../lib/numberWords';
 import { DIMENSIONS } from '../lib/scoringViewModel';
@@ -184,13 +185,11 @@ function Hero({ stats }) {
       <div className="ax-hero-veil" aria-hidden="true" />
       <div className="ax-wrap ax-hero-body">
         <div className="ax-lbl">The global venture creation network</div>
-        <h1 id="ax-hero-h" className="ax-h1">Where we <em>build</em> the rails for the next generation of ventures</h1>
-        <p className="ax-hero-copy">
-          Axal VC is the operating platform for venture creation: venture tools, a global partner network,
-          and capital when you’re ready to scale, all in one system for turning an idea into an organization.
-        </p>
+        {/* D6995: the same words the prerender writes into / before JavaScript runs (lib/siteHome.js). */}
+        <h1 id="ax-hero-h" className="ax-h1">{HOME_HEADLINE.lead}<em>{HOME_HEADLINE.em}</em>{HOME_HEADLINE.tail}</h1>
+        <p className="ax-hero-copy">{HOME_OFFER}</p>
         <div className="ax-row-btns" style={{ marginTop: 34 }}>
-          <Link to="/register" className="ax-btn ax-btn-lg ax-btn-primary">Join Axal VC →</Link>
+          <Link to={HOME_PRIMARY.to} className="ax-btn ax-btn-lg ax-btn-primary">{HOME_PRIMARY.label} →</Link>
           {/* #6988 (X6): not /directory, which may list nobody; the platform page until #7006 (B2). */}
           <Link to="/platform" className="ax-btn ax-btn-lg ax-btn-quiet">See the platform</Link>
         </div>

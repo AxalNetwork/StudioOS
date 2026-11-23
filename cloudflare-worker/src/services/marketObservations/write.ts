@@ -1,6 +1,7 @@
 /** D7709 (#7709): bounded append-only observation writes and durable, body-free import receipts. */
 import type { Env } from '../../types';
 import { reportPrivateError } from '../../util/errorPrivacy';
+import { observationFieldsError, OBSERVATION_FIELDS, type ObservationFields } from '../researchObservations';
 
 export const MAX_BATCH_ROWS = 40;
 export class ImportRequestError extends Error {
@@ -17,7 +18,8 @@ export class ImportFailure extends Error {
     this.httpStatus = httpStatus !== null && Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? httpStatus : null;
   }
 }
-export interface Observation {
+/** One provider cell. D7716: the optional fields say what it counts, where and how; a value outside the exported lists is refused. */
+export interface Observation extends Partial<ObservationFields> {
   metric_key: string; metric_label: string; geography_type: 'country' | 'region' | 'city' | 'ecosystem';
   geography_code: string; period: string; value: number | null; unit: string;
   observation_status: 'actual' | 'estimate' | 'forecast' | 'axal_derived' | 'unspecified';
@@ -90,6 +92,8 @@ export async function runObservationBatch(env: Env, source: string, prepare: () 
     for (const r of rows) {
       if (!Number.isFinite(r.value) || !r.source_observation_key || r.source_observation_key.length > 200 || !r.vintage || r.vintage.length > 100)
         throw new ImportFailure('provider_payload');
+      // D7716: a field outside its exported list refuses the batch before any write; nothing is truncated or guessed.
+      if (observationFieldsError(r)) throw new ImportFailure('provider_payload');
       const old = identities.get(r.source_observation_key);
       if (old && (old.vintage !== r.vintage || old.value !== r.value || old.observation_status !== r.observation_status))
         throw new ImportFailure('provider_payload');
@@ -113,15 +117,19 @@ export async function runObservationBatch(env: Env, source: string, prepare: () 
       const results = await env.DB.batch(pending.map(r => env.DB.prepare(
         `INSERT OR IGNORE INTO research_market_observations
           (source_id,metric_key,metric_label,geography_type,geography_code,period,value,unit,observation_status,
-           published_at,retrieved_at,confidence,source_observation_key,vintage,supersedes_observation_id)
+           published_at,retrieved_at,confidence,source_observation_key,vintage,supersedes_observation_id,
+           statistical_unit,scale,currency,price_basis,industry_scheme,industry_code,size_band,series_id,
+           supporting_passage,applicability_note,limitations)
          SELECT ?,?,?,?,?,?,?,?,?,?,?,'source_reported',?,?,
-           (SELECT id FROM research_market_observations WHERE source_id=? AND source_observation_key=? ORDER BY id DESC LIMIT 1)
+           (SELECT id FROM research_market_observations WHERE source_id=? AND source_observation_key=? ORDER BY id DESC LIMIT 1),
+           ?,?,?,?,?,?,?,?,?,?,?
           WHERE EXISTS (SELECT 1 FROM research_market_sources WHERE id=? AND enabled=1)
             AND NOT EXISTS (SELECT 1 FROM research_market_observations p WHERE p.source_id=? AND p.source_observation_key=?
               AND p.id=(SELECT MAX(q.id) FROM research_market_observations q WHERE q.source_id=p.source_id AND q.source_observation_key=p.source_observation_key)
               AND p.value IS ? AND p.observation_status=?)`,
       ).bind(source, r.metric_key, r.metric_label, r.geography_type, r.geography_code, r.period, r.value, r.unit, r.observation_status,
         r.published_at, started, r.source_observation_key, r.vintage, source, r.source_observation_key,
+        ...OBSERVATION_FIELDS.map(f => r[f] ?? null),
         source, source, r.source_observation_key, r.value, r.observation_status)));
       const ignored: Observation[] = [];
       for (let i = 0; i < results.length; i++) {

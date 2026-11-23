@@ -168,6 +168,11 @@ export default function ZoneDraft({
   // text, because the brief is appended after the SAVED note. Accept is
   // disabled with the sentence beside it. Left out, Accept is as before.
   acceptBlocked = null,
+  // #6270: what an ACCEPTED draft offers besides the band's own buttons — the
+  // diligence room's Copy and Export. Called with the accepted item and drawn
+  // only while it is accepted, so a proposal is never copied as if it were the
+  // reader's memo. Left out, every other mount is as before.
+  acceptedActions = null,
   // D771–D775 (D720 §11): the option's `<verb>:<object>` key on its page, from
   // the profile's list in `lib/railOptions/`, where it differs from the
   // registry's `draft:<surface>`. Left out, the band names that key (D770).
@@ -351,6 +356,7 @@ export default function ZoneDraft({
             {item.accepted ? (
               <span className="text-[10.5px] font-bold text-axal-positive dark:text-emerald-400">Accepted</span>
             ) : null}
+            {item.accepted && editing == null && acceptedActions ? acceptedActions(item) : null}
             {acceptBlocked ? (
               <span id={`${blockedId}-accept`} data-testid="zone-draft-accept-blocked" className="basis-full text-[11px] text-amber-800 dark:text-amber-300">
                 {acceptBlocked}
