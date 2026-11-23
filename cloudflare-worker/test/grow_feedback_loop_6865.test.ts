@@ -179,8 +179,13 @@ test('distinct people: the record, then the email (any case), then the name; an 
 
 test('revenue is recurring, from the last 60 days, per currency, under the askers\' companies in this venture only', async () => {
   const f = fixture();
+  // The Worker reads its own now during the call; a slow call can cross midnight UTC, so `since` is
+  // the day 60 days before a moment between these two reads (#8316, #8318).
+  const sinceAt = (t: number) => new Date(t - 60 * 86_400_000).toISOString().slice(0, 10);
+  const before = Date.now(); // clock-ok: relative
   const w = (await weight(f, FOUNDER, 'Fleet CSV')).body.revenue;
-  assert.equal(w.window_days, 60); assert.equal(w.since, DAY(60));
+  const after = Date.now(); // clock-ok: relative
+  assert.equal(w.window_days, 60); assert.ok([sinceAt(before), sinceAt(after)].includes(w.since), `${w.since} is 60 days before the call`);
   // Kite: r1 + r2 (r3 is 90 days old, r4 is one-time, r6 is another venture's); Ostra: r5 in EUR.
   assert.deepEqual(w.by_currency, [{ currency: 'EUR', cents: 80000 }, { currency: 'USD', cents: 240000 }]);
   assert.equal(w.companies_with_revenue, 2); assert.equal(w.companies_named, 2);
