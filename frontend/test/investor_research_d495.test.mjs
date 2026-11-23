@@ -26,15 +26,15 @@ test('IR1 Clear history is the page’s handler, not a note citing closed #1023'
 });
 
 // D6272: the request shipped on the deal (its Documents tab, Ask for access),
-// so neither row may say it waits on another slot's routes.
-test('IR2 New request and Attach to deal point at the deal, not at slot S02', () => {
-  for (const label of ['New request', 'Attach to deal']) {
-    const a = op('research/diligence', label);
-    assert.equal(a.disabled, true, `${label} can be pressed`);
-    assert.doesNotMatch(a.title, /slot S02|research\.ts/, `${label} still cites the old wait`);
-  }
-  assert.match(op('research/diligence', 'New request').title, /deal’s Documents tab/);
-  assert.match(op('research/diligence', 'Attach to deal').title, /already shows its deal/);
+// so neither row may say it waits on another slot's routes. D6269 (#6269):
+// `New request` is withheld rather than drawn disabled; the room list has no
+// one deal to ask on, and the Requests block lists what came of yours.
+test('IR2 New request is withheld and Attach to deal points at the deal, not at slot S02', () => {
+  assert.equal(op('research/diligence', 'New request'), undefined, 'New request is drawn again');
+  const a = op('research/diligence', 'Attach to deal');
+  assert.equal(a.disabled, true, 'Attach to deal can be pressed');
+  assert.doesNotMatch(a.title, /slot S02|research\.ts|#\d+/, 'Attach to deal cites a wait or an issue');
+  assert.match(a.title, /already shows its deal/);
 });
 
 test('IR4: the investor’s Markets zone states that theses wait on a decision', () => {
