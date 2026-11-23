@@ -31,7 +31,7 @@ const PARTS: Record<string, string[]> = {
   'product-roadmap': ['github', 'vercel'],
   'founding-team': ['github'],
   'company-creation': ['github', 'vercel'],
-  'operating-systems': ['tools'],
+  'operating-systems': ['systems', 'tools'], // D5078: the five systems' rows and actions
 };
 
 let small: Awaited<ReturnType<typeof buildReads>>;

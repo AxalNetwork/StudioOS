@@ -13,9 +13,11 @@
  *                private / public / government split (government is not
  *                recorded anywhere);
  *   heat         market_intel_indexes, live rows only (D538), the current
- *                month (month to date) and its change on the last month;
- *                computed on the read when live observations exist but the
- *                month's index does not yet (as sector-compass does);
+ *                point (the score over the window its last recompute
+ *                covered) and its change on the previous point, each with its
+ *                window dates (D7708); computed on the read when live
+ *                observations exist but the month's index does not yet (as
+ *                sector-compass does);
  *   demand_vs_supply  the sectors whose live demand rises faster than supply;
  *   competition  companies per sector label and per country (top N), the
  *                remainders, and the companies with no label or no country;
@@ -38,9 +40,9 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { readListedTotals } from '../services/listedCompanies';
 import { requireAuth } from '../auth';
-import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
-import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
-import { periodKey, WINDOW_DAYS } from '../services/market_intel/scoring';
+import { SECTORS, previousPeriodKey, recomputeIndexes } from '../services/market_intel/aggregator';
+import { liveIndexSql, liveRowSql, retrievedAtSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
+import { periodKey, scoreWindow, storedWindow, WINDOW_NOT_RECORDED } from '../services/market_intel/scoring';
 import { listCountries, loadOverrides, mapFundFocus, mapFundHq, type Mapping } from '../services/researchTaxonomy';
 import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
 
@@ -305,7 +307,14 @@ async function readTotals(env: Env, companiesRead: Promise<CompanyAggregates>, f
   });
 }
 
-interface IndexRow { sector: string; dimension: string; value: number; delta_pct: number | null; source_count: number }
+interface IndexRow {
+  sector: string; dimension: string; value: number; delta_pct: number | null; source_count: number;
+  window_start?: string | null; window_end?: string | null; source_mix_json?: string | null;
+}
+
+/** D7708 — the window of a set of index points: one recompute writes them all, so they share it. */
+interface Window { window_start: string | null; window_end: string | null; window_reason: string | null }
+const NO_WINDOW: Window = { window_start: null, window_end: null, window_reason: WINDOW_NOT_RECORDED };
 
 /**
  * Live observations exist but this month's index has not been computed from
@@ -315,7 +324,7 @@ interface IndexRow { sector: string; dimension: string; value: number; delta_pct
 export const INDEX_PENDING_REASON =
   "Live observations are recorded, but this month's index has not been computed yet";
 
-interface LiveIndexes { rows: IndexRow[]; pending: boolean }
+interface LiveIndexes { rows: IndexRow[]; pending: boolean; window: Window; previous_window: Window }
 
 /**
  * This month's live index rows. When there are none but live observations
@@ -327,22 +336,36 @@ interface LiveIndexes { rows: IndexRow[]; pending: boolean }
  */
 async function readLiveIndexes(env: Env): Promise<LiveIndexes> {
   const read = async () => (await env.DB.prepare(
-    `SELECT sector, dimension, value, delta_pct, source_count
+    `SELECT sector, dimension, value, delta_pct, source_count, window_start, window_end, source_mix_json
        FROM market_intel_indexes WHERE geo = 'global' AND period_key = ? AND ${liveIndexSql()}`
   ).bind(periodKey()).all<IndexRow>()).results || [];
+  // D7708 — the previous point's window, so a change names what it compares.
+  const previousWindow = async (): Promise<Window> => {
+    const w = await env.DB.prepare(
+      `SELECT MIN(window_start) AS window_start, MAX(window_end) AS window_end
+         FROM market_intel_indexes WHERE geo = 'global' AND period_key = ? AND ${liveIndexSql()}`
+    ).bind(previousPeriodKey(periodKey())).first<{ window_start: string | null; window_end: string | null }>();
+    return w?.window_start && w?.window_end ? { window_start: w.window_start, window_end: w.window_end, window_reason: null } : NO_WINDOW;
+  };
+  const done = async (rows: IndexRow[], pending: boolean): Promise<LiveIndexes> => {
+    const first = rows[0] ? storedWindow(rows[0]) : null;
+    const window: Window = first ? { window_start: first.window_start, window_end: first.window_end, window_reason: first.window_reason } : NO_WINDOW;
+    return { rows, pending, window, previous_window: rows.length ? await previousWindow() : NO_WINDOW };
+  };
   const rows = await read();
-  if (rows.length > 0) return { rows, pending: false };
-  const cutoff = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString();
+  if (rows.length > 0) return done(rows, false);
+  // D7708 — live data exists in the window when a row was retrieved inside it (D7707's retrieval date).
+  const cutoff = scoreWindow(new Date()).window_start;
   const observed = await env.DB.prepare(
-    `SELECT 1 AS one FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()} LIMIT 1`
+    `SELECT 1 AS one FROM market_intel_rows WHERE ${retrievedAtSql()} >= ? AND ${liveRowSql()} LIMIT 1`
   ).bind(cutoff).first<{ one: number }>();
-  if (!observed) return { rows, pending: false };
+  if (!observed) return done(rows, false);
   try {
     await recomputeIndexes(env);
     const again = await read();
-    return { rows: again, pending: again.length === 0 };
+    return done(again, again.length === 0);
   } catch {
-    return { rows: [], pending: true };
+    return { rows: [], pending: true, window: NO_WINDOW, previous_window: NO_WINDOW };
   }
 }
 
@@ -351,7 +374,7 @@ function noIndexReason(r: LiveIndexes): string {
   return r.pending ? INDEX_PENDING_REASON : NO_LIVE_SOURCE_REASON;
 }
 
-type Cell = { value: number | null; delta_pct: number | null; source_count: number; reason?: string };
+type Cell = { value: number | null; delta_pct: number | null; source_count: number; context_only: boolean | null; reason?: string };
 
 function heatGrid(rows: IndexRow[]) {
   const by = new Map(rows.map((r) => [`${r.sector}|${r.dimension}`, r] as const));
@@ -359,9 +382,11 @@ function heatGrid(rows: IndexRow[]) {
     sector,
     dimensions: Object.fromEntries(DIMENSIONS.map((d) => {
       const r = by.get(`${sector}|${d}`);
+      // D7708 — context_only: every figure behind this cell is one macro figure copied to every sector.
+      const mix = r ? storedWindow(r).source_mix : null;
       const cell: Cell = r
-        ? { value: r.value, delta_pct: r.delta_pct ?? null, source_count: r.source_count }
-        : { value: null, delta_pct: null, source_count: 0, reason: NO_LIVE_SOURCE_REASON };
+        ? { value: r.value, delta_pct: r.delta_pct ?? null, source_count: r.source_count, context_only: mix ? mix.context_only : null }
+        : { value: null, delta_pct: null, source_count: 0, context_only: null, reason: NO_LIVE_SOURCE_REASON };
       return [d, cell];
     })),
   }));
@@ -394,7 +419,8 @@ async function readHeat(env: Env, indexes: Promise<LiveIndexes>) {
     const live = await indexes;
     const r = live.rows;
     if (r.length === 0) return { status: 'not_recorded' as const, reason: noIndexReason(live) };
-    return { status: 'ok' as const, period_key: periodKey(), period_status: 'month_to_date', sectors: heatGrid(r) };
+    return { status: 'ok' as const, period_key: periodKey(), period_status: 'month_to_date',
+      ...live.window, previous_period_key: previousPeriodKey(periodKey()), previous_window: live.previous_window, sectors: heatGrid(r) };
   });
 }
 
@@ -407,7 +433,8 @@ async function readDemandVsSupply(env: Env, indexes: Promise<LiveIndexes>) {
     if (sectors.length === 0) {
       return { status: 'not_recorded' as const, reason: 'No sector has a live demand and supply change on last month yet' };
     }
-    return { status: 'ok' as const, period_key: periodKey(), sectors };
+    return { status: 'ok' as const, period_key: periodKey(), ...live.window,
+      previous_period_key: previousPeriodKey(periodKey()), previous_window: live.previous_window, sectors };
   });
 }
 

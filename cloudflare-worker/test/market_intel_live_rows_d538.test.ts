@@ -43,7 +43,7 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 1;
 const STUB = (key: string) => `${STUB_CITATION_PREFIX}${key}`;
 
-/** The market-intel tables as migrations 030 + 379 leave them, plus a users row. */
+/** The market-intel tables as migrations 030 + 379 + 7707 + 7708 leave them, plus a users row. */
 function fixture() {
   const db = new DatabaseSync(':memory:');
   const mig030 = readFileSync(resolve(here, '../sql/migrations/030_market_intel.sql'), 'utf8');
@@ -56,6 +56,9 @@ function fixture() {
   `);
   db.exec(mig030);
   db.exec(mig379);
+  // D7707 (what a row measures) and D7708 (the window and mix an index point stores).
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611191833_7707_market_intel_row_dates_runs.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611220337_7708_market_intel_index_window.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'admin', 'Ada', 'ada@axal.example')`).run(ADMIN);
   return db;
 }
@@ -160,7 +163,7 @@ test('liveRowSql selects exactly the rows isLiveRow accepts, on real SQLite', ()
 test('a dimension no row feeds has no value, and the headline averages only recorded dimensions', () => {
   const sources = new Map(listSources().map((s) => [s.key, s] as const));
   const none = composeSectorScores({ rows: [], sources, now: new Date() });
-  for (const d of Object.values(none)) assert.deepEqual(d, { value: null, source_count: 0 }, 'an empty dimension is not 50');
+  for (const d of Object.values(none)) assert.deepEqual(d, { value: null, source_count: 0, mix: null }, 'an empty dimension is not 50');
   assert.equal(compositeHeadline(none), null, 'an average of nothing is not 50');
   assert.equal(compositeHeadline({ demand: { value: 80 }, supply: { value: null }, capital: { value: null }, talent: { value: null }, research: { value: 40 }, sentiment: { value: null } } as any), 60);
 });
@@ -200,9 +203,10 @@ test('recomputeIndexes computes from live rows only, stamps basis live, and clea
   assert.ok(r.rows_cleared > 0);
   // Sectors with no live row at all get no row either.
   assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM market_intel_indexes WHERE sector <> 'DevTools'`).get() as any).n, 0);
-  // The warm snapshot lives under the versioned key, never the pre-D538 one.
-  assert.ok([...store.map.keys()].some((k) => k.endsWith('compass:global:live')));
+  // The warm snapshot lives under the versioned key (D7708's), never the pre-D538 or pre-D7708 one.
+  assert.ok([...store.map.keys()].some((k) => k.endsWith('compass:global:live:v7708')));
   assert.ok(![...store.map.keys()].some((k) => k.endsWith('compass:global')), 'the pre-D538 snapshot key was written');
+  assert.ok(![...store.map.keys()].some((k) => k.endsWith('compass:global:live')), 'the pre-D7708 snapshot key was written');
 });
 
 /* ------------------------------------------------------------------ */
