@@ -279,7 +279,7 @@ test('4. cross-tenant: another tenant’s record is never taken or overwritten, 
   // A record under this key claiming another tenant, and a channel record of this key sent for another tenant.
   x.bucket.objects.set(keyOf(m), { body: '{"forged":true}', customMetadata: { [SITE_META.tenant]: '8', [SITE_META.company]: '80', [SITE_META.manifest]: m.manifestUid }, httpMetadata: {} });
   x.channel.records.push({ externalId: 'post-x', key: `release:${m.manifestUid}:external_distribution:${DEST}`, manifestUid: m.manifestUid, digest: m.digest, tenantId: 8, companyId: 80, body: {} });
-  let r = await drain(x);
+  await drain(x);
   assert.deepEqual(effectRows(w).map((e) => e.last_error_code), ['wrong_tenant', 'wrong_tenant']);
   assert.equal(x.bucket.count('put') + x.channel.count('post'), 0);
   assert.equal(x.bucket.objects.get(keyOf(m))!.body, '{"forged":true}', 'never overwritten');
@@ -296,7 +296,7 @@ test('4. cross-tenant: another tenant’s record is never taken or overwritten, 
       JSON.stringify({ audience: 'public', digest: s.m.digest, line: s.line, manifest: s.m.manifestUid, ref, target }));
   }
   const x2 = live(w2);
-  r = await drain(x2);
+  const r = await drain(x2);
   assert.deepEqual(deliveries(w2).map((d) => [d.tenant_id, d.target, d.outcome, d.reason_code, d.provider_calls]), [
     [8, 'website_cdn', 'withheld', 'wrong_tenant', 0], [8, 'external_distribution', 'withheld', 'wrong_tenant', 0],
   ]);

@@ -35,6 +35,7 @@ import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
 import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
+import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -733,19 +734,68 @@ async function prototypeGithub(env: Env, p: Project) {
  */
 /** The four columns, in board order: the list's ordinal sort, and what the writers accept (D690). */
 const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
+/**
+ * #6036 (D6036, BD25): Late is an item past its target date that is not Done; Unlinked is an item that
+ * moves no feedback theme and no KPI. Each is ONE SQL expression, read by the facts' aggregate, by both
+ * list paths (the SQL page and the in-memory one read the same column) and by the Late and Unlinked
+ * filters, so the strip's count and the filtered list can never disagree. `a` is the table alias prefix.
+ * A target date SQLite's `date()` cannot read is no date: never Late.
+ */
+const lateSql = (a: string) => `(CASE WHEN LOWER(COALESCE(${a}kanban_status, '')) <> 'done' AND date(${a}target_date) IS NOT NULL
+      AND date(${a}target_date) < date('now') THEN 'yes' ELSE 'no' END)`;
+const linkSql = (a: string) => `(CASE WHEN TRIM(COALESCE(${a}feedback_theme, '')) = '' AND TRIM(COALESCE(${a}kpi_key, '')) = '' THEN 'unlinked' ELSE 'linked' END)`;
 const ROADMAP_FROM = `FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ?`;
-const ROADMAP_COLS = 'SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id, u.name AS owner';
+const ROADMAP_COLS = 'SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id, u.name AS owner, '
+  + `${lateSql('o.')} AS late, ${linkSql('o.')} AS link`;
 const ROADMAP_LIST: ListSql = {
-  keys: { column: 'o.kanban_status' }, orders: { column: ROADMAP_COLUMNS }, defaultSort: 'column', readOrder: 'o.sort_order, o.id',
+  keys: { column: 'o.kanban_status', late: lateSql('o.'), link: linkSql('o.') }, orders: { column: ROADMAP_COLUMNS }, defaultSort: 'column', readOrder: 'o.sort_order, o.id',
   filters: { column: { sql: 'LOWER(o.kanban_status)', values: ROADMAP_COLUMNS } },
 };
+/** #6036: what an item waits on (unresolved blockers' titles, in edge order) and how many items it blocks; its state is `okrGraph.ts`'s. */
+type RoadmapLinks = { state: OkrState; waitsOn: string[]; blocks: number };
+type RoadmapEdge = OkrEdge & { blocker: string | null; blocker_status: string | null };
+/** Every dependency edge of the venture whose two ends are its own items, with the blocker's title and column: one read per module page. */
+async function roadmapEdges(env: Env, projectId: number): Promise<RoadmapEdge[]> {
+  return rows(await env.DB.prepare(
+    `SELECT d.okr_id, d.blocks_okr_id, b.objective AS blocker, b.kanban_status AS blocker_status
+       FROM okr_dependencies d
+       JOIN roadmap_okrs b ON b.id = d.okr_id AND b.project_id = d.project_id
+       JOIN roadmap_okrs t ON t.id = d.blocks_okr_id AND t.project_id = d.project_id
+      WHERE d.project_id = ? ORDER BY d.id`,
+  ).bind(projectId).all<RoadmapEdge>());
+}
+/** Each listed item's links. A blocker off this page still decides Blocked: its column came with its edge. */
+function roadmapLinks(items: any[], edges: RoadmapEdge[]): Map<number, RoadmapLinks> {
+  const nodes = new Map<number, { id: number; kanban_status: string | null }>();
+  for (const e of edges) nodes.set(Number(e.okr_id), { id: Number(e.okr_id), kanban_status: e.blocker_status ?? null });
+  for (const i of items) nodes.set(Number(i.id), { id: Number(i.id), kanban_status: i.kanban_status ?? null });
+  const states = statesFor([...nodes.values()], edges);
+  const out = new Map<number, RoadmapLinks>();
+  for (const i of items) {
+    const id = Number(i.id);
+    const waitsOn = edges.filter(e => Number(e.blocks_okr_id) === id && !isResolved({ id: e.okr_id, kanban_status: e.blocker_status }))
+      .map(e => (typeof e.blocker === 'string' && e.blocker.trim() ? e.blocker : `Item ${e.okr_id}`));
+    // A Done item blocks nothing any more, whatever its edges say.
+    const blocks = isResolved(i) ? 0 : edges.filter(e => Number(e.okr_id) === id).length;
+    out.set(id, { state: states.get(id) ?? 'provisional', waitsOn, blocks });
+  }
+  return out;
+}
+const STATE_TONE: Record<OkrState, string> = { blocked: 'red', in_flight: 'blue', provisional: 'grey', done: 'green' };
 const isPosthogKpi = (k: unknown) => typeof k === 'string' && k.startsWith('posthog-');
-function roadmapRow(i: any, kpiWords: (k: unknown) => unknown): RecordRow {
+function roadmapRow(i: any, kpiWords: (k: unknown) => unknown, links: Map<number, RoadmapLinks>): RecordRow {
+  const own = links.get(Number(i.id)) ?? { state: 'provisional' as OkrState, waitsOn: [], blocks: 0 };
+  const late = i.late === 'yes';
+  // #6036 (BD25): the State column says the word, what it waits on, and Late; never a colour alone.
+  const stateText = [own.state === 'blocked' ? `Blocked · waits on ${own.waitsOn.join(', ')}` : STATE_LABELS[own.state],
+    ...(own.blocks ? [`Blocks ${own.blocks}`] : []), ...(late ? ['Late'] : [])].join(' · ');
   // Moves reads the feedback theme an item answers and the KPI it moves.
   return record(i.id,
-    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
-    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
+    { item: i.objective, column: i.kanban_status, state: { text: stateText, tone: late && own.state !== 'blocked' ? 'amber' : STATE_TONE[own.state] },
+      moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
+    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null,
+      state: own.state, late: late ? 'yes' : 'no', link: i.link === 'unlinked' ? 'unlinked' : 'linked', blocks: own.blocks, waits_on: own.waitsOn.join(', ') || null },
     { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
       kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null });
 }
@@ -753,13 +803,14 @@ function roadmapRow(i: any, kpiWords: (k: unknown) => unknown): RecordRow {
 export async function roadmapItemRows(env: Env, projectId: number): Promise<RecordRow[]> {
   const items = await roadmapItems(env, projectId);
   const kpiWords = await roadmapKpiWords(env, projectId, items.some(x => isPosthogKpi(x.kpi_key)));
-  return items.map(i => roadmapRow(i, kpiWords));
+  const links = roadmapLinks(items, await roadmapEdges(env, projectId));
+  return items.map(i => roadmapRow(i, kpiWords, links));
 }
 async function roadmapItems(env: Env, projectId: number): Promise<any[]> {
   // A literal, so the schema guard reads its columns (the paged read is built and is not read by it).
   return rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
-            u.name AS owner
+            u.name AS owner, ${lateSql('o.')} AS late, ${linkSql('o.')} AS link
        FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ? ORDER BY o.sort_order, o.id`,
   ).bind(projectId).all<any>());
@@ -775,17 +826,21 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
   // The overview: one row per stored column value, with the Now/Next/Later/Done counts, the total, and whether any
   // item names a PostHog KPI. #4603 part 3: the module page also needs every Theme and KPI for its filters, so it
   // groups the one scan by column, theme and KPI instead of scanning again for them (one row per combination).
-  type Group = { kanban_status: string; feedback_theme?: unknown; kpi_key?: unknown; n: number; posthog?: number };
+  // #6036 (BD25): each group also counts its Late and Unlinked items, so the strip's two figures are exact over
+  // the whole list, paged or not, from the same scan (one aggregate, as D6034's backend list asks).
+  type Group = { kanban_status: string; feedback_theme?: unknown; kpi_key?: unknown; n: number; posthog?: number; late: number; unlinked: number };
+  const tallies = `SUM(CASE WHEN ${lateSql('')} = 'yes' THEN 1 ELSE 0 END) AS late, SUM(CASE WHEN ${linkSql('')} = 'unlinked' THEN 1 ELSE 0 END) AS unlinked`;
   const byColumn: Group[] = opts.rows
     ? rows(await env.DB.prepare(
-      `SELECT kanban_status, feedback_theme, kpi_key, COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?
+      `SELECT kanban_status, feedback_theme, kpi_key, COUNT(*) AS n, ${tallies} FROM roadmap_okrs WHERE project_id = ?
         GROUP BY kanban_status, feedback_theme, kpi_key`,
     ).bind(p.id).all<Group>())
     : rows(await env.DB.prepare(
-      `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog
+      `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog, ${tallies}
          FROM roadmap_okrs WHERE project_id = ? GROUP BY kanban_status`,
     ).bind(p.id).all<Group>());
   const itemCount = byColumn.reduce((t, r) => t + number(r.n), 0);
+  const lateCount = byColumn.reduce((t, r) => t + number(r.late), 0), unlinkedCount = byColumn.reduce((t, r) => t + number(r.unlinked), 0);
   const buckets = ROADMAP_COLUMNS.map(s => byColumn.filter(r => r.kanban_status === s).reduce((t, r) => t + number(r.n), 0));
   const posthogNamed = byColumn.some(r => (opts.rows ? isPosthogKpi(r.kpi_key) : number(r.posthog) === 1));
   // Items shipped per month: each month's distinct items moved to Done, one row per month.
@@ -805,26 +860,35 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
   if (opts.rows) {
     const sql = opts.query ? listPageSql(ROADMAP_LIST, opts.query) : null;
     const kpiWords = await roadmapKpiWords(env, p.id, posthogNamed);
+    const edges = await roadmapEdges(env, p.id);
     if (sql) {
       const read = await sqlPage(env, ROADMAP_COLS, ROADMAP_FROM, sql, p.id, itemCount);
-      itemRows = read.found.map(i => roadmapRow(i, kpiWords));
+      const links = roadmapLinks(read.found, edges);
+      itemRows = read.found.map(i => roadmapRow(i, kpiWords, links));
       paged = read.paged;
       // The Theme and KPI filters offer every item's values, not the page's: the groups above carry each one.
       const of = (key: 'theme' | 'kpi', column: 'feedback_theme' | 'kpi_key') =>
         optionsOf(byColumn.filter(g => g[column] != null).map((g, at) => record(at, {}, { [key]: g[column] as any })), key);
       themes = of('theme', 'feedback_theme'); kpis = of('kpi', 'kpi_key');
     } else {
-      itemRows = (await roadmapItems(env, p.id)).map(i => roadmapRow(i, kpiWords));
+      const items = await roadmapItems(env, p.id);
+      const links = roadmapLinks(items, edges);
+      itemRows = items.map(i => roadmapRow(i, kpiWords, links));
       themes = optionsOf(itemRows, 'theme'); kpis = optionsOf(itemRows, 'kpi');
     }
   }
   return { card: card('product-roadmap', itemCount ? 'ok' : 'empty', series, 'All time', itemCount ? null : 'No roadmap items yet. Now, Next and Later appear here.', itemCount ? next(p, 'product-roadmap', buckets[1] ? 'Move the next planned item into Now' : null) : next(p, 'product-roadmap', 'Add item', true)),
-    cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
+    cols: [['item', 'Item'], ['column', 'Column'], ['state', 'State'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: itemRows,
-    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: themes }, { key: 'kpi', label: 'KPI', options: kpis }],
+    // #6036 (BD25): the strip's Late and Unlinked figures are these two filters, counted over the whole list.
+    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: themes }, { key: 'kpi', label: 'KPI', options: kpis },
+      { key: 'late', label: 'Late', options: [{ value: 'yes', label: 'Late', count: lateCount }] },
+      { key: 'link', label: 'Links', options: [{ value: 'unlinked', label: 'Unlinked', count: unlinkedCount }, { value: 'linked', label: 'Linked', count: itemCount - unlinkedCount }] }],
       sort: { key: 'column', label: 'Column' }, orders: { column: [...ROADMAP_COLUMNS] } },
     ...(paged ? { paged } : {}),
-    facts: { items: itemCount, shipped_this_month: months.get(thisMonth) ?? 0 },
+    // #6036 (BD25): the figure strip: the four columns, shipped this month, Late and Unlinked, each over every item.
+    facts: { items: itemCount, shipped_this_month: months.get(thisMonth) ?? 0,
+      now: buckets[0], next: buckets[1], later: buckets[2], done: buckets[3], late: lateCount, unlinked: unlinkedCount },
     ...(opts.parts ? { parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } } : {}) };
 }
 
@@ -2148,7 +2212,7 @@ async function deleteFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Respons
   ]);
   if (existing.proof_file_key && c.env.FILES) {
     // D6651: the venture removing its own filing goes through the one record-erasure path.
-    try { await eraseRecordObjects(c.env.FILES, existing.proof_file_key, 'owner_removed'); }
+    try { await eraseRecordObjects(c.env.FILES, existing.proof_file_key, 'owner_removed', { db: c.env.DB }); }
     catch (e) { console.warn('[cycle_build] deleted filing proof not removed:', (e as Error)?.message); }
   }
   return c.json({ ok: true, deleted: id });

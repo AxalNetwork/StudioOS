@@ -318,7 +318,7 @@ deckReviewer.delete('/:id/raw', async (c) => {
   if (row.r2_key && c.env.FILES) {
     try {
       // D6651: the retention purge goes through the one record-erasure path.
-      await eraseRecordObjects(c.env.FILES, String(row.r2_key), 'owner_removed');
+      await eraseRecordObjects(c.env.FILES, String(row.r2_key), 'owner_removed', { db: c.env.DB });
     } catch (e) {
       console.warn('[deck-reviewer] R2 purge failed:', (e as Error).message);
     }
@@ -339,7 +339,7 @@ deckReviewer.delete('/:id', async (c) => {
   if (row.r2_key && c.env.FILES) {
     try {
       // D6651: the owner deleting the review goes through the one record-erasure path.
-      await eraseRecordObjects(c.env.FILES, String(row.r2_key), 'owner_removed');
+      await eraseRecordObjects(c.env.FILES, String(row.r2_key), 'owner_removed', { db: c.env.DB });
     } catch {
       /* noop */
     }
