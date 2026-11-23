@@ -12,6 +12,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, existsS
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { parse as parseYaml } from 'yaml';
 
 const root = resolve(import.meta.dirname, '..', '..');
 const FILE = '.github/workflows/research-import.yml';
@@ -69,9 +70,10 @@ test('no step condition reads inputs, which a research-import event leaves empty
   assert.deepEqual(conditions, ["if: env.SOURCE != 'urls'", "if: env.SOURCE == 'urls'"]);
 });
 
-test('the token may write contents and nothing else', () => {
-  const perms = yml.slice(yml.indexOf('\npermissions:'), yml.indexOf('\nconcurrency:')).trim().split('\n');
-  assert.deepEqual(perms.map((l) => l.trim()), ['permissions:', 'contents: write']);
+test('only the import job may write contents, with no other token scope', () => {
+  const workflow = parseYaml(yml);
+  assert.deepEqual(workflow.permissions, {});
+  assert.deepEqual(workflow.jobs.import.permissions, { contents: 'write' });
 });
 
 test('no ${{ }} expression sits inside any run block, so a dispatched value is never spliced into a script', () => {

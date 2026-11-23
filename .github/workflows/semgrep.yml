@@ -107,6 +107,10 @@ jobs:
           esac
 
   scan:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     name: Scan
     needs: [scope, visibility]
     if: needs.scope.outputs.scan == 'true'

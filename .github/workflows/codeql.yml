@@ -108,6 +108,10 @@ jobs:
           esac
 
   analyze:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     name: analyze (${{ matrix.language }})
     needs: [scope, visibility]
     if: needs.scope.outputs.scan == 'true'
