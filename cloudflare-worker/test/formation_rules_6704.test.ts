@@ -48,6 +48,14 @@ test('same answers/version are byte-identical; costs never select Estonia; expli
   assert.ok(formationRules(us,cat).information.includes('home-state LLC'));
   assert.equal(formationRules(us,cat).options.some(o=>o.form_key==='us_de_llc'||o.form_key==='us_wy_ccorp'),false);
   assert.ok(formationRules({...us,founder_state:'DE'},cat).options.some(o=>o.form_key==='us_de_llc'));
+  const scenarioOne = {...cat,rules:[{scenario:1,country:'US',form_key:'us_de_llc',when:{},reasons:['Fixture home-state option'],what_would_change_it:['Founder state changes']}]};
+  const home = formationRules(us,scenarioOne);
+  assert.deepEqual(home.information,['home-state LLC']);
+  assert.equal(home.scenario,1);
+  assert.equal(home.path,'simple');
+  assert.equal(home.options.length,0);
+  assert.equal(formationRules(us,scenarioOne,'us_de_llc').options.length,0);
+  assert.equal(formationRules({...us,founder_state:'DE'},scenarioOne).options[0].form_key,'us_de_llc');
   assert.ok(formationRules({...answers,written_us_investor_requirement:true,us_investor_requirement_document:'Fixture written requirement'},cat).options.some(o=>o.form_key==='us_de_ccorp'));
 });
 
