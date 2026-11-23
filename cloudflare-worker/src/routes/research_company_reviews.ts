@@ -1,6 +1,6 @@
 /**
  * D7820 (#7820): admin routes over the Research › Companies review ledger (D7819), mounted at
- * /api/research/company-reviews ahead of the research router. Admin only on every route; each write goes through the
+ * /api/research/company-reviews (no `before`: research.ts has no catch-all or middleware under that path). Admin only on every route; each write goes through the
  * admin audit trail with a count and a batch reference, never a uid list. Service: `services/researchCompanyReview.ts`.
  *
  *   POST /                 place, change or clear (status `admitted`) a status for one uid or up to 200, all or nothing:
@@ -18,7 +18,6 @@ import type { RouteMount } from '../util/routeRegistry';
 import { requireAdmin } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { mapError } from './_t13t14t15_helpers';
-import research from './research';
 import {
   ReviewInputError, applyReviews, listHolds, parseCheck, parseReview, recordCheck, reviewHistory,
 } from '../services/researchCompanyReview';
@@ -72,4 +71,4 @@ r.get('/:uid/history', async (c) => {
 
 export default r;
 
-export const mount: RouteMount = { path: '/api/research/company-reviews', router: r, before: [research] };
+export const mount: RouteMount = { path: '/api/research/company-reviews', router: r };
