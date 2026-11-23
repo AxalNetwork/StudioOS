@@ -408,3 +408,5 @@ catalogue version only in the fixture.
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
 | `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
+
+`research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
