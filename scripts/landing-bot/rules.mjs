@@ -35,6 +35,12 @@ export const BREAKER_ALERTS = Object.freeze([
   '[alert] the Actions queue is backed up',
   '[alert] merge queue stalled',
 ]);
+/**
+ * #8076 (D8076): queue admission limits the feeder applies before each entry. The owner may change either on #8076.
+ * PRIVILEGED_IN_QUEUE: `pr:privileged` PRs in the merge queue at once. PER_SLOT_IN_QUEUE: PRs of one slot at once.
+ */
+export const PRIVILEGED_IN_QUEUE = 1;
+export const PER_SLOT_IN_QUEUE = 3;
 /** Across kinds, per PR, in any 24 hours. */
 export const MAX_BOT_COMMITS_PER_DAY = 4;
 export const MAX_MODEL_RUNS_PER_DAY = 2;

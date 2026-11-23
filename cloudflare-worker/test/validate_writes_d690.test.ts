@@ -79,6 +79,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(MIG460);
+  db.exec(sqlOf('202611220320_6017_experiment_results.sql'));
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('228_research_company_directory.sql'));
   db.exec(sqlOf('202611180051_7175_competitor_subject_and_verified_website.sql')); // D7175: subject_uid, website_verified_at
@@ -606,7 +607,10 @@ test('17: 460 adds no column that any other migration or the baseline already ha
   // 585's `record_table` CHECK names 'hypothesis_experiments' as the table a link sits on.
   const statementsOnly = (sql: string) => sql.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, "''");
   for (const t of ['hypothesis_experiments', 'hypothesis_evidence_links', 'competitor_tracking']) {
-    for (const sql of others) assert.doesNotMatch(statementsOnly(sql), new RegExp(`\\b${t}\\b`), `${t} appears in another migration`);
+    for (const sql of others) {
+      if (t === 'hypothesis_experiments' && sql.includes('-- D6017:')) continue; // Additive experiment metadata is independently tested.
+      assert.doesNotMatch(statementsOnly(sql), new RegExp(`\\b${t}\\b`), `${t} appears in another migration`);
+    }
   }
   // Over a fresh database, and with foreign keys on, hardDeleteProject still removes the venture.
   const db = fixture({ fk: true });
@@ -683,4 +687,44 @@ test('12/segments: New segment stores its five steps; Edit keeps what it is not 
   assert.equal((await cv(db, 'PATCH', `/segments/${id}`, { score_since: 'last month' })).status, 400);
   await cv(db, 'POST', '/segments', { name: 'Couriers' });
   assert.equal((await cv(db, 'PATCH', `/segments/${id}`, { name: 'couriers' })).status, 409);
+});
+
+// D6017: additive metadata and the list share the real writer and evidence gates.
+test('V9: stop/restart, observations and direction round-trip without inventing legacy metadata', async () => {
+ const { experimentsPart } = await import('../src/services/validateExperiments.ts');
+ const db=fixture(); const env=envOf(db); const h=hyp(db,P,'H1'); const h2=hyp(db,P,'H2'); const foreign=hyp(db,P_B,'H1');
+ const a=await addExperiment(env,{projectId:P,userId:FOUNDER,hypothesisId:h,title:'Test A'});
+ await addExperiment(env,{projectId:P,userId:FOUNDER,hypothesisId:h2,title:'Test B'});
+ await addExperiment(env,{projectId:P_B,userId:OTHER,hypothesisId:foreign,title:'Private B'});
+ const initial=await experimentsPart({env,projectId:P,canWrite:true});
+ assert.equal(initial.rows?.length,2); assert.equal(initial.rows?.find(e=>e.id===a.id)?.result_recorded_at,null);
+ const input={projectId:P,userId:FOUNDER,hypothesisId:h,experiment_id:a.id};
+ await setExperimentStatus(env,{...input,status:'done'});
+ assert.equal((await experimentsPart({env,projectId:P})).rows?.find(e=>e.id===a.id)?.status,'result_needed');
+ await assert.rejects(setExperimentStatus(env,{...input,status:'done',result_direction:'supports'}),/observed result/);
+ await setExperimentStatus(env,{...input,status:'done',result:'Observed three',result_direction:'contradicts'});
+ const completed=(await experimentsPart({env,projectId:P})).rows?.find(e=>e.id===a.id);
+ assert.equal(completed?.status,'completed'); assert.equal(completed?.direction,'contradicts'); assert.ok(completed?.result_recorded_at);
+ await addEvidence(env,{projectId:P,userId:FOUNDER,hypothesisId:h,kind:'experiment',ref_id:a.id});
+ assert.equal((await evidenceFor({env,projectId:P})).find(e=>e.kind==='experiment')?.observed,true);
+ await setExperimentStatus(env,{...input,status:'stopped',result_direction:null});
+ const stopped=(await experimentsPart({env,projectId:P,canWrite:true})).rows?.find(e=>e.id===a.id);
+ assert.equal(stopped?.status,'stopped'); assert.equal(stopped?.observed,null); assert.equal(stopped?.lovable.can_launch,false);
+ assert.ok(one(db,'SELECT stopped_at FROM hypothesis_experiments WHERE id=?',a.id).stopped_at);
+ assert.equal((await evidenceFor({env,projectId:P})).find(e=>e.kind==='experiment')?.observed,false);
+ await setExperimentStatus(env,{...input,status:'running'});
+ assert.equal((await experimentsPart({env,projectId:P})).rows?.find(e=>e.id===a.id)?.status,'running');
+ assert.equal((await evidenceFor({env,projectId:P})).find(e=>e.kind==='experiment')?.observed,false);
+ assert.equal(one(db,'SELECT stopped_at FROM hypothesis_experiments WHERE id=?',a.id).stopped_at,null);
+ db.exec('DROP TABLE hypothesis_experiments');
+ assert.equal((await experimentsPart({env,projectId:P})).state,'unreadable');
+});
+
+test('V9: a stopped experiment refuses direct Lovable launch before any handoff is written', async()=>{
+ const {launchPrompt}=await import('../src/services/lovable/launch.ts');
+ const db=fixture(), env=envOf(db), hypothesisId=hyp(db,P,'H1');
+ const ex=await addExperiment(env,{projectId:P,userId:FOUNDER,hypothesisId,title:'Stopped launch'});
+ await setExperimentStatus(env,{projectId:P,userId:FOUNDER,hypothesisId,experiment_id:ex.id,status:'stopped'});
+ await assert.rejects(launchPrompt(env,{id:FOUNDER} as any,'validate',P,{record:{kind:'experiment',id:String(ex.id)},prompt:'Build a test'}),(err:any)=>err.code==='experiment_not_planned' && err.status===422);
+ db.close();
 });

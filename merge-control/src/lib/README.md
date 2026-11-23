@@ -8,3 +8,4 @@
 | `reconcile.ts` | Queue branch, workflow, event and head-SHA cancellation constraints. |
 | `runnerScalePolicy.ts` | D7889: pure capped fleet proposals, durable reservation fences, eligibility-first drain and budget holds; no deployed router integration. |
 | `ciCapacityPolicy.ts` | D7887: bounded shared-pool allocation, immutable receipts, generation fences and full expected-set authority. |
+| `ciCapacityAuthPolicy.ts` | D8011: inactive bounded issuer-key cache and atomic-store admission budgets; verified owned-receipt continuation never caches token authority. |

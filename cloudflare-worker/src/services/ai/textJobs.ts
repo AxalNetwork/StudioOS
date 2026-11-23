@@ -284,6 +284,8 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'draft:statement-cover-note': 'IN5', // D6888: the statement's covering note, from its own figures, as D6212's notes
   'draft:updates-read': 'IN13', // nearest: a summary on the 70B (IN9 reads sentiment and writes nothing)
   'draft:support-summary': 'IN11', 'draft:lp-reminder': 'RA10',
+  'draft:lp-summary': 'IN5', // D6242: one LP's figures read back, as D6212's notes
+  'draft:quarterly-letter': 'RA10', // D6242: the period's letter, written as the LP reminder is
   // Advisor and Operating Partner practice
   'draft:terms': 'IN11', 'draft:proposal': 'IN11', 'draft:chases': 'IN11', 'draft:weekly-reports': 'IN11',
   'draft:catalog-read': 'IN11', 'draft:consent-requests': 'IN11',

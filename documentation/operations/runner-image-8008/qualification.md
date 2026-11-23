@@ -11,7 +11,12 @@ no tool tag, package version or signing identity is guessed here.
 ## 1. Source and input review
 
 Recheck `contract.md` against the exact executor revision the owner will deploy.
-Record differences from every manifest source revision. The source preflight
+Record differences from every manifest source revision. The evidence checkout's
+working-tree baseline is main 4ea24068; the integrated candidate is separately
+verified through its frozen Git objects. That does not assert that the evidence
+checkout itself is the integrated execution source. Stage the exact frozen
+candidate tree separately, record its head/tree and trusted staging hashes, and
+verify that source before binding it into the native container. The source preflight
 requires those actual Git objects; missing objects are a refusal, not an assumed
 receipt. The c36 private intake remains verified and stays in its approved
 channel. Obtain/reconcile the final published candidate or approved handoff. Reuse S18's recipe
@@ -39,7 +44,7 @@ and the reviewed recipe. Never include a checkout's `.git`, `.env` or tokens.
 Lockfile hashes and Linux x64 native archive SRI values are in `components.json`.
 Validate npm's SRI during clean `npm ci`, without updating locks. Node 22.23.3
 must satisfy the engine constraints of selected Linux/glibc packages. Static
-review checked 364 selected engine requirements with semver 7.8.5: zero
+review checked 365 selected engine requirements with semver 7.8.6: zero
 mismatches for 22.23.3; 192 other-platform entries were excluded. This static
 result is recorded in `evidence.json` and does not replace clean native installs.
 The lock also lists unselected platforms: `@img/sharp-win32-ia32` requires ^20.9.0 but
@@ -116,8 +121,10 @@ signing, registry access, OIDC use or publication.
 
 ## 4. Native runtime and actual-node boundary (not performed)
 
-Use the verified S09 c36 source and updated contract in `contract.md`.
-Reconcile any later S39 composition at its exact head before testing; c36 intake
+Use the frozen S39 `8c11fb864c3466fec684ec6bb92409d33973b2ec` source and
+updated `contract.md`. Its head/tree, merged executor and planner/caller are
+independently reconciled in `qualification-progress.json:source_reconciliation`.
+Reconcile any later designated delta before testing; historical c36 intake
 does not qualify a different integrated tree.
 On an explicitly authorized isolated canary, use the reviewed JobContainer and
 its ownership/receipt cleanup, not a hand-written relaxed `docker run`. The
@@ -167,5 +174,9 @@ Supply the completed six-part `operator_input_record` in `qualification-progress
 private handoff: approved builder/rootfs or immutable OCI evidence, reviewed image
 digest, exact engine/security baseline, intended-node baseline and tooling, current
 bounded operating reference/window/shutdown owner, and final designated combined
-source. All six are currently NOT SUPPLIED. Reconcile that exact final source
-separately from the verified older c36 receipt before running native gates.
+source. The source field is now independently verified at 8c11. The remaining
+environment/image/baseline/current-authority fields have not been supplied to
+S31. The private request is tied to the existing historically observed Linux
+machine, subject to current admin readback; it requests no new infrastructure
+or guessed spending/operating bounds. Source availability and interface
+reconciliation do not waive any native gate.

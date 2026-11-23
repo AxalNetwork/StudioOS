@@ -34,6 +34,7 @@ import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
+import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
 import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1120,8 +1121,15 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
       filings: combined.length, next_filing_due: nextFilingDue,
       // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
-      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
-        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
+      next_filing: nextFiling ? { id: nextFiling.id, title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null,
+      // #6038 (D6038, BD25, BD26, BD29): the module page's company-first blocks, each read and failing on its own.
+      // The overview reads none of them (#4603's budget), so its card is the module page's card, unchanged.
+      ...(opts.pageFacts ? {
+        entity: await entitySummary(env, p, order ?? null, steps),
+        elections: await electionRows(env, p, viewer, steps),
+        papers: await companyPapers(env, p, viewer),
+      } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),

@@ -15,6 +15,7 @@ import RoadmapBoard from '../RoadmapBoard';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 import { lazyStep } from '../lazyStep.jsx';
+import CompanyCreationHome from '../CompanyCreationHome.jsx';
 import OperatingSystemsHome, { OsCadenceBands } from '../OperatingSystemsHome.jsx';
 
 // D6028 (#6028, BD1, BD2): Build Overview V2, behind its own lazy boundary.
@@ -72,6 +73,14 @@ const build = {
       action: data?.parts?.systems?.next?.href ? { label: data.parts.systems.next.text, href: data.parts.systems.next.href } : null,
       body: Object.assign((p) => <OperatingSystemsHome {...p} data={data} projectId={ctx.projectId} />, { placesSources: true }),
       Bands: OsCadenceBands,
+    }),
+    // D6038 (#6038, BD11, BD25, BD26, BD30): Company creation starts from the company: it owns its page
+    // (D6049's `homes`). The header carries no action; the page's one primary is the nearest-deadline filing,
+    // or Start guided incorporation before any company exists. It draws its own supporting tools (`drawsTools`).
+    'company-creation': (data, ctx) => ({
+      sub: 'Know what company exists, what is still to file and by when, and which papers are on record.',
+      action: null,
+      body: Object.assign((p) => <CompanyCreationHome {...p} data={data} projectId={ctx.projectId} />, { drawsTools: true }),
     }),
   }),
   add: toFnMap({}),
