@@ -10,6 +10,8 @@ import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { EVIDENCE, evidenceLabel, subjectCard } from './companyAnalysisRead';
 
+import { CompanyPublisherProvider, SourceDetails, useCompanySource } from './CompanySource.jsx';
+
 const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
 const link = 'font-semibold text-violet-700 underline hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-200';
 
@@ -33,12 +35,6 @@ export function useSubjectRecord(uid) {
   }, [uid]);
   useEffect(() => { load(); return () => { seq.current += 1; }; }, [load]);
   return { read, retry: load };
-}
-
-/** The directory record's source, in the profile's words. */
-function sourceWords(card) {
-  if (card.source === 'Companies House') return { label: 'Companies House · OGL v3.0', link: 'View the record ↗' };
-  return { label: 'Wikidata · CC0', link: 'View the Wikidata record ↗' };
 }
 
 /** The website's own state, in words: Not verified until a check is recorded. */
@@ -66,8 +62,9 @@ function Site({ card }) {
  * its state, the field source, Change company, and the self-match line. Each
  * state names itself in words.
  */
-export function SubjectCard({ read, linkName, onRetry, onChange }) {
+function SubjectCardBody({ read, linkName, onRetry, onChange }) {
   const card = subjectCard(read, linkName);
+  const source = useCompanySource(read?.data?.item);
   return (
     <section aria-label="Subject" data-testid="analysis-subject" data-subject-state={card.state}
       className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30">
@@ -108,7 +105,7 @@ export function SubjectCard({ read, linkName, onRetry, onChange }) {
               <Site card={card} />
               <WebsiteState card={card} />
               {card.websiteStatus === 'not_recorded' && (
-                <span className="text-axal-muted">{`${card.source || 'The directory'} lists no website for this company. You can run without it.`}</span>
+                <span className="text-axal-muted">{`${source.label} lists no website for this company. You can run without it.`}</span>
               )}
             </>
           )}
@@ -117,8 +114,7 @@ export function SubjectCard({ read, linkName, onRetry, onChange }) {
         <dd className="text-axal-muted">
           {card.state === 'ok' ? (
             <>
-              {`${sourceWords(card).label}${card.asOf ? ` · as of ${card.asOf}` : ''}`}
-              {card.sourceUrl ? <> · <a href={card.sourceUrl} target="_blank" rel="noreferrer" className={link}>{sourceWords(card).link}</a></> : null}
+              <SourceDetails record={read.data.item} />
             </>
           ) : card.state === 'loading' ? <span className="inline-block h-3 w-40 rounded bg-gray-200 align-middle dark:bg-gray-700" aria-hidden="true" />
             : 'Name from the link you followed; nothing else is shown until the record is read.'}
@@ -204,3 +200,5 @@ export function SubjectBar({ uid, read, onRetry, evidence, running, startedAt = 
     </div>
   );
 }
+
+export function SubjectCard(props) { return <CompanyPublisherProvider><SubjectCardBody {...props} /></CompanyPublisherProvider>; }

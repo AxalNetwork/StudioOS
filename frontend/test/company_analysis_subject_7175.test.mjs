@@ -129,7 +129,7 @@ test('setup from a profile: the subject card, the market from its sector, no sta
     assert.match(text, /Halden Grid/);
     assert.match(text, /halden-grid\.example ↗/);
     assert.match(text, /Not verified/);
-    assert.match(text, /Wikidata · CC0 · as of 2026-09-30/);
+    assert.match(text, /Wikidata · Licence not recorded · licence terms not reviewed · as of 2026-09-30/);
     assert.match(text, /The subject is never listed as a competitor\./);
     assert.equal(m.props(m.byId('ca-market')).value, 'Energy storage', 'the market starts from the sector label');
     assert.equal(m.props(m.byId('ca-known')).value, '', 'the website is not a known competitor');
