@@ -14,9 +14,12 @@
  *
  *   `investor_introductions`  an investor REQUESTING an intro to a founder
  *                             against a paid quarterly quota. Its `status` is
- *                             written 'pending' once and updated by NOTHING, so
- *                             a Delivered/Outstanding split off that column
- *                             would report a state machine that never moves.
+ *                             written 'pending', and since D6261 the founder's
+ *                             answer (accepted / declined) or the investor's
+ *                             withdrawal moves it, and nothing else does. None
+ *                             of those is work delivered, so a Delivered /
+ *                             Outstanding split off that column would still
+ *                             report something the row does not record.
  *                             `_investorProjectScope` unions it with dealroom
  *                             membership to decide what an investor may SEE.
  *   `intro_propositions`,
@@ -127,9 +130,8 @@ test('the three old reasons were true, and these are the facts that made them tr
     assert.ok(!new RegExp(`\\b${absent}\\b`).test(ddl),
       `investor_introductions now has ${absent} — re-check whether it is a support record after all`);
   }
-  // Written 'pending' by the one INSERT and moved by nothing. If an UPDATE ever
-  // appears, the Delivered/Outstanding argument below needs revisiting.
-  assert.match(INTROS, /VALUES \(\?, \?, \?, \?, \?, \?, 'pending', \?\)/,
+  // Written 'pending' by the one INSERT (D6261 added the answering founder).
+  assert.match(INTROS, /VALUES \(\?, \?, \?, \?, \?, \?, 'pending', \?, \?\)/,
     'the introduction insert changed shape');
   // `grep -rl` exits 1 on no match, which `execFileSync` throws on — so the
   // PASSING case is the one that needs catching, not the failing one.
@@ -140,7 +142,15 @@ test('the three old reasons were true, and these are the facts that made them tr
   } catch (e) {
     assert.equal(e.status, 1, `grep failed for a reason other than no-match: ${e.message}`);
   }
-  assert.equal(updates, '', 'something now updates investor_introductions.status');
+  // D6261: one module moves it, and only to an answer or a withdrawal. If any
+  // other file updates it, or a status like 'delivered' appears, the
+  // Delivered/Outstanding argument above needs revisiting.
+  assert.equal(updates, 'cloudflare-worker/src/services/introAskDecisions.ts',
+    'something else now updates investor_introductions.status');
+  const moves = read('cloudflare-worker/src/services/introAskDecisions.ts')
+    .match(/export const ASK_STATUSES = \[([^\]]*)\]/)[1];
+  assert.deepEqual(moves.split(',').map((x) => x.trim().replace(/'/g, '')), ['pending', 'accepted', 'declined', 'withdrawn'],
+    'an ask can now reach a status beyond an answer or a withdrawal');
 
   // 2. `intro_credit_ledger` is credits, not hours.
   const c = BASELINE.indexOf('CREATE TABLE intro_credit_ledger');

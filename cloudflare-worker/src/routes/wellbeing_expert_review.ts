@@ -171,7 +171,7 @@ reviews.put('/experts/me/credentials/files', async (c) => {
     // written, the file this request just stored is named by nothing and leaves through the one
     // record-erasure path as `unreferenced`; a cleanup failure never masks the answer.
     await putRecordOrThrow(c.env.FILES, key, bytes, { httpMetadata: { contentType: type } });
-    const dropStored = () => eraseRecordObjects(c.env.FILES!, key, 'unreferenced').catch(() => { /* inaccessible orphan; no DB reference */ });
+    const dropStored = () => eraseRecordObjects(c.env.FILES!, key, 'unreferenced', { db: c.env.DB }).catch(() => { /* inaccessible orphan; no DB reference */ });
     let saved: D1Result[];
     try {
       saved = await c.env.DB.batch([
@@ -213,7 +213,7 @@ reviews.delete('/experts/me/credentials/files/:fileUid', async (c) => {
     // Keep the key available for retries if storage fails. R2 deletion is
     // idempotent, so a later D1 failure can also be retried with this row.
     // D6651: the expert removing their own file goes through the one record-erasure path.
-    await eraseRecordObjects(c.env.FILES, file.file_key, 'owner_removed');
+    await eraseRecordObjects(c.env.FILES, file.file_key, 'owner_removed', { db: c.env.DB });
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM expert_credential_files WHERE uid = ? AND expert_id = ?').bind(c.req.param('fileUid'), row.id),
       c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,

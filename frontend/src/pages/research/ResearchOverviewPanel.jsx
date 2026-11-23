@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Card, Skeleton, Unreadable, Unrecorded, NOT_RECORDED } from '../../ui';
 import { researchOverviewApi } from '../../lib/api/researchOverview.js';
+import { againstText, GLOBAL_CONTEXT, windowPhrase, windowText, WINDOW_NOT_RECORDED } from './indexWindow.js';
 
 /**
  * D536 (#1082) — the Research overview panel, to `design/incoming/Research ·
@@ -17,8 +18,9 @@ import { researchOverviewApi } from '../../lib/api/researchOverview.js';
  *
  * HONESTY. A figure the route does not send is "Not recorded" with the
  * route's reason; a section whose read failed is "Unreadable"; neither is ever
- * drawn as 0. The index figures are monthly and the current month is month to
- * date. Government companies have no source at all and say so.
+ * drawn as 0. Each index point is the score over the 30 days before it was
+ * last computed, and the grid names that window and the previous point's
+ * (D7708). Government companies have no source at all and say so.
  */
 
 const NUM = new Intl.NumberFormat('en-US');
@@ -123,13 +125,22 @@ export function Delta({ pct }) {
   const n = Number(pct);
   // A change that rounds to 0.0% is no change: no arrow, no colour, so an
   // unchanged index never reads as a rise.
-  if (Math.abs(n) < 0.05) return <span className="text-axal-muted dark:text-gray-400" title="Unchanged on last month">= 0.0%</span>;
+  if (Math.abs(n) < 0.05) return <span className="text-axal-muted dark:text-gray-400" title="Unchanged on the previous point">= 0.0%</span>;
   return <span className={n > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>{n > 0 ? '▲' : '▼'} {Math.abs(n).toFixed(1)}%</span>;
 }
 
+/** D7708 — the dimensions whose every recorded cell is one macro figure copied to every sector. */
+export function contextOnlyDimensions(heat) {
+  return DIMS.filter((d) => {
+    const cells = (heat?.sectors || []).map((r) => r.dimensions?.[d]).filter((c) => c && c.value != null);
+    return cells.length > 0 && cells.every((c) => c.context_only === true);
+  });
+}
+
 function Heat({ heat }) {
+  const context = isOk(heat) ? contextOnlyDimensions(heat) : [];
   return <section className="mt-6" data-testid="research-overview-heat">
-    <Head title="Twelve sectors on six dimensions" sub="Each index runs from 0 to 100, worldwide, for the current month, month to date. The arrow compares it with the month before." />
+    <Head title="Twelve sectors on six dimensions" sub={`Each index runs from 0 to 100, worldwide: the score over ${isOk(heat) && windowText(heat) !== WINDOW_NOT_RECORDED ? windowText(heat) : 'the 30 days before it was last computed'}. The arrow compares it with the previous point${isOk(heat) && windowText(heat.previous_window) !== WINDOW_NOT_RECORDED ? `, over ${windowText(heat.previous_window)}` : ''}.`} />
     {!isOk(heat) ? <SectionState section={heat} what="The sector grid" /> : <>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-[12px]">
@@ -146,14 +157,15 @@ function Heat({ heat }) {
           </tr>)}</tbody>
         </table>
       </div>
-      <Cap>market_intel_indexes · global · {heat.period_key} · month to date. Not recorded: no live source reported this month. Unreadable: the read failed; never drawn as 0.</Cap>
+      {context.length ? <p data-testid="research-overview-context" className="mt-2 text-[11.5px] text-axal-muted dark:text-gray-400">{GLOBAL_CONTEXT}: {context.join(', ')}.</p> : null}
+      <Cap>market_intel_indexes · global · {heat.period_key} · {windowPhrase(heat)}. Not recorded: no live source reported in the window. Unreadable: the read failed; never drawn as 0.</Cap>
     </>}
   </section>;
 }
 
 function DemandSupply({ dvs }) {
   return <section className="mt-6" data-testid="research-overview-demand">
-    <Head title="Where demand outruns supply" sub="Sectors whose demand index rose more than their supply index since last month: more people looking than new products arriving." />
+    <Head title="Where demand outruns supply" sub="Sectors whose demand index rose more than their supply index since the previous point: more people looking than new products arriving." />
     {!isOk(dvs) ? <SectionState section={dvs} what="Demand against supply" /> : <>
       <ol className="space-y-1.5 text-[12.5px]">{(dvs.sectors || []).slice(0, 5).map((o, i) => <li key={o.sector} className="flex flex-wrap items-baseline gap-3">
         <span className="w-5 font-mono text-axal-muted dark:text-gray-400">{i + 1}</span>
@@ -161,7 +173,7 @@ function DemandSupply({ dvs }) {
         <span>Demand <Delta pct={o.demand_delta_pct} /></span><span>Supply <Delta pct={o.supply_delta_pct} /></span>
         <span className="font-mono font-semibold text-axal-ink dark:text-gray-100">+{o.gap_pct}pp</span>
       </li>)}</ol>
-      <Cap>market_intel_indexes · demand and supply · global · {dvs.period_key} against the month before</Cap>
+      <Cap>market_intel_indexes · demand and supply · global · {windowPhrase(dvs)}, {againstText(dvs.previous_window)}</Cap>
     </>}
   </section>;
 }

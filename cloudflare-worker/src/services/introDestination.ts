@@ -57,8 +57,12 @@
  * `cloudflare-worker/test/intro_destination_4609.test.ts`.
  */
 
-/** Which introduction system a uid belongs to. */
-export type IntroKind = 'proposition' | 'request';
+/**
+ * Which introduction system a uid belongs to. D6261 (#6261) added the third:
+ * `ask`, an investor's quota intro ask (`investor_introductions`), which its
+ * founder answers and its investor may withdraw on the same zone.
+ */
+export type IntroKind = 'proposition' | 'request' | 'ask';
 
 /** The zone every licence can open. A real route, guarded for all five. */
 export const INTRO_ZONE = '/network/introductions';
@@ -87,6 +91,9 @@ export const propositionDestination = (uid?: string | null) => introDestination(
 
 /** The destination for a teammate introduction request (`relationship_interactions`, D4329). */
 export const requestDestination = (uid?: string | null) => introDestination('request', uid);
+
+/** The destination for an investor's intro ask (`investor_introductions`, D6261). */
+export const askDestination = (uid?: string | null) => introDestination('ask', uid);
 
 /**
  * The shape five notification sites used to write by hand, kept ONLY so the

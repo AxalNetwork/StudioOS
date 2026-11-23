@@ -32,7 +32,8 @@
  * the shared four-state handling stays shared.
  */
 
-import { useId, useState } from 'react';
+import { cloneElement, isValidElement, useId, useState } from 'react';
+import { Card, Pill } from '../../ui';
 
 export {
   // The four states, in one place, with error beating empty. See its own
@@ -262,3 +263,128 @@ export function isNoPartnerProfile(error) {
   return /no partner profile/i.test(String(error || ''));
 }
 
+
+/*
+ * D4844 (#4844) — THE OFFERS INTERACTION SYSTEM: the type scale, the action
+ * hierarchy, the field and the status chip every Offers zone draws, after the
+ * Offers v2 canvas's OF-10 rules ("Body text 14px, secondary 13px, metadata
+ * never below 12px"; "Each screen has one amber primary action"; "Visible
+ * label, field-level error tied with aria-describedby"; "Always icon + word").
+ *
+ * They live here, beside the amber pair above, rather than in the advisor kit
+ * the zones also read: the advisor's `ZoneHeading`, `NothingYet` and `Field`
+ * serve every Expertise zone and every Pipeline and Delivery zone too, and
+ * this issue is the Offers pass. A zone opts in by importing these names.
+ */
+const OFFER_FOCUS = ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700';
+
+/** A text box, select or textarea at body size (14px), 44px tall on a phone. */
+export const offerInputClass =
+  'mt-1 w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[14px] text-axal-ink '
+  + 'focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 '
+  + 'aria-[invalid=true]:border-red-600 max-sm:min-h-[44px] '
+  + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:aria-[invalid=true]:border-red-400';
+
+/** The zone's ONE filled primary: amber, 13px, a 44px target below 640px. */
+export const offerButtonClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-700 px-3.5 py-2 text-[13px] font-semibold text-white '
+  + 'hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[44px]' + OFFER_FOCUS;
+
+/** Every other action: outlined, never filled (Export, Cancel, View, Edit). */
+export const offerGhostButtonClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-lg border border-axal-hairline bg-white px-3.5 py-2 text-[13px] font-semibold text-axal-ink '
+  + 'hover:bg-axal-ground disabled:opacity-50 max-sm:min-h-[44px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800' + OFFER_FOCUS;
+
+/** A destructive action: outlined red, and always placed away from Save. */
+export const offerDangerButtonClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3.5 py-2 text-[13px] font-semibold text-red-700 '
+  + 'hover:bg-red-50 disabled:opacity-50 max-sm:min-h-[44px] dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30' + OFFER_FOCUS;
+
+/** A zone's section heading: 18px, with its explanation at body size (14px). */
+export function OfferHeading({ title, blurb, action }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-3" data-offer-heading="">
+      <div className="max-w-2xl">
+        <h2 className="text-[18px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{title}</h2>
+        {blurb && <p className="mt-1 text-[14px] leading-relaxed text-gray-600 dark:text-gray-300">{blurb}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/**
+ * An empty store the page read: the commercial outcome as an 18px heading,
+ * why it matters at body size, and exactly ONE action (OF03b, OF06b).
+ */
+export function OfferEmpty({ title, body, action, testId = 'offer-empty' }) {
+  return (
+    <Card variant="dashed" padding="lg" data-testid={testId}>
+      <h2 className="text-[18px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{title}</h2>
+      <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-gray-600 dark:text-gray-300">{body}</p>
+      {action && <div className="mt-4">{action}</div>}
+    </Card>
+  );
+}
+
+/**
+ * One form field: a visible `<label>` at 13px wrapping its control, the help
+ * text and the field's own error tied to the control by `aria-describedby`,
+ * and `aria-invalid` while the error stands. The error leads with a cross, so
+ * it is not told by its colour alone. Help and error sit outside the label so
+ * the control's name stays the label's words.
+ */
+export function OfferField({ label, hint, error, optional = false, children }) {
+  const hintId = useId();
+  const errorId = useId();
+  const control = isValidElement(children)
+    ? cloneElement(children, {
+      'aria-describedby': [children.props['aria-describedby'], hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined,
+      'aria-invalid': error ? 'true' : children.props['aria-invalid'],
+    })
+    : children;
+  return (
+    <div className="block" data-offer-field="">
+      <label className="block">
+        <span className="block text-[13px] font-semibold text-axal-ink dark:text-gray-100">
+          {label}
+          {optional ? <span className="font-normal text-gray-600 dark:text-gray-400"> · optional</span> : null}
+        </span>
+        {control}
+      </label>
+      {hint ? <span id={hintId} className="mt-1 block text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">{hint}</span> : null}
+      {error ? (
+        <span id={errorId} className="mt-1 flex items-start gap-1 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-field-error="">
+          <span aria-hidden="true">✕</span>{error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * OF-10's status chip: an icon AND a word, so a greyscale screen still says
+ * which state it is. Green only for live or complete, amber for pending or
+ * action required, red for rejected or withdrawn, neutral otherwise.
+ */
+export const OFFER_STATUS = Object.freeze({
+  Live: { tone: 'ok', icon: '✓' },
+  Complete: { tone: 'ok', icon: '✓' },
+  Draft: { tone: 'neutral', icon: '◌' },
+  Unlisted: { tone: 'neutral', icon: '‖' },
+  Paused: { tone: 'neutral', icon: '‖' },
+  'HQ review': { tone: 'warn', icon: '…' },
+  'In review': { tone: 'warn', icon: '…' },
+  Recruiting: { tone: 'warn', icon: '…' },
+  Testing: { tone: 'warn', icon: '…' },
+  Rejected: { tone: 'danger', icon: '✕' },
+});
+
+export function OfferStatus({ state, children, testId }) {
+  const s = OFFER_STATUS[state] || { tone: 'neutral', icon: '○' };
+  return (
+    <Pill tone={s.tone} className="text-[12px]" data-testid={testId || 'offer-status'}>
+      <span aria-hidden="true" data-status-icon="">{s.icon}</span>{children || state}
+    </Pill>
+  );
+}
