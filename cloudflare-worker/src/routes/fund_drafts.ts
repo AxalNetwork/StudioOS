@@ -25,7 +25,7 @@ import type { RouteMount } from '../util/routeRegistry';
 import { run as runAI } from '../services/aiRouter';
 import { requireFundGp } from '../services/fundGpAccess';
 import { readFundPage } from '../services/fundReports';
-import { BRIEF_INSTRUCTION, LETTER_INSTRUCTION, briefMaterial, letterMaterial } from '../services/fundDrafts';
+import { BRIEF_INSTRUCTION, LETTER_INSTRUCTION, briefMaterial, letterMaterial, periodMovements } from '../services/fundDrafts';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
@@ -118,16 +118,8 @@ r.post('/:id/report-periods/:periodId/drafts/letter', async (c) => {
   if (!period) return refuse(c, 404, { code: 'not_found', message: FUND_DRAFT_SENTENCES.not_found });
   if (period.status !== 'draft') return refuse(c, 409, { code: 'period_issued', message: FUND_DRAFT_SENTENCES.letter_issued });
   if (!period.period_start || !period.period_end) return refuse(c, 409, { code: 'period_dates', message: FUND_DRAFT_SENTENCES.letter_dates });
-  const calls = await c.env.DB.prepare(
-    `SELECT id, call_number, amount_cents, purpose, due_date, created_at FROM fund_capital_calls
-      WHERE fund_id = ? AND date(created_at) BETWEEN date(?) AND date(?) ORDER BY created_at, id LIMIT 50`,
-  ).bind(ctx.fund.id, period.period_start, period.period_end).all<any>();
-  const dists = await c.env.DB.prepare(
-    `SELECT id, amount_cents, distribution_type, distributed_at, created_at FROM fund_distributions
-      WHERE fund_id = ? AND status = 'paid' AND date(COALESCE(distributed_at, created_at)) BETWEEN date(?) AND date(?)
-      ORDER BY COALESCE(distributed_at, created_at), id LIMIT 500`,
-  ).bind(ctx.fund.id, period.period_start, period.period_end).all<any>();
-  const material = letterMaterial(period, calls.results || [], dists.results || []);
+  const moved = await periodMovements(c.env, ctx.fund.id, period.period_start, period.period_end);
+  const material = letterMaterial(period, moved.calls, moved.distributions);
   if (!material) return refuse(c, 409, { code: 'nothing_to_draft', message: FUND_DRAFT_SENTENCES.letter_nothing });
   const d = await draft(c, ctx.user.id, { instruction: LETTER_INSTRUCTION, lines: material.lines, option: 'draft:letter-opening', page: 'Investor · Fund · Reporting', record: `fund_report_period:${period.id}` });
   if (d.response) return d.response;

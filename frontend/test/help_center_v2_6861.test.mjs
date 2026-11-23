@@ -163,12 +163,12 @@ test('HC4: a search that found nothing is recorded only for a member, after typi
 
 // ── HC5, HC9: the guide page ────────────────────────────────────────────────
 
-test('HC5: Go to only for a page the viewer can open; Start recovery for account recovery', () => {
+test('HC5: Go to only for a page the viewer can open; Recover my account for account recovery', () => {
   const dataRoom = guidePlacement('validate-grow/data-room', { role: 'founder' });
   assert.deepEqual(goToTarget(dataRoom, { role: 'founder' }), { label: 'Go to Data Room', path: '/raise/data-room' });
   assert.equal(goToTarget(guidePlacement('validate-grow/data-room', { role: 'advisor' }), { role: 'advisor' }), null, 'a page this viewer cannot open draws no button');
   assert.equal(goToTarget(guidePlacement('validate-grow/office-hours'), { role: 'founder' }), null, 'a guide with no page draws no button');
-  assert.deepEqual(goToTarget(guidePlacement('account/auth-recovery'), null), { label: 'Start recovery', path: '/auth/recover' });
+  assert.deepEqual(goToTarget(guidePlacement('account/auth-recovery'), null), { label: 'Recover my account', path: '/auth/recover' });
   assert.equal(appliesToLine(['partner']), 'Applies to: Operating partner');
   assert.equal(appliesToLine(null), 'Every account');
 });
@@ -191,11 +191,11 @@ test('HC5: the guide page — one primary Go to, address, On this page, owner an
   assert.doesNotMatch(renderedText(recovery), /Verified \d/);
 });
 
-test('HC9: account recovery, signed out — Start recovery, the private channels, no ticket and no answer', () => {
+test('HC9: account recovery, signed out — Recover my account, the private channels, no ticket and no answer', () => {
   const out = html(h(HelpArticle, { sections: anon, area: 'account', guide: 'auth-recovery', user: null }));
   const text = renderedText(out);
   assert.match(text, /Can’t sign in\?/);
-  assert.match(out, /data-testid="help-guide-go" href="\/auth\/recover"[^>]*>Start recovery</);
+  assert.match(out, /data-testid="help-guide-go" href="\/auth\/recover"[^>]*>Recover my account</);
   assert.match(text, /Still can’t get in\?/);
   assert.match(out, /href="\/help\/troubleshooting\/contact-support"/);
   assert.match(out, /security\/advisories\/new/);
