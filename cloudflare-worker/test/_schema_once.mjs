@@ -181,3 +181,18 @@ export function loadSchema(db, opts = {}) {
   }
   return db;
 }
+
+/**
+ * D8354 (#8354): the cached schema in a fresh in-memory handle, for tests that used `buildFresh(BASELINE,
+ * LATER)` from `scripts/check-baseline-drift.mjs`. That rebuilt the baseline and every later migration per
+ * database (about 35 s each by 2026-11-23, 12 s of it one data migration), and timed shards out. This is the
+ * same build (`schema_once_d4133` holds a loaded copy to a fresh one) with the same handle: double-quoted
+ * strings as `dqs` says, foreign keys ON once loaded. `below` gives the build before a numbered migration.
+ * The drift guard itself (`check-baseline-drift.mjs`) still builds fresh; this is only for tests.
+ */
+export function freshSchema({ dqs = false, below } = {}) {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: dqs });
+  loadSchema(db, below === undefined ? {} : { below });
+  db.exec('PRAGMA foreign_keys = ON;');
+  return db;
+}
