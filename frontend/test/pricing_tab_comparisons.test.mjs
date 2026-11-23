@@ -82,7 +82,7 @@ for (const member of [false, true]) {
       const inst = walk(grid).find(n => props(n)['data-testid'] === 'pricing-card-institutional');
       assert.ok(inst); assert.ok(text(inst).includes('Contact Axal VC'));
       assert.ok(!walk(inst).some(n => props(n)['data-testid'] === 'pricing-checkout-institutional'));
-      assert.ok(walk(inst).some(n => n.tagName === 'A' && props(n).href === '/contact'));
+      assert.ok(walk(inst).some(n => n.tagName === 'A' && props(n).href === '/contact?topic=invest')); // #6984 (X2)
       assert.ok(grid.parentNode === lp.parentNode && grid.parentNode.childNodes.indexOf(grid) < grid.parentNode.childNodes.indexOf(lp), 'LP Access is below the four investor plans');
       await click('Founder');
       assert.equal(nodes().filter(n => cls(n, 'axp-lp')).length, 0, 'LP Access belongs only to Investor');

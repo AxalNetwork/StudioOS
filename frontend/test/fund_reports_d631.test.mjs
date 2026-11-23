@@ -27,18 +27,18 @@ test('real F1 renders recorded cents, live count, GP, LPA and missing providers 
   assert.match(html, /<b>Not recorded<\/b><small>Auditor has not been recorded/);
   assert.doesNotMatch(html, /€|\[Firm\]|\[12\]/);
 });
-test('real F1 loading, Unreadable, denied and corrupt reads cannot expose stale totals', () => {
+test('real F1 loading, Unavailable, denied and corrupt reads cannot expose stale totals', () => {
   for (const Component of [FundPage, FundReportPeriodPage]) {
     const data = { ...page, period };
     const loading = render(Component, { ...ready(data), loading: true });
     assert.match(loading, /aria-busy="true"/); assert.doesNotMatch(loading, /\$2,000|Recorded letter|Recorded Fund|Q2 2026/);
     const failed = render(Component, { ...ready(data), error: { status: 503 } });
-    assert.match(failed, /Unreadable/); assert.match(failed, /Try again/); assert.doesNotMatch(failed, /\$2,000|Recorded letter|Recorded Fund|Q2 2026/);
+    assert.match(failed, /Unavailable/); assert.match(failed, /Try again/); assert.doesNotMatch(failed, /\$2,000|Recorded letter|Recorded Fund|Q2 2026/);
     const refused = render(Component, { ...ready(data), error: { status: 404 } });
     assert.match(refused, /Fund not available/); assert.doesNotMatch(refused, /\$2,000|Recorded letter|Save draft/);
   }
   const corrupt = render(FundPage, ready({ ...page, totals: { committed_cents: '200000', invested_cents: null } }));
-  assert.match(corrupt, /Unreadable/); assert.doesNotMatch(corrupt, /\$2,000/);
+  assert.match(corrupt, /Unavailable/); assert.doesNotMatch(corrupt, /\$2,000/);
 });
 test('real F1 empty LP state, absent amounts, absent LPA and LP actions stay honest', () => {
   const html = render(FundPage, ready({ ...page, can_manage: false, fund: { ...page.fund, lp_count: 0, size_cents: null }, totals: { committed_cents: 0, invested_cents: null, invested_reason: 'No attributed positions are recorded.' }, lpa: null,

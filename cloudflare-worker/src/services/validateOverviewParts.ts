@@ -78,7 +78,7 @@ export function sharedReads(env: Env, projectId: number): Shared {
     return claimsOf(hyps, links, ivs, model);
   })();
   const experiments = (async () => (await env.DB.prepare(
-    `SELECT e.id, e.hypothesis_id, e.title, e.status, e.result, e.updated_at
+    `SELECT e.id, e.hypothesis_id, e.title, CASE WHEN e.stopped_at IS NOT NULL THEN 'stopped' ELSE e.status END AS status, e.result, e.updated_at
        FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id
       WHERE e.project_id = ? AND h.project_id = ? AND h.retired_at IS NULL
       ORDER BY e.updated_at DESC, e.id DESC`,

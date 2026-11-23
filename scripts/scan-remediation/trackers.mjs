@@ -7,8 +7,76 @@ const names = issue => issue.labels.map(label => typeof label === 'string' ? lab
 const login = value => String(value || '').toLowerCase()
 const routingSlot = 'slot:S21'
 export const SLA_LABEL = 'sla:7d'
+const STATUS_TTL_MS = 24 * 60 * 60 * 1000
 
-export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin = 'github-actions[bot]', source = codeScanning }) {
+export function referenceText(body) {
+  let fence
+  return String(body || '').replace(/<!--[\s\S]*?-->/g, ' ').split('\n').filter(line => {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/)?.[1]
+    if (fence) {
+      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null
+      return false
+    }
+    if (marker) { fence = marker; return false }
+    return !/^(?: {4}|\t| {0,3}>)/.test(line)
+  }).join('\n').replace(/(`+).*?\1/g, ' ')
+}
+
+function sameRepositoryPull(pull, { owner, repo, defaultBranch }) {
+  const fullName = `${owner}/${repo}`.toLowerCase()
+  if (pull.state !== 'open' || !validNumber(pull.number) || pull.base?.ref !== defaultBranch ||
+      login(pull.head?.repo?.full_name) !== fullName) return false
+  return true
+}
+
+// D7259: an issue reference is enough to associate existing work; no protected alert access is required.
+export function trackerPulls(pulls, { owner, repo, defaultBranch }) {
+  const fullName = `${owner}/${repo}`.toLowerCase()
+  const result = new Map()
+  for (const pull of pulls) {
+    if (!sameRepositoryPull(pull, { owner, repo, defaultBranch })) continue
+    const add = number => {
+      if (!validNumber(number)) return
+      if (!result.has(number)) result.set(number, new Map())
+      result.get(number).set(pull.number, pull)
+    }
+    // Examples and URL fragments must not be mistaken for tracker references.
+    let body = referenceText(pull.body)
+    for (const [, repository, number] of body.matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/([1-9]\d*)(?=$|[\s)>\]#?.,])/gi)) {
+      if (repository.toLowerCase() === fullName) add(Number(number))
+    }
+    body = body.replace(/https?:\/\/[^\s<>]+/gi, ' ')
+    body = body.replace(/(?<![\w/.-])([\w.-]+\/[\w.-]+)#([1-9]\d*)(?![\w/-])/g, (_, repository, number) => {
+      if (repository.toLowerCase() === fullName) add(Number(number))
+      return ' '
+    })
+    let alertNumbers = false
+    for (const line of body.split('\n')) {
+      if (!line.trim()) alertNumbers = false
+      for (const match of line.matchAll(/\b(alerts?|findings?|issues?|trackers?|refs?|references?|closes?|closed|fix(?:es|ed)?|resolve[sd]?|part\s+of)\b|(?<![\w/#])#([1-9]\d*)(?![\w/-])/gi)) {
+        if (match[1]) alertNumbers = /^(?:alerts?|findings?)$/i.test(match[1])
+        else if (!alertNumbers) add(Number(match[2]))
+      }
+    }
+  }
+  return result
+}
+
+export function matchingPulls(pulls, options, issueNumber, alertNumber, source = codeScanning) {
+  const fullName = `${options.owner}/${options.repo}`.toLowerCase()
+  const result = new Map(trackerPulls(pulls, options).get(issueNumber) ?? [])
+  for (const pull of pulls) {
+    if (!sameRepositoryPull(pull, options)) continue
+    for (const [, repository, kind, number] of referenceText(pull.body).matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/security\/(code-scanning|dependabot|secret-scanning)\/([1-9]\d*)(?=$|[\s)>\]#?.,])/gi)) {
+      if (repository.toLowerCase() === fullName && kind.toLowerCase() === source.urlPart && Number(number) === alertNumber) {
+        result.set(pull.number, pull)
+      }
+    }
+  }
+  return result
+}
+
+export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin = 'github-actions[bot]', source = codeScanning, now = Date.now }) {
   const titles = source.titles
   const marker = source.marker
   const base = 'https://github.com/' + owner + '/' + repo
@@ -36,7 +104,32 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
       body.split('\n').includes(marker(number))
   }
 
-  async function unclaimed(issue, review = false) {
+  async function handedOff(issue, allowedPulls = new Set()) {
+    const comments = await api.pages('/issues/' + issue.number + '/comments')
+    const at = Number(now())
+    if (!Number.isFinite(at)) throw Error('Invalid reconciliation clock')
+    let latest
+    for (const comment of comments) {
+      if (!trusted(comment)) continue
+      const block = String(comment.body || '').trim().match(/^(?:```(?:text)?[ \t]*\r?\n)?STATUS[ \t]*\r?\n([\s\S]*)/)?.[1]?.split('\n```')[0]
+      const task = block?.match(/^task:\s*#([1-9]\d*)\s+slot:\s*(S\d{2})\s+agent:\s*\S/m)
+      const state = block?.match(/^state:\s*(IN_PROGRESS|BLOCKED|READY_FOR_REVIEW|DONE)\s*$/m)?.[1]
+      const created = Date.parse(comment.created_at)
+      if (Number(task?.[1]) !== issue.number || task?.[2] !== 'S21' || !state ||
+          !Number.isFinite(created) || created > at) continue
+      if (!latest || created > latest.created || (created === latest.created && comment.id > latest.id)) {
+        latest = { created, state, id: comment.id }
+      }
+    }
+    if (latest && latest.state !== 'DONE' && at - latest.created < STATUS_TTL_MS) return true
+    if (!names(issue).includes('state:review')) return false
+    const pulls = await api.pages('/pulls?state=open&base=' + encodeURIComponent(defaultBranch))
+    const number = Number(titles.exec(issue.title)?.[1])
+    const matches = matchingPulls(pulls, { owner, repo, defaultBranch }, issue.number, number, source)
+    return [...matches.keys()].some(number => !allowedPulls.has(number))
+  }
+
+  async function unclaimed(issue, review = false, allowedPulls) {
     const labels = names(issue)
     const number = Number(titles.exec(issue.title)?.[1])
     // S21 routing permits reconciliation until a session claims the automatic tracker.
@@ -52,8 +145,9 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
       return false
     } catch (error) {
       if (error.status !== 404) throw error
-      return true
     }
+    // Re-read handoffs before each mutation, including one posted after initial discovery.
+    return !await handedOff(issue, allowedPulls)
   }
 
   async function current(issue, number) {
@@ -87,8 +181,9 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
         const reopened = await api.request('PATCH', '/issues/' + issue.number, { state: 'open' })
         remember(reopened)
         // A fresh main-branch occurrence must be re-evaluated even if the last PR was reviewed.
-        if (names(reopened).includes('state:review')) await removeLabel(reopened, 'state:review')
-        return { issue: reopened, actionable: true, created: false }
+        const fresh = await active(reopened, true)
+        if (fresh && names(fresh).includes('state:review')) await removeLabel(fresh, 'state:review')
+        return { issue: fresh ?? reopened, actionable: Boolean(fresh), created: false }
       }
       return { issue, actionable: await unclaimed(issue, true), created: false }
     }
@@ -108,26 +203,37 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     catch (error) { if (error.status !== 404) throw error }
   }
 
-  async function active(issue, review = false) {
+  async function active(issue, review = false, allowedPulls) {
     const number = Number(titles.exec(issue?.title)?.[1])
     if (!validNumber(number) || byAlert.get(number)?.size !== 1 ||
       !byAlert.get(number).has(issue.number)) return null
     const fresh = await current(issue, number)
-    return fresh?.state === 'open' && await unclaimed(fresh, review) ? fresh : null
+    if (allowedPulls) for (const prNumber of allowedPulls) {
+      let pull
+      try { pull = await api.request('GET', '/pulls/' + prNumber) }
+      catch (error) { if (error.status === 404) return null; throw error }
+      if (!matchingPulls([pull], { owner, repo, defaultBranch }, issue.number, number, source).has(prNumber)) return null
+    }
+    return fresh?.state === 'open' && await unclaimed(fresh, review, allowedPulls) ? fresh : null
   }
 
   async function markReady(issue) {
-    const fresh = await active(issue, true)
+    let fresh = await active(issue, true)
     if (!fresh) return
-    if (!names(fresh).includes('state:ready')) {
+    if (names(fresh).includes('state:review')) {
+      await removeLabel(fresh, 'state:review')
+      fresh = await active(issue, true)
+    }
+    if (fresh && !names(fresh).includes('state:ready')) {
       await api.request('POST', '/issues/' + fresh.number + '/labels', { labels: ['state:ready'] })
     }
-    if (names(fresh).includes('state:review')) await removeLabel(fresh, 'state:review')
   }
 
-  async function commentOnce(path, body) {
+  async function commentOnce(issue, body, allowedPulls) {
+    const path = '/issues/' + issue.number
     const comments = await api.pages(path + '/comments')
-    if (!comments.some(comment => bots.has(login(comment.user?.login)) && comment.body === body)) {
+    if (!comments.some(comment => bots.has(login(comment.user?.login)) && comment.body === body) &&
+        await active(issue, true, allowedPulls)) {
       await api.request('POST', path + '/comments', { body })
     }
   }
@@ -140,21 +246,32 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     const fresh = await active(issue, true)
     if (!fresh) return
     const link = base + '/compare/' + encodeURIComponent(defaultBranch) + '...' + branch
-    await commentOnce('/issues/' + fresh.number, 'A fix is ready on this branch. ' +
+    await commentOnce(fresh, 'A fix is ready on this branch. ' +
       '[Compare the prepared changes and open a pull request](' + link + '). ' +
       'You can also let the workflow open the draft PR on a later run once its credential can create pull requests.')
     await markReady(fresh)
   }
 
   async function linkPull(issue, prNumber) {
-    if (!validNumber(prNumber)) throw Error('Invalid pull request number')
-    const fresh = await active(issue, true)
+    await linkPulls(issue, [prNumber])
+  }
+
+  async function linkPulls(issue, prNumbers) {
+    if (!Array.isArray(prNumbers) || !prNumbers.length || !prNumbers.every(validNumber)) throw Error('Invalid pull request number')
+    // This transition may finish its own review label change, but cannot bypass a session STATUS,
+    // an atomic claim, or another PR handed off while it was writing the traceability comments.
+    const allowedPulls = new Set(prNumbers)
+    let fresh = await active(issue, true, allowedPulls)
     if (!fresh) return
-    const link = 'Tracking pull request: ' + base + '/pull/' + prNumber
+    for (const number of allowedPulls) await commentOnce(fresh, 'Tracking pull request: ' + base + '/pull/' + number, allowedPulls)
+    fresh = await active(issue, true, allowedPulls)
+    if (!fresh) return
     const path = '/issues/' + fresh.number
-    await commentOnce(path, link)
-    if (!names(fresh).includes('state:review')) await api.request('POST', path + '/labels', { labels: ['state:review'] })
-    if (names(fresh).includes('state:ready')) await removeLabel(fresh, 'state:ready')
+    if (names(fresh).includes('state:ready')) {
+      await removeLabel(fresh, 'state:ready')
+      fresh = await active(issue, true, allowedPulls)
+    }
+    if (fresh && !names(fresh).includes('state:review')) await api.request('POST', path + '/labels', { labels: ['state:review'] })
   }
 
   async function closeFixed(alert) {
@@ -170,7 +287,7 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
   }
 
   return {
-    ensure, markReady, linkPrepared, linkPull, closeFixed,
+    ensure, markReady, linkPrepared, linkPull, linkPulls, closeFixed,
     trackedNumbers: () => [...byAlert].filter(([, issues]) =>
       [...issues.values()].some(issue => issue.state === 'open')).map(([number]) => number),
   }

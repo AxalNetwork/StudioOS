@@ -31,6 +31,7 @@ const SURFACES = [
   'pages/SpinoutLabBriefPage.jsx',
   'pages/programs/content/spinout-lab.js',
   'pages/events/PublicEventsPage.jsx',
+  'components/site/LabProgramCard.jsx',
   'lib/siteMethod.js',
   'pages/site/MethodologyPage.jsx',
 ];

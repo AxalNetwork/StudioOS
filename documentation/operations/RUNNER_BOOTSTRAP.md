@@ -31,7 +31,8 @@ defines the runner job**. The initial selected entry is:
 AxalNetwork/StudioOS/.github/workflows/runner-executor.yml@refs/heads/main
 ```
 
-That workflow must first land through #7886. Record its full main SHA and raw file
+That workflow is published through #7886 and the merged #8231 executor repair.
+Record its approved full main SHA and raw file
 SHA256, plus the observed group ID/settings, in a private operator receipt. The
 bootstrap independently checks main ancestry and exact file content. A dispatch
 wrapper or caller is not the group-authorized runner-job definition. Do not add a
@@ -59,8 +60,11 @@ It does not renew the expired pilot deadline or its provider authorization.
 
 ## 2. Prepare an approved machine
 
-Obtain the private approved node/runbook, spend cap and teardown deadline before
-creating provider resources. Only one temporary Linux node is in scope. Schedule
+Obtain the current private approved node/runbook, spending boundary and teardown
+deadline before any provider operation. The first #7888 milestone requires two
+independently supported Linux machine identities; this runbook does not authorize
+a second machine, a new operating window or further spending. Prepare only a
+machine covered by current operator authorization. Schedule
 provider shutdown/deletion privately before enrollment; a stopped runner still
 leaves a billable VM. No provider API or extra GitHub App permissions are required
 merely to install/verify the node.
@@ -217,8 +221,10 @@ self-hosted runners. Keep the old Mac workflow/group recoverable until the new
 one passes and the migration owner records the handover; do not rename them here.
 
 On expired token/configuration failure, get fresh short-lived material; never
-retry in a loop or echo captured output. A complete existing `.runner` is reused;
-a partial `.runner`/credential set requires operator recovery of that registration
+retry in a loop or echo captured output. A complete existing `.runner` is acknowledged without a token, new registration
+or service change, even while new enrollment/start remain blocked by the isolation
+canary gate. This reports local registration only, never admission or current
+online/idle eligibility. A partial `.runner`/credential set requires operator recovery of that registration
 before another is created. A failed archive fetch leaves earlier verified
 artifacts reusable. An unmarked partial destination is refused: while drained,
 the operator archives/removes only that incomplete destination under the dedicated
@@ -253,3 +259,58 @@ is unavailable here. The existing node was not reconfigured to use this new
 bootstrap/supervisor. The operator's 17:00 UTC stop/teardown obligation still
 applies; job completion alone does not stop VM billing. No duplicate run was
 started to replace this result.
+
+## 6. One current Linux readiness record
+
+S38 supplies the same immutable record to S31 (#8008 qualification) and S18
+(#7888 pilot/fleet ownership), and records each recipient's actual acknowledgment
+of its revision/hash. Receipt of source, interface reconciliation, native
+qualification and pilot success are separate facts. Keep private machine details,
+addresses, approval amounts and credential values in the private operator packet;
+publish only sanitized status and nonsecret references.
+
+The record identifies:
+
+- Current main, merged executor, S39's designated combined head/tree, planner pin
+  and exact bootstrap/profile file hashes. An earlier checked head is a checkpoint;
+  obtain S39's final designation after corrections before qualification/execution.
+- Approved existing Linux amd64 builder/rootfs or immutable OCI packet, its source,
+  archive hash, manifest digest to local config-ID mapping, engine image identity,
+  SBOM/scan/signature/provenance evidence and S31 qualification disposition.
+- Actual engine/version, effective security settings, root-owned local policy and
+  node architecture/OS/kernel, resource limits and available tools. The selected
+  executor uses `/usr/local/bin/docker`, `/usr/bin/setfacl`, a root-owned
+  `/etc/studioos/job-container-policy.json`, the pinned Node/Python contract, a
+  2-CPU/4-GiB job limit and candidate/keeper UIDs 10000/10001. These are source
+  requirements, not observed host facts or authorization to install/change them.
+- Timestamped current runner IDs, actual OS/architecture/capability labels, group
+  ID/name and repository/workflow restrictions, with the exact readback source.
+  Record a 403 as unreadable. Never translate unreadable or absent evidence into
+  zero runners, a disabled control or verified access.
+- Independently supported machine identities and one runner process per machine.
+  Runner names/IDs alone do not prove distinct hardware; two registrations on one
+  host do not add the second machine. The second approved machine uses the same
+  group/AND labels and distinct stable registration identity, without YAML edits.
+- Current operating authorization reference, bounded window and spending/resource
+  limits, stop condition, shutdown owner, teardown method and residual-resource
+  verification. The November 20 one-node window is historical. An 8-GiB scaling
+  ceiling does not prove 4 GiB plus OS/listener overhead is presently available.
+- Observed deployed service/caller/executor controls and exact source pins,
+  including the Mac exclusion. Repository defaults are declared values, not
+  readback of deployed controls. Macs and included compute do not satisfy the
+  first two-Linux/four-standard-hosted milestone.
+
+If one machine alone is currently approved, finish its bounded assessment and
+name the precise remaining second-machine requirements: independent approved
+machine identity; matching native architecture and measured resources; the same
+reviewed image/engine/security baseline; fresh operating and teardown authority;
+unique organization registration in the verified restricted group; one listener;
+and qualification/credential-denial/cleanup evidence. S38 neither provisions that
+node nor grants a budget, broader access or admission.
+
+The existing #8055 verifier is the acceptance consumer. No new verifier, caller
+routing or fleet-builder implementation is part of bootstrap readiness. Local
+fixtures exercise real filesystem/state/archive transactions with synthetic
+account/service ports; they are not native privileged-install or node-isolation
+evidence. The activation canary gate remains closed until its owners establish
+that evidence and approve any change to the gate.

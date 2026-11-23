@@ -1,7 +1,7 @@
 /** D7899: reconcile trusted default-branch alerts with S21 trackers without GitHub AI or code writes. */
 import { pathToFileURL } from 'node:url';
 import { githubApi } from './github.mjs';
-import { loadTrackers } from './trackers.mjs';
+import { loadTrackers, matchingPulls } from './trackers.mjs';
 import { ALERT_SOURCES } from './sources.mjs';
 import { breachPass, digestText, isDigestRun, openSecurityTasks } from './sla.mjs';
 import { webhookDelivery } from '../health-alert-transport.mjs';
@@ -16,19 +16,6 @@ function windowOf(numbers, limit, runNumber) {
   if (sorted.length <= limit) return sorted;
   const start = ((runNumber - 1) % Math.ceil(sorted.length / limit)) * limit;
   return sorted.slice(start, start + limit);
-}
-
-function sameRepoAlertPRs(pulls, options) {
-  const fullName = `${options.owner}/${options.repo}`.toLowerCase();
-  const result = new Map();
-  for (const pull of pulls) {
-    if (pull.head?.repo?.full_name?.toLowerCase() !== fullName || pull.base?.ref !== options.defaultBranch) continue;
-    const urls = (pull.body ?? '').matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/security\/code-scanning\/([1-9]\d*)(?=$|[\s)>\]#?.,])/gi);
-    for (const [, repo, alert] of urls) {
-      if (repo.toLowerCase() === fullName) result.set(Number(alert), pull);
-    }
-  }
-  return result;
 }
 
 export async function reconcile(api, options, dependencies = {}) {
@@ -51,7 +38,6 @@ export async function reconcile(api, options, dependencies = {}) {
   // GitHub's canonical alert URL also identifies an existing same-repo PR with a custom branch name.
   const pulls = candidates.length
     ? await api.pages(`/pulls?state=open&base=${encodeURIComponent(defaultBranch)}`) : [];
-  const existingPulls = sameRepoAlertPRs(pulls, options);
   let failed = 0;
   for (const number of candidates) {
     try {
@@ -65,10 +51,12 @@ export async function reconcile(api, options, dependencies = {}) {
       if (alert.state !== 'open' || alert.most_recent_instance.state !== 'open') continue;
       const { issue, actionable } = await trackers.ensure(number);
       if (!actionable) continue;
-      const existing = existingPulls.get(number);
-      if (existing) {
+      const existing = matchingPulls(pulls, options, issue.number, number);
+      if (existing.size) {
         // Keep existing human and legacy bot work linked; never regenerate its patch.
-        await trackers.linkPull(issue, existing.number);
+        // Several PRs can be partial work: link all of them without choosing one arbitrarily.
+        if (existing.size === 1) await trackers.linkPull(issue, existing.values().next().value.number);
+        else await trackers.linkPulls(issue, [...existing.keys()]);
         continue;
       }
       if (alert.assignees?.length) continue;
