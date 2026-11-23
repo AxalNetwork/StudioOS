@@ -211,13 +211,17 @@ formationCases.post('/:uid/choice', async c => {
   const uid = `fc_choice_${crypto.randomUUID()}`;
   const next = row.revision + 1;
   const extra = [c.env.DB.prepare(`INSERT INTO formation_case_choices(uid,case_id,suggestion_uid,form_key,was_among_options,own_reason,confirmation,memo_uid,notice_hash,created_by)
-    SELECT ?,id,?,?,1,?,?,CASE WHEN ? = 'structure_memo' THEN (SELECT uid FROM formation_case_memos WHERE uid = ? AND case_id = formation_cases.id AND partner_id = formation_cases.partner_id AND answers_uid = ?) ELSE NULL END,?,? FROM formation_cases WHERE id = ? AND revision = ? AND stage = 'chosen'`)
-    .bind(uid,shown.uid,option.form_key,b.own_reason.trim(),b.confirmation,b.confirmation,b.memo_uid ?? null,shown.answers_uid,shown.notice_hash,user.id,row.id,next),
+    SELECT ?,id,?,?,1,?,?,CASE WHEN ? = 'structure_memo' THEN (SELECT uid FROM formation_case_memos WHERE uid = ? AND case_id = formation_cases.id AND partner_id = formation_cases.partner_id AND answers_uid = ?) ELSE NULL END,?,? FROM formation_cases WHERE id = ? AND revision = ? AND stage = 'chosen' AND EXISTS (SELECT 1 FROM formation_case_events WHERE case_id = ? AND to_revision = ? AND json_extract(detail_json, '$.choice_uid') = ?)` )
+    .bind(uid,shown.uid,option.form_key,b.own_reason.trim(),b.confirmation,b.confirmation,b.memo_uid ?? null,shown.answers_uid,shown.notice_hash,user.id,row.id,next,row.id,next,uid),
     c.env.DB.prepare(`UPDATE formation_cases SET form_key = ?, path = ?, structure_gate = ?, catalogue_version_id = ? WHERE id = ? AND revision = ? AND EXISTS (SELECT 1 FROM formation_case_choices WHERE uid = ?)`)
     .bind(option.form_key,option.path,option.structure_gate,shown.catalogue_version_id,row.id,next,uid)];
   if (row.stage === 'chosen') {
-    const result = await c.env.DB.batch([c.env.DB.prepare("UPDATE formation_cases SET revision = revision + 1, updated_at = datetime('now') WHERE id = ? AND revision = ? AND stage = 'chosen' AND closed_at IS NULL AND hold_reason IS NULL").bind(row.id,row.revision),...extra,c.env.DB.prepare("INSERT INTO formation_case_events(case_id,actor_user_id,party,kind,from_stage,to_stage,to_revision,visibility,detail_json) SELECT id,?,'founder','choice_recorded','chosen','chosen',?,'all',? FROM formation_cases WHERE id = ? AND revision = ? AND EXISTS(SELECT 1 FROM formation_case_choices WHERE uid = ?)").bind(user.id,next,JSON.stringify({choice_uid:uid}),row.id,next,uid)]);
-    if (!result[0].meta.changes) return refuse(c,409,{code:'formation_case_moved',message:'The case changed. Reload before choosing.'});
+    const result = await c.env.DB.batch([
+      c.env.DB.prepare("INSERT INTO formation_case_events(case_id,actor_user_id,party,kind,from_stage,to_stage,to_revision,visibility,detail_json) SELECT id,?,'founder','choice_recorded','chosen','chosen',?,'all',? FROM formation_cases WHERE id = ? AND revision = ? AND stage = 'chosen' AND closed_at IS NULL AND hold_reason IS NULL")
+        .bind(user.id,next,JSON.stringify({choice_uid:uid}),row.id,row.revision),
+      c.env.DB.prepare("UPDATE formation_cases SET revision = revision + 1, updated_at = datetime('now') WHERE id = ? AND revision = ? AND stage = 'chosen' AND closed_at IS NULL AND hold_reason IS NULL AND EXISTS(SELECT 1 FROM formation_case_events WHERE case_id = ? AND to_revision = ? AND json_extract(detail_json, '$.choice_uid') = ?)")
+        .bind(row.id,row.revision,row.id,next,uid), ...extra]);
+    if (!result[1].meta.changes) return refuse(c,409,{code:'formation_case_moved',message:'The case changed. Reload before choosing.'});
   } else {
     const moved = await transition(c.env,row.id,'chosen',{party:'founder',userId:user.id},{expectRevision:row.revision,extra,detail:{choice_uid:uid},visibility:'all'});
     if (!moved.ok) return refuse(c,409,{code:'formation_case_moved',message:'The case changed. Reload before choosing.'});

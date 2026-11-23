@@ -29,6 +29,10 @@ test('same answers/version are byte-identical; costs never select Estonia; expli
   assert.equal(formationRules(answers,cat,'ee_ou').options.find(o=>o.form_key==='ee_ou')!.path,'specialist');
   assert.equal(formationRules(answers,cat,'us_de_ccorp').options.find(o=>o.form_key==='us_de_ccorp')!.path,'simple');
   assert.equal(formationRules({...answers,payments:true},cat,'us_de_ccorp').options[0].path,'specialist');
+  const cross = formationRules({...answers,founders:[{residence_country:'US'}]},cat);
+  assert.ok(cross.options.some(o=>o.form_key==='gb_ltd'));
+  assert.ok(cross.options.some(o=>o.form_key==='us_de_ccorp'));
+  assert.ok(cross.options.every(o=>o.path==='specialist'));
   assert.doesNotMatch(JSON.stringify(first),/tax|saving|index.?rank|\d+%/i);
   cat.forms[0].facts.push({...cat.forms[0].facts[0],key:'tax_rate',value:'99%'});
   assert.doesNotMatch(JSON.stringify(formationRules(answers,cat)),/99%|tax_rate/);
@@ -72,7 +76,7 @@ async function setup() {
     const r=await app.request('/api/formation/cases/case6704'+path,{method,headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})},env);
     return {status:r.status,body:await r.json() as any};
   }
-  return {db,req};
+  return {db,req,env};
 }
 test('flag off returns no output; access is scoped; payments cannot waive; changed answers invalidate a suggestion',async t=>{
   const f=await setup();t.after(()=>f.db.close());
@@ -120,4 +124,27 @@ test('memo requires named professional and HQ-recorded accepting partner acknowl
   assert.equal(f.db.prepare('SELECT stage FROM formation_cases WHERE id=9904').get()!.stage,'chosen');
   assert.throws(()=>f.db.exec("UPDATE formation_case_memos SET author_name='Changed' WHERE case_id=9904"),/immutable/);
   assert.throws(()=>f.db.exec('DELETE FROM formation_case_memos WHERE case_id=9904'),/immutable/);
+});
+
+test('a racing first choice or changed choice cannot append under another request’s next revision',async t=>{
+  for(const stage of ['draft','chosen']) {
+    const f=await setup();t.after(()=>f.db.close());
+    f.db.exec("UPDATE feature_flags SET enabled=1 WHERE key='formation_options' AND scope='global'");
+    f.db.prepare('UPDATE formation_cases SET stage=? WHERE id=9904').run(stage);
+    f.db.exec(`INSERT INTO formation_case_answers(uid,case_id,case_revision,answers_json,prefill_json,created_by) VALUES('race6704',9904,1,'{"founders":[{"residence_country":"GB"}],"operating_countries":["GB"],"management_country":"GB"}','{}',9904)`);
+    const shown=(await f.req('GET','/options')).body;
+    const batch=f.env.DB.batch.bind(f.env.DB);let raced=false;
+    f.env.DB.batch=async (statements: unknown[])=>{
+      if(!raced) {
+        raced=true;
+        f.db.exec(`UPDATE formation_cases SET stage='chosen',revision=1 WHERE id=9904;
+          INSERT INTO formation_case_events(case_id,actor_user_id,party,kind,to_stage,to_revision,visibility,detail_json) VALUES(9904,9904,'founder','stage_changed','chosen',1,'all','{"choice_uid":"another-request"}')`);
+      }
+      return batch(statements);
+    };
+    const result=await f.req('POST','/choice',{revision:0,suggestion_uid:shown.suggestion_uid,notice_hash:shown.notice_hash,form_key:'gb_ltd',own_reason:'Losing request',confirmation:'self'});
+    assert.equal(result.status,409,stage);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM formation_case_choices WHERE case_id=9904').get()!.n,0,stage);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM formation_case_events WHERE case_id=9904').get()!.n,1,stage);
+  }
 });

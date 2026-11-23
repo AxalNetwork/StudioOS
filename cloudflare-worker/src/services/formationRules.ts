@@ -18,7 +18,7 @@ export type ComparisonRule = {
   reasons: string[]; what_would_change_it: string[];
 };
 export type RuleCatalogue = { version: number; status: string; forms: CatalogueForm[]; rules: ComparisonRule[] };
-const prohibited = /tax|saving|index.?rank|\b\d+(?:\.\d+)?\s*%/i;
+const prohibited = /tax[ _-]*rate|saving|index.?rank|\b\d+(?:\.\d+)?\s*%/i;
 const safeText = (s: unknown): s is string => typeof s === 'string' && s.length > 0 && s.length <= 2000 && !prohibited.test(s);
 export function formationRules(answers: FormationAnswers, catalogue: RuleCatalogue, openedForm: string | null = null) {
   if (catalogue.status !== 'published' || !Number.isSafeInteger(catalogue.version) || catalogue.version < 1) throw new Error('published_catalogue_required');
@@ -33,10 +33,10 @@ export function formationRules(answers: FormationAnswers, catalogue: RuleCatalog
   const specialist = complex || answers.cross_border === true || countries.size > 1;
   const forms = [...catalogue.forms].sort((a,b) => a.form.key < b.form.key ? -1 : a.form.key > b.form.key ? 1 : 0);
   if (new Set(forms.map(f => f.form.key)).size !== forms.length) throw new Error('duplicate_form');
-  const ruleFor = (key: string) => catalogue.rules.find(r => r.form_key === key && r.country === home && r.when && Object.entries(r.when).every(([k,v]) => ['founder_state', 'written_us_investor_requirement', 'cross_border', 'regulated', 'spinout', 'flip', 'fund', 'grant', 'payments', 'health'].includes(k) && answers[k as keyof FormationAnswers] === v));
+  const ruleFor = (key: string) => catalogue.rules.find(r => r.form_key === key && r.country === home && r.when && typeof r.when === 'object' && !Array.isArray(r.when) && Object.entries(r.when).every(([k,v]) => ['founder_state', 'written_us_investor_requirement', 'cross_border', 'regulated', 'spinout', 'flip', 'fund', 'grant', 'payments', 'health'].includes(k) && answers[k as keyof FormationAnswers] === v));
   const selected = forms.filter(f => f.form.offer_mode !== 'off' && !!ruleFor(f.form.key) && (ruleFor(f.form.key)!.scenario !== 1 || (f.form.key === 'us_de_llc' && answers.founder_state === 'DE')) && (
     f.form.key === openedForm || (answers.written_us_investor_requirement === true && f.form.key === 'us_de_ccorp') ||
-    (f.jurisdiction.country === home && f.jurisdiction.country !== 'EE' && !['us_wy_ccorp', 'us_de_llc'].includes(f.form.key)) ||
+    ((f.jurisdiction.country === home || answers.founders.some(founder => founder.residence_country === f.jurisdiction.country)) && f.jurisdiction.country !== 'EE' && !['us_wy_ccorp', 'us_de_llc'].includes(f.form.key)) ||
     (home === 'US' && answers.founder_state === 'DE' && f.form.key === 'us_de_llc')
   )).sort((a,b) => (a.form.key === openedForm ? 0 : a.form.key === 'us_de_ccorp' && answers.written_us_investor_requirement ? 1 : 2) - (b.form.key === openedForm ? 0 : b.form.key === 'us_de_ccorp' && answers.written_us_investor_requirement ? 1 : 2)).slice(0,3);
   // Opened forms always occupy a slot, even when the local catalogue has several forms.
@@ -44,10 +44,10 @@ export function formationRules(answers: FormationAnswers, catalogue: RuleCatalog
   if (opened && !selected.includes(opened)) selected.splice(2,1,opened);
   const options = selected.map(f => {
     const rule = ruleFor(f.form.key);
-    if (!rule || !Number.isInteger(rule.scenario) || rule.scenario < 1 || rule.scenario > 13 || !rule.reasons?.length || !rule.what_would_change_it?.length || ![...rule.reasons, ...rule.what_would_change_it].every(safeText)) throw new Error('comparison_rule_not_recorded');
-    if (!safeText(f.form.label)) throw new Error('comparison_text_invalid');
+    if (!rule || !Number.isInteger(rule.scenario) || rule.scenario < 1 || rule.scenario > 13 || !Array.isArray(rule.reasons) || !rule.reasons.length || !Array.isArray(rule.what_would_change_it) || !rule.what_would_change_it.length || ![...rule.reasons, ...rule.what_would_change_it].every(safeText)) throw new Error('comparison_rule_not_recorded');
+    if (!safeText(f.form.key) || !safeText(f.form.label)) throw new Error('comparison_text_invalid');
     const requirements = f.facts.filter(x => /^(residency|director|secretary|registered_office|licensing|capital|filing|local_presence)(_|$)/.test(x.key)).map(x => {
-      if (x.value != null && !safeText(x.value)) throw new Error('comparison_text_invalid');
+      if (!safeText(x.key) || (x.source && (!safeText(x.source.title) || (x.source.url != null && !safeText(x.source.url)))) || (x.value != null && !safeText(x.value))) throw new Error('comparison_text_invalid');
       return { key: x.key, value: x.value, status: x.status, source: x.source, checked_on: x.checked_on };
     });
     const path = specialist || (f.jurisdiction.country === 'EE' && home !== 'EE') ? 'specialist' : 'simple';
