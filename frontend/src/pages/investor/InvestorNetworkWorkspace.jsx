@@ -13,8 +13,9 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
 import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue, shortDate, touchHistory, touchRecorder, openReminderFor, reminderLists } from '../../lib/networkBook';
 import { useAuth } from '../../hooks/useAuthSync';
-import { introTarget, askKey, createIntroRequests, quotaFrom, askTargetName, askDate } from '../../lib/investorIntroRequest';
+import { introTarget, askKey, createIntroRequests, quotaFrom, askTargetName, askStatusLabel } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
+import InvestorAskCard from './InvestorAskCard';
 import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestination';
 import { counterpartAnswer, introCreditView } from './introCreditModel.js';
 
@@ -163,6 +164,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // destination contract). A `kind=request` uid belongs to the teammate desk.
   const deepLink = resolveIntroTarget(params);
   const highlightedIntro = introTargetIsMine(deepLink, 'proposition') ? deepLink.uid : '';
+  // D6261: an ask's notice says `kind=ask`, so it opens the Asked view on that
+  // ask. Only a link that names the kind does: a legacy link stays where it was.
+  const highlightedAsk = deepLink.kind === 'ask' ? deepLink.uid : '';
+  useEffect(() => { if (highlightedAsk) setDeskView('asked'); }, [highlightedAsk]);
   const requestedTab = params.get('tab') || '';
   const inOrgZone = zone === 'organizations';
   const [networkPicker, setNetworkPicker] = useState(null);
@@ -723,7 +728,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { handlers: {offerIntroduction: {onClick:()=>setNetworkPicker('introduction'),title:'Offer an introduction between two of your accepted ties.'}}, view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { handlers: {offerIntroduction: {onClick:()=>setNetworkPicker('introduction'),title:'Offer an introduction between two of your accepted ties.'}}, view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), askStatusLabel(a.status), a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="intro-credit-summary">
                 <span>Spendable intro credits · <strong>{creditView.label}</strong></span>
                 <button type="button" className="min-h-11 font-semibold underline" onClick={() => load(true)} disabled={refreshing} data-testid="intro-credit-retry">{refreshing ? 'Reading…' : 'Refresh credits'}</button>
@@ -731,13 +736,12 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               </div>
               {deskView === 'asked' ? (
                 errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
-                  <div className="inw-proposition-list">{askRows.map((ask) => <article className="inw-proposition" key={ask.uid} data-testid={`card-ask-${ask.uid}`}>
-                    <div className="inw-prop-top"><span className="inw-prop-label">Asked · {ask.quarter || 'quarter not recorded'}</span><span className="inw-state" data-testid={`status-ask-${ask.uid}`}>{typeLabel(ask.status)}</span></div>
-                    <strong data-testid={`target-ask-${ask.uid}`}>{askTargetName(ask, askNamesUnreadable)}</strong>
-                    <p data-testid={`message-ask-${ask.uid}`}>{ask.message ? ask.message : 'No message was sent with this ask.'}</p>
-                    <div className="inw-prop-actions"><span className="inw-state" data-testid={`date-ask-${ask.uid}`}>Asked {askDate(ask.created_at)} · {age(ask.created_at)}</span></div>
-                  </article>)}</div>
-                  <p className="inw-footnote">An ask’s status is written when you make it and nothing moves it yet — a reply is a conversation, not a row here.</p>
+                  <div className="inw-proposition-list">{askRows.map((ask) => <InvestorAskCard key={ask.uid} ask={ask} namesUnreadable={askNamesUnreadable} highlighted={ask.uid === highlightedAsk} age={age} onWithdrawn={(result) => {
+                    // The answer carries the new count; the asks are read again so the card reads Withdrawn.
+                    setIntroQuota((current) => { const q = quotaFrom(result, current.value); return q ? { status: 'ready', value: q } : current; });
+                    readAsks();
+                  }} />)}</div>
+                  <p className="inw-footnote">The founder is told when you send an ask, and accepts or declines it here. You may withdraw an ask they have not answered. Acceptance opens the mutual NDA; it is not a signature or an introduction made.</p>
                 </>
               ) : introductions === null ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <Skeleton rows={4} />) : propositionRows.length === 0 ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div>) : <>
                 {errors.introductions ? <Alert>{errors.introductions} Previously loaded propositions remain below.</Alert> : null}

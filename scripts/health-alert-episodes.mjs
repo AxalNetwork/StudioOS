@@ -1,7 +1,7 @@
 // D5663: paginated health episodes with persistent transition delivery intents.
 //
 // D5663: issue-backed health episodes and durable delivery intent; transports are injected for tests/adapters.
-import { ALERT_KINDS, mainState, message, safeStallIdentities } from './lib/githubAlerts.mjs';
+import { ALERT_KINDS, mainState, message, safeDeadlineCandidates, safeStallIdentities } from './lib/githubAlerts.mjs';
 const marker = /\n?<!-- studioos-health:v1 ([^\n]+) -->/g;
 const locks = new Map();
 export function safeHealthFacts(facts = {}) {
@@ -14,6 +14,8 @@ export function safeHealthFacts(facts = {}) {
   if (/^[a-zA-Z0-9_ ()/.@:-]{1,200}$/.test(facts.fingerprint || '')) out.fingerprint = facts.fingerprint.replaceAll('@', ' at ');
   if (/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/[1-9]\d*$/.test(facts.runUrl || '')) out.runUrl = facts.runUrl;
   if (/^\d{4}-\d{2}-\d{2}$/.test(facts.breakDate || '') && Number.isFinite(Date.parse(facts.breakDate))) out.breakDate = facts.breakDate; // D7124: the future-clock break date
+  const deadlineCandidates = safeDeadlineCandidates(facts.deadlineCandidates); // D5974: preserve safe names through durable notification retries.
+  if (deadlineCandidates.length) out.deadlineCandidates = deadlineCandidates;
   const identities = safeStallIdentities(facts.identities); // D7125: the queue-stall failures, sanitized
   if (identities.length) out.identities = identities;
   return out;
