@@ -21,12 +21,18 @@ export interface CapacityStore {
   prune(before: number): void;
   save(request: CapacityRequest): void;
 }
+/** D8339: says a settled request has no result left to publish. `superseded` is read from the parent fence. */
+export type CapacityEvictionGuard = (request: CapacityRequest, superseded: boolean) => boolean;
+const leaseEnd = (request: CapacityRequest) => Math.max(request.deadline,
+  ...request.shards.flatMap(shard => shard.attempts.flatMap(a => [a.startDeadline, a.executionDeadline, a.cancelDeadline ?? 0])));
 
 /** Bounded full receipts, indexed work and compact permanent identity fences. */
 export class SqlCapacityStore implements CapacityStore {
   private readonly storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
-  constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>) {
-    this.storage = storage;
+  private readonly evictable: CapacityEvictionGuard | null;
+  /** Without a guard, receipts leave by age alone and a full store refuses, as before D8339. */
+  constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>, evictable: CapacityEvictionGuard | null = null) {
+    this.storage = storage; this.evictable = evictable;
     storage.transactionSync(() => {
       storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_requests (
         id TEXT PRIMARY KEY, parent TEXT NOT NULL UNIQUE, state TEXT NOT NULL)`);
@@ -76,7 +82,32 @@ export class SqlCapacityStore implements CapacityStore {
         (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)`, before);
       this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?', before);
       // Parent, request and child tombstones survive receipt retention: no identity can be reused.
+      // The cutoff is the caller's clock less the age limit, so this is the caller's clock.
+      this.evict(before + CAPACITY_RETENTION_MS);
     });
+  }
+  /** D8339: at the cap, make room for one admission from settled history, oldest completion first.
+   * A request stays while a lease of its own is open or the guard cannot say its result is published.
+   * Finding nothing leaves the store full, and the caller refuses `capacity_storage_bound`. */
+  private evict(now: number): void {
+    const guard = this.evictable;
+    let excess = this.count() - CAPACITY_REQUEST_LIMIT + 1;
+    if (!guard || excess <= 0) return;
+    const settled = this.storage.sql.exec<{ id: string }>(`SELECT id FROM ci_capacity_index
+      WHERE pending = 0 ORDER BY completed_at, id LIMIT ${CAPACITY_REQUEST_LIMIT}`).toArray();
+    for (const { id } of settled) {
+      if (excess <= 0) break;
+      const request = this.get(id);
+      if (!request || !(leaseEnd(request) <= now)) continue;
+      const s = request.submission;
+      let published = false;
+      try { published = guard(request, this.newerParent(s.parentRunId, s.parentAttempt)) === true; }
+      catch { /* Unreadable publication evidence keeps the request. */ }
+      if (!published) continue;
+      this.storage.sql.exec('DELETE FROM ci_capacity_requests WHERE id = ?', id);
+      this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE id = ?', id);
+      excess--;
+    }
   }
   private index(request: CapacityRequest): void {
     const s = request.submission;
