@@ -13,7 +13,7 @@ import router from '../src/routes/formation_cases.ts';
 const keys = ['gb_ltd','us_de_ccorp','us_de_llc','us_wy_ccorp','ee_ou'];
 function catalogue(): RuleCatalogue {
   const forms = keys.map(key => ({ version:{id:9904,version:9904,status:'published',published_at:'2026-11-20'}, jurisdiction:{country:key.slice(0,2).toUpperCase(),subdivision:null,registry_name:null,vocabulary:{}},form:{key,label:key,offer_mode:'orderable',legal_form_family:null,legacy_gate:null,legacy_display:null,allow_axal_collection:false},facts:[{key:'registered_office',value:'Synthetic fixture requirement',status:'recorded',blocking:true,source:{id:9904,kind:'registry',title:'Synthetic fixture',url:'https://example.test'},checked_on:'2026-11-20'}],fees:[],pack:[] })) as CatalogueForm[];
-  return {version:9904,status:'published',forms,rules:forms.flatMap(f => ['GB','US','EE'].map(country => ({country,form_key:f.form.key,scenario:12,when:{},reasons:['Compare the recorded circumstances'],what_would_change_it:['A different operating country']})))};
+  return {version:9904,status:'published',forms,rules:forms.flatMap(f => ['GB','US','EE'].map(country => ({country,form_key:f.form.key,scenario:2,when:{},reasons:['Compare the recorded circumstances'],what_would_change_it:['A different operating country']})))};
 }
 const answers: FormationAnswers = {founders:[{residence_country:'GB'}],operating_countries:['GB'],management_country:'GB'};
 test('same answers/version are byte-identical; costs never select Estonia; explicit opens reach each form', () => {
@@ -45,7 +45,7 @@ test('same answers/version are byte-identical; costs never select Estonia; expli
   assert.equal(first.options[0].requirements[0].source!.id,9904);
   assert.equal(first.options[0].requirements[0].checked_on,'2026-11-20');
   const us = {...answers, founders:[{residence_country:'US'}],operating_countries:['US'],management_country:'US',founder_state:'CA'};
-  assert.ok(formationRules(us,cat).information.includes('home-state LLC'));
+  assert.deepEqual(formationRules(us,cat).information,[]);
   assert.equal(formationRules(us,cat).options.some(o=>o.form_key==='us_de_llc'||o.form_key==='us_wy_ccorp'),false);
   assert.ok(formationRules({...us,founder_state:'DE'},cat).options.some(o=>o.form_key==='us_de_llc'));
   const scenarioOne = {...cat,rules:[{scenario:1,country:'US',form_key:'us_de_llc',when:{},reasons:['Fixture home-state option'],what_would_change_it:['Founder state changes']}]};
@@ -53,6 +53,8 @@ test('same answers/version are byte-identical; costs never select Estonia; expli
   assert.deepEqual(home.information,['home-state LLC']);
   assert.equal(home.scenario,1);
   assert.equal(home.path,'simple');
+  assert.throws(()=>formationRules({...us,fund:true},{...scenarioOne,rules:scenarioOne.rules.map(r=>({...r,when:{fund:false}}))}));
+  for(const scenario of [6,7,8,9,12]) assert.equal(formationRules(answers,{...cat,rules:cat.rules.map(r=>({...r,scenario}))}).path,'specialist');
   assert.equal(home.options.length,0);
   assert.equal(formationRules(us,scenarioOne,'us_de_llc').options.length,0);
   assert.equal(formationRules({...us,founder_state:'DE'},scenarioOne).options[0].form_key,'us_de_llc');
@@ -110,7 +112,7 @@ test('flag off returns no output; access is scoped; payments cannot waive; chang
   assert.equal((await f.req('POST','/choice',choice)).body.error,'choice_evidence_changed');
 });
 test('a changed simple choice appends rows; database refuses mutation of shown and chosen evidence',async t=>{
-  const f=await setup();t.after(()=>f.db.close());
+  const f=await setup(2);t.after(()=>f.db.close());
   f.db.exec("UPDATE feature_flags SET enabled=1 WHERE key='formation_options' AND scope='global'");
   // New answer set, not an update to the existing evidence.
   f.db.exec(`INSERT INTO formation_case_answers(uid,case_id,case_revision,answers_json,prefill_json,created_by) VALUES('simple6704',9904,1,'{"founders":[{"residence_country":"GB"}],"operating_countries":["GB"],"management_country":"GB"}','{}',9904)`);
@@ -144,7 +146,7 @@ test('memo requires named professional and HQ-recorded accepting partner acknowl
 
 test('a racing first choice or changed choice cannot append under another request’s next revision',async t=>{
   for(const stage of ['draft','chosen']) {
-    const f=await setup();t.after(()=>f.db.close());
+    const f=await setup(2);t.after(()=>f.db.close());
     f.db.exec("UPDATE feature_flags SET enabled=1 WHERE key='formation_options' AND scope='global'");
     f.db.prepare('UPDATE formation_cases SET stage=? WHERE id=9904').run(stage);
     f.db.exec(`INSERT INTO formation_case_answers(uid,case_id,case_revision,answers_json,prefill_json,created_by) VALUES('race6704',9904,1,'{"founders":[{"residence_country":"GB"}],"operating_countries":["GB"],"management_country":"GB"}','{}',9904)`);

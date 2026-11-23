@@ -33,7 +33,8 @@ export function formationRules(answers: FormationAnswers, catalogue: RuleCatalog
   const specialist = complex || answers.cross_border === true || countries.size > 1;
   const forms = [...catalogue.forms].sort((a,b) => a.form.key < b.form.key ? -1 : a.form.key > b.form.key ? 1 : 0);
   if (new Set(forms.map(f => f.form.key)).size !== forms.length) throw new Error('duplicate_form');
-  const ruleFor = (key: string) => catalogue.rules.find(r => r.form_key === key && r.country === home && (r.scenario !== 1 || (key === 'us_de_llc' && home === 'US' && answers.founder_state === 'DE')) && r.when && typeof r.when === 'object' && !Array.isArray(r.when) && Object.entries(r.when).every(([k,v]) => ['founder_state', 'written_us_investor_requirement', 'cross_border', 'regulated', 'spinout', 'flip', 'fund', 'grant', 'payments', 'health'].includes(k) && answers[k as keyof FormationAnswers] === v));
+  const matches = (r: ComparisonRule) => r.country === home && r.when && typeof r.when === 'object' && !Array.isArray(r.when) && Object.entries(r.when).every(([k,v]) => ['founder_state', 'written_us_investor_requirement', 'cross_border', 'regulated', 'spinout', 'flip', 'fund', 'grant', 'payments', 'health'].includes(k) && answers[k as keyof FormationAnswers] === v);
+  const ruleFor = (key: string) => catalogue.rules.find(r => r.form_key === key && matches(r) && (r.scenario !== 1 || (key === 'us_de_llc' && home === 'US' && answers.founder_state === 'DE')));
   const selected = forms.filter(f => f.form.offer_mode !== 'off' && !!ruleFor(f.form.key) && (ruleFor(f.form.key)!.scenario !== 1 || (f.form.key === 'us_de_llc' && answers.founder_state === 'DE')) && (
     f.form.key === openedForm || (answers.written_us_investor_requirement === true && f.form.key === 'us_de_ccorp') ||
     ((f.jurisdiction.country === home || answers.founders.some(founder => founder.residence_country === f.jurisdiction.country)) && f.jurisdiction.country !== 'EE' && !['us_wy_ccorp', 'us_de_llc'].includes(f.form.key)) ||
@@ -50,13 +51,13 @@ export function formationRules(answers: FormationAnswers, catalogue: RuleCatalog
       if (!safeText(x.key) || (x.source && (!safeText(x.source.title) || (x.source.url != null && !safeText(x.source.url)))) || (x.value != null && !safeText(x.value))) throw new Error('comparison_text_invalid');
       return { key: x.key, value: x.value, status: x.status, source: x.source, checked_on: x.checked_on };
     });
-    const path = specialist || (f.jurisdiction.country === 'EE' && home !== 'EE') ? 'specialist' : 'simple';
+    const path = specialist || [6,7,8,9,12].includes(rule.scenario) || (f.jurisdiction.country === 'EE' && home !== 'EE') ? 'specialist' : 'simple';
     // Decision 10A preserves the simple route for an otherwise simple non-US founder choosing Delaware.
     return { waiver_eligible: [4,5,10,11,13].includes(rule.scenario) && !['payments','health','fund','flip','spinout'].some(k => answers[k as keyof FormationAnswers] === true), form_key: f.form.key, label: f.form.label, scenario: rule.scenario, path, structure_gate: path === 'specialist' ? 'required' : 'not_required', reasons: rule.reasons, what_would_change_it: rule.what_would_change_it, requirements, offer_mode: f.form.offer_mode };
   });
-  if (!options.length && !(home === 'US' && answers.founder_state !== 'DE' && catalogue.rules.some(r => r.scenario === 1 && r.country === 'US'))) throw new Error('comparison_rule_not_recorded');
+  if (!options.length && !(home === 'US' && answers.founder_state !== 'DE' && catalogue.rules.some(r => r.scenario === 1 && matches(r)))) throw new Error('comparison_rule_not_recorded');
   const path = options[0]?.path ?? (specialist ? 'specialist' : 'simple');
   return { scenario: options[0]?.scenario ?? 1, path, structure_gate: path === 'specialist' ? 'required' : 'not_required', catalogue_version: catalogue.version, notice: { key: GENERAL_COUNSEL_DISCLAIMER_KEY, version: 'D4421', text: AGENT_DISCLAIMERS[GENERAL_COUNSEL_DISCLAIMER_KEY] },
-    information: home === 'US' && answers.founder_state !== 'DE' ? ['home-state LLC'] : [], options,
+    information: home === 'US' && answers.founder_state !== 'DE' && catalogue.rules.some(r => r.scenario === 1 && matches(r)) ? ['home-state LLC'] : [], options,
     not_shown: forms.filter(f => !selected.includes(f)).map(f => ({ form_key: f.form.key, reason: f.form.offer_mode === 'off' ? 'Not offered' : !ruleFor(f.form.key) ? 'No published comparison rule covers this form and these circumstances' : f.jurisdiction.country === 'EE' ? 'Open this form to compare it' : 'Not selected by the recorded circumstances; open the form to compare it' })) };
 }
