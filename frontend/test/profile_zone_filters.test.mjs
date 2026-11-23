@@ -797,6 +797,10 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // passage, never a memo), so it is retired; `Show cleared` is the owner's
     // filter for Clear history (#6274 question 4 B) and has no artboard label.
     if (name === 'investor') canvas['research/ask'] = [...canvas['research/ask'].filter((label) => label !== 'Cited in a memo'), 'Show cleared'];
+    // D6269 (#6269): the chips are the Investor Research v2 Rooms canvas's real
+    // states (IRV-02). `Granted` became the Rooms granted tile and `Not staged`
+    // selects no row; `Partly staged` and `Declined` are that canvas's words.
+    if (name === 'investor') canvas['research/diligence'] = ['All', 'Partly staged', 'Requested', 'Declined'];
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {

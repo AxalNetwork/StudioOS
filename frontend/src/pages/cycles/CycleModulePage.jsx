@@ -397,12 +397,15 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {/* D6038 (#6038): a home that lists its own table gets its query, row control, Export and the tool doors; one
+          {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools).
+              D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read.
+              D6038 (#6038): a home that lists its own table gets its row control, Export and the tool doors; one
               that sets `drawsTools` draws those doors itself (Company creation's supporting tools, BD11). */}
           {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
-            query, onQuery, rowAction, onExport, tools: toolLinks })}
+            query, onQuery, rowAction, onExport, tools: toolLinks,
+            sources: sources ? <Sources action={sourcesAction}>{sources}</Sources> : null })}
           {home.drawsTools ? null : doors}
-          {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
+          {children}{sources && !home.placesSources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>
       ) : owned ? children : (
         <>

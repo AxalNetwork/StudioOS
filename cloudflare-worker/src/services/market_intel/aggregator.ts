@@ -7,9 +7,11 @@
  *     `market_intel_rows`. Sources flagged LIVE call `fetchLive`. The rest
  *     store nothing and the run says why, unless `MI_STUB_ROWS = "on"`
  *     (development and tests), where they write their `fetchStub` (D538).
- *   - `recomputeIndexes(env)` — reads the last-WINDOW_DAYS rows, applies
- *     weights + decay, writes per-(sector, dimension) composites to
- *     `market_intel_indexes` and busts the KV layer.
+ *   - `recomputeIndexes(env)` — reads the rows retrieved in the last
+ *     WINDOW_DAYS days, counts each observation once, applies weights + decay,
+ *     writes per-(sector, dimension) composites to `market_intel_indexes`
+ *     with the window each covers and the mix it used (D7708), and busts the
+ *     KV layer.
  *
  * Index re-runs are safe: the upsert on `market_intel_indexes` keys on the
  * UNIQUE(sector, geo, period_key, dimension) constraint. Row writes are
@@ -23,10 +25,10 @@
 import type { Env } from '../../types';
 import type { CommonRow, SourceDescriptor, Cadence, Dimension } from './registry';
 import { listSources, isLive } from './registry';
-import { compositeHeadline, composeSectorScores, periodKey, WINDOW_DAYS } from './scoring';
+import { compositeHeadline, compositeMix, composeSectorScores, periodKey, scoreWindow, type ScoreMix, type ScoredRow } from './scoring';
 import { bumpQuota, isExhausted, markRateLimited } from './quota';
 import { writeKv } from './cache';
-import { isLiveRow, liveRowSql, liveIndexSql, LIVE_INDEX_BASIS } from './liveRows';
+import { isLiveRow, liveRowSql, liveIndexSql, retrievedAtSql, LIVE_INDEX_BASIS } from './liveRows';
 
 /** Canonical sector universe. Connectors normalise to one of these. */
 export const SECTORS = [
@@ -283,15 +285,21 @@ export async function runSourcesByCadence(env: Env, cadence: Cadence): Promise<C
   return runSources(env, listSources().filter((s) => s.cadence === cadence), cadence);
 }
 
-interface IndexRow {
+export interface IndexRow {
   sector: string;
   geo: string;
   period_key: string;
   dimension: Dimension | 'composite';
   value: number;
-  /** Change against the previous month's live value, in percent; null when there is none. */
+  /** Change against the previous point's live value (its own window), in percent; null when there is none. */
   delta_pct: number | null;
+  /** D7708 — distinct registered providers that contributed, for a dimension and for the composite. */
   source_count: number;
+  /** D7708 — the window the point covers (ISO instants). */
+  window_start: string;
+  window_end: string;
+  /** D7708 — the mix the score used, stored beside the point and never recomputed on a read. */
+  source_mix: ScoreMix;
 }
 
 /** The month before `period` (`YYYY-MM`). */
@@ -321,12 +329,16 @@ export function deltaPct(value: number, previous: number | undefined): number | 
 export async function recomputeIndexes(env: Env): Promise<{ sectors: number; rows_written: number; rows_cleared: number }> {
   const sources = new Map(listSources().map((s) => [s.key, s] as const));
   const period = periodKey();
-  const cutoff = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString();
+  const now = new Date();
+  const cutoff = scoreWindow(now).window_start;
 
+  // D7708 — in the window by retrieval date (D7707: retrieved_at, or ts before it),
+  // with what the scorer needs to count each observation once.
   const allRows = (await env.DB.prepare(
-    `SELECT source_key, sector, geo, metric_key, metric_value, ts
-       FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()}`
-  ).bind(cutoff).all<{ source_key: string; sector: string; geo: string; metric_key: string; metric_value: number; ts: string }>()).results || [];
+    `SELECT id, source_key, sector, geo, metric_key, metric_value, ts,
+            observed_period, retrieved_at, scope, coverage_area
+       FROM market_intel_rows WHERE ${retrievedAtSql()} >= ? AND ${liveRowSql()}`
+  ).bind(cutoff).all<ScoredRow>()).results || [];
 
   // D538 — last month's live values, so each write carries its change.
   const prevRows = (await env.DB.prepare(
@@ -336,16 +348,15 @@ export async function recomputeIndexes(env: Env): Promise<{ sectors: number; row
   const prev = new Map(prevRows.map((p) => [`${p.sector}|${p.dimension}`, p.value] as const));
 
   // Group rows by sector for the composer.
-  const bySector = new Map<string, CommonRow[]>();
+  const bySector = new Map<string, ScoredRow[]>();
   for (const r of allRows) {
     const arr = bySector.get(r.sector) || [];
-    arr.push(r as CommonRow);
+    arr.push(r);
     bySector.set(r.sector, arr);
   }
 
   const writes: IndexRow[] = [];
   const cleared: Array<{ sector: string; dimension: Dimension | 'composite' }> = [];
-  const now = new Date();
   for (const sector of SECTORS) {
     const rows = bySector.get(sector) || [];
     const scores = composeSectorScores({ rows, sources, now });
@@ -353,16 +364,21 @@ export async function recomputeIndexes(env: Env): Promise<{ sectors: number; row
     for (const d of dims) {
       const v = scores[d].value;
       if (v == null) { cleared.push({ sector, dimension: d }); continue; }
+      const mix = scores[d].mix!;
       writes.push({
         sector, geo: 'global', period_key: period, dimension: d, value: v,
         delta_pct: deltaPct(v, prev.get(`${sector}|${d}`)), source_count: scores[d].source_count,
+        window_start: mix.window_start, window_end: mix.window_end, source_mix: mix,
       });
     }
     const headline = compositeHeadline(scores);
-    if (headline == null) { cleared.push({ sector, dimension: 'composite' }); continue; }
+    const composite = compositeMix(scores);
+    if (headline == null || !composite) { cleared.push({ sector, dimension: 'composite' }); continue; }
+    // D7708 — the composite's count is distinct providers too; it was the row count until now.
     writes.push({
       sector, geo: 'global', period_key: period, dimension: 'composite',
-      value: headline, delta_pct: deltaPct(headline, prev.get(`${sector}|composite`)), source_count: rows.length,
+      value: headline, delta_pct: deltaPct(headline, prev.get(`${sector}|composite`)), source_count: composite.source_count,
+      window_start: composite.mix.window_start, window_end: composite.mix.window_end, source_mix: composite.mix,
     });
   }
 
@@ -375,15 +391,20 @@ export async function recomputeIndexes(env: Env): Promise<{ sectors: number; row
     ),
     ...writes.map((w) =>
       env.DB.prepare(
-        `INSERT INTO market_intel_indexes (sector, geo, period_key, dimension, value, delta_pct, source_count, computed_at, basis)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+        `INSERT INTO market_intel_indexes (sector, geo, period_key, dimension, value, delta_pct, source_count, computed_at, basis,
+                                           window_start, window_end, source_mix_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)
          ON CONFLICT(sector, geo, period_key, dimension) DO UPDATE SET
            value = excluded.value,
            delta_pct = excluded.delta_pct,
            source_count = excluded.source_count,
            computed_at = excluded.computed_at,
-           basis = excluded.basis`
-      ).bind(w.sector, w.geo, w.period_key, w.dimension, w.value, w.delta_pct, w.source_count, LIVE_INDEX_BASIS)
+           basis = excluded.basis,
+           window_start = excluded.window_start,
+           window_end = excluded.window_end,
+           source_mix_json = excluded.source_mix_json`
+      ).bind(w.sector, w.geo, w.period_key, w.dimension, w.value, w.delta_pct, w.source_count, LIVE_INDEX_BASIS,
+        w.window_start, w.window_end, JSON.stringify(w.source_mix))
     ),
   ];
   if (stmts.length > 0) await env.DB.batch(stmts);
@@ -401,5 +422,7 @@ export async function recomputeIndexes(env: Env): Promise<{ sectors: number; row
 /**
  * KV key of the warm sector-compass snapshot. `:live` since D538: the old
  * `compass:global` snapshot held stub-derived indexes and must never be read.
+ * `:v7708` since D7708: a snapshot written before it holds row counts and no
+ * window, and is never served.
  */
-export const COMPASS_KV_KEY = 'compass:global:live';
+export const COMPASS_KV_KEY = 'compass:global:live:v7708';

@@ -279,10 +279,13 @@ async function assertEdit(Route_) {
     assert.equal(m.form(), null, 'Back closes it');
   } finally { await m.unmount(); }
 
-  // An Edit that does not read its record (Choose connector) starts from valuesOf(row).
+  // An Edit that does not read its record (Choose connector) starts from valuesOf(row). D5078 (#5078): Operating
+  // systems' page draws no records table now (its Systems rows lead to each record), so the Edit opens from the
+  // same address state a row's Edit writes.
   m = await mountCycle(Route_, '/build/operating-systems?project_id=3');
   try {
-    await m.act(() => propsOf(m.all('records-row-action')[0]).onClick());
+    assert.equal(m.all('records-row-action').length, 0, 'no systems table on the module page');
+    await m.act(() => m.at.navigate(`${m.at.path}${m.at.search}`, { state: { editing: 'crm' } }));
     const open = m.form();
     assert.equal(open?.form, EDITS.build['operating-systems']);
     assert.deepEqual(open.current, { choice: '', used_by: 'Sales' }, 'it starts from valuesOf(row)');
