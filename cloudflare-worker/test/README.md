@@ -412,3 +412,4 @@ catalogue version only in the fixture.
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
 
 `research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
+| `formation_rules_6704.test.ts` | D6704: deterministic fixture comparisons, append-only suggestions/choices/memos, flag and structure gates. |
