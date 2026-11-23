@@ -31,6 +31,7 @@ function fixture(rows, { tracked = [], pulls = [], claimed = [] } = {}) {
     closeFixed: async a => calls.push(['fixed', a.number]),
     markReady: async i => calls.push(['ready', i.number]),
     linkPull: async (i, p) => calls.push(['linked', i.number, p]),
+    linkPulls: async (i, numbers) => { for (const p of numbers) calls.push(['linked', i.number, p]); },
   };
   const deps = {
     loadTrackers: async () => trackers,
@@ -66,7 +67,7 @@ test('every scanner hands unassigned findings to S21 without requesting a genera
   assert.deepEqual(f.calls, [['ensure', 1], ['ready', 501], ['ensure', 2], ['ready', 502], ['ensure', 3], ['ready', 503]]);
 });
 test('links human and legacy bot PRs without editing them and ignores fork PRs', async () => {
-  const pr = (number, repo, ref, n) => ({ number, base: {ref:'main'}, head: {ref, repo:{full_name:repo}},
+  const pr = (number, repo, ref, n) => ({ number, state: 'open', base: {ref:'main'}, head: {ref, repo:{full_name:repo}},
     body: '(https://github.com/AxalNetwork/StudioOS/security/code-scanning/' + n + ')', user: { login: options.botLogin } });
   const pulls = [pr(77, 'AxalNetwork/StudioOS', 'custom', 1), pr(78, 'fork/StudioOS', 'custom', 2),
     pr(79, 'AxalNetwork/StudioOS', 'alert-autofix-3', 3), pr(80, 'AxalNetwork/StudioOS', 'alert-fix-4', 4)];
@@ -91,6 +92,7 @@ test('real tracker reconciliation writes only one issue and its ready label acro
       if (path === '/code-scanning/alerts/42') return Response.json(alert(42));
       if (path === '/pulls') return Response.json([]);
       if (path === '/issues/900') return Response.json(issue);
+      if (path === '/issues/900/comments') return Response.json([]);
       if (path === '/git/ref/heads/claim/900') return new Response(null, { status: 404 });
     }
     if (method === 'POST' && path === '/issues') {
@@ -112,6 +114,54 @@ test('real tracker reconciliation writes only one issue and its ready label acro
     ['POST', '/issues'], ['POST', '/issues/900/labels'],
   ]);
   assert.ok(requests.every(([, path]) => !path.includes('/autofix') && !path.includes('/commits')));
+});
+
+const trackerPR = (number, body, extra = {}) => ({ number, state: 'open', body,
+  base: { ref: 'main' }, head: { ref: 'session-work', repo: { full_name: 'AxalNetwork/StudioOS' } }, ...extra });
+
+test('one PR can hand off several exact tracker references without protected alert links', async () => {
+  const f = fixture([alert(1), alert(2), alert(3)], { pulls: [trackerPR(77,
+    'Closes #501. Part of AxalNetwork/StudioOS#502; also https://github.com/axalnetwork/studioos/issues/503.')] });
+  await f.run();
+  assert.deepEqual(f.calls, [['ensure', 1], ['linked', 501, 77], ['ensure', 2], ['linked', 502, 77],
+    ['ensure', 3], ['linked', 503, 77]]);
+});
+
+test('unrelated, closed, fork, wrong-base and example references never take a tracker out of ready', async () => {
+  const rejected = [
+    trackerPR(77, 'Closes #501', { state: 'closed' }),
+    trackerPR(77, 'Closes #501', { head: { repo: { full_name: 'fork/StudioOS' } } }),
+    trackerPR(77, 'Closes #501', { base: { ref: 'feature' } }),
+    trackerPR(77, 'Closes other/repository#501'),
+    trackerPR(77, 'Closes https://github.com/other/repository/issues/501'),
+    trackerPR(77, 'Closes https://example.org/#501'),
+    trackerPR(77, 'Closes #5010; alert #501 and finding number #501'),
+    trackerPR(77, 'Alerts #501 and #502\nAlert: #501\nFindings:\n- #501\n- #502'),
+    trackerPR(77, 'Example: `Closes #501`\n```text\nCloses #501\n```\n<!-- Closes #501 -->'),
+    trackerPR(77, '~~~text\nCloses #501\n~~~\n    Closes #501\n> Closes #501\n``Closes #501``'),
+    trackerPR(77, '~~~text\nhttps://github.com/AxalNetwork/StudioOS/security/code-scanning/1\n~~~'),
+  ];
+  for (const pull of rejected) {
+    const f = fixture([alert(1)], { pulls: [pull] });
+    await f.run();
+    assert.deepEqual(f.calls, [['ensure', 1], ['ready', 501]], pull.body);
+  }
+});
+
+test('explicit tracker context after alert numbers remains actionable for a shared PR', async () => {
+  const f = fixture([alert(1), alert(2)], { pulls: [trackerPR(77, 'Alerts #9 and #10; fixes #501, #502.')] });
+  await f.run();
+  assert.deepEqual(f.calls, [['ensure', 1], ['linked', 501, 77], ['ensure', 2], ['linked', 502, 77]]);
+});
+
+test('duplicate references converge and all partial PRs are preserved without selecting one arbitrarily', async () => {
+  const body = 'Closes #501, AxalNetwork/StudioOS#501. https://github.com/AxalNetwork/StudioOS/security/code-scanning/1';
+  const one = fixture([alert(1)], { pulls: [trackerPR(77, body)] });
+  await one.run();
+  assert.deepEqual(one.calls, [['ensure', 1], ['linked', 501, 77]]);
+  const several = fixture([alert(1)], { pulls: [trackerPR(77, body), trackerPR(78, 'Refs #501')] });
+  await several.run();
+  assert.deepEqual(several.calls, [['ensure', 1], ['linked', 501, 77], ['linked', 501, 78]]);
 });
 test('REST transport accepts triple-dot comparison; pagination is complete and errors redact responses', async () => {
   const seen = [];
