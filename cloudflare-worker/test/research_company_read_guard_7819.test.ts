@@ -24,7 +24,10 @@ export const PENDING_READERS = [
   'services/researchCompanyPublishers.ts',
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
-export const MAINTENANCE_WRITERS: string[] = [];
+export const MAINTENANCE_WRITERS: string[] = [
+  // D7825 (#7825): the admin domain review sets or clears website_verified_at on the reviewed company only.
+  'cloudflare-worker/src/services/researchRecordIdentity.ts',
+];
 const OWN = 'cloudflare-worker/src/services/researchCompanyRead.ts';
 export function withoutComments(source: string, path = 'file.ts') {
   return transformSync(source, {
