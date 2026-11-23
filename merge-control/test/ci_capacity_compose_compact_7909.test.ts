@@ -324,3 +324,28 @@ test('D7909 orphan ambiguity and legacy negative evidence remain until explicit 
  f.sent(3,'success',{phase:'creating',checkId:null,sent:null});pruneCapacityHistory(f.storage,'publications');
  assert.equal(f.storage.sql.exec('SELECT id FROM capacity_publications WHERE id=?',uuid(3)+':pilot').toArray().length,1);
 });
+
+test('D7909 R2 full-request expiry is fenced until an authenticated negative is applied and published',async t=>{
+ const f=fixture(t),request=await f.settled(2,'success',START+2);f.sent(2,'success');
+ const run=runtime(f),receipt=bound(request.shards[0].attempts[0]);
+ f.results.put(receipt,77,bad,START);assert.equal(f.results.pendingFailure(uuid(2)),true);
+ f.advance(CAPACITY_RETENTION_MS+LEASES_OVER);run.store.prune(f.state.now-CAPACITY_RETENTION_MS);
+ assert.notEqual(run.store.get(uuid(2)),null,'the full runtime guard retains unapplied negative authority');
+ assert.equal(run.store.compact(uuid(2)),null);
+ assert.deepEqual(f.capacity(run.store).status(uuid(2)),{status:'failure',reason:'verified_failure'});
+ const restarted=runtime(f);restarted.store.prune(f.state.now-CAPACITY_RETENTION_MS);
+ assert.notEqual(restarted.store.get(uuid(2)),null,'restart cannot drop the full request before journal replay');
+ assert.equal(await f.results.replayFailures((r,j)=>f.capacity(restarted.store).recordExecutionFailure(r,j)),false);
+ assert.equal(f.results.pendingFailure(uuid(2)),false);
+ const net=network();await new CapacityOutbox(f.storage,net.api,config).publish(restarted.store,id=>f.capacity(restarted.store).status(id),'pilot');
+ assert.ok(net.calls.some(c=>c.method==='PATCH'&&c.body.conclusion==='failure'));
+ restarted.store.prune(f.state.now-CAPACITY_RETENTION_MS);
+ assert.equal(restarted.store.get(uuid(2)),null,'a delivered negative may leave at its original expiry');
+});
+
+test('D7909 R2 unresolved duplicate status cannot expose the full row as success',async t=>{
+ const f=fixture(t);await f.place(2,START+2);await f.settled(2,'success',START+2);f.sent(2,'success');
+ assert.equal(f.store.compact(uuid(2))!.failed,false);
+ assert.deepEqual(f.capacity().status(uuid(2)),{status:'pending',reason:'capacity_history_conflict'});
+ assert.notEqual(f.store.get(uuid(2)),null);assert.notEqual(f.store.compact(uuid(2)),null);
+});
