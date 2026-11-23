@@ -719,6 +719,101 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
   return { uid };
 }
 
+// ── Eadwyn's proposals on a market (D8251, GR-24) ───────────────────────────
+
+export const PROPOSAL_KINDS = ['score', 'plan', 'comparison'] as const;
+type Source = { label: string; url: string | null };
+
+function proposalSources(raw: unknown, required: boolean): Source[] {
+  const list = raw == null ? [] : Array.isArray(raw) ? raw : null;
+  if (!list || list.length > 10) throw new Refused(400, 'Sources are a list of up to 10', 'sources');
+  const out: Source[] = list.map((x: any) => {
+    const label = str(x?.label, 120);
+    const url = x?.url == null || x.url === '' ? null : String(x.url).slice(0, 500);
+    if (!label || (url && !/^https:\/\/[^\s]+$/.test(url))) throw new Refused(400, 'A source has a label and, if it links, an https address', 'sources');
+    return { label, url };
+  });
+  if (required && !out.length) throw new Refused(400, 'A proposed score names its source', 'sources');
+  return out;
+}
+
+/** The proposal's payload, validated by its kind; nothing outside the kind's own keys is kept. */
+function proposalPayload(kind: string, raw: unknown): Record<string, unknown> {
+  const p = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  if (kind === 'score') {
+    const part = MARKET_PARTS.find(([k]) => k === p.part)?.[0];
+    if (!part) throw new Refused(400, 'A proposed score is for one of the four parts', 'part');
+    const value = score(p.score, 'score');
+    if (value == null) throw new Refused(400, 'A proposed score is a whole number from 0 to 10', 'score');
+    return { part, score: value };
+  }
+  if (kind === 'plan') {
+    const steps = Array.isArray(p.steps) ? p.steps : [];
+    if (!steps.length || steps.length > 12) throw new Refused(400, 'A drafted plan has 1 to 12 steps', 'steps');
+    return { steps: steps.map((x: any) => {
+      const text = str(x?.text, 300);
+      if (!text) throw new Refused(400, 'A step says what is to be done', 'steps');
+      return { text, due_on: x?.due_on == null || x.due_on === '' ? null : day(x.due_on, 'due_on') };
+    }) };
+  }
+  if (kind === 'comparison') {
+    const text = str(p.text, 2000);
+    if (!text) throw new Refused(400, 'A comparison is written out', 'text');
+    return { text };
+  }
+  throw new Refused(400, 'A proposal is a score, a plan or a comparison', 'kind');
+}
+
+/**
+ * What Eadwyn's run calls to leave a proposal on a market. It is not a route: nothing a founder does creates one.
+ * Nothing here touches the market's own fields; only `decideMarketProposal` with an accept does, through the Edit path.
+ */
+export async function recordMarketProposal(env: Env, pid: number, marketUid: string, input: { kind: unknown; payload: unknown; sources?: unknown }): Promise<{ uid: string }> {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const kind = oneOf(input.kind, PROPOSAL_KINDS, 'kind', true) as string;
+  const payload = proposalPayload(kind, input.payload);
+  const sources = proposalSources(input.sources, kind === 'score');
+  const uid = newUid();
+  await env.DB.prepare('INSERT INTO market_proposals (uid, market_id, kind, payload, sources) VALUES (?, ?, ?, ?, ?)')
+    .bind(uid, m.id, kind, JSON.stringify(payload), JSON.stringify(sources)).run();
+  return { uid };
+}
+
+/**
+ * The founder's decision on one proposal of this market. It is decided once: a second decision is a 409 and writes
+ * nothing. Accept writes through the existing market paths (`updateMarket` for a score, `addEntryStep` for each step
+ * of a plan; a comparison has nothing to write and is only marked read); Dismiss writes nothing. A failed write
+ * puts the proposal back, so Accept can be tried again.
+ */
+export async function decideMarketProposal(env: Env, pid: number, user: User, marketUid: string, proposalUid: unknown, decision: 'accept' | 'dismiss'): Promise<{ uid: string; state: string }> {
+  const uid = str(proposalUid, 64);
+  if (!uid) throw new Refused(400, 'Say which proposal', 'proposal');
+  const p = await env.DB.prepare(
+    `SELECT p.id, p.kind, p.payload, p.sources, p.state FROM market_proposals p JOIN markets m ON m.id = p.market_id
+      WHERE p.uid = ? AND m.uid = ? AND m.project_id = ?`,
+  ).bind(uid, marketUid, pid).first<{ id: number; kind: string; payload: string; sources: string; state: string }>();
+  if (!p) throw new Refused(404, 'Not found');
+  const next = decision === 'accept' ? 'accepted' : 'dismissed';
+  const claimed = await env.DB.prepare(`UPDATE market_proposals SET state = ?, decided_by = ?, decided_at = ? WHERE id = ? AND state = 'proposed'`)
+    .bind(next, user.id, nowIso(), p.id).run();
+  if (!changed(claimed)) throw new Refused(409, 'This proposal was already decided');
+  if (decision === 'accept') {
+    try {
+      const payload = JSON.parse(p.payload) as any;
+      if (p.kind === 'score') {
+        const sources = JSON.parse(p.sources) as Source[];
+        await updateMarket(env, pid, user, marketUid, { [`${payload.part}_score`]: payload.score, [`${payload.part}_source`]: sources.map((s) => s.label).join('; ').slice(0, 200) });
+      } else if (p.kind === 'plan') {
+        for (const step of payload.steps) await addEntryStep(env, pid, user, marketUid, { text: step.text, due_on: step.due_on });
+      }
+    } catch (e) {
+      await env.DB.prepare(`UPDATE market_proposals SET state = 'proposed', decided_by = NULL, decided_at = NULL WHERE id = ?`).bind(p.id).run();
+      throw e;
+    }
+  }
+  return { uid, state: next };
+}
+
 // ── Durable company-building ────────────────────────────────────────────────
 
 export const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;

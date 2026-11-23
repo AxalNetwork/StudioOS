@@ -95,6 +95,27 @@ function Block({ id, title, summary, phone, children, testid }) {
     <h2 id={`${id}-h`} className={H2}>{title}</h2>{children}</section>;
 }
 
+/**
+ * D8251 (#8251, GR-24): one Eadwyn proposal as a card. A score names its part, the proposed and the current score and
+ * its sources; a plan lists its steps; a comparison is its text. Accept and Dismiss are there only for a writer.
+ */
+function ProposalCard({ p, current, accept, dismiss }) {
+  const sources = Array.isArray(p.sources) ? p.sources : [];
+  const part = p.kind === 'score' ? PART_NAMES[p.payload?.part] || String(p.payload?.part || '') : null;
+  return <li className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-800" data-testid="market-proposal" data-kind={p.kind}>
+    <b className="text-[13px] text-axal-ink dark:text-gray-100">{p.kind === 'score' ? `Score ${part.toLowerCase()}` : p.kind === 'plan' ? 'Drafted entry plan' : 'Written comparison'}</b>
+    {p.kind === 'score' && <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100">Proposed <b className="font-mono">{p.payload.score} / 10</b>
+      {' · '}now {current != null ? <span className="font-mono">{current} / 10</span> : <DataState state="not_recorded" reasonVisible={false} />}</p>}
+    {p.kind === 'plan' && <ol className="m-0 flex list-none flex-col gap-0.5 p-0 text-[12.5px]">{(p.payload?.steps || []).map((st, i) => <li key={i}>{st.text}{st.due_on ? <small className={`ml-1.5 ${MUTED}`}>due {dayLabel(st.due_on, true) || st.due_on}</small> : null}</li>)}</ol>}
+    {p.kind === 'comparison' && <p className="m-0 whitespace-pre-line text-[12.5px] text-axal-ink/90 dark:text-gray-200">{p.payload?.text}</p>}
+    <p className={`m-0 text-[11.5px] ${MUTED}`}>{sources.length ? <>Source: {sources.map((x, i) => <span key={i}>{i ? '; ' : ''}{x.url ? <a href={x.url} target="_blank" rel="noopener noreferrer" className={LINK}>{x.label}</a> : x.label}</span>)}</> : 'Source not recorded'}</p>
+    {(accept || dismiss) && <span className="flex gap-1.5">
+      {accept && <button type="button" onClick={accept} className={SMALL_BTN} data-testid="market-proposal-accept">Accept</button>}
+      {dismiss && <button type="button" onClick={dismiss} className={SMALL_BTN} data-testid="market-proposal-dismiss">Dismiss</button>}</span>}
+  </li>;
+}
+const PART_NAMES = { demand: 'Demand', regulation: 'Regulation', partners: 'Partners', cost: 'Cost to enter' };
+
 export default function MarketRecord({ record, activity, onForm, onWrite, onShowAll, now = Date.now() }) {
   const phone = useRecordPhone();
   const { search } = useLocation();
@@ -145,6 +166,18 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
     </details>) : <div className="grid grid-cols-1 gap-2.5 @[760px]/cycle:grid-cols-2">
       {view.parts.map((p) => <PartTile key={p.key} part={p} evidence={ev?.[p.key]} geo={geoState === 'ready' ? null : geoState} onRetryGeo={() => setTries((n) => n + 1)} onScore={edit} />)}
     </div>}
+  </section>;
+
+  const proposals = Array.isArray(m.proposals) ? m.proposals : null;
+  const proposalRun = (key, uid) => { const a = rowAction({ key, body: { proposal: uid } }, decl); return a ? runner(a, h) : null; };
+  const proposalsSection = <section className={`${CARD} flex flex-col gap-2`} aria-labelledby="market-proposals-h" data-testid="market-proposals">
+    <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 id="market-proposals-h" className={H2}>Eadwyn proposes</h2>
+      <span className={`text-[12px] ${MUTED}`}>Nothing is written until a founder accepts</span></div>
+    {!proposals ? <DataState state="unavailable" what="Eadwyn's proposals" claim="This is not a claim that there are none." />
+      : proposals.length === 0 ? <DataState state="none">Eadwyn has no open proposal for this market.</DataState>
+      : <ul className="m-0 flex list-none flex-col gap-2 p-0">{proposals.map((p) => <ProposalCard key={p.uid} p={p}
+        current={p.kind === 'score' ? (view.parts.find((x) => x.key === p.payload?.part)?.score ?? null) : null}
+        accept={proposalRun('accept-proposal', p.uid)} dismiss={proposalRun('dismiss-proposal', p.uid)} />)}</ul>}
   </section>;
 
   const planSection = <section id="entry-plan" className={`${CARD} flex flex-col gap-2`} aria-labelledby="market-plan-h" data-testid="market-plan">
@@ -239,9 +272,9 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
   return <div className="flex min-w-0 flex-col gap-3" data-testid="market-record" data-phone={phone ? 'true' : undefined}>
     <RecordHeaderRow pills={pills} actions={record?.actions || []} handlers={h}
       inline={(p, row) => <div className="flex flex-wrap items-center justify-between gap-3.5">{p}{row}</div>} />
-    {phone ? <>{partsSection}{planSection}{locSection}{side}{handoffs}</> : (
+    {phone ? <>{partsSection}{proposalsSection}{planSection}{locSection}{side}{handoffs}</> : (
       <div className="grid grid-cols-1 items-start gap-3 @[760px]/cycle:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <div className="flex min-w-0 flex-col gap-3">{partsSection}{planSection}{locSection}{handoffs}</div>
+        <div className="flex min-w-0 flex-col gap-3">{partsSection}{proposalsSection}{planSection}{locSection}{handoffs}</div>
         <div className="flex min-w-0 flex-col gap-3">{side}</div>
       </div>)}
   </div>;
