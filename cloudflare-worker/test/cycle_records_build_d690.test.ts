@@ -140,7 +140,7 @@ const SLUGS = ['solution-design', 'prototype-mvp', 'product-roadmap', 'founding-
 const CANVAS: Record<string, { title: string; name: string; cols: string[]; filters: string[]; sort: string }> = {
   'solution-design': { title: 'Features', name: 'Solution design', cols: ['Feature', 'Evidence link', 'Impact', 'Effort'], filters: ['Evidence link', 'Impact', 'Effort'], sort: 'Impact' },
   'prototype-mvp': { title: 'Must-haves', name: 'Prototype / MVP', cols: ['Must-have', 'Test', 'State', 'Owner', 'Due', 'Built', 'Tested'], filters: ['State', 'Hypothesis'], sort: 'State' },
-  'product-roadmap': { title: 'Roadmap items', name: 'Product roadmap', cols: ['Item', 'Column', 'Moves', 'Owner', 'Date'], filters: ['Column', 'Theme', 'KPI'], sort: 'Column' },
+  'product-roadmap': { title: 'Roadmap items', name: 'Product roadmap', cols: ['Item', 'Column', 'State', 'Moves', 'Owner', 'Date'], filters: ['Column', 'Theme', 'KPI', 'Late', 'Links'], sort: 'Column' },
   'founding-team': { title: 'Founders', name: 'Founding team', cols: ['Founder', 'Role', 'Equity', 'Vesting', 'Agreement', '83(b)'], filters: ['Role'], sort: 'Equity' },
   'company-creation': { title: 'Filings', name: 'Company creation', cols: ['Filing', 'Jurisdiction', 'Due', 'State', 'Proof'], filters: ['State', 'Due'], sort: 'Due' },
   'operating-systems': { title: 'Systems', name: 'Operating systems', cols: ['System', 'Provider', 'State', 'Last sync', 'Used by'], filters: ['State'], sort: 'State' },

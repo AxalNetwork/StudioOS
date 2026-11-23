@@ -68,3 +68,32 @@ export function registerHeading(lane, selection) {
   const desc = own?.desc || "Creating an account is free. Your membership is reviewed before your workspace opens. No password to remember — we'll email you a secure link.";
   return { title, desc };
 }
+
+/**
+ * #6984 (X2): how long a lane chosen on an earlier visit is kept. `gvpn:intent` is `{ lane, ts }`; an entry older than
+ * this, or one with no `ts` (written before the timestamp was read), is expired and not used.
+ */
+export const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** The lane this visit signs up under: the address's lane always wins; else a stored lane under 24 hours old; else none. */
+export function laneForVisit(search, saved, now = Date.now()) {
+  const fromUrl = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('lane');
+  if (fromUrl && LANES.includes(fromUrl)) return { lane: fromUrl, store: true };
+  const ts = saved && typeof saved === 'object' ? saved.ts : null;
+  const fresh = typeof ts === 'number' && Number.isFinite(ts) && ts <= now && now - ts < INTENT_TTL_MS;
+  return { lane: fresh && LANES.includes(saved.lane) ? saved.lane : null, store: false };
+}
+
+/** #6984 (X2): who the context line says is signing up, by lane. */
+export const LANE_SIGNUP_ROLE = Object.freeze({ founder: 'a founder', investor: 'an investor', lp: 'an LP', partner: 'an operating partner', advisor: 'an advisor' });
+
+/**
+ * The one context line above the form: the role, and the plan only when the catalogue read returned it (`state:
+ * 'ready'`); a plan that is not offered, or could not be read, is never named here. Null when there is nothing to say.
+ */
+export function registerContextLine(lane, selection) {
+  const role = lane && LANE_SIGNUP_ROLE[lane] ? `You are signing up as ${LANE_SIGNUP_ROLE[lane]}.` : '';
+  const plan = selection?.state === 'ready' && selection.name ? `Plan: ${selection.name}, ${selection.interval === 'yearly' ? 'yearly' : 'monthly'}.` : '';
+  const line = [role, plan].filter(Boolean).join(' ');
+  return line || null;
+}
