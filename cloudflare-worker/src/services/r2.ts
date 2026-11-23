@@ -92,7 +92,7 @@ export async function getKycDocument(env: Env, fileKey: string): Promise<R2Objec
 export async function deleteKycDocument(env: Env, fileKey: string, reason: RecordErasureReason): Promise<void> {
   if (!env.FILES) return;
   if (!fileKey.startsWith('kyc/')) return;
-  await eraseRecordObjects(env.FILES, fileKey, reason);
+  await eraseRecordObjects(env.FILES, fileKey, reason, { db: env.DB });
 }
 
 // ---------------------------------------------------------------------------

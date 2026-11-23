@@ -181,7 +181,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   assert.equal(ventureRef('?project=7')?.id, 7, "the read's own `?project=` links pick the venture too");
   assert.equal(ventureRef('?project_id=7')?.id, 7);
   // Check each consumer rather than a total changed by every new component (D4485, D4487).
-  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'def\\.Overview', 'ValidateLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
     const start = route.search(new RegExp(`<${component}\\b`));
     const end = route.indexOf('search={q}', start);
     const attributes = route.slice(start, end);

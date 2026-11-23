@@ -640,7 +640,7 @@ research.delete('/documents/:uid', async (c) => {
   await deleteChunkedEntity(c.env, 'research_doc', row.id, row.chunk_count);
   if (c.env.FILES) {
     // D6651: the owner removing their document goes through the one record-erasure path.
-    try { await eraseRecordObjects(c.env.FILES, row.r2_key, 'owner_removed'); } catch (e) {
+    try { await eraseRecordObjects(c.env.FILES, row.r2_key, 'owner_removed', { db: c.env.DB }); } catch (e) {
       console.warn('[research] R2 delete failed:', (e as Error).message);
     }
   }

@@ -498,6 +498,10 @@ D686 (#1592): `integrations.ts` returns the signed OAuth destination `/build/con
 
 D753 (#1878): `catalogueEntry` builds each catalogue item for `/available` and for `GET /directory/:key`, the descriptive page read registered above `/:key`. The page fields come from `../integrations/connectorPages.ts` through the registry. `crunchbase.ts`'s `connect_path` and the onboarding checklist's `ef.stripe`, `ef.plaid` and `inv.crm` steps link to `connectorPagePath(key)`, the connector's own page (#1946).
 
+D6713: the compliance wizard's pack read and the legal entity pack door use
+`formationPacks.ts`/`formationCatalogue.ts`. A catalogue form with no pack gives
+an empty list; an unsourced rule never creates a dated compliance event.
+
 D691 (#1696): Grow obligation routes use the production `compliance_events`
 columns (`due_date`, `completion_status`), translate the existing API keys in
 TypeScript, require a due date and record manual provenance and the entity’s

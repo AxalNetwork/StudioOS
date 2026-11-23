@@ -1,0 +1,43 @@
+# The branch keeper (#6474): merges main into a conflicted PR that is quiet,
+# eligible and within its attempts and budget, and asks the conflict resolver
+# when the merge leaves a real conflict.
+name: keeper
+kind: platform
+owner: S21
+identity: studioos-landing-bot  # the landing-bot App token, minted in the landing-bot environment
+capabilities:
+  - code.read
+  - code.commit      # a normal merge commit with `Landing-Bot-Kind: keeper` (permission-contents: write)
+  - issue.read
+  - issue.write      # the `conflict` label and the sticky comment (permission-issues: write)
+  - ci.read          # breakers and CI evidence (actions: read)
+  - ci.dispatch      # dispatches landing-bot-conflict.yml once per conflicted PR (actions: write)
+models:
+  route: none
+  allowed: []
+resources:
+  cpu: none
+  memory: none
+limits:
+  runtime: 30         # minutes: the keep job's timeout-minutes
+  tokens: 0
+  parallel_tasks: 1   # concurrency group studioos-landing-bot-keeper
+  child_agents: none  # one conflict-resolver dispatch per conflicted PR, bounded by LANDING_BOT_KEEPER_PER_SWEEP (a repository variable)
+  prs: 0              # opens none; pushes to existing PR branches
+network:
+  internet: true
+  egress:
+    - api.github.com
+    - github.com
+allowed_paths:
+  - '**'             # main's changes merged into a PR branch; pathGuard() hands back a conflict in a protected or T2 file
+runner_pool: trusted
+approval:
+  external_actions: not-required
+escalation: S21
+status: paused       # LANDING_BOT_ENABLED is unset: every run on 2026-11-21 was skipped
+sources:
+  - .github/workflows/landing-bot-keeper.yml
+  - scripts/landing-bot/keeper.mjs
+  - scripts/landing-bot/keeper-plan.mjs
+  - scripts/landing-bot/keeper-merge.mjs

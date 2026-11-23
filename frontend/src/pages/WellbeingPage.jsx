@@ -14,6 +14,7 @@ import {
 import { BTN, FIELD, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 import { PeriodCards, PrivateLine, ReflectionView, useTodayReflections } from './wellbeing/Reflections';
 import { SuggestionsSection } from './wellbeing/WellnessSuggestions';
+import { MyGroupSeats } from './wellbeing/GroupSessions';
 import { TAB_WORDS, cadenceOfParam } from './wellbeing/reflectionsModel';
 
 /**
@@ -540,6 +541,7 @@ export default function WellbeingPage() {
   const [params] = useSearchParams();
   const cadence = cadenceOfParam(params.get('period'));
   const reflections = useTodayReflections();
+  const [seatsVersion, setSeatsVersion] = useState(0);
   const [bookings, setBookings] = useState({ status: 'loading', rows: [] });
   const [tab, setTab] = useState('upcoming');
   const [rated, setRated] = useState({});
@@ -644,12 +646,14 @@ export default function WellbeingPage() {
             {showAggregate && <AdminAggregate />}
             <PeriodCards read={reflections.read} timezone={reflections.timezone} onRetry={reflections.reload} />
             {/* D7119 part 2 (WLM-05): suggestions from the member's own choices only. */}
-            <SuggestionsSection />
+            <SuggestionsSection onSeats={() => setSeatsVersion((v) => v + 1)} />
           </>
         )}
         {cadence ? null : (
         <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
           <div className="space-y-4">
+            {/* D7120 part 2: the member's own group seats, beside their 1:1 bookings. */}
+            <MyGroupSeats version={seatsVersion} />
             <MyBookingsCard
               status={bookings.status}
               bookings={bookings.rows}
