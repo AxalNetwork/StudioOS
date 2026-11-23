@@ -10,6 +10,7 @@
 | `ci_capacity.test.ts` | D7887: deterministic capacity, real SQLite recovery, timeout/fallback, provenance and aggregate tests. |
 | `ci_capacity_auth_policy_8011.test.ts` | D8011: fake clock/network/crypto boundaries test bounded key refresh, durable reservations and verified receipt progress. |
 | `ci_capacity_retention_8339.test.ts` | D8339: guarded age and count retention of the request store against real SQLite and the real publication outbox; nothing owed is removed and every identity fence survives. |
+| `ci_capacity_compact_failed_8378.test.ts` | D8378: the bounded, indexed read of failed compact records against real SQLite and the real store; order, cursor, clamp, query plan and no writes. |
 | `ci_capacity_compact_8348.test.ts` | D8348: handoff of a passing request to a compact record against real SQLite and the real coordinator; atomicity, caps, sticky failure, cursored expiry and paging. |
 
 Wrangler local-runtime smoke checks and packaging are recorded in D5618.

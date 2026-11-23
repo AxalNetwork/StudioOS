@@ -45,6 +45,13 @@ export interface CapacityCompactStore {
   /** Sticky negative truth. True when the record holds a failure after the call. */
   compactFailure(receipt: ExecutionReceipt, jobId: number): boolean;
 }
+/** D8378: an optional port beside CapacityCompactStore, for a publisher that corrects failed records first.
+ * A read: it changes no record, cursor or expiry, and what it returns is not permission to publish. */
+export interface CapacityCompactFailedStore {
+  /** Records that hold a failure, however it was recorded. Identity order, strictly after `after`.
+   * At most CAPACITY_COMPACT_PAGE whatever `limit` asks. */
+  compactFailedPage(after: string, limit: number): CompactView[];
+}
 
 const positive = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
 const isMode = (mode: unknown): mode is CompactMode => mode === 'pilot' || mode === 'full-suite';
@@ -142,6 +149,8 @@ export class CapacityCompactTable {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_compact (
       id TEXT PRIMARY KEY, completed_at INTEGER NOT NULL, failed INTEGER NOT NULL DEFAULT 0, failure TEXT, state TEXT NOT NULL)`);
     storage.sql.exec('CREATE INDEX IF NOT EXISTS ci_capacity_compact_expiry ON ci_capacity_compact(completed_at, id)');
+    // D8378: only failed records are indexed, so finding them costs what they number, not what the table holds.
+    storage.sql.exec('CREATE INDEX IF NOT EXISTS ci_capacity_compact_failed ON ci_capacity_compact(id) WHERE failed = 1');
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_compact_cursor (
       name TEXT PRIMARY KEY CHECK (name = 'expiry'), completed_at INTEGER NOT NULL, id TEXT NOT NULL)`);
   }
@@ -159,6 +168,12 @@ export class CapacityCompactTable {
     if (typeof after !== 'string' || !positive(limit)) throw new Error('capacity_compact_page');
     return this.storage.sql.exec<Row>(`SELECT id, completed_at, failed, failure, state FROM ci_capacity_compact
       WHERE id > ? ORDER BY id LIMIT ?`, after, Math.min(limit, CAPACITY_COMPACT_PAGE)).toArray().map(view);
+  }
+  /** D8378: the same page rule over failed records only. `failed = 1` is written out so the partial index applies. */
+  failedPage(after: string, limit: number): CompactView[] {
+    if (typeof after !== 'string' || !positive(limit)) throw new Error('capacity_compact_page');
+    return this.storage.sql.exec<Row>(`SELECT id, completed_at, failed, failure, state FROM ci_capacity_compact
+      WHERE failed = 1 AND id > ? ORDER BY id LIMIT ?`, after, Math.min(limit, CAPACITY_COMPACT_PAGE)).toArray().map(view);
   }
   /** A plain insert: an existing identity is a conflict the caller must have refused, never an overwrite. */
   insert(record: CompactRecord): void {
