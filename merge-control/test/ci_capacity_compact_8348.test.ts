@@ -301,6 +301,46 @@ test('D8348 the handoff is all or nothing, and an identity already compacted is 
   assert.equal(JSON.stringify(f.store.compact(uuid(3))), kept, 'the existing record and its failure are untouched');
 });
 
+test('D8348 an identity held both whole and compact loses neither side on any removal path', async t => {
+  const f = fixture(t);
+  // 2: a published pass, also compact, with a verified failure recorded on the compact side.
+  // 3: a delivered failure, also compact. 4: an unsettled request, also compact. 5: an ordinary published pass.
+  await f.settled(2, 'success', START + 2); const two = await f.place(2, START + 2); f.sent(2, 'success');
+  assert.equal(f.store.compactFailure(compactReceipt(two, 'worker-1-of-6', 1)!, 77), true);
+  await f.settled(3, 'failure', START + 3); await f.place(3, START + 3); f.sent(3, 'failure');
+  await f.settled(4, 'success', START + 4, r => { r.completedAt = null; r.shards[0].attempts[0].phase = 'running'; }); await f.place(4, START + 4); f.sent(4, 'success');
+  await f.settled(5, 'success', START + 5); f.sent(5, 'success');
+  for (let n = 6; n <= CAPACITY_REQUEST_LIMIT + 1; n++) await f.settled(n, 'success', START + n);   // unpublished: nothing else may leave
+  const both = () => [2, 3, 4].map(n => [f.store.get(uuid(n)) !== null, f.store.compact(uuid(n)) !== null]);
+  const whole = [[true, true], [true, true], [true, true]];
+
+  // At the cap, inside seven days: the final request 3 is not deleted and request 2 is not handed off again.
+  f.advance(LEASES_OVER);
+  const c = f.capacity();
+  await c.submit(input(2001));
+  assert.deepEqual(both(), whole); assert.equal(f.store.compact(uuid(5)) !== null, true, 'the ordinary pass is the one handed off');
+  await assert.rejects(c.submit(input(2002)), /capacity_storage_bound/);
+  assert.deepEqual(both(), whole);
+
+  // Past seven days: age removes neither the full side nor the compact side, across a restart.
+  f.advance(CAPACITY_RETENTION_MS);
+  for (let i = 0; i < 3; i++) f.sweep();
+  f.sweep(f.open());
+  assert.deepEqual(both(), whole);
+  assert.equal(f.store.compact(uuid(5)), null, 'a record with no full twin still expires');
+  assert.deepEqual([f.store.compact(uuid(2))!.failed, f.store.compact(uuid(2))!.failure!.jobId], [true, 77], 'the verified failure is still there');
+  assert.equal(f.store.compact(uuid(3))!.failed, false);
+  // The store without a guard, which removes by age alone, keeps them as well; so does one without a consumer.
+  new SqlCapacityStore(f.storage).prune(f.state.now - CAPACITY_RETENTION_MS);
+  assert.deepEqual(both(), whole);
+  assert.equal(f.store.get(uuid(6)), null, 'the same pass removes an ordinary aged request');
+  assert.equal(f.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM ci_capacity_index WHERE id IN (?, ?, ?)', uuid(2), uuid(3), uuid(4)).toArray()[0].n, 3, 'and their index rows, before any reopen could rebuild them');
+  new SqlCapacityStore(f.storage, f.guard).prune(f.state.now - CAPACITY_RETENTION_MS);
+  assert.deepEqual(both(), whole);
+  // Both sides answering is the signal; nothing here resolves it.
+  assert.equal(f.store.count(), 4); assert.equal(f.store.compactCount(), 3);
+});
+
 test('D8348 at 32,768 compact records a pass stays whole and the store refuses', async t => {
   const f = fixture(t);
   for (let n = 2; n <= CAPACITY_REQUEST_LIMIT + 1; n++) { await f.settled(n, 'success', START + n); f.sent(n, 'success'); }

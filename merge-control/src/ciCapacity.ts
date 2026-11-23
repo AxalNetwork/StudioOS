@@ -92,9 +92,12 @@ export class SqlCapacityStore implements CapacityStore, CapacityCompactStore {
       // Parent, request and child tombstones survive receipt retention: no identity can be reused.
       if (this.consumer) this.expireCompact(before, this.consumer);
       if (this.evictable) { this.retain(before, this.evictable); return; }
+      // D8348: an identity held both whole and compact is inconsistent state. Neither side is ever removed.
       this.storage.sql.exec(`DELETE FROM ci_capacity_requests WHERE id IN
-        (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)`, before);
-      this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?', before);
+        (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)
+        AND id NOT IN (SELECT id FROM ci_capacity_compact)`, before);
+      this.storage.sql.exec(`DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?
+        AND id NOT IN (SELECT id FROM ci_capacity_compact)`, before);
     });
   }
   /** D8339: with a guard, age and count removal share one test. One pass over settled history, oldest
@@ -116,6 +119,8 @@ export class SqlCapacityStore implements CapacityStore, CapacityCompactStore {
       if (!aged && count < CAPACITY_REQUEST_LIMIT) break;
       const request = this.get(id);
       if (!request || !(leaseEnd(request) <= now)) continue;
+      // D8348: an identity held both whole and compact is inconsistent state. Neither side is ever removed.
+      if (this.compacts.has(id)) continue;
       const s = request.submission;
       let evidence: CapacityEvidence = 'owed';
       try { evidence = guard(request, this.newerParent(s.parentRunId, s.parentAttempt)); }
@@ -131,14 +136,14 @@ export class SqlCapacityStore implements CapacityStore, CapacityCompactStore {
   }
   /** D8348: writes the compact record of a passing request. The caller deletes the full request in the same
    * transaction, so a restart finds one or the other. False leaves the request whole: no consumer, an unknown
-   * mode, a full compact table, an identity already compacted, or a request the projection cannot carry. */
+   * mode, a full compact table, or a request the projection cannot carry. */
   private handoff(request: CapacityRequest, room: { left: number | null }): boolean {
     if (!this.consumer) return false;
     let mode: unknown = null;
     try { mode = this.consumer.mode(); } catch { return false; }
     const s = request.submission;
     room.left ??= CAPACITY_COMPACT_LIMIT - this.compacts.count();
-    if (room.left <= 0 || this.compacts.has(s.requestId)) return false;
+    if (room.left <= 0) return false; // The pass has already refused an identity that is compact as well.
     const record = compactProject(request, mode, this.newerParent(s.parentRunId, s.parentAttempt));
     if (!record) return false;
     this.compacts.insert(record);
@@ -146,8 +151,11 @@ export class SqlCapacityStore implements CapacityStore, CapacityCompactStore {
     return true;
   }
   private expireCompact(before: number, consumer: CapacityCompactConsumer): void {
-    this.compacts.expire(before, record => consumer.evidence(record,
-      this.newerParent(record.submission.parentRunId, record.submission.parentAttempt)));
+    this.compacts.expire(before, record => {
+      // The same rule from the other side: while a full request shares the identity, the record stays.
+      if (this.storage.sql.exec('SELECT id FROM ci_capacity_requests WHERE id = ?', record.submission.requestId).toArray().length) return 'owed';
+      return consumer.evidence(record, this.newerParent(record.submission.parentRunId, record.submission.parentAttempt));
+    });
   }
   compactCount(): number { return this.compacts.count(); }
   compact(id: string): CompactView | null { return this.compacts.get(id); }
