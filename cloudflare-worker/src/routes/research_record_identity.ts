@@ -1,6 +1,6 @@
 /**
  * D7825 (#7825): record identity of a Research company or fund record (names, native identifiers, reviewed domains),
- * mounted at /api/research/record-identity ahead of the research router. Service: `services/researchRecordIdentity.ts`.
+ * mounted at /api/research/record-identity (no `before`: research.ts has no catch-all or middleware under that path). Service: `services/researchRecordIdentity.ts`.
  *
  *   GET    /:kind/:uid                       a member's read; answers as that record's own profile route answers the
  *                                            account (the Companies rule and served rows; the fund catalogue's rule
@@ -20,7 +20,6 @@ import { requireAdmin, requireAuth } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { refuseCompanies } from '../services/researchCompaniesAccess';
 import { mapError } from './_t13t14t15_helpers';
-import research from './research';
 import {
   IdentityInputError, addIdentifier, addName, correctIdentifier, correctName, identityOf, parseKind, parseUid,
   removeEntry, resolveRecord, reviewDomain,
@@ -75,4 +74,4 @@ r.delete('/:kind/:uid/identifiers/:id', audited('research_record_identifier_remo
 
 export default r;
 
-export const mount: RouteMount = { path: '/api/research/record-identity', router: r, before: [research] };
+export const mount: RouteMount = { path: '/api/research/record-identity', router: r };
