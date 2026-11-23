@@ -15,7 +15,8 @@ import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
 import { reportError } from '../../lib/log';
-import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
+import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine, guideBreadcrumbLd } from './helpCenter';
+import { injectJsonLd } from '../../lib/seo';
 import { guidePlacement, helpAreas } from './guidePlacement';
 import { helpGuideMeta } from './helpMeta';
 import { usePageMeta } from '../../lib/seo';
@@ -1226,6 +1227,13 @@ export default function DocsLayout() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [route, directory]);
+
+  // D7004 (#7004): the guide's BreadcrumbList, the same trail its page draws; removed when the page leaves.
+  const crumbLd = useMemo(
+    () => (route ? guideBreadcrumbLd(visibleSections, route.area, route.guide) : null),
+    [route?.area, route?.guide, visibleSections],
+  );
+  useEffect(() => (crumbLd ? injectJsonLd('help-guide-breadcrumb', crumbLd) : undefined), [crumbLd]);
 
   // A guide opens at its top, not at the scroll position the last page left.
   useEffect(() => {

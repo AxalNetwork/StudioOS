@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 
 import { OG_ROUTES, ogTagsFor, staticBodyFor } from '../frontend/src/lib/ogRegistry.js';
 import { DOOR_LINKS } from '../frontend/src/lib/siteLinks.js';
+import { structuredDataFor, withStructuredData } from '../frontend/src/lib/structuredData.js';
 import { programOgRoutes } from './lib/programCatalog.mjs';
 // D6996 (#6996): each public Help Center guide's own page, from the guide index.
 import { helpOgRoutes } from './lib/helpGuides.mjs';
@@ -163,6 +164,8 @@ function renderRoute(shell, pathname, overrides = {}) {
   // D6995: the markers stay, so re-running replaces the block again and the output converges.
   if (!STATIC_BODY.test(html)) throw new Error('Shell HTML has no static-body markers — cannot write the page body.');
   html = html.replace(STATIC_BODY, (_, begin, end) => `${begin}\n    ${staticBodyBlock(pathname, overrides)}\n    ${end}`);
+  // D7004 (#7004): the route's JSON-LD, from recorded facts only, in its own `ld:managed` block.
+  html = withStructuredData(html, structuredDataFor(pathname));
   return { html, tags };
 }
 
