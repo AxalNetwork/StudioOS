@@ -398,6 +398,9 @@ catalogue version only in the fixture.
 | `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
 | `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
 
+`research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
 `research_company_read_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
 
 `research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
@@ -407,3 +410,5 @@ catalogue version only in the fixture.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+
+`research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.

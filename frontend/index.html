@@ -274,13 +274,17 @@
 <body class="bg-white text-gray-900">
   <div id="root">
     <!-- D1379: what a visitor (or Google's OAuth reviewer) reads before the app starts, or without JavaScript:
-         the app's name, what it does, and the public policy pages. The app replaces it once it boots. -->
+         the app's name, what it does, and the public policy pages. The app replaces it once it boots.
+         D6995: scripts/prerender-og.mjs writes each public route's own heading, offer and links between the
+         two static-body markers (from lib/ogRegistry.js); this block is what a route without its own file shows. -->
+    <!-- BEGIN static-body -->
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:calc(100vh - 44px);padding:0 16px;font-family:sans-serif;text-align:center;color:#6b7280;">
       <h1 style="margin:0;font-size:20px;font-weight:600;color:#111827;">Axal VC</h1>
       <p style="margin:0;max-width:34rem;font-size:15px;line-height:1.5;">A venture studio platform. Founders validate an idea with customer interviews, form the company and raise, with partners and investors in one network.</p>
       <p style="margin:0;font-size:13px;"><a href="/privacy" style="color:#6b7280;">Privacy policy</a> · <a href="/terms" style="color:#6b7280;">Terms of service</a></p>
       <p style="margin:0;font-size:14px;">Loading…</p>
     </div>
+    <!-- END static-body -->
   </div>
   <script data-cfasync="false" type="module" src="/src/main.jsx"></script>
 </body>

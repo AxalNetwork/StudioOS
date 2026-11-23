@@ -13,6 +13,11 @@
  * ever put in them. A citation's source is available, removed (only the
  * passage recorded with it remains) or not recorded (an old Ask citation that
  * never named its document).
+ *
+ * D7817 (#7817): a citation of a source in an attached analysis copy is
+ * attached, or attachment removed once the copy is detached. Either way the
+ * copy recorded the source's link, title and retrieval date, so it is never
+ * called "Source not recorded".
  */
 import { NOT_RECORDED, answerabilityOf, indexStateOf } from './researchStates.js';
 
@@ -38,6 +43,9 @@ export const CITATION_AVAILABILITY = {
   available: { label: 'Available', tone: 'ok', glyph: '✓' },
   removed: { label: 'Source removed', tone: 'neutral', glyph: '?' },
   not_recorded: { label: 'Source not recorded', tone: 'neutral', glyph: '?' },
+  // D7817: a source of an attached analysis copy.
+  attached: { label: 'From an attached analysis', tone: 'ok', glyph: '✓' },
+  attachment_removed: { label: 'Attachment removed', tone: 'neutral', glyph: '?' },
 };
 export const availabilityOf = (c) => CITATION_AVAILABILITY[c?.availability] || { label: NOT_RECORDED, tone: 'neutral', glyph: '?' };
 
@@ -136,9 +144,10 @@ export function findingsBadge(read) {
 export function citationPanel(c) {
   const avail = availabilityOf(c);
   const live = c?.availability === 'available';
+  const fromAttachment = c?.kind === 'analysis_source';
   return {
     n: c?.n ?? null,
-    title: c?.title || 'Untitled document',
+    title: c?.title || (fromAttachment ? c?.url : null) || 'Untitled document',
     availability: avail,
     year: live ? (c.source_year ?? null) : null,
     index: live ? indexStateOf({ index_state: c.index_state }) : null,
@@ -147,7 +156,12 @@ export function citationPanel(c) {
     passage: c?.passage || null,
     inEvidence: Boolean(c?.in_evidence),
     openHref: live && c.document_uid ? `/research/library#document-${encodeURIComponent(c.document_uid)}` : null,
-    note: c?.availability === 'removed'
+    // D7817: an attached source's frozen link and retrieval date.
+    url: fromAttachment ? (c.url || null) : null,
+    retrievedAt: fromAttachment ? (c.retrieved_at || null) : null,
+    note: c?.availability === 'attachment_removed'
+      ? 'The analysis copy this source came from was detached from the project. The link, title and retrieval date recorded with this finding remain.'
+      : c?.availability === 'removed'
       ? 'This document is no longer in your Library, so only the passage recorded with this finding remains.'
       : c?.availability === 'not_recorded'
         ? 'This citation was recorded before Ask kept the document it came from, so its source cannot be opened.'
