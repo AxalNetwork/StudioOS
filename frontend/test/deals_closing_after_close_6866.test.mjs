@@ -1,6 +1,6 @@
 /**
  * D6866 part 2 (#6866, canvas D6158 DX23 A and DX27 A) — the after-close
- * view of the closing workspace, and My vote on a phone in Commit.
+ * view of the closing workspace.
  *
  *   · after close, four figures: lines received (withdrawn named, not
  *     counted), the total recorded in transfers, executed paper and the
@@ -8,9 +8,8 @@
  *     venture's desk, filtered by the duty's own closing_line_uid); a read
  *     that failed says Unavailable, never 0;
  *   · the founder's cap-table decision as a word and a glyph with its date,
- *     and "date not recorded" when the read carries none;
- *   · DX27 A: the caller's own vote from the commit-room read, and a sticky
- *     phone action that opens the decision record.
+ *     and "date not recorded" when the read carries none.
+ * DX27 A on a phone (My vote and Vote) is D6151 part 3's `CommitPhone.jsx`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,12 +22,10 @@ import {
   ok, LOADING, UNREADABLE, afterCloseFigures, captableCard, transferRows, paperRows,
 } from '../src/pages/investor/deals/closingWorkspaceModel.js';
 import { AfterCloseFigures, CaptableCard } from '../src/pages/investor/deals/ClosingWorkspace.jsx';
-import { myVoteOf, PhoneVoteBar } from '../src/pages/investor/deals/CommitZone.jsx';
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const WS = codeOnly(readFileSync('frontend/src/pages/investor/deals/ClosingWorkspace.jsx', 'utf8'));
-const ZONE = codeOnly(readFileSync('frontend/src/pages/investor/deals/CommitZone.jsx', 'utf8'));
 
 const CLOSED = {
   status: 'closed', project_id: 7, currency: 'USD',
@@ -121,31 +118,4 @@ test('the workspace asks the reporting desk only as an Admin, only after close, 
   assert.match(closed, /<AfterCloseFigures/);
   assert.match(closed, /<CaptableCard card=\{captableCard\(closingRec\)\}/);
   assert.match(closed, /<PortfolioTable/);
-});
-
-test('DX27 A: My vote comes from the commit-room read, and the phone action opens the decision record', () => {
-  const me = { id: 2 };
-  const dec = (over = {}) => ({ uid: 'd 1', status: 'voting', votes: [], roster: { available: false, members: [] }, ...over });
-  assert.equal(myVoteOf(dec({ status: 'decided' }), me), null);
-  assert.equal(myVoteOf(null, me), null);
-  assert.equal(myVoteOf(dec(), null), null);
-  assert.deepEqual(myVoteOf(dec(), me), { voted: false, sentence: 'You have not voted yet.', action: 'Vote', href: '/deals/commit/d%201' });
-  const voted = myVoteOf(dec({ votes: [
-    { user_id: 2, vote: 'yes', created_at: '2026-11-07 10:00:00' },
-    { user_id: 2, vote: 'abstain', created_at: '2026-11-08 10:00:00' },
-    { user_id: 3, vote: 'no', created_at: '2026-11-09 10:00:00' },
-  ] }), me);
-  assert.equal(voted.sentence, 'You voted Abstain.', 'the latest of the caller’s own votes');
-  assert.equal(voted.action, 'Open my vote');
-  assert.match(myVoteOf(dec({ votes: [{ user_id: 2, vote: 'recused' }] }), me).sentence, /^You recused: conflict declared, not counted in the tally\.$/);
-  const off = myVoteOf(dec({ roster: { available: true, members: [{ user_id: 9 }] } }), me);
-  assert.equal(off.sentence, 'You are not on this decision’s voting roster.');
-  assert.equal(off.action, 'Open the decision');
-  assert.equal(myVoteOf(dec({ roster: { available: true, members: [{ user_id: 2 }] } }), me).action, 'Vote');
-  const bar = html(h(PhoneVoteBar, { mine: myVoteOf(dec(), me) }));
-  assert.match(bar, /class="sticky bottom-0[^"]*md:hidden"/);
-  assert.match(bar, /href="\/deals\/commit\/d%201"[^>]*min-h-\[48px\]|min-h-\[48px\][^>]*href="\/deals\/commit\/d%201"/);
-  assert.match(bar, />Vote<\/a>/);
-  assert.equal(html(h(PhoneVoteBar, { mine: null })), '');
-  assert.match(ZONE, /<PhoneVoteBar mine=\{myVoteOf\(current, user\)\} \/>/);
 });

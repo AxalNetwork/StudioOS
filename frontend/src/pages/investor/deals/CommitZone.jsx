@@ -362,43 +362,6 @@ export function DecisionCard({ decision }) {
   );
 }
 
-/**
- * DX27 A (D6158, D6866 part 2): the caller's own vote on the open decision,
- * from the commit-room read's votes and roster. Null when there is no
- * decision, it is decided, or no caller. `onRoster` is null when the
- * decision has no roster (who may vote is not recorded), so the caller is
- * not turned away on a guess; the decision record answers.
- */
-export function myVoteOf(decision, me) {
-  if (!decision || decision.status === 'decided' || me?.id == null) return null;
-  const mine = (decision.votes ?? []).filter((v) => Number(v.user_id) === Number(me.id))
-    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
-  const roster = decision.roster;
-  const onRoster = roster?.available ? (roster.members || []).some((m) => Number(m.user_id) === Number(me.id)) : null;
-  const href = `/deals/commit/${encodeURIComponent(decision.uid)}`;
-  if (mine) {
-    const sentence = mine.vote === 'recused' ? 'You recused: conflict declared, not counted in the tally.' : `You voted ${(VOTE_WORDS[mine.vote]?.label || mine.vote)}.`;
-    return { voted: true, sentence, action: 'Open my vote', href };
-  }
-  if (onRoster === false) return { voted: false, sentence: 'You are not on this decision’s voting roster.', action: 'Open the decision', href };
-  return { voted: false, sentence: 'You have not voted yet.', action: 'Vote', href };
-}
-
-/**
- * DX27 A on a phone: My vote, and the one action kept in reach at the foot
- * of the screen. Vote opens the decision record, where the vote is cast
- * (the vote sheet is #6142's). Below `md` only; 48px target.
- */
-export function PhoneVoteBar({ mine }) {
-  if (!mine) return null;
-  return (
-    <div className="sticky bottom-0 z-10 -mx-1 space-y-2 border-t border-axal-hairline bg-white/95 px-1 pb-2 pt-2 dark:border-gray-800 dark:bg-gray-950/95 md:hidden" data-testid="commit-phone-vote">
-      <p className="text-[12.5px] text-axal-ink dark:text-gray-200"><span className="mr-1 text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">My vote</span>{mine.sentence}</p>
-      <Link to={mine.href} className="flex min-h-[48px] w-full items-center justify-center rounded-[8px] bg-axal-violet-deep px-4 text-[14px] font-bold text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500" data-testid="commit-phone-vote-action">{mine.action}</Link>
-    </div>
-  );
-}
-
 const CONDITION_WORDS = { open: 'Open', met: 'Met', waived: 'Waived' };
 
 /**
@@ -1070,7 +1033,6 @@ export default function InvestorCommitZone() {
                   </div>
                 </div>
                 <HowThisWorks />
-                <PhoneVoteBar mine={myVoteOf(current, user)} />
               </>
             ) : (
               <NoOpenDecision decided={decided} onShowAll={() => setView('decisions')} onOpen={() => setOpening(true)} />
