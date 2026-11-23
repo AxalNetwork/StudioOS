@@ -8,7 +8,7 @@ import {
   NDA_FILTERS, NDA_LINE, NO_LINKS, NO_VIEWS, UNREADABLE, ZERO_DAY_NOTE,
   boardState, dailyBars, dropRows, dropTitle, funnelRows, overviewFigures, periodWords, posthogLine,
 } from './shareBoardModel';
-import FigureTile from './AnalyticsFigure.jsx';
+import FigureTile, { FigureBody } from './AnalyticsFigure.jsx';
 import { NOT_RECORDED } from './pitchStudioModel';
 import ShareFeedback from './ShareFeedback';
 
@@ -27,6 +27,10 @@ import ShareFeedback from './ShareFeedback';
  * keeps the four kinds of nothing apart (`AnalyticsFigure.jsx`); a day with no
  * views draws a grey line, a measured zero. The canvas's Reactions & feedback
  * tile is not drawn: it waits for proposal 9 (ShareFeedback below is D6064's).
+ *
+ * D8250 (#8250): under Visits, how many investor links were opened; under the
+ * most-read card, its seconds per link on average. Both count share links, the
+ * only identity a link has, and read Not recorded, never 0, with no data.
  */
 
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -129,12 +133,29 @@ export function OverviewTiles({ data }) {
     <section className="flex flex-col gap-1.5" data-testid="share-board-tiles" aria-label="Investor analytics">
       {period ? <span className={`${MUTED} text-right`} data-testid="share-board-period">{period}</span> : null}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <FigureTile label="Visits" fig={f.visits} testId="share-board-visits" />
-        <FigureTile label="Most-read card" fig={f.mostRead} testId="share-board-most-read" />
+        <FigureTile label="Visits">
+          <FigureBody fig={f.visits} testId="share-board-visits" />
+          <ReaderLine fig={f.investors} testId="share-board-investors" />
+        </FigureTile>
+        <FigureTile label="Most-read card">
+          <FigureBody fig={f.mostRead} testId="share-board-most-read" />
+          <ReaderLine fig={f.perReader} testId="share-board-per-reader" />
+        </FigureTile>
         <FigureTile label="Reached the ask" fig={f.ask} testId="share-board-ask" />
       </div>
     </section>
   );
+}
+
+/**
+ * D8250 (#8250): a reader line under a tile's figure, counted by link. A value
+ * is one quiet line; Not recorded keeps its chip and why. An unreadable read
+ * draws nothing here: the tile's own figure already says Unavailable.
+ */
+export function ReaderLine({ fig, testId }) {
+  if (!fig || fig.kind === 'unreadable') return null;
+  if (fig.kind === 'value') return <em className="text-[11.5px] not-italic text-axal-muted dark:text-gray-400" data-figure-state="value" data-testid={testId}>{fig.value}</em>;
+  return <FigureBody fig={fig} testId={testId} />;
 }
 
 export function ViewsPerDay({ days, empty }) {
