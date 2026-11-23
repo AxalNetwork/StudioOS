@@ -17,6 +17,7 @@
 | `ciCapacityAuth.ts` | D7973: bounded signed GitHub OIDC identity and body reads. |
 | `ciCapacityGithub.ts` | D7973: bounded App-backed provenance, inventory, dispatch, observation and cancellation ports. |
 | `ciCapacityTransport.ts` | D7973: authenticated exact-plan submission and owned receipt retrieval. |
+| `ciCapacityCorrections.ts` | D7909-p8: durable negative-publication due set, bounded legacy discovery and fail-closed backfill readiness. |
 | `ciCapacityOutbox.ts` | D7973: durable publication intents and distinct pilot/full-suite authority. |
 | `ciCapacityRuntime.ts` | D7973: unbound inactive capacity object, independent switches and alarm recovery. |
 | `ciCapacityHistory.ts` | D7909-p8: bounded cursored collection retains full, compact and pending-negative dependent evidence. |

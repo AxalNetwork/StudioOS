@@ -223,10 +223,11 @@ export class CiCapacity {
   private readonly policy: CapacityPolicy;
   private readonly now: () => number;
   private readonly pendingFailure: (id:string)=>boolean;
-  constructor(store: CapacityStore, ports: CapacityPorts, repository: string, policy: CapacityPolicy, now: () => number = Date.now, pendingFailure: (id:string)=>boolean = ()=>false) {
+  private readonly correctionDue:(id:string)=>void;
+  constructor(store: CapacityStore, ports: CapacityPorts, repository: string, policy: CapacityPolicy, now: () => number = Date.now, pendingFailure: (id:string)=>boolean = ()=>false, correctionDue:(id:string)=>void = ()=>{}) {
     validateCapacityPolicy(policy);
     this.store = store; this.ports = ports; this.repository = repository;
-    this.policy = structuredClone(policy); this.now = now;this.pendingFailure=pendingFailure;
+    this.policy = structuredClone(policy); this.now = now;this.pendingFailure=pendingFailure;this.correctionDue=correctionDue;
   }
 
   private ordered<T>(fn: () => Promise<T>): Promise<T> {
@@ -366,13 +367,13 @@ export class CiCapacity {
       const compact=this.store as CapacityStore & Partial<CapacityCompactStore>;
       if(!request){
         if(compact.compactFailure?.(receipt,jobId)!==true)throw new Error('capacity_result_owner');
-        return;
+        this.correctionDue(receipt.requestId);return;
       }
       // A duplicate is inconsistent state; preserve negative truth on BOTH sides before acknowledgement.
       if(compact.compact?.(receipt.requestId)&&compact.compactFailure?.(receipt,jobId)!==true)throw new Error('capacity_result_owner');
       if(!applyObservation(request,{receipt,workflowPath:'.github/workflows/runner-executor.yml',workflowAttempt:1,jobId,
         runnerProfile:receipt.profile,status:'in_progress',conclusion:null,jobConclusion:null,testStep:'failure',startedAt:null,cleanupConfirmed:false},this.now()))throw new Error('capacity_result_owner');
-      this.store.save(request);
+      this.store.save(request);this.correctionDue(receipt.requestId);
     });
   }
 

@@ -3,6 +3,7 @@ import type { CapacityExecutionResult } from '../ciCapacityGithub.ts';
 import type { ExecutionReceipt } from './ciCapacityPolicy.ts';
 import { receiptMatches } from './ciCapacityPolicy.ts';
 import { pruneCapacityHistory } from '../ciCapacityHistory.ts';
+import { SqlCapacityCorrections } from '../ciCapacityCorrections.ts';
 export type ExecutionResultBody = Pick<CapacityExecutionResult,'testStep'|'executionOutcome'|'cleanupConfirmed'> & { exportComplete: boolean };
 export function executionResultBody(value: unknown): ExecutionResultBody {
   const row=value as ExecutionResultBody|null;
@@ -19,8 +20,9 @@ function storedResult(text:string):StoredResult{
 }
 export class SqlCapacityResults {
   private storage: Pick<DurableObjectStorage,'sql'|'transactionSync'>;
+  private corrections:SqlCapacityCorrections;
   constructor(storage: Pick<DurableObjectStorage,'sql'|'transactionSync'>){
-    this.storage=storage;
+    this.storage=storage;this.corrections=new SqlCapacityCorrections(storage);
     storage.sql.exec('CREATE TABLE IF NOT EXISTS capacity_execution_results (id TEXT PRIMARY KEY, request_id TEXT NOT NULL, state TEXT NOT NULL)');
     storage.sql.exec('CREATE INDEX IF NOT EXISTS capacity_execution_result_owner ON capacity_execution_results(request_id,id)');
     storage.sql.exec('CREATE TABLE IF NOT EXISTS capacity_failure_scan_cursor (id INTEGER PRIMARY KEY CHECK(id=1), last TEXT NOT NULL)');
@@ -49,7 +51,10 @@ export class SqlCapacityResults {
       this.storage.sql.exec('INSERT OR REPLACE INTO capacity_failure_scan_cursor(id,last) VALUES(1,?)',row.id);
       try{const value=storedResult(row.state);
         if(value.receipt.requestId!==row.request_id||this.id(value.receipt)!==row.id)throw new Error('capacity_result_state');
-        if(value.testStep==='failure'&&value.failureApplied!==true)this.storage.sql.exec('INSERT OR IGNORE INTO capacity_result_failures(id,request_id,state) VALUES(?,?,?)',row.id,row.request_id,row.state);
+        if(value.testStep==='failure'&&value.failureApplied!==true){
+          this.storage.sql.exec('INSERT OR IGNORE INTO capacity_result_failures(id,request_id,state) VALUES(?,?,?)',row.id,row.request_id,row.state);
+          this.corrections.enqueue(row.request_id);
+        }
       }catch{/* Retain unreadable evidence while the cursor lets other records progress. */}
     }
     if(rows.length<64)this.storage.sql.exec('DELETE FROM capacity_failure_scan_cursor WHERE id=1');
@@ -78,6 +83,7 @@ export class SqlCapacityResults {
       if(!row)throw new Error('capacity_result_state');const value=storedResult(row.state);
       if(value.testStep!=='failure')throw new Error('capacity_result_state');
       this.storage.sql.exec('UPDATE capacity_execution_results SET state=? WHERE id=?',JSON.stringify({...value,failureApplied:true}),this.id(receipt));
+      this.corrections.enqueue(receipt.requestId);
       this.storage.sql.exec('DELETE FROM capacity_result_failures WHERE id=?',this.id(receipt));
     });
   }
@@ -98,7 +104,10 @@ export class SqlCapacityResults {
       // Negative truth is sticky. Cleanup remains independently reported and cannot erase it.
       const record: StoredResult={receipt,jobId,...value,testStep:previous?.testStep==='failure'?'failure':value.testStep,receivedAt:now,observedAt:now,failureApplied:false};
       this.storage.sql.exec('INSERT INTO capacity_execution_results (id,request_id,state) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET state = excluded.state',id,receipt.requestId,JSON.stringify(record));
-      if(record.testStep==='failure')this.storage.sql.exec('INSERT INTO capacity_result_failures(id,request_id,state) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state',id,receipt.requestId,JSON.stringify(record));
+      if(record.testStep==='failure'){
+        this.storage.sql.exec('INSERT INTO capacity_result_failures(id,request_id,state) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state',id,receipt.requestId,JSON.stringify(record));
+        this.corrections.enqueue(receipt.requestId);
+      }
     });
   }
   read(receipt: ExecutionReceipt,jobId: number,now: number):CapacityExecutionResult|null {

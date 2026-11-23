@@ -59,7 +59,7 @@ function fixture(t: { after(fn: () => void): void; mock: { timers: { enable(o: o
     async inventory() { return null; }, async parent() { return true; }, async prerequisites() { return null; },
     async dispatch() { return 900_000; }, async discover() { return null; }, async observe() { return null; }, async cancel() { /* none */ },
   } as unknown as CapacityPorts;
-  const capacity = (over: SqlCapacityStore = store) => new CiCapacity(over, ports, repository, policy(), () => state.now,id=>results.pendingFailure(id));
+  const capacity = (over: SqlCapacityStore = store) => new CiCapacity(over, ports, repository, policy(), () => state.now,id=>results.pendingFailure(id),id=>new SqlCapacityCorrections(storage).enqueue(id));
   storage.sql.exec('CREATE TABLE IF NOT EXISTS capacity_publications (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   let template: CapacityRequest | null = null;
   /** A settled request built from one the coordinator really accepted. `fallback` shards carry a fenced first attempt. */
@@ -112,6 +112,7 @@ function fixture(t: { after(fn: () => void): void; mock: { timers: { enable(o: o
 
 
 import { pruneCapacityHistory } from '../src/ciCapacityHistory.ts';
+import { SqlCapacityCorrections } from '../src/ciCapacityCorrections.ts';
 import { SqlCapacityResults } from '../src/lib/ciCapacityResults.ts';
 import { CapacityTransport } from '../src/ciCapacityTransport.ts';
 import { GithubCapacityPorts } from '../src/ciCapacityGithub.ts';
@@ -244,11 +245,11 @@ test('D7909 failed publication retries across restart, and original mode is neve
  f.sweep();assert.equal(f.store.compact(uuid(2)),null);
 });
 
-function runtime(f:ReturnType<typeof fixture>){
+function runtime(f:ReturnType<typeof fixture>,enabled=false){
  const settings={...config,maxExternalWorkerShards:2,maxIncludedWorkerShards:0,publication:'pilot'};
- const env={REPOSITORY:repository,CAPACITY_ENABLED:'false',CAPACITY_PUBLICATION:'pilot',CAPACITY_CONFIG:JSON.stringify(settings),GITHUB_APP_ID:'23',GITHUB_INSTALLATION_ID:'1',GITHUB_APP_PRIVATE_KEY:keys.privateKey.export({type:'pkcs8',format:'pem'}).toString()};
+ const env={REPOSITORY:repository,CAPACITY_ENABLED:enabled?'true':'false',CAPACITY_PUBLICATION:'pilot',CAPACITY_CONFIG:JSON.stringify(settings),GITHUB_APP_ID:'23',GITHUB_INSTALLATION_ID:'1',GITHUB_APP_PRIVATE_KEY:keys.privateKey.export({type:'pkcs8',format:'pem'}).toString()};
  let deleted=0;const alarms:number[]=[];
- const storage={...f.storage,get:async()=>true,setAlarm:async(time:number)=>{alarms.push(time);},deleteAlarm:async()=>{deleted++;}};
+ const storage={...f.storage,get:async()=>!enabled,setAlarm:async(time:number)=>{alarms.push(time);},deleteAlarm:async()=>{deleted++;}};
  const control=new CapacityControl({storage} as unknown as DurableObjectState,env);
  return {control,env,settings,alarms,deleted:()=>deleted,store:(control as unknown as {store:SqlCapacityStore}).store};
 }
@@ -348,4 +349,83 @@ test('D7909 R2 unresolved duplicate status cannot expose the full row as success
  assert.equal(f.store.compact(uuid(2))!.failed,false);
  assert.deepEqual(f.capacity().status(uuid(2)),{status:'pending',reason:'capacity_history_conflict'});
  assert.notEqual(f.store.get(uuid(2)),null);assert.notEqual(f.store.compact(uuid(2)),null);
+});
+
+test('D7909 R1 a late full failure just behind history is corrected first without a new full-store port',async t=>{
+ const f=fixture(t),net=network();
+ for(let n=2;n<402;n++){await f.settled(n,'success',START+n);f.sent(n,'success');}
+ await f.capacity().submit(input(2001));await f.place(500,START+500);f.sent(500,'success');
+ const box=new CapacityOutbox(f.storage,net.api,config);
+ f.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)','pilot:history',uuid(200));
+ const late=f.store.get(uuid(200))!;late.shards[0].attempts[0].verifiedTestFailure=true;f.store.save(late);
+ let visited=0;await box.publish(f.store,id=>{visited++;return f.capacity().status(id);},'pilot');
+ assert.equal(net.calls[0].method,'PATCH');assert.ok(net.calls[0].path.endsWith('/100200'));
+ assert.equal(net.calls[0].body.conclusion,'failure');assert.ok(visited<=4);
+});
+
+test('D7909 R1 journaled compact negative bypasses identity cursors before application and survives restart',async t=>{
+ const f=fixture(t),net=network();
+ for(let n=2;n<402;n++){await f.place(n,START+n);f.sent(n,'success');}
+ const box=new CapacityOutbox(f.storage,net.api,config),queue=new SqlCapacityCorrections(f.storage);
+ f.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)','pilot:compact',uuid(200));
+ f.storage.sql.exec('INSERT OR REPLACE INTO capacity_correction_progress(name,value) VALUES(?,?)','failed-after',uuid(400));
+ const receipt=compactReceipt(f.store.compact(uuid(200))!,'worker-1-of-6',1)!;
+ f.results.put(receipt,77,bad,START);assert.equal(queue.pending(),true);assert.equal(f.store.compact(uuid(200))!.failed,false);
+ net.state.patchDown=true;await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.ok(net.calls[0].path.endsWith('/100200'));assert.equal(queue.pending(),true);
+ net.state.patchDown=false;net.calls.length=0;
+ await new CapacityOutbox(f.storage,net.api,config).publish(f.open(),id=>f.capacity().status(id),'pilot');
+ assert.ok(net.calls[0].path.endsWith('/100200'));assert.equal(net.calls[0].body.conclusion,'failure');assert.equal(queue.pending(),false);
+ await f.results.replayFailures((r,j)=>f.capacity().recordExecutionFailure(r,j));
+ assert.equal(queue.pending(),true,'application also recovers the durable notification');
+ net.calls.length=0;await new CapacityOutbox(f.storage,net.api,config).publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(net.calls.filter(c=>c.method==='PATCH'&&c.path.endsWith('/100200')).length,0,'already delivered failure is not republished');
+ assert.equal(queue.pending(),false);
+});
+
+test('D7909 R1 indexed legacy failures outrank positive compact history and corrected rows do not use slots again',async t=>{
+ const f=fixture(t),net=network();for(let n=2;n<402;n++){await f.place(n,START+n);f.sent(n,'success');}
+ const receipt=compactReceipt(f.store.compact(uuid(200))!,'worker-1-of-6',1)!;f.store.compactFailure(receipt,77);
+ const box=new CapacityOutbox(f.storage,net.api,config);
+ f.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)','pilot:compact',uuid(200));
+ await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.ok(net.calls[0].path.endsWith('/100200'));assert.equal(net.calls[0].body.conclusion,'failure');
+ assert.equal(f.store.compactFailedPage('',100).length,1,'sticky failed record remains in the indexed read');
+ net.calls.length=0;await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(net.calls.filter(c=>c.method==='PATCH').length,0);
+});
+
+test('D7909 R1 correction notification rolls back with the result and is not an alternative authority',async t=>{
+ const f=fixture(t),r=await f.place(2,START+2),receipt=compactReceipt(r,'worker-1-of-6',1)!;f.sent(2,'success');
+ const queue=new SqlCapacityCorrections(f.storage);f.state.breakOn='INSERT OR IGNORE INTO capacity_publication_corrections';
+ assert.throws(()=>f.results.put(receipt,77,bad,START),/storage failed/);f.state.breakOn=null;
+ assert.equal(f.results.read(receipt,77,START),null);assert.equal(f.results.pendingFailure(uuid(2)),false);assert.equal(queue.pending(),false);
+ queue.enqueue(uuid(2));const net=network();await new CapacityOutbox(f.storage,net.api,config).publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(net.calls.length,0,'a due hint alone cannot publish failure or success');assert.equal(queue.pending(),true);
+});
+
+test('D7909 R1 blocked corrections cannot starve the due cursor and a compact intent cannot be recreated',async t=>{
+ const f=fixture(t),queue=new SqlCapacityCorrections(f.storage),net=network();
+ for(let n=2;n<112;n++){await f.place(n,START+n);queue.enqueue(uuid(n));}
+ const r=await f.place(500,START+500);f.sent(500,'success');f.store.compactFailure(compactReceipt(r,'worker-1-of-6',1)!,77);queue.enqueue(uuid(500));
+ let reads=0;const original=f.storage.sql.exec;f.storage.sql.exec=((query:string,...args:any[])=>{if(query.includes('SELECT seq,request_id'))reads++;return original(query,...args);}) as typeof original;
+ const box=new CapacityOutbox(f.storage,net.api,config);await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(net.calls.length,0);assert.ok(reads<=2);reads=0;
+ await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.ok(net.calls[0].path.endsWith('/100500'));assert.ok(reads<=2);assert.equal(net.calls.some(c=>c.method==='POST'),false);
+});
+
+test('D7909 R1 cold legacy backfill is paged and enablement waits for completed correction publication',async t=>{
+ const f=fixture(t),queue=new SqlCapacityCorrections(f.storage),net=network();
+ for(let n=2;n<203;n++){const r=await f.place(n,START+n);f.store.compactFailure(compactReceipt(r,'worker-1-of-6',1)!,77);f.sent(n,n===202?'success':'failure');}
+ const run=runtime(f,true),enabled=()=> (run.control as unknown as {enabled():Promise<boolean>}).enabled();
+ assert.equal(await enabled(),false);
+ const box=new CapacityOutbox(f.storage,net.api,config);await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(queue.legacyReady(),false);assert.equal(await enabled(),false);
+ await box.publish(f.store,id=>f.capacity().status(id),'pilot');assert.equal(queue.legacyReady(),false);
+ net.state.patchDown=true;await box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(queue.legacyReady(),false,'scanned is not complete while the correction ACK is missing');
+ net.state.patchDown=false;await new CapacityOutbox(f.storage,net.api,config).publish(f.store,id=>f.capacity().status(id),'pilot');
+ assert.equal(queue.legacyReady(),true);assert.equal(await enabled(),true);
+ assert.ok(net.calls.some(c=>c.method==='PATCH'&&c.path.endsWith('/100202')&&c.body.conclusion==='failure'));
 });

@@ -14,6 +14,7 @@ import type { CapacityBudgetStore, CapacityBudgetWindow } from './lib/ciCapacity
 import { ownerAuthorized } from './webhook.ts';
 import type { Env } from './types.ts';
 import { SqlCapacityResults } from './lib/ciCapacityResults.ts';
+import { SqlCapacityCorrections } from './ciCapacityCorrections.ts';
 /** Default-off service contract. Checked-in configuration does not grant live access or activate work. */
 export type CapacityEnv = Pick<Env,'REPOSITORY'|'GITHUB_APP_ID'|'GITHUB_INSTALLATION_ID'|'GITHUB_APP_PRIVATE_KEY'> & {
   CAPACITY_OWNER_TOKEN?: string; CAPACITY_AUDIENCE?: string; CAPACITY_ENABLED?: string;
@@ -48,9 +49,11 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   private keys: CapacityIssuerKeys;
   private budget: CapacityRequestBudget;
   private results: SqlCapacityResults;
+  private corrections:SqlCapacityCorrections;
   constructor(ctx: DurableObjectState, env: CapacityEnv) {
     super(ctx,env);
     this.results = new SqlCapacityResults(ctx.storage);
+    this.corrections=new SqlCapacityCorrections(ctx.storage);
     const mode=()=>{try{const config=this.settings();
       new GithubCapacityPorts(async()=>{throw new Error('capacity_validation_only');},config);
       validateCapacityPolicy(this.policy(config));return config.publication;
@@ -59,11 +62,12 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     this.store=new SqlCapacityStore(ctx.storage,
       (request,superseded)=>this.results.pendingFailure(request.submission.requestId)?'owed':guard(request,superseded),
       {mode,evidence:(record,superseded)=>this.results.pendingFailure(record.submission.requestId)?'owed':consumer.evidence(record,superseded)});
+    if(this.store.compactCount()===0)this.corrections.completeLegacy();
     this.keys = new CapacityIssuerKeys(capacityPlatformFetch);
     this.budget = new CapacityRequestBudget(new SqlCapacityBudgetStore(ctx.storage));
   }
   private ordered<T>(fn:()=>Promise<T>):Promise<T>{const result=this.serial.then(fn);this.serial=result.catch(()=>undefined);return result;}
-  private async enabled(){return this.env.CAPACITY_ENABLED==='true'&&(await this.ctx.storage.get<boolean>('capacity-kill'))===false;}
+  private async enabled(){return this.env.CAPACITY_ENABLED==='true'&&(await this.ctx.storage.get<boolean>('capacity-kill'))===false&&this.corrections.legacyReady();}
   private settings():Settings {
     const settings=JSON.parse(this.env.CAPACITY_CONFIG??'null') as Settings|null;
     if(!settings||settings.repository!==this.env.REPOSITORY||!Number.isSafeInteger(settings.appId)||settings.appId<=0||!['pilot','full-suite'].includes(settings.publication))throw new Error('capacity_configuration_missing');
@@ -81,7 +85,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     const parent=ports.parent.bind(ports),dispatch=ports.dispatch.bind(ports);
     ports.parent=async input=>await this.enabled()?parent(input):false;
     ports.dispatch=async attempt=>{if(!await this.enabled())throw new Error('capacity_disabled');return dispatch(attempt);};
-    const capacity=new CiCapacity(this.store,ports,this.env.REPOSITORY,this.policy(config),Date.now,id=>this.results.pendingFailure(id));
+    const capacity=new CiCapacity(this.store,ports,this.env.REPOSITORY,this.policy(config),Date.now,id=>this.results.pendingFailure(id),id=>this.corrections.enqueue(id));
     return {capacity,config,ports,transport:new CapacityTransport(capacity,config,()=>this.enabled(),()=>this.ctx.storage.setAlarm(Date.now()+1000))};
   }
   async fetch(request:Request):Promise<Response>{
@@ -152,7 +156,11 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     this.store.prune(Date.now()-CAPACITY_RETENTION_MS);
     if(this.store.count()===0&&this.store.compactCount()===0){
       const publications=pruneCapacityHistory(this.ctx.storage,'publications');
-      if(!garbage&&!publications)await this.ctx.storage.deleteAlarm();return;
+      for(const row of this.corrections.page()){
+        if(!this.results.pendingFailure(row.request_id))this.corrections.remove(row.seq);
+        this.corrections.advance(row.seq);
+      }
+      if(!garbage&&!publications&&!this.corrections.pending())await this.ctx.storage.deleteAlarm();return;
     }
     const {capacity,config}=await this.components();
     const outbox=new CapacityOutbox(this.ctx.storage,await capacityGithubClient(this.env,capacityPlatformFetch),config);
