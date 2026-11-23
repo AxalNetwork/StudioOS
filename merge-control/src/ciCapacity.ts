@@ -94,7 +94,7 @@ export class SqlCapacityStore implements CapacityStore {
     let excess = this.count() - CAPACITY_REQUEST_LIMIT + 1;
     if (!guard || excess <= 0) return;
     const settled = this.storage.sql.exec<{ id: string }>(`SELECT id FROM ci_capacity_index
-      WHERE pending = 0 ORDER BY completed_at, id LIMIT ${CAPACITY_REQUEST_LIMIT}`).toArray();
+      WHERE pending = 0 ORDER BY completed_at, id LIMIT 1000`).toArray();
     for (const { id } of settled) {
       if (excess <= 0) break;
       const request = this.get(id);
