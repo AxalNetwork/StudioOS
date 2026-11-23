@@ -27,8 +27,9 @@ storage readers and guards must consume it rather than copy figures.
 writes or deletes an R2 object under a `record` prefix of the D6650 inventory. A
 record is written once (`putRecord` refuses an existing key), a replacement is a
 new key (the replaced object is kept), and the only delete is
-`eraseRecordObjects` with a stated reason, the door #6654's suppression ledger
-completes; a failed write's rollback of the object it just stored goes through
+`eraseRecordObjects` with a stated reason, which writes one D6654
+`record_suppression_ledger` row per key (a key hash, never the key) before it
+deletes, and deletes nothing when that write fails (except a rollback); a failed write's rollback of the object it just stored goes through
 it as `unreferenced`. `scripts/check-record-writes.mjs`
 fails the build on any other put or delete of a record prefix.
 

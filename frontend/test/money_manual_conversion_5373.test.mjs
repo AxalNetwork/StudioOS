@@ -32,7 +32,6 @@ const rootPath = fileURLToPath(root);
 const ALLOW = [
   { kind: 'not-money', reason: "A percentage, ratio or rounding to two places, not an amount of currency: the line has a money word beside it.", files: {
     "frontend/src/pages/PortfolioPerformancePage.jsx": 1,
-    "frontend/src/pages/SpinoutLabMarketPage.jsx": 2,
     "frontend/src/pages/admin/insights/insightsModel.js": 1,
     "frontend/src/pages/admin/payments/dialogModel.js": 1,
     "frontend/src/pages/founder/callsModel.js": 1,
