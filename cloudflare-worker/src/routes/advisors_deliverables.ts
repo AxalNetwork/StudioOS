@@ -206,7 +206,7 @@ async function dropStored(c: Context<{ Bindings: Env }>, stored: StoredFile | nu
   if (!stored || !c.env.FILES) return;
   try {
     const named = await c.env.DB.prepare('SELECT 1 AS x FROM advisor_deliverable_versions WHERE file_key = ?').bind(stored.key).first();
-    if (!named) await eraseRecordObjects(c.env.FILES, stored.key, 'unreferenced');
+    if (!named) await eraseRecordObjects(c.env.FILES, stored.key, 'unreferenced', { db: c.env.DB });
   } catch { /* orphaned bytes, never a row pointing nowhere */ }
 }
 

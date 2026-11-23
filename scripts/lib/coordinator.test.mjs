@@ -22,7 +22,7 @@ test('planLabels refuses what AGENTS.md does not allow', () => {
   assert.throws(() => planLabels(['state:blocked'], { state: 'state:ready', add: ['needs-decision'] }), /needs-decision needs state:blocked/);
   assert.throws(() => planLabels(['state:blocked', 'needs-design'], { remove: ['state:blocked'] }), /no state label/);
   assert.throws(() => planLabels(['needs-decision'], {}), /needs-decision needs state:blocked, not no state label/);
-  assert.throws(() => planLabels([], { slot: 'S39' }), /non-standard slot/);
+  assert.throws(() => planLabels([], { slot: 'S40' }), /non-standard slot/);
   assert.throws(() => planLabels([], { state: 'state:in-review' }), /unknown state/);
   assert.throws(() => planLabels(['state:ready', 'state:review'], {}), /two state labels/);
 });
@@ -47,17 +47,20 @@ test('planLabels with no change reports none', () => {
   assert.equal(planLabels(['task', 'state:ready'], { state: 'state:ready' }).changed, false);
 });
 
-test('slot labels: only S01 to S37 in upper case are standard', () => {
+test('slot labels: only S01 to S39 in upper case are standard; the admin slot is not a build slot', () => {
   assert.equal(slotOf('slot:s38'), 'S38');
   assert.equal(slotOf('state:ready'), null);
+  assert.equal(slotOf('slot:chatgptpro'), null);
   assert.equal(isStandardSlotLabel('slot:S37'), true);
-  assert.equal(isStandardSlotLabel('slot:S38'), false);
+  assert.equal(isStandardSlotLabel('slot:S39'), true);
+  assert.equal(isStandardSlotLabel('slot:S40'), false);
+  assert.equal(isStandardSlotLabel('slot:chatgptpro'), false);
   assert.equal(isStandardSlotLabel('slot:s05'), false);
 });
 
 test('slotPicker never picks S01, S18 or S32 and spreads a batch over the least loaded', () => {
   const load = {};
-  for (let n = 1; n <= 37; n++) load[`S${String(n).padStart(2, '0')}`] = 5;
+  for (let n = 1; n <= 39; n++) load[`S${String(n).padStart(2, '0')}`] = 5;
   load.S04 = 1; load.S09 = 2;
   const pick = slotPicker(load);
   const got = Array.from({ length: 6 }, pick);
@@ -76,7 +79,8 @@ test('a proposal is a build task, a brief or a decision, and is labelled to matc
   assert.deepEqual(proposalLabels({ type: 'design-brief', title: 'b' }, {}).labels, ['task', 'slot:S01', 'state:blocked', 'needs-design']);
   assert.deepEqual(proposalLabels({ type: 'full-stack', title: 'b' }, { slot: 'S07', ready: true }).labels, ['task', 'frontend', 'worker', 'slot:S07', 'state:ready']);
   assert.deepEqual(proposalLabels({ type: 'worker', title: 'b' }, { slot: 'S07', ready: false }).labels, ['task', 'worker', 'slot:S07', 'state:blocked']);
-  assert.throws(() => proposalLabels({ type: 'worker', title: 'b' }, { slot: 'S38' }), /standard slot/);
+  assert.throws(() => proposalLabels({ type: 'worker', title: 'b' }, { slot: 'S40' }), /standard slot/);
+  assert.throws(() => proposalLabels({ type: 'worker', title: 'b' }, { slot: 'chatgptpro' }), /standard slot/);
 });
 
 test('markers round-trip, and alreadyDone finds this run only', () => {

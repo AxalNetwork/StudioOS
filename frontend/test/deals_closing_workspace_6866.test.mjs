@@ -11,7 +11,7 @@
  *     hold names its count, a hold on a decision the caller cannot see has no
  *     count, an unreadable gate keeps the button off, and only an Admin records;
  *   · the Audit tab merges checklist moves, transfers, paper and closing events
- *     newest first, and a closing event's actor reads "Name not shown yet";
+ *     newest first, and a closing event with no actor name reads "Not recorded" (D6889);
  *   · the before-close rules are the three `completeClosing` enforces;
  *   · the side sheet sends only what changed.
  */
@@ -121,7 +121,7 @@ test('transfers total says what it counts, all time on this deal', () => {
   assert.equal(transferRows(UNREADABLE).state, 'unreadable');
 });
 
-test('the Audit tab merges every record newest first; a closing event names no actor yet', () => {
+test('the Audit tab merges every record newest first; a closing event with no actor name reads Not recorded', () => {
   const transfers = transferRows(ok([{ uid: 't', amount_cents: 100, recorded_at: '2026-11-12T15:40', recorded_by_name: 'Name A' }]));
   const paper = paperRows(ok([{ id: 1, deal_id: 3, status: 'completed', document_title: 'SAFE', sent_at: '2026-11-02', completed_at: '2026-11-06' }]), 3);
   const a = auditRows({
@@ -133,7 +133,7 @@ test('the Audit tab merges every record newest first; a closing event names no a
   assert.deepEqual(a.rows.map((r) => r.kind), ['Checklist', 'Transfers', 'Closing', 'Paper', 'Paper']);
   assert.equal(a.rows[0].what, 'Item “Board consent” moved Pending → Done');
   assert.equal(a.rows[2].who, null);
-  assert.equal(a.rows[2].whoNote, 'Name not shown yet');
+  assert.equal(a.rows[2].whoNote, 'Not recorded');
   assert.equal(a.rows[2].what, 'Line withdrawn');
   assert.deepEqual(a.counts, { All: 5, Checklist: 1, Paper: 2, Transfers: 1, Closing: 1 });
   const partial = auditRows({ events: UNREADABLE, transfers, paper, closing: ok(null) });
