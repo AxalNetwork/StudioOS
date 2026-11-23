@@ -124,7 +124,13 @@ function referenceCard(items: any[], moves: any[]) {
   const series: any[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
   if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
   return { series, next: items.length && items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null,
-    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 } };
+    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0,
+      // #6036 (D6036): the strip's figures, from every item: the four columns as stored, Late (a readable target
+      // day before today, not Done) and Unlinked (no theme and no KPI, blank counting as none).
+      now: buckets[0], next: buckets[1], later: buckets[2], done: buckets[3],
+      late: items.filter(i => String(i.kanban_status ?? '').toLowerCase() !== 'done' && /^\d{4}-\d{2}-\d{2}/.test(String(i.target_date ?? ''))
+        && !Number.isNaN(Date.parse(String(i.target_date).slice(0, 10))) && String(i.target_date).slice(0, 10) < new Date().toISOString().slice(0, 10)).length,
+      unlinked: items.filter(i => !String(i.feedback_theme ?? '').trim() && !String(i.kpi_key ?? '').trim()).length } };
 }
 
 test('2. the card and facts are what the old full read computed', async () => {

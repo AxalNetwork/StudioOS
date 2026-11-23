@@ -20,6 +20,8 @@ export const PENDING_READERS = [
   'services/competitorDirectoryLink.ts',
   'services/records/validate.ts',
   'services/researchCompanyDirectory.ts',
+  // D7810 (#7810): the publisher inventory groups every stored row, held and withdrawn ones included, by design.
+  'services/researchCompanyPublishers.ts',
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
 export const MAINTENANCE_WRITERS: string[] = [

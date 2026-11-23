@@ -50,6 +50,9 @@ function freshDb() {
   db.exec(tableFrom('037', 'market_intel_rows'));
   db.exec(tableFrom('037', 'market_intel_indexes'));
   db.exec(migration('379'));
+  // D7707 (what a row measures) and D7708 (the window and mix an index point stores).
+  db.exec(migration('202611191833_7707'));
+  db.exec(migration('202611220337_7708'));
 
   const m = db.prepare(`INSERT INTO research_market_directory (slug, name, company_count, source_name, source_boundary, as_of)
                         VALUES (?, ?, ?, 'Axal', 'supplied', '2026-09-30')`);
@@ -101,6 +104,16 @@ function seedIndex(db: DatabaseSync) {
   const insert = db.prepare(`INSERT INTO market_intel_indexes
     (sector, period_key, dimension, value, delta_pct, source_count, computed_at, basis) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   insert.run('Fintech / DeFi', periods.at(-1), 'research', 62, 4, 2, '2026-10-05T09:00:00Z', 'live');
+  // D7708 — the newest point stores its window and the mix the score used; the older points were written before D7708.
+  db.prepare(`UPDATE market_intel_indexes SET window_start = ?, window_end = ?, source_mix_json = ?
+    WHERE sector = 'Fintech / DeFi' AND period_key = ? AND dimension = 'research'`).run(
+    '2026-09-05T09:00:00.000Z', '2026-10-05T09:00:00.000Z', JSON.stringify({
+      window_start: '2026-09-05T09:00:00.000Z', window_end: '2026-10-05T09:00:00.000Z', context_only: false,
+      entries: [
+        { source_key: 'openalex', share: 0.75, observations: 3, scope: 'sector', coverage_area: null, period_from: '2026-09-01/2026-10-01', period_to: '2026-09-05/2026-10-05' },
+        { source_key: 'crossref', share: 0.25, observations: 1, scope: 'sector', coverage_area: null, period_from: null, period_to: null },
+      ],
+    }), periods.at(-1));
   insert.run('Fintech / DeFi', periods.at(-3), 'research', 50, null, 1, '2026-08-31T09:00:00Z', 'live');
   insert.run('Fintech / DeFi', periods.at(-2), 'research', 99, 20, 2, '2026-09-30T09:00:00Z', 'stub');
   insert.run('Fintech / DeFi', periods.at(-1), 'capital', 99, null, 2, '2026-10-05T09:00:00Z', null);
@@ -136,20 +149,36 @@ test('live series keep twelve months and their gaps; missing and stub indexes ar
   const r = await get(db, '/sectors/fintech-defi');
   const d = r.body.dimensions.research;
   assert.equal(d.value, 62); assert.equal(d.change, 4); assert.equal(d.basis, 'live');
+  // D7708 — the change names the point it compares with; that month's point is not live here, so its window is not recorded.
+  assert.deepEqual(d.change_against, { period: periods.at(-2), window_start: null, window_end: null, window_reason: 'Window not recorded' });
   assert.equal(d.computed_at, '2026-10-05T09:00:00Z');
   assert.deepEqual(d.points.map((p: any) => p.period), periods);
   assert.deepEqual(d.points.slice(-3).map((p: any) => p.value), [50, null, 62]);
-  assert.equal(d.points.at(-1).month_to_date, true);
+  // D7708 — the newest point is overwritten by each refresh; each point names its window, or says it is not recorded.
+  assert.equal(d.points.at(-1).latest_point, true);
+  assert.equal(d.points.at(-1).window_start, '2026-09-05T09:00:00.000Z');
+  assert.equal(d.points.at(-1).window_end, '2026-10-05T09:00:00.000Z');
+  assert.equal(d.window_end, '2026-10-05T09:00:00.000Z');
+  assert.equal(d.points.at(-3).window_start, null, 'a point written before D7708 never gets a derived date');
+  assert.equal(d.points.at(-3).window_reason, 'Window not recorded');
   assert.match(d.points.at(-2).reason, /No live source/);
   assert.equal(r.body.dimensions.capital.value, null);
   assert.equal(r.body.dimensions.supply.value, null);
 });
-test('source mix counts only cited live rows, with recorded names, shares and the month behind each point', async () => {
+test('source mix is the one stored beside the point: share of weight and distinct observations, with recorded names (D7708)', async () => {
   const db = freshDb(); seedIndex(db);
-  const mix = (await get(db, '/sectors/fintech-defi')).body.dimensions.research.points.at(-1).source_mix;
-  assert.deepEqual(mix.map((s: any) => [s.source_key, s.rows, s.share]), [['openalex', 2, 2 / 3], ['crossref', 1, 1 / 3]]);
+  const body = (await get(db, '/sectors/fintech-defi')).body;
+  const points = body.dimensions.research.points;
+  const mix = points.at(-1).source_mix;
+  // Read back as stored, never recomputed from row counts by calendar month.
+  assert.deepEqual(mix.map((s: any) => [s.source_key, s.share, s.observations, s.scope]), [['openalex', 0.75, 3, 'sector'], ['crossref', 0.25, 1, 'sector']]);
   assert.equal(mix[0].name, 'OpenAlex research velocity');
-  assert.ok(mix.every((s: any) => s.name && s.latest));
+  assert.equal(points.at(-1).context_only, false);
+  // A point written before D7708 has no stored mix, so none is invented for it.
+  assert.deepEqual(points.at(-3).source_mix, []);
+  assert.equal(points.at(-3).context_only, null);
+  assert.match(body.source_mix_basis, /share of the weight the score used/);
+  assert.doesNotMatch(body.source_mix_basis, /calendar month/);
 });
 test('sub-markets, countries and signals use mappings, not the raw broad-sector label', async () => {
   const r = await get(freshDb(), '/sectors/fintech-defi');
@@ -186,15 +215,16 @@ test('no advisor note is read or returned; SQL binds sector values and rejects a
   assert.equal(r.status, 200);
   assert.ok(!JSON.stringify(r.body).includes('SECRET ADVISOR NOTE'));
   assert.ok(!('advisor_note' in r.body.signals[0]));
+  // D7708 — one read: the mix is stored beside each point, so no second read of market_intel_rows.
   const selection = queries.filter((q) => q.sql.includes('market_intel_'));
-  assert.equal(selection.length, 2);
+  assert.equal(selection.length, 1);
   assert.ok(selection.every((q) => !q.sql.includes('Fintech / DeFi') && q.binds.includes('Fintech / DeFi')));
   const bad = await get(freshDb(), `/sectors/${encodeURIComponent("fintech-defi' OR 1=1 --")}`);
   assert.equal(bad.status, 404);
 });
 test('every failed sector read is 503 Unreadable rather than a successful empty or zero answer', async () => {
   for (const table of ['research_market_directory', 'research_market_sectors', 'research_taxonomy_overrides',
-    'research_company_directory', 'research_fund_directory', 'research_countries', 'market_intel_indexes', 'market_intel_rows', 'signals']) {
+    'research_company_directory', 'research_fund_directory', 'research_countries', 'market_intel_indexes', 'signals']) {
     const wrap = (binding: any) => ({ ...binding, prepare(sql: string) {
       if (sql.includes(`FROM ${table}`)) throw new Error('simulated read failure');
       return binding.prepare(sql);
