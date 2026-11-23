@@ -61,20 +61,32 @@ test('the card prints each mover with its sign and its sector page', () => {
   const t = text(h(TopMovers, { overview: ready(HEAT) }));
   assert.match(t, /Rising AI Infrastructure · demand ▲ 30% Fintech \/ DeFi · demand ▲ 12\.5%/);
   assert.match(t, /Falling AI Infrastructure · supply ▼ 20\.3% /);
-  assert.match(t, /market_intel_indexes · global · 2026-10 against 2026-09/);
+  assert.match(t, /market_intel_indexes · global · 2026-10 against 2026-09 · window not recorded/);
+  assert.doesNotMatch(t, /month to date/);
   assert.doesNotMatch(t, /capital ▲|capital ▼|talent ▲|research/, 'an unchanged or unrecorded cell is ranked');
   assert.doesNotMatch(t, /Not recorded|#1092/);
 });
 
+test('the card names the window each side covers (D7708)', () => {
+  const windowed = { ...HEAT, window_start: '2026-09-05T04:00:00.000Z', window_end: '2026-10-05T04:00:00.000Z',
+    previous_window: { window_start: '2026-08-01T04:00:00.000Z', window_end: '2026-08-31T04:00:00.000Z', window_reason: null } };
+  const t = text(h(TopMovers, { overview: ready(windowed) }));
+  assert.match(t, /the score over 5 Sep 2026 to 5 Oct 2026, against 1 Aug 2026 to 31 Aug 2026\./);
+  assert.match(t, /2026-10 against 2026-09 · window 5 Sep 2026 to 5 Oct 2026/);
+  // A point written before D7708 says its window is not recorded, never a derived date.
+  const old = text(h(TopMovers, { overview: ready(HEAT) }));
+  assert.match(old, /its 30-day window \(not recorded for this point\), against the previous point \(window not recorded\)/);
+});
+
 test('one side empty says so; no change at all is Not recorded, not a list of zeros', () => {
   const up = { ...HEAT, sectors: [{ sector: 'DevTools', dimensions: { demand: cell(4) } }] };
-  assert.match(text(h(TopMovers, { overview: ready(up) })), /No live index fell on last month/);
+  assert.match(text(h(TopMovers, { overview: ready(up) })), /No live index fell against the previous point/);
   const down = { ...HEAT, sectors: [{ sector: 'DevTools', dimensions: { demand: cell(-4) } }] };
   const d = text(h(TopMovers, { overview: ready(down) }));
-  assert.match(d, /Rising No live index rose on last month\. Falling DevTools · demand ▼ 4%/);
+  assert.match(d, /Rising No live index rose against the previous point\. Falling DevTools · demand ▼ 4%/);
   const flat = { ...HEAT, sectors: [{ sector: 'DevTools', dimensions: { demand: cell(0), supply: none } }] };
   const t = text(h(TopMovers, { overview: ready(flat) }));
-  assert.match(html(h(TopMovers, { overview: ready(flat) })), /title="No live index has a change on last month yet\."/);
+  assert.match(html(h(TopMovers, { overview: ready(flat) })), /title="No live index has a change on the previous point yet\."/);
   assert.match(t, /Not recorded/);
   assert.doesNotMatch(t, /Rising|0%/);
 });
