@@ -2,13 +2,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { createHostedReaders, hostedGithubRead } from '../../scripts/ci/runners/hosted-readers.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { CapacityRequestBudget } from '../../merge-control/src/lib/ciCapacityAuthPolicy.ts';
+import { SqlCapacityBudgetStore } from '../../merge-control/src/ciCapacityRuntime.ts';
+import { createHostedReaders, hostedGithubRead, hostedReaderFactory } from '../../scripts/ci/runners/hosted-readers.mjs';
 import { createHostedVerification } from '../../scripts/ci/runners/hosted-verification.mjs';
 import { createReceiptReader, githubOidcToken } from '../../scripts/ci/capacity-client.mjs';
 import { authenticateCapacity } from '../../merge-control/src/ciCapacityAuth.ts';
 import { CapacityTransport } from '../../merge-control/src/ciCapacityTransport.ts';
 import { resolveCatalogProfile } from '../../scripts/ci/runners/catalog.mjs';
-import { hostedReaders, isolationFor } from '../../scripts/ci/runners/executor-isolation.mjs';
+import { hostedReaders, isolationFor, hostedExecutorDependencies } from '../../scripts/ci/runners/executor-isolation.mjs';
+import { JobContainer } from '../../scripts/ci/runners/job-container.mjs';
+import { receiptIdentity } from '../../scripts/ci/runner-admission.mjs';
+import { main as bridge } from '../../scripts/ci/capacity-executor.mjs';
 const NOW = 1_800_000_000_000, REPO = 'AxalNetwork/StudioOS', EXEC = 'e'.repeat(40), SOURCE = 'a'.repeat(40);
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const key = { ...publicKey.export({ format: 'jwk' }), kid: 'fixture-8345', alg: 'RS256', use: 'sig' };
@@ -17,7 +23,7 @@ const jwt = claims => { const input = `${encode({ alg: 'RS256', kid: key.kid })}
 const clone = value => structuredClone(value);
 function world(t, profile = 'hosted', child = EXEC) {
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
-  const receipt = { version: 1, requestId: 'fixture-8345', repository: REPO, logicalShard: 'worker-1-of-6', event: 'push',
+  const receipt = { version: 1, requestId: '83450000-0000-4000-8000-000000000001', repository: REPO, logicalShard: 'worker-1-of-6', event: 'push',
     parentRunId: 101, parentAttempt: 1, parentWorkflowId: 77, sourceSha: SOURCE, queueBaseSha: null, planDigest: `sha256:${'1'.repeat(64)}`,
     planArtifactId: 505, executorSha: EXEC, childWorkflowSha: child, profile, generation: 3, childRunId: 202, childAttempt: 1,
     startDeadline: NOW + 60_000, executionDeadline: NOW + 1_000_000 };
@@ -44,13 +50,23 @@ function world(t, profile = 'hosted', child = EXEC) {
       Tmpfs: { '/work': 'rw,nosuid,nodev,size=4294967296,uid=10000,gid=10000,mode=0700', '/tmp': 'rw,nosuid,nodev,noexec,size=268435456,uid=10000,gid=10000,mode=0700' } },
     Mounts: [{ Type: 'bind', Source: '/fixture/source', Destination: '/input', RW: false, Propagation: 'rprivate' },
       { Type: 'bind', Source: '/fixture/plan.json', Destination: '/input-plan.json', RW: false, Propagation: 'rprivate' }] };
-  const native = { policy, owned: { id, owner, image, source: '/fixture/source', plan: '/fixture/plan.json', receipt: clone(receipt), deadlineSeconds },
-    namespace: () => true, async engine(command, options) { assert.ok(options.signal); assert.ok(options.timeout <= 10_000);
-      calls.push({ engine: clone(command) }); return command[0] === 'inspect' ? JSON.stringify([info]) : command.at(-1).includes('python_version') ? policy.pythonVersion : policy.nodeVersion; } };
+  const native = new JobContainer(policy, { profileId: profile, namespace: () => true,
+    async engine(command, options) { assert.ok(options.signal); assert.ok(options.timeout <= 30_000);
+      calls.push({ engine: clone(command) });
+      if (command[0] === 'inspect') return JSON.stringify([info]);
+      if (command[0] === 'version') return 'fixture-engine';
+      return command.at(-1).includes('python_version') ? policy.pythonVersion : command.includes('-e') ? 'readable' : policy.nodeVersion;
+    } });
+  native.owned = { id, owner, image, source: '/fixture/source', plan: '/fixture/plan.json', receipt: receiptIdentity(receipt), deadlineSeconds };
+  // Synthetic egress qualification ONLY in this fixture. The actual S09 ports always return false today.
+  for (const method of ['inspectBoundary', 'inspectReadiness']) native[method] = async args => {
+    const value = await JobContainer.prototype[method].call(native, args);
+    return value && { ...value, deniesHostControl: state.egressProof };
+  };
   const envelope = { active: true, receipt: clone(receipt), hostedEvidence: { includedEligibility: { binding: clone(receipt), observedAt: NOW, jobId: 909,
     runnerGroupId: 6, provider: 'github-hosted', billingLane: 'included-compute', reservation: 'active', overageAllowed: false,
     stopAtLimitVerified: true, validUntil: NOW + 30_000 } } };
-  const calls = [], state = { sign: () => jwt(claims), jobs: [selected], total: 1, pages: null, revoked: false };
+  const calls = [], state = { sign: () => jwt(claims), jobs: [selected], total: 1, pages: null, revoked: false, egressProof: true };
   const config = { repository: REPO, repositoryId: repo.id, executorSha: EXEC, childWorkflowSha: child };
   const transport = new CapacityTransport({ receipt: async () => clone(envelope.receipt) }, config, async () => !state.revoked, async () => {});
   const fetcher = async (url, init) => {
@@ -59,9 +75,14 @@ function world(t, profile = 'hosted', child = EXEC) {
     if (String(url) === 'https://token.actions.githubusercontent.com/.well-known/jwks') return Response.json({ keys: [key] });
     if (new URL(url).hostname === 'fixture.actions.githubusercontent.com') return Response.json({ value: state.sign() });
     if (String(url) === 'https://capacity.invalid/capacity/receipt') {
-      const identity = await authenticateCapacity(new Request(url, init), claims.aud, REPO, fetcher, Date.now);
-      const result = await transport.receipt(JSON.parse(init.body), identity);
-      return Response.json({ ...result, ...(result.active ? { hostedEvidence: envelope.hostedEvidence } : {}) });
+      const verify = () => authenticateCapacity(new Request(url, init), claims.aud, REPO, fetcher, Date.now);
+      const work = async identity => {
+        const result = await transport.receipt(JSON.parse(init.body), identity);
+        return { ...result, ...(result.active ? { hostedEvidence: envelope.hostedEvidence } : {}) };
+      };
+      const result = state.budget ? await state.budget.run(verify, () => 'receipt', work)
+        : await work(await verify());
+      return Response.json(result);
     }
     if (String(url).endsWith('/attempts/1')) return Response.json(run);
     if (String(url).includes('/attempts/1/jobs?')) { const data = state.pages?.[new URL(url).searchParams.get('page')]; return Response.json(data ?? { total_count: state.total, jobs: state.jobs }); }
@@ -79,7 +100,7 @@ function world(t, profile = 'hosted', child = EXEC) {
 test('signed target token + authenticated receipt transport + independent job + native inspection drive the real adapter', async t => {
   for (const profile of ['hosted', 'github-8']) {
     await t.test(profile, async t => { const w = world(t, profile); const result = await w.inspect();
-      assert.equal(result.allowed, true); assert.equal(result.boundary.instanceId, w.native.owned.id);
+      assert.equal(result.allowed, true, result.reason); assert.equal(result.boundary.instanceId, w.native.owned.id);
       assert.equal(result.boundary.jobId, 909, 'Actions job id differs from the OIDC check id 910');
       assert.equal(w.calls.filter(c => c.engine?.[0] === 'inspect').length, 1);
       assert.equal(w.calls.filter(c => c.url?.includes('api.github.com')).length, 2);
@@ -109,10 +130,15 @@ test('every canonical receipt field, including distinct child-workflow identity,
   }
   assert.equal(w.calls.some(c => c.engine), false);
 });
-test('reader supports distinct child/control identities; existing S30 adapter coupling remains a tracked integration refusal', async t => {
+test('reader and exact S09 adapter support distinct child/control identities', async t => {
   const w = world(t, 'hosted', 'c'.repeat(40)); const result = await w.readers.readProvenance(w.args);
   assert.equal(result.claims.workflow_sha, 'c'.repeat(40)); assert.equal(result.binding.executorSha, EXEC);
-  assert.equal((await w.inspect()).allowed, false, 'no relaxation of the unchanged adapter');
+  assert.equal((await w.inspect()).allowed, true, 'exact child identity is separate from the control checkout');
+});
+test('canonical receipt pin presence is retained even when child and control happen to match', async t => {
+  const w = world(t); delete w.envelope.receipt.childWorkflowSha;
+  await assert.rejects(w.readers.readProvenance(w.args), /hosted_receipt_changed/);
+  assert.equal(w.calls.some(c => c.engine), false);
 });
 test('revocation is refreshed between provenance and native inspection', async t => {
   const w = world(t); await w.readers.readProvenance(w.args); w.state.revoked = true;
@@ -137,7 +163,7 @@ test('native credential and ownership defects never become asserted denial flags
     if (fault === 'mount') w.info.Mounts.push({ Destination: '/var/run/docker.sock' });
     if (fault === 'namespace') w.native.namespace = () => false;
     if (fault === 'owner') w.native.owned.owner = '203-1-3';
-    if (fault === 'runtime') w.native.policy.nodeVersion = '20.0.0';
+    if (fault === 'runtime') w.native.policy = { ...w.native.policy, nodeVersion: '20.0.0' };
     assert.equal((await w.inspect()).allowed, false);
   });
 });
@@ -229,7 +255,7 @@ test('runtime version probes and job/policy mutation during inspection refuse', 
       const result = await engine(...args);
       if (fault === 'version' && args[0][0] === 'exec') return 'unreviewed';
       if (fault === 'instance') w.native.owned.source = '/fixture/replaced';
-      if (fault === 'policy') w.native.policy.image = `sha256:${'3'.repeat(64)}`;
+      if (fault === 'policy') w.native.policy = { ...w.native.policy, image: `sha256:${'3'.repeat(64)}` };
       return result;
     };
     assert.equal((await w.inspect()).allowed, false);
@@ -241,5 +267,119 @@ test('authenticated but wrong target-only claims refuse without relying on adapt
     { workflow_sha: SOURCE }, { sha: SOURCE }, { workflow_ref: `${REPO}/.github/workflows/ci.yml@refs/heads/main` }]) {
     const readers = createHostedReaders({ ...w.options, oidcToken: async () => jwt({ ...w.claims, ...patch }) });
     await assert.rejects(readers.readProvenance(w.args));
+  }
+});
+
+
+test('separate readiness and live reader ports execute exact S09 methods, with no instance at admission', async t => {
+  const w = world(t, 'hosted', 'c'.repeat(40)), owned = w.native.owned;
+  const factory = hostedReaderFactory({ CI_CAPACITY_AUDIENCE: w.claims.aud, GH_TOKEN: 'fixture-only',
+    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://fixture.actions.githubusercontent.com/token', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-only' },
+  w.options.readReceipt, { fetcher: w.options.issuerFetch });
+  const readers = factory({ job: w.native }), verification = createHostedVerification(readers);
+  w.native.owned = null;
+  const admission = await verification.inspectAdmission(w.args);
+  assert.equal(admission.allowed, true, admission.reason);
+  assert.equal(Object.hasOwn(admission.boundary, 'instanceId'), false);
+  assert.equal(w.calls.some(c => c.engine?.[0] === 'inspect'), false);
+  w.native.owned = owned;
+  const boundary = w.native.boundaryIdentity();
+  assert.equal(await verification.verifyExecution({ ...w.args, boundary }), true);
+  assert.equal(await verification.verifyExecution({ ...w.args, boundary: { ...boundary, instanceId: 'wrong' } }), false);
+});
+
+test('actual bridge networking never becomes asserted host-control denial', async t => {
+  const w = world(t); w.state.egressProof = false;
+  assert.equal((await w.native.inspectReadiness({ signal: new AbortController().signal })).deniesHostControl, false);
+  assert.equal((await w.native.inspectBoundary({ receipt: w.receipt, signal: new AbortController().signal })).deniesHostControl, false);
+  await w.readers.readProvenance(w.args);
+  await assert.rejects(w.readers.readBoundaryReadiness(w.args), /native_inspection_refused/);
+  await assert.rejects(w.readers.readBoundary(w.args), /native_inspection_refused/);
+  assert.equal(await createHostedVerification(w.readers).verifyAdmission(w.args), false);
+  assert.equal(await createHostedVerification(w.readers).verifyExecution({ ...w.args, boundary: w.native.boundaryIdentity() }), false);
+});
+
+test('readiness rejects an instance, stale/future evidence, changed policy, scope and each missing denial', async t => {
+  for (const fault of ['instance', 'stale', 'future', 'policy', 'scope', 'deniesRunnerAgent', 'deniesJobCredentials', 'deniesOidc', 'deniesAppCapabilities', 'deniesHostControl']) {
+    await t.test(fault, async t => {
+      const w = world(t), original = w.native.inspectReadiness;
+      w.native.inspectReadiness = async args => {
+        const document = await original(args);
+        if (fault === 'instance') document.instanceId = w.native.owned.id;
+        else if (fault === 'stale') document.observedAt = NOW - 30_001;
+        else if (fault === 'future') document.observedAt = NOW + 1;
+        else if (fault === 'policy') document.policyDigest = `sha256:${'0'.repeat(64)}`;
+        else if (fault === 'scope') document.scope = 'tests-only';
+        else document[fault] = false;
+        return document;
+      };
+      await w.readers.readProvenance(w.args);
+      await assert.rejects(w.readers.readBoundaryReadiness(w.args));
+      assert.equal(await createHostedVerification(w.readers).verifyAdmission(w.args), false);
+    });
+  }
+});
+
+test('bridge receipt snapshots are isolation-scoped and fit the unchanged receipt budget across 24 minutes', async t => {
+  const w = world(t), db = new DatabaseSync(':memory:'); t.after(() => db.close());
+  const storage = { sql: { exec(query, ...values) { const rows = db.prepare(query).all(...values); return { toArray: () => rows }; } },
+    transactionSync(fn) { db.exec('BEGIN'); try { const value = fn(); db.exec('COMMIT'); return value; } catch (error) { db.exec('ROLLBACK'); throw error; } } };
+  w.state.budget = new CapacityRequestBudget(new SqlCapacityBudgetStore(storage));
+  w.receipt.executionDeadline = NOW + 30 * 60_000; w.envelope.receipt = clone(w.receipt);
+  w.native.owned = null; // Readiness is evaluated before any candidate/container exists.
+  const env = { GITHUB_REPOSITORY: REPO, EXECUTOR_SHA: EXEC, CHILD_WORKFLOW_SHA: EXEC, GITHUB_WORKFLOW_SHA: EXEC,
+    GITHUB_RUN_ID: '202', GITHUB_RUN_ATTEMPT: '1', PROFILE: 'hosted', CI_CAPACITY_AUDIENCE: w.claims.aud,
+    GH_TOKEN: 'fixture-only', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://fixture.actions.githubusercontent.com/token', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-only' };
+  t.mock.method(globalThis, 'fetch', w.options.issuerFetch);
+  let retainedReaders;
+  const ports = { results: { read: () => null }, store: {}, authority: { readReceipt: w.options.readReceipt },
+    isolationFactory(profileId, options) {
+      const original = options.readers;
+      return hostedExecutorDependencies({ profileId, boundaryJob: () => w.native,
+        readers: args => { retainedReaders = original(args); return retainedReaders; } });
+    },
+    async admit(_env, dependencies) {
+      assert.equal(await dependencies.verifyIsolation(w.args), false, 'no preceding authenticated observation');
+      const input = { request: { requestId: w.receipt.requestId, shard: w.receipt.logicalShard,
+        generation: w.receipt.generation, profile: w.receipt.profile }, context: w.args.context, phase: 'execute' };
+      await dependencies.readReceipt(input);
+      assert.equal(await dependencies.verifyIsolation(w.args), true);
+      await dependencies.readReceipt(input); // S09 closes admission with a fresh canonical read.
+      return 0;
+    } };
+  const transcript = [];
+  for (let minute = 0; minute <= 24; minute++) {
+    t.mock.timers.setTime(NOW + minute * 60_000);
+    w.claims.iat = Date.now() / 1000; w.claims.nbf = w.claims.iat - 1; w.claims.exp = w.claims.iat + 300;
+    const before = w.calls.filter(c => c.url === 'https://capacity.invalid/capacity/receipt').length;
+    for (let phase = 0; phase < 5; phase++) assert.equal(await bridge('admit', env, ports), 0);
+    const reads = w.calls.filter(c => c.url === 'https://capacity.invalid/capacity/receipt').length - before;
+    assert.equal(reads, 10, 'reader documents add no receipt reservations');
+    await assert.rejects(retainedReaders.readProvenance(w.args), /receipt_observation_missing/, 'snapshot is closed after isolation returns');
+    // Authenticated result delivery shares this lane. Reserve its actual policy slot; transport delivery itself
+    // is exercised in the existing composed suite, not inferred from this synthetic acknowledgement.
+    const reserve = () => w.state.budget.run(async () => clone(w.claims), () => 'receipt', async () => ({ accepted: true }));
+    assert.deepEqual(await reserve(), { accepted: true });
+    await reserve(); // The twelfth slot is available; the thirteenth is still refused.
+    await assert.rejects(reserve(), /work_limited/);
+    transcript.push({ minute, receiptReads: reads, resultReservations: 1, normalReservations: reads + 1 });
+  }
+  // Revocation after native readiness must still fail the closing authenticated receipt read.
+  t.mock.timers.setTime(NOW + 25 * 60_000);
+  const ready = w.native.inspectReadiness;
+  w.native.inspectReadiness = async args => { const value = await ready(args); w.state.revoked = true; return value; };
+  await assert.rejects(bridge('admit', env, ports), /capacity_receipt_refused/);
+  assert.ok(transcript.every(row => row.normalReservations < 12 && row.normalReservations * 6 <= 96));
+  console.log('HOSTED_8345_CADENCE ' + JSON.stringify({ transcript, periodicPolling: 'none', protectedRolloverUnderFlood: 'not qualified' }));
+});
+
+
+test('readiness requires the exact trusted JobContainer profile, not a lookalike port object', async t => {
+  const w = world(t);
+  for (const job of [{ profileId: 'hosted', policy: w.native.policy, inspectReadiness: w.native.inspectReadiness },
+    Object.assign(new JobContainer(w.native.policy, { profileId: 'github-8', engine: w.native.engine }), { inspectReadiness: w.native.inspectReadiness })]) {
+    const readers = createHostedReaders({ ...w.options, job });
+    await readers.readProvenance(w.args);
+    await assert.rejects(readers.readBoundaryReadiness(w.args), /job_unconfigured/);
   }
 });

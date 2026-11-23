@@ -1,16 +1,15 @@
-/** D8345: trusted hosted evidence acquisition; unwired until S09 supplies the live hosted job and phase composition. */
-import { createHash } from 'node:crypto';
+/** D8345: trusted hosted evidence acquisition through S09 readiness/live ports; absent hosted job or denial evidence refuses. */
 import { isDeepStrictEqual } from 'node:util';
 import { authenticateCapacity } from '../../../merge-control/src/ciCapacityAuth.ts';
-import { capacityJson } from '../capacity-client.mjs';
+import { capacityJson, githubOidcToken } from '../capacity-client.mjs';
 import { receiptIdentity } from '../runner-admission.mjs';
-import { verifiedContainer } from './job-container.mjs';
+import { JobContainer, containerPolicyDigest } from './job-container.mjs';
 const REPOSITORY = 'AxalNetwork/StudioOS', WORKFLOW = '.github/workflows/runner-executor.yml';
 const API = `https://api.github.com/repos/${REPOSITORY}/`;
 const need = (ok, reason) => { if (!ok) throw Error(reason); };
 const positive = n => Number.isSafeInteger(n) && n > 0;
 const binding = r => ({ ...receiptIdentity(r), childWorkflowSha: r.childWorkflowSha ?? r.executorSha });
-const equal = (a, b) => isDeepStrictEqual(binding(a), binding(b));
+const equal = (a, b) => isDeepStrictEqual(binding(a), binding(b)) && a.childWorkflowSha === b.childWorkflowSha;
 const fresh = (at, now) => Number.isSafeInteger(at) && at <= now && now - at <= 30_000;
 export const HOSTED_READER_MS = 10_000;
 
@@ -29,7 +28,7 @@ export function hostedGithubRead({ token, fetcher = globalThis.fetch } = {}) {
 /**
  * Trusted-code dependencies only. readReceipt is the authenticated authority client; oidcToken is GitHub's
  * reserved target-job closure. job is the supervisor-owned native object, never a request-supplied ID or flag.
- * No default job, eligibility producer or runtime registration is supplied. All three ports fail closed.
+ * No default positive job or eligibility producer is supplied. Every reader port fails closed.
  */
 export function createHostedReaders({ audience, readReceipt, oidcToken, githubRead, issuerFetch = globalThis.fetch,
   job, now = Date.now } = {}) {
@@ -131,37 +130,34 @@ export function createHostedReaders({ audience, readReceipt, oidcToken, githubRe
     need(proof && equal(proof.binding, receipt) && fresh(proof.observedAt, now()), 'hosted_provenance_required');
     return proof;
   };
-  const readBoundary = bounded(async args => {
-    const { receipt, signal, phase } = args, observedAt = currentTime(receipt, phase);
+  const nativeDocument = async (args, readiness) => {
+    const { receipt, signal, phase } = args;
     await authority(args); const provenance = recentProof(receipt);
-    need(job && typeof job.engine === 'function' && typeof job.namespace === 'function', 'hosted_native_job_unconfigured');
-    const owned = structuredClone(job.owned), policy = structuredClone(job.policy);
-    need(owned?.receipt && equal(owned.receipt, receipt) && /^[a-f0-9]{64}$/.test(owned.id ?? '')
-      && owned.owner === `${receipt.childRunId}-1-${receipt.generation}`
-      && owned.deadlineSeconds === Math.floor(receipt.executionDeadline / 1000)
-      && policy?.version === 1 && /^sha256:[a-f0-9]{64}$/.test(policy.image ?? '') && owned.image === policy.image
-      && policy.nodeVersion === '22.23.3' && policy.pythonVersion === '3.11.18', 'hosted_native_ownership_refused');
-    const call = async command => {
-      need(!signal.aborted, 'hosted_reader_cancelled');
-      const left = Math.min(HOSTED_READER_MS, receipt.executionDeadline - now());
-      need(left > 0, 'hosted_reader_lease_expired');
-      return job.engine(command, { signal, timeout: left });
-    };
-    const rows = JSON.parse(await call(['inspect', owned.id]));
-    need(Array.isArray(rows) && rows.length === 1 && rows[0].Id === owned.id, 'hosted_native_inspection_refused');
-    const pid = rows[0].State?.Pid;
-    need(positive(pid) && verifiedContainer(rows[0], { ...owned,
-      pidNamespace: job.namespace(pid, 'pid') === true, mountNamespace: job.namespace(pid, 'mnt') === true }), 'hosted_native_inspection_refused');
-    need(String(await call(['exec', '--user', '10000:10000', owned.id, '/usr/local/bin/node', '-p', 'process.versions.node'])).trim() === policy.nodeVersion
-      && String(await call(['exec', '--user', '10000:10000', owned.id, '/usr/local/bin/python3', '-c', 'import platform; print(platform.python_version())'])).trim() === policy.pythonVersion, 'hosted_native_runtime_refused');
-    need(isDeepStrictEqual(owned, job.owned) && isDeepStrictEqual(policy, job.policy), 'hosted_native_instance_changed');
-    const identity = { instanceId: owned.id, policyDigest: `sha256:${createHash('sha256').update(JSON.stringify(policy)).digest('hex')}`, jobId: provenance.job.id };
-    need(instance === null || isDeepStrictEqual(instance, identity), 'hosted_native_instance_changed');
-    need(!signal.aborted, 'hosted_reader_cancelled');
-    instance ??= identity;
-    return { binding: receipt, observedAt, kind: 'trusted-native-inspection', ...identity, scope: 'dependency-install-and-tests',
-      deniesRunnerAgent: true, deniesJobCredentials: true, deniesOidc: true, deniesAppCapabilities: true, deniesHostControl: true };
-  });
+    need(job instanceof JobContainer && job.profileId === receipt.profile
+      && typeof job[readiness ? 'inspectReadiness' : 'inspectBoundary'] === 'function', 'hosted_native_job_unconfigured');
+    const policy = structuredClone(job.policy), before = readiness ? null : structuredClone(job.boundaryIdentity());
+    need(policy.version === 1 && /^sha256:[a-f0-9]{64}$/.test(policy.image ?? '')
+      && policy.nodeVersion === '22.23.3' && policy.pythonVersion === '3.11.18', 'hosted_native_runtime_refused');
+    const document = await (readiness ? job.inspectReadiness({ signal }) : job.inspectBoundary({ receipt, signal }));
+    need(document && document.kind === (readiness ? 'trusted-native-readiness' : 'trusted-native-inspection')
+      && document.policyDigest === containerPolicyDigest(policy) && document.scope === 'dependency-install-and-tests'
+      && fresh(document.observedAt, currentTime(receipt, phase))
+      && ['deniesRunnerAgent', 'deniesJobCredentials', 'deniesOidc', 'deniesAppCapabilities', 'deniesHostControl']
+        .every(key => document[key] === true), 'hosted_native_inspection_refused');
+    need(isDeepStrictEqual(policy, job.policy), 'hosted_native_instance_changed');
+    if (readiness) need(!Object.hasOwn(document, 'instanceId'), 'hosted_native_readiness_instance');
+    else {
+      need(before && document.instanceId === before.instanceId && document.policyDigest === before.policyDigest
+        && isDeepStrictEqual(before, job.boundaryIdentity()), 'hosted_native_instance_changed');
+      const identity = { instanceId: document.instanceId, policyDigest: document.policyDigest, jobId: provenance.job.id };
+      need(instance === null || isDeepStrictEqual(instance, identity), 'hosted_native_instance_changed');
+      instance ??= identity;
+    }
+    // Preserve inspected facts verbatim. In particular bridge networking never becomes host-control denial.
+    return { ...structuredClone(document), binding: structuredClone(receipt), jobId: provenance.job.id };
+  };
+  const readBoundaryReadiness = bounded(args => nativeDocument(args, true));
+  const readBoundary = bounded(args => nativeDocument(args, false));
   const readIncludedEligibility = bounded(async args => {
     const envelope = await authority(args), provenance = recentProof(args.receipt);
     const lane = envelope.hostedEvidence?.includedEligibility;
@@ -173,5 +169,12 @@ export function createHostedReaders({ audience, readReceipt, oidcToken, githubRe
     // Preserve the authority observation time; reading a cached response cannot make evidence fresh again.
     return structuredClone(lane);
   });
-  return { readProvenance, readBoundary, readIncludedEligibility, now };
+  return { readProvenance, readBoundaryReadiness, readBoundary, readIncludedEligibility, now };
+}
+
+/** Reserved job capabilities only; the executor supplies a fresh authenticated receipt snapshot per isolation call. */
+export function hostedReaderFactory(env, readReceipt, { fetcher = globalThis.fetch } = {}) {
+  return ({ job }) => createHostedReaders({ audience: env.CI_CAPACITY_AUDIENCE, readReceipt,
+    oidcToken: githubOidcToken(env, fetcher), githubRead: hostedGithubRead({ token: env.GH_TOKEN ?? env.GITHUB_TOKEN, fetcher }),
+    issuerFetch: fetcher, job });
 }
