@@ -12,7 +12,7 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, StatedLimit } from '../../advisor/expertise/kit';
 import { ICDecisionsList, OpenDecisionSheet } from '../../ICDecisionsPage';
-import {ballotOf, tallyText as tallyWords} from '../../icDecisionModel';
+import {ballotOf, tallyText as tallyWords, VOTE_WORDS as RECORD_WORDS} from '../../icDecisionModel';
 import Sheet from '../../../ui/Sheet';
 import { YourVote } from './commit/VoteDialogs';
 import { rosterLine, refusalWords } from './commit/commitVoteModel';
