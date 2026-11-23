@@ -3,7 +3,7 @@ import {
   activeAttempt, admitReceipt, aggregateCapacity, applyObservation, selectPools, submissionMatches,
   validateCapacityPolicy, HOSTED_JOB_CEILING_MS, EXTERNAL_RUN_CEILING_MS, RESULT_DELIVERY_RESERVE_MS, receiptMatches, CapacityDispatchRefused,
 } from './lib/ciCapacityPolicy.ts';
-import { CAPACITY_COMPACT_LIMIT, CapacityCompactTable, compactProject } from './ciCapacityCompact.ts';
+import { CAPACITY_COMPACT_LIMIT, CapacityCompactTable, compactProject, compactReceipt, compactAggregate } from './ciCapacityCompact.ts';
 import type { CapacityCompactConsumer, CapacityCompactStore, CompactView } from './ciCapacityCompact.ts';
 import type {
   Aggregate, CapacityInventory, CapacityPolicy, CapacityRequest, ChildObservation, CiAttempt,
@@ -220,10 +220,11 @@ export class CiCapacity {
   private readonly repository: string;
   private readonly policy: CapacityPolicy;
   private readonly now: () => number;
-  constructor(store: CapacityStore, ports: CapacityPorts, repository: string, policy: CapacityPolicy, now: () => number = Date.now) {
+  private readonly pendingFailure: (id:string)=>boolean;
+  constructor(store: CapacityStore, ports: CapacityPorts, repository: string, policy: CapacityPolicy, now: () => number = Date.now, pendingFailure: (id:string)=>boolean = ()=>false) {
     validateCapacityPolicy(policy);
     this.store = store; this.ports = ports; this.repository = repository;
-    this.policy = structuredClone(policy); this.now = now;
+    this.policy = structuredClone(policy); this.now = now;this.pendingFailure=pendingFailure;
   }
 
   private ordered<T>(fn: () => Promise<T>): Promise<T> {
@@ -344,15 +345,29 @@ export class CiCapacity {
   ownsResult(receipt: ExecutionReceipt): { current: boolean; receipt: ExecutionReceipt } | null {
     const request=this.store.get(receipt.requestId),shard=request?.shards.find(s=>s.name===receipt.logicalShard);
     const attempt=shard?.attempts.find(a=>a.generation===receipt.generation);
+    if(!request){
+      const history=(this.store as CapacityStore & Partial<CapacityCompactStore>).compact?.(receipt.requestId);
+      const preserved=history?compactReceipt(history,receipt.logicalShard,receipt.generation):null;
+      // Historical ownership only: every compact result is non-current, even its last successful generation.
+      return preserved&&receiptMatches(preserved,receipt)?{current:false,receipt:preserved}:null;
+    }
     if(!attempt||attempt.childRunId===null||!receiptMatches(this.bound(attempt),receipt))return null;
-    return {current:attempt.generation===shard!.generation,receipt:this.bound(attempt)};
+    const duplicate=(this.store as CapacityStore & Partial<CapacityCompactStore>).compact?.(receipt.requestId);
+    return {current:!duplicate&&attempt.generation===shard!.generation,receipt:this.bound(attempt)};
   }
 
   /** Called only after authenticated job verification. Negative truth fences immediately; cleanup is re-observed. */
   recordExecutionFailure(receipt: ExecutionReceipt,jobId: number): Promise<void> {
     return this.ordered(async()=>{
       const request=this.store.get(receipt.requestId);
-      if(!request||!this.ownsResult(receipt)||!validRunId(jobId))throw new Error('capacity_result_owner');
+      if(!this.ownsResult(receipt)||!validRunId(jobId))throw new Error('capacity_result_owner');
+      const compact=this.store as CapacityStore & Partial<CapacityCompactStore>;
+      if(!request){
+        if(compact.compactFailure?.(receipt,jobId)!==true)throw new Error('capacity_result_owner');
+        return;
+      }
+      // A duplicate is inconsistent state; preserve negative truth on BOTH sides before acknowledgement.
+      if(compact.compact?.(receipt.requestId)&&compact.compactFailure?.(receipt,jobId)!==true)throw new Error('capacity_result_owner');
       if(!applyObservation(request,{receipt,workflowPath:'.github/workflows/runner-executor.yml',workflowAttempt:1,jobId,
         runnerProfile:receipt.profile,status:'in_progress',conclusion:null,jobConclusion:null,testStep:'failure',startedAt:null,cleanupConfirmed:false},this.now()))throw new Error('capacity_result_owner');
       this.store.save(request);
@@ -361,7 +376,11 @@ export class CiCapacity {
 
   status(id: string): Aggregate | null {
     const request = this.store.get(id);
-    if (!request) return null;
+    const history=(this.store as CapacityStore & Partial<CapacityCompactStore>).compact?.(id);
+    if((request||history)&&this.pendingFailure(id))return {status:'failure',reason:'verified_failure'};
+    if(!request)return history?compactAggregate(history,this.store.newerParent(history.submission.parentRunId,history.submission.parentAttempt)):null;
+    if(history?.failed)return {status:'failure',reason:'verified_failure'};
+    if(history)return {status:'pending',reason:'capacity_history_conflict'};
     request.superseded = this.superseded(request);
     return aggregateCapacity(request, this.now());
   }

@@ -11,5 +11,6 @@
 | `ci_capacity_auth_policy_8011.test.ts` | D8011: fake clock/network/crypto boundaries test bounded key refresh, durable reservations and verified receipt progress. |
 | `ci_capacity_retention_8339.test.ts` | D8339: guarded age and count retention of the request store against real SQLite and the real publication outbox; nothing owed is removed and every identity fence survives. |
 | `ci_capacity_compact_8348.test.ts` | D8348: handoff of a passing request to a compact record against real SQLite and the real coordinator; atomicity, caps, sticky failure, cursored expiry and paging. |
+| `ci_capacity_compose_compact_7909.test.ts` | D7909-p8: composed signed outcomes, negative replay, fair publication, retention and runtime recovery against real SQLite. |
 
 Wrangler local-runtime smoke checks and packaging are recorded in D5618.

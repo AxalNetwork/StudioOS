@@ -1,12 +1,14 @@
 /** D7909: default-off capacity service; deployment, permissions and activation remain held. */
 import { DurableObject } from 'cloudflare:workers';
-import { CiCapacity, SqlCapacityStore } from './ciCapacity.ts';
+import { CiCapacity, SqlCapacityStore, CAPACITY_RETENTION_MS } from './ciCapacity.ts';
 import { authenticateCapacity, capacityBearer, capacityBody, capacityPlatformFetch } from './ciCapacityAuth.ts';
 import { capacityGithubClient, capacityInventoryClient, GithubCapacityPorts } from './ciCapacityGithub.ts';
 import type { CapacityConfig, CapacityExecutionResultReader } from './ciCapacityGithub.ts';
 import { CapacityOutbox } from './ciCapacityOutbox.ts';
 import { CapacityTransport, capacityIdentityLane } from './ciCapacityTransport.ts';
-import { CI_CAPACITY_BUDGETS } from './lib/ciCapacityPolicy.ts';
+import { publicationSettled, publicationConsumer } from './ciCapacityRetention.ts';
+import { pruneCapacityHistory } from './ciCapacityHistory.ts';
+import { CI_CAPACITY_BUDGETS, validateCapacityPolicy } from './lib/ciCapacityPolicy.ts';
 import { CapacityIssuerKeys, CapacityRequestBudget } from './lib/ciCapacityAuthPolicy.ts';
 import type { CapacityBudgetStore, CapacityBudgetWindow } from './lib/ciCapacityAuthPolicy.ts';
 import { ownerAuthorized } from './webhook.ts';
@@ -47,10 +49,18 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   private budget: CapacityRequestBudget;
   private results: SqlCapacityResults;
   constructor(ctx: DurableObjectState, env: CapacityEnv) {
-    super(ctx,env); this.store=new SqlCapacityStore(ctx.storage);
+    super(ctx,env);
+    this.results = new SqlCapacityResults(ctx.storage);
+    const mode=()=>{try{const config=this.settings();
+      new GithubCapacityPorts(async()=>{throw new Error('capacity_validation_only');},config);
+      validateCapacityPolicy(this.policy(config));return config.publication;
+    }catch{return null;}};
+    const guard=publicationSettled(ctx.storage,mode),consumer=publicationConsumer(ctx.storage,mode);
+    this.store=new SqlCapacityStore(ctx.storage,
+      (request,superseded)=>this.results.pendingFailure(request.submission.requestId)?'owed':guard(request,superseded),
+      {mode,evidence:(record,superseded)=>this.results.pendingFailure(record.submission.requestId)?'owed':consumer.evidence(record,superseded)});
     this.keys = new CapacityIssuerKeys(capacityPlatformFetch);
     this.budget = new CapacityRequestBudget(new SqlCapacityBudgetStore(ctx.storage));
-    this.results = new SqlCapacityResults(ctx.storage);
   }
   private ordered<T>(fn:()=>Promise<T>):Promise<T>{const result=this.serial.then(fn);this.serial=result.catch(()=>undefined);return result;}
   private async enabled(){return this.env.CAPACITY_ENABLED==='true'&&(await this.ctx.storage.get<boolean>('capacity-kill'))===false;}
@@ -61,6 +71,9 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     if(settings.publication==='pilot'&&settings.maxIncludedWorkerShards!==0)throw new Error('capacity_pilot_included_disabled');
     return settings;
   }
+  private policy(config:Settings){return {version:1 as const,maxExternalWorkerShards:config.maxExternalWorkerShards,
+    maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,
+    maxActiveRequests:config.publication==='pilot'?1:8,budgets:{...CI_CAPACITY_BUDGETS}};}
   private async components() {
     const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch);
     const inventoryApi=this.env.CAPACITY_INVENTORY_TOKEN?capacityInventoryClient(this.env,capacityPlatformFetch):undefined;
@@ -68,7 +81,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     const parent=ports.parent.bind(ports),dispatch=ports.dispatch.bind(ports);
     ports.parent=async input=>await this.enabled()?parent(input):false;
     ports.dispatch=async attempt=>{if(!await this.enabled())throw new Error('capacity_disabled');return dispatch(attempt);};
-    const capacity=new CiCapacity(this.store,ports,this.env.REPOSITORY,{version:1,maxExternalWorkerShards:config.maxExternalWorkerShards,maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,maxActiveRequests:config.publication==='pilot'?1:8,budgets:{...CI_CAPACITY_BUDGETS}});
+    const capacity=new CiCapacity(this.store,ports,this.env.REPOSITORY,this.policy(config),Date.now,id=>this.results.pendingFailure(id));
     return {capacity,config,ports,transport:new CapacityTransport(capacity,config,()=>this.enabled(),()=>this.ctx.storage.setAlarm(Date.now()+1000))};
   }
   async fetch(request:Request):Promise<Response>{
@@ -134,11 +147,18 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   alarm():Promise<void>{return this.ordered(async()=>{
     // The alarm survives an exception or eviction, including during publication or an ambiguous dispatch.
     await this.ctx.storage.setAlarm(Date.now()+15000);
-    if(this.store.count()===0){await this.ctx.storage.deleteAlarm();return;}
+    const garbage=this.results.prune();
+    // Pending negative authority fences both full and compact expiry before replay reaches it.
+    this.store.prune(Date.now()-CAPACITY_RETENTION_MS);
+    if(this.store.count()===0&&this.store.compactCount()===0){
+      const publications=pruneCapacityHistory(this.ctx.storage,'publications');
+      if(!garbage&&!publications)await this.ctx.storage.deleteAlarm();return;
+    }
     const {capacity,config}=await this.components();
     const outbox=new CapacityOutbox(this.ctx.storage,await capacityGithubClient(this.env,capacityPlatformFetch),config);
+    const failures=await this.results.replayFailures((receipt,jobId)=>capacity.recordExecutionFailure(receipt,jobId));
     const next=await capacity.tick();
     const publication=await outbox.publish(this.store,id=>capacity.status(id),config.publication);
-    if(next===null&&!publication)await this.ctx.storage.deleteAlarm();
+    if(next===null&&!publication&&!failures&&!garbage)await this.ctx.storage.deleteAlarm();
   });}
 }

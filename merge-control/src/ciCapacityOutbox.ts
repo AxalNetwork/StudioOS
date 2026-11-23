@@ -1,5 +1,7 @@
 /** D7973: restart-safe check publication intents; pilot authority is never full-suite authority. */
 import type { CapacityStore } from './ciCapacity.ts';
+import type { CapacityCompactStore } from './ciCapacityCompact.ts';
+import { pruneCapacityHistory } from './ciCapacityHistory.ts';
 import { GithubCapacityPorts } from './ciCapacityGithub.ts';
 import type { CapacityApi, CapacityConfig } from './ciCapacityGithub.ts';
 import type { Aggregate } from './lib/ciCapacityPolicy.ts';
@@ -18,20 +20,44 @@ export class CapacityOutbox {
   }
   async publish(store: CapacityStore, status: (id: string)=>Aggregate|null, mode: Intent['mode']): Promise<boolean> {
     let pending=false;
-    this.storage.sql.exec('DELETE FROM capacity_publications WHERE substr(id, 1, 36) NOT IN (SELECT id FROM ci_capacity_requests)');
-    const records=store.list();
-    const intents=new Map(this.storage.sql.exec<{id:string;state:string}>('SELECT id,state FROM capacity_publications').toArray().map(row=>[row.id,JSON.parse(row.state) as Intent]));
-    const priority=records.filter(r=>{const sent=intents.get(`${r.submission.requestId}:${mode}`)?.sent;return r.completedAt===null||!sent||JSON.parse(sent).status==='pending';});
-    const candidates=priority.length?priority:records;
-    const cursor=this.storage.sql.exec<{last:string}>('SELECT last FROM capacity_publication_cursor WHERE mode = ?',mode).toArray()[0]?.last??'';
-    const after=candidates.filter(r=>r.submission.requestId>cursor);
-    const rotated=priority.length?[...after,...candidates.filter(r=>r.submission.requestId<=cursor)]:(after.length?after:candidates);
-    // At most four publications per alarm. A durable cursor prevents retained history or a failed intent monopolizing the API budget.
-    for(const request of rotated.slice(0,4)) {
-      this.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor (mode,last) VALUES (?,?)',mode,request.submission.requestId);
+    const garbage=pruneCapacityHistory(this.storage,'publications');
+    const records=store.list(), compactStore=store as CapacityStore & Partial<CapacityCompactStore>;
+    const read=(id:string)=>this.storage.sql.exec<{state:string}>('SELECT state FROM capacity_publications WHERE id=?',id).toArray()[0];
+    const priority=records.filter(r=>{try{const row=read(`${r.submission.requestId}:${mode}`);const intent=row?JSON.parse(row.state) as Intent:null;
+      return r.completedAt===null||!intent?.sent||JSON.parse(intent.sent).status==='pending';}catch{return true;}});
+    const priorityIds=new Set(priority.map(r=>r.submission.requestId));
+    const history=records.filter(r=>!priorityIds.has(r.submission.requestId));
+    const cursor=(name:string)=>this.storage.sql.exec<{last:string}>('SELECT last FROM capacity_publication_cursor WHERE mode=?',name).toArray()[0]?.last??'';
+    const advance=(name:string,last:string)=>this.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)',name,last);
+    const rotate=(rows:typeof records,key:string)=>{const last=cursor(key);return [...rows.filter(r=>r.submission.requestId>last),...rows.filter(r=>r.submission.requestId<=last)];};
+    const hot=rotate(priority,`${mode}:priority`), settled=rotate(history,`${mode}:history`);
+    const compactKey=`${mode}:compact`;
+    let compact=compactStore.compactPage?.(cursor(compactKey),100)??[];
+    if(!compact.length&&cursor(compactKey))compact=compactStore.compactPage?.('',100)??[];
+    const eligible=compact.filter(r=>r.publicationMode===mode&&!records.some(full=>full.submission.requestId===r.submission.requestId));
+    type Selected={record:Pick<(typeof records)[number],'submission'>;lane:string;compact:boolean};
+    const selected:Selected[]=[];
+    const add=(record:Selected['record']|undefined,lane:string,isCompact=false)=>{if(record)selected.push({record,lane,compact:isCompact});};
+    // Four publications total: active work, full history and compact history each get a turn.
+    add(hot.shift(),`${mode}:priority`);add(settled.shift(),`${mode}:history`);
+    for(const record of eligible.slice(0,2))add(record,compactKey,true);
+    while(selected.length<4&&(hot.length||settled.length)){
+      add(hot.shift(),`${mode}:priority`);if(selected.length<4)add(settled.shift(),`${mode}:history`);
+    }
+    // A page of other modes/conflicts must not trap this cursor; none is reinterpreted or published.
+    if(!eligible.length&&compact.length)advance(compactKey,compact.at(-1)!.submission.requestId);
+    for(const item of selected){
+      const request=item.record;
+      advance(item.lane,request.submission.requestId);
+      // Duplicate authority is unresolved. Preserve both sides and every existing intent; publish neither.
+      if(!item.compact&&compactStore.compact?.(request.submission.requestId)){pending=true;continue;}
       const id=`${request.submission.requestId}:${mode}`, name=mode==='pilot'?PILOT_CHECK:FULL_CHECK;
-      const old=this.storage.sql.exec<{state:string}>('SELECT state FROM capacity_publications WHERE id = ?',id).toArray()[0];
-      const intent: Intent=old?JSON.parse(old.state):{requestId:request.submission.requestId,mode,checkId:null,phase:'new',sent:null,failed:false};
+      const old=read(id);let intent:Intent;
+      try{
+        if(item.compact&&!old){pending=true;continue;}
+        intent=old?JSON.parse(old.state):{requestId:request.submission.requestId,mode,checkId:null,phase:'new',sent:null,failed:false};
+        if(intent.requestId!==request.submission.requestId||intent.mode!==mode)throw new Error('publication_identity_conflict');
+      }catch{pending=true;continue;}
       const save=()=>this.storage.sql.exec('INSERT OR REPLACE INTO capacity_publications (id,state) VALUES (?,?)',id,JSON.stringify(intent));
       const result=status(request.submission.requestId);if(!result)continue;
       // An old, superseded attempt may update its existing check, but may never create a newer check on that SHA.
@@ -95,6 +121,7 @@ export class CapacityOutbox {
         intent.sent=fingerprint;save();
       }catch { /* Durable intent remains for the next alarm; never publish guessed success. */ }
     }
-    return pending||rotated.length>4;
+    // Keep bounded reconciliation/expiry alive while either representation still owes monitoring.
+    return pending||garbage||records.length>0||compact.length>0;
   }
 }
