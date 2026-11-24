@@ -34,8 +34,10 @@ export interface ImportReport {
   rows_seen: number; rows_inserted: number; rows_unchanged: number;
   next_cursor: string | null; failure: string | null;
 }
-type Prior = { id: number; source_observation_key: string; vintage: string; value: number | null; observation_status: string };
-const same = (p: Prior, r: Observation) => p.value === r.value && p.observation_status === r.observation_status;
+type Prior = { id: number; source_observation_key: string; vintage: string; value: number | null; observation_status: string; limitations: string | null };
+/** D7717: a cell is unchanged only when its value, status and limitations (where a provider's flags land) all match. */
+const same = (p: Prior, r: Observation) => p.value === r.value && p.observation_status === r.observation_status
+  && (p.limitations ?? null) === (r.limitations ?? null);
 const keyOf = (r: Pick<Observation, 'source_observation_key' | 'vintage'>) => JSON.stringify([r.source_observation_key, r.vintage]);
 const failureOf = (error: unknown) => error instanceof ImportFailure ? error : new ImportFailure('database_unavailable');
 export const failureText = (f: ImportFailure) => f.kind + (f.httpStatus === null ? '' : ` HTTP ${f.httpStatus}`);
@@ -52,7 +54,7 @@ async function priorRows(env: Env, source: string, rows: Observation[]): Promise
   // One bounded prior read: the latest row and the requested edition, at most two per cell.
   const wanted = JSON.stringify(rows.map(r => ({ key: r.source_observation_key, vintage: r.vintage })));
   return (await env.DB.prepare(
-    `SELECT o.id,o.source_observation_key,o.vintage,o.value,o.observation_status
+    `SELECT o.id,o.source_observation_key,o.vintage,o.value,o.observation_status,o.limitations
        FROM research_market_observations o
       WHERE o.source_id=? AND EXISTS (
         SELECT 1 FROM json_each(?) w WHERE json_extract(w.value,'$.key')=o.source_observation_key
@@ -95,7 +97,8 @@ export async function runObservationBatch(env: Env, source: string, prepare: () 
       // D7716: a field outside its exported list refuses the batch before any write; nothing is truncated or guessed.
       if (observationFieldsError(r)) throw new ImportFailure('provider_payload');
       const old = identities.get(r.source_observation_key);
-      if (old && (old.vintage !== r.vintage || old.value !== r.value || old.observation_status !== r.observation_status))
+      if (old && (old.vintage !== r.vintage || old.value !== r.value || old.observation_status !== r.observation_status
+        || (old.limitations ?? null) !== (r.limitations ?? null)))
         throw new ImportFailure('provider_payload');
       identities.set(r.source_observation_key, r);
     }
@@ -126,11 +129,11 @@ export async function runObservationBatch(env: Env, source: string, prepare: () 
           WHERE EXISTS (SELECT 1 FROM research_market_sources WHERE id=? AND enabled=1)
             AND NOT EXISTS (SELECT 1 FROM research_market_observations p WHERE p.source_id=? AND p.source_observation_key=?
               AND p.id=(SELECT MAX(q.id) FROM research_market_observations q WHERE q.source_id=p.source_id AND q.source_observation_key=p.source_observation_key)
-              AND p.value IS ? AND p.observation_status=?)`,
+              AND p.value IS ? AND p.observation_status=? AND p.limitations IS ?)`,
       ).bind(source, r.metric_key, r.metric_label, r.geography_type, r.geography_code, r.period, r.value, r.unit, r.observation_status,
         r.published_at, started, r.source_observation_key, r.vintage, source, r.source_observation_key,
         ...OBSERVATION_FIELDS.map(f => r[f] ?? null),
-        source, source, r.source_observation_key, r.value, r.observation_status)));
+        source, source, r.source_observation_key, r.value, r.observation_status, r.limitations ?? null)));
       const ignored: Observation[] = [];
       for (let i = 0; i < results.length; i++) {
         if (Number(results[i].meta?.changes || 0) === 1) { inserted++; unchanged += duplicates.get(keyOf(pending[i])) || 0; }

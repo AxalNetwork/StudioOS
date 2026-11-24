@@ -261,6 +261,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
 | `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
 Prefer scoped business clocks and explicit observable outcomes to a fixed count
@@ -281,5 +282,9 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
+
+| `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
+
+`hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.

@@ -16,13 +16,12 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
-import { resolve, join, dirname } from 'node:path';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { SignJWT } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 const STUB = 'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
   + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
@@ -53,9 +52,6 @@ await build({
 const worker = (await import(pathToFileURL(out).href)).default;
 test.after(() => rmSync(dirname(out), { recursive: true, force: true }));
 
-const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 1;    // the branch's admin
@@ -78,27 +74,12 @@ const HQ_VARS = {
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-type DB = ReturnType<typeof buildFresh>;
+type DB = ReturnType<typeof freshSchema>;
 
-// The schema is built once and replayed per test, in memory: a hundred fresh
-// builds of every migration would take the suite past its time limit.
-const TEMPLATE = buildFresh(BASELINE, LATER, { dqs: true });
-const OBJECTS = TEMPLATE.prepare(
-  "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY rowid",
-).all() as Array<{ type: string; name: string; sql: string }>;
-const SEEDS = OBJECTS.filter((o) => o.type === 'table').map((o) => ({
-  name: o.name, rows: TEMPLATE.prepare(`SELECT * FROM "${o.name}"`).all() as Array<Record<string, any>>,
-})).filter((t) => t.rows.length > 0);
+// D8354: each test gets its own in-memory copy of the D4133 cached schema (the baseline and every later
+// migration, with their rows), loaded by SQLite rather than replayed row by row from a template.
 function schemaCopy(): DB {
-  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true }) as DB;
-  for (const o of OBJECTS) if (o.type === 'table') db.exec(o.sql);
-  for (const t of SEEDS) {
-    const cols = Object.keys(t.rows[0]);
-    const ins = db.prepare(`INSERT INTO "${t.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`);
-    for (const r of t.rows) ins.run(...cols.map((c) => r[c]));
-  }
-  for (const o of OBJECTS) if (o.type !== 'table') db.exec(o.sql);
-  return db;
+  return freshSchema({ dqs: true });
 }
 function makeD1(db: DB) {
   return {

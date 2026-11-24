@@ -177,7 +177,7 @@ test('the model: ceilings, coordinator load, queueing and sizing', () => {
   assert.ok(steady.stable && steady.meanWaitMinutes > 0 && steady.meanWaitMinutes < 1);
   assert.equal(queueWait({ arrivalsPerHour: 240, serviceMinutes: 25, slots: 60 }).stable, false);
   // Today's busiest measured hour, Worker shards only, on 120 slots.
-  const busiest = queueWait({ arrivalsPerHour: MEASURED.workerShardsStartedPerHour.max, serviceMinutes: MEASURED.workerShardMinutes.p50, slots: 120 });
+  const busiest = queueWait({ arrivalsPerHour: MEASURED.workerShardsCompletedPerHour.busiest, serviceMinutes: MEASURED.workerShardMinutes.p50, slots: 120 });
   assert.ok(busiest.stable && busiest.utilisation < 0.65 && busiest.meanWaitMinutes < 0.01);
 
   assert.deepEqual(sizeFor({ targetRunning: 120, slotsPerMachine: 4 }), { slots: 150, machines: 39, perMachine: { cpus: 10, memoryGiB: 20, pids: 1024 }, total: { cpus: 300, memoryGiB: 600 } });

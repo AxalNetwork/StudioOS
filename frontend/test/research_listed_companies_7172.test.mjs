@@ -128,9 +128,26 @@ test('RML-07: each source writes what it records, every gap the words Not record
   const bare = listedCsvCells({ source: 'signal_companies', symbol: 'Z', name: 'Quiet', exchange: null, country: '', sector: null, market_cap_band: null, employee_band: null, updated_at: null });
   assert.deepEqual(bare.slice(2), ['Not recorded', 'Signal companies', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded']);
   assert.ok(!bare.includes('') && !bare.includes(null), 'no blank cell');
-  assert.deepEqual(MARKET_CSV_HEADER, ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug']);
-  assert.deepEqual(marketCsvCells({ name: 'Cold-chain storage', supplied_count: 208, mi_sector: null, slug: 'cold-chain-storage' }),
-    ['Cold-chain storage', 208, 'Not mapped', 'cold-chain-storage']);
+  // D7710 (owner answer A): the first four columns are unchanged; seven provenance columns follow.
+  assert.deepEqual(MARKET_CSV_HEADER.slice(0, 4), ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug']);
+  assert.deepEqual(MARKET_CSV_HEADER.slice(4), ['Directory as of', 'Countries', 'Sources naming the market',
+    'Sector-level sources (inherited)', 'Newest named source', 'Newest date basis', 'Read at']);
+  const bareMarket = marketCsvCells({ name: 'Cold-chain storage', supplied_count: 208, mi_sector: null, slug: 'cold-chain-storage' });
+  assert.deepEqual(bareMarket, ['Cold-chain storage', 208, 'Not mapped', 'cold-chain-storage',
+    'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded']);
+  assert.ok(!bareMarket.includes('') && !bareMarket.includes(null), 'no blank market cell');
+  // Every new cell comes from the list response's own fields.
+  const listed = {
+    name: 'Energy storage', supplied_count: 312, mi_sector: 'Climate Intelligence', slug: 'energy-storage', as_of: '2026-10-01',
+    countries: { status: 'recorded', value: [{ code: 'DE', count: 4 }, { code: 'NL', count: 2 }] },
+    sources_by_kind: { market_intel: { count: 4 }, signal_evidence: { count: 2 } },
+    newest_source_at: { status: 'recorded', value: '2026-11-10 08:00:00' }, newest_source_basis: 'reported',
+    read_at: '2026-11-16T09:40:00.000Z',
+  };
+  assert.deepEqual(marketCsvCells(listed).slice(4), ['2026-10-01', 'DE 4; NL 2', 2, 4, '2026-11-10 08:00:00', 'Date the source reports', '2026-11-16T09:40:00.000Z']);
+  const noneNamed = marketCsvCells({ ...listed, sources_by_kind: { market_intel: { count: 4 }, signal_evidence: { count: 0 } },
+    newest_source_at: { status: 'not_recorded', value: null, reason: 'None named' }, newest_source_basis: null });
+  assert.deepEqual(noneNamed.slice(6, 10), [0, 4, 'Not recorded', 'Not recorded'], 'none named is a count of 0 with no date');
 });
 
 test('the directory export writes every match in the view\'s order, paging the Worker when one read is short', async () => {
@@ -146,6 +163,10 @@ test('the directory export writes every match in the view\'s order, paging the W
   const got = await collectMarkets({ q: ' storage ', sort: 'supplied_count:desc', pageSize: 2,
     fetchPage: async (params) => { asked.push(params); return { total: 3, items: pages[asked.length - 1] }; } });
   assert.deepEqual(got.map((m) => m.slug), ['energy-storage', 'data-storage', 'robotics']);
+  // D7710: each row keeps its page's read time.
+  const timed = await collectMarkets({ sort: 'name:asc', pageSize: 2,
+    fetchPage: async (params) => (params.offset ? { total: 3, items: [ms[2]], read_at: 'T2' } : { total: 3, items: [ms[0], ms[1]], read_at: 'T1' }) });
+  assert.deepEqual(timed.map((m) => m.read_at), ['T1', 'T1', 'T2']);
   assert.deepEqual(asked, [
     { q: 'storage', sort: 'supplied_count', dir: 'desc', limit: 2, offset: undefined },
     { q: 'storage', sort: 'supplied_count', dir: 'desc', limit: 2, offset: 2 },
@@ -410,11 +431,13 @@ test('the directory exports the filtered markets in the view\'s order, not the f
     await act(async () => { m.header.actions[0].onClick(); });
     await m.settle();
     assert.equal(m.downloads.files[0].name, `markets-3-rows-${stamp()}.csv`);
+    // D7710: the first four columns as before, then the provenance columns; the fixture holds none, so Not recorded.
+    const NR7 = ',2026-11-02,Not recorded,Not recorded,Not recorded,Not recorded,Not recorded,Not recorded';
     assert.deepEqual((await m.downloads.text()).split('\r\n'), [
-      'Market,Companies (taxonomy count),Tracked sector,Slug',
-      'Cold-chain storage,208,Not mapped,cold-chain-storage',
-      'Data storage,947,Data,data-storage',
-      'Energy storage,1284,Energy,energy-storage',
+      'Market,Companies (taxonomy count),Tracked sector,Slug,Directory as of,Countries,Sources naming the market,Sector-level sources (inherited),Newest named source,Newest date basis,Read at',
+      `Cold-chain storage,208,Not mapped,cold-chain-storage${NR7}`,
+      `Data storage,947,Data,data-storage${NR7}`,
+      `Energy storage,1284,Energy,energy-storage${NR7}`,
     ]);
   } finally { await m.unmount(); }
 });

@@ -111,6 +111,15 @@ twice, with and without the rules. Only `README.md` files may differ between the
   `bot:keeper-tried` or `needs-session`, never on `conflict` alone (D6476-p5).
 - A conflict in a file `pathGuard()` refuses, or a refused union, is handed back with `needs-session`.
 
+**Three attempts, then for good (D6476-p6, #8077).** A PR gets at most three keeper attempts, whatever their
+outcome. The count is the larger of two records: the App's `bot:keeper-tried` label events plus its keeper merge
+commits, or the `Keeper attempt k of 3: <outcome>` lines in the sticky comment. The sticky count matters because
+GitHub writes no new label event when the label is already on. Each attempt adds its line and keeps the earlier
+ones. A conflict on the third attempt adds `needs-session` with a final line, and the resolver is not asked. A
+fourth attempt is never planned, not after a push and not on a dispatch. If any record cannot be read, nothing is
+planned for that PR. The ejection handler hands an exhausted PR's conflict to the owner (`ejected`) and does not
+wait for the keeper.
+
 **Daily pushes.** The plan uploads a reservation artifact before any push, and pushes only if the upload
 succeeded. The next run counts today's reservations against `LANDING_BOT_DAILY_PUSHES`.
 
@@ -210,6 +219,7 @@ Otherwise it either waits or hands back (#6476 S1, D6476-p4):
   `false` (even after a cascade or infrastructure ejection) is a conflict; `null` waits.
 - **A conflict** asks the keeper only in the first 20 minutes after the ejection; after that the keeper's own
   15-minute schedule runs. If the keeper's merge landed and GitHub still reports a conflict, it hands back.
+  Once the keeper has used its three attempts (D6476-p6), the conflict is handed back at once.
 
 One sticky comment says which, and a sweep whose outcome has not changed writes nothing. `ejected` labels the App
 wrote before 2026-11-21, when it labelled the waiting cases too, get one fresh look on removals under 7 days old;
