@@ -10,7 +10,9 @@ import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { logAdminAction } from '../services/adminAudit';
-import { logActorAct } from '../services/actorLog';
+import { slotBookingFacts, slotVerdicts, type BookedPricing, type SlotRow } from '../services/advisorAvailability';
+import { transitionBooking, type BookingTransition } from '../services/advisorBookingLifecycle';
+import { PracticeRefusal } from '../services/practiceRefusal';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull } from './_t13t14t15_helpers';
 import { loadUserVectors, confidenceAdjustedAlignment, skillComplementarity, computeWatchOuts } from '../services/matchingVectors';
@@ -84,14 +86,7 @@ const EXPERTISE_AXIS: Record<string, string> = {
   fundraising: 'capital_network', networking: 'capital_network', 'data science': 'engineering',
   ai_ml: 'engineering', 'ai / ml': 'engineering', growth: 'gtm_sales',
 };
-type SlotRow = {
-  id: number; uid: string; advisor_id: number;
-  starts_at: string; ends_at: string; capacity: number;
-  meeting_url: string | null; notes: string | null;
-  is_cancelled: number; created_at: string;
-  /** Migration 240: set when the advisor withdrew the hour. A blocked slot is not cancelled and is not bookable (D4695). */
-  blocked_reason?: string | null;
-};
+
 
 /**
  * #4715 — an advisor as the directory and the match list show them to another
@@ -519,27 +514,6 @@ function ownSlotDto(s: SlotRow & {
  * disagree is 'mixed'; a slot nobody holds is null. The grid's "paid / free"
  * tile reads this, so an hour with no recorded price is never counted free.
  */
-type BookedPricing = 'priced' | 'free' | 'unpriced' | 'mixed' | null;
-async function bookedPricingBySlot(env: Env, advisorId: number, slotIds: number[]): Promise<Map<number, BookedPricing>> {
-  const out = new Map<number, BookedPricing>();
-  if (!slotIds.length) return out;
-  const rows = await env.DB.prepare(
-    `SELECT slot_id,
-            SUM(CASE WHEN amount_cents > 0 THEN 1 ELSE 0 END) AS priced,
-            SUM(CASE WHEN amount_cents = 0 THEN 1 ELSE 0 END) AS free,
-            SUM(CASE WHEN amount_cents IS NULL THEN 1 ELSE 0 END) AS unpriced
-       FROM advisor_bookings
-      WHERE advisor_id = ? AND status IN ('pending','confirmed','completed')
-        AND slot_id IN (SELECT value FROM json_each(?))
-      GROUP BY slot_id`,
-  ).bind(advisorId, JSON.stringify(slotIds)).all<{ slot_id: number; priced: number; free: number; unpriced: number }>();
-  for (const r of rows.results || []) {
-    const kinds = [r.priced > 0 && 'priced', r.free > 0 && 'free', r.unpriced > 0 && 'unpriced'].filter(Boolean) as BookedPricing[];
-    out.set(Number(r.slot_id), kinds.length === 1 ? kinds[0] : kinds.length ? 'mixed' : null);
-  }
-  return out;
-}
-
 advisors.get('/me/slots', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -556,10 +530,10 @@ advisors.get('/me/slots', async (c) => {
         ORDER BY starts_at ASC LIMIT 500`
     ).bind(m.id, from, until).all<SlotRow>();
     const slots = (rows.results || []) as SlotRow[];
-    const pricing = await bookedPricingBySlot(c.env, m.id, slots.map((s) => Number(s.id)));
+    const facts = await slotBookingFacts(c.env, m.id, slots.map((s) => Number(s.id)));
     const items: any[] = [];
     for (const s of slots) {
-      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id), pricing.get(Number(s.id)) ?? null));
+      items.push(ownSlotDto(s as any, facts.get(Number(s.id))?.taken ?? 0, facts.get(Number(s.id))?.pricing ?? null));
     }
     return c.json({ items, window: { from, until, days }, truncated: slots.length >= 500 });
   } catch (e) { return mapError(c, e); }
@@ -579,44 +553,6 @@ advisors.get('/me/slots', async (c) => {
  *
  * The slot is still listed (a founder can see why a time is gone); it is not hidden. The booking stays the decision.
  */
-async function slotVerdicts(env: Env, advisorId: number, slots: SlotRow[]): Promise<Map<number, { unavailable_code: string | null; paid_cap_reached: boolean }>> {
-  const out = new Map<number, { unavailable_code: string | null; paid_cap_reached: boolean }>();
-  if (!slots.length) return out;
-  const rules = rulesFromRow(await env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
-    .bind(advisorId).first<AvailabilityRow>());
-  const starts = slots.map((s) => Date.parse(s.starts_at)).filter(Number.isFinite);
-  const lo = new Date(Math.min(...starts) - 8 * 86_400_000).toISOString();
-  const hi = new Date(Math.max(...starts) + 8 * 86_400_000).toISOString();
-  const booked = (rules.buffer_minutes ?? 0) > 0 ? ((await env.DB.prepare(
-    `SELECT s.id, s.starts_at, s.ends_at FROM advisor_office_hour_slots s
-      WHERE s.advisor_id = ? AND s.is_cancelled = 0 AND s.starts_at >= ? AND s.starts_at < ?
-        AND EXISTS (SELECT 1 FROM advisor_bookings b WHERE b.slot_id = s.id AND b.status IN ('pending','confirmed','completed'))`
-  ).bind(advisorId, lo, hi).all<{ id: number; starts_at: string; ends_at: string }>()).results ?? []) : [];
-  const paidStarts = rules.weekly_paid_cap != null ? ((await env.DB.prepare(
-    `SELECT ps.starts_at FROM advisor_bookings pb
-       JOIN advisor_office_hour_slots ps ON ps.id = pb.slot_id
-       JOIN advisor_session_types pt ON pt.id = pb.session_type_id
-      WHERE pb.advisor_id = ? AND pb.status IN ('pending','confirmed','completed')
-        AND pt.price_cents > 0 AND pt.is_free_intro = 0 AND COALESCE(pt.is_included, 0) = 0
-        AND ps.starts_at >= ? AND ps.starts_at < ?`
-  ).bind(advisorId, lo, hi).all<{ starts_at: string }>()).results ?? []).map((r) => Date.parse(r.starts_at)) : [];
-  const now = Date.now();
-  for (const s of slots) {
-    const start = Date.parse(s.starts_at);
-    const week = Number.isFinite(start) ? weekBounds(start, rules.timezone) : null;
-    const used = week ? paidStarts.filter((t) => t >= week.from && t < week.until).length : 0;
-    const refused = ruleRefusal({
-      slot: s, rules, now, paid: false, paidThisWeek: null,
-      booked: booked.filter((o) => o.id !== s.id),
-    });
-    out.set(s.id, {
-      unavailable_code: refused && refused.code !== 'slot_blocked' ? refused.code : null,
-      paid_cap_reached: rules.weekly_paid_cap != null && used >= rules.weekly_paid_cap,
-    });
-  }
-  return out;
-}
-
 advisors.get('/:uid/slots', async (c) => {
   try {
     const viewer = await requireAuth(c);
@@ -632,7 +568,9 @@ advisors.get('/:uid/slots', async (c) => {
       ? await c.env.DB.prepare(sql).bind(m.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
     const slots = (rows.results || []) as SlotRow[];
-    const verdicts = await slotVerdicts(c.env, m.id, slots);
+    const [verdicts, facts] = await Promise.all([
+      slotVerdicts(c.env, m.id, slots), slotBookingFacts(c.env, m.id, slots.map((s) => Number(s.id))),
+    ]);
     // #4715: the advisor (and an admin) see their own slots whole; a founder
     // sees the link and notes only on a slot they hold a confirmed booking on.
     // The booking verdicts ride on either shape: they name no link and no note.
@@ -647,7 +585,7 @@ advisors.get('/:uid/slots', async (c) => {
     }
     const items: any[] = [];
     for (const s of slots) {
-      const taken = await takenForSlot(c.env, s.id);
+      const taken = facts.get(Number(s.id))?.taken ?? 0;
       const shown = whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken);
       items.push({ ...shown, ...verdicts.get(s.id) });
     }
@@ -1139,95 +1077,19 @@ function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
   if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
 }
 
-async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
-  allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
-  reason?: string | null;
-  /** #4702: the answer this transition records, if it is one. */
-  decision?: 'accepted' | 'declined';
-}) {
-  const user = await requireAuth(c);
-  const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
-  if (!b) return c.json({ detail: 'Booking not found' }, 404);
-  // #4715: the advisor side is the policy's answer (licence today, owned row),
-  // never the stored users.advisor_id pointer on its own.
-  const isAdvisor = await actsForAdvisor(c.env, user, b.advisor_id);
-  const isOwner = b.founder_user_id === user.id;
-  const adm = isAdmin(user);
-  let allowed = adm;
-  if (opts.whoCan === 'advisor') allowed = allowed || isAdvisor;
-  if (opts.whoCan === 'founder') allowed = allowed || isOwner;
-  if (opts.whoCan === 'either') allowed = allowed || isAdvisor || isOwner;
-  if (!allowed) return c.json({ detail: 'Forbidden' }, 403);
-  if (!opts.allowed.includes(b.status)) {
-    return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
+async function transition(c: Context<{ Bindings: Env }>, id: number, opts: BookingTransition) {
+  try {
+    const user = await requireAuth(c);
+    await transitionBooking(c.env, user, id, opts);
+    if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
+    if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
+      .bind(id).first<BookingRow>();
+    return c.json(bookingDto(fresh!));
+  } catch (e) {
+    if (e instanceof PracticeRefusal) return c.json(e.body, e.status);
+    throw e;
   }
-  // D4703 (#4703): the status read above is the status this write expects.
-  // Two presses at once (a cancel and a confirm, or two cancels) used to both
-  // pass the check and both write; now the second changes nothing and says so.
-  //
-  // #4702 (D4702): the ANSWER is recorded apart from the status. Confirming is an
-  // accept. A cancel by the advisor of a request still waiting is a decline. A
-  // cancel by anyone of a session already accepted leaves the accept as it was,
-  // and a client withdrawing a request before any answer records no answer, so
-  // neither the client's cancellation nor an admin's changes the advisor's rate.
-  const at = nowIso();
-  const cancelledBy = opts.nextStatus === 'cancelled'
-    ? (isAdvisor && !adm ? 'advisor' : isOwner && !adm ? 'client' : 'admin') : null;
-  const decision = opts.decision
-    ?? (opts.nextStatus === 'cancelled' && b.status === 'pending' && cancelledBy === 'advisor' ? 'declined' : null);
-  const wrote = await c.env.DB.prepare(
-    `UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason),
-            advisor_decision = COALESCE(?, advisor_decision),
-            advisor_decided_at = CASE WHEN ? IS NOT NULL THEN ? ELSE advisor_decided_at END,
-            cancelled_by = COALESCE(?, cancelled_by), updated_at = ?
-      WHERE id = ? AND status = ?`
-  ).bind(opts.nextStatus, opts.reason ?? null, decision, decision, at, cancelledBy, at, id, b.status).run();
-  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
-    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
-  }
-  // #4692: WHO closed the session, and when.
-  //
-  // The row carried the OUTCOME and not the hand: `status` says what happened,
-  // `cancelled_by` says which side cancelled and `advisor_decision` holds the
-  // answer, but none of them names the account that pressed the button, and
-  // `updated_at` is the row's clock rather than an act. So a completed session
-  // (which is what the advisor is paid on) and a cancel could not be traced to
-  // a person at all — including a cancel an admin made on someone else's
-  // booking, which reached no audit store.
-  //
-  // Recorded AFTER the conditional UPDATE changed a row, so the refused press
-  // on a stale status above leaves no record of an act that did not happen.
-  // Both writers are best effort by their own contract: the session has
-  // already changed, and a lost line is better than an act undone by its own
-  // record.
-  //
-  // An admin's press is the privileged one and goes to `logAdminAction`, which
-  // reaches HQ's governance feed (D159); the advisor's and the client's own go
-  // to `activity_logs` through `logActorAct` (D637). `adm` decides, exactly as
-  // it decides `cancelled_by` above, so one press cannot be an admin to one
-  // store and the advisor to the other. Ids and states only: `opts.reason` is
-  // free text the person typed and stays out of both.
-  const actorRole = adm ? 'admin' : isAdvisor ? 'advisor' : 'client';
-  const act = {
-    booking_id: id, advisor_id: b.advisor_id, slot_id: b.slot_id,
-    from_status: b.status, to_status: opts.nextStatus,
-    actor_role: actorRole, cancelled_by: cancelledBy, decision, at,
-  };
-  if (actorRole === 'admin') {
-    await logAdminAction(c.env, user.id, String(user.email || ''),
-      `advisor_booking_${opts.nextStatus}`, { ...act, target_user_id: b.founder_user_id });
-  } else {
-    await logActorAct(c.env, user, `advisor_booking_${opts.nextStatus}`, act);
-  }
-  // Task #52 — remove from external calendars on cancel/no-show.
-  // Defer the dynamic import + provider DELETE work via waitUntil so
-  // the cancel response returns immediately.
-  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
-  // D4703: a confirmed booking's external copy stops being tentative.
-  if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
-  const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
-    .bind(id).first<BookingRow>();
-  return c.json(bookingDto(fresh!));
 }
 
 advisors.post('/bookings/:id/confirm', (c) => transition(c, Number(c.req.param('id')),

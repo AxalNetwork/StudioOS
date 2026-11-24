@@ -69,7 +69,7 @@ const assertShape = (fixture, keys, what) => {
 // ─────────────────────────── fixtures, in the routes' own shape ───────────────────────────
 
 const VERSION_KEYS = keysBetween(ADVISORS, 'function versionDto(r: VersionRow): any {\n  return {', '\n  };');
-const DELIVERABLE_KEYS = keysBetween(ADVISORS, 'const items = (rows.results || []).map((d) => {', '\n      };');
+const DELIVERABLE_KEYS = keysBetween(ADVISORS, 'const items = rows.results.map((d) => {', '\n    };');
 const TYPE_KEYS = keysBetween(ADVISORS, 'function sessionTypeDto(r: SessionTypeRow): any {\n  return {', '\n  };');
 const LINK_KEYS = keysBetween(ADVISORS, 'function bookingLinkDto(r: BookingLinkRow): any {\n  return {', '\n  };');
 const ADVISOR_KEYS = new Set([
