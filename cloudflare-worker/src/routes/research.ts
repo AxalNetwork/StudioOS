@@ -40,6 +40,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
+import { LETTER_INSTRUCTION_FULL, LP_SUMMARY_INSTRUCTION, holdToMaterial, letterDraftGather, lpSummaryGather } from '../services/fundZoneDrafts';
 import { COMPANY_INSTRUCTION, FOUNDING_INSTRUCTION, companyMaterial, foundingMaterial } from '../services/buildRecordDrafts';
 import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
 import type { Env } from '../types';
@@ -3742,6 +3743,28 @@ const DRAFT_SURFACES: Record<string, {
   'funds/calls': {
     instruction: CALL_REMINDER_INSTRUCTION,
     gather: (c, userId, scope) => callReminderMaterial(c.env, userId, scope),
+  },
+
+  // D6242 (#6242) — "Summarise this LP" on the LP record drawer: one LP of one
+  // fund (`<fund>:<lp>`), from that LP's register row, ledger lines and
+  // receipts and comms log only, formatted as the drawer formats them. No
+  // `accept` hook: accepting keeps the summary and writes no fund record.
+  // `finish` refuses a draft quoting a figure its material does not carry.
+  'funds/lps': {
+    instruction: LP_SUMMARY_INSTRUCTION,
+    gather: (c, _userId, scope) => lpSummaryGather(c, scope),
+    finish: async (c, _userId, scope, text) => holdToMaterial(text, await lpSummaryGather(c, scope)),
+  },
+
+  // D6242 (#6242) — "Draft the letter" on a draft reporting period
+  // (`<fund>:<period>`), from its recorded capital movements and saved Key
+  // developments. No `accept` hook: Accept fills the page's unsaved Letter
+  // section, and only Save draft writes the period. An issued period, or one
+  // that records neither, gives nothing to draft.
+  'funds/reporting': {
+    instruction: LETTER_INSTRUCTION_FULL,
+    gather: (c, _userId, scope) => letterDraftGather(c, scope),
+    finish: async (c, _userId, scope, text) => holdToMaterial(text, await letterDraftGather(c, scope)),
   },
 
   // #1524 item 3 (D663) — the Investor narrative band: Eadwyn phrases the fix

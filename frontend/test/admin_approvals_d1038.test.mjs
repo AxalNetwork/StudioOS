@@ -38,6 +38,7 @@ import {
 import { glancesFromStudioGlance } from '../src/pages/admin/adminStudioOverview.js';
 import AdminApprovals, { ApprovalsPage } from '../src/pages/admin/approvals/AdminApprovals.jsx';
 import LaneBoards from '../src/pages/admin/approvals/LaneBoards.jsx';
+import { APPROVALS_PAGE_FILES, approvalsPageSource } from './_approvalsPage.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -1096,11 +1097,11 @@ test('the routes under one guard, the redirect, the row lit on every sub-path, a
   assert.ok(row.match.includes('/admin/approvals'), 'the lane boards light the row');
   assert.ok(read('design/incoming/Approvals · Boards.dc.html').includes('APR16'));
   assert.ok(read('design/incoming/Approvals Page.dc.html').length > 1000);
-  for (const f of ['LaneBoards.jsx', 'AdminApprovals.jsx']) {
+  for (const f of ['LaneBoards.jsx', ...APPROVALS_PAGE_FILES.map((p) => p.split('/').pop())]) {
     assert.doesNotMatch(read(`frontend/src/pages/admin/approvals/${f}`), /window\.(alert|confirm)|\balert\(|\bconfirm\(/, f);
   }
   // D1045: the item link is a literal template the reachability walk resolves to the one-segment route.
-  const page = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const page = approvalsPageSource();
   assert.ok(page.includes('<Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`}'));
   // APR14b: a non-admin on any /admin path meets RoleGuard's one card (D940), not a page of its own.
   assert.ok(app.includes("return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;"));
@@ -1186,11 +1187,11 @@ test('D1047 (APR15c): a board\'s drawer has "‹ [lane]" back on a phone; dialog
     assert.ok(src.includes(`<PhoneBack label="${label}" onClose={onClose}`), f);
     assert.ok(src.includes('<div className={`${FOOT} flex-wrap items-center`}>'), `${f}: the drawer's buttons`);
   }
-  assert.ok(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx').includes('<PhoneBack label="Approvals" onClose={onClose} testId="approvals-item-back" />'), 'the item drawer too');
+  assert.ok(approvalsPageSource().includes('<PhoneBack label="Approvals" onClose={onClose} testId="approvals-item-back" />'), 'the item drawer too');
 });
 
 test('D1047: every tap target on a phone is at least 44 by 44', () => {
-  const page = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const page = approvalsPageSource();
   const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
   for (const name of ['CHIP', 'BTN', 'BTN_PRIMARY', 'SELECT']) {
     const m = new RegExp(`const ${name} = '([^']+)'`).exec(page);
@@ -1205,7 +1206,7 @@ test('D1047: every tap target on a phone is at least 44 by 44', () => {
 
 test('D1047 (APR16): dark — the guard is green, and every status pill keeps its own dark pair', () => {
   execFileSync(process.execPath, ['scripts/check-dark-mode.mjs'], { stdio: 'pipe' });
-  const page = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const page = approvalsPageSource();
   const pills = /const PILL = \{([\s\S]*?)\n\};/.exec(page)[1];
   for (const tone of ['warn', 'bad', 'good', 'plain']) {
     const line = new RegExp(`${tone}: '([^']+)'`).exec(pills)[1];

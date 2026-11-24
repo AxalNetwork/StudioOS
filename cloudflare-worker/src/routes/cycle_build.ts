@@ -6,7 +6,6 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
-import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { lovableRepositories } from '../integrations/providers/github/lovableMark';
 import { lovablePart } from '../services/lovableAppLinks';
@@ -29,11 +28,13 @@ import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, deleteRoadmapItem, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
+import { connectionAction, connectionWhy, notConnectedTools, systemsPart, systemsWithoutCompany, toolSyncLines, withLastFailures } from '../services/operatingSystemsView';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
+import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
 import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1120,8 +1121,15 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
       filings: combined.length, next_filing_due: nextFilingDue,
       // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
-      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
-        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
+      next_filing: nextFiling ? { id: nextFiling.id, title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null,
+      // #6038 (D6038, BD25, BD26, BD29): the module page's company-first blocks, each read and failing on its own.
+      // The overview reads none of them (#4603's budget), so its card is the module page's card, unchanged.
+      ...(opts.pageFacts ? {
+        entity: await entitySummary(env, p, order ?? null, steps),
+        elections: await electionRows(env, p, viewer, steps),
+        papers: await companyPapers(env, p, viewer),
+      } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1151,7 +1159,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     'SELECT COUNT(*) AS n FROM project_core_systems WHERE project_id = ?',
   ).bind(p.id).first<{ n: number }>())?.n);
   const connectors = p.company_id == null ? [] : rows(await env.DB.prepare(
-    `SELECT s.kind, s.used_by, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at
+    `SELECT s.kind, s.used_by, i.id, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at
        FROM project_core_systems s
        JOIN integrations i ON i.id = s.integration_id
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
@@ -1196,6 +1204,8 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
        LEFT JOIN users u ON u.id = i.user_id
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
+  // D5078: why each failing tool or system failed, from its latest failed sync (the parts only; one statement, none when nothing fails).
+  if (opts.parts) await withLastFailures(env, [...tools, ...connectors]);
   const toolCounts = p.company_id == null ? null : opts.parts
     ? { total: tools.length, connected: tools.filter(tool => tool.status === 'active').length, failing: tools.filter(tool => tool.status === 'error').length }
     : await env.DB.prepare(
@@ -1216,23 +1226,31 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') AND i.status = 'error'
         AND i.provider_key IN (SELECT value FROM json_each(?)) ORDER BY i.id LIMIT 1`,
   ).bind(p.company_id, JSON.stringify(REGISTRY.map(d => d.key))).all<any>());
+  // D5078 (#5078, BD12): each tool's action by its state (Connected → Manage, Failing or Reconnect
+  // required → Reconnect, the owner's only), and why it is not connected, in words.
   const toolRows = tools.map((tool, index) => {
     const descriptor = getDescriptor(tool.provider_key);
     const metadata = CONNECTOR_METADATA[tool.provider_key];
     const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? connectHref(descriptor.key, p.id) : null;
+    const toolState = systemStateOf(tool, tool.status);
+    const { action, reason } = connectionAction(tool, toolState, viewer.id, !!viewerMember, href);
     return record(`tool-${index}`, {
       tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
-      state: SYSTEM_STATE_LABEL[systemStateOf(tool, tool.status)],
+      state: SYSTEM_STATE_LABEL[toolState],
       last_sync: tool.last_synced_at ?? null,
       failed_at: tool.last_error_at ?? null,
       feeds: metadata?.feeds.map(key => MODULE_LABELS[key] ?? key).join(' · ') || 'Not recorded',
       owner: tool.user_id === viewer.id ? 'You' : viewerMember ? tool.owner_name ?? null : null,
-      action: href ? { text: 'Open', href } : null,
-    });
+      action: action ? { text: action.text, href: action.href } : null,
+      reason: [connectionWhy(tool, toolState, tool.user_id === viewer.id || !!viewerMember), reason].filter(Boolean).join(' ') || null,
+    }, { state: toolState, intent: action?.intent ?? 'none' });
   });
   const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));
   // Code and Hosting are shown only in the Tools part, so the overview (OVERVIEW) does not read them.
   const code = !opts.parts || p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // D5078 (#5078): the sync lines of every enabled tool, not GitHub's only, bounded and labelled as the latest.
+  const syncs = !opts.parts || p.company_id == null ? null
+    : await toolSyncLines(env, tools, (userId: number) => userId === viewer.id || !!viewerMember);
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
   let hosting: any = null;
   if (opts.parts) {
@@ -1276,26 +1294,32 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       orders: { state: [...SYSTEM_STATE_ORDER] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
       tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null, reconnect: p.company_id == null ? null : reconnectFact },
-    ...(opts.parts ? { parts: { tools: {
-      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
+    ...(opts.parts ? { parts: {
+      // D5078 (#5078, BD20 A/B): the five systems, one state each driving its line and its action; no rows without a company.
+      systems: p.company_id == null ? systemsWithoutCompany() : systemsPart(SYSTEM_KINDS.map(k => {
+        const c = byKind.get(k);
+        return { kind: k, label: SYSTEM_LABEL[k], workspace: k === 'workspace',
+          connection: c ? { ...c, owner_name: tools.find(tool => c.id != null && tool.id === c.id)?.owner_name ?? null } : null };
+      }), viewer.id, !!viewerMember, p.id),
+      tools: {
+      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action'],['reason','Why']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
+      // D5078 (#5078, BD12): the Build-feeding tools the company has not connected, with what each would feed and Connect.
+      not_connected: p.company_id == null ? [] : notConnectedTools(tools.map(tool => String(tool.provider_key)), p.id),
       state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
-      syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
+      syncs: syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
       hosting,
     } } } : {}) };
 
 }
 
-/** How many sync lines Tools shows, newest first. */
-export const SYNC_LINES = 20;
+/** How many sync lines Tools shows, newest first (D5078: `services/operatingSystemsView.ts` reads them). */
+export { SYNC_LINES } from '../services/operatingSystemsView';
 const repositoriesOf = (configJson: string | null): string[] => {
   try { const cfg = JSON.parse(configJson || '{}'); return Array.isArray(cfg.repositories) ? cfg.repositories.filter((r: unknown): r is string => typeof r === 'string') : []; }
   catch { return []; }
-};
-const parsed = (raw: string | null): Record<string, unknown> | null => {
-  try { const v = JSON.parse(raw || 'null'); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
 };
 
 /**
@@ -1318,6 +1342,12 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
       WHERE i.provider_key = 'github' ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
   const sees = (userId: number) => userId === viewer.id || viewerMember;
+  await withLastFailures(env, github);
+  const codeAction = (g: any) => {
+    const conn = { ...g, provider_key: 'github' }, state = systemStateOf(g, g.status);
+    const { action, reason } = connectionAction(conn, state, viewer.id, viewerMember, connectHref('github', p.id));
+    return { action: action ? { text: action.text, href: action.href } : null, reason: [connectionWhy(conn, state, sees(g.user_id)), reason].filter(Boolean).join(' ') || null };
+  };
   const systems = await Promise.all(github.map(async (g) => {
     const repositories = repositoriesOf(g.config_json);
     const fed = (await fedCounts(env, g.id, 'github', null, p.id)).filter(m => (m.count ?? 0) > 0);
@@ -1328,39 +1358,11 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
       repositories: sees(g.user_id) ? repositories : null, repositories_total: repositories.length,
       feeds: fed.map(m => ({ module: m.module, label: m.label, href: m.href ? `${m.href}?project_id=${p.id}` : null, count: m.count })),
       owner: g.user_id === viewer.id ? 'You' : viewerMember ? g.owner_name ?? null : null,
-      action: { text: 'Open', href: connectHref('github', p.id) },
+      // D5078: the Code system's action follows its state, as every tool row's does.
+      ...codeAction(g),
     };
   }));
-  const code = { state: systems.length ? 'ok' : 'empty', systems, reason: systems.length ? null : 'No GitHub connection is enabled for this company.' };
-  if (!github.length) return { code, syncs: { state: 'empty', rows: [], reason: 'No GitHub sync yet.' } };
-  const owners = new Map(github.map(g => [Number(g.id), Number(g.user_id)]));
-  let logs: any[];
-  try {
-    logs = rows(await env.DB.prepare(
-      `SELECT id, integration_id, status, response_summary, payload_json, created_at FROM integration_logs
-        WHERE event_type = 'sync' AND integration_id IN (SELECT value FROM json_each(?))
-        ORDER BY created_at DESC, id DESC LIMIT ?`,
-    ).bind(JSON.stringify([...owners.keys()]), SYNC_LINES).all<any>());
-  } catch {
-    return { code, syncs: { state: 'unreadable', rows: [], reason: 'The sync history could not be read.' } };
-  }
-  const lines = logs.map((l) => {
-    const payload = parsed(l.payload_json);
-    const failed = l.status !== 'ok';
-    const arrived = failed ? [] : syncArrivals(payload);
-    const repos = Array.isArray(payload?.repositories) ? (payload!.repositories as unknown[]).filter((r): r is string => typeof r === 'string') : null;
-    const more = Number.isSafeInteger(payload?.repositories_more) ? Number(payload!.repositories_more) : 0;
-    return {
-      id: `sync-${l.id}`, at: l.created_at ?? null, provider: 'GitHub',
-      state: failed ? 'failed' : payload?.partial === true ? 'partial' : 'done',
-      repositories: repos && sees(owners.get(Number(l.integration_id)) ?? -1) ? repos : null,
-      repositories_more: repos ? more : null,
-      arrived: arrived.map(a => ({ module: a.module, label: a.label, count: a.count, stored: a.stored })),
-      text: failed ? null : syncArrivalsText(arrived),
-      error: failed ? syncErrorWords(l.response_summary) : null,
-    };
-  });
-  return { code, syncs: { state: lines.length ? 'ok' : 'empty', rows: lines, reason: lines.length ? null : 'No GitHub sync yet.' } };
+  return { code: { state: systems.length ? 'ok' : 'empty', systems, reason: systems.length ? null : 'No GitHub connection is enabled for this company.' } };
 }
 
 const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer, opts?: ReadOpts) => Promise<ModuleRead>> = {
@@ -1865,6 +1867,82 @@ async function patchRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   ]);
   return c.json({ ok: true, id });
 }
+
+/**
+ * D6033 (#6033, BD25): Solution design's risks as a list, 25 a page, read on its own.
+ * The module read keeps its counts only (#4603 part 2, 2026-11-07), so this read
+ * adds no statement to it. It has the module read's gate (`context`), lists the
+ * risks tied to no feature too (an accepted Build Plan risk writes none,
+ * buildPlanAccept.ts), and gives a writer the owners and features Add offers.
+ */
+export const RISKS_PER_PAGE = 25;
+const RISK_STATES = ['open', 'mitigating', 'closed'] as const;
+const RISK_ROW_FROM = `FROM venture_risks r
+       LEFT JOIN users u ON u.id = r.owner_user_id
+       LEFT JOIN mvp_features f ON f.id = r.feature_id AND f.project_id = r.project_id
+      WHERE r.project_id = ?
+        AND (? = '' OR r.state = ?)
+        AND (? = '' OR (? = 'tied' AND r.feature_id IS NOT NULL) OR (? = 'untied' AND r.feature_id IS NULL))`;
+const RISK_TOTAL_SQL = 'SELECT COUNT(*) AS n ' + RISK_ROW_FROM;
+const RISK_PAGE_SQL = `SELECT r.id, r.title, r.severity, r.state, r.mitigation, r.owner_user_id, u.name AS owner, f.id AS feature_id, f.title AS feature,
+        EXISTS (SELECT 1 FROM build_plan_items i WHERE i.project_id = r.project_id AND i.landed_table = 'venture_risks' AND i.landed_id = CAST(r.id AS TEXT)) AS from_plan
+       ` + RISK_ROW_FROM + `
+      ORDER BY CASE r.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, CASE r.state WHEN 'closed' THEN 1 ELSE 0 END, r.id
+      LIMIT ? OFFSET ?`;
+app.get('/risks', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const viewer = await requireAuth(c);
+  const state = c.req.query('state') ?? '';
+  const feature = c.req.query('feature') ?? '';
+  const rawPage = c.req.query('page') ?? '1';
+  if (state && !(RISK_STATES as readonly string[]).includes(state)) return c.json({ error: 'invalid_state', detail: 'State is open, mitigating or closed' }, 400);
+  if (feature && !['tied', 'untied'].includes(feature)) return c.json({ error: 'invalid_feature', detail: 'Feature is tied or untied' }, 400);
+  if (!/^[1-9]\d{0,5}$/.test(rawPage)) return c.json({ error: 'invalid_page', detail: 'Page is a whole number from 1' }, 400);
+  const page = Number(rawPage);
+  const filter = [state, state, feature, feature, feature];
+  const writes = canWrite(project, viewer);
+  // Five reads, each on its own; none is in the module read (D6033).
+  const [counts, total, found, owners, features] = await Promise.all([
+    c.env.DB.prepare(`SELECT COUNT(*) AS all_n,
+        COALESCE(SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END), 0) AS open_n,
+        COALESCE(SUM(CASE WHEN state = 'mitigating' THEN 1 ELSE 0 END), 0) AS mitigating_n,
+        COALESCE(SUM(CASE WHEN state = 'closed' THEN 1 ELSE 0 END), 0) AS closed_n,
+        COALESCE(SUM(CASE WHEN feature_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS tied_n,
+        COALESCE(SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END), 0) AS high_n,
+        COALESCE(SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END), 0) AS medium_n,
+        COALESCE(SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END), 0) AS low_n
+       FROM venture_risks WHERE project_id = ?`).bind(project.id).first<Record<string, unknown>>(),
+    c.env.DB.prepare(RISK_TOTAL_SQL).bind(project.id, ...filter).first<{ n: number }>(),
+    c.env.DB.prepare(RISK_PAGE_SQL).bind(project.id, ...filter, RISKS_PER_PAGE, (page - 1) * RISKS_PER_PAGE).all<any>(),
+    // A writer's Add offers the company's members and the venture's features; a reader is sent neither.
+    c.env.DB.prepare('SELECT u.id, u.name FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? AND ? = 1 ORDER BY lower(u.name), u.id')
+      .bind(project.company_id ?? -1, writes ? 1 : 0).all<any>(),
+    c.env.DB.prepare('SELECT id, title FROM mvp_features WHERE project_id = ? AND ? = 1 ORDER BY lower(title), id LIMIT 500').bind(project.id, writes ? 1 : 0).all<any>(),
+  ]);
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const k = (counts ?? {}) as Record<string, unknown>;
+  const matched = n(total?.n);
+  return c.json({
+    rows: ((found.results ?? []) as any[]).map(r => ({
+      id: Number(r.id), title: r.title, severity: r.severity, state: r.state,
+      mitigation: typeof r.mitigation === 'string' && r.mitigation.trim() ? r.mitigation.trim() : null,
+      owner: r.owner_user_id == null ? null : { you: Number(r.owner_user_id) === Number(viewer.id), name: r.owner ?? null },
+      feature: r.feature_id == null ? null : { id: Number(r.feature_id), title: r.feature },
+      from_plan: n(r.from_plan) === 1,
+    })),
+    total: matched, page, per_page: RISKS_PER_PAGE, pages: Math.max(1, Math.ceil(matched / RISKS_PER_PAGE)),
+    counts: {
+      all: n(k.all_n), open: n(k.open_n), mitigating: n(k.mitigating_n), closed: n(k.closed_n),
+      tied: n(k.tied_n), untied: n(k.all_n) - n(k.tied_n),
+      high: n(k.high_n), medium: n(k.medium_n), low: n(k.low_n),
+    },
+    can_write: writes,
+    ...(writes ? { choices: {
+      owners: ((owners.results ?? []) as any[]).map(u => ({ value: String(u.id), label: u.name ?? 'Unnamed member' })),
+      features: ((features.results ?? []) as any[]).map(f => ({ value: String(f.id), label: f.title })),
+    } } : {}),
+  });
+});
 
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision

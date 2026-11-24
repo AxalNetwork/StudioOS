@@ -156,7 +156,7 @@ const sheet = (draft, count) => words(at('/research/markets', h(FiltersSheetBody
 test('RMD-11B: one Filters sheet, its counts, Reset, and "Show N markets" from the Worker\'s count for the draft', () => {
   const t = sheet({ country: ['DE'], fresh: '30', src: '' }, { status: 'ready', total: 2 });
   assert.match(t, /^Filters ✕ Country Germany 3 Netherlands 2 Denmark 2 Sweden 1 France 1 All 7 countries ▾ 4 markets have no recorded country and never match one\./);
-  assert.match(t, /Source freshness Any date Last 30 days 5 31 to 90 days 0 Older than 90 days \(Stale\) 1 No source recorded 0 Source type/);
+  assert.match(t, /Source freshness Any date Named evidence, reported in the last 30 days 5 Named evidence, reported 31 to 90 days ago 0 Named evidence, reported over 90 days ago \(Stale\) 1 None named 0 Source type/);
   assert.match(t, /Source type Any source Evidence that names the market 2/);
   assert.match(t, /Reset Show 2 markets$/);
   assert.equal(COUNTRIES_SHOWN, 5);

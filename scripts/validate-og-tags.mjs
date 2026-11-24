@@ -27,6 +27,8 @@ import { fileURLToPath } from 'node:url';
 
 import { OG_ROUTES, ogTagsFor, SITE_URL } from '../frontend/src/lib/ogRegistry.js';
 import { programOgRoutes } from './lib/programCatalog.mjs';
+// D6996 (#6996): each public Help Center guide's own page, from the guide index.
+import { helpOgRoutes } from './lib/helpGuides.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -155,6 +157,8 @@ async function main() {
   const imageUsage = new Map();
   // D6966 (#6966): each program presentation's own page, from its map entry.
   const routes = [...OG_ROUTES, ...(await programOgRoutes())];
+  // D6996 (#6996): each public Help Center guide's own page, after the registry's routes.
+  routes.push(...helpOgRoutes());
 
   for (const route of routes) {
     const file = routeFile(route.path);

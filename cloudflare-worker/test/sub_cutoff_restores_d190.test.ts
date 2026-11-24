@@ -44,8 +44,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -61,6 +61,7 @@ import {
 import { loadOverrides, upsertOverride } from '../src/services/ventureRisk.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
+import { loadSchemaFile } from './_schema_once.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -78,16 +79,43 @@ const migrationNames = () =>
  * one: the baseline, then every migration ABOVE the cutoff. `skip` drops one
  * by filename so the same builder produces the before-half.
  */
-function freshDb(skip: string[] = []) {
-  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(SQL_DIR, 'schema_baseline.sql'), 'utf8'));
-  for (const name of migrationNames()) {
-    if (migrationNumber(name) <= BASELINE_CUTOFF || skip.includes(name)) continue;
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, name), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
+function buildFresh(path: string, skip: string[]) {
+  const db = new DatabaseSync(path, { enableDoubleQuotedStringLiterals: true });
+  try {
+    db.exec(readFileSync(resolve(SQL_DIR, 'schema_baseline.sql'), 'utf8'));
+    for (const name of migrationNames()) {
+      if (migrationNumber(name) <= BASELINE_CUTOFF || skip.includes(name)) continue;
+      for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, name), 'utf8'))) {
+        try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
+      }
     }
+  } finally { db.close(); }
+}
+
+/**
+ * #8377: each variant (which migrations are skipped) is built ONCE per run, into a private
+ * directory under the checkout's own schema cache, and every test gets its own in-memory copy
+ * of it, rows included (`loadSchemaFile`, D4133). The file built some twenty full schemas, one
+ * per test, and that alone pushed its CI shard past the 50-minute limit on slower runners.
+ */
+const CACHE = resolve(HERE, '../../node_modules/.cache/studioos-schema');
+const builds = new Map<string, string>();
+let work: string | null = null;
+function freshDb(skip: string[] = []) {
+  const key = [...skip].sort().join('\0');
+  let file = builds.get(key);
+  if (!file) {
+    if (!work) {
+      mkdirSync(CACHE, { recursive: true, mode: 0o700 });
+      const dir = mkdtempSync(join(CACHE, 'd190-'));
+      work = dir;
+      process.once('exit', () => rmSync(dir, { recursive: true, force: true }));
+    }
+    file = join(work, `fresh-${builds.size}.sqlite`);
+    buildFresh(file, skip);
+    builds.set(key, file);
   }
-  return db;
+  return loadSchemaFile(new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true }), file);
 }
 
 /** The shape a table has, read from the database rather than from source. */

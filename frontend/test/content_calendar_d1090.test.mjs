@@ -129,8 +129,9 @@ test('the wiring: the card and From Notion on Distribution, From Notion on Produ
   assert.match(route, /<FromNotion section="grow" projectId=\{ctx\.projectId\} module="distribution" \/>/);
   // D1608 (#3731): PostHog's part sits beside From Notion on Product improvement.
   // D6098 (#6098): the theme rename/merge part reads the module's data. D6865 (#6865): the counts, weight and
-  // Close the loop part (FeedbackLoop) comes first, then the themes part.
-  assert.match(route, /'product-improvement': \(data, ctx\) => \(<>\s*<FeedbackLoop counts=\{data\?\.parts\?\.counts\}[\s\S]*?\/>\s*<FeedbackThemes themes=\{data\?\.parts\?\.themes\}[\s\S]*?\/>\s*<FromNotion section="grow" projectId=\{ctx\.projectId\} module="product_improvement" \/>/);
+  // Close the loop part came first; D6865 part 2 (#6891) moved it into the Feedback tab's own page (`homes`),
+  // so the themes part leads.
+  assert.match(route, /'product-improvement': \(data, ctx\) => \(<>\s*<FeedbackThemes themes=\{data\?\.parts\?\.themes\}[\s\S]*?\/>\s*<FromNotion section="grow" projectId=\{ctx\.projectId\} module="product_improvement" \/>/);
   const card = read('frontend/src/pages/cycles/ContentCalendar.jsx');
   assert.doesNotMatch(card, /window\.(alert|confirm|prompt)/);
   for (const m of card.matchAll(/'([^']*\bbg-white\b[^']*)'/g)) assert.match(m[1], /dark:bg-/, m[1]);

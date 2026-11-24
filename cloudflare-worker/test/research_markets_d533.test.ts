@@ -19,7 +19,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 
 import researchMarkets, {
   indexSeries, NO_COMPANY_REASON, NO_COUNTRY_REASON, NO_SOURCE_REASON, SOURCES_CAP,
-  NO_KIND_REASON, ageDays, freshBand,
+  NO_KIND_REASON, NO_DISTINCT_REASON, ageDays, freshBand,
 } from '../src/routes/research_markets.ts';
 import { EUR_SOURCE } from '../src/services/researchFundDirectory.ts';
 import { periodKey } from '../src/services/market_intel/scoring.ts';
@@ -30,6 +30,7 @@ const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 function migration(prefix: string): string {
+  // A stamped migration is named by its minute and issue (D4106), so the prefix may carry both.
   const file = readdirSync(MIGRATIONS).find((f) => f.startsWith(`${prefix}_`)) as string;
   return readFileSync(resolve(MIGRATIONS, file), 'utf8');
 }
@@ -64,6 +65,9 @@ function freshDb() {
   db.exec(tableFrom('037', 'market_intel_indexes'));
   db.exec(migration('379'));
   db.exec(migration('404'));
+  // D7710: the period measured and retrieval date (D7707), and each index point's window (D7708).
+  db.exec(migration('202611191833_7707'));
+  db.exec(migration('202611220337_7708'));
 
   const m = db.prepare(`INSERT INTO research_market_directory (slug, name, company_count, source_name, source_boundary, as_of)
                         VALUES (?, ?, ?, 'Axal', 'supplied', '2026-09-30')`);
@@ -282,7 +286,14 @@ test('a market with live index rows gets monthly series; stubs and sourceless po
   assert.equal(ix.series.supply.status, 'not_recorded', 'a 50 from no source is not a reading');
   assert.equal(ix.series.talent.status, 'not_recorded', 'an index from before D538 is a stub');
   assert.match(ix.series.talent.reason, /No live source/);
-  assert.deepEqual(ix.source_mix.map((m: any) => [m.source_key, m.rows]), [['fred', 2], ['arxiv', 1]]);
+  // D7710: no all-time source mix; each point names its window (D7708), never a derived one.
+  assert.equal('source_mix' in ix, false);
+  assert.deepEqual(ix.series.demand.points.map((p: any) => [p.window_start, p.window_end, p.window_reason]),
+    [[null, null, 'Window not recorded'], [null, null, 'Window not recorded'], [null, null, 'Window not recorded']]);
+  db.prepare(`UPDATE market_intel_indexes SET window_start = '2026-09-05T00:00:00.000Z', window_end = '2026-10-05T00:00:00.000Z'
+              WHERE period_key = '2026-10' AND dimension = 'demand'`).run();
+  const oct = (await get(db, '/markets/fintech')).body.index.series.demand.points.at(-1);
+  assert.deepEqual([oct.window_start, oct.window_end, oct.window_reason], ['2026-09-05T00:00:00.000Z', '2026-10-05T00:00:00.000Z', null]);
 });
 
 test('a market with no live data, or no sector, says Not recorded and why', async () => {
@@ -292,7 +303,7 @@ test('a market with no live data, or no sector, says Not recorded and why', asyn
   for (const d of ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment']) {
     assert.deepEqual([none.series[d].status, none.series[d].points], ['not_recorded', []], d);
   }
-  assert.deepEqual(none.source_mix, []);
+  assert.equal('source_mix' in none, false, 'D7710: the all-time mix is gone');
   seedIndex(db);
   const fashion = (await get(db, '/markets/fashion')).body.index;
   assert.equal(fashion.sector, null);
@@ -602,43 +613,55 @@ test('D6284: a market with no live source reads null with a reason, never 0', as
   }
 });
 
-test('D6284: source count and newest date join live market-intel sources and active-signal evidence', async () => {
-  const db = freshDb();
-  seedIndex(db);
-  seedEvidence(db);
-  const by = Object.fromEntries((await get(db, '/markets')).body.items.map((i: any) => [i.slug, i]));
-  // fintech: live fred and arxiv (the stub and uncited rows drop out), plus s1's gdelt and hn.
-  assert.deepEqual(by.fintech.source_count, { status: 'recorded', value: 4 });
-  assert.deepEqual(by.fintech.newest_source_at, { status: 'recorded', value: '2026-10-05 09:00:00' },
-    'the archived signal\'s November evidence is not counted');
-  assert.deepEqual(by.fintech.sources.map((s: any) => [s.kind, s.key, s.rows]), [
-    ['signal_evidence', 'gdelt', 2],
-    ['market_intel', 'fred', 2],
-    ['signal_evidence', 'hn', 1],
-    ['market_intel', 'arxiv', 1],
-  ]);
-  // payments shares FinTech's tracked sector and s1's evidence.
-  assert.equal(by.payments.mi_sector, 'Fintech / DeFi');
-  assert.deepEqual(by.payments.source_count, { status: 'recorded', value: 4 });
-  // fashion has no tracked sector: only s4's evidence counts.
-  assert.equal(by.fashion.mi_sector, null);
-  assert.deepEqual(by.fashion.source_count, { status: 'recorded', value: 1 });
-  assert.deepEqual(by.fashion.newest_source_at, { status: 'recorded', value: '2026-10-07 09:00:00' });
-  // autotech has no tracked sector and no signal names it.
-  assert.deepEqual(by.autotech.source_count, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
-  assert.deepEqual(by.autotech.newest_source_at, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
+// D7710: a clock where fred's October rows are inside the index window (from 20 Sep) and arxiv's September row is not.
+const D7710_NOW = Date.UTC(2026, 9, 20, 0, 0, 0);
+
+test('D6284, D7710: the headline counts evidence naming the market; sector sources sit beside it, over the window', async () => {
+  mock.timers.enable({ apis: ['Date'], now: D7710_NOW });
+  try {
+    const db = freshDb();
+    seedIndex(db);
+    seedEvidence(db);
+    const by = Object.fromEntries((await get(db, '/markets')).body.items.map((i: any) => [i.slug, i]));
+    // fintech: s1's gdelt and hn name it; fred is its in-window sector source (arxiv is older, stub and uncited drop out).
+    assert.deepEqual(by.fintech.source_count, { status: 'recorded', value: 2 });
+    assert.deepEqual(by.fintech.newest_source_at, { status: 'recorded', value: '2026-10-05 09:00:00' },
+      'the archived signal\'s November evidence is not counted');
+    assert.equal(by.fintech.newest_source_basis, 'reported');
+    assert.deepEqual(by.fintech.distinct_source_count, { status: 'recorded', value: 3 });
+    assert.deepEqual(by.fintech.sources.map((s: any) => [s.kind, s.key, s.rows, s.basis]), [
+      ['signal_evidence', 'gdelt', 2, 'reported'],
+      ['market_intel', 'fred', 2, 'retrieved'],
+      ['signal_evidence', 'hn', 1, 'reported'],
+    ]);
+    // payments shares FinTech's tracked sector and s1's evidence.
+    assert.equal(by.payments.mi_sector, 'Fintech / DeFi');
+    assert.deepEqual(by.payments.source_count, { status: 'recorded', value: 2 });
+    // fashion has no tracked sector: only s4's evidence counts.
+    assert.equal(by.fashion.mi_sector, null);
+    assert.deepEqual(by.fashion.source_count, { status: 'recorded', value: 1 });
+    assert.deepEqual(by.fashion.newest_source_at, { status: 'recorded', value: '2026-10-07 09:00:00' });
+    // autotech has no tracked sector and no signal names it.
+    assert.deepEqual(by.autotech.source_count, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
+    assert.deepEqual(by.autotech.newest_source_at, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
+    assert.equal(by.autotech.newest_source_basis, null);
+    assert.deepEqual(by.autotech.distinct_source_count, { status: 'not_recorded', value: null, reason: NO_DISTINCT_REASON });
+  } finally { mock.timers.reset(); }
 });
 
 test('D6284: coverage is read for the page in a fixed number of queries, and the source list is capped', async () => {
+  mock.timers.enable({ apis: ['Date'], now: D7710_NOW });
   const db = freshDb();
   seedIndex(db);
   seedEvidence(db);
   const r = db.prepare(`INSERT INTO market_intel_rows (source_key, sector, metric_key, metric_value, ts, citation_url)
-                        VALUES (?, 'Fintech / DeFi', 'm', 1, '2026-08-01T00:00:00Z', 'https://example.org/x')`);
+                        VALUES (?, 'Fintech / DeFi', 'm', 1, '2026-10-10T00:00:00Z', 'https://example.org/x')`);
   for (let n = 0; n < SOURCES_CAP + 5; n++) r.run(`src${String(n).padStart(2, '0')}`);
   const fin = (await get(db, '/markets?q=FinTech')).body.items[0];
-  assert.equal(fin.source_count.value, 4 + SOURCES_CAP + 5, 'the count counts every source');
+  assert.equal(fin.distinct_source_count.value, 3 + SOURCES_CAP + 5, 'the distinct total counts every source');
+  assert.equal(fin.sources_by_kind.market_intel.count, 1 + SOURCES_CAP + 5);
   assert.equal(fin.sources.length, SOURCES_CAP, 'the list is capped');
+  mock.timers.reset();
 
   // Count the statements one /markets read prepares: the same for one tracked market or all four.
   const count = async (path: string) => {
@@ -732,21 +755,25 @@ test('D7171: country, fresh and src filter the whole directory before paging, wi
 });
 
 test('D7171: sector-level sources and evidence naming the market are counted apart; src=sector is sector-level only', async () => {
-  mock.timers.enable({ apis: ['Date'], now: D7171_NOW });
+  mock.timers.enable({ apis: ['Date'], now: D7710_NOW });
   try {
     const db = freshDb();
     seedIndex(db);
     const r = await get(db, '/markets');
     const by = Object.fromEntries(r.body.items.map((i: any) => [i.slug, i]));
     assert.deepEqual(by.fintech.sources_by_kind, {
-      market_intel: { count: 2, newest: { status: 'recorded', value: '2026-10-02T00:00:00Z' } },
-      signal_evidence: { count: 0, newest: { status: 'not_recorded', value: null, reason: NO_KIND_REASON } },
+      market_intel: { count: 1, newest: { status: 'recorded', value: '2026-10-02T00:00:00Z' }, basis: 'retrieved' },
+      signal_evidence: { count: 0, newest: { status: 'not_recorded', value: null, reason: NO_KIND_REASON }, basis: null },
     });
+    // D7710: a market with only inherited sources reads none named, with no band.
+    assert.deepEqual(by.fintech.source_count, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
+    assert.equal(by.fintech.newest_source_at.status, 'not_recorded');
+    assert.deepEqual(slugs(await get(db, '/markets?fresh=none')), ['autotech', 'fashion', 'fintech', 'payments']);
     assert.deepEqual(slugs(await get(db, '/markets?src=sector')), ['fintech', 'payments']);
     seedEvidence(db);
     const fin = (await get(db, '/markets?q=FinTech')).body.items[0];
-    assert.deepEqual(fin.sources_by_kind.signal_evidence, { count: 2, newest: { status: 'recorded', value: '2026-10-05 09:00:00' } });
-    assert.equal(fin.sources_by_kind.market_intel.count + fin.sources_by_kind.signal_evidence.count, fin.source_count.value);
+    assert.deepEqual(fin.sources_by_kind.signal_evidence, { count: 2, newest: { status: 'recorded', value: '2026-10-05 09:00:00' }, basis: 'reported' });
+    assert.equal(fin.sources_by_kind.signal_evidence.count, fin.source_count.value, 'the headline is the named count');
     assert.deepEqual(slugs(await get(db, '/markets?src=sector')), [], 'evidence naming the market makes it named, not sector-level');
   } finally { mock.timers.reset(); }
 });
@@ -790,9 +817,10 @@ test('D7171: the coverage summary counts the filtered markets, keeps both countr
       fresh: { 30: 1, 90: 2, older: 0, none: 1 },
       countries: { recorded: 2, no_company: 2, no_placeable_country: 0, distinct: 3 },
       tracked: { mapped: 2, unmapped: 2 },
+      // D7710: on 6 Nov the window starts 7 Oct, so FinTech's sector rows (1 and 2 Oct) are outside it.
       by_sector: [{
-        sector: 'Fintech / DeFi', markets: 2, sector_sources: 2,
-        newest_sector_source: { status: 'recorded', value: '2026-10-02T00:00:00Z' }, named_markets: 2,
+        sector: 'Fintech / DeFi', markets: 2, sector_sources: 0,
+        newest_sector_source: { status: 'not_recorded', value: null, reason: NO_KIND_REASON }, newest_sector_basis: null, named_markets: 2,
       }],
       unmapped: { markets: 2, named_markets: 1 },
       stale_days: 90,

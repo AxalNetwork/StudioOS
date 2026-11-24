@@ -88,6 +88,8 @@ const SKIPS_IN_QUEUE = Object.freeze([
   // D7108 part 2: `plan` feeds the full-suite check but is skipped in the
   // queue, where each suite part plans for itself; the gate requires that skip.
   PLAN_IF,
+  // D7909: optional capacity submission is main-push only, independently of the hosted gate.
+  "${{ !cancelled() && github.event_name != 'merge_group' && github.event_name == 'push' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && needs.plan.outputs.capacity_submission != '' }}",
 ]);
 
 // Jobs that run in the queue although no required check needs them, each with

@@ -217,9 +217,12 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
       ).bind(n, projectId).first();
     }
     case 'venture_risks': {
+      // D6033 (#6033): a risk tied to no feature (an accepted Build Plan risk) is the venture's too.
+      // A risk that names a feature is the venture's only while that feature is the venture's as well.
       const n = numeric(value);
       return n !== null && !!await db.prepare(
-        'SELECT 1 FROM venture_risks r JOIN mvp_features f ON f.id = r.feature_id WHERE r.id = ? AND r.project_id = ? AND f.project_id = ?',
+        `SELECT 1 FROM venture_risks r LEFT JOIN mvp_features f ON f.id = r.feature_id
+          WHERE r.id = ? AND r.project_id = ? AND (r.feature_id IS NULL OR f.project_id = ?)`,
       ).bind(n, projectId, projectId).first();
     }
     case 'formation_step_checks': {

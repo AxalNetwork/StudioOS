@@ -37,6 +37,12 @@ the generic route wrapper once a canvas has graduated.
   Reports (`InvestorPortfolioUpdates.jsx`): four tiles and one row per company
   the investor signed into, from `GET /api/reporting/portfolio`, with filters
   and a sort. Lateness is amber, never red, and nothing ranks a company.
+- `FundLocked.jsx` (D6233, #6233, FV2) is the one locked Fund surface:
+  `/funds`, its four zones and `/funds/history` draw it below the
+  Institutional tier, and `/funds/performance` for a member without the
+  Investor licence. It lists the Fund bucket's own zones and offers Talk to
+  Axal (the Contact form); its words and rules are in `fundLockedModel.js`,
+  pure, and its styles in `fundLocked.css`.
 - `InvestorWorkspacePage.jsx` is the shared investor workspace frame — it
   wraps a page with the investor chrome and, on the Deals route, renders
   `InvestorDealsWorkspace` inline rather than handing off to a separate page.
@@ -266,3 +272,5 @@ live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
 
 - `settings/` holds the investor Firm Settings editor (#6287).
 - `fund/` holds the Axal VC Fund workspace's section components and navigation (#6130).
+
+- `FundPerformanceDetail.jsx` holds the GP-only read-only quarterly history and dated position marks on `/funds/performance` (D6253).

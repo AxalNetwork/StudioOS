@@ -93,6 +93,9 @@ export function makeCycleWrites(request) {
       distributionOverview: (projectId, { week } = {}) => request(`/cycles/grow/distribution/overview?${new URLSearchParams({ project: String(projectId), ...(week !== undefined ? { week } : {}) })}`),
       campaignUpdate: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D6865 part 2 (#6891, GR-24): Save as feedback from an Inbox reply. The reply's key links it, so the
+      // reply carries "Saved as feedback"; a reply saved twice is a 409 naming the item it already is.
+      feedbackFromReply: (projectId, replyKey, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, origin: 'inbox_reply', reply_key: replyKey, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channelSpend: (projectId, uid, month, body) => request(`/cycles/grow/channels/${seg(uid)}/spend/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
       // D695 (#1657): Enter a KPI and Open a role, through #1697's routes.

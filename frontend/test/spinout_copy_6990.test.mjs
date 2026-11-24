@@ -29,6 +29,8 @@ const FILES = [
   'frontend/src/components/spinout/LabIntro.jsx',
   'frontend/src/lib/spinoutLabArsenal.js',
   'frontend/src/pages/events/PublicEventsPage.jsx',
+  // D6992: the events programme card moved here, shared with the Resources hub.
+  'frontend/src/components/site/LabProgramCard.jsx',
 ];
 const BANNED = [
   'funded company', 'Average time to incorporation', 'warm introductions', 'Five to ten warm',
@@ -83,7 +85,7 @@ test('the Lab page: Read the programme brief, the cohort footnote, no engineerin
 });
 
 test('the events programme card says what the programme is, with its length computed', () => {
-  const src = readFileSync('frontend/src/pages/events/PublicEventsPage.jsx', 'utf8');
+  const src = readFileSync('frontend/src/components/site/LabProgramCard.jsx', 'utf8');
   assert.ok(src.includes('A {numberWord(COHORT_WEEKS)}-week programme for founders testing an idea or a new product. By application.'));
   assert.equal(`A ${numberWord(COHORT_WEEKS)}-week programme`, 'A four-week programme', 'today\'s cohort is four weeks');
 });
