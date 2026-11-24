@@ -32,6 +32,7 @@ import { eventSocialCard } from '../../../frontend/src/lib/eventSocialCard.js';
 import {
   SITE_NAME, SITE_URL, ogEntryFor, ogImageKeys, ogImageUrl, ogTagsFor,
 } from '../../../frontend/src/lib/ogRegistry.js';
+import { articleLd, eventLd, withStructuredData } from '../../../frontend/src/lib/structuredData.js';
 
 export type CardKind = 'event' | 'article' | 'insight' | 'job' | 'person' | 'startup' | 'partner' | 'author' | 'handle';
 export interface SocialMatch { kind: CardKind; key: string; path: string }
@@ -45,6 +46,8 @@ export interface CardTags {
   imageIsCard: boolean;
   imageAlt: string;
   type: 'website' | 'article' | 'profile';
+  /** D7004 (#7004): the record's JSON-LD (`Article`, or `Event` when its facts are recorded); none when absent. */
+  jsonLd?: object[];
 }
 
 /** The run_worker_first globs this module answers, in `wrangler.toml` order. */
@@ -215,17 +218,19 @@ export async function resolveCard(env: Env, m: SocialMatch): Promise<CardTags | 
     case 'event': {
       // events_public.ts GET /events/:slug — owner question C (a): an unlisted event is carded.
       const r = await db.prepare(
-        `SELECT title, summary, starts_at, timezone, location_kind, cover_url FROM events
+        `SELECT title, summary, starts_at, ends_at, timezone, location_kind, location_text, cover_url FROM events
           WHERE slug = ? AND status = 'published'
             AND ((visibility = 'public' AND admin_published = 1) OR visibility = 'unlisted')`,
       ).bind(m.key).first<any>();
       if (!r?.title) return null;
-      return { ...eventSocialCard(r), url: `${SITE_URL}${m.path}` };
+      // D7004: never the join link (`location_url`) or the price; `eventLd` is null without a date and a place or online format.
+      const ld = eventLd({ ...r, path: m.path });
+      return { ...eventSocialCard(r), url: `${SITE_URL}${m.path}`, ...(ld ? { jsonLd: [ld] } : {}) };
     }
     case 'article': {
       // articles.ts GET /:slug's gate, without its view count.
       const r = await db.prepare(
-        `SELECT a.id, a.title, a.subtitle, a.excerpt, a.read_minutes, a.cover_r2_key,
+        `SELECT a.id, a.title, a.subtitle, a.excerpt, a.read_minutes, a.cover_r2_key, a.published_at, a.updated_at,
                 COALESCE(u.display_name, u.name) AS author_name
            FROM articles a LEFT JOIN users u ON u.id = a.author_user_id
           WHERE a.slug = ? AND a.status = 'published' LIMIT 1`,
@@ -233,10 +238,12 @@ export async function resolveCard(env: Env, m: SocialMatch): Promise<CardTags | 
       if (!r?.title) return null;
       const by = [oneLine(r.author_name) ? `By ${oneLine(r.author_name)}` : '', Number(r.read_minutes) > 0 ? `${Number(r.read_minutes)} min read` : ''].filter(Boolean).join(' · ');
       const lede = oneLine(r.excerpt) || oneLine(r.subtitle);
-      return recordTags(m, {
-        title: r.title, description: [lede, by].filter(Boolean).join(' — '),
-        image: r.cover_r2_key ? `${SITE_URL}/api/articles/cover/${Number(r.id)}` : null, type: 'article',
-      });
+      const image = r.cover_r2_key ? `${SITE_URL}/api/articles/cover/${Number(r.id)}` : null;
+      const ld = articleLd({ ...r, image, path: m.path });
+      return {
+        ...recordTags(m, { title: r.title, description: [lede, by].filter(Boolean).join(' — '), image, type: 'article' }),
+        ...(ld ? { jsonLd: [ld] } : {}),
+      };
     }
     case 'insight': {
       // market_intel_public.ts GET /publications/:slug's gate.
@@ -364,10 +371,13 @@ ${lines.map((l) => (l ? `  ${l}` : '')).join('\n')}
 
 const MANAGED = /[ \t]*<!-- BEGIN og:managed[\s\S]*?<!-- END og:managed -->/;
 
-/** The shell with its managed block replaced, or null when it has none to replace. */
+/**
+ * The shell with its managed block replaced, or null when it has none to replace. D7004: the shell's own
+ * structured data (the home's `Organization`) is removed, and the record's JSON-LD, if any, written in its place.
+ */
 export function rewriteShell(html: string, tags: CardTags): string | null {
   if (!MANAGED.test(html)) return null;
-  return html.replace(MANAGED, () => cardBlock(tags));
+  return withStructuredData(html.replace(MANAGED, () => cardBlock(tags)), tags.jsonLd || []);
 }
 
 function withShellHeaders(from: Headers, extra: Record<string, string> = {}): Headers {

@@ -4,12 +4,13 @@ import { api } from '../../../lib/api';
 import { closingsApi } from '../../../lib/api/closings';
 import { dealStaffApi } from '../../../lib/api/dealStaff';
 import { dealClosingHistoryApi } from '../../../lib/api/dealClosingHistory';
+import { reportingApi } from '../../../lib/api/reporting';
 import { formatMinor } from '../../../lib/money';
 import {
   LOADING, UNREADABLE, ok, UNAVAILABLE_WORD, DISCLAIMER,
   itemStatus, itemOwner, checklistSummary, paperRows, conditionRows,
   transferHold, transferRows, auditRows, closeRules, workspaceTabs, itemPatch,
-  phoneCell, portfolioRows, companyHref,
+  phoneCell, portfolioRows, companyHref, afterCloseFigures, captableCard,
 } from './closingWorkspaceModel';
 
 /**
@@ -129,6 +130,19 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
     api.positionsList().then((r) => { if (alive) setCompany(ok(companyHref(r, projectId))); }, () => { if (alive) setCompany(UNREADABLE); });
     return () => { alive = false; };
   }, [needsCompany, projectId]);
+  // D6866 part 2 (DX23 A): after close, the venture's reporting duties, an
+  // Admin's read of the founder's desk (D1058), counted on this closing's
+  // lines only. Asked once the closing reads closed, never for an investor.
+  const [duties, setDuties] = useState(LOADING);
+  const needsDuties = isAdmin && closingRec?.status === 'closed' && closingRec?.project_id != null;
+  useEffect(() => {
+    if (!needsDuties) return undefined;
+    let alive = true;
+    setDuties(LOADING);
+    reportingApi.desk(projectId).then((r) => { if (alive) setDuties(ok(r || {})); }, () => { if (alive) setDuties(UNREADABLE); });
+    return () => { alive = false; };
+  }, [needsDuties, projectId]);
+  const figures = useMemo(() => afterCloseFigures({ closing: closingRec, transfers, paper, duties: isAdmin ? duties : null }), [closingRec, transfers, paper, duties, isAdmin]);
   const items = reads.checklist.state === 'ready' && reads.checklist.value ? reads.checklist.value.items || [] : [];
   const title = deal?.project_name || `Deal #${dealId}`;
 
@@ -371,7 +385,11 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
                 : rules.state === 'closed' ? (
                   <>
                     <p className="text-[12.5px]" data-testid="close-rules-closed"><StatusWord status={{ key: 'done', word: `Closed${rules.closedAt ? ` ${rules.closedAt}` : ''}`, glyph: '✓' }} /> Checklist, Paper, Conditions, Transfer and Audit stay readable.</p>
-                    {portfolio.state === 'ready' ? <PortfolioTable portfolio={portfolio} isAdmin={isAdmin} company={company} currency={currency} /> : null}
+                    {figures.state === 'ready' ? <AfterCloseFigures figures={figures.figures} currency={currency} onRetry={load} /> : null}
+                    <div className="mt-3 grid gap-3 lg:grid-cols-12">
+                      <CaptableCard card={captableCard(closingRec)} />
+                      {portfolio.state === 'ready' ? <PortfolioTable portfolio={portfolio} isAdmin={isAdmin} company={company} currency={currency} /> : null}
+                    </div>
                   </>
                 )
                   : (
@@ -394,6 +412,52 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
 }
 
 /**
+ * After close (DX23 A, D6866 part 2): lines received, the total recorded,
+ * executed paper and reporting duties, two by two on a phone. A figure whose
+ * read failed says Unavailable with Try again; one being read says Reading…;
+ * neither is ever 0. The duties figure is an Admin's read and is not drawn
+ * for anyone else.
+ */
+export function AfterCloseFigures({ figures, currency, onRetry }) {
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4" data-testid="after-close-figures">
+      {figures.map((f) => (
+        <div key={f.key} className="rounded-[8px] border border-axal-hairline p-3 dark:border-gray-800" data-testid={`after-close-${f.key}`}>
+          <dt className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{f.label}</dt>
+          <dd className="mt-1">
+            {f.loading ? <span className="text-[12px] text-gray-500 dark:text-gray-400">Reading…</span>
+              : f.unavailable ? (
+                <span className="block text-[12px] text-red-700 dark:text-red-300" role="alert">
+                  {UNAVAILABLE_WORD}
+                  <button type="button" onClick={onRetry} className="ml-1 inline-flex min-h-[44px] items-center underline md:min-h-0">Try again</button>
+                </span>
+              ) : (
+                <>
+                  <b className="block font-mono text-[16px] text-axal-ink dark:text-gray-100">{f.cents !== undefined ? money(f.cents, currency) : f.value}</b>
+                  <span className="block text-[11px] text-gray-500 dark:text-gray-400">{f.note}</span>
+                </>
+              )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The founder's cap-table decision (DX23 A), as a word and a glyph with its date. */
+export function CaptableCard({ card }) {
+  return (
+    <section className="min-w-0 rounded-[8px] border border-axal-hairline p-3 dark:border-gray-800 lg:col-span-4" data-testid="after-close-captable">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Cap-table proposal</h4>
+        <StatusWord status={card.status} />
+      </div>
+      <p className="mt-1 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="after-close-captable-sentence">{card.sentence}</p>
+    </section>
+  );
+}
+
+/**
  * After close (DX23 A, D6889): each received line, In Portfolio or not.
  * An admin's In Portfolio links to the venture's Portfolio page and names
  * the position; anyone else (the founder) reads the label only. Closing
@@ -402,7 +466,7 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
 function PortfolioTable({ portfolio, isAdmin, company, currency }) {
   const href = company.state === 'ready' ? company.value : null;
   return (
-    <div className="mt-3 space-y-2" data-testid="portfolio-lines">
+    <div className="min-w-0 space-y-2 lg:col-span-8" data-testid="portfolio-lines">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Record in Portfolio</h4>
         <span className="text-[11px] text-gray-500 dark:text-gray-400">{isAdmin ? 'Admin · closing does not create positions' : 'Whether each line is in Portfolio'}</span>

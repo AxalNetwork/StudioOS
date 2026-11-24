@@ -279,6 +279,11 @@ test('bounded publication cursor advances active requests and prunes orphaned in
  await outbox.publish(store,pending,'pilot');assert.equal(f.checks.length,6);
  const removed=f.checks[0].external_id.slice(0,36);f.storage.sql.exec('DELETE FROM ci_capacity_requests WHERE id = ?',removed);
  await outbox.publish(store,pending,'pilot');
+ assert.equal(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?',removed+':pilot').toArray().length,1,'an orphan with publication still owed retains its evidence');
+ const orphan=JSON.parse(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?',removed+':pilot').toArray()[0].state);
+ orphan.sent=JSON.stringify({status:'success',reason:'all_shards_verified'});
+ f.storage.sql.exec('UPDATE capacity_publications SET state=? WHERE id=?',JSON.stringify(orphan),removed+':pilot');
+ await outbox.publish(store,pending,'pilot');
  assert.equal(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?',removed+':pilot').toArray().length,0);
 });
 
