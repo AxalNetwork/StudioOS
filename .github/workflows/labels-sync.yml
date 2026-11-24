@@ -38,7 +38,7 @@ jobs:
   sync:
     name: create or update every declared label
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -52,7 +52,8 @@ jobs:
           node --input-type=module <<'JS'
           import { readFileSync } from 'node:fs';
           import { execFileSync } from 'node:child_process';
-          const gh = args => execFileSync('gh', args, { encoding: 'utf8' });
+          // #8101: a paged listing can pass execFileSync's 1 MB default and end the step with ENOBUFS.
+          const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024 });
           const live = JSON.parse(gh(['api', '--paginate', '--slurp', 'repos/' + process.env.GH_REPO + '/labels?per_page=100'])).flat();
           for (const [old, canonical] of Object.entries(JSON.parse(readFileSync('/tmp/retired-labels.json')))) {
             if (old.toLowerCase() !== canonical.toLowerCase()) continue;
@@ -99,10 +100,22 @@ jobs:
           node --input-type=module <<'JS'
           import { readFileSync } from 'node:fs';
           import { execFileSync } from 'node:child_process';
-          const gh = args => execFileSync('gh', args, { encoding: 'utf8' });
+          // #8101: a paged listing can pass execFileSync's 1 MB default and end the step with ENOBUFS.
+          const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024 });
           for (const [old, canonical] of Object.entries(JSON.parse(readFileSync('/tmp/retired-labels.json')))) {
             if (old.toLowerCase() === canonical.toLowerCase()) continue;
-            const pages = JSON.parse(gh(['api', '--paginate', '--slurp', 'repos/' + process.env.GH_REPO + '/issues?state=all&per_page=100&labels=' + encodeURIComponent(old)]));
-            for (const issue of pages.flat()) gh(['issue', 'edit', String(issue.number), '--add-label', canonical, '--remove-label', old]);
+            // Only the number and the label names: 186 closed `state:done` issues came to 2.2 MB as full JSON.
+            const rows = gh(['api', '--paginate', 'repos/' + process.env.GH_REPO + '/issues?state=all&per_page=100&labels=' + encodeURIComponent(old),
+              '--jq', '.[] | "\\(.number)\\t\\(.labels | map(.name) | @json)"']).split('\n').filter(Boolean);
+            for (const row of rows) {
+              const tab = row.indexOf('\t');
+              const number = row.slice(0, tab);
+              if (!/^[1-9][0-9]*$/.test(number)) throw new Error('unexpected row from the issue listing: ' + row.slice(0, 80));
+              const labels = [...new Set(JSON.parse(row.slice(tab + 1)).filter(name => name !== old).concat(canonical))];
+              // The issues endpoint takes pull requests too, which `gh issue edit` does not.
+              gh(['api', '--method', 'PATCH', 'repos/' + process.env.GH_REPO + '/issues/' + number, '--input', '-'], JSON.stringify({ labels }));
+              // One write a second keeps a large catch-up (448 issues on 2026-11-22) under GitHub's secondary write limit.
+              Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+            }
           }
           JS

@@ -54,6 +54,9 @@ function fixture() {
   for (const f of ['228_research_company_directory.sql', '229_research_market_directory.sql',
     '365_research_eurotech_fund_directory.sql', '136_signals.sql', '030_market_intel.sql']) db.exec(ddl(f));
   db.exec(readFileSync(resolve(here, '../sql/migrations/379_market_intel_index_basis.sql'), 'utf8'));
+  // D7707 (what a row measures) and D7708 (the window and mix an index point stores).
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611191833_7707_market_intel_row_dates_runs.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611220337_7708_market_intel_index_window.sql'), 'utf8'));
   // D597: fund rows are read only through each list's terms review.
   db.exec(readFileSync(resolve(here, '../sql/migrations/406_research_fund_sources.sql'), 'utf8'));
   // #1077: the Public count reads SEC EDGAR's store too (migration 404).
@@ -217,9 +220,13 @@ test('heat: live index rows only; a stub-derived row is never read', async () =>
   assert.equal(body.heat.sectors.length, SECTORS.length);
   const s0 = body.heat.sectors.find((s: any) => s.sector === SECTORS[0]);
   const s1 = body.heat.sectors.find((s: any) => s.sector === SECTORS[1]);
-  assert.deepEqual(s0.dimensions.demand, { value: null, delta_pct: null, source_count: 0, reason: NO_LIVE_SOURCE_REASON });
-  assert.deepEqual(s1.dimensions.demand, { value: 64, delta_pct: 8, source_count: 2 });
+  assert.deepEqual(s0.dimensions.demand, { value: null, delta_pct: null, source_count: 0, context_only: null, reason: NO_LIVE_SOURCE_REASON });
+  // D7708 — a point written before D7708 stores no mix, so whether it is copied context is not recorded (null).
+  assert.deepEqual(s1.dimensions.demand, { value: 64, delta_pct: 8, source_count: 2, context_only: null });
   assert.equal(s1.dimensions.supply.value, null);
+  // D7708 — and its window reads not recorded, never a derived date.
+  assert.equal(body.heat.window_start, null);
+  assert.equal(body.heat.window_reason, 'Window not recorded');
 });
 
 /** A live observation (cited by its provider, not the stub page) `ageDays` old. */
@@ -242,7 +249,23 @@ test('heat: live observations with this month\'s index not yet computed are comp
   const s0 = body.heat.sectors.find((s: any) => s.sector === SECTORS[0]);
   assert.equal(typeof s0.dimensions.research.value, 'number');
   assert.ok(indexRows(db) > 0, 'the computed index was stored');
+  // D7708 — an index computed now carries its window: the 30 days before the compute.
+  assert.ok(body.heat.window_start && body.heat.window_end, JSON.stringify(body.heat));
+  assert.equal(Date.parse(body.heat.window_end) - Date.parse(body.heat.window_start), 30 * 86_400_000);
+  assert.equal(body.heat.window_reason, null);
+  assert.equal(s0.dimensions.research.context_only, false, 'openalex is a per-sector signal');
   assert.notEqual(body.demand_vs_supply.reason, NO_LIVE_SOURCE_REASON);
+});
+
+test('heat: live data in the window is found by retrieval date (D7708), so a row its provider returned yesterday is computed on the read', async () => {
+  const db = seeded();
+  // Stored 45 days ago, returned again yesterday (D7707's retrieved_at).
+  db.prepare(
+    `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, unit, ts, citation_url, retrieved_at)
+     VALUES ('openalex', ?, 'global', 'research', 0.6, 'count', ?, 'https://openalex.org/W1', ?)`,
+  ).run(SECTORS[0], new Date(Date.now() - 45 * 86_400_000).toISOString(), new Date(Date.now() - 86_400_000).toISOString());
+  const { body } = await get(db);
+  assert.equal(body.heat.status, 'ok', JSON.stringify(body.heat));
 });
 
 test('heat: when the index cannot be computed on the read, both sections say it is pending, not that no source reported', async () => {

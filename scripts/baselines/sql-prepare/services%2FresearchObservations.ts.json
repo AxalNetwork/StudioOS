@@ -1,0 +1,8 @@
+{
+  "FRAGMENTS.current @ services/researchObservations.ts": 1,
+  "ORDER @ services/researchObservations.ts": 2,
+  "SELECT @ services/researchObservations.ts": 4,
+  "chainCols @ services/researchObservations.ts": 2,
+  "exportWhere @ services/researchObservations.ts": 1,
+  "where @ services/researchObservations.ts": 3
+}

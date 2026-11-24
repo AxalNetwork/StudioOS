@@ -51,6 +51,7 @@ import {
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
 } from '../src/pages/admin/programs/programsModel.js';
 import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -691,7 +692,7 @@ test('the sidebars: the Admin row and its match, Approvals without /admin/refer-
 
 test('Approvals: lane 16 says No queue at People, lane 2 and the branch console take the Queue, and the placement map follows', () => {
   // D1038 (#2390): Approvals moved to /admin/approvals; the lane and the Not-a-queue card keep the doors.
-  const held = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const held = approvalsPageSource();
   assert.match(held, /case 'referrals': return <Link to="\/admin\/programs\/refer-and-earn\/queue" className=\{LINK\}>Refer & Earn › Queue<\/Link>;/);
   assert.match(held, /<Link to="\/admin\/programs\/mentor-cohorts\/people" className=\{LINK\}>Mentor cohort access<\/Link>: \{NOT_A_QUEUE\[3\]\.reason\}/);
   assert.equal(LANE_CONSOLES.referrals, '/admin/programs/refer-and-earn/queue');

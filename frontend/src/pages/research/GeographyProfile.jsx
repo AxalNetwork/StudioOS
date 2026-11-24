@@ -271,7 +271,7 @@ export function GeographyBody({ data, role = 'founder' }) {
         )}
       </Card>
       <p className="text-[11px] leading-relaxed text-axal-faint">
-        Countries come from the company directory (Wikidata) and from fund HQs as the fund lists wrote them. Market intelligence is worldwide only, so per-country demand reads “Not recorded”.
+        Company countries and fund headquarters come from the sources recorded in their directories. Market intelligence is worldwide only, so per-country demand reads “Not recorded”.
       </p>
     </div>
   );

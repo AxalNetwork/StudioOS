@@ -101,3 +101,40 @@ export function createIntroRequests(post, publish, { onSpent, onRefused } = {}) 
     }
   };
 }
+
+/**
+ * D6261 (#6261): the four statuses the Worker writes on an ask, and nothing
+ * else. `pending` is written by the ask; the founder writes `accepted` or
+ * `declined`; the investor writes `withdrawn` while it is still pending.
+ */
+export const ASK_STATUS_LABEL = { pending: 'Pending', accepted: 'Accepted', declined: 'Declined', withdrawn: 'Withdrawn' };
+
+/** The label for a status the route writes, or a plain "not recognised" for anything else: never a guess. */
+export function askStatusLabel(status) {
+  return ASK_STATUS_LABEL[status] || 'Status not recognised';
+}
+
+/** What an ask's status means for the investor, in one sentence. */
+export function askStatusNote(ask) {
+  switch (ask?.status) {
+    case 'pending':
+      return ask.answerable === false
+        ? 'No founder account can answer this ask. You may withdraw it.'
+        : 'Waiting for the founder to accept or decline. You may withdraw it while it is unanswered.';
+    case 'accepted':
+      return 'The founder accepted. Next is the mutual NDA. Nothing is signed and no introduction has been made yet.';
+    case 'declined':
+      return 'The founder declined. The ask used its slot.';
+    case 'withdrawn':
+      return 'You withdrew this ask before it was answered.';
+    default:
+      return 'This status is not one the ask route writes.';
+  }
+}
+
+/** The withdraw answer's sentence: whether the slot came back, and why not. */
+export function withdrawnLine(result) {
+  return result?.slot_returned
+    ? 'Withdrawn. Its slot is back in this quarter’s asks.'
+    : 'Withdrawn. It was spent in an earlier quarter, so no slot comes back.';
+}

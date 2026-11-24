@@ -154,7 +154,7 @@ test('missing experiment results: planned, running and done-without-result exper
   assert.deepEqual([r.state, r.coverage.counted], ['withheld', 1]);
   assert.deepEqual(r.coverage.excluded.map((x) => x.reason), Array(3).fill('no_observed_result'));
   assert.equal(experimentWord('done', null), 'Done · no result recorded');
-  assert.equal(experimentWord('running', 'Lifted 4%'), 'Lifted 4%');
+  assert.equal(experimentWord('running', 'Lifted 4%'), 'Running · no result yet');
   // The form's options say the same, so its note can count as the Worker does.
   const ctx = { env, projectId: P, user: founder, project: { id: P, founder_id: 1001 } } as any;
   const opts: any = await verdictSpec().formOptions!(ctx, {});

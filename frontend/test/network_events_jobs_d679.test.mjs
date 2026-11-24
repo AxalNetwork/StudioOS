@@ -8,8 +8,8 @@
  *   - every page opens with the Network sub-nav;
  *   - live data only: none of the canvas's sample events, circles, jobs,
  *     companies or program facts is in source, and every list is a live read;
- *   - the Programs row is the Spin-Out Lab card alone, read from the Lab's
- *     cohort helpers, with no card for the advisor intake or Fund I;
+ *   - the Programs row is the Spin-Out Lab card alone, read from the cohort
+ *     record (D6992), with no card for the advisor intake or Fund I;
  *   - each row draws its live fields (an event's date in its own zone, a
  *     circle without cadence or seats, a job without invented facts);
  *   - the job filters are the Worker's employment types;
@@ -47,7 +47,7 @@ const circles = await import('../src/pages/CirclesPage.jsx');
 const jobs = await import('../src/pages/jobs/PublicJobsPage.jsx');
 const job = await import('../src/pages/jobs/PublicJobDetailPage.jsx');
 const net = await import('../src/lib/siteNetwork2.js');
-const { openCohortCopy } = await import('../src/lib/spinoutLab.js');
+const LabCard = await import('../src/components/site/LabProgramCard.jsx');
 
 const render = (el, path = '/') => renderToStaticMarkup(
   React.createElement(MemoryRouter, { initialEntries: [path] }, el),
@@ -128,25 +128,28 @@ test('every list is a live read', () => {
   }
 });
 
-test('the Programs row is the Spin-Out Lab card alone, read from the cohort helpers', () => {
+test('the Programs row is the Spin-Out Lab card alone, read from the cohort record', () => {
+  // D6992: the card is one component, fed by the cohort record, shared with the Resources hub.
   const src = code(SRC.events);
-  assert.match(src, /import \{ COHORT_WEEKS, openCohortCopy, useCohortPlaces \} from '\.\.\/\.\.\/lib\/spinoutLab'/);
-  assert.match(src, /const cohort = openCohortCopy\(\);/, 'the cohort number and start come from the Lab cohort rule');
-  assert.match(src, /const places = useCohortPlaces\(\);/, 'the places come from the cohort record');
-  assert.match(src, /const COHORT_DAYS = COHORT_WEEKS \* 7;/, 'the duration is the cohort timing, not a typed 28');
+  assert.match(src, /import \{ useCohortRecord \} from '\.\.\/\.\.\/lib\/spinoutLab'/);
+  assert.match(src, /import \{ LabProgramSlot \} from '\.\.\/\.\.\/components\/site\/LabProgramCard'/);
+  assert.match(src, /const cohort = useCohortRecord\(\);/, 'the cohort comes from the cohort record');
+  const cardSrc = code(read('frontend/src/components/site/LabProgramCard.jsx'));
+  assert.match(cardSrc, /const COHORT_DAYS = COHORT_WEEKS \* 7;/, 'the duration is the cohort timing, not a typed 28');
 
-  const c = openCohortCopy();
-  const card = render(React.createElement(events.LabProgramCard));
-  assert.ok(card.includes(`Spin-Out Lab · Cohort ${c.cohortNum}`), 'the card names the open cohort');
-  assert.ok(card.includes(`Apply to Cohort ${c.cohortNum}`), 'the CTA names the open cohort');
+  const read0 = { status: 'ok', cohort: { open: true, name: 'December 2026', startLabel: 'December 1, 2026', deadlineLabel: 'November 24, 2026', places: 25 } };
+  const card = render(React.createElement(LabCard.LabProgramCard, { read: read0 }));
+  assert.ok(card.includes('Spin-Out Lab · December 2026'), 'the card names the open cohort as the record does');
+  assert.ok(card.includes('Apply to December 2026'), 'the CTA names the open cohort');
   assert.ok(card.includes('href="/spinout-lab/apply"'), 'the CTA goes to the Lab application');
-  assert.ok(card.includes(`<dt>Starts</dt><dd class="ax-mono">${c.startLabel}</dd>`), 'the start is the cohort rule\'s');
+  assert.ok(card.includes('<dt>Starts</dt><dd class="ax-mono">December 1, 2026</dd>'), 'the start is the record\'s');
   assert.ok(card.includes('<dt>Duration</dt><dd class="ax-mono">28 days</dd>'));
-  assert.ok(!card.includes('<dt>Places</dt>'), 'places are not drawn before the cohort record is read');
+  assert.ok(card.includes('<dt>Places</dt><dd class="ax-mono">25</dd>'), 'the places are the record\'s');
 
   const page = renderAt('/events', '/events', events.default);
   const programs = page.slice(page.indexOf('id="ax-n2-programs"'), page.indexOf('id="ax-n2-events"'));
-  assert.equal((programs.match(/class="ax-card ax-n2-program"/g) || []).length, 1, 'one program card: the Lab');
+  assert.equal((programs.match(/class="ax-card ax-n2-program"/g) || []).length, 0, 'no card before the cohort record is read');
+  assert.equal((programs.match(/class="ax-card/g) || []).length, 0, 'and no other program card: no advisor intake, no Fund I');
 });
 
 test('an event row draws its date in the event\'s own zone, its type, and the way in', () => {

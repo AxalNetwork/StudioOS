@@ -95,12 +95,14 @@ function fakeTypeform(opts: { form?: any; items: any[]; faults?: Record<number, 
   return { state, fetch };
 }
 
-function world(config: unknown = { region: 'us' }) {
+function world() {
   const db = new DatabaseSync(':memory:', SCHEMA_OPTIONS);
   loadSchema(db);
   db.prepare("INSERT INTO projects (id, name) VALUES (?, 'Synthetic venture'), (?, 'Other synthetic venture')").run(PROJECT, OTHER_PROJECT);
-  db.prepare("INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, status, config_json) VALUES (?, 'int-5828', ?, 'typeform', 'oauth2', 'active', ?)")
-    .run(INTEGRATION, USER, config == null ? null : JSON.stringify(config));
+  db.prepare("INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, status) VALUES (?, 'int-5828', ?, 'typeform', 'oauth2', 'active')")
+    .run(INTEGRATION, USER);
+  // D5828 part 2: the venture's binding (#5827) is the selection the sync row follows.
+  db.prepare("INSERT INTO typeform_form_bindings (uid, integration_id, project_id, form_id, bound_by) VALUES ('bind-5828', ?, ?, ?, ?)").run(INTEGRATION, PROJECT, FORM, USER);
   db.prepare('INSERT INTO typeform_form_syncs (id, integration_id, project_id, form_id) VALUES (1, ?, ?, ?)').run(INTEGRATION, PROJECT, FORM);
   const env: any = { DB: d1Over(db) };
   return { db, env };
@@ -113,7 +115,8 @@ async function mapDefault(env: any, nowIso = at(T0)) {
   assert.equal(await setTypeformMappings(env, 1, formFields(FORM_DEF()), MAPPINGS, nowIso), true);
 }
 const KEY = { integrationId: INTEGRATION, projectId: PROJECT, formId: FORM };
-const deps = (fetch: any, now: number, extra: Record<string, any> = {}) => ({ fetch, accessToken: async () => TOKEN, now: () => now, runId: `run-${now}`, limits: { pageSize: 3 }, ...extra });
+const session = (region: unknown = 'us') => async () => ({ accessToken: TOKEN, region });
+const deps = (fetch: any, now: number, extra: Record<string, any> = {}) => ({ fetch, session: session(), now: () => now, runId: `run-${now}`, limits: { pageSize: 3 }, ...extra });
 const checkpoint = (db: DatabaseSync) => (db.prepare('SELECT checkpoint_submitted_at AS c FROM typeform_form_syncs WHERE id = 1').get() as any).c;
 const answers = (db: DatabaseSync) => (db.prepare('SELECT field_id, answer_text FROM typeform_answers ORDER BY id').all() as any[]).map((r) => ({ ...r }));
 
@@ -321,7 +324,7 @@ test('a revoked grant, a deleted or moved form and a disconnected connection sto
   assert.equal((await syncTypeformForm(env, deps(revoked.fetch, T0 + H), KEY)).outcome, 'access_revoked');
   const moved = fakeTypeform({ items: [], faults: { 1: { status: 404 } } });
   assert.equal((await syncTypeformForm(env, deps(moved.fetch, T0 + 2 * H), KEY)).outcome, 'form_unavailable');
-  const lost = await syncTypeformForm(env, { ...deps(moved.fetch, T0 + 3 * H), accessToken: async () => { throw new Error('no grant'); } }, KEY);
+  const lost = await syncTypeformForm(env, { ...deps(moved.fetch, T0 + 3 * H), session: async () => { throw new Error('no grant'); } }, KEY);
   assert.equal(lost.outcome, 'access_revoked');
   db.prepare("UPDATE integrations SET status = 'disconnected' WHERE id = ?").run(INTEGRATION);
   const quiet = fakeTypeform({ items: [] });
@@ -336,20 +339,20 @@ test('a revoked grant, a deleted or moved form and a disconnected connection sto
 });
 
 test('the region chooses the origin and the response link; no validated region, no read', async () => {
-  const eu = world({ region: 'eu' });
+  const eu = world();
   await mapDefault(eu.env);
   const fake = fakeTypeform({ items: [item(HISTORY[0])] });
-  await syncTypeformForm(eu.env, deps(fake.fetch, T0), KEY);
+  await syncTypeformForm(eu.env, deps(fake.fetch, T0, { session: session('eu') }), KEY);
   assert.ok(fake.state.calls.every((u) => u.startsWith('https://api.eu.typeform.com/forms/FrmSyn01')));
   assert.equal(fake.state.headers[0].authorization, `Bearer ${TOKEN}`);
   assert.equal((await typeformFormStatus(eu.env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM))!.link, 'https://admin.eu.typeform.com/form/FrmSyn01/results#responses');
   const us = world();
   await syncTypeformForm(us.env, deps(fakeTypeform({ items: [] }).fetch, T0), KEY);
   assert.equal((await typeformFormStatus(us.env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM))!.link, 'https://admin.typeform.com/form/FrmSyn01/results#responses');
-  for (const cfg of [null, { region: 'apac' }, { data_center: 'eu' }]) {
-    const w = world(cfg);
+  for (const region of [null, '', 'apac', 'EU', { region: 'eu' }]) {
+    const w = world();
     const quiet = fakeTypeform({ items: [] });
-    assert.equal((await syncTypeformForm(w.env, deps(quiet.fetch, T0), KEY)).outcome, 'region_unknown');
+    assert.equal((await syncTypeformForm(w.env, deps(quiet.fetch, T0, { session: session(region) }), KEY)).outcome, 'region_unknown');
     assert.equal(quiet.state.calls.length, 0);
     assert.equal((await typeformFormStatus(w.env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM))!.link, null);
   }
@@ -379,7 +382,9 @@ test('a renamed field keeps its id; a deleted or retyped mapped field is flagged
   assert.equal(r2.new_answers, 0, 'flagged mappings land nothing');
   assert.doesNotMatch(changed.state.calls[1], /fields=/);
   const s = await typeformFormStatus(env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM);
-  assert.deepEqual(s!.needs_remap.map((m) => [m.field_id, m.status]), [['fldKind', 'type_changed'], ['fldPain', 'field_deleted']]);
+  assert.deepEqual(s!.needs_remap, [{ field_id: 'fldKind', status: 'type_changed' }, { field_id: 'fldPain', status: 'field_deleted' }]);
+  // D5828 part 3: no field title reaches the client, even for the connection owner.
+  assert.ok(!JSON.stringify(s).includes('waitlist?') && !JSON.stringify(s).includes('hardest part'));
   // Remapping the retyped field to its new type makes it active again.
   assert.equal(await setTypeformMappings(env, 1, formFields(FORM_DEF({ kindType: 'dropdown', dropPain: true })), [{ field_id: 'fldKind', kind: 'waitlist', choices: ['chYes'] }], at(T0 + 2 * H)), true);
   assert.deepEqual((await typeformFormStatus(env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM))!.needs_remap, []);

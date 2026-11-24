@@ -1,0 +1,67 @@
+/**
+ * HQ package term lifecycle reads (D5025, #5025 part 1): each accepted package
+ * term's state, and the read-only review of a renewal, upgrade, downgrade or
+ * change with an optional actual-day proration quote. Super Admin only; writes
+ * nothing.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireSuperAdmin } from '../auth';
+import { mapError } from './_t13t14t15_helpers';
+import adminLicences from './admin_licences';
+import type { RouteMount } from '../util/routeRegistry';
+import { byUid } from '../services/licenceLedgerCore';
+import { getPackageOffer, PackageOfferError } from '../services/packageOffers';
+import { licenceOffers, reviewChange, standaloneGranted, termState, today } from '../services/packageLifecycle';
+
+const r = new Hono<{ Bindings: Env }>();
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+function answer(c: any, e: unknown) {
+  if (e instanceof PackageOfferError) return c.json({ error: e.code, message: e.sentence }, e.status);
+  const mapped = mapError(c, e);
+  return mapped.status === 400 ? c.json({ error: 'package_lifecycle_unavailable', message: 'The package term could not be read. Try again.' }, 500) : mapped;
+}
+
+r.get('/:uid/package-terms', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const uid = c.req.param('uid');
+    if (!await byUid(c.env, uid)) throw new PackageOfferError(404, 'not_found', 'No licence has that id.');
+    const all = await licenceOffers(c.env, uid);
+    const day = today();
+    const items = all.filter((o) => o.state === 'accepted').map((o) => ({
+      uid: o.uid, package_key: o.package_key, package_version: o.package_version, package_name: o.package_name,
+      starts_on: o.starts_on, ends_on: o.ends_on, accepted_annual_fee_cents: o.accepted_annual_fee_cents, currency: o.currency,
+      state: termState(o, all, day),
+    }));
+    c.header('Cache-Control', 'no-store');
+    return c.json({ as_of: day, items });
+  } catch (e) { return answer(c, e); }
+});
+
+r.get('/:uid/package-offers/:offer/change-review', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const uid = c.req.param('uid');
+    const proposal = await getPackageOffer(c.env, uid, c.req.param('offer'));
+    if (proposal.state !== 'draft' && proposal.state !== 'offered') {
+      throw new PackageOfferError(409, 'offer_not_open', 'Only a draft or offered package offer can be reviewed as a change.');
+    }
+    const effective = c.req.query('effective_on') ?? null;
+    if (effective != null && !DAY.test(effective)) {
+      throw new PackageOfferError(400, 'invalid_effective_on', 'effective_on must be a day written YYYY-MM-DD.');
+    }
+    const review = reviewChange({
+      proposal, all: await licenceOffers(c.env, uid), standaloneGranted: await standaloneGranted(c.env, uid),
+      day: today(), effectiveOn: effective,
+    });
+    if (effective != null && review.current_term && !(review as any).proration_quote) {
+      throw new PackageOfferError(400, 'effective_outside_term', 'effective_on must fall inside the current term, in the same currency.');
+    }
+    c.header('Cache-Control', 'no-store');
+    return c.json(review);
+  } catch (e) { return answer(c, e); }
+});
+
+export const mount: RouteMount = { path: '/api/admin/licences', router: r, before: [adminLicences] };
+export default r;

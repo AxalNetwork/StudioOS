@@ -128,6 +128,21 @@ of that year.
 
 ---
 
+### 1.4 Credentials and environments (D8069, #8069)
+
+Every job that reads a cloud credential names the GitHub environment that holds it. `frontend/test/workflow_environments_8069.test.mjs` fails the build when one does not.
+
+| Environment | Who may enter | Jobs |
+| --- | --- | --- |
+| `production` | `main` only, the owner approves | the release (`cloudflare-worker-deploy.yml` deploy, schema-drift, branches), `d1-migrate.yml`, and the merge-control, meeting-bot and archive-observer deploys |
+| `production-ops` | `main` only, the owner approves | the D1 backup, the DR drill and its synthetic outside restore, file recovery (snapshot and synthetic proof), the probes, branch provisioning and the gateway jobs |
+| `preview` | `main` only, no reviewer | the pull-request preview's deploy and delete (`pr-preview-deploy.yml`) |
+| `agent-compute-preview` | `main` only, independent review | the disabled compute host |
+
+The release's admission and rollback contract above is unchanged. A pull-request run enters none of these environments, so it holds no deploy credential. Each deploy and ops workflow grants no permission at the top (`permissions: {}`). Each job declares what it uses. `id-token: write` appears only on a job that exchanges the OIDC token (Claude's federation, the capacity planner, and from #8064 an AWS or Azure login).
+
+No workflow reads a long-lived AWS or Azure key. Cloudflare has no OIDC federation, so its tokens are scoped per Worker and per environment (#8064). The preview jobs read `PR_PREVIEW_CLOUDFLARE_API_TOKEN`, not the generic name. Until the repository copy of `CLOUDFLARE_API_TOKEN` is deleted, an absent environment secret of that name would fall back to the production-capable repository token. The [credential runbook](PRODUCTION_CREDENTIALS.md) has the cutover steps and the owner gates.
+
 ## 2. Pre-flight
 
 Run these before deploying. Read **exit codes**, not output — several of these
