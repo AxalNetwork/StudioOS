@@ -1,5 +1,6 @@
 import { guidePlacement } from './guidePlacement';
 import { guideBodyText } from './sections';
+import { helpGuideBreadcrumbLd } from '../../lib/structuredData.js';
 
 // D599 (#1280) — the Help Center's addresses and its one derived figure, as
 // plain functions, so the layout and tests run the same address and signal
@@ -33,6 +34,18 @@ export function hashTarget(hash, visibleSections, { isAdmin = false, restricted 
     (s) => s.id === area && s.subsections.some((g) => g.id === guide),
   );
   return known ? guideHref(`${area}/${guide}`) : null;
+}
+
+/**
+ * D7004 (#7004): a guide's `BreadcrumbList`, the trail its page draws (Help, the area, the guide), or null when
+ * the viewer's sections hold no such guide.
+ */
+export function guideBreadcrumbLd(sections, area, guide) {
+  const section = (sections || []).find((s) => s.id === area);
+  const sub = section?.subsections.find((g) => g.id === guide);
+  if (!sub) return null;
+  const placement = guidePlacement(`${area}/${guide}`);
+  return helpGuideBreadcrumbLd({ areaId: placement?.area || section.id, areaTitle: placement?.areaTitle || section.title, guideTitle: sub.title });
 }
 
 /** Reading time from the guide's own words, at 200 a minute, never under one. */

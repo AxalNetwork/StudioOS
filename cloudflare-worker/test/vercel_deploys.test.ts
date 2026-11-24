@@ -58,6 +58,7 @@ async function world(opts: { withDeploys?: boolean } = {}) {
     CREATE TABLE hypotheses(id INTEGER PRIMARY KEY, project_id INTEGER, claim TEXT);
     CREATE TABLE roadmap_okrs(id INTEGER PRIMARY KEY, project_id INTEGER, objective TEXT, key_results_json TEXT, kanban_status TEXT, quarter TEXT, sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE okr_column_moves(id INTEGER PRIMARY KEY, project_id INTEGER, okr_id INTEGER, to_status TEXT, moved_at TEXT);
+    CREATE TABLE okr_dependencies(id INTEGER PRIMARY KEY, project_id INTEGER, okr_id INTEGER, blocks_okr_id INTEGER, note TEXT, created_by INTEGER, created_at TEXT);
     INSERT INTO users(id, role, founder_id, name, email) VALUES (1, 'founder', 11, 'One', 'one@example.test'), (2, 'founder', 22, 'Outsider', 'out@example.test');
     INSERT INTO company_profiles VALUES (10);
     INSERT INTO projects(id, founder_id, company_id) VALUES (101, 11, 10);

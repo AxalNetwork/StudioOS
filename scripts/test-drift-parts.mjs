@@ -249,11 +249,27 @@ function main(argv) {
     env.TEST_TRACE_ROOT = root;
   }
   const sh = (command) => spawnSync('sh', ['-c', command], { cwd: root, stdio: 'inherit', env });
+  const early = queuePreflight({ env: { ...env, CI_FAILURE_PART: part.name }, root, sh });
+  if (early !== 0) return early;
   if (generated !== 0) {
     if (part.name === REST) runPart({ commands: ['npm run test:guards'], env: { ...env, CI_FAILURE_PART: part.name }, root, sh });
     return generated;
   }
   return runPart({ commands: part.commands, env: { ...env, CI_FAILURE_PART: part.name }, root, sh, continueIndependent: part.name === REST });
+}
+
+/**
+ * D8416: what every part of a merge-queue run checks before its own commands. A candidate can hold a workflow
+ * that does not parse when neither main nor the PR does (two PRs add the same job key and merge without a
+ * conflict), and the queue's matrix is fail-fast, so the first part to get here stops the others. Each command
+ * is also one of test:guards', so the full-suite verdict still includes it.
+ */
+export const QUEUE_PREFLIGHT = Object.freeze(['node scripts/check-production-credentials.mjs']);
+
+/** D8416: run QUEUE_PREFLIGHT for a queue candidate only; a failure is recorded and annotated as any command's is. */
+export function queuePreflight({ env = process.env, ...options }) {
+  if (env.GITHUB_EVENT_NAME !== 'merge_group') return 0;
+  return runPart({ ...options, env, commands: QUEUE_PREFLIGHT, continueIndependent: false });
 }
 
 /** D5505: Actions PR runs identify the head while GITHUB_SHA identifies the tested merge. */

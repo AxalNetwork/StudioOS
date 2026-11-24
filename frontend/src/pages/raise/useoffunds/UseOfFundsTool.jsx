@@ -191,6 +191,39 @@ function SectionTable({ rows, base, sheetTo, testId = 'uof-sections' }) {
   );
 }
 
+/**
+ * D5075 (#5075, RA-26 C): on a phone the section table is a card a section, every column kept as a
+ * labelled line: share and amount first, then a month over the target, its milestone and its hires.
+ * The section's name opens its sheet (#6083), a 44px target. Nothing is wider than the screen.
+ */
+function SectionCards({ rows, base, sheetTo }) {
+  const target = base?.target_runway_months;
+  return (
+    <div className="flex flex-col gap-2" data-testid="uof-section-cards">
+      <span className={EYEBROW}>{rows.length} sections</span>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Sections of the raise">
+        {rows.map((r) => (
+          <li key={r.key} className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-axal-hairline px-3 py-2 dark:border-gray-800" data-testid="uof-section-card">
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <Link to={sheetTo(r.key)} className={`${LINK} inline-flex min-h-[44px] min-w-0 flex-1 items-center gap-1.5 text-[13.5px]`} data-testid={`uof-open-section-${r.key}`}>
+                <span className={`h-2 w-2 shrink-0 rounded-full ${SECTION_BG[r.key]}`} aria-hidden="true" /><span className="min-w-0 break-words [overflow-wrap:anywhere]">{r.label}</span><span aria-hidden="true">›</span>
+              </Link>
+              <span className={`${MONO} shrink-0 text-[13px] font-extrabold text-axal-ink dark:text-gray-100`} data-testid={`uof-section-card-share-${r.key}`}>{r.share != null ? `${r.share}%` : <NotRecorded />}</span>
+            </span>
+            <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12.5px]">
+              <div className="flex min-w-0 flex-col"><dt className={EYEBROW}>Amount</dt><dd className={`m-0 break-words ${MONO} [overflow-wrap:anywhere] text-axal-ink dark:text-gray-100`}>{money(r.amountCents, base?.currency) || <NotRecorded />}</dd></div>
+              <div className="flex min-w-0 flex-col"><dt className={EYEBROW}>{target ? `A month over ${target} months` : 'A month'}</dt><dd className={`m-0 break-words ${MONO} [overflow-wrap:anywhere] text-axal-ink dark:text-gray-100`}>{money(r.monthlyCents, base?.currency) || <NotRecorded />}</dd></div>
+              <div className="col-span-2 flex min-w-0 flex-col"><dt className={EYEBROW}>Milestone</dt><dd className="m-0 break-words [overflow-wrap:anywhere] text-axal-ink dark:text-gray-100">{r.milestone ? <>{r.milestone.label}<span className={`block text-[11px] ${MUTED}`}>{r.milestone.by ? `by ${r.milestone.by}` : 'No date recorded'}</span></> : <span className={MUTED}>None yet</span>}</dd></div>
+              <div className="flex min-w-0 flex-col"><dt className={EYEBROW}>Hires</dt><dd className={`m-0 ${MONO} text-axal-ink dark:text-gray-100`}>{r.hires == null ? <span className={MUTED}>Unreadable</span> : r.hires || <span className={MUTED}>None</span>}</dd></div>
+            </dl>
+          </li>
+        ))}
+      </ul>
+      <p className={`m-0 text-[11.5px] ${MUTED}`}>A section’s name opens it.</p>
+    </div>
+  );
+}
+
 /** Cash over time (UF1) and the cash path (UF7): the model's path, with its table. */
 function CashCard({ base, title, testId, without = null }) {
   const [view, setView] = useState('chart');
@@ -364,7 +397,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi, ho
                 <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
                   <Card title="What the raise buys" meta={money(base?.amount_to_raise_cents, base?.currency) ? `${money(base.amount_to_raise_cents, base.currency)} · base scenario` : null} testId="uof-money">
                     <StackBar rows={rows} currency={base?.currency} />
-                    {!phone ? <SectionTable rows={rows} base={base} sheetTo={sheet.to} /> : null}
+                    {phone ? <SectionCards rows={rows} base={base} sheetTo={sheet.to} /> : <SectionTable rows={rows} base={base} sheetTo={sheet.to} />}
                   </Card>
                   <FoundersAfterCard link={base?.cap_table_link} phone={phone} onRetry={read.reload} />
                   {!phone ? (planViewer(plan)?.mercury === false && plan.runway_today?.sources?.mercury?.state === 'founder_only'

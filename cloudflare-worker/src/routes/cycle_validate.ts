@@ -56,6 +56,7 @@ import { currentMarketFigures, type MarketFigureRow } from '../services/marketFi
 import { part } from '../services/cycleFocus';
 import {
   CYCLE, QUESTION, MODULES, CARD_FOR, readWaitlistBar, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
+  compareSegments, COMPARE_MIN, COMPARE_MAX,
   type Ctx, type ModuleSlug,
 } from '../services/cycleValidate';
 import {
@@ -63,7 +64,7 @@ import {
   setDemandSignalStatus, setWaitlistTarget, setInterviewsTarget, setValidationObjective, writeCompetitorMention, setMarketMark, addMarketSource,
   removeMarketSource, setHypothesisPlan, setEvidenceStrength,
   writeTheme, updateTheme, deleteTheme, updateSegment, addCompetitor, updateCompetitor, updateDemandSignal,
-  createHypothesis, updateHypothesis,
+  createHypothesis, updateHypothesis, setPrimarySegment,
 } from '../services/validateWriters';
 import { ownedRow } from '../services/records/owned';
 import { moduleSuggestions } from '../services/interviewSuggestions';
@@ -313,6 +314,41 @@ cycleValidate.delete('/google/facts/:id', googleWrite(async (c, g) => {
   return c.json({ ok: true, id, module: MODULE_SLUG[module] });
 }));
 
+/**
+ * D6007 (#6007, V24): Compare segments, two to four of the venture's active segments side by side
+ * (`?ids=1,2,3`, in the order asked). Read by anyone who reads the module; nothing is written.
+ */
+cycleValidate.get('/segments/compare', async (c) => {
+  const s = await scope(c, canReadBoard);
+  if (s instanceof Response) return s;
+  const raw = String(c.req.query('ids') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const ids = raw.map((x) => idParam(x));
+  if (ids.some((x) => x == null)) return c.json({ detail: 'ids must be segment ids, separated by commas' }, 400);
+  const unique = [...new Set(ids as number[])];
+  if (unique.length < COMPARE_MIN || unique.length > COMPARE_MAX) {
+    return c.json({ detail: `Compare takes ${COMPARE_MIN} to ${COMPARE_MAX} segments` }, 400);
+  }
+  try {
+    const out = await compareSegments(ctxOf(c, s.projectId), unique);
+    return c.json({ ...out, can_write: canWrite(s.project, s.user) });
+  } catch (e) {
+    console.warn('[cycle_validate] segment compare unreadable:', (e as Error)?.message);
+    return c.json({ detail: 'The segments could not be read' }, 503);
+  }
+});
+
+/** D6007 (#6007, V23, V24): set or clear the venture's primary ICP (`{ primary: true | false }`); one per venture. */
+cycleValidate.put('/segments/:id/primary', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'customer_segments', c.req.param('id'), s.projectId, 'Segment');
+  if (id instanceof Response) return id;
+  const b = await body(c);
+  try {
+    return c.json(await setPrimarySegment(c.env, { projectId: s.projectId, userId: Number(s.user.id), segmentId: Number(id), primary: b.primary }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
 /** The Lab market page's three stored checks. */
 cycleValidate.get('/market-readiness', async (c) => {
   const s = await scope(c, canReadBoard);
@@ -561,6 +597,8 @@ cycleValidate.patch('/segments/:id', async (c) => {
       projectId: s.projectId, userId: Number(s.user.id), segmentId: Number(id), name: b.name, description: b.description,
       who_they_are: b.who_they_are, context: b.context, job_to_be_done: b.job_to_be_done, urgency: b.urgency,
       value_promised: b.value_promised, value_source: b.value_source, score_since: b.score_since,
+      // D6007 (#6007): the segment's firmographics and disqualifiers, kept unless named.
+      firmographics: b.firmographics, disqualifiers: b.disqualifiers,
     }));
   } catch (e) { return writeFailed(c, e); }
 });

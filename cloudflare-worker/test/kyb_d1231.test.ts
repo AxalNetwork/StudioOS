@@ -562,7 +562,7 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ["maskFor('date_of_birth', p.dob || null)", 'p.dob || null',privacyScenario],
     ["'kyc_field_shown'", "'kyb_wrong_showing'",privacyScenario],
     ["kyb.use('/:id/documents/:documentId', requireCfAccess());",'',documentScenario],
-    ["await eraseRecordObjects(c.env.FILES!, doc.file_key, 'purge');",';',documentScenario],
+    ["await eraseRecordObjects(c.env.FILES!, doc.file_key, 'purge', { db: c.env.DB });",';',documentScenario],
     ["'kyb_document_access'", "'kyb_wrong_document_action'",documentScenario],
     ['row.linked_user_id === user.id', 'false', selfReviewScenario],
     ['if (ids.includes(user.id))', 'if (false)', selfReviewScenario],

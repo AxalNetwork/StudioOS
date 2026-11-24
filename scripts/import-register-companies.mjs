@@ -6,7 +6,7 @@
  * No network access, database connection, inferred financials or generated reviews.
  */
 import { createHash } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, createReadStream, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
@@ -409,6 +409,27 @@ export function registerMigration(rows, asOf) {
   return `-- D7316 (#7316): proposed additive company import from official registers, ${asOf}.\n-- Sources: BRREG NLOD-2.0; PRH and RIK CC-BY-4.0. Source records are normalized.\n-- Registry-listed websites are not independently checked for reachability or ownership.\n-- No financial data, generated review decisions, updates or deletions.\n-- Worldwide acceptance is reported separately and is not implied by this plan.\n${registerMigrationStatements(rows).join('\n\n')}\n`;
 }
 function writeJson(filename, value) { mkdirSync(dirname(resolve(filename)), { recursive: true }); writeFileSync(filename, `${JSON.stringify(value, null, 2)}\n`); }
+
+/** D8198 (#8198): create a SQL proposal exclusively, or accept identical existing bytes without rewriting them. */
+export function writeSqlPlan(filename, sql) {
+  if (constants.O_NOFOLLOW === undefined || constants.O_NONBLOCK === undefined) throw new Error('Safe SQL output requires no-follow and nonblocking file opens');
+  const bytes = Buffer.from(sql, 'utf8');
+  mkdirSync(dirname(resolve(filename)), { recursive: true });
+  let fd;
+  try {
+    fd = openSync(filename, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const existing = openSync(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      if (!fstatSync(existing).isFile()) throw new Error('Existing SQL plan must be a regular file');
+      if (!readFileSync(existing).equals(bytes)) throw new Error('Refusing to overwrite a different existing SQL plan');
+    } finally { closeSync(existing); }
+    return;
+  }
+  try { writeFileSync(fd, bytes); } finally { closeSync(fd); }
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const allowed = new Set(['candidates', 'source-manifests', 'quality-holds', 'existing', 'as-of', 'baseline-observed-at', 'out', 'statements', 'report', 'audit']);
   const args = {};
@@ -429,7 +450,7 @@ export async function main(argv = process.argv.slice(2)) {
     asOf: args['as-of'], baselineObservedAt: args['baseline-observed-at'], evidence, qualityHolds: JSON.parse(holdsBytes),
   });
   const statements = registerMigrationStatements(prepared.accepted), sql = registerMigration(prepared.accepted, args['as-of']);
-  if (existsSync(args.out) && readFileSync(args.out, 'utf8') !== sql) throw new Error('Refusing to overwrite a different existing SQL plan');
+  writeSqlPlan(args.out, sql);
   const report = { ...prepared.report, candidates_file_sha256: hash(candidatesBytes), existing_file_sha256: hash(existingBytes),
     quality_holds_file_sha256: hash(holdsBytes),
     proposed_sql_sha256: hash(sql), proposed_sql_bytes: Buffer.byteLength(sql), statement_count: statements.length,
@@ -437,7 +458,6 @@ export async function main(argv = process.argv.slice(2)) {
   writeJson(args.report, report);
   writeJson(args.audit, { ...report, rejected_rows: prepared.rejected, admitted_rows: prepared.accepted });
   writeJson(args.statements, statements);
-  mkdirSync(dirname(resolve(args.out)), { recursive: true }); writeFileSync(args.out, sql);
   console.error(JSON.stringify({ accepted: report.accepted, rejected: report.rejected, user_goal: report.user_goal,
     original_worldwide_acceptance: report.original_worldwide_acceptance, proposed_statement_count: statements.length }, null, 2));
   return 0;

@@ -62,6 +62,8 @@ function fixture() {
   db.exec(readFileSync(resolve(here, '../sql/migrations/379_market_intel_index_basis.sql'), 'utf8'));
   // D7707 — what a row measures, and the run record.
   db.exec(readFileSync(resolve(here, '../sql/migrations/202611191833_7707_market_intel_row_dates_runs.sql'), 'utf8'));
+  // D7708 — the window and mix an index point stores.
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611220337_7708_market_intel_index_window.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'admin', 'Ada', 'ada@axal.example')`).run(ADMIN);
   return db;
 }
@@ -452,8 +454,10 @@ test('sector-compass: live since the first live day, the window it covers, month
   const { status, body } = await getCompass(envFor(db));
   assert.equal(status, 200, JSON.stringify(body));
   assert.equal(body.period_status, 'month_to_date');
-  assert.match(body.history_note, /month to date/);
-  assert.match(body.delta_note, /previous month/);
+  // D7708 — the notes say a value is the score over its own 30-day window, not the calendar month.
+  assert.match(body.history_note, /30 days before its last refresh/);
+  assert.match(body.history_note, /not the calendar month/);
+  assert.match(body.delta_note, /previous month's value, each the score over its own 30-day window/);
   const f = body.freshness;
   assert.equal(f.live_since, new Date(Date.now() - 5 * DAY).toISOString().slice(0, 10));
   assert.equal(f.live_since_exact, true);

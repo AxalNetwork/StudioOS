@@ -3,15 +3,18 @@ import { api } from '../../../lib/api';
 import OfferPages from '../../../ui/OfferPages.jsx';
 import {
   // D4842: no tile strip and no shelf. OF-03 is the result cards alone.
-  ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Field, NoPartnerProfile, isNoPartnerProfile,
-  inputClass, buttonClass, ghostButtonClass, formatDay,
+  ZoneBody, StatedLimit, Unrecorded, Pill,
+  NoPartnerProfile, isNoPartnerProfile, formatDay,
+  // D4844: the Offers type scale, field, actions and empty state.
+  OfferEmpty, OfferField, OfferHeading,
+  offerInputClass, offerButtonClass, offerGhostButtonClass, offerDangerButtonClass,
 } from '../kit';
+import Sheet from '../../../ui/Sheet.jsx';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote, zoneReadError } from './useGuardedWrite';
 import {
   PROOF_CONSENT, PROOF_CHIP_OF, proofConsentKey, proofProvenance, proofHeadline, proofSecondAction, proofChipCounts,
 } from './proofCards.js';
@@ -114,35 +117,35 @@ function ConsentRow({ consent, onWithdraw, busy }) {
     <div className="border-t border-axal-hairline py-2 first:border-t-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
             <span className="font-semibold">{consent.consenter_name}</span>
-            {consent.consenter_role && <span className="text-axal-faint">{consent.consenter_role}</span>}
+            {consent.consenter_role && <span className="text-gray-600 dark:text-gray-400">{consent.consenter_role}</span>}
             <Pill tone={pill.tone}>{pill.label}</Pill>
-            {consent.revision != null && <span className="text-axal-faint">about version {consent.revision}</span>}
+            {consent.revision != null && <span className="text-gray-600 dark:text-gray-400">about version {consent.revision}</span>}
           </div>
           {consent.consent_text && (
             /* The exact words agreed to, quoted. Consent to "a case study" and
                consent to "a case study naming our revenue" are different
                consents, so a boolean cannot stand in for the wording. */
-            <p className="mt-1 max-w-xl text-[12px] italic leading-relaxed text-axal-muted">
+            <p className="mt-1 max-w-xl text-[13px] italic leading-relaxed text-gray-600 dark:text-gray-300">
               “{consent.consent_text}”
             </p>
           )}
-          <div className="mt-0.5 text-[11px] text-axal-faint">
+          <div className="mt-0.5 text-[12px] text-gray-600 dark:text-gray-400">
             {consent.requested_at && <>Asked {formatDay(consent.requested_at)}</>}
             {consent.consent_given_at && <> · agreed {formatDay(consent.consent_given_at)}</>}
             {consent.withdrawn_at && <> · {consent.consent_given_at ? 'withdrawn' : 'declined'} {formatDay(consent.withdrawn_at)}</>}
             {consent.state === 'requested' && consent.expires_at && <> · link valid until {formatDay(consent.expires_at)}</>}
           </div>
           {consent.state === 'superseded' && (
-            <p className="mt-1 max-w-xl text-[11.5px] leading-relaxed text-axal-muted">
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
               This was about an earlier version of the claim, so it no longer publishes the current one. Ask again to confirm the current wording.
             </p>
           )}
           {consent.state === 'requested' && consent.invite_token && (
             <input
               aria-label={`Link for ${consent.consenter_name}`}
-              className={`${inputClass} mt-1 font-mono text-[11px]`}
+              className={`${offerInputClass} font-mono !text-[12px]`}
               readOnly
               value={`${window.location.origin}/attest/partner/${consent.invite_token}`}
               onFocus={(e) => e.target.select()}
@@ -151,7 +154,7 @@ function ConsentRow({ consent, onWithdraw, busy }) {
         </div>
         {live && (
           <button
-            type="button" className={ghostButtonClass} disabled={busy}
+            type="button" className={offerDangerButtonClass} disabled={busy}
             title="Records that this client has withdrawn. The row stays and says so."
             onClick={() => onWithdraw(consent)}
           >
@@ -175,10 +178,10 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
     const link = `${window.location.origin}/attest/partner/${issuedToken.invite_token}`;
     return (
       <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-amber-deep dark:text-amber-300">
+        <h4 className="text-[14px] font-extrabold text-axal-amber-deep dark:text-amber-300">
           Send this link to {issuedToken.consenter_name}
-        </div>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
+        </h4>
+        <p className="mt-1 text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
           It shows them this claim exactly as it reads now. To answer, they ask for
           a code that Axal emails to the address you gave, so holding the link is
           not enough to answer — not for you, and not for anyone it is forwarded to.
@@ -186,12 +189,13 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
           you ask again.
         </p>
         <input
-          className={`${inputClass} font-mono text-[11.5px]`}
+          className={`${offerInputClass} font-mono !text-[12px]`}
+          aria-label={`Link to send to ${issuedToken.consenter_name}`}
           readOnly
           value={link}
           onFocus={(e) => e.target.select()}
         />
-        <p className="mt-2 text-[11.5px] text-axal-faint">
+        <p className="mt-2 text-[12px] text-gray-600 dark:text-gray-400">
           Nothing was emailed. Send it however you already talk to them.
         </p>
       </div>
@@ -201,33 +205,113 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
   return (
     <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Who is being asked">
-          <input className={inputClass} value={form.consenter_name} maxLength={200}
+        <OfferField label="Who is being asked" error={fieldError(note, `ask:${item.id}`, 'consenter_name')}>
+          <input className={offerInputClass} value={form.consenter_name} maxLength={200} autoComplete="name"
             onChange={(e) => setForm({ ...form, consenter_name: e.target.value })} />
-        </Field>
-        <Field label="Email" hint="Their code to answer is sent here. It cannot be your firm’s.">
-          <input className={inputClass} value={form.consenter_email} maxLength={300}
+        </OfferField>
+        <OfferField label="Email" hint="Their code to answer is sent here. It cannot be your firm’s."
+          error={fieldError(note, `ask:${item.id}`, 'consenter_email')}>
+          <input className={offerInputClass} type="email" value={form.consenter_email} maxLength={300} autoComplete="email"
             onChange={(e) => setForm({ ...form, consenter_email: e.target.value })} />
-        </Field>
-        <Field label="Their role">
-          <input className={inputClass} value={form.consenter_role} maxLength={200}
+        </OfferField>
+        <OfferField label="Their role" optional>
+          <input className={offerInputClass} value={form.consenter_role} maxLength={200}
             onChange={(e) => setForm({ ...form, consenter_role: e.target.value })} />
-        </Field>
+        </OfferField>
       </div>
       <button
-        type="button" className={`${buttonClass} mt-3`}
+        type="button" className={`${offerButtonClass} mt-3`}
         disabled={busy || !form.consenter_name.trim() || !form.consenter_email.trim()}
         onClick={() => onAsk(item, form)}
       >
         Create the ask
       </button>
       <WriteNote note={scopedNote(note, `ask:${item.id}`)} busy={busy} />
-      <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
+      <p className="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
         This records the ask and gives you a link to pass on. Axal sends nothing
         on your behalf; the only email is the code your client asks for when they
         answer.
       </p>
     </div>
+  );
+}
+
+/** D4844: the sentence a refused save put on one field of one form, or null. */
+function fieldError(note, scope, field) {
+  return note && !note.ok && note.scope === scope && note.field === field ? note.text : null;
+}
+
+/** D4844: a proof item's own checks, before anything is sent. */
+export function proofErrors(value) {
+  return String(value?.title || '').trim() ? {} : { title: 'Give the result a title.' };
+}
+
+/**
+ * D4844 (#4844) — THE PROOF EDITOR IS THE SHARED SHEET, for a new item and an
+ * existing one alike. It brings `Sheet`'s guarantees (dialog, named title,
+ * focus moved to the first field and kept inside, Escape, an inert page, focus
+ * back on the opener, a bottom sheet on a phone). The entries live with the
+ * caller, so closing the sheet throws nothing away and a failed save keeps
+ * every field; the failure is said inside the sheet with Retry, and a refusal
+ * that names a field is said on that field. Delete sits on the left of the
+ * footer, away from Save.
+ */
+export function ProofSheet({ title, eyebrow, value, onChange, onSubmit, submitLabel, onDelete = null, onClose, busy, note, scope, testId }) {
+  const [errors, setErrors] = useState({});
+  const first = useRef(null);
+  const set = (key) => (e) => {
+    onChange({ ...value, [key]: e.target.value });
+    if (errors[key]) setErrors((x) => ({ ...x, [key]: undefined }));
+  };
+  const submit = () => {
+    const found = proofErrors(value);
+    setErrors(found);
+    if (!Object.keys(found).length) onSubmit();
+  };
+  const err = (key) => errors[key] || fieldError(note, scope, key);
+  return (
+    <Sheet
+      title={title}
+      eyebrow={eyebrow}
+      onClose={onClose}
+      width={560}
+      phone="sheet"
+      initialFocus={first}
+      testId={testId}
+      footer={(
+        <div className="flex flex-wrap items-center gap-2">
+          {onDelete && (
+            <button type="button" className={offerDangerButtonClass} disabled={busy} onClick={onDelete}>Delete</button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <button type="button" className={offerGhostButtonClass} onClick={onClose}>Cancel</button>
+            <button type="button" className={offerButtonClass} disabled={busy} aria-busy={busy || undefined} onClick={submit}>
+              {submitLabel}
+            </button>
+          </div>
+        </div>
+      )}
+    >
+      <div className="flex flex-col gap-4 p-5">
+        <OfferField label="Title" error={err('title')} hint="A short name for the work, such as the client and the engagement.">
+          <input ref={first} className={offerInputClass} value={value.title || ''} maxLength={200} onChange={set('title')} />
+        </OfferField>
+        <OfferField label="Kind" error={err('kind')}>
+          <select className={offerInputClass} value={value.kind} onChange={set('kind')}>
+            {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </OfferField>
+        <OfferField label="What the work was" optional error={err('detail')}>
+          <textarea className={offerInputClass} rows={3} value={value.detail || ''} maxLength={4000} onChange={set('detail')} />
+        </OfferField>
+        <OfferField label="Result claimed" optional error={err('outcome_note')}
+          hint="Your account of the outcome. It stays a claim until a client confirms it.">
+          <input className={offerInputClass} value={value.outcome_note || ''} maxLength={1000} onChange={set('outcome_note')} />
+        </OfferField>
+        <WriteNote note={scopedNote(note, scope)} busy={busy} />
+        {busy && <p role="status" className="text-[13px] text-gray-600 dark:text-gray-400">Saving…</p>}
+      </div>
+    </Sheet>
   );
 }
 
@@ -267,7 +351,7 @@ export function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, not
       <div className="text-[13px] text-axal-muted dark:text-gray-300">
         {head.client ? <b className="text-axal-ink dark:text-gray-100">{head.client}</b> : <Unrecorded>Client not named</Unrecorded>}
         {head.context && <span> · {head.context}</span>}
-        <span className="text-axal-faint"> · {KIND_LABEL[item.kind] || item.kind}</span>
+        <span className="text-gray-600 dark:text-gray-400"> · {KIND_LABEL[item.kind] || item.kind}</span>
       </div>
       <span
         className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-bold ${CONSENT_CHIP_CLASS[label.tone]}`}
@@ -275,16 +359,16 @@ export function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, not
       >
         <i aria-hidden="true" className="not-italic">{label.icon}</i>{label.label}
       </span>
-      <p className="text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-300">
+      <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
         {lines.when}<br />{lines.engagement}
       </p>
-      <p className="text-[12px] text-axal-faint">{label.line}</p>
+      <p className="text-[12px] text-gray-600 dark:text-gray-400">{label.line}</p>
       <div className="mt-1 flex flex-wrap gap-2">
-        <button type="button" className={`${ghostButtonClass} min-h-[44px] md:min-h-0`} aria-expanded={open}
+        <button type="button" className={offerGhostButtonClass} aria-expanded={open}
           onClick={() => { setOpen((v) => !v); setAsking(false); }}>
           {open ? 'Hide proof' : 'View proof'}
         </button>
-        <button type="button" className={`${ghostButtonClass} min-h-[44px] md:min-h-0`}
+        <button type="button" className={offerGhostButtonClass}
           onClick={() => {
             if (second.opens === 'ask') { setAsking((v) => !v); setOpen(false); } else { setOpen(true); setAsking(false); }
           }}>
@@ -302,62 +386,42 @@ export function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, not
       {open && (
         <div className="mt-1 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid="proof-detail">
           {item.detail && (
-            <p className="max-w-2xl text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-300">{item.detail}</p>
+            <p className="max-w-2xl text-[14px] leading-relaxed text-gray-700 dark:text-gray-300">{item.detail}</p>
           )}
-          {head.context && <p className="mt-1 text-[12px] text-axal-faint">Recorded as “{item.title}”.</p>}
+          {head.context && <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">Recorded as “{item.title}”.</p>}
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className={ghostButtonClass} onClick={() => setEdit((v) => !v)}>
-              {edit ? 'Cancel' : 'Edit'}
+            <button type="button" className={offerGhostButtonClass} aria-haspopup="dialog" onClick={() => { setDraft(item); setEdit(true); }}>
+              Edit
             </button>
             {key !== 'approved' && key !== 'requested' && (
-              <button type="button" className={ghostButtonClass} onClick={() => setAsking((v) => !v)}>
+              <button type="button" className={offerGhostButtonClass} onClick={() => setAsking((v) => !v)}>
                 {asking ? 'Close' : 'Ask for consent'}
               </button>
             )}
           </div>
 
           {edit && (
-            <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Title">
-                  <input className={inputClass} value={draft.title || ''} maxLength={200}
-                    onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-                </Field>
-                <Field label="Kind">
-                  <select className={inputClass} value={draft.kind}
-                    onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
-                    {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </Field>
-              </div>
-              <div className="mt-3 grid gap-3">
-                <Field label="What the work was">
-                  <textarea className={inputClass} rows={3} value={draft.detail || ''} maxLength={4000}
-                    onChange={(e) => setDraft({ ...draft, detail: e.target.value })} />
-                </Field>
-                <Field
-                  label="Result claimed"
-                  hint="Your account of the outcome. It stays a claim until a client confirms it."
-                >
-                  <input className={inputClass} value={draft.outcome_note || ''} maxLength={1000}
-                    onChange={(e) => setDraft({ ...draft, outcome_note: e.target.value })} />
-                </Field>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className={buttonClass} disabled={busy}
-                  onClick={() => onSave(item, draft, () => setEdit(false))}>Save</button>
-                <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-                  disabled={busy} onClick={() => onDelete(item)}>Delete</button>
-              </div>
-              <WriteNote note={scopedNote(note, `proof:${item.id}`)} busy={busy} />
-            </div>
+            <ProofSheet
+              title={`Edit “${item.title}”`}
+              eyebrow="Proof · edit result"
+              value={draft}
+              onChange={setDraft}
+              submitLabel="Save"
+              onSubmit={() => onSave(item, draft, () => setEdit(false))}
+              onDelete={() => onDelete(item)}
+              onClose={() => setEdit(false)}
+              busy={busy}
+              note={note}
+              scope={`proof:${item.id}`}
+              testId={`proof-edit-${item.id}`}
+            />
           )}
 
           {item.consents.length > 0 && (
             <div className="mt-3">
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              <h4 className="text-[12px] font-extrabold uppercase tracking-[.08em] text-gray-600 dark:text-gray-400">
                 Consent record
-              </div>
+              </h4>
               <div className="mt-1">
                 {item.consents.map((k) => (
                   <ConsentRow key={k.id} consent={k} busy={busy}
@@ -402,29 +466,28 @@ const CONSENT_CHIP_CLASS = {
 function AskModal({ items, busy, issued, onAsk, onClose, note }) {
   const [pick, setPick] = useState(items[0]?.id ?? null);
   const item = items.find((i) => i.id === pick) || null;
+  const first = useRef(null);
+  // D4844: the shared Sheet, not a bespoke fixed overlay; focus starts on the outcome.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Ask a client for consent</h3>
-          <button type="button" className={ghostButtonClass} onClick={onClose}>Close</button>
-        </div>
+    <Sheet title="Ask a client for consent" eyebrow="Proof · consent" onClose={onClose} width={560} phone="sheet"
+      initialFocus={first} testId="proof-ask-sheet">
+      <div className="flex flex-col gap-3 p-5">
         {items.length === 0 ? (
-          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">
+          <p className="text-[14px] leading-relaxed text-gray-700 dark:text-gray-300">
             There is nothing to ask about yet. Record a case study or an outcome first —
             a consent is about a specific claim, so there has to be one.
           </p>
         ) : (
           <>
-            <Field label="Which outcome" hint="The consent is recorded against this item and no other.">
-              <select className={inputClass} value={pick ?? ''} onChange={(e) => setPick(Number(e.target.value))}>
+            <OfferField label="Which outcome" hint="The consent is recorded against this item and no other.">
+              <select ref={first} className={offerInputClass} value={pick ?? ''} onChange={(e) => setPick(Number(e.target.value))}>
                 {items.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.title} — {CONSENT_LABEL[consentState(i)]}
                   </option>
                 ))}
               </select>
-            </Field>
+            </OfferField>
             {item && (
               <AskPanel
                 item={item} busy={busy} onAsk={onAsk} note={note}
@@ -434,7 +497,7 @@ function AskModal({ items, busy, issued, onAsk, onClose, note }) {
           </>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -462,7 +525,7 @@ export default function PartnerProofZone() {
       return true;
     } catch (e) {
       if (generation !== request.current) return false;
-      setState({ loading: false, error: e?.message || 'The proof record did not load.', data: null });
+      setState({ loading: false, error: zoneReadError(e), data: null });
       return false;
     }
   }, []);
@@ -557,43 +620,29 @@ export default function PartnerProofZone() {
           mounted for the first record. Mounted by `adding` alone, it also
           survives a refresh and an unreadable list. */}
       {adding && (
-        <div className="mb-6 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="proof-editor">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Title">
-              <input className={inputClass} value={newItem.title} maxLength={200}
-                onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
-            </Field>
-            <Field label="Kind">
-              <select className={inputClass} value={newItem.kind}
-                onChange={(e) => setNewItem({ ...newItem, kind: e.target.value })}>
-                {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className="mt-3">
-            <Field label="What the work was">
-              <textarea className={inputClass} rows={3} value={newItem.detail} maxLength={4000}
-                onChange={(e) => setNewItem({ ...newItem, detail: e.target.value })} />
-            </Field>
-          </div>
-          <button
-            type="button" className={`${buttonClass} mt-3`}
-            disabled={busy || !newItem.title.trim()}
-            onClick={() => run(
-              () => api.createPartnerProof(newItem), 'Added.', 'new',
-              () => {
-                setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
-                setAdding(false);
-              },
-            )}
-          >
-            Add item
-          </button>
-          <WriteNote note={scopedNote(note, 'new')} busy={busy} />
-        </div>
+        <ProofSheet
+          title="Add proof"
+          eyebrow="Proof · new result"
+          value={newItem}
+          onChange={setNewItem}
+          submitLabel="Save proof"
+          onSubmit={() => run(
+            () => api.createPartnerProof(newItem), 'Added.', 'new',
+            () => {
+              setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
+              setAdding(false);
+            },
+          )}
+          onClose={() => toggleAdding(false)}
+          busy={busy}
+          note={note}
+          scope="new"
+          testId="proof-editor"
+        />
       )}
       <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
+        what="Your proof"
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={reload}
@@ -601,14 +650,15 @@ export default function PartnerProofZone() {
         isEmpty={unlinked || (items.length === 0)}
         empty={(
           /* OF03b: the empty state names the commercial outcome and offers one action. */
-          <NothingYet
+          <OfferEmpty
+            testId="proof-empty"
             title="Show founders why they should hire you"
             body={
               'Add a result from completed work. It starts as your own account, and '
               + 'it is published once the client approves the wording.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
+              <button type="button" className={offerButtonClass} aria-haspopup="dialog" onClick={() => toggleAdding(true)}>
                 Add your first proof
               </button>
             )}
@@ -616,25 +666,26 @@ export default function PartnerProofZone() {
         )}
       >
         <div className="space-y-6">
-          <ZoneHeading
+          {/* D4844: the zone's ONE primary. Ask for consent in the toolbar is secondary. */}
+          <OfferHeading
             title="Proof"
             blurb="Results from completed work. Client-approved results carry the most weight."
             action={(
-              <button type="button" className={buttonClass} onClick={() => toggleAdding(!adding)}>
-                {adding ? 'Cancel' : '+ Add proof'}
+              <button type="button" className={offerButtonClass} aria-haspopup="dialog" onClick={() => toggleAdding(true)}>
+                + Add proof
               </button>
             )}
           />
 
           {(d?.has_more || d?.page > 1) && (
-            <p className="text-sm text-axal-muted">The filters and their counts apply to this page of proof.</p>
+            <p className="text-[13px] text-gray-600 dark:text-gray-400">The filters and their counts apply to this page of proof.</p>
           )}
 
           {/* OF-03: the result cards, two across at desktop and one on a phone
               (OF09b). A chip that finds nothing says which view it is, because
               a bare empty grid reads as "you have no proof". */}
           {items.length > 0 && visible.length === 0 && (
-            <p className="text-[12px] text-axal-muted">
+            <p className="text-[13px] text-gray-600 dark:text-gray-400">
               No proof on this page is in this state. {d?.total ?? items.length} recorded in total.
             </p>
           )}

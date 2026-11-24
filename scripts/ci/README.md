@@ -23,6 +23,15 @@ They do not change production application state.
 | `runner-execution.mjs` | D7886: exact-plan Worker execution, verified runtime/source, actual test-result truth and owned-run cleanup. |
 | `macbook-admission.mjs` | Verify exact parent CI identity, active delegation and same-repository source provenance before the Mac runs candidate code (D7881). |
 | `macbook-worker.mjs` | Delegate one Worker shard with startup/completion bounds, real-failure propagation and standard hosted fallback (D7881). |
+| `agent-provenance.mjs` | Check the identity-chain trailers on every commit an `agent/**` pull request adds and write its provenance artifact (D8068). |
+| `agent-provenance.test.mjs` | Hold the trailer parser to AGENTS.md § "Identity trailers" and run the check on fixture repositories (D8068). |
+| `queue-capacity-audit.mjs` | D8013: bounded GET-only queue, current-attempt and exact-ref review evidence. |
+| `queue-capacity-audit-8013.test.mjs` | D8013: provenance, incomplete evidence, stale snapshots and read-only transport tests. |
+| `queue-capacity-audit-8013.fixture.mjs` | D8013: synthetic rerun and aggregate-job observations for offline diagnosis. |
+| `capacity-scale-model.mjs` | D8333: pure sizing model for the capacity pool: enforced ceilings, coordinator API load, queue wait, slots and machines for a target. |
+| `ownership-check.mjs` | Read-only, advisory-first check of changed paths against active tasks' explicit ownership (D8075). |
+| `ownership-check.test.mjs` | Ownership parser, glob, API completeness and workflow contract regressions (D8075). |
+| `ownership-fixtures.json` | Full public task-body snapshots used to catch ownership wording drift (D8075). |
 | `capacity-client.mjs` | D7973: default-off submission and fresh OIDC receipt reader without a hosted waiter. |
 | `capacity-planner.mjs` | D7973: trusted reusable planner, original event/exact plan validation and one-shot submission. |
 

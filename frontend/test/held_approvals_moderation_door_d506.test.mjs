@@ -26,10 +26,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 // D1038 (#2390): Approvals moved to /admin/approvals; the lane's door moved with it.
-const HELD_RAW = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+const HELD_RAW = approvalsPageSource();
 const HELD = codeOnly(HELD_RAW);
 const APP = codeOnly(read('frontend/src/App.jsx'));
 const BOARD = codeOnly(read('frontend/src/pages/branch/BranchApprovals.jsx'));
