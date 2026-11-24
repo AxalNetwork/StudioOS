@@ -80,9 +80,10 @@ const checks: MutationCheck[]=[
  [200,3,'HubSpot','You','Salesforce','Two',null,200,null,false,false,false,false]);db.close();}},
  {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
+ // D5078 (#5078): the failing Salesforce is member 2's, so member 1 is not offered its Reconnect.
  const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.action;
  snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next?.text ?? null,r.body.card.next?.href ?? null,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],
- [2,1,3,'Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce&project_id=101',{text:'Open',href:'/build/connect?tool=salesforce&project_id=101'},'Capital relationships · Network']);db.close();}},
+ [2,1,3,'Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce&project_id=101',null,'Capital relationships · Network']);db.close();}},
 
  {name:'The five tiles and rows name Workspace',before:"workspace: 'Workspace'",after:"workspace: 'Analytics'",run:async(route:any)=>{
  const {db,env}=fixture();db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',NULL,1)");const r=await request(route,env,'/modules/operating-systems?project=101');
@@ -140,7 +141,7 @@ const checks: MutationCheck[]=[
  {name:'Links into Connect a tool keep the venture',before:"&project_id=${encodeURIComponent(String(projectId))}",after:"",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',12,2)");
  const r=await request(route,env,'/modules/operating-systems?project=101');
- snap([r.body.card.next.href,r.body.parts.tools.rows.map((row:any)=>row.cells.action?.href)],['/build/connect?tool=salesforce&project_id=101',['/build/connect?tool=hubspot&project_id=101','/build/connect?tool=salesforce&project_id=101','/build/connect?tool=stripe&project_id=101']]);db.close();}},
+ snap([r.body.card.next.href,r.body.parts.tools.rows.map((row:any)=>row.cells.action?.href)],['/build/connect?tool=salesforce&project_id=101',['/build/connect?tool=hubspot&project_id=101',undefined,'/build/connect?tool=stripe&project_id=101']]);db.close();}},
 ];
 const secondMutations: Array<[string,string]> = [
  ["AND ic.enabled = 1\n       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id\n       LEFT JOIN users", "AND ic.enabled = 0\n       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id\n       LEFT JOIN users"],

@@ -3,17 +3,22 @@
  * terms. A recommendation layer: refreshing it changes nothing on the licence;
  * applying or overriding it goes through the revision-safe terms write and says
  * how it ended, the branch push apart from HQ's commit. No internal id is shown.
+ *
+ * D5956 (#5956), boards L47 and L48 — the Apply review lists the five figures before → after, each with where it goes
+ * (`applyDestinations`), and its receipt links to Billing when an initial invoice is now owed. The fee invoices are read
+ * apart (`GET /:uid/fee-invoices`), so whether the initial invoice is already issued is known, or said to be unknown.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { licencePricingApi } from '../../../lib/api/licencePricing.js';
+import { licenceFeeInvoicesApi } from '../../../lib/api/licenceFeeInvoices.js';
 import { reportError } from '../../../lib/log';
 import { bpsPercent } from '../../../lib/bps';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError } from '../../../lib/mutationOutcome';
 import {
   BASIS_LABELS, NOT_RECORDED, PRICING_FIGURES, REVIEW_KIND_LABELS, REVIEW_STATE_LABELS,
-  basketOf, buildApply, changesContract, difference, figure, freshness, indexLabel,
+  applyDestinations, basketOf, buildApply, changesContract, difference, figure, freshness, indexLabel, issueFromBillingNext,
 } from './countryPricingModel';
 import { PRICING_PATHS, licenceMarketFacts } from './pricingHqModel';
 
@@ -85,7 +90,46 @@ function BasisEditor({ api, view, onSaved, setNotice }) {
   );
 }
 
-function ApplyForm({ api, view, mode, reviewUid, onDone, onCancel, setNotice }) {
+const GOES_TONE = {
+  goes: 'text-gray-800 dark:text-gray-200', none: 'text-gray-600 dark:text-gray-400', decision: 'text-amber-800 dark:text-amber-300', unknown: 'text-red-700 dark:text-red-300',
+};
+
+/** L47: the five figures, before → after, and where each goes. A table on desktop and tablet, one card per figure on a phone. */
+function Destinations({ view, form, invoices }) {
+  const rows = applyDestinations({ view, form, invoices });
+  return (
+    <div className="mt-2" data-testid="pricing-apply-destinations">
+      <table className="hidden w-full text-left text-[12.5px] sm:table">
+        <thead><tr className="text-[11px] uppercase text-gray-500"><th className="py-1 pr-2">Figure</th><th className="pr-2">Counts</th><th className="pr-2 text-right">Before</th><th className="pr-2 text-right">After</th><th>Goes to</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} className="border-t border-gray-100 dark:border-gray-800" data-testid={`pricing-dest-${r.key}`} data-tone={r.tone}>
+              <td className="py-1 pr-2">{r.label}</td>
+              <td className="pr-2 text-gray-600 dark:text-gray-400">{r.counts}</td>
+              <td className="pr-2 text-right font-mono">{r.before}</td>
+              <td className="pr-2 text-right font-mono">{r.after}</td>
+              <td className={GOES_TONE[r.tone]}>{r.tone === 'goes' ? `→ ${r.goesTo}` : r.goesTo}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul className="space-y-2 sm:hidden">
+        {rows.map((r) => (
+          <li key={r.key} className="rounded-md border border-gray-200 p-2 text-[12.5px] dark:border-gray-800">
+            <p className="font-medium">{r.label} <span className="font-normal text-gray-500">· {r.counts}</span></p>
+            <p className="font-mono">{r.before} → {r.after}</p>
+            <p className={GOES_TONE[r.tone]}>{r.tone === 'goes' ? `Goes to ${r.goesTo}` : r.goesTo}</p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
+        Issued invoices stay as issued. If the initial invoice is already issued, the new initial fee and surcharge are recorded on the decision only.
+      </p>
+    </div>
+  );
+}
+
+function ApplyForm({ api, view, mode, reviewUid, invoices, onDone, onCancel, setNotice, setNext }) {
   const [form, setForm] = useState({ accepted: {}, reason: '', override_reason: '', effective_from: today(), pricing_review_on: '', acknowledge: false });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
@@ -94,9 +138,10 @@ function ApplyForm({ api, view, mode, reviewUid, onDone, onCancel, setNotice }) 
   async function submit() {
     const built = buildApply({ view, form, reviewUid });
     if (!built.ok) { setErrors(built.errors); return; }
-    setErrors({}); setBusy(true); setNotice(null);
+    setErrors({}); setBusy(true); setNotice(null); setNext?.(null);
     try {
       const out = await api.apply(view.licence_uid, built.body);
+      setNext?.(issueFromBillingNext({ view, form, invoices }));
       const pushed = out.push_outcome === 'partial'
         ? ' HQ saved it; the studio’s copy has not caught up yet and is retried.'
         : '';
@@ -143,10 +188,11 @@ function ApplyForm({ api, view, mode, reviewUid, onDone, onCancel, setNotice }) 
           {errors.reason && <span className="text-[11px] text-red-600" role="alert">{errors.reason}</span>}
         </label>
       </div>
+      <Destinations view={view} form={form} invoices={invoices} />
       {needsAck && (
         <label className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[12px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
           <input type="checkbox" checked={form.acknowledge} onChange={set('acknowledge')} data-testid="pricing-ack" />
-          This changes the annual fee or royalty, and the current agreement was drawn on the old figures. It will not be edited;
+          Required. This changes the annual fee, the royalty or the minimum guarantee, and the current agreement was drawn on the old figures. It will not be edited;
           it may no longer match until a replacement is instantiated on the Contract tab. Issued invoices stay as issued.
         </label>
       )}
@@ -221,8 +267,10 @@ function Reviews({ api, view, onChanged, onApply, setNotice }) {
   );
 }
 
-export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
+export function CountryPricing({ licence, onSaved, api = licencePricingApi, invoicesApi = licenceFeeInvoicesApi }) {
   const [view, setView] = useState(null);
+  const [invoices, setInvoices] = useState({ status: 'loading', data: null });
+  const [next, setNext] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -233,6 +281,11 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
     catch (e) { reportError('licence_pricing_read_failed', e); setError('Country pricing could not be read just now.'); }
   }, [api, licence.uid]);
   useEffect(() => { load(); }, [load, licence.terms_revision]);
+  // D5956: read apart from the pricing, so a failed invoice read says "unknown" on the two initial rows, never "none".
+  const loadInvoices = useCallback(() => Promise.resolve().then(() => invoicesApi.list(licence.uid)).then(
+    (data) => setInvoices({ status: 'ready', data }), () => setInvoices({ status: 'unreadable', data: null }),
+  ), [invoicesApi, licence.uid]);
+  useEffect(() => { loadInvoices(); }, [loadInvoices, licence.terms_revision]);
 
   if (error) return <p className="mt-6 text-sm text-red-700" role="alert">{error} It is Unreadable, not empty.</p>;
   if (!view) return <p className="mt-6 text-sm text-gray-500"><Loader2 size={14} className="inline animate-spin" /> Loading country pricing…</p>;
@@ -248,7 +301,7 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
     } catch (e) { reportError('licence_pricing_refresh_failed', e); setNotice(outcomeFromError(e, 'No recommendation was made.')); }
     finally { setBusy(false); }
   }
-  const after = () => { setForm(null); load(); onSaved?.(); };
+  const after = () => { setForm(null); load(); loadInvoices(); onSaved?.(); };
   const multi = view.territory.length > 1;
   // D5020 (L26): staleness, the recommendation's standing and the accepted terms, said apart.
   const facts = licenceMarketFacts(view, today());
@@ -257,7 +310,8 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
     <section className="mt-8 border-t border-gray-200 pt-4 dark:border-gray-800" data-testid="country-pricing" aria-labelledby="country-pricing-h">
       <h3 id="country-pricing-h" className="text-sm font-semibold">Pricing &amp; Market</h3>
       <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
-        Country pricing: a recommendation from market data. Refreshing it never changes the licence; applying it changes the annual fee and royalty above.
+        Country pricing: a recommendation from market data. Refreshing it never changes the licence. Applying it writes the annual fee and royalty into the core terms above,
+        the minimum royalty into the schedule’s § 4.4 minimum guarantee, and records the initial fee and surcharge for the one-off initial invoice issued from Billing.
         Regulatory classes are commercial planning metadata. Recommendation, accepted terms and an override are three different records.
       </p>
       <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-gray-200 px-3 py-2 text-[12px] text-gray-700 dark:border-gray-800 dark:text-gray-300" data-testid="pricing-exclusivity-ref">
@@ -359,10 +413,15 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
         </div>
       )}
       {form && snap && (
-        <ApplyForm api={api} key={`${form.mode}-${snap.uid}`} view={view} mode={form.mode} reviewUid={form.reviewUid} onDone={after} onCancel={() => setForm(null)} setNotice={setNotice} />
+        <ApplyForm api={api} key={`${form.mode}-${snap.uid}`} view={view} mode={form.mode} reviewUid={form.reviewUid} invoices={invoices} onDone={after} onCancel={() => setForm(null)} setNotice={setNotice} setNext={setNext} />
       )}
       <Reviews api={api} view={view} onChanged={load} onApply={(mode, reviewUid) => setForm({ mode, reviewUid })} setNotice={setNotice} />
       <div className="mt-2"><OutcomeNotice notice={notice} testId="country-pricing-outcome" /></div>
+      {next && notice && (
+        <p className="mt-1 text-[12.5px]" data-testid="pricing-issue-from-billing">
+          <a href={next.href} className="font-semibold text-indigo-700 underline dark:text-indigo-300">{next.text}</a>
+        </p>
+      )}
     </section>
   );
 }

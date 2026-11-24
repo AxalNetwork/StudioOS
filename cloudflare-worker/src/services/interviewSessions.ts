@@ -405,7 +405,7 @@ export async function deleteSessionAudio(env: Env, session: SessionRow, actorUse
   if (keys.length && env.FILES) {
     // D6651: audio removal (the owner's, or the retention purge) goes through the one record-erasure path.
     const why = actorUserId === null ? 'retention_expired' : 'owner_removed';
-    for (let i = 0; i < keys.length; i += 1000) await eraseRecordObjects(env.FILES, keys.slice(i, i + 1000), why);
+    for (let i = 0; i < keys.length; i += 1000) await eraseRecordObjects(env.FILES, keys.slice(i, i + 1000), why, { db: env.DB });
   }
   await env.DB.batch([
     env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ?').bind(session.id),
@@ -438,7 +438,7 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
   const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
   if (keys.length && env.FILES) {
     // D6651: deleting a session goes through the one record-erasure path.
-    for (let i = 0; i < keys.length; i += 1000) await eraseRecordObjects(env.FILES, keys.slice(i, i + 1000), 'owner_removed');
+    for (let i = 0; i < keys.length; i += 1000) await eraseRecordObjects(env.FILES, keys.slice(i, i + 1000), 'owner_removed', { db: env.DB });
   }
   const counts = await env.DB.prepare(
     `SELECT (SELECT COUNT(*) FROM interview_transcript_segments WHERE session_id = ?) AS segments,

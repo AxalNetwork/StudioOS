@@ -1,0 +1,26 @@
+-- D6865 part 2 (#6891, the rest of #6099's Grow v2 Feedback canvas, GR-24 and
+-- GR-29C): Save as feedback from an Inbox reply links the reply to the
+-- feedback item it became, so the reply carries a "Saved as feedback" tag.
+--
+--   product_feedback.reply_key  the Inbox message key of the reply the item was
+--                               saved from (`services/growInbox.ts`):
+--                               `contact:<contact_replies.id>` or
+--                               `mail:<sha-256 hex>` for a mailbox message.
+--                               NULL for every item not saved from a reply.
+--                               It is read with `contact_uid` (the thread's
+--                               contact), so one key is only ever matched
+--                               inside its own thread. The Worker checks a
+--                               `contact:` key against that contact's inbound
+--                               replies; a mailbox key is a digest and is
+--                               checked for its shape only.
+--
+-- One reply becomes at most one feedback item: the unique index below holds
+-- it, and the Worker refuses a second save with the item it already is.
+--
+-- Grep first (D689 D-t): no `reply_key` column exists on product_feedback in
+-- schema_baseline.sql or any migration (443, 462, 202611101053, 202611161128).
+--
+-- Additive: one ADD COLUMN and one partial unique index. NON-IDEMPOTENT (D1's
+-- ALTER TABLE has no IF NOT EXISTS): the ledger runner applies it once.
+ALTER TABLE product_feedback ADD COLUMN reply_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_product_feedback_reply ON product_feedback(project_id, contact_uid, reply_key) WHERE reply_key IS NOT NULL;

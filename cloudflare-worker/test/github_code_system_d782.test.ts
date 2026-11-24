@@ -114,7 +114,8 @@ test('GitHub is the Code system: repositories, last sync and what it fed in this
     { module: 'product_roadmap', label: 'Product roadmap', href: '/build/product-roadmap?project_id=101', count: 2 },
     { module: 'prototype_mvp', label: 'Prototype / MVP', href: '/build/prototype-mvp?project_id=101', count: 1 },
   ]);
-  assert.deepEqual(sys.action, { text: 'Open', href: '/build/connect?tool=github&project_id=101' });
+  // D5078 (#5078): a connected Code system is managed, not opened.
+  assert.deepEqual(sys.action, { text: 'Manage', href: '/build/connect?tool=github&project_id=101' });
   // The other project of the same company counts only its own row.
   const other = (await tools(env, 102)).code.systems[0];
   assert.deepEqual(other.feeds.map((f: any) => [f.module, f.count]), [['prototype_mvp', 1]]);
@@ -145,7 +146,7 @@ test('no GitHub connection, a disabled one, and a project with no company', asyn
   db.close();
 });
 
-test('each sync is a line: what arrived per module, newest first, and only GitHub\'s company-enabled syncs', async () => {
+test('each sync is a line: what arrived per module, newest first, every company-enabled tool\'s (D5078)', async () => {
   // Mutation checked: order oldest first → the 2026-10-17 line leads.
   const { db, env } = fixture(); github(db);
   db.exec(`INSERT INTO integrations(id, uid, user_id, provider_key, status, auth_type) VALUES (32, 'st-one', 1, 'stripe', 'active', 'oauth2');
@@ -155,15 +156,17 @@ test('each sync is a line: what arrived per module, newest first, and only GitHu
   syncLog(db, 3, '2026-10-18 10:00:00', 'ok', 'Stripe', { charges: 5 }, 32, 'stripe');
   const s = (await tools(env)).syncs;
   assert.equal(s.state, 'ok');
-  assert.deepEqual(s.rows.map((r: any) => r.at), ['2026-10-18 09:00:00', '2026-10-17 08:00:00'], 'Stripe\'s sync is not GitHub\'s line');
-  const [line] = s.rows;
+  // D5078 (#5078): Stripe's sync is a line too, labelled the latest 20; what it brought is not recorded.
+  assert.deepEqual(s.rows.map((r: any) => [r.at, r.provider]), [['2026-10-18 10:00:00', 'Stripe'], ['2026-10-18 09:00:00', 'GitHub'], ['2026-10-17 08:00:00', 'GitHub']]);
+  assert.deepEqual([s.limit, s.label, s.rows[0].text, s.rows[0].repositories], [20, 'Latest 20', 'Not recorded', null]);
+  const line = s.rows[1];
   assert.deepEqual([line.provider, line.state, line.repositories, line.repositories_more, line.error], ['GitHub', 'done', ['acme/app', 'acme/site'], 1, null]);
   // D782 (#2111): a release lands in Product roadmap now.
   assert.equal(line.text, '12 issues → Product roadmap, 3 pull requests → Prototype / MVP, 2 releases → Product roadmap');
   assert.deepEqual(line.arrived.map((a: any) => [a.module, a.count, a.stored]), [['product_roadmap', 12, true], ['prototype_mvp', 3, true], ['product_roadmap', 2, true]]);
-  assert.equal(s.rows[1].text, '1 issue → Product roadmap, 0 pull requests → Prototype / MVP, 0 releases → Product roadmap');
+  assert.equal(s.rows[2].text, '1 issue → Product roadmap, 0 pull requests → Prototype / MVP, 0 releases → Product roadmap');
   // An outsider reads the lines without the repository names.
-  assert.equal((await tools(env, 101, 4)).syncs.rows[0].repositories, null);
+  assert.equal((await tools(env, 101, 4)).syncs.rows[1].repositories, null);
   db.close();
 });
 

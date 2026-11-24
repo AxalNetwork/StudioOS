@@ -67,6 +67,7 @@ function world() {
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
   db.exec(mig('459_cycle_activity_convention.sql'));
   db.exec(mig('460_validate_record_stores.sql'));
+  db.exec(mig('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP and profile columns
   db.exec(mig('464_verdict_decisions.sql'));
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',
     '447_assistant_interviews.sql', '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql']) db.exec(mig(m));
