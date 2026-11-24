@@ -97,5 +97,8 @@ test('4: a long list ends in "and N more" inside the 500-character cap', () => {
   assert.match(s, /; and \d+ more$/);
   const shown = (s.match(/Field \d+/g) ?? []).length;
   assert.equal(shown + Number(/and (\d+) more$/.exec(s)![1]), 30);
-  assert.deepEqual(marketChanges({ size_cents: 5000, size_currency: 'usd' }, { size_cents: 7500, size_currency: 'usd' }), ['Size 50 USD → 75 USD']);
+  assert.deepEqual(marketChanges({ size_cents: 5000, size_currency: 'usd' }, { size_cents: 7500, size_currency: 'usd' }), ['Size 50.00 USD → 75.00 USD']);
+  // D5373: the currency's own decimals, not a bare factor of 100.
+  assert.deepEqual(marketChanges({ size_cents: 5000, size_currency: 'JPY' }, { size_cents: 5000, size_currency: 'KWD' }), ['Size 5000 JPY → 5.000 KWD']);
+  assert.deepEqual(marketChanges({ size_cents: null, size_currency: null }, { size_cents: 7500, size_currency: null }), ['Size Not recorded → 7500 in minor units, currency not recorded']);
 });

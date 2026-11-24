@@ -24,6 +24,7 @@ import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './stor
 import { onCompanyTeam } from './obligationOwner';
 import { putRecordOrThrow } from './recordStore';
 import { eraseRecordObjects } from './recordErasure';
+import { currencyCode, toMajorString } from '../../../frontend/src/lib/money.js';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
@@ -791,7 +792,13 @@ const STATE_WORD: Record<string, string> = { considering: 'Considering', enterin
 const DECISION_WORD: Record<string, string> = { enter: 'Enter', not_yet: 'Not yet', exit: 'Exit' };
 const clip = (v: string, n = 48) => (v.length > n ? `${v.slice(0, n - 1).trimEnd()}…` : v);
 const worded = (words: Record<string, string>, v: unknown, empty = NOT_SET) => (v == null || v === '' ? empty : words[String(v)] ?? clip(String(v)));
-const money = (cents: unknown, cur: unknown) => (cents == null ? NOT_SET : `${Number(cents) / 100}${cur ? ` ${String(cur).toUpperCase()}` : ''}`);
+// D5373: the amount in the currency's own decimals (JPY none, KWD three) from the money layer, never a bare factor of 100.
+const money = (cents: unknown, cur: unknown) => {
+  if (cents == null) return NOT_SET;
+  const code = currencyCode(typeof cur === 'string' ? cur.trim().toUpperCase() : cur);
+  const major = code ? toMajorString(cents, code) : null;
+  return major === null ? `${String(cents)} in minor units, currency not recorded` : `${major} ${code}`;
+};
 
 export function marketChanges(before: Row, after: Row): string[] {
   const out: string[] = [];
