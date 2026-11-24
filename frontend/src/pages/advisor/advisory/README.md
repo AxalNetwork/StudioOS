@@ -3,7 +3,10 @@
 `AdvisorAdvisoryWorkspace.jsx` is the older tabbed shell. Clients and Contracts
 still use it at `/advisor/advisory/clients` and `/advisor/advisory/contracts`.
 The Practice zones provide the current opportunities, engagements and delivery
-surfaces; do not create another booking or payment flow here.
+surfaces; the retired Opportunities and Engagements tabs and their unreachable
+shell branches were removed in D4704 part 2. Session publishing and lifecycle
+actions live in `../practice/SessionActions.jsx` and `../practice/SessionsZone.jsx`.
+Do not create another booking or payment flow here.
 
 `ClientsPage.jsx` derives its roster from the signed-in advisor's booking
 history. `kit.jsx` groups clients by user ID, never by their display name.
