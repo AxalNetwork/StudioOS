@@ -23,22 +23,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleGrow from '../src/routes/cycle_grow.ts';
 import { personKey } from '../src/services/feedbackLoop.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
-const BASELINE = readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const FOUNDER = 1; const ADVISOR = 3; const OTHER = 6;
@@ -48,13 +40,10 @@ const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [ADVISOR]: 'founder
 const NOW = Date.now(); // clock-ok: relative
 const DAY = (ago: number) => new Date(NOW - ago * 86_400_000).toISOString().slice(0, 10);
 
-const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations);
 
 function fixture() {
-  const db = new DatabaseSync(':memory:');
-  db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(BASELINE);
-  for (const name of newer) db.exec(readFileSync(resolve(M, name), 'utf8'));
+  // D8354: the cached schema (the baseline and every later migration, foreign keys on), not a rebuild per test.
+  const db = freshSchema();
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Founder A', 'fa@example.test'), (20, 'Founder B', 'fb@example.test');`);
   const u = db.prepare('INSERT INTO users (id, email, name, role, founder_id) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder@example.test', 'Fay Founder', 'founder', 10);
@@ -179,13 +168,13 @@ test('distinct people: the record, then the email (any case), then the name; an 
 
 test('revenue is recurring, from the last 60 days, per currency, under the askers\' companies in this venture only', async () => {
   const f = fixture();
-  // The Worker reads its own now during the call; a slow call can cross midnight UTC, so `since` is
-  // the day 60 days before a moment between these two reads (#8316, #8318).
-  const sinceAt = (t: number) => new Date(t - 60 * 86_400_000).toISOString().slice(0, 10);
-  const before = Date.now(); // clock-ok: relative
+  // D8354: the route reads its own clock per request, so a run that crosses 00:00 UTC between the fixture's
+  // NOW and the request sees the next day. The window start is the date 60 days before either moment.
+  const sinceBefore = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10); // clock-ok: relative
   const w = (await weight(f, FOUNDER, 'Fleet CSV')).body.revenue;
-  const after = Date.now(); // clock-ok: relative
-  assert.equal(w.window_days, 60); assert.ok([sinceAt(before), sinceAt(after)].includes(w.since), `${w.since} is 60 days before the call`);
+  const sinceAfter = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10); // clock-ok: relative
+  assert.equal(w.window_days, 60);
+  assert.ok([sinceBefore, sinceAfter].includes(w.since), `since ${w.since} is neither ${sinceBefore} nor ${sinceAfter}`);
   // Kite: r1 + r2 (r3 is 90 days old, r4 is one-time, r6 is another venture's); Ostra: r5 in EUR.
   assert.deepEqual(w.by_currency, [{ currency: 'EUR', cents: 80000 }, { currency: 'USD', cents: 240000 }]);
   assert.equal(w.companies_with_revenue, 2); assert.equal(w.companies_named, 2);

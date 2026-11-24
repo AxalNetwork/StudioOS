@@ -609,10 +609,12 @@ function Disclosure({ reads, signedIn }) {
 
 const BODIES = { overview: Overview, security: Security, data: Data, subprocessors: Subprocessors, documents: Documents, disclosure: Disclosure };
 
-function Frame({ inShell, children }) {
+// D6996 (#6996): no title or description of its own. Each tab's head is its registry entry (`lib/ogRegistry.js`),
+// the same one its prerendered page carries, so /trust/security never previews or tabs as the overview.
+function Frame({ inShell, pathname, children }) {
   if (inShell) return <div className="min-h-full bg-[#f8f7fb] dark:bg-gray-950">{children}</div>;
   return (
-    <SitePage title="Trust center" description="How Axal VC protects your data and your money: facts we can show, and what we cannot show yet." signup={false}>
+    <SitePage path={pathname} signup={false}>
       {children}
     </SitePage>
   );
@@ -627,7 +629,7 @@ export default function TrustCenter({ inShell = false }) {
   const reads = useTrustReads();
   const reviewed = lastReviewed(reads.trust.read);
   return (
-    <Frame inShell={inShell}>
+    <Frame inShell={inShell} pathname={pathname}>
       <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-4 py-8 sm:px-[30px]" data-testid="trust-center" data-frame={inShell ? 'shell' : 'site'}>
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">

@@ -15,8 +15,11 @@ import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
 import { reportError } from '../../lib/log';
-import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
+import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine, guideBreadcrumbLd } from './helpCenter';
+import { injectJsonLd } from '../../lib/seo';
 import { guidePlacement, helpAreas } from './guidePlacement';
+import { helpGuideMeta } from './helpMeta';
+import { usePageMeta } from '../../lib/seo';
 import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
 import {
@@ -1176,6 +1179,20 @@ export default function DocsLayout() {
   const isAdmin = role === 'admin';
   const route = parseGuidePath(location.pathname);
 
+  // D6996 (#6996): the head says which page this is, as its prerendered HTML does. A guide this viewer can read
+  // takes its own title and description (`helpMeta.js`); an address with no such guide names none and is noindex;
+  // the home and the directory take the registry's /help entry. No pageview beacon: this page never sent one.
+  const guideSection = route ? visibleSections.find((s) => s.id === route.area) : null;
+  const guideSub = guideSection?.subsections.find((s) => s.id === route.guide) || null;
+  const guideMeta = guideSub ? helpGuideMeta(guideSection, guideSub) : null;
+  usePageMeta({
+    path: guideMeta ? guideMeta.path : location.pathname,
+    title: guideMeta?.title,
+    description: guideMeta?.description,
+    robots: route && !guideMeta ? 'noindex' : undefined,
+    analytics: false,
+  });
+
   // `#<area>/<guide>` was every guide's address until each had its own page,
   // and it is in notifications already sent, the advisor's tools and people's
   // bookmarks. So a hash on the home opens that guide (`hashTarget` says where).
@@ -1210,6 +1227,13 @@ export default function DocsLayout() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [route, directory]);
+
+  // D7004 (#7004): the guide's BreadcrumbList, the same trail its page draws; removed when the page leaves.
+  const crumbLd = useMemo(
+    () => (route ? guideBreadcrumbLd(visibleSections, route.area, route.guide) : null),
+    [route?.area, route?.guide, visibleSections],
+  );
+  useEffect(() => (crumbLd ? injectJsonLd('help-guide-breadcrumb', crumbLd) : undefined), [crumbLd]);
 
   // A guide opens at its top, not at the scroll position the last page left.
   useEffect(() => {

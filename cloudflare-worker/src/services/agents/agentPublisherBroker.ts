@@ -10,6 +10,7 @@ import {
 } from './agentPublisher';
 import { agentOfProvenance, requireCapability, type CapabilityCode } from '../agentCapabilities';
 import { inspectVentureGitPublisher, type VentureGitScope } from './ventureGitInstallation';
+import { reservePublish, settlePublish } from '../agentBudgets';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const SHA = /^[a-f0-9]{40}$/;
@@ -43,7 +44,8 @@ export type BrokerResult =
   | { ok: false; code: 'not_authorized' | 'work_intent_required' | 'candidate_mismatch' | 'queue_full'
       | 'publication_pending' | 'github_unavailable';
       retryable: boolean }
-  | { ok: false; code: CapabilityCode; retryable: false; capability: string };
+  | { ok: false; code: CapabilityCode; retryable: false; capability: string }
+  | { ok: false; code: 'budget_exhausted' | 'budget_unreadable'; retryable: false; cap: string | null };
 
 type PublicationRow = {
   intent_digest: string; candidate_sha: string; state: string; pr_number: number | null; pr_url: string | null; attempts: number; retry_at_ms: number | null;
@@ -130,8 +132,14 @@ export async function executeAgentPublication(
   }
   if (!SHA.test(candidateSha)) return { ok: false, code: 'candidate_mismatch', retryable: false };
   // D8070: opening the pull request is the agent's code.pr.
-  const capable = await requireCapability(env, await agentOfProvenance(env, intent.provenance.agent_id), 'code.pr');
+  const agentRef = await agentOfProvenance(env, intent.provenance.agent_id);
+  const capable = await requireCapability(env, agentRef, 'code.pr');
   if (!capable.ok) return { ok: false, code: capable.code, retryable: false, capability: capable.capability };
+  // D8071: the agent's PRs today against its daily cap, before anything is reserved or sent to GitHub.
+  if (agentRef) {
+    const budget = await reservePublish(env, agentRef.id, intent.idempotency_key, new Date(ports.now()));
+    if (!budget.ok) return { ok: false, code: budget.code, retryable: false, cap: budget.cap };
+  }
 
   const inspection = await inspectVentureGitPublisher(env.DB, scope, intent.installation_uid);
   if (inspection.code !== 'venture_git_publisher_disabled' || !('installation' in inspection)) {
@@ -309,6 +317,10 @@ export async function executeAgentPublication(
       tenant_id=? AND company_id=? AND project_id=? AND installation_uid=? AND task_id=? AND state='reserved'`)
       .bind(number, expectedUrl, ports.now(), ...bind).run();
     if (Number(saved.meta.changes) !== 1) throw new GithubFailure(0);
+    // D8071: the open PR counts once toward the agent's day. The PR is open whatever this write does.
+    if (agentRef) {
+      try { await settlePublish(env, agentRef.id, intent.idempotency_key, new Date(ports.now())); } catch { console.warn('[agents] budget_settle_failed'); }
+    }
     return { ok: true, number: Number(number), url: expectedUrl, commit_sha: candidateSha, replayed: false };
   } catch (error) {
     if (error instanceof GithubFailure && (error.status === 403 || error.status === 429)) {

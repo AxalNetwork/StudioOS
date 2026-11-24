@@ -11,6 +11,7 @@
  *   gate       GET /deals/:id/transfer-gate (Admin)     {held, open_conditions|null}
  *   events     GET /deals/:id/closing-checklist/events
  *   closing    GET /closings (+ /closings/:uid)          the closing record, if one is open
+ *   duties     GET /reporting/desk?project= (Admin, after close)  the venture's reporting duties
  *
  * Every state is a word with a glyph, never colour alone. A read that failed
  * says Unavailable (D5129) and never stands in as zero or as "nothing holds it".
@@ -384,6 +385,80 @@ export function portfolioRows(closing) {
     };
   });
   return { state: 'ready', rows, inPortfolio: rows.filter((r) => r.inPortfolio).length };
+}
+
+/**
+ * The four figures over a closed closing (DX23 A, D6866 part 2). Each comes
+ * from a read the workspace already makes, except the duties, which are the
+ * venture's reporting desk (`GET /reporting/desk?project=`, D1058) filtered
+ * to this closing's lines by the duty's own `closing_line_uid`. A figure
+ * whose read failed is `unavailable`, never 0; one still being read is
+ * `loading`. Hidden unless the closing is closed.
+ *
+ *   lines    received of the lines not withdrawn; withdrawn ones are named
+ *            and not counted (the closing read)
+ *   total    every recorded transfer on the deal, all time (the Transfer tab's total)
+ *   paper    envelopes executed (completed) on the deal
+ *   duties   reporting duties owed on this closing's lines, signed paper or
+ *            template; left out when `duties` is null (not an Admin)
+ */
+export function afterCloseFigures({ closing, transfers, paper, duties }) {
+  if (!closing || closing.status !== 'closed') return { state: 'hidden' };
+  const lines = (Array.isArray(closing.lines) ? closing.lines : []).filter(Boolean);
+  const withdrawn = lines.filter((l) => l.status === 'withdrawn');
+  const live = lines.filter((l) => l.status !== 'withdrawn');
+  const received = live.filter((l) => l.status === 'received').length;
+  const linesFig = {
+    key: 'lines',
+    label: 'Lines received',
+    value: `${received} of ${live.length}`,
+    note: withdrawn.length === 0 ? 'No line withdrawn'
+      : withdrawn.length <= 2 ? `${withdrawn.map((l) => text(l.investor_name)).join(' and ')} withdrawn, not counted`
+        : `${withdrawn.length} lines withdrawn, not counted`,
+  };
+  const fromRead = (r, done) => (!r || r.state === 'loading' ? { loading: true } : r.state === 'unreadable' ? { unavailable: true } : done(r));
+  const totalFig = {
+    key: 'total',
+    label: 'Total received',
+    ...fromRead(transfers, (t) => ({ cents: t.totalCents, note: `${t.count} transfer${t.count === 1 ? '' : 's'} recorded, all time` })),
+  };
+  const paperFig = {
+    key: 'paper',
+    label: 'Executed paper',
+    ...fromRead(paper, (p) => ({ value: String(p.executed), note: `envelope${p.executed === 1 ? '' : 's'} completed on this deal` })),
+  };
+  const uids = new Set(lines.map((l) => String(l.uid)));
+  const dutiesFig = {
+    key: 'duties',
+    label: 'Reporting duties',
+    ...fromRead(duties, (d) => {
+      const mine = (Array.isArray(d.value?.duties) ? d.value.duties : []).filter((x) => x && uids.has(String(x.closing_line_uid)));
+      const signed = mine.filter((x) => x.source?.kind === 'signed_envelope').length;
+      const template = mine.length - signed;
+      const note = mine.length === 0 ? 'None recorded on this closing’s lines'
+        : template === 0 ? 'created from the signed paper'
+          : signed === 0 ? 'created from the closing template'
+            : `${signed} from the signed paper, ${template} from the closing template`;
+      return { value: String(mine.length), note };
+    }),
+  };
+  // `duties: null` is a caller who does not read the desk (anyone but an Admin): the figure is not drawn.
+  return { state: 'ready', figures: duties == null ? [linesFig, totalFig, paperFig] : [linesFig, totalFig, paperFig, dutiesFig] };
+}
+
+/**
+ * The cap-table decision card (DX23 A). The founder decides the proposal
+ * (`decideCaptable`); the read carries its state and `decided_at`. A date
+ * the read does not carry is not recorded, never today.
+ */
+export function captableCard(closing) {
+  const cap = closing?.captable || {};
+  const on = ymd(cap.decided_at) || null;
+  const when = on ? ` on ${on}` : ' · date not recorded';
+  if (cap.state === 'accepted') return { status: { key: 'done', word: 'Accepted', glyph: '✓' }, sentence: `Accepted by the founder${when}.`, date: on };
+  if (cap.state === 'dismissed') return { status: { key: 'none', word: 'Dismissed', glyph: '–' }, sentence: `Dismissed by the founder${when}.`, date: on };
+  if (cap.state === 'proposed') return { status: { key: 'open', word: 'Proposed', glyph: '○' }, sentence: 'Proposed · Waiting on the founder.', date: null };
+  return { status: { key: 'none', word: NOT_RECORDED, glyph: '○' }, sentence: 'The closing record carries no cap-table decision.', date: null };
 }
 
 /** The Portfolio company page for the closing's venture, from the positions list (admin); null when not found. */

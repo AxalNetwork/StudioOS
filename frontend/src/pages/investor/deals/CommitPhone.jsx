@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import Sheet from '../../../ui/Sheet';
 import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
-import { ballotOf, ownRecusal } from '../../icDecisionModel';
+import { ballotOf, ownRecusal, VOTE_WORDS } from '../../icDecisionModel';
 
 /**
  * Deals · Commit on a phone — board DE27 of the Deals v2 addendum (D6141), part 3 of #6151 (D6151-p3).
@@ -62,7 +62,7 @@ export function votedLine(user, decision) {
   return `${who}${you}`;
 }
 
-const VOTE_LABEL = { yes: 'Yes', no: 'No', abstain: 'Abstain', recused: 'Recused' };
+const VOTE_LABEL = VOTE_WORDS; // D8248: yes reads Invest, no Pass
 const VOTE_SIGN = { yes: '✓', no: '✕', abstain: '○', recused: '⊘' };
 const CARD = 'rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900';
 
@@ -83,9 +83,9 @@ export function PhoneTally({ tally }) {
   );
   return (
     <div role="group" aria-label="Tally" className="grid grid-cols-4 gap-2" data-testid="commit-phone-tally">
-      {cell('yes', 'Yes')}
-      {cell('no', 'No')}
-      {cell('abstain', 'Abstain')}
+      {cell('yes', VOTE_WORDS.yes)}
+      {cell('no', VOTE_WORDS.no)}
+      {cell('abstain', VOTE_WORDS.abstain)}
       {cell('recused', 'Recused · not in the tally', 'border-dashed bg-gray-50 dark:bg-gray-800/40')}
     </div>
   );
@@ -153,9 +153,9 @@ function short(value) {
 }
 
 const CHOICES = [
-  ['yes', 'Yes'],
-  ['no', 'No'],
-  ['abstain', 'Abstain'],
+  ['yes', VOTE_WORDS.yes],
+  ['no', VOTE_WORDS.no],
+  ['abstain', VOTE_WORDS.abstain],
   ['recused', 'Recuse · declare a conflict'],
 ];
 
@@ -167,7 +167,7 @@ export function VoteSheet({ decision, onClose, onVoted }) {
   const [error, setError] = useState('');
   const recusing = vote === 'recused';
   async function submit() {
-    if (!vote) { setError('Choose Yes, No, Abstain or Recuse.'); return; }
+    if (!vote) { setError(`Choose ${VOTE_WORDS.yes}, ${VOTE_WORDS.no}, ${VOTE_WORDS.abstain} or Recuse.`); return; }
     if (!rationale.trim()) {
       setError(recusing
         ? 'A recusal records the conflict it declares. Write the declaration as the rationale.'

@@ -12,7 +12,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eligible, LABELS, renderSticky, stickyComment, verdictFor } from './rules.mjs';
 import { classify, consent, decide, evidenceState, groupRunFor, keeperMergedSince, KIND, RETRY_CUTOVER, STRANDED_DAYS } from './ejection-rules.mjs';
-import { client, readBreakers } from './keeper.mjs';
+import { client, pages, readBreakers } from './keeper.mjs';
+import { keeperAttempts } from './keeper-plan.mjs';
 import { createGitHubReader } from './feeder-github.mjs';
 
 const Q = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{
@@ -43,6 +44,7 @@ export function normalise(nodes) {
       ejectedLabelAt: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.ejected).map((i) => i.createdAt).sort().pop() ?? null,
       ejectedLabels: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.ejected).map((i) => ({ at: i.createdAt, actor: actor(i.actor) }))
         .sort((a, b) => (a.at < b.at ? -1 : 1)),
+      keeperTriedEvents: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.keeperTried).map((i) => ({ at: i.createdAt, actor: actor(i.actor) })),
       handedBackLabels: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.handedBack).map((i) => ({ at: i.createdAt, actor: actor(i.actor) })),
     };
   });
@@ -152,7 +154,11 @@ export async function sweep(env, {
     let ev;
     try { ev = await evidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, required: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
     const fresh = await gh.get(`pulls/${pr.number}`);
+    // D6476-p6: the keeper's attempts so far; an unread sticky comment leaves it unknown (null), which changes nothing.
+    let stickyBody = null;
+    try { stickyBody = stickyComment(await pages(gh, `issues/${pr.number}/comments`, 5), botLogin)?.body ?? ''; } catch { /* null */ }
     const d = decide({
+      keeperAttempts: keeperAttempts({ keeperTriedEvents: pr.keeperTriedEvents, commits, stickyBody }, botLogin).used,
       klass: k.class, mergeable: typeof fresh.mergeable === 'boolean' ? fresh.mergeable : null, keeperMerged: keeperMergedSince(commits, removal.at, botLogin),
       removedAt: removal.at, consent: consent({ ...pr, commits }, { botLogin }),
       checks: evidenceState(ev, pr.head.sha), checksDetail: ev.detail,

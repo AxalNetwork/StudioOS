@@ -11,18 +11,16 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import profiling from '../src/routes/profiling.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 import { userMeetsTier } from '../src/middleware/requireTier.ts';
 // D991: a rejection carries the member-facing reason it requires.
 const REJECT_REASON = 'The entity name does not match the registry.';
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const later = postCutoffMigrations(process.cwd()).map((m: any) => m.sql);
 const email = 'profile@example.test';
 // Build the canonical world once; each test gets its own byte-for-byte copy.
 const templateDir = mkdtempSync(join(tmpdir(), 'd992-template-'));
 const templatePath = join(templateDir, 'schema.sqlite');
-const canonical = buildFresh(baseline, later);
+const canonical = freshSchema();
 canonical.exec(`VACUUM INTO '${templatePath.replaceAll("'", "''")}'`);
 canonical.close();
 const schemaBytes = readFileSync(templatePath);

@@ -1,0 +1,157 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Enterprise statistics by size class and NACE Rev. 2 activity (from 2021 onwards)",
+ "source": "ESTAT",
+ "updated": "2026-09-30T11:00:00+0200",
+ "value": {
+  "3": 5262,
+  "0": 98369,
+  "1": 2343,
+  "2": 16001,
+  "6": 4933,
+  "10": 31514.51,
+  "7": 80165.78,
+  "9": 7262.1,
+  "13": 2367.11
+ },
+ "status": {
+  "5": "|C",
+  "3": "e",
+  "0": "b",
+  "2": "b",
+  "6": "b",
+  "12": "|C",
+  "10": "e",
+  "7": "b",
+  "8": "|C",
+  "9": "b",
+  "13": "b"
+ },
+ "id": [
+  "freq",
+  "indic_sbs",
+  "nace_r2",
+  "size_emp",
+  "geo",
+  "time"
+ ],
+ "size": [
+  1,
+  2,
+  1,
+  1,
+  7,
+  1
+ ],
+ "dimension": {
+  "freq": {
+   "label": "Time frequency",
+   "category": {
+    "index": {
+     "A": 0
+    },
+    "label": {
+     "A": "Annual"
+    }
+   }
+  },
+  "indic_sbs": {
+   "label": "Economic indicator for structural business statistics",
+   "category": {
+    "index": {
+     "ENT_NR": 0,
+     "NETTUR_MEUR": 1
+    },
+    "label": {
+     "ENT_NR": "Enterprises - number",
+     "NETTUR_MEUR": "Net turnover - million euro"
+    }
+   }
+  },
+  "nace_r2": {
+   "label": "Statistical classification of economic activities in the European Community (NACE Rev. 2)",
+   "category": {
+    "index": {
+     "J62": 0
+    },
+    "label": {
+     "J62": "Computer programming, consultancy and related activities"
+    }
+   }
+  },
+  "size_emp": {
+   "label": "Size classes in number of persons employed",
+   "category": {
+    "index": {
+     "TOTAL": 0
+    },
+    "label": {
+     "TOTAL": "Total"
+    }
+   }
+  },
+  "geo": {
+   "label": "Geopolitical entity (reporting)",
+   "category": {
+    "index": {
+     "FR": 0,
+     "LU": 1,
+     "PT": 2,
+     "CH": 3,
+     "ME": 4,
+     "AL": 5,
+     "RS": 6
+    },
+    "label": {
+     "FR": "France",
+     "LU": "Luxembourg",
+     "PT": "Portugal",
+     "CH": "Switzerland",
+     "ME": "Montenegro",
+     "AL": "Albania",
+     "RS": "Serbia"
+    }
+   }
+  },
+  "time": {
+   "label": "Time",
+   "category": {
+    "index": {
+     "2021": 0
+    },
+    "label": {
+     "2021": "2021"
+    }
+   }
+  }
+ },
+ "extension": {
+  "lang": "EN",
+  "id": "SBS_SC_OVW",
+  "agencyId": "ESTAT",
+  "version": "1.0",
+  "datastructure": {
+   "id": "SBS_SC_OVW",
+   "agencyId": "ESTAT",
+   "version": "26.0"
+  },
+  "status": {
+   "label": {
+    "|C": "|confidential",
+    "e": "estimated",
+    "b": "break in time series"
+   }
+  },
+  "positions-with-no-data": {
+   "freq": [],
+   "indic_sbs": [],
+   "nace_r2": [],
+   "size_emp": [],
+   "geo": [
+    4
+   ],
+   "time": []
+  }
+ }
+}
