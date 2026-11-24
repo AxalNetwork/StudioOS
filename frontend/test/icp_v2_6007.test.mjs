@@ -106,7 +106,8 @@ test('the Validate def: Compare segments is a tool link into the mode, and the m
   assert.equal(mode.action, null);
   // CycleRoute hands the page's params to a home (and no other hub entry is added for it).
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /fnOf\(def\.homes, slug\)\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), searchParams \}\)/);
+  // The page's search params reach the home; other keys (D6865's search, fillsOn) may sit beside them.
+  assert.match(route, /fnOf\(def\.homes, slug\)\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), searchParams[,\s}]/);
 });
 
 function Probe() { const l = useLocation(); return h('output', { 'data-testid': 'where' }, l.pathname + l.search); }
