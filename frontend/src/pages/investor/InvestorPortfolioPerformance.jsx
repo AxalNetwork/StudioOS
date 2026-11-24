@@ -40,7 +40,7 @@ import { QuarterEndPlot, QuarterEndTable } from '../portfolio/QuarterEndChart';
 import StatementSheet from '../portfolio/StatementSheet';
 import { METHODOLOGY } from '../portfolio/statementModel';
 import {
-  NOT_RECORDED, SHAPES, cohortExportOf, cohortsOf, day, isQuarterEnd, performanceOf, quarterExportOf, quarterSeriesOf, quarterShape, quarterWindowOf,
+  NOT_RECORDED, SHAPES, UNAVAILABLE, cohortExportOf, cohortsOf, day, isQuarterEnd, performanceOf, quarterExportOf, quarterSeriesOf, quarterShape, quarterWindowOf,
 } from '../portfolio/portfolioModel';
 import PortfolioExport from '../portfolio/PortfolioExport';
 
@@ -139,19 +139,28 @@ function Methodology() {
   );
 }
 
+/** D6206: one Distributed, DPI or TVPI cell: a figure, or the word that says why there is none. */
+function ReturnCell({ cell, label }) {
+  if (cell.state === 'ok') return <td className="n" data-label={label}>{cell.value}</td>;
+  const cls = cell.state === 'unavailable' ? 'pf-unavailable' : 'pf-not-recorded';
+  return <td className="n" data-label={label}><span className={cls} title={cell.reason}>{cell.value}</span></td>;
+}
+
 function Cohorts({ cohorts, onRetry }) {
   let body;
   if (cohorts.state === 'loading') body = <Skeleton rows={2} />;
   else if (cohorts.state === 'unreadable') body = <SourceFailure what="Positions" claim="No cohort or zero is shown in its place." onRetry={onRetry} testid="status-perf-cohorts-unreadable" />;
   else if (cohorts.state !== 'ok') body = <p className="pf-note"><span className="pf-not-recorded">{NOT_RECORDED}</span> · {cohorts.reason}</p>;
   else {
+    const t = cohorts.total;
     body = (
       <div className="pf-table-wrap">
         <table className="pf-table" data-testid="perf-cohorts">
           <caption>Grouped by the year of the first cheque · latest recorded marks · gross</caption>
           <thead><tr>
             <th scope="col">Vintage</th><th scope="col" className="n">Companies</th><th scope="col" className="n">Invested</th>
-            <th scope="col" className="n">Carrying value</th><th scope="col" className="n">Carrying ÷ invested</th>
+            <th scope="col" className="n">Distributed</th><th scope="col" className="n">Carrying value</th>
+            <th scope="col" className="n">DPI</th><th scope="col" className="n">TVPI</th>
           </tr></thead>
           <tbody>
             {cohorts.rows.map((r) => (
@@ -159,22 +168,43 @@ function Cohorts({ cohorts, onRetry }) {
                 <th scope="row" data-label="Vintage">{r.vintage}</th>
                 <td className="n" data-label="Companies">{r.companies}</td>
                 <td className="n" data-label="Invested">{r.invested}</td>
+                <ReturnCell cell={r.distributed} label="Distributed" />
                 <td className="n" data-label="Carrying value">{r.carrying}{r.atCost ? <small>{r.atCost} at cost</small> : null}</td>
-                <td className="n" data-label="Carrying ÷ invested">{r.multiple || <span className="pf-not-recorded">{NOT_RECORDED}</span>}</td>
+                <ReturnCell cell={r.dpi} label="DPI" />
+                <ReturnCell cell={r.tvpi} label="TVPI" />
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr data-testid="perf-cohort-total">
+              <th scope="row" data-label="Vintage">Book</th>
+              <td className="n" data-label="Companies">{t.companies}</td>
+              <td className="n" data-label="Invested">{t.invested}</td>
+              <ReturnCell cell={t.distributed} label="Distributed" />
+              <td className="n" data-label="Carrying value">{t.carrying}</td>
+              <ReturnCell cell={t.dpi} label="DPI" />
+              <ReturnCell cell={t.tvpi} label="TVPI" />
+            </tr>
+          </tfoot>
         </table>
       </div>
     );
   }
+  const dist = cohorts.state === 'ok' ? cohorts.distributions : null;
   return (
     <section className="pf-card pf-table-card" aria-labelledby="pf-cohorts-title">
       <div className="pf-card-head"><h2 id="pf-cohorts-title">Vintage cohorts</h2></div>
       {body}
-      <p className="pf-foot">
-        Distributions are not recorded per company on the positions read, so a cohort shows carrying value ÷ invested, not TVPI.
-        {cohorts.undated ? ` ${cohorts.undated} position${cohorts.undated === 1 ? '' : 's'} with no first-cheque date ${cohorts.undated === 1 ? 'is' : 'are'} in no cohort.` : ''}
+      {dist && dist.state === 'unavailable' ? (
+        <p className="pf-partial" data-testid="perf-cohorts-distributions-unavailable">
+          {dist.reason} Distributed, DPI and TVPI are {UNAVAILABLE}; invested and carrying value are current.
+          {' '}<button type="button" className="pf-link-button" onClick={onRetry} data-testid="button-retry-perf-cohorts-distributions">Retry</button>
+        </p>
+      ) : null}
+      <p className="pf-foot" data-testid="perf-cohorts-foot">
+        DPI is distributed ÷ invested; TVPI is (distributed + carrying value) ÷ invested. A cohort with nothing distributed shows $0.
+        {' '}The Book row is every listed position{cohorts.undated ? `, including ${cohorts.undated} with no first-cheque date that ${cohorts.undated === 1 ? 'is' : 'are'} in no cohort` : ''}
+        {cohorts.unlisted ? `, and ${cohorts.unlisted} distributed by companies with no listed position` : ''}.
       </p>
     </section>
   );

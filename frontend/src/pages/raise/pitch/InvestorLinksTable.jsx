@@ -257,7 +257,8 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
           </table>
         </div>
       )}
-      {sheet ? <ViewerAnalyticsSheet deck={deck} row={sheet} projectId={projectId} onClose={() => setSheet(null)} /> : null}
+      {/* D6062: the sheet says when the deck has a newer version than this link opens, from the same changes-since read. */}
+      {sheet ? <ViewerAnalyticsSheet deck={deck} row={sheet} projectId={projectId} since={since.status === 'ready' ? since.data : null} changes={sinceLine} onClose={() => setSheet(null)} /> : null}
       {confirm ? (
         <Lightbox label={WITHDRAW_TITLE} title={WITHDRAW_TITLE} width={480} onClose={() => setConfirm(null)} testId="investor-link-withdraw-confirm"
           footer={(

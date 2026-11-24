@@ -27,6 +27,7 @@ async function world() {
       (501, 'typeform-5829-a', 7, 'typeform', 'oauth2', 'active', '{"region":"us"}'),
       (502, 'typeform-5829-b', 8, 'typeform', 'oauth2', 'active', '{"region":"us"}');
     INSERT INTO typeform_form_syncs (id, integration_id, project_id, form_id) VALUES (1, 501, 41, 'FormTest'), (2, 502, 42, 'OtherForm');
+    INSERT INTO typeform_form_bindings (uid, project_id, integration_id, form_id, bound_by) VALUES ('binding-a', 41, 501, 'FormTest', 7), ('binding-b', 42, 502, 'OtherForm', 8);
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (101, 41, 'H1', 'Synthetic claim'), (102, 42, 'H2', 'Other claim');
     INSERT INTO hypothesis_experiments (id, uid, project_id, hypothesis_id, title) VALUES (201, 'ex-a', 41, 101, 'Synthetic experiment'), (202, 'ex-b', 42, 102, 'Other experiment');`);
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' };
@@ -34,7 +35,7 @@ async function world() {
   const mappingId = Number(db.prepare('SELECT id FROM typeform_field_mappings WHERE sync_id = 1').get()!.id);
   let items: any[] = [1, 2].map(n => ({ response_id: `response${n}`, token: `response${n}`, response_type: 'completed', submitted_at: new Date(NOW).toISOString(),
     answers: [{ field: { id: 'question', type: 'long_text' }, type: 'text', text: `PRIVATE SYNTHETIC ANSWER ${n}` }] }));
-  const deps = { now: () => NOW, runId: 'synthetic-run', accessToken: async () => 'not-a-real-token',
+  const deps = { now: () => NOW, runId: 'synthetic-run', session: async () => ({ accessToken: 'not-a-real-token', region: 'us' }),
     fetch: async (url: string) => Response.json(url.includes('/responses') ? { items } : { fields }) };
   const sync = () => syncTypeformForm(env, deps, { ...scope, formId: 'FormTest' });
   await sync();
@@ -185,8 +186,7 @@ test('router refuses another member, a support session and an unenabled connecti
     return [res.status, (await res.text()).includes('PRIVATE SYNTHETIC ANSWER')];
   };
   assert.deepEqual([await call(8), await call(7, { impersonated_by: 7 }), await call(7)], [[404, false], [403, false], [403, false]]);
-  w.db.exec(`INSERT INTO typeform_form_bindings (uid, project_id, integration_id, form_id, bound_by) VALUES ('binding-a', 41, 501, 'FormTest', 7);
-    INSERT INTO user_company_links (uid, company_id, user_id) VALUES ('company-member-a', 41, 7);
+  w.db.exec(`INSERT INTO user_company_links (uid, company_id, user_id) VALUES ('company-member-a', 41, 7);
     INSERT INTO integration_companies (integration_id, company_id, enabled) VALUES (501, 41, 1);`);
   assert.deepEqual(await call(7), [200, true]);
   assert.deepEqual(await call(7, { impersonated_by: 7 }), [403, false]);

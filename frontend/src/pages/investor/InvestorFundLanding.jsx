@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, CircleAlert, FileText, LockKeyhole, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, CircleAlert, FileText, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { fmtCents, fmtMultiple, fmtRate, useFundAnalytics } from '../../lib/fundAnalytics';
@@ -13,29 +13,12 @@ import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, PERFORMANCE_UNREADABL
 import { fundPerformanceApi } from '../../lib/api/fundPerformance.js';
 import FundOverviewPanel from './FundOverviewParts';
 import { CreateFundCard } from './FundTermsForm';
+import FundLocked from './FundLocked';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
 
-
-function LockedFund() {
-  return (
-    <main className="i6-locked" data-testid="investor-fund-locked">
-      <section className="i6-locked-preview" aria-hidden="true">
-        <div className="i6-locked-lines"><i /><i /><i /><i /></div>
-        <div className="i6-locked-grid"><i /><i /><i /></div>
-        <div className="i6-locked-block"><i /><i /><i /></div>
-      </section>
-      <section className="i6-locked-copy">
-        <span className="i6-kicker"><LockKeyhole size={12} /> Institutional add-on</span>
-        <h1>Run your own fund</h1>
-        <p>Fund administration is a separate Institutional workspace: LP registry, capital movements, accounting records, and issued LP packs remain connected to their originating schedule.</p>
-        <p className="i6-muted">Access is provisioned by Axal. Your existing investor and LP tools are unchanged.</p>
-      </section>
-    </main>
-  );
-}
 
 // A source that could not be read is `unavailable`, and that is not the same
 // fact as an empty one. The old load caught every rejection into `[]`, so a
@@ -214,7 +197,8 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
     reload();
     setDetailKey((value) => value + 1);
   };
-  if (!fundUnlocked) return <LockedFund />;
+  // D6233 (#6233, FV2): the one locked Fund surface, the same one every Fund zone draws.
+  if (!fundUnlocked) return <FundLocked zone="overview" />;
 
   const body = loading
     ? <div className="i6-loading"><i /><i /><i /></div>

@@ -164,7 +164,11 @@ const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
  * `sqlite_sequence`. The handle keeps the options the test opened it with.
  */
 export function loadSchema(db, opts = {}) {
-  const path = schemaPath(opts);
+  return loadSchemaFile(db, schemaPath(opts));
+}
+
+/** `loadSchema` from a given built file (#8377: a test that builds its own variants, once each). */
+export function loadSchemaFile(db, path) {
   const alias = `schema_once_${process.pid}`;
   db.prepare(`ATTACH DATABASE ? AS ${alias}`).run(path);
   try {
@@ -179,5 +183,20 @@ export function loadSchema(db, opts = {}) {
   } finally {
     db.exec(`DETACH DATABASE ${alias}`);
   }
+  return db;
+}
+
+/**
+ * D8354 (#8354): the cached schema in a fresh in-memory handle, for tests that used `buildFresh(BASELINE,
+ * LATER)` from `scripts/check-baseline-drift.mjs`. That rebuilt the baseline and every later migration per
+ * database (about 35 s each by 2026-11-23, 12 s of it one data migration), and timed shards out. This is the
+ * same build (`schema_once_d4133` holds a loaded copy to a fresh one) with the same handle: double-quoted
+ * strings as `dqs` says, foreign keys ON once loaded. `below` gives the build before a numbered migration.
+ * The drift guard itself (`check-baseline-drift.mjs`) still builds fresh; this is only for tests.
+ */
+export function freshSchema({ dqs = false, below } = {}) {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: dqs });
+  loadSchema(db, below === undefined ? {} : { below });
+  db.exec('PRAGMA foreign_keys = ON;');
   return db;
 }

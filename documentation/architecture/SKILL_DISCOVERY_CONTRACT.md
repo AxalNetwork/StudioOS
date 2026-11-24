@@ -2,7 +2,7 @@
 
 This is the request and response a task-to-skill recommendation uses. `POST /api/teams/skills/discover` (`cloudflare-worker/src/routes/team_skills.ts`, #5967, `decisions/D4538-p6.md`) serves it to a caller who can manage the agent; it reads only. The decision behind it, and the company-extension model, are in `decisions/D4538.md`. The labelled query set that measures it is in `skill-discovery/queries.v1.json`.
 
-The gate and ranking stages 1 to 3 are built as a pure service, `cloudflare-worker/src/services/agents/skillDiscovery.ts`. Its relevance method and measured numbers are in `decisions/D4538-p4.md`.
+The gate and ranking stages 1 to 3 are built as a pure service, `cloudflare-worker/src/services/agents/skillDiscovery.ts`. Its relevance method and measured numbers are in `decisions/D4538-p4.md`. The input gate, the run gate and stages 4 and 5 are in `decisions/D4538-p8.md` (#5968); `services/agents/skillDiscoveryEvidence.ts` reads their facts.
 
 Discovery is a **hard eligibility gate first, then ranking**. Eligibility is never a low score: a skill the requesting agent cannot run is never a candidate. Nothing here attaches a skill; attaching stays the existing, separately authorised action (`PUT /api/teams/agents/:uid/skills`, through `attachCheck`).
 
@@ -36,8 +36,8 @@ Every catalogue skill is checked against the agent before anything is ranked. Th
 | `role_mismatch` | The current version does not list the agent's role | `attachCheck` |
 | `tool_not_approved` | A tool of the current version is not in the agent's grants, with `{ tool }` | `attachCheck` |
 | `output_mismatch` | `output_kind` was asked for, and the skill produces another | discovery |
-| `input_unavailable` | #4667 reports the skill's inputs cannot be read for this scope | discovery, once #4667 lands |
-| `not_runnable` | #4534's execution contract refuses the skill for this agent | discovery, once wired |
+| `input_unavailable` | #4667's `preflight` reports a required input the scope cannot supply, with `inputs` naming each | discovery (D4538-p8) |
+| `not_runnable` | the run path refuses this agent (`agent_paused`, `outside_assistant`), with `run` naming the code | discovery (D4538-p8) |
 
 A skill that fails is never in `candidates`. It may be listed in `blocked` with its code, so the operator sees why ("Cash runway snapshot needs Mercury, which this agent is not granted"). Another company's skill is never listed anywhere, not even as blocked: naming it would disclose it.
 
@@ -48,8 +48,8 @@ Stages run in this order. Each reports what it used, and a stage with no source 
 1. **Role and taxonomy fit.** The agent's role among the version's roles (already required by the gate), and the overlap of the version's taxonomy tags with `taxonomy_focus` and the task's inferred areas.
 2. **Task relevance.** Semantic match of `task` against the skill's name, purpose and steps.
 3. **Input and output compatibility.** The asked-for output kind, and the inputs the skill reads against what the scope records.
-4. **Quality evidence.** The release evidence (D4533) and the current version's golden-case results, with their freshness. **Not recorded** until #4533 and #4588 supply them.
-5. **Operational evidence.** Measured runs, failure, latency and cost. **Not recorded** until #4536 measures them. Use count is reported as adoption, never as quality.
+4. **Quality evidence.** The release evidence (D4533) and the current version's golden-case results, with their freshness. The block names the version, suite, models and evaluator; stale or incomplete evidence is labelled and moves no score (D4538-p8). An HQ skill only: a company skill's block says it has none.
+5. **Operational evidence.** #4536's attributed outcomes and model-call latency for the executed version, over this company's agents' runs only. Only the failure rate moves a score, down; cost, whole-run latency and workflows are `{ available: false, reason }`. Use count and run count never raise a rank.
 
 ## Response
 
@@ -65,8 +65,9 @@ Stages run in this order. Each reports what it used, and a stage with no source 
       ],
       "fit": { "role": true, "taxonomy": ["finance_cash"] },
       "missing": [],                  // inputs or tools not available; empty for a candidate (the gate removed the rest)
-      "evaluation": { "available": false, "reason": "Release evidence is not read by discovery yet (#4533)." },
-      "operational": { "available": false, "reason": "Runs are not measured yet (#4536)." },
+      "inputs": { "available": false, "reason": "Not recorded: no input binding is reported for this skill (#4667 covers the first ten skills)." },
+      "evaluation": { "available": true, "version": 3, "suite": { "cases": 4, "models": ["…"], "models_source": "version_evidence" }, "results": { "…": "…" }, "release": { "…": "…" }, "freshness": "fresh", "stale_reasons": [], "rank": { "effect": "raised", "factor": 1.1, "reason": "…" } },
+      "operational": { "available": false, "reason": "Not recorded: no run measures were read for this skill." },
       "confidence": "high",          // 'high' | 'medium' | 'low'
       "uncertainty": null             // why, when confidence is not high
     }
@@ -82,7 +83,7 @@ Stages run in this order. Each reports what it used, and a stage with no source 
 - **`no_suitable_skill`** is returned when no eligible skill fits the task well enough, and also when the request is for something no read-only skill can do, such as sending an email. It is a result, not an error.
 - **`ambiguous`** returns its candidates with `confidence: "low"` and a `clarify` question. It never silently picks one.
 - **Exact versions.** `version` is the published version an attach would pin. A recommendation never names a draft.
-- **Never shown as zero.** Every evidence block is `{ available: false, reason }` until its source exists.
+- **Never shown as zero.** An evidence block, or a measure inside one, with no source is `{ available: false, reason }`, and is never scored as zero.
 
 ## Measuring it
 

@@ -14,6 +14,7 @@
  *   GET    /:scope/:id/rulebooks/:role         default, effective, versions, diff, floor
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
+ *   GET    /agents/:uid/budget                 D8071: its caps, use this period and runs halted for budget (the sponsor, read-only)
  *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842); `tool_reads` (part 5)
  *   GET/PUT /:scope/:id/allowlists              D4422: inherited model/tool restrictions, saved by the effective scope’s editors
  *   GET/PUT /:scope/:id/outside-assistant-tools D4424: inherited inbound Axal tool names, separate from outbound custom-server grants
@@ -53,6 +54,7 @@
 import { agentModels, planOk } from '../services/agents/modelOffers';
 import { effectiveAllowlistScope, readAllowlists, saveAllowlists, allowlistRefusal, allowlistTools, parseAllowlists } from '../services/agents/allowlists';
 import { maxTeamCap } from '../services/agents/aiPolicy';
+import { agentBudgetView, haltedRuns } from '../services/agentBudgets';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -200,6 +202,7 @@ const SKILL_WORDS = {
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
+  capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 } as const;
 
 const validCap = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0 && (v as number) <= CAP_MAX_MICROUSD;
@@ -281,6 +284,20 @@ router.get('/agents/:uid/run/quote', async (c) => {
     if (!got.agent) return got.refusal;
     const q = await agentQuote(c.env, { agent: got.agent, module: c.req.query('module') ?? '', option: c.req.query('option') ?? '' });
     return q.ok ? c.json({ quote: q.quote }) : answer(c, q);
+  } catch (e) { return mapError(c, e); }
+});
+
+// D8071 (#8071): the sponsor's read-only view of the agent's budget. HQ sets the caps.
+router.get('/agents/:uid/budget', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await sponsored(c, user);
+    if (!got.agent) return got.refusal;
+    try {
+      return c.json({ budget: await agentBudgetView(c.env, got.agent.id), halted: await haltedRuns(c.env, got.agent.id, 20) });
+    } catch {
+      return say(c, 503, 'budget_unreadable', 'The budget could not be read.');
+    }
   } catch (e) { return mapError(c, e); }
 });
 

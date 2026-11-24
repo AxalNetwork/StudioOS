@@ -360,7 +360,7 @@ kyb.patch('/:id/reject', async c => {
   if (!changed) return conflict(c);
   if ((docs.results || []).length && !c.env.FILES) return c.json({ error: 'kyb_cleanup_pending', detail: 'Rejected. Document deletion is incomplete. Try again.' }, 503);
   // D6651: a rejected case's documents are purged through the one record-erasure path.
-  for (const doc of docs.results || []) await eraseRecordObjects(c.env.FILES!, doc.file_key, 'purge');
+  for (const doc of docs.results || []) await eraseRecordObjects(c.env.FILES!, doc.file_key, 'purge', { db: c.env.DB });
   return c.json({ uid: row.uid, status: 'rejected' });
 });
 
@@ -440,9 +440,9 @@ kyb.post('/:id/documents', async c => {
         SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
         .bind(documentUid, row.uid, b.kind, key, match[1], bytes.length, user.id),
     ]);
-    if (!changed) { await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {}); return conflict(c); }
+    if (!changed) { await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => {}); return conflict(c); }
   } catch {
-    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => {});
     return c.json({ error: 'document_not_saved', detail: 'The document was not saved. Try again.' }, 503);
   }
   return c.json({ uid: documentUid, kind: b.kind, size_bytes: bytes.length }, 201);
