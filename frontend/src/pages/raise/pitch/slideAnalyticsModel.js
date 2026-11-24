@@ -229,7 +229,7 @@ export function journeyRows(answer, row) {
   const out = [];
   if (row?.created_at) out.push({ key: 'created', at: stampWords(row.created_at), words: 'Link created', sort: parseAt(row.created_at)?.getTime() ?? 0, kind: 'created' });
   (Array.isArray(answer?.timeline) ? answer.timeline : []).forEach((e, i) => {
-    out.push({ key: `${e.kind}-${e.view_id ?? 'x'}-${i}`, at: stampWords(e.at), words: TIMELINE_WORDS[e.kind] || e.kind, sort: parseAt(e.at)?.getTime() ?? 0, kind: e.kind });
+    out.push({ key: `${e.kind}-${e.view_id ?? 'x'}-${i}`, at: stampWords(e.at), words: TIMELINE_WORDS[e.kind] || e.kind, sort: parseAt(e.at)?.getTime() ?? 0, kind: e.kind, view_id: e.view_id ?? null });
   });
   const gone = answer?.withdrawn_at ?? row?.withdrawn_at;
   if (gone) out.push({ key: 'withdrawn', at: stampWords(gone), words: 'Link withdrawn', sort: parseAt(gone)?.getTime() ?? Number.MAX_SAFE_INTEGER, kind: 'withdrawn' });
@@ -248,4 +248,41 @@ export function newerVersionOf(since, name = 'This investor') {
     chip: `v${since.current.version} differs`,
     line: `${name}'s link opens v${since.since.version}. v${since.current.version} is the current version; this link does not show it.`,
   };
+}
+
+// ── D8249 (#8249): which cards each visit read ─────────────────────────────────
+
+export const NO_VISIT_READ = 'No card was timed on this visit.';
+/** The kinds of journey step that are a visit, and so can carry its reads. */
+const VISIT_KINDS = new Set(['opened', 'revisited']);
+
+/**
+ * One visit's line under its journey step, from the link read's `visit_reads`
+ * (seconds per card per visit, newest first, bounded): "Read 3 cards · longest
+ * on Traction" with that card's measured seconds, or Not recorded when no
+ * heartbeat timed a card on the visit. Null where there is no line to draw: a
+ * step that is not a visit, Time per slide off (Tracking off is drawn by the
+ * tiles and Time per card, D6062), a read without the field, or a visit older
+ * than the bound. Drawn from measured seconds only; never "0 cards".
+ */
+export function visitReadOf(answer, step) {
+  if (!step || !VISIT_KINDS.has(step.kind) || step.view_id == null) return null;
+  if (answer?.time_per_slide === false || !Array.isArray(answer?.visit_reads)) return null;
+  const v = answer.visit_reads.find((x) => Number(x?.view_id) === Number(step.view_id));
+  if (!v) return null;
+  const n = Number(v.cards_read);
+  const time = durationWords(v.longest?.seconds);
+  if (!Number.isInteger(n) || n < 1 || !v.longest || !time) {
+    return { kind: 'not_recorded', words: ABSENCE.not_recorded.word, why: NO_VISIT_READ };
+  }
+  const title = v.longest.title || `Card ${Number(v.longest.index) + 1}`;
+  return { kind: 'value', words: `Read ${plural(n, 'card')} · longest on ${title}`, sub: time };
+}
+
+/** Under the journey, when the link has more visits than the per-visit read covers. Null otherwise. */
+export function visitReadsNote(answer) {
+  const limit = Number(answer?.visit_reads_limit);
+  const views = Number(answer?.views);
+  if (!Array.isArray(answer?.visit_reads) || !Number.isInteger(limit) || limit < 1 || !(views > limit)) return null;
+  return `Cards read are shown for the ${limit} newest visits; older visits are on the journey without them.`;
 }

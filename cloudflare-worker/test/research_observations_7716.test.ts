@@ -225,5 +225,6 @@ test('a request with no sign-in is refused on every route', async t => {
     assert.equal((await w.get(path, false)).status, 401, path);
   }
   const metrics = await w.get('/api/research/observations/metrics');
-  assert.equal(metrics.body.items.length, 10);
+  // D7717: later importers add their own catalogue rows; the World Bank's ten stay.
+  assert.equal(metrics.body.items.filter((m: any) => m.source_id === 'world-bank').length, 10);
 });

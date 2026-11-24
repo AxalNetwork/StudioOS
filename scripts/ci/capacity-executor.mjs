@@ -10,6 +10,7 @@ import { trustedAuthority } from './executor-authority.mjs';
 import { githubOidcToken, reportExecutionResult } from './capacity-client.mjs';
 import { recoveryStore, defaultRecoveryRoot } from './runners/recovery-store.mjs';
 import { isolationFor } from './runners/executor-isolation.mjs';
+import { hostedReaderFactory } from './runners/hosted-readers.mjs';
 import { JobContainer } from './runners/job-container.mjs';
 import { createTraceExporter } from './runners/trace-exporter.mjs';
 const need=(ok,reason)=>{if(!ok)throw Error(reason);};
@@ -122,21 +123,42 @@ export async function main(mode,env=process.env,ports={}){
   if(mode==='cleanup')try{await report();}catch(e){failure??=e;}
   if(failure)throw failure;if(mode==='cleanup')state.retire?.();return 0;
  }
- const authority=ports.authority??await trustedAuthority(env),isolation=ports.isolation??isolationFor(env.PROFILE??JSON.parse(env.ADMITTED_JSON??'null')?.identity?.profile);
- need(typeof authority.readReceipt==='function'&&isolation,'supervisor_authority_unconfigured');
- let canonical=null;
+ const authority=ports.authority??await trustedAuthority(env);
+ need(typeof authority.readReceipt==='function','supervisor_authority_unconfigured');
+ let canonical=null,observedAuthority=null,observedAt=null,isolationObservation=null;
  const readReceipt=async args=>{
   const envelope=await authority.readReceipt(args),receipt=envelope?.receipt;
   need(envelope?.active===true&&receipt?.executorSha===context.executorSha&&(receipt.childWorkflowSha??receipt.executorSha)===context.childWorkflowSha,'supervisor_receipt_identity');
-  if(canonical)need(same(canonical,receipt),'supervisor_receipt_changed');canonical=structuredClone(receipt);return envelope;
+  if(canonical)need(same(canonical,receipt),'supervisor_receipt_changed');canonical=structuredClone(receipt);observedAuthority=structuredClone(envelope);observedAt=Date.now();return envelope;
  };
+ // Every S09 admission brackets isolation with authenticated receipt reads; live recheck refreshes below.
+ // Reuse only that in-call observation, not a TTL network cache: no extra receipt-lane reservations per document.
+ const observedReceipt=async({request,context:caller,signal})=>{
+  const time=Date.now(),receipt=isolationObservation?.envelope?.receipt,at=isolationObservation?.at;
+  need(!signal?.aborted&&Number.isSafeInteger(at)&&at<=time&&time-at<=30_000
+    &&receipt&&caller.repository===context.repository&&String(caller.childRunId)===context.childRunId
+    &&String(caller.childAttempt)==='1'&&caller.executorSha===context.executorSha
+    &&(caller.childWorkflowSha??caller.executorSha)===context.childWorkflowSha
+    &&request.requestId===receipt.requestId&&request.shard===receipt.logicalShard
+    &&Number(request.generation)===receipt.generation&&request.profile===receipt.profile,'supervisor_receipt_observation_missing');
+  return structuredClone(isolationObservation.envelope);
+ };
+ const isolation=ports.isolation??(ports.isolationFactory??isolationFor)(env.PROFILE??JSON.parse(env.ADMITTED_JSON??'null')?.identity?.profile,
+  {readers:hostedReaderFactory(env,observedReceipt)});
+ need(isolation,'supervisor_authority_unconfigured');
+ const inspectObserved=async(port,args)=>{
+  need(isolationObservation===null,'supervisor_isolation_overlap');
+  isolationObservation={envelope:structuredClone(observedAuthority),at:observedAt};
+  try{return typeof port==='function'&&await port(args)===true;}finally{isolationObservation=null;}
+ };
+ const admissionIsolation=args=>inspectObserved(isolation.admissionIsolation,args);
  const executionIsolation=async args=>{
   // The S09 before-install and before-test boundary checks also refresh current receipt authority.
   await readReceipt({request:{requestId:args.receipt.requestId,shard:args.receipt.logicalShard,generation:args.receipt.generation,profile:args.receipt.profile},context,phase:'execute',signal:args.signal});
-  return await isolation.executionIsolation?.(args)===true;
+  return await inspectObserved(isolation.executionIsolation,args)===true;
  };
- const deps={...authority,...isolation,readReceipt,executionIsolation,store};
- if(mode==='admit')return await (ports.admit??admit)(env,{...deps,verifyIsolation:isolation.admissionIsolation});
+ const deps={...authority,...isolation,readReceipt,admissionIsolation,executionIsolation,store};
+ if(mode==='admit')return await (ports.admit??admit)(env,{...deps,verifyIsolation:admissionIsolation});
  if(mode==='verify-plan')return await executeMode(mode,env,deps);
  need(mode==='run'&&isolation.job,'supervisor_boundary_unavailable');
  need(record===null,'supervisor_run_already_recorded');

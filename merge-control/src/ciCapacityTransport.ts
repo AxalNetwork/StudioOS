@@ -54,8 +54,17 @@ export class CapacityTransport {
     const owned=this.capacity.ownsResult(receipt),result=executionResultBody(body.result);
     if(!owned||(!owned.current&&result.testStep!=='failure'))throw new Error('capacity_result_generation');
     const jobId=await ports.resultJob(owned.receipt,identity);
-    await this.wake();results.put(owned.receipt,jobId,result,Date.now());
-    if(result.testStep==='failure')await this.capacity.recordExecutionFailure(owned.receipt,jobId);
+    await this.wake();
+    results.validate(owned.receipt,jobId);
+    // Re-resolve after awaited provenance. Compact history admits negatives only, never late positives.
+    const current=this.capacity.ownsResult(owned.receipt);
+    if(!current||(!current.current&&result.testStep!=='failure'))throw new Error('capacity_result_generation');
+    // Association + negative journal commit together; pending negatives fence expiry until replay applies them.
+    results.put(current.receipt,jobId,result,Date.now());
+    if(result.testStep==='failure'){
+      await this.capacity.recordExecutionFailure(current.receipt,jobId);
+      results.appliedFailure(current.receipt,jobId);
+    }
     return {accepted:true};
   }
 }

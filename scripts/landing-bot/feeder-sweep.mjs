@@ -1,5 +1,6 @@
 import { breakers, count, eligible, mode } from './rules.mjs';
 import { selectQueueEntries } from './feeder-plan.mjs';
+import { hold } from './concurrency.mjs';
 
 const positive = value => Number.isSafeInteger(value) && value > 0;
 
@@ -40,6 +41,16 @@ async function orderedNumbers({ reader, event, dispatchPr }) {
   return [...new Set(numbers)];
 }
 
+// #8076 (D8076): the queue's entries and a candidate's slot. A failed read is null: the candidate is held, never admitted.
+async function queueEntries({ reader }) {
+  try { const q = await reader.readQueueEntries(); return Array.isArray(q) ? q : null; } catch { return null; }
+}
+async function admissionFacts({ reader }, row) {
+  let slot = null;
+  try { slot = await reader.readOwningSlot(row.pull); } catch { /* null: held */ }
+  return { number: row.pull.number, labels: row.pull.labels, slot };
+}
+
 async function readRow({ reader, env, event, dispatchPr, repo }, number, breaker) {
   const [facts, landing] = await Promise.all([reader.readCandidate(number), reader.readLandingDecision(number)]);
   const { pull, files } = facts;
@@ -56,10 +67,15 @@ export async function planSweep(options) {
   let cap = Math.min(...Object.values(state.capacity));
   let dailyChecked = false;
   const selected = [];
+  const queued = await queueEntries(options);
+  const admitted = [];
   for (const number of await orderedNumbers(options)) {
     const row = await readRow(options, number, state.breaker);
     const [entry] = selectQueueEntries([row], { ...state.capacity, remainingDaily: 1 });
     if (!entry) continue;
+    const mine = await admissionFacts(options, row);
+    const held = hold(mine, queued && [...queued, ...admitted]);
+    if (held) { options.onHold?.(held); continue; }
     if (!dailyChecked) {
       const remaining = await options.readRemainingDaily();
       if (!positive(remaining)) return [];
@@ -67,6 +83,7 @@ export async function planSweep(options) {
       dailyChecked = true;
     }
     selected.push(entry);
+    admitted.push(mine);
     if (selected.length === cap) break;
   }
   return selected;
@@ -86,27 +103,35 @@ export async function applySweep(options, plan) {
     }
     reserved.set(item.number, item.expectedHeadOid);
   }
-  const queued = [];
+  const written = [];
   let slotsLeft = reserved.size;
   let verifiedReservation;
+  const admitted = [];
   for (const number of await orderedNumbers(options)) {
     if (!reserved.has(number)) continue;
     const state = await snapshot(options);
-    if (!state || queued.length >= state.capacity.perSweep) break;
+    if (!state || written.length >= state.capacity.perSweep) break;
     slotsLeft = Math.min(slotsLeft, state.capacity.freeQueueSlots);
     const row = await readRow(options, number, state.breaker);
     const [entry] = selectQueueEntries([row], { ...state.capacity, remainingDaily: 1 });
     if (!entry || entry.expectedHeadOid !== reserved.get(number)) continue;
+    // #8076: re-read the queue before each write; the plan's view of it may be stale.
+    const inQueue = await queueEntries(options);
+    const mine = await admissionFacts(options, row);
+    // An entry this sweep wrote may not show in the queue read yet; count it once either way.
+    const held = hold(mine, inQueue && [...inQueue, ...admitted.filter((a) => !inQueue.some((q) => q.number === a.number))]);
+    if (held) { options.onHold?.(held); continue; }
     // The serialized run owns an immutable reservation. The writer enforces its UTC expiry for each attempt.
     if (verifiedReservation === undefined) verifiedReservation = await options.readRemainingDaily();
-    if (!positive(verifiedReservation) || queued.length >= verifiedReservation) break;
+    if (!positive(verifiedReservation) || written.length >= verifiedReservation) break;
     const result = await options.enqueue({ ...entry, pullRequestId: row.pull.node_id });
     if (result?.status !== 'queued' || result.number !== number || result.expectedHeadOid !== entry.expectedHeadOid) {
       throw new Error(`Queue write for #${number} was ${result?.status === 'refused' ? 'refused' : 'unconfirmed'}; sweep stopped.`);
     }
-    queued.push(result);
+    written.push(result);
+    admitted.push(mine);
     // Queue counts can lag a successful write. Do not spend the same slot twice in this sweep.
     if (--slotsLeft === 0) break;
   }
-  return queued;
+  return written;
 }

@@ -8,6 +8,7 @@ import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
+import { growTabCounts } from './growOverviewModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, moduleSubtitle, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
@@ -383,7 +384,7 @@ export default function CycleModulePage({
   ));
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} search={search} more={more} /> : header}
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} tabCounts={meta.key === 'grow' ? growTabCounts(slug, data) : null} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
@@ -398,10 +399,13 @@ export default function CycleModulePage({
       ) : ownsHome ? (
         <>
           {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools).
-              D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read. */}
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, query, onQuery,
+              D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read.
+              D6038 (#6038): a home that lists its own table gets its row control, Export and the tool doors; one
+              that sets `drawsTools` draws those doors itself (Company creation's supporting tools, BD11). */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
+            query, onQuery, rowAction, onExport, tools: toolLinks,
             sources: sources ? <Sources action={sourcesAction}>{sources}</Sources> : null })}
-          {doors}
+          {home.drawsTools ? null : doors}
           {children}{sources && !home.placesSources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>
       ) : owned ? children : (
