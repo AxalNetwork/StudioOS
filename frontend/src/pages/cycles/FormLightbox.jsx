@@ -41,6 +41,9 @@ import { reportError } from '../../lib/log.js';
 import { fillTable, placeValues, placedProposals, savedId, stillPlaced } from '../../lib/fillForms.js';
 import { activeSupportSession } from '../../lib/supportSession.js';
 import { SUPPORT_OFF } from '../../lib/fillScoped.js';
+import { useViewMode } from '../../contexts/ViewModeContext.js';
+import { needsPreviewUploadConfirm, PREVIEW_UPLOAD_CANCELLED, uploadedFiles } from './previewUploadModel.js';
+import PreviewUploadConfirm from './PreviewUploadConfirm.jsx';
 
 const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-[9px] text-[13px] text-axal-ink outline-none focus:border-axal-violet disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-lg:rounded-xl';
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[0.09em] text-axal-muted dark:text-gray-400';
@@ -218,6 +221,9 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [refusal, setRefusal] = useState(refused);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  // #8261 (BD29 B): a founder-preview upload waits here for the Super Admin's answer; null when nothing is asked.
+  const viewMode = useViewMode();
+  const [askUpload, setAskUpload] = useState(null);
   // D4600: what a write that half succeeded leaves behind. `memory` outlives one Save (a submit keeps there the
   // id of the record it made); `partial` freezes the form to the one operation left.
   const memory = useRef(typeof base?.makeMemory === 'function' ? base.makeMemory() : {});
@@ -344,9 +350,18 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     const found = formErrors(base, fields, values);
     setErrors(found); setRefusal('');
     if (Object.keys(found).length) return;
+    const sent = { ...submittedValues(fields, values), ...picked() };
+    // #8261: a Super Admin previewing a founder's Company creation says yes before a paper is sent; Cancel sends nothing.
+    if (needsPreviewUploadConfirm({ cycle, slug, mode: viewMode, values: sent })) {
+      saving.current = true;
+      const yes = await new Promise((resolve) => setAskUpload({ files: uploadedFiles(sent), resolve }));
+      saving.current = false;
+      if (mounted.current !== true) return;
+      setAskUpload(null);
+      if (!yes) { setRefusal(PREVIEW_UPLOAD_CANCELLED); return; }
+    }
     saving.current = true; setBusy(true);
     try {
-      const sent = { ...submittedValues(fields, values), ...picked() };
       const result = await onSubmit(sent, memory.current);
       await afterSave(result, sent);
       if (!mounted.current) return;
@@ -410,5 +425,6 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     </form>}
     {fillOpen && fill && !readOnly ? <FillSheet page={fill.page} form={fill.form} project={fill.project} record={fill.record ? { id: fill.record } : null} title={cleanFormCopy(base.title || 'this form').toLowerCase()}
       values={Object.fromEntries(fillNames.map((n) => [n, values[n]]))} aiOff={!!fill.aiOff} onPlace={place} onClose={() => setFillOpen(false)} /> : null}
+    {askUpload ? <PreviewUploadConfirm files={askUpload.files} onConfirm={() => askUpload.resolve(true)} onCancel={() => askUpload.resolve(false)} /> : null}
   </Lightbox>;
 }

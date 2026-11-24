@@ -29,6 +29,8 @@ import {
  */
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const SECONDARY = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-axal-hairline px-3 py-1.5 text-[13px] font-semibold text-axal-ink hover:bg-axal-ground focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+// #4845: a text button that is still a 44px target below 1024px, with the focus ring.
+const RETRY_LINK = 'inline-flex items-center font-semibold text-amber-800 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 max-lg:min-h-[44px] dark:text-amber-300';
 const PRIMARY = 'inline-flex min-h-[38px] items-center justify-center rounded-lg bg-amber-700 px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-amber-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500';
 
 export default function OfferReadiness({ bucket, board, className = '' }) {
@@ -86,7 +88,7 @@ export function OfferReadinessView({ bucket, board, byKey = EMPTY, className = '
       {failed.length > 0 && (
         <p role="alert" className="text-[13px] text-axal-muted dark:text-gray-300">
           {failed.length === 1 ? 'One read' : `${failed.length} reads`} could not be completed, so {failed.length === 1 ? 'its figure reads' : 'their figures read'} {UNREADABLE} rather than zero.{' '}
-          <button type="button" className="font-semibold text-amber-800 underline dark:text-amber-300"
+          <button type="button" className={RETRY_LINK}
             onClick={() => failed.forEach(([, s]) => s.retry?.())}>
             Try again
           </button>
@@ -135,7 +137,7 @@ export function OfferReadinessView({ bucket, board, byKey = EMPTY, className = '
       <div className="grid gap-3.5 lg:grid-cols-2" data-testid="offer-groups">
         {OFFER_GROUPS.map((g) => (
           <section key={g.key} aria-label={g.label} className={`${CARD} flex flex-col gap-3 px-4 py-3.5`} data-testid={`offer-group-${g.key}`}>
-            <span className="font-mono text-[11px] font-bold uppercase tracking-[.08em] text-amber-800 dark:text-amber-300">{g.label}</span>
+            <span className="font-mono text-[12px] font-bold uppercase tracking-[.08em] text-amber-800 dark:text-amber-300">{g.label}</span>
             {g.zones.filter((slug) => zoneBySlug.has(slug)).map((slug) => (
               <ZonePreview key={slug} slug={slug} zone={zoneBySlug.get(slug)} section={sectionBySlug.get(slug)}
                 to={to(slug)} source={byKey[ZONE_SOURCE[slug]]} />
@@ -160,7 +162,7 @@ function ZonePreview({ slug, zone, section, to, source }) {
     <div id={section?.anchor} className="scroll-mt-24 border-t border-axal-hairline pt-2.5 first-of-type:border-t-0 first-of-type:pt-0 dark:border-gray-800" data-testid={`offer-preview-${slug}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to={to} data-testid={`offer-zone-link-${slug}`}
-          className="text-[14px] font-bold text-axal-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 dark:text-gray-100">
+          className="inline-flex items-center gap-1 text-[14px] font-bold text-axal-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 max-lg:min-h-[44px] dark:text-gray-100">
           {zone.label} <span aria-hidden="true">→</span>
         </Link>
         {sub && <span className="text-[12.5px] text-axal-muted dark:text-gray-400">{sub}</span>}
@@ -170,7 +172,7 @@ function ZonePreview({ slug, zone, section, to, source }) {
         <p className="mt-1.5 text-[13px] text-axal-muted dark:text-gray-300">
           {UNREADABLE}. This zone could not be read, so nothing is listed rather than an empty list.{' '}
           {typeof source.retry === 'function' && (
-            <button type="button" onClick={source.retry} className="font-semibold text-amber-800 underline dark:text-amber-300">Try again</button>
+            <button type="button" onClick={source.retry} className={RETRY_LINK}>Try again</button>
           )}
         </p>
       )}

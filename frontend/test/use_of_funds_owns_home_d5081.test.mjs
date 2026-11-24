@@ -290,6 +290,44 @@ test('390: the phone draws Home with its action full width, and none of the gene
   assert.match(funded, /overflow-x-auto[\s\S]*min-w-\[420px\]/);
 });
 
+test('RA-26 C at 390 (D5075): what the round buys as a card a section, every column kept, a long milestone and large figures wrapping; no section table', async () => {
+  const big = plan();
+  const b = big.base.value;
+  b.amount_to_raise_cents = 98765432109876;
+  b.model.sections[0].allocation = modelled(44444444449444);
+  b.model.sections[4].allocation = modelled(null);
+  b.lines[4] = { category_key: 'reserve', share_pct: null, source: 'Typed' };
+  b.milestones[1] = { ...b.milestones[1], label: 'Launch the self-serve tier across every regional marketplace with localised billing and support' };
+  b.hires = { state: 'ok', items: [{ id: 1, category_key: 'product', role: 'Engineer', start_month: '2027-01', annual_cents: 18000000, currency: 'usd' }] };
+  const v = await mounted('/raise/use-of-funds?project_id=3', { phone: true, read: big });
+  try {
+    assert.equal(v.by('uof-sections'), undefined, 'no 720px section table on a phone');
+    assert.equal(v.text('uof-section-cards').split(' Product')[0], '5 sections');
+    const cards = v.all('uof-section-card');
+    assert.equal(cards.length, 5);
+    const flat = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(flat).join(' ') : n?.textContent || '');
+    const txt = (n) => flat(n).replace(/\s+/g, ' ').trim();
+    assert.equal(txt(cards[0]), 'Product & engineering › 45% Amount $444,444,444,494.44 A month over 24 months $18,518,518,520.60 Milestone Launch the self-serve tier across every regional marketplace with localised billing and support by 2027-04 Hires 1');
+    assert.match(txt(cards[4]), /Not recorded/, 'a missing share and amount say Not recorded, never 0');
+    assert.doesNotMatch(txt(cards[4]), /\$0|0%/);
+    const open = v.by('uof-open-section-product');
+    assert.equal(v.pr(open).href, '/raise/use-of-funds?project_id=3&section=product', 'the name opens the section sheet (#6083)');
+    assert.match(v.pr(open).className, /min-h-\[44px\]/, 'a 44px target');
+    assert.ok(v.by('uof-runway-compare'), 'runway Recorded against Modelled follows');
+    assert.match(v.text('uof-runway-today'), /^Today Recorded 11 months/);
+    assert.match(v.text('uof-runway-after'), /^After the raise Modelled 24 months/);
+  } finally { await v.close(); }
+  const d = await mounted('/raise/use-of-funds?project_id=3', { read: big });
+  try {
+    assert.ok(d.by('uof-sections'), 'a desktop keeps the table');
+    assert.equal(d.by('uof-section-cards'), undefined);
+  } finally { await d.close(); }
+  const src = read('frontend/src/pages/raise/useoffunds/UseOfFundsTool.jsx');
+  const cards = src.slice(src.indexOf('function SectionCards'), src.indexOf('/** Cash over time'));
+  assert.doesNotMatch(cards, /overflow-x-auto|min-w-\[\d/, 'nothing in the cards is wider than the screen');
+  assert.match(cards, /\[overflow-wrap:anywhere\]/, 'long names and figures wrap');
+});
+
 test('no shipped implementation-stage copy on the tool', () => {
   const src = ['UseOfFundsTool.jsx', 'UseOfFundsParts.jsx', 'ScenariosForecast.jsx'].map((f) => read(`frontend/src/pages/raise/useoffunds/${f}`)).join('\n');
   const shipped = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*\*)/.test(l)).join('\n');

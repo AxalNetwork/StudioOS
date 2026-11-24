@@ -48,14 +48,19 @@ export type SearchConsoleDeps = {
   sleep?: (ms: number) => Promise<void>;
   limits?: Partial<Limits>;
 };
-export type ErrorCode = 'property_denied' | 'grant_revoked' | 'rate_limited' | 'google_unavailable' | 'request_budget' | 'malformed_response';
+/**
+ * `token_busy` and `token_unavailable` (D5840 part 2) come from the token dependency: another refresh holds the
+ * lease, or the connection could not be read for a reason that is not a revoked grant. Neither marks the selection.
+ */
+export type ErrorCode = 'property_denied' | 'grant_revoked' | 'rate_limited' | 'google_unavailable' | 'request_budget' | 'malformed_response'
+  | 'token_busy' | 'token_unavailable';
 export class SearchConsoleError extends Error {
   code: ErrorCode;
   constructor(code: ErrorCode) { super(code); this.code = code; }
 }
 /** A refusal before any provider call: the caller answers it with `status` and `code`. */
 export class SearchConsoleRefusal extends Error {
-  status: 400 | 403 | 404 | 409; code: string;
+  status: 400 | 403 | 404 | 409 | 503; code: string;
   constructor(status: SearchConsoleRefusal['status'], code: string) { super(code); this.status = status; this.code = code; }
 }
 
@@ -165,7 +170,8 @@ async function fetchPages(ctx: Ctx, siteUrl: string, from: string, to: string): 
   return out;
 }
 
-async function venture(env: Env, user: Pick<User, 'id' | 'role' | 'founder_id' | 'licences'>, projectId: unknown, write: boolean): Promise<number> {
+/** The venture's id when the caller may read it (`write` false) or change it (`write` true); refused otherwise. */
+export async function searchConsoleVenture(env: Env, user: Pick<User, 'id' | 'role' | 'founder_id' | 'licences'>, projectId: unknown, write: boolean): Promise<number> {
   const id = Number(projectId);
   if (!Number.isInteger(id) || id <= 0) throw new SearchConsoleRefusal(400, 'project_required');
   const p = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(id).first<{ id: number; founder_id: number | null }>();
@@ -216,7 +222,7 @@ export type SyncResult = {
  */
 export async function syncSearchConsole(env: Env, user: Pick<User, 'id' | 'role' | 'founder_id' | 'licences'>, projectId: unknown,
   deps: SearchConsoleDeps, opts: { trigger?: 'connect' | 'manual' | 'cron' } = {}): Promise<SyncResult> {
-  const pid = await venture(env, user, projectId, true);
+  const pid = await searchConsoleVenture(env, user, projectId, true);
   const sel = await selectionOf(env, pid);
   if (!sel) throw new SearchConsoleRefusal(409, 'no_property_selected');
   if (propertyKind(sel.site_url) !== sel.property_kind) throw new SearchConsoleRefusal(409, 'property_malformed');
@@ -366,7 +372,7 @@ async function writeChunk(env: Env, g: unknown[], c: ChunkInput): Promise<{ days
  * byProperty rows only, each week's coverage, and that week's top landing pages, labelled as top rows.
  */
 export async function searchConsoleWeekly(env: Env, user: Pick<User, 'id' | 'role' | 'founder_id' | 'licences'>, projectId: unknown) {
-  const pid = await venture(env, user, projectId, false);
+  const pid = await searchConsoleVenture(env, user, projectId, false);
   const sel = await selectionOf(env, pid);
   if (!sel) return { property: null, reason: 'Not recorded: no Search Console property selected', weeks: [] };
   const state = await env.DB.prepare(`SELECT search_type, data_state, provider_timezone, units_json, initial_from, fetched_through, last_status, last_error_code, last_success_at

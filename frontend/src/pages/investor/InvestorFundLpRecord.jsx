@@ -27,6 +27,9 @@ import './investorFundLpRecord.css';
  * All three answer `requireFundGp`: the GP of record at the institutional
  * tier, or an admin. Nothing here sends a message: Log a message records one
  * the GP sent outside the platform, subject only.
+ *
+ * D6242 (#6242): `proposal`, when the page passes one, is called with the
+ * drawer's ledger and comms reads and draws Eadwyn's LP summary band.
  */
 
 /** One read's state: loading, ready with its data, or unreadable. `key` names what is read. */
@@ -47,7 +50,7 @@ function useRead(fetcher, key) {
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-export default function LpRecordDrawer({ fund, lp, figures, onClose, onLogged }) {
+export default function LpRecordDrawer({ fund, lp, figures, onClose, onLogged, proposal = null }) {
   const key = `${fund.id}:${lp.id}`;
   const ledger = useRead(() => api.fundsLedger(fund.id, lp.id), key);
   const comms = useRead(() => api.fundsCommsList(fund.id, lp.id), key);
@@ -71,11 +74,11 @@ export default function LpRecordDrawer({ fund, lp, figures, onClose, onLogged })
   }
 
   return <LpRecordView fund={fund} lp={lp} figures={figures} ledger={ledger} comms={comms} report={report}
-    form={form} setForm={setForm} onLog={logMessage} onClose={onClose} />;
+    form={form} setForm={setForm} onLog={logMessage} onClose={onClose} proposal={proposal} />;
 }
 
 /** The drawer itself, over read states, so a test can draw every state. */
-export function LpRecordView({ fund, lp, figures, ledger, comms, report, form = null, setForm = () => {}, onLog = () => {}, onClose }) {
+export function LpRecordView({ fund, lp, figures, ledger, comms, report, form = null, setForm = () => {}, onLog = () => {}, onClose, proposal = null }) {
   const who = lp.name || lp.email || `LP #${lp.id}`;
   const kyc = kycOf(lp);
   const lpa = lpaOf(lp);
@@ -143,6 +146,9 @@ export function LpRecordView({ fund, lp, figures, ledger, comms, report, form = 
                 <span>Subject only · no body stored</span>
               </li>)}</ul>}
       </section>
+
+      {/* D6242 (#6242): Eadwyn's summary of this LP, drawn by the page over this drawer's own reads. */}
+      {proposal ? proposal({ ledger, comms }) : null}
 
       <section className="lpr-card" data-testid="lp-record-statement">
         <header><h3>Statement</h3><span>As the LP sees it</span></header>

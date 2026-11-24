@@ -93,6 +93,9 @@ export function makeCycleWrites(request) {
       distributionOverview: (projectId, { week } = {}) => request(`/cycles/grow/distribution/overview?${new URLSearchParams({ project: String(projectId), ...(week !== undefined ? { week } : {}) })}`),
       campaignUpdate: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D6865 part 2 (#6891, GR-24): Save as feedback from an Inbox reply. The reply's key links it, so the
+      // reply carries "Saved as feedback"; a reply saved twice is a 409 naming the item it already is.
+      feedbackFromReply: (projectId, replyKey, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, origin: 'inbox_reply', reply_key: replyKey, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channelSpend: (projectId, uid, month, body) => request(`/cycles/grow/channels/${seg(uid)}/spend/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
       // D695 (#1657): Enter a KPI and Open a role, through #1697's routes.
@@ -135,6 +138,11 @@ export function makeCycleWrites(request) {
       deleteTiktokFact: (projectId, id, kind) => request(`/cycles/grow/tiktok/facts/${seg(id)}?${new URLSearchParams({ project: String(projectId), kind: kind === 'account' ? 'account' : 'video' })}`, { method: 'DELETE' }),
       acceptTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
       dismissTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      // D5862 (#5862): the venture's linked Facebook Page (D5859 sync and delete, D5860 the channel proposal).
+      syncFacebook: (projectId) => request('/cycles/grow/facebook/sync', { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      deleteFacebookFact: (projectId, id) => request(`/cycles/grow/facebook/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
+      acceptFacebookProposal: (projectId, id) => request(`/cycles/grow/facebook/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      dismissFacebookProposal: (projectId, id) => request(`/cycles/grow/facebook/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
     },
     // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
     // FormData body (Upload proof) goes as it is.
