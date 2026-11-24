@@ -77,20 +77,20 @@ const canon = (k) => (Object.hasOwn(BRAND_ALIAS, k) ? BRAND_ALIAS[k] : k);
 const TABLES = { mark: BRAND_MARKS, generic: BRAND_GENERIC, monogram: BRAND_MONOGRAM };
 
 const SIMPLE_ICONS_KEYS = ['figma', 'hubspot', 'calendly', 'crunchbase', 'stripe', 'github', 'zoom', 'google_meet', 'telegram', 'whatsapp', 'signal', 'claude', 'gemini', 'x', 'facebook', 'instagram', 'youtube', 'tiktok', 'vercel', 'notion'];
-const VENDOR_OR_MONOGRAM = ['lovable', 'google', 'salesforce', 'slack', 'docusign', 'carta', 'affinity', 'microsoft', 'teams', 'linkedin', 'chatgpt', 'grok', 'mercury', 'posthog', 'beehiiv', 'typeform'];
+const VENDOR_OR_MONOGRAM = ['lovable', 'google', 'salesforce', 'slack', 'docusign', 'carta', 'affinity', 'microsoft', 'teams', 'linkedin', 'chatgpt', 'grok', 'mercury', 'posthog', 'beehiiv', 'typeform', 'quickbooks'];
 const GENERIC = { phone_speaker: 'Phone', sms: 'MessageSquare', paste: 'ClipboardPaste', other: 'Bot', website: 'Globe', email: 'Mail' };
 
 // ── 1. Every key is classified ──────────────────────────────────────────────
 
 test('1. every key the app draws is classified, exactly once', () => {
-  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'vercel', 'zoom', 'google_workspace', 'google_calendar', 'microsoft_365', 'mercury', 'notion', 'posthog', 'facebook', 'tiktok', 'x', 'google_search_console', 'typeform', 'beehiiv'], 'the Worker registry\'s 25 keys, figma\'s one-line entry included (D1385 adds PostHog, #5291 TikTok, #5292 Facebook, D2407 Beehiiv, D5839 Search Console, D5827 Typeform, D2403 X)');
+  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'vercel', 'zoom', 'google_workspace', 'google_calendar', 'microsoft_365', 'mercury', 'notion', 'posthog', 'facebook', 'tiktok', 'x', 'google_search_console', 'typeform', 'quickbooks', 'beehiiv'], 'the Worker registry\'s 26 keys, figma\'s one-line entry included (D1385 adds PostHog, #5291 TikTok, #5292 Facebook, D2407 Beehiiv, D5839 Search Console, D5827 Typeform, D5834 QuickBooks, D2403 X)');
   for (const key of ALL_KEYS) {
     const c = canon(key);
     const homes = Object.entries(TABLES).filter(([, t]) => Object.hasOwn(t, c)).map(([n]) => n);
     assert.equal(homes.length, 1, `${key} (${c}) is in exactly one table, not ${JSON.stringify(homes)}`);
   }
   const classified = [...new Set(ALL_KEYS.map(canon))].sort();
-  assert.equal(classified.length, 42);
+  assert.equal(classified.length, 43);
   assert.deepEqual(classified, [...SIMPLE_ICONS_KEYS, ...VENDOR_OR_MONOGRAM, ...Object.keys(GENERIC)].sort());
   assert.deepEqual(BRAND_ALIAS, { google_calendar: 'google', google_workspace: 'google', google_search_console: 'google', microsoft_365: 'microsoft', twitter: 'x', gcip: 'google' });
   assert.deepEqual(Object.keys(BRAND_MARKS).sort(), [...SIMPLE_ICONS_KEYS, ...Object.keys(VENDOR_MARKS)].sort(), 'Simple Icons and the recorded vendor artwork');

@@ -156,7 +156,7 @@ test('RegisterPage is wired to the plan block, the lane copy and the advisor lan
   const page = readFileSync('frontend/src/pages/RegisterPage.jsx', 'utf8');
   assert.match(page, /planIntentFrom\(/);
   assert.match(page, /<RegistrationPlanBlock intent=\{planIntent\} lane=\{lane\} onSelection=\{setSelection\} \/>/);
-  assert.match(page, /registerHeading\(lane, planIntent \? selection : null\)/);
+  assert.match(page, /registerHeading\(lane, planIntent \? selection : null, productIntent\)/);
   assert.match(page, /clearPendingPricingNext\(\)/);
   assert.equal(LANE_ROLE.advisor, undefined);
   const worker = readFileSync('cloudflare-worker/src/routes/auth.ts', 'utf8');

@@ -26,6 +26,7 @@ import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
 import { SEARCH_CONSOLE_READ_SCOPES } from './searchConsoleOAuth';
 import { TYPEFORM_READ_SCOPES } from './typeformOAuth';
+import { QUICKBOOKS_SCOPES } from './quickbooksOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
 import { FACEBOOK_BUILT_FEEDS, FACEBOOK_FEEDS } from './facebookFeeds';
 import { TIKTOK_BUILT_FEEDS, TIKTOK_FEEDS } from './tiktokFeeds';
@@ -670,6 +671,14 @@ export const REGISTRY: ProviderDescriptor[] = [
     audience_rule: 'venture', docs_url: 'https://www.typeform.com/developers/get-started/applications/',
     icon: 'ClipboardList', oauth_scopes: [...TYPEFORM_READ_SCOPES],
   },
+  // D5834 (#5834): QuickBooks Online, read only; one company (realm) per venture, the P&L and balance sheet only.
+  {
+    key: 'quickbooks', display_name: 'QuickBooks Online', integration_type: 'data_feed',
+    description: 'Your QuickBooks Online profit and loss and balance sheet, read only, through Intuit’s own sign-in: each connection reads one QuickBooks company for one of your companies. It never creates, edits or deletes a transaction, an invoice, a payment or a payroll record.',
+    status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0',
+    icon: 'Calculator', oauth_scopes: [...QUICKBOOKS_SCOPES],
+  },
   {
     key: 'beehiiv', display_name: 'Beehiiv', integration_type: 'data_feed',
     description: 'Your newsletter on Beehiiv, read only, through Beehiiv’s own sign-in: each company reads one publication you choose. It reads audience and post figures, never your subscribers’ addresses.',
@@ -692,6 +701,8 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     permissions: ['Read your Search Console properties, your permission level on each, and the data of the property you choose. Axal VC never changes a property, its users or its settings.'] },
   typeform: { category: 'Data', verified: false, pulls: [], sends: [], feeds: [],
     permissions: ['Read your forms and their fields.', 'Read the responses to the form you choose.', 'Keep the connection when you are away, so responses can sync.'] },
+  quickbooks: { category: 'Accounting and banking', verified: false, pulls: [], sends: [], feeds: [],
+    permissions: ['Read the profit and loss and balance sheet of the QuickBooks company you choose, also while you are away. Intuit grants accounting access as one scope; Axal VC reads only those two reports.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: false, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
