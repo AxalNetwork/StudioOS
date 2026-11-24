@@ -393,6 +393,7 @@ test('a database without the Trash column still reads, and Remove refuses rather
 const UNFILTERED: Array<[string, string, string]> = [
   ['routes/account_companies.ts', "SELECT 'raise', project_id FROM data_room_files", 'which cycles hold any record; a file in Trash is still recorded'],
   ['routes/captable.ts', 'INSERT INTO data_room_files', 'a write of a new file'],
+  ['routes/company_creation_handoffs.ts', 'INSERT INTO data_room_files', 'a write of a new file'],
   ['routes/cycle_use_of_funds.ts', 'INSERT INTO data_room_files', 'a write of a new file'],
   ['routes/data_room.ts', 'LEFT JOIN data_room_files f ON f.id = l.file_id', 'the founder’s access log keeps naming what was opened'],
   ['routes/data_room.ts', 'INSERT INTO data_room_files', 'a write of a new file'],

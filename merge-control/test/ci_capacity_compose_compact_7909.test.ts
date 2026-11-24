@@ -96,9 +96,9 @@ function fixture(t: { after(fn: () => void): void; mock: { timers: { enable(o: o
       createAttempts: 1, lastCreateAt: START, ...patch }));
   };
   /** A compact record placed directly, for tests that are about the table and not the handoff. */
-  const place = async (n: number, completedAt: number) => {
+  const place = async (n: number, completedAt: number, mode: CompactMode = 'pilot') => {
     const r = await request(n, 'success', completedAt); r.deadline = Math.max(r.deadline, completedAt + 1);
-    const record = compactProject(r, 'pilot', false)!;
+    const record = compactProject(r, mode, false)!;
     storage.sql.exec('INSERT INTO ci_capacity_compact (id, completed_at, failed, failure, state) VALUES (?, ?, 0, NULL, ?)', uuid(n), completedAt, compactEncode(record));
     return record;
   };
@@ -136,7 +136,7 @@ function network(){
   throw Error('fixture unserved '+path);
  };return {calls,state,api};
 }
-async function outcome(f:ReturnType<typeof fixture>,receipt:ExecutionReceipt,result:typeof good|typeof bad,jobId=77,capacity=f.capacity(),beforeJob:()=>void=()=>{}){
+async function outcome(f:ReturnType<typeof fixture>,receipt:ExecutionReceipt,result:typeof good|typeof bad,jobId=77,capacity=f.capacity(),beforeJob:()=>void=()=>{},wake:()=>Promise<void>=async()=>{}){
  const check=String(jobId+1000);const enc=(x:unknown)=>Buffer.from(JSON.stringify(x)).toString('base64url');
  const claims={iss:'https://token.actions.githubusercontent.com',aud:'capacity',sub:`repo:${repository}:ref:refs/heads/main`,repository,repository_id:'7',run_id:String(receipt.childRunId),run_attempt:'1',event_name:'workflow_dispatch',ref:'refs/heads/main',sha:receipt.childWorkflowSha??receipt.executorSha,workflow_sha:receipt.childWorkflowSha??receipt.executorSha,workflow_ref:`${repository}/.github/workflows/runner-executor.yml@refs/heads/main`,runner_environment:'github-hosted',check_run_id:check,exp:Math.floor(f.state.now/1000)+300,iat:Math.floor(f.state.now/1000),nbf:Math.floor(f.state.now/1000)-1};
  const payload=enc({alg:'RS256',kid:jwk.kid})+'.'+enc(claims),token=payload+'.'+sign('RSA-SHA256',Buffer.from(payload),keys.privateKey).toString('base64url');
@@ -145,7 +145,7 @@ async function outcome(f:ReturnType<typeof fixture>,receipt:ExecutionReceipt,res
   id:receipt.childRunId,event:'workflow_dispatch',path:'.github/workflows/runner-executor.yml',head_sha:claims.sha,head_branch:'main',run_attempt:1,
   display_title:`Worker executor | ${receipt.requestId} | ${receipt.logicalShard} | generation ${receipt.generation}`,repository:{id:7,full_name:repository},head_repository:{id:7,full_name:repository},
  }:{total_count:1,jobs:[{id:jobId,name:'Admitted Worker shard',run_id:receipt.childRunId,run_attempt:1,head_sha:claims.sha,check_run_url:`https://api.github.com/repos/${repository}/check-runs/${check}`}]};},config,()=>f.state.now);
- return new CapacityTransport(capacity,config,async()=>false,async()=>{}).outcome({receipt,result},identity,ports,f.results);
+ return new CapacityTransport(capacity,config,async()=>false,wake).outcome({receipt,result},identity,ports,f.results);
 }
 
 test('D7909 compact handoff preserves intents and result/job associations beyond 1000 passing requests',async t=>{
@@ -253,6 +253,171 @@ function runtime(f:ReturnType<typeof fixture>,enabled=false){
  const control=new CapacityControl({storage} as unknown as DurableObjectState,env);
  return {control,env,settings,alarms,deleted:()=>deleted,store:(control as unknown as {store:SqlCapacityStore}).store};
 }
+import { CapacityReconciliation } from '../src/ciCapacityReconciliation.ts';
+import worker from '../src/index.ts';
+test('8376 reconciliation counts stalled evidence and adopts only an exact independently observed check',async t=>{
+  const f=fixture(t), id=uuid(2), checkId=910;
+  await f.settled(2,'failure',START+2,r=>{r.shards[0].attempts[0].phase='cancellation_unknown';});
+  const creating={phase:'creating',checkId:null,sent:null,failed:true,createAttempts:2,lastCreateAt:START};
+  f.sent(2,'failure',creating);
+  f.advance(37*24*60*60_000);
+  const run=runtime(f);
+  run.store.prune(f.state.now-CAPACITY_RETENTION_MS);
+  const open=()=>new CapacityReconciliation(f.storage,run.store,f.results,run.settings as typeof config & {publication:'pilot'});
+  const review=open(), item=review.inspect(id);
+  assert.equal(item.adoptable,true);
+  assert.deepEqual(item.issues,['create_exhausted','negative_pending','cleanup_unknown']);
+  const match={id:checkId,external_id:item.key,name:'ci-capacity/worker-pilot',head_sha:item.source,app:{id:config.appId}};
+  const parent={id:102,run_attempt:1,head_sha:item.source,repository:{id:7,full_name:repository}};
+  const scoped=(checks:()=>Promise<unknown>)=>async(method:string,path:string)=>{
+    assert.equal(method,'GET');
+    if(path==='/repos/'+repository+'/actions/runs/102/attempts/1')return parent;
+    assert.ok(path.startsWith('/repos/'+repository+'/commits/'+item.source+'/check-runs?'));
+    return checks();
+  };
+  assert.equal(await review.adopt(id,item.fingerprint,checkId,async(_method,path)=>path.includes('/actions/runs/')
+    ?{...parent,repository:{id:999,full_name:repository}}:{total_count:1,check_runs:[match]}),false);
+  for(const rows of [[],[match,{...match,id:911}],[{...match,head_sha:'d'.repeat(40)}],
+    [{...match,app:{id:44}}],[{...match,name:'ci-capacity/full-suite'}],[{...match,external_id:uuid(3)+':pilot'}]]){
+    assert.equal(await review.adopt(id,item.fingerprint,checkId,scoped(async()=>({total_count:rows.length,check_runs:rows}))),false);
+    assert.equal(open().inspect(id).fingerprint,item.fingerprint);
+  }
+  assert.equal(await review.adopt(id,item.fingerprint,checkId,scoped(async()=>({total_count:2,check_runs:[match]}))),false);
+  const found=scoped(async()=>({total_count:1,check_runs:[match]}));
+  // A concurrent update after discovery must invalidate the owner's observation.
+  assert.equal(await review.adopt(id,item.fingerprint,checkId,scoped(async()=>{
+    f.sent(2,'failure',{...creating,lastCreateAt:START+1});
+    return {total_count:1,check_runs:[match]};
+  })),false);
+  const restarted=open();
+  const fresh=restarted.inspect(id);
+  assert.equal(await restarted.adopt(id,fresh.fingerprint,checkId,found),true);
+  assert.equal(await restarted.adopt(id,fresh.fingerprint,checkId,found),false);
+  const saved=JSON.parse(f.db.prepare('SELECT state FROM capacity_publications WHERE id=?').get(item.key)!.state as string);
+  assert.equal(saved.ownerAdoption.priorFingerprint,fresh.fingerprint);assert.equal(saved.checkId,checkId);assert.equal(saved.createAttempts,2);assert.equal(saved.failed,true);assert.equal(saved.sent,null);
+  assert.deepEqual(restarted.inspect(id).issues,['intent_unresolved','negative_pending','cleanup_unknown']);
+  assert.equal(run.store.get(id)!.shards[0].attempts[0].phase,'cancellation_unknown');
+  for(let n=3;n<38;n++) await f.place(n,START+n);
+  const first=restarted.counts(''),second=restarted.counts(first.next!);
+  assert.equal(first.scanned,32);assert.equal(second.scanned,4);assert.equal(second.next,null);
+  assert.equal(first.counts.cleanup_unknown,1);assert.equal(first.counts.intent_unresolved+second.counts.intent_unresolved,36);
+  const changed=new CapacityReconciliation(f.storage,run.store,f.results,{...config,publication:'full-suite'});
+  assert.ok(changed.inspect(uuid(3)).issues.includes('mode_conflict'));
+});
+
+async function adoptionFixture(t: Parameters<typeof fixture>[0], attempts = 2, mode: CompactMode = 'pilot') {
+  const f = fixture(t);
+  const record = await f.place(2, START, mode);
+  const { requestId, parentRunId, parentAttempt, sourceSha } = record.submission;
+  const key = requestId + ':pilot';
+  f.sent(2, 'failure', { phase: 'creating', checkId: null, sent: null, createAttempts: attempts });
+  const review = new CapacityReconciliation(f.storage, f.store, f.results, { ...config, publication: 'pilot' });
+  const parentApi = network().api;
+  const api = async (method: string, path: string) => {
+    assert.equal(method, 'GET');
+    if (path === `/repos/${repository}/actions/runs/${parentRunId}/attempts/${parentAttempt}`) {
+      return parentApi(method, path);
+    }
+    assert.ok(path.startsWith(`/repos/${repository}/commits/${sourceSha}/check-runs?`));
+    return { total_count: 1, check_runs: [{
+      id: 910, head_sha: sourceSha, external_id: key, name: 'ci-capacity/worker-pilot', app: { id: config.appId },
+    }] };
+  };
+  const intent = f.db.prepare('SELECT state FROM capacity_publications WHERE id=?');
+  async function expectRefusal(checkId = 910) {
+    const before = intent.get(key)!.state;
+    const { fingerprint } = review.inspect(requestId);
+    assert.equal(await review.adopt(requestId, fingerprint, checkId, api), false);
+    assert.equal(intent.get(key)!.state, before, 'refusal must preserve the entire stored intent');
+  }
+  return { f, expectRefusal };
+}
+
+test('8376 refuses owner check 999 when the sole verified match is check 910', async t => {
+  const { expectRefusal } = await adoptionFixture(t);
+  await expectRefusal(999);
+});
+
+test('8376 refuses adoption while a second create attempt is available', async t => {
+  const { expectRefusal } = await adoptionFixture(t, 1);
+  await expectRefusal();
+});
+
+test('8376 refuses pilot adoption for a record compacted under full-suite publication', async t => {
+  const { expectRefusal } = await adoptionFixture(t, 2, 'full-suite');
+  await expectRefusal();
+});
+
+test('8376 refuses adoption when full and compact records both own the request', async t => {
+  const { f, expectRefusal } = await adoptionFixture(t);
+  await f.settled(2, 'success', START);
+  await expectRefusal();
+});
+
+test('8376 refuses adoption when the result journal cannot be read', async t => {
+  const { f, expectRefusal } = await adoptionFixture(t);
+  f.state.breakOn = 'SELECT id,state FROM capacity_result_failures';
+  await expectRefusal();
+});
+
+test('8376 owner reconciliation authenticates both entry points and requires the explicit drain switch',async t=>{
+  const f=fixture(t),run=runtime(f,true),token='test-only-owner';
+  Object.assign(run.env,{CAPACITY_OWNER_TOKEN:token});
+  const get=(auth:string)=>new Request('https://example.invalid/capacity/publications',{headers:{authorization:'Bearer '+auth}});
+  const post=(auth:string)=>new Request('https://example.invalid/capacity/reconcile',{method:'POST',headers:{authorization:'Bearer '+auth},
+    body:JSON.stringify({requestId:uuid(3),mode:'pilot',fingerprint:'test',checkId:4})});
+  const env={...run.env,CAPACITY_CONTROL:{getByName:()=>run.control}} as any;
+  for(const req of [get('wrong'),post('wrong')]) {
+    assert.equal((await worker.fetch(req,env)).status,401);
+    assert.equal((await run.control.fetch(req)).status,401);
+  }
+  assert.equal((await worker.fetch(get(token),env)).status,200);
+  assert.equal((await worker.fetch(post(token),env)).status,409);
+});
+
+test('8376 drained owner adopts a landed check after two lost creates through the Worker route',async t=>{
+  const f=fixture(t),run=runtime(f),id=uuid(2);
+  await f.settled(2,'failure',START);
+  let creates=0;
+  const publisher=new CapacityOutbox(f.storage,async(method)=>{
+    if(method==='POST'){creates++;throw Error('fixture lost check-create acknowledgement');}
+    assert.equal(method,'GET');
+    return {total_count:0,check_runs:[]};
+  },config);
+  const publish=()=>publisher.publish(run.store,()=>({status:'failure',reason:'verified_failure'}),'pilot');
+  await publish();
+  f.advance(1_000);await publish();
+  f.advance(60_000);await publish();
+  assert.equal(creates,2);
+  f.advance(37*24*60*60_000);await publish();
+  assert.equal(creates,2);
+  run.store.prune(f.state.now-CAPACITY_RETENTION_MS);
+  const env={...run.env,CAPACITY_CONTROL:{getByName:()=>run.control},CAPACITY_OWNER_TOKEN:'fixture'};
+  Object.assign(run.env,{CAPACITY_OWNER_TOKEN:env.CAPACITY_OWNER_TOKEN});
+  const headers={authorization:'Bearer fixture'};
+  const item=await (await worker.fetch(new Request('https://fixture.invalid/capacity/publications?requestId='+id,{headers}),env as any)).json() as any;
+  assert.deepEqual(item.issues,['create_exhausted','negative_pending']);
+  const gets:string[]=[];
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const path=new URL(String(input)).pathname;
+    if(path.includes('/app/installations/')) return Response.json({token:'fixture'});
+    assert.equal(init.method,'GET');gets.push(path);
+    return Response.json(path.includes('/actions/runs/')?{id:102,run_attempt:1,head_sha:item.source,repository:{id:7,full_name:repository}}
+      :{total_count:1,check_runs:[{id:19,external_id:item.key,head_sha:item.source,app:{id:23},name:'ci-capacity/worker-pilot'}]});
+  });
+  const adoption=()=>new Request('https://fixture.invalid/capacity/reconcile',{method:'POST',headers,
+    body:JSON.stringify({requestId:id,mode:'pilot',checkId:19,fingerprint:item.fingerprint})});
+  run.env.GITHUB_APP_ID='999';
+  assert.equal((await worker.fetch(adoption(),env as any)).status,409);
+  assert.deepEqual(gets,[]);
+  run.env.GITHUB_APP_ID=String(config.appId);
+  const response=await worker.fetch(adoption(),env as any);
+  assert.equal(response.status,200);assert.deepEqual(await response.json(),{adopted:true});
+  assert.equal(gets.length,2);
+  assert.equal(run.alarms.at(-1),f.state.now+1000);
+  assert.ok(run.store.get(id));
+});
+
 test('D7909 actual runtime composes only validated modes and preserves unknown/changed configurations on restart',async t=>{
  const f=fixture(t);for(let n=2;n<=CAPACITY_REQUEST_LIMIT+1;n++){await f.settled(n,'success',START+n);f.sent(n,'success');}
  const run=runtime(f);f.advance(LEASES_OVER);run.store.prune(f.state.now-CAPACITY_RETENTION_MS);assert.notEqual(run.store.compact(uuid(2)),null);
@@ -268,7 +433,7 @@ test('D7909 actual alarm continues when only compact history remains and does no
   if(url.includes('/app/installations/'))return Response.json({token:'fixture-installation-token'});
   return Response.json(await net.api(init.method,new URL(url).pathname+new URL(url).search,init.body?JSON.parse(init.body):undefined));
  });
- await run.control.alarm();assert.equal(run.deleted(),0);assert.equal(run.alarms.length,1);
+ await run.control.alarm();assert.equal(run.deleted(),0);assert.deepEqual(run.alarms,[f.state.now+15_000,f.state.now+60_000]);
  assert.equal(net.calls.some(c=>c.path.endsWith('/dispatches')),false);assert.notEqual(run.store.compact(uuid(2)),null);
 });
 
@@ -428,4 +593,93 @@ test('D7909 R1 cold legacy backfill is paged and enablement waits for completed 
  net.state.patchDown=false;await new CapacityOutbox(f.storage,net.api,config).publish(f.store,id=>f.capacity().status(id),'pilot');
  assert.equal(queue.legacyReady(),true);assert.equal(await enabled(),true);
  assert.ok(net.calls.some(c=>c.method==='PATCH'&&c.path.endsWith('/100202')&&c.body.conclusion==='failure'));
+});
+
+test('8375 settled history slows down, avoids idle token minting, and still observes a changed parent',async t=>{
+  const f=fixture(t);
+  await f.settled(2,'failure',START);f.sent(2,'failure');
+  let tokens=0, parentCancelled=false;
+  const net=network();
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const url=new URL(String(input));
+    if(url.pathname.includes('/app/installations/')){tokens++;return Response.json({token:'fixture'});}
+    const data=await net.api(init.method,url.pathname+url.search,init.body?JSON.parse(init.body):undefined);
+    return Response.json(parentCancelled&&data.workflow_id?{...data,conclusion:'cancelled'}:data);
+  });
+  let run=runtime(f);
+  for(let i=0;i<3;i++){
+    await run.control.alarm();
+    assert.equal(run.alarms.at(-1),f.state.now+60_000);
+    f.advance(60_000);
+    if(i===0)run=runtime(f);
+  }
+  assert.equal(tokens,0);assert.equal(net.calls.length,0);
+  await f.place(3,START);f.sent(3,'success');
+  await run.control.alarm();
+  assert.equal(tokens,1);assert.equal(run.alarms.at(-1),f.state.now+60_000);
+  parentCancelled=true;net.state.patchDown=true;f.advance(60_000);
+  await run.control.alarm();
+  assert.equal(tokens,2);
+  assert.equal(net.calls.at(-1)?.body.conclusion,'cancelled');
+  assert.equal(run.alarms.at(-1),f.state.now+15_000);
+  net.state.patchDown=false;f.advance(15_000);
+  await run.control.alarm();
+  assert.equal(JSON.parse(JSON.parse(f.db.prepare('SELECT state FROM capacity_publications WHERE id=?').get(uuid(3)+':pilot')!.state as string).sent).status,'cancelled');
+});
+
+test('8375 empty alarm disarms; expiry runs immediately on restart or rollback, once a minute otherwise',async t=>{
+  const f=fixture(t), run=runtime(f);
+  const prune=t.mock.method(run.store,'prune');
+  await run.control.alarm();
+  assert.equal(run.deleted(),1);
+  await f.settled(2,'failure',START);f.sent(2,'failure');
+  f.advance(15_000);await run.control.alarm();assert.equal(prune.mock.callCount(),1);
+  f.state.now=START-1;t.mock.timers.setTime(f.state.now);
+  await run.control.alarm();assert.equal(prune.mock.callCount(),2);
+  const restarted=runtime(f),again=t.mock.method(restarted.store,'prune');
+  await restarted.control.alarm();assert.equal(again.mock.callCount(),1);
+});
+
+test('8375 authenticated late negative wakes idle history before journaling and reaches its check after restart',async t=>{
+  const f=fixture(t),r=await f.place(3,START),net=network();
+  f.sent(3,'success');
+  const run=runtime(f);
+  let tokens=0;
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const url=new URL(String(input));
+    if(url.pathname.includes('/app/installations/')){tokens++;return Response.json({token:'fixture'});}
+    return Response.json(await net.api(init.method,url.pathname+url.search,init.body?JSON.parse(init.body):undefined));
+  });
+  await run.control.alarm();
+  assert.equal(run.alarms.at(-1),f.state.now+60_000);
+  const wake=async()=>{assert.equal(f.results.pendingFailure(uuid(3)),false);run.alarms.push(f.state.now+1000);};
+  await outcome(f,compactReceipt(r,'worker-1-of-6',1)!,bad,77,f.capacity(),()=>{},wake);
+  assert.equal(run.alarms.at(-1),f.state.now+1000);
+  f.advance(1000);await runtime(f).control.alarm();
+  assert.equal(net.calls.at(-1)?.method,'PATCH');
+  assert.equal(net.calls.at(-1)?.body.conclusion,'failure');assert.equal(tokens,2);
+});
+
+test('8375 an active coordinator and history publisher share one token, including on acquisition failure',async t=>{
+  const f=fixture(t), net=network(), run=runtime(f,true);
+  await f.place(3,START);f.sent(3,'success');
+  const pending=await f.request(2,'success',START);
+  pending.completedAt=null;pending.shards[0].attempts[0].phase='running';f.store.save(pending);
+  let tokens=0,reject=true;
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const url=new URL(String(input));
+    if(url.pathname.includes('/app/installations/')){
+      tokens++;
+      if(reject)throw Error('fixture issuance unavailable');
+      return Response.json({token:'fixture'});
+    }
+    return Response.json(await net.api(init.method,url.pathname+url.search,init.body?JSON.parse(init.body):undefined));
+  });
+  await run.control.alarm();assert.equal(tokens,1);assert.equal(net.calls.length,0);
+  assert.equal(run.alarms.at(-1),f.state.now+15_000);
+  reject=false;f.advance(15_000);await run.control.alarm();
+  assert.equal(tokens,2);
+  assert.ok(net.calls.some(c=>c.path.includes('/runs/102')));
+  assert.ok(net.calls.some(c=>c.path.includes('/runs/103')));
+  assert.equal(run.alarms.at(-1),f.state.now+15_000);
 });

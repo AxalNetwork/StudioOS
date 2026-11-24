@@ -79,6 +79,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(MIG460);
+  db.exec(sqlOf('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP and profile columns
   db.exec(sqlOf('202611220320_6017_experiment_results.sql'));
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('228_research_company_directory.sql'));

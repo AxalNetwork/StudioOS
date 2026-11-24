@@ -11,7 +11,8 @@ export default {
     const path = new URL(request.url).pathname;
     try {
       if (path.startsWith('/capacity/')) {
-        const owner = (path === '/capacity/switch' && request.method === 'POST') || (path === '/capacity/status' && request.method === 'GET');
+        const owner = (request.method === 'POST' && ['/capacity/switch','/capacity/reconcile'].includes(path))
+          || (request.method === 'GET' && ['/capacity/status','/capacity/publications'].includes(path));
         const caller = request.method === 'POST' && ['/capacity/submit', '/capacity/receipt', '/capacity/outcome'].includes(path);
         if (!owner && !caller) return new Response('not found', { status: 404 });
         if (owner && !ownerAuthorized(request, env.CAPACITY_OWNER_TOKEN)) return new Response('unauthorized', { status: 401 });
