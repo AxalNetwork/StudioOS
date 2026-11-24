@@ -19,7 +19,7 @@ import { sessionPlacementRows } from '../../routes/founder_validate_structure';
 import { loadSession, type SessionRow } from '../interviewSessions';
 import {
   MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews, recordingConsentText,
-  contradictsByGroup, loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
+  contradictsByGroup, loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf, firmographicsOf, disqualifiersOf,
   type ClaimStatus, type HypRow, type InterviewRow, type LinkRow,
 } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
@@ -33,7 +33,7 @@ import {
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
   addCompetitorSignal, addEvidence, addExperiment, archiveSegment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
   INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
-  splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
+  splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment, setPrimarySegment,
   updateTheme, updateThemeStatement,
 } from '../validateWriters';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
@@ -879,7 +879,11 @@ const icp: ModuleSpec = {
     return {
       title: String(s.name),
       sub: joined(`One of ${plural(total, 'segment', 'segments')}`, s.updated_at ? `updated ${dMon(s.updated_at)}` : null),
-      pills: evidence ? [{ text: `${STRENGTH[evidence]} evidence`, tone: evidence === 'pattern' ? 'vio' : 'grey' }] : [],
+      pills: [
+        ...(evidence ? [{ text: `${STRENGTH[evidence]} evidence`, tone: evidence === 'pattern' ? 'vio' : 'grey' }] : []),
+        // D6007 (#6007, V23): the venture's one primary ICP.
+        ...(Number(s.is_primary) === 1 ? [{ text: '★ Primary ICP', tone: 'vio' }] : []),
+      ],
       facts: [
         { label: 'Interviews', value: summary?.interviews ?? 0 },
         { label: 'Strong fit', value: summary?.strong ?? 0 },
@@ -946,6 +950,23 @@ const icp: ModuleSpec = {
       },
     },
     {
+      // D6007 (#6007, V23): stored on the segment itself, never derived from interviews (those are "From interviews").
+      key: 'profile', title: 'Firmographics and disqualifiers', side: true,
+      read: async (ctx, id) => {
+        const { s } = await loadSegment(ctx, id);
+        const firmographics = firmographicsOf(s.firmographics_json) ?? [];
+        const disqualifiers = disqualifiersOf(s.disqualifiers_json) ?? [];
+        return {
+          rows: [
+            ...firmographics.map((f) => ({ a: f.label, b: f.value })),
+            ...disqualifiers.map((d) => ({ a: 'Disqualifier', b: d, tone: 'amb' as const })),
+          ],
+          empty: 'No firmographics or disqualifiers recorded on this segment.',
+          action: 'edit',
+        };
+      },
+    },
+    {
       key: 'persona', title: 'Persona card', side: true,
       read: async () => ({ rows: [{ a: 'Export', b: 'PDF', action: 'export-persona' }] }),
     },
@@ -964,7 +985,19 @@ const icp: ModuleSpec = {
           return { ok: true };
         }),
       },
-      { key: 'compare-segments', label: 'Compare segments', kind: 'link', href: `/validate/ideal-customer-profile?project=${ctx.projectId}` },
+      // D6007 (#6007): Compare opens the module's compare mode with this segment chosen.
+      { key: 'compare-segments', label: 'Compare segments', kind: 'link', href: `/validate/ideal-customer-profile?project=${ctx.projectId}&compare=${segmentId}` },
+      Number(s.is_primary) === 1
+        ? {
+          key: 'clear-primary', label: 'Clear primary ICP', kind: 'write',
+          confirm: { title: 'Clear the primary ICP?', body: 'No segment will be the primary ICP until you choose one.', cta: 'Clear' },
+          execute: (c) => refusing(async () => ({ ok: true, record: await setPrimarySegment(c.env, { projectId: c.projectId, userId: userId(c), segmentId, primary: false }) })),
+        }
+        : {
+          key: 'set-primary', label: 'Set as primary ICP', kind: 'write',
+          confirm: { title: 'Make this the primary ICP?', body: 'A venture has one primary ICP; any other segment that holds it stops holding it.', cta: 'Set as primary' },
+          execute: (c) => refusing(async () => ({ ok: true, record: await setPrimarySegment(c.env, { projectId: c.projectId, userId: userId(c), segmentId, primary: true }) })),
+        },
       // #1658's client action draws the PDF; PNG is not built (decision 15).
       { key: 'export-persona', label: 'Export persona', kind: 'link', href: `/validate/ideal-customer-profile/${segmentId}?project=${ctx.projectId}&export=persona` },
       {
@@ -980,6 +1013,12 @@ const icp: ModuleSpec = {
             { key: 'value_promised', label: 'Value promised', kind: 'T', value: s.value_promised ?? '', placeholder: '[What changes for them]' },
             { key: 'value_source', label: 'Source for the value', kind: 'T', value: s.value_source ?? '' },
             { key: 'score_since', label: 'Score against interviews since', kind: 'T', input: 'date', value: s.score_since ?? '' },
+            // D6007 (#6007): one per line; an empty box clears the list.
+            { key: 'firmographics', label: 'Firmographics', kind: 'T', input: 'textarea', max: 2000,
+              value: (firmographicsOf(s.firmographics_json) ?? []).map((f) => `${f.label}: ${f.value}`).join('\n'),
+              placeholder: 'Company size: 50–200 people', note: 'One per line, as Label: value.' },
+            { key: 'disqualifiers', label: 'Disqualifiers', kind: 'T', input: 'textarea', max: 2000,
+              value: (disqualifiersOf(s.disqualifiers_json) ?? []).join('\n'), placeholder: 'Under 20 staff', note: 'One per line.' },
           ],
         },
         execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateSegment(c.env, {
@@ -987,6 +1026,7 @@ const icp: ModuleSpec = {
           name: field(body, 'name'), description: field(body, 'description'), who_they_are: field(body, 'who_they_are'),
           context: field(body, 'context'), job_to_be_done: field(body, 'job_to_be_done'), urgency: field(body, 'urgency'),
           value_promised: field(body, 'value_promised'), value_source: field(body, 'value_source'), score_since: field(body, 'score_since'),
+          firmographics: field(body, 'firmographics'), disqualifiers: field(body, 'disqualifiers'),
         }) })),
       },
     ];

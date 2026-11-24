@@ -43,6 +43,7 @@ function fixture({ enabled = true, kv = true } = {}) {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  db.exec(sqlOf('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP columns the segment readers select.
   // D690 (#1692): the Validate reads behind get_validate_context touch 460's stores.
   db.exec(sqlOf('460_validate_record_stores.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');

@@ -14,6 +14,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `agent-compute-image.yml` | General compute image | image (advisory) | — | — | — | — | — |
 | `agent-compute-preview.yml` | General compute preview (owner gated) | — | — | — | — | — | `workflow_dispatch` · gate (advisory, conditional)<br>deploy_disabled_host (advisory) |
 | `agent-gateway-keys.yml` | Agent gateway keys | — | — | — | — | — | `workflow_dispatch` · Verify, store and link the account keys (advisory, conditional) |
+| `agent-provenance.yml` | Agent provenance | provenance (advisory, conditional) | — | provenance (advisory, conditional) | — | — | — |
 | `agent-stage-a.yml` | Agent Stage A (hosted lifecycle, stubbed inference) | — | — | — | — | — | `workflow_dispatch` · one hosted lifecycle per path, then teardown (advisory) |
 | `archive-observer-deploy.yml` | Archive observer deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
 | `backup-d1.yml` | Daily D1 Backup → R2 | — | — | — | — | backup (advisory) | `workflow_dispatch` · backup (advisory) |
@@ -82,12 +83,13 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `schema-rehearsal.yml` | Schema rehearsal (hosted provisioning and restore) | — | — | — | — | — | `workflow_dispatch` · provision, seed, export, restore, compare (advisory) |
 | `semgrep.yml` | Semgrep | security scan scope (advisory)<br>code scanning takes uploads? (advisory, conditional)<br>Scan (advisory, conditional)<br>main scan findings (advisory, conditional)<br>Request alert reconciliation (advisory, conditional) | — | — | security scan scope (advisory)<br>code scanning takes uploads? (advisory, conditional)<br>Scan (advisory, conditional)<br>main scan findings (advisory, conditional)<br>Request alert reconciliation (advisory, conditional) | security scan scope (advisory)<br>code scanning takes uploads? (advisory, conditional)<br>Scan (advisory, conditional)<br>main scan findings (advisory, conditional)<br>Request alert reconciliation (advisory, conditional) | — |
 
-Workflows that listen for `merge_group` (4): `ci.yml`, `dependency-review.yml`, `gitleaks.yml`, `migration-immutability.yml`.
+Workflows that listen for `merge_group` (5): `agent-provenance.yml`, `ci.yml`, `dependency-review.yml`, `gitleaks.yml`, `migration-immutability.yml`.
 
 ### Jobs shared across events
 
 These jobs share a YAML definition across the listed events. Workflow filters, matrix expansion and step conditions still apply. This list proposes no removals.
 
+- `agent-provenance.yml` / provenance · pull_request, merge_group (conditional on pull_request, merge_group; steps reference event data)
 - `ci.yml` / frontend (build) · pull_request, merge_group, push (steps reference event data)
 - `ci.yml` / worker (typecheck) · pull_request, merge_group, push (steps reference event data)
 - `ci.yml` / suite plan · pull_request, merge_group, push (conditional on pull_request, merge_group, push; steps reference event data)

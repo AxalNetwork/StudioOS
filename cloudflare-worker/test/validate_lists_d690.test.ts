@@ -40,7 +40,8 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   for (const m of ['440_validate_cycle_stores.sql', '438_interview_sessions.sql', '447_assistant_interviews.sql',
-    '453_interview_processing.sql', '459_cycle_activity_convention.sql', '460_validate_record_stores.sql']) db.exec(sqlOf(m));
+    '453_interview_processing.sql', '459_cycle_activity_convention.sql', '460_validate_record_stores.sql',
+    '202611220319_6007_segment_primary_profile.sql']) db.exec(sqlOf(m));
     applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fern Founder', 'fern@example.test', 1001);
@@ -123,7 +124,7 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
     sorts: ['newest', 'oldest', 'name'],
   },
   'ideal-customer-profile': {
-    title: 'Segments', cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
+    title: 'Segments', cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated', 'Primary ICP'],
     // D6003: attainable evidence levels and every supported sort, default first.
     filters: [['evidence', 'Evidence', ['anecdote', 'pattern', 'not_recorded']], ['fit', 'Fit', ['strong', 'none']]],
     sorts: ['evidence', 'name', 'strong', 'interviews'],

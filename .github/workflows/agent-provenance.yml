@@ -1,0 +1,94 @@
+name: Agent provenance
+
+# D8068 (#8068): every commit an `agent/**` pull request adds carries the identity chain
+# (AGENTS.md § "Identity trailers"). Advisory: the job is continue-on-error until the owner
+# adds `provenance` to main's required checks. A branch outside agent/** is skipped by the
+# script itself (verdict `skipped`), so the job still reports and still keeps the artifact.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# One run per pull request; a newer push cancels the superseded run. A merge-queue entry
+# gets its own group (the run id), so it is never cancelled.
+concurrency:
+  group: agent-provenance-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  provenance:
+    name: provenance
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test the parser against AGENTS.md
+        run: node scripts/ci/agent-provenance.test.mjs
+      - name: Resolve the range and the trusted check
+        id: range
+        env:
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MG_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MG_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == pull_request ]]; then
+            number="$PR_NUMBER"; branch="$PR_HEAD_REF"; base="$PR_BASE_SHA"; head="$PR_HEAD_SHA"
+          else
+            # gh-readonly-queue/main/pr-<n>-<sha>: the queued PR's own commits, not the squash.
+            [[ "$MG_HEAD_REF" =~ ^refs/heads/gh-readonly-queue/main/pr-([0-9]+)-[0-9a-f]{40}$ ]] || { echo "::error::unreadable merge group ref"; exit 1; }
+            number="${BASH_REMATCH[1]}"; base="$MG_BASE_SHA"
+            branch=$(gh api "repos/$REPO/pulls/$number" --jq .head.ref)
+            head=$(gh api "repos/$REPO/pulls/$number" --jq .head.sha)
+          fi
+          [[ "$number" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ && "$head" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::unreadable pull request range"; exit 1; }
+          git fetch --no-tags --quiet origin "refs/pull/$number/head"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$head" ]] || { echo "::error::the pull request head moved"; exit 1; }
+          # The check that judges a branch is its base's copy; only the PR that adds it runs its own.
+          if git cat-file -e "$base:scripts/ci/agent-provenance.mjs" 2>/dev/null; then
+            BASE_SHA="$base"
+            git show "$BASE_SHA:scripts/ci/agent-provenance.mjs" > "$RUNNER_TEMP/agent-provenance.mjs"
+            source=base
+          else
+            cp scripts/ci/agent-provenance.mjs "$RUNNER_TEMP/agent-provenance.mjs"
+            source=pr
+          fi
+          {
+            echo "base=$base"
+            echo "head=$head"
+            echo "source=$source"
+          } >> "$GITHUB_OUTPUT"
+          printf 'branch<<EOF_BRANCH\n%s\nEOF_BRANCH\n' "$branch" >> "$GITHUB_OUTPUT"
+      - name: Check the identity chain
+        env:
+          RANGE_BASE: ${{ steps.range.outputs.base }}
+          RANGE_HEAD: ${{ steps.range.outputs.head }}
+          BRANCH: ${{ steps.range.outputs.branch }}
+          SOURCE: ${{ steps.range.outputs.source }}
+        shell: bash
+        run: node "$RUNNER_TEMP/agent-provenance.mjs" --base "$RANGE_BASE" --head "$RANGE_HEAD" --branch "$BRANCH" --out "$RUNNER_TEMP/provenance.json" --source "$SOURCE"
+      - name: Keep provenance.json
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: provenance
+          path: ${{ runner.temp }}/provenance.json
+          if-no-files-found: warn
+          retention-days: 30
