@@ -15,6 +15,7 @@
  * `as_of` day and a link; its text is what the prompt may carry when chosen.
  */
 import type { Env, User } from '../../types';
+import { isSuperAdmin } from '../../auth';
 import type { ProjectRef } from '../../routes/_founder_validate_helpers';
 import { readableRecord } from '../records/read';
 import { INTENTS, RELATIONSHIP_OF, type Intent, type Relationship } from './intents';
@@ -219,6 +220,10 @@ export async function personRecord(env: Env, user: User, raw: unknown): Promise<
     if (e instanceof RecordMissing) throw notFound();
     throw e;
   }
+  // D7587: the elevated Super Admin can email the interview whose record
+  // they can already open. Ordinary admins remain case-only. Company items
+  // and live blocks retain their separate case-only restriction.
+  if (ref.kind === 'interviewee' && isSuperAdmin(user)) return moduleRecord(env, user, ref.kind, ref.id);
   if (caseOnly(user)) throw notFound();
   if (MODULES[ref.kind]) return moduleRecord(env, user, ref.kind, ref.id);
   if (ref.kind === 'advisor') return advisorEngagement(env, user, ref.id);

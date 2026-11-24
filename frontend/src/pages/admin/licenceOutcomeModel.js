@@ -37,6 +37,7 @@ export const ACTION_WORDS = Object.freeze({
   detachAdmin: { doing: 'Detaching the account…', done: 'Account detached', not: 'Account not detached', noun: 'detach' },
   removeAdmin: { doing: 'Removing the administrator…', done: 'Administrator removed', not: 'Administrator not removed', noun: 'removal' },
   issueInvoice: { doing: 'Issuing the invoice…', done: 'Invoice issued', not: 'Invoice not issued', noun: 'invoice' },
+  issueInitialInvoice: { doing: 'Issuing the initial invoice…', done: 'Initial invoice issued', not: 'Initial invoice not issued', noun: 'invoice' },
   voidInvoice: { doing: 'Voiding the invoice…', done: 'Invoice voided', not: 'Invoice not voided', noun: 'void' },
   sendAgreement: { doing: 'Sending the agreement…', done: 'Agreement sent', not: 'Agreement not sent', noun: 'send' },
   deploy: { doing: 'Starting the deployment…', done: 'Deployment started', not: 'Deployment not started', noun: 'deployment' },

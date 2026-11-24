@@ -3,16 +3,20 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import OfferPages from '../../../ui/OfferPages.jsx';
 import {
-  ZoneBody, NothingYet, ZoneHeading, Unrecorded, Pill,
+  ZoneBody, Unrecorded, Pill,
   Section, Field, NotComputable, NotMeasured, NoPartnerProfile,
-  isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
+  isNoPartnerProfile, moneyDollars,
+  // #4845: the Offers field, actions and empty state (D4844), so this zone's
+  // controls are 14px, 44px on a phone and carry the amber focus ring.
+  OfferEmpty, OfferHeading, offerInputClass as inputClass, offerButtonClass as buttonClass,
+  offerGhostButtonClass as ghostButtonClass, offerDangerButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { FOOT, TREND_WHY, captionOf, missingSource, sourceRows } from './visibilityModel';
-import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote, zoneReadError } from './useGuardedWrite';
 
 /**
  * Offers · Visibility — `/offers/visibility`.
@@ -108,7 +112,7 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
             <button type="button" className={buttonClass} disabled={busy}
               onClick={() => onSave(row, draft, () => setEdit(false))}>Save</button>
             <button
-              type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
+              type="button" className={`${offerDangerButtonClass} ml-auto`}
               disabled={busy}
               title="Removes the surface and the attributions pointing at it. Retiring is usually the right move instead."
               onClick={() => onDelete(row)}
@@ -123,30 +127,56 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
   );
 }
 
-function AttributionRow({ row, surfaces, onSet, onClear, busy }) {
+/**
+ * Where one engagement came from: a select named by the engagement it sets, so a
+ * screen reader hears "Where Pricing sprint came from" rather than an unnamed list.
+ * Empty is a REAL choice, not a prompt: an engagement whose source nobody knows
+ * must be recordable as exactly that.
+ */
+function AttributionSelect({ row, surfaces, onSet, onClear, busy }) {
   return (
-    <tr className="border-t border-axal-hairline align-top">
+    <select
+      className={inputClass}
+      aria-label={`Where ${row.need_title || 'this engagement'} came from`}
+      value={row.surface_id ?? ''}
+      disabled={busy || surfaces.length === 0}
+      onChange={(e) => (e.target.value ? onSet(row, Number(e.target.value)) : onClear(row))}
+    >
+      <option value="">Not attributed</option>
+      {surfaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>
+  );
+}
+
+const engagementName = (row) => row.need_title || <Unrecorded>Untitled</Unrecorded>;
+const engagementMeta = (row) => `${row.founder_name || row.engagement_uid} · ${row.status}`;
+
+function AttributionRow(props) {
+  const { row } = props;
+  return (
+    <tr className="border-t border-axal-hairline align-top dark:border-gray-800">
       <td className="py-2 pr-3">
-        <div className="font-semibold">{row.need_title || <Unrecorded>Untitled</Unrecorded>}</div>
-        <div className="text-[11px] text-axal-faint">
-          {row.founder_name || row.engagement_uid} · {row.status}
-        </div>
+        <div className="font-semibold">{engagementName(row)}</div>
+        <div className="text-[12px] text-gray-600 dark:text-gray-400">{engagementMeta(row)}</div>
       </td>
       <td className="py-2 pr-3 tabular-nums">{row.price != null ? moneyDollars(row.price) : <Unrecorded />}</td>
-      <td className="py-2 pr-3">
-        <select
-          className={inputClass}
-          value={row.surface_id ?? ''}
-          disabled={busy || surfaces.length === 0}
-          onChange={(e) => (e.target.value ? onSet(row, Number(e.target.value)) : onClear(row))}
-        >
-          {/* Empty is a REAL choice, not a prompt: an engagement whose source
-              nobody knows must be recordable as exactly that. */}
-          <option value="">Not attributed</option>
-          {surfaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </td>
+      <td className="py-2 pr-3"><AttributionSelect {...props} /></td>
     </tr>
+  );
+}
+
+/** #4845 (OF-09): on a phone the same engagement is a labelled record, its select full width. */
+function AttributionCard(props) {
+  const { row } = props;
+  return (
+    <li className="border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-800" data-testid={`attribution-card-${row.engagement_id}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <b className="min-w-0 text-[14px]">{engagementName(row)}</b>
+        <span className="shrink-0 text-[13px] tabular-nums">{row.price != null ? moneyDollars(row.price) : <Unrecorded />}</span>
+      </div>
+      <div className="text-[12px] text-gray-600 dark:text-gray-400">{engagementMeta(row)}</div>
+      <AttributionSelect {...props} />
+    </li>
   );
 }
 
@@ -174,7 +204,8 @@ export default function PartnerVisibilityZone() {
     } catch (e) {
       setState({
         loading: false,
-        error: e?.message || 'The surface record did not load.',
+        // #4845: a written sentence (`zoneReadError`), never the response's text.
+        error: zoneReadError(e),
         data: null,
         attribution: null,
       });
@@ -239,6 +270,19 @@ export default function PartnerVisibilityZone() {
   // arrived, and `error` is cleared so the shared "This did not load" card —
   // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
   const unlinked = isNoPartnerProfile(state.error);
+  const attributionProps = (row) => ({
+    row,
+    surfaces: active,
+    busy,
+    onSet: (r, surfaceId) => run(
+      () => api.setPartnerEngagementSource(r.engagement_id, { surface_id: surfaceId }),
+      'Attributed.', `attr:${r.engagement_id}`,
+    ),
+    onClear: (r) => run(
+      () => api.clearPartnerEngagementSource(r.engagement_id),
+      'Attribution cleared.', `attr:${r.engagement_id}`,
+    ),
+  });
 
   return (
     <>
@@ -304,13 +348,18 @@ export default function PartnerVisibilityZone() {
       )}
       <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
+        // #4845: #5129's loading and Unavailable states (`SectionState`), as the
+        // other Offers zones draw them, in place of the older "This did not
+        // load" card.
+        what="Your surfaces"
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={reload}
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
-          <NothingYet
+          <OfferEmpty
+            testId="visibility-empty"
             title="No surface is recorded yet"
             body={
               'A surface is anywhere the firm appears and work can come from — a '
@@ -328,7 +377,7 @@ export default function PartnerVisibilityZone() {
       >
         <div className="space-y-6">
           {/* #4843 (D4843, board OF-05): the zone answers one question, with one primary action. */}
-          <ZoneHeading
+          <OfferHeading
             title="Where does our work come from?"
             blurb="Engagements and won value by the surface that brought them in."
             action={(
@@ -353,10 +402,10 @@ export default function PartnerVisibilityZone() {
           )}
 
           <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="visibility-sources">
-            {caption && <p className="m-0 px-3 pt-2.5 text-[11px] font-bold uppercase tracking-[.08em] text-axal-faint" data-testid="visibility-caption">{caption}</p>}
+            {caption && <p className="m-0 px-3 pt-2.5 text-[12px] font-bold uppercase tracking-[.08em] text-gray-600 dark:text-gray-400" data-testid="visibility-caption">{caption}</p>}
             {/* A desk reads a table; a phone reads the same rows as labelled cards (OF-09). */}
             <table className="hidden w-full text-left text-[13px] sm:table">
-              <thead className="text-[11px] font-bold uppercase tracking-[.06em] text-axal-faint">
+              <thead className="text-[12px] font-bold uppercase tracking-[.06em] text-gray-600 dark:text-gray-400">
                 <tr>
                   {['Source', 'Kind', 'Engagements', 'Won', 'Views', 'Trend'].map((h, i) => (
                     <th key={h} scope="col" className={`px-3 py-2 ${i === 2 || i === 3 ? 'text-right' : ''}`}>{h}</th>
@@ -394,40 +443,30 @@ export default function PartnerVisibilityZone() {
           <Section title="Where each engagement came from">
             <div id="visibility-attribution" className="scroll-mt-24" data-testid="visibility-attribution">
               {attribution.length === 0 ? (
-                <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-400">
                   No engagement yet. Win work and it appears here to be attributed;
                   until it is, it counts toward no surface.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[12.5px]">
-                    <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+                <>
+                  {/* #4845 (OF-09): a table from 640px, labelled records below it, so no
+                      engagement's select needs the page to scroll sideways. */}
+                  <table className="hidden w-full text-left text-[13px] sm:table" data-testid="attribution-table">
+                    <thead className="text-[12px] font-extrabold uppercase tracking-[.06em] text-gray-600 dark:text-gray-400">
                       <tr>
-                        <th className="pb-1 pr-3">Engagement</th>
-                        <th className="pb-1 pr-3">Value</th>
-                        <th className="pb-1 pr-3">Came from</th>
+                        <th scope="col" className="pb-1 pr-3">Engagement</th>
+                        <th scope="col" className="pb-1 pr-3">Value</th>
+                        <th scope="col" className="pb-1 pr-3">Came from</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {attribution.map((row) => (
-                        <AttributionRow
-                          key={row.engagement_id}
-                          row={row}
-                          surfaces={active}
-                          busy={busy}
-                          onSet={(r, surfaceId) => run(
-                            () => api.setPartnerEngagementSource(r.engagement_id, { surface_id: surfaceId }),
-                            'Attributed.', `attr:${r.engagement_id}`,
-                          )}
-                          onClear={(r) => run(
-                            () => api.clearPartnerEngagementSource(r.engagement_id),
-                            'Attribution cleared.', `attr:${r.engagement_id}`,
-                          )}
-                        />
-                      ))}
+                      {attribution.map((row) => <AttributionRow key={row.engagement_id} {...attributionProps(row)} />)}
                     </tbody>
                   </table>
-                </div>
+                  <ul className="m-0 list-none p-0 sm:hidden" data-testid="attribution-cards">
+                    {attribution.map((row) => <AttributionCard key={row.engagement_id} {...attributionProps(row)} />)}
+                  </ul>
+                </>
               )}
             </div>
             {/* Scoped by a PREFIXED key, not a bare id. A surface id and an
@@ -473,7 +512,7 @@ export default function PartnerVisibilityZone() {
             nothingToDraft="No surface is recorded yet, so there is nothing to compare."
           />
 
-          <p className="text-[12px] text-axal-faint">
+          <p className="text-[12px] text-gray-600 dark:text-gray-400">
             Passing on a lead with a named reason lives on{' '}
             <Link to="/offers/audience-fit" className="text-amber-700 underline">Audience fit</Link>.
           </p>

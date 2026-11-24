@@ -365,7 +365,9 @@ const market = {
 
 const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Compliance'], ['risk', 'Risk'], ['culture', 'Culture']]);
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
-const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
+const REMIND_PRESETS = [30, 14, 7, 1, 0];
+const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
+const remindField = { note: 'At most three reminders.', kind: 'CK', name: 'remind', k: 'Remind', opts: REMIND_PRESETS.map(n=>({value:String(n),label:reminderLabel(n),checked:n===14||n===1})) };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
 // D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
 const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
@@ -842,6 +844,16 @@ export const FORMS = {
   // Build's six canvas forms join from `BUILD_FORMS` below (#1656 PR 3b).
 };
 
+/**
+ * D8259: forms only their own address opens (`/new?form=<key>`), never an Add button: Add a suggested filing.
+ * CycleRoute looks here after `formsFor`, so `formsFor` stays the module's buttons.
+ */
+export function addressFormFor(cycle, slug, key) {
+  const byCycle = Object.prototype.hasOwnProperty.call(ADDRESS_FORMS, cycle) ? ADDRESS_FORMS[cycle] : null;
+  const list = byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : [];
+  return list.find((f) => f.key === key) || null;
+}
+
 /** All Add forms for a module, in button order. */
 export function formsFor(cycle, slug) {
   const byCycle = Object.prototype.hasOwnProperty.call(FORMS, cycle) ? FORMS[cycle] : null;
@@ -1129,8 +1141,6 @@ const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
 /** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
 const KEEP_TYPED_OWNER = '__typed';
 // #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
-const REMIND_PRESETS = [30, 14, 7, 1, 0];
-const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
 const editObligation = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-obligation',
@@ -1743,18 +1753,28 @@ const editTheme = {
   submit: (w, projectId, id, v) => w.validate.themeUpdate(projectId, id, editTheme.toBody(v)),
 };
 
+// D6007 (#6007, V23): the segment's own firmographics and disqualifiers, one per line, on Edit only.
+const segmentProfileFields = [
+  { kind: 'T', name: 'firmographics', k: 'Firmographics', input: 'textarea', max: 2000, ph: 'Company size: 50–200 people', note: 'One per line, as Label: value.' },
+  { kind: 'T', name: 'disqualifiers', k: 'Disqualifiers', input: 'textarea', max: 2000, ph: 'Under 20 staff', note: 'One per line. An empty box clears the list.' },
+];
 const editSegment = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-segment', title: 'Edit segment', sub: segment.sub,
-  fields: segmentFields,
+  fields: [...segmentFields, ...segmentProfileFields],
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since',
+      'firmographics', 'disqualifiers'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;
   },
-  toBody: (v) => onlyShown(v, segmentBody(v), { score_since: 'score_against' }),
+  toBody: (v) => onlyShown(v, {
+    ...segmentBody(v),
+    // An emptied box sends null, which clears the list; the Worker parses one per line.
+    firmographics: str(v.firmographics), disqualifiers: str(v.disqualifiers),
+  }, { score_since: 'score_against' }),
   submit: (w, projectId, id, v) => w.validate.segmentUpdate(projectId, id, editSegment.toBody(v)),
 };
 
@@ -1947,14 +1967,17 @@ const buildItem = {
   title: 'Add item',
   sub: 'A roadmap item moves a KPI or answers a feedback theme.',
   foot: 'Issues from a connected GitHub repository land here too.',
-  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
-  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' },
+    // D6036 (#6036): the feature the item ships, from Solution design; Nothing keeps it unlinked.
+    { kind: 'CH', name: 'feature_id', k: 'Feature', opts: [NOTHING], def: 0, optionsFrom: 'features' }],
+  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id), feature_id: idOrNull(v.feature_id) }),
   // D6097: a feedback record's Add to roadmap (`/build/product-roadmap/new?feedback_theme=Speed`) opens it with that theme chosen.
   fromQuery: (q) => feedbackThemeOf(q.get('feedback_theme')),
   // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
   loadOptions: buildOptions('product-roadmap', (read) => ({
     kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
     waits_on_id: { options: [NOTHING, ...readChips(read, 'waits_on_id')], def: 0 }, owner_user_id: ownersOf(read),
+    feature_id: { options: [NOTHING, ...readChips(read, 'feature_id')], def: 0 },
   })),
   submit: (w, projectId, v) => w.build.roadmapItem(projectId, buildItem.toBody(v)),
 };
@@ -2063,6 +2086,39 @@ const buildFiling = {
     return made;
   },
 };
+
+/** D8259 (#8259, BD28): a suggestion's values reach the form on its address; anything else is ignored. */
+const SUGGESTION_KINDS = new Set(['franchise_tax', 'annual_report', 'other']);
+export function suggestedFilingValues(q) {
+  const out = {};
+  const title = (q.get('title') || '').trim();
+  if (title && title.length <= 200) out.title = title;
+  if (SUGGESTION_KINDS.has(q.get('kind'))) out.kind = q.get('kind');
+  if (q.get('jurisdiction') === 'Federal') out.jurisdiction = 'Federal';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(q.get('due_date') || '')) out.due_date = q.get('due_date');
+  return out;
+}
+/**
+ * D8259 (#8259, BD28 A): "Add to my filings" on a suggested filing. The same filing, form and write as Add filing,
+ * opened with the suggestion's name, kind and date, which the founder can change. It has no Add button of its own:
+ * it is in ADDRESS_FORMS, not FORMS, and is `addressOnly`, so only a suggestion's link opens it, at `?form=suggested`.
+ * Nothing is filed.
+ */
+const buildSuggestedFiling = {
+  ...buildFiling,
+  key: 'suggested', cta: 'Add to my filings', button: 'Add to my filings', addressOnly: true,
+  title: 'Add a suggested filing',
+  sub: 'A filing from Axal’s pack for your company. Check the date before you save it. Nothing is filed.',
+  fields: [{ kind: 'T', name: 'title', k: 'Filing', required: true, ph: 'Delaware franchise tax + annual report' }, ...filingFields, proofField],
+  fromQuery: suggestedFilingValues,
+  toBody: (v) => ({ ...filingBody(v), title: str(v.title) }),
+  // Add filing's own submit (its proof upload and retry, D4600), with the suggestion's name on the filing it creates.
+  submit: (w, projectId, v, memory = {}) => buildFiling.submit({ ...w, build: { ...w.build,
+    formationStep: (id, body, key) => w.build.formationStep(id, { ...body, title: str(v.title) }, key) } }, projectId, v, memory),
+};
+
+/** D8259: the forms `addressFormFor` opens. */
+const ADDRESS_FORMS = { build: { 'company-creation': [buildSuggestedFiling] } };
 
 /** D4600: the label the Add filing button takes once only the proof upload is left. */
 const PROOF_RETRY = 'Retry proof upload';

@@ -10,7 +10,9 @@ its data, passes it in, and does only what these functions allow.
 | File | What it holds |
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
+| `concurrency.mjs` | Queue admission holds (#8076, D8076), pure: at most `PRIVILEGED_IN_QUEUE` `pr:privileged` PRs and `PER_SLOT_IN_QUEUE` PRs per slot in the merge queue, the one-line reason for a hold, and the shared-state workflows' concurrency groups. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
+| `conflict-indicator.mjs` | The PR-list conflict indicator (#6476, D6476-p5): labels a confirmed conflict `conflict` and clears it only on a fresh `mergeable: true` for the current head and main. Labels only. |
 | `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
 | `refresh-rules.mjs` | The serial refresh's pure rules (#6478): which PRs inherited main's failure, how many the window allows, and the one-at-a-time loop that stops at a breaker. |
 | `refresh.mjs` | The serial refresh's entry point (`plan`, `apply`): update-branch with the App token, else the keeper's runner merge. |
@@ -64,6 +66,22 @@ Configure the GitHub Actions environment `landing-bot` to accept deployments fro
 
 Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_ENABLED`.
 
+**Concurrency holds (#8076, D8076).** Before it plans an entry, and again before each write, the feeder reads the
+queue's entries and each candidate's slot. The slot is the `slot:S…` label on the issue the PR body names. It then
+holds back a candidate when either is true:
+- a `pr:privileged` PR is already queued (`PRIVILEGED_IN_QUEUE`, 1);
+- the candidate's slot already has `PER_SLOT_IN_QUEUE` (3) PRs queued, counting the entries this sweep made.
+
+A PR that names no issue with a slot is not counted per slot. If the queue or a slot cannot be read, the candidate
+is held, never admitted. Each hold adds one line to the run summary, for example "Held from the merge queue: slot
+S07 already has 3 PRs queued (#1, #2, #3), and the most is 3." A hold ends on its own once an entry leaves the queue.
+The owner may change either constant in `rules.mjs` on #8076. GitHub's own queue limits are #8060's.
+
+**Shared-state workflows.** Each workflow in `concurrency.mjs`'s `SHARED_STATE_GROUPS` declares its own
+`concurrency` group with `cancel-in-progress: false`, so two runs that write the same state never interleave. The
+list covers labels sync, the conflict indicator, the keeper, the feeder, and the deploy's retention ledger.
+`landing_concurrency_8076.test.mjs` fails if one loses its group.
+
 The workflow uploads the exact selected PR numbers and SHAs before requesting the write token, rechecks each candidate, and requests normal queue entry with GitHub's expected-head guard. An uncertain response stops the sweep. Check the PR timeline before taking any action on that entry.
 
 ## The branch keeper
@@ -88,8 +106,19 @@ twice, with and without the rules. Only `README.md` files may differ between the
   the push fails, which is intended.
 - If GitHub refuses the push because main's changes include a workflow file, the keeper tries the update-branch
   API. If that fails too, it hands the PR back. Each run's summary counts these refusals.
-- A real conflict is labelled `conflict` and listed in the sticky comment, and the resolver is asked.
+- A real conflict is labelled `conflict` (the PR-list indicator) and `bot:keeper-tried` (the keeper's own hand-back),
+  listed in the sticky comment, and the resolver is asked. The keeper waits for a push only on its own
+  `bot:keeper-tried` or `needs-session`, never on `conflict` alone (D6476-p5).
 - A conflict in a file `pathGuard()` refuses, or a refused union, is handed back with `needs-session`.
+
+**Three attempts, then for good (D6476-p6, #8077).** A PR gets at most three keeper attempts, whatever their
+outcome. The count is the larger of two records: the App's `bot:keeper-tried` label events plus its keeper merge
+commits, or the `Keeper attempt k of 3: <outcome>` lines in the sticky comment. The sticky count matters because
+GitHub writes no new label event when the label is already on. Each attempt adds its line and keeps the earlier
+ones. A conflict on the third attempt adds `needs-session` with a final line, and the resolver is not asked. A
+fourth attempt is never planned, not after a push and not on a dispatch. If any record cannot be read, nothing is
+planned for that PR. The ejection handler hands an exhausted PR's conflict to the owner (`ejected`) and does not
+wait for the keeper.
 
 **Daily pushes.** The plan uploads a reservation artifact before any push, and pushes only if the upload
 succeeded. The next run counts today's reservations against `LANDING_BOT_DAILY_PUSHES`.
@@ -160,6 +189,42 @@ ejection, then:
   - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
+## The conflict indicator
+
+`.github/workflows/landing-conflict-indicator.yml` (#6476 owner addition, D6476-p5) runs on each push to main and every
+15 minutes, with the workflow's `GITHUB_TOKEN` and no App. For every open PR into main:
+- **GitHub says `CONFLICTING`:** it adds `conflict` if missing, whether checks are green or pending, and keeps every
+  other label.
+- **The list says `MERGEABLE` and `conflict` is on:** it re-reads the PR. It removes the label only if that read says
+  `mergeable: true`, on the head the list saw, against the current main head.
+- **Unknown, uncomputed or unread:** it changes nothing.
+
+The label explains; it authorises nothing. No bot reads it to decide an action. It never merges main, runs a model,
+enqueues or re-runs CI, and it works with every repair bot off.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_CONFLICT_LABELS` | `true` turns the indicator on; anything else leaves the workflow skipped. Separate from `LANDING_BOT_ENABLED`. |
+
+Otherwise it either waits or hands back (#6476 S1, D6476-p4):
+- **Waits, unlabelled,** when only a condition that clears on its own holds: required checks still running on the
+  current head (a keeper merge always starts new ones), evidence that could not be read, the head moving between
+  reads, a breaker or `[alert] merge queue stalled`, or a daily budget that resets. Each sweep looks again and
+  re-reads the head's full-suite and required-check evidence, consent, budgets and breakers; the same removal is
+  restored once it all holds. Past 24 hours after the ejection it is handed back instead.
+- **Hands back with `ejected`** when the owner must act: no consent (a person removed it, or a commit other than a
+  no-model merge of main), a failed required check, `bot:off`, a `repair/` branch, a `.gitattributes` change, or a
+  class that is never re-queued.
+- **Mergeability:** a re-queue needs GitHub's `mergeable: true` on the fresh read, for every class. An explicit
+  `false` (even after a cascade or infrastructure ejection) is a conflict; `null` waits.
+- **A conflict** asks the keeper only in the first 20 minutes after the ejection; after that the keeper's own
+  15-minute schedule runs. If the keeper's merge landed and GitHub still reports a conflict, it hands back.
+  Once the keeper has used its three attempts (D6476-p6), the conflict is handed back at once.
+
+One sticky comment says which, and a sweep whose outcome has not changed writes nothing. `ejected` labels the App
+wrote before 2026-11-21, when it labelled the waiting cases too, get one fresh look on removals under 7 days old;
+on a restore the App removes only its own label, after a fresh read shows it is still the App's. A stranded hand-back
+adds `bot:handed-back`, which makes it final and is never removed. A label a person added is never second-guessed.
 ## The serial refresh
 
 `.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green

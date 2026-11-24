@@ -1,5 +1,7 @@
 # frontend/test — what the frontend guarantees
 
+`ci_capacity_auth_composition_8011.test.mjs` exercises the inactive capacity runtime's signed authentication, SQLite admission and trusted reader continuation through the Node platform adapter. `ci_capacity_transport.test.mjs` retains the real Linux profile/executor composition and its success, failure, revocation and incomplete-result cases. Neither suite is live provider or deployed Workers-runtime evidence.
+
 ```
 node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'
 ```
@@ -56,6 +58,8 @@ also exercises a `project_id` deep link.
 | `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
 
 | `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
+
+| `deal_summary_menu_7771.test.mjs` | #7771: labelled Share menu availability on desktop/phone, PDF filename and blob, Worker refusals and abort on unmount. |
 
 ## Conventions
 
@@ -198,7 +202,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 `venture_context_5074.test.mjs` checks D5074: every venture alias resolves to one context, the one `?project_id=` form, legacy redirects keeping the query and hash, the Data room on the shared context only, and its controls drawn from the Worker's capabilities. `_data_room_capabilities.mjs` holds those capability maps for fixtures; the Worker's `data_room_capabilities_5074.test.ts` pins them to `cloudflare-worker/src/services/dataRoomCapabilities.ts`.
 
-`raise_refused_no_data_5079.test.mjs` checks D5079: a refused authoritative read ends the rendering of authoritative data for that Raise tool. It mounts the real `CycleRoute` on a stubbed Worker whose module read succeeds while the tool's own read answers 403, and pins that the Cap table, Data room and Capital relationships pages then draw the tool's refusal and none of the module's card, records, Add, counts, Eadwyn bands or Evidence block — while an empty read still draws all of them, a 500 is still a failure and not a refusal, a Data room `summary` answer says it is not the room rather than drawing nothing, Capital relationships no longer calls a refusal unreadable, and the Cap table withholds its tool bar and Record an issuance and offers an admin the reason-gated door. Each guarded line is broken on disk and the file re-run in a child process filtered to the tests that must then fail, because the refusal travels from a tool's read through `CycleRoute` into the module page.
+`raise_refused_no_data_5079.test.mjs` checks D5079: a refused authoritative read ends the rendering of authoritative data for that Raise tool. It mounts the real `CycleRoute` on a stubbed Worker whose module read succeeds while the tool's own read answers 403, and pins that the Cap table, Data room and Capital relationships pages then draw the tool's refusal and none of the module's card, records, Add, counts, Eadwyn bands or Evidence block — while an empty read still draws all of them, a 500 is still a failure and not a refusal, a Data room `summary` answer says it is not the room rather than drawing nothing, Capital relationships no longer calls a refusal unreadable, and the Cap table withholds its tool bar and Record an issuance and offers an admin the reason-gated door. Each guarded line is broken in a temporary copy of `frontend/src` and `frontend/test` (every other entry links to the checkout) and the file re-run there in a child process filtered to the tests that must then fail, because the refusal travels from a tool's read through `CycleRoute` into the module page. The checkout is never written to, so test files running in parallel never import a broken line.
 
 - `scan_triggers_5602.test.mjs` — D5602 admission, artifact fencing, real alert CLI transitions and mutation coverage.
 `runner_lanes_5611.test.mjs` checks branch-only benchmark triggers, exact merged suite-step parity and free-runner placement of non-token secret jobs (D5611).
@@ -244,10 +248,12 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `free_secret_detection_7899.test.mjs` | D7899 dedicated Axal bearer detection, public-prefix/placeholder exclusions and refusal of blanket JWT exemptions. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `grow_export_6103.test.mjs` | D6103: `canExport` covers only Feedback and KPIs, `exportCsv`'s path and query against the Worker route, Export drawn only with `onExport` (and only on `can_export` in CycleRoute), the saved row count and the Worker's refusal sentence. |
 | `portfolio_mark_today_d6226.test.mjs` | D6226: Positions counts stale marks from the positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip; the reference-date order. |
 | `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
 | `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
 
+| `research_errors_7587.test.mjs` | D7587: recording Start recovery, microphone release, preserved queued audio and explicit session navigation. |
 `release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
 ## Observable readiness (D5504)
 
@@ -255,6 +261,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
 Prefer scoped business clocks and explicit observable outcomes to a fixed count
 of event-loop turns. The migration inventory and first changed-test command are
@@ -263,11 +270,20 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
+`company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
+`portfolio_unavailable_6201.test.mjs` (D6201) keeps explicit route failure reasons on financial figures and reporting, and excludes failed reads from chase rows.
 `icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
 
+| `runner_capacity_7888.test.mjs` | D7888: bounded read-only capacity metadata, pagination, identity/timing/privacy, failure/cancel/restart and CLI GET-only checks. |
 `runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
 | `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
 
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
+
+| `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
+| `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
+| `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
+
+`hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.

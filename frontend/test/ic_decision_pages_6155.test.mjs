@@ -48,7 +48,7 @@ test('a recusal sends the declared conflict as its rationale, and nothing withou
   assert.match(src, /\{RECUSAL_FINAL_LINE\}/, 'the control says it is final');
   assert.match(RECUSAL_FINAL_LINE, /final/);
   // A refused later vote shows the Worker's own words: the catch keeps e.message.
-  assert.match(src, /const recuse = async[\s\S]*?catch \(e\) \{ setErr\(e\.message\); \}/);
+  assert.match(src, /const recuse = async[\s\S]*?catch \(e\) \{ fail\(e\); \}/);
 });
 
 test('a member who recused is told so and offered no further vote', () => {
@@ -62,8 +62,8 @@ test('a member who recused is told so and offered no further vote', () => {
 });
 
 test('tallies are words and numbers, recused beside them, Not recorded never 0', () => {
-  assert.equal(tallyText({ yes: 3, no: 1, abstain: 0, recused: 2 }), 'Yes 3 · No 1 · Abstain 0 · Recused 2');
-  assert.equal(tallyText({ yes: 2, no: 0, abstain: 1 }), 'Yes 2 · No 0 · Abstain 1 · Recused Not recorded');
+  assert.equal(tallyText({ yes: 3, no: 1, abstain: 0, recused: 2 }), 'Invest 3 · Pass 1 · Abstain 0 · Recused 2');
+  assert.equal(tallyText({ yes: 2, no: 0, abstain: 1 }), 'Invest 2 · Pass 0 · Abstain 1 · Recused Not recorded');
   assert.equal(tallyText(null), 'Votes not recorded');
   for (const file of ['pages/ICDecisionPage.jsx', 'pages/ICDecisionsPage.jsx']) {
     const src = read(file);
@@ -72,26 +72,25 @@ test('tallies are words and numbers, recused beside them, Not recorded never 0',
   }
 });
 
-test('conditions are listed read-only, and the commit room link only for roles it admits', () => {
+test('conditions use author controls, and Commit admits the owner-approved partner role', () => {
   assert.equal(canOpenCommitRoom('admin'), true);
   assert.equal(canOpenCommitRoom('investor'), true);
-  assert.equal(canOpenCommitRoom('partner'), false, '/deals/commit refuses a partner');
+  assert.equal(canOpenCommitRoom('partner'), true, 'D6154: partners use Commit only');
   const app = read('App.jsx');
-  assert.match(app, /path="\/deals\/commit" element=\{guard\(\['admin', 'investor'\]/, 'the guard this rule mirrors');
+  assert.match(app, /path="\/deals\/commit" element=\{guard\(\['admin', 'partner', 'investor'\]/, 'the guard this rule mirrors');
   const src = read('pages/ICDecisionPage.jsx');
   assert.match(src, /\{canOpenCommitRoom\(role\) && \(\s*<Link to="\/deals\/commit"/);
   assert.match(src, /CONDITION_WORDS\[cond\.status\]/);
-  assert.doesNotMatch(src, /api\.icCondition/, 'no condition is changed here');
+  assert.match(src, /canChange\?<form/);assert.match(src,/api\.icAddCondition/);
 });
 
 test('a failed read is Unreadable with Try again on both pages', () => {
   const detail = read('pages/ICDecisionPage.jsx');
-  assert.match(detail, /Unreadable: this IC record could not be read\./);
+  assert.match(detail, /DataState state=\{errState\} reason=\{`This IC record could not be read\./);
   assert.match(detail, /onClick=\{load\}[\s\S]{0,300}Try again/);
-  const list = read('pages/ICDecisionsPage.jsx');
-  assert.match(list, /\) : readErr \? \(/, 'a failed list read is not "No IC decisions yet"');
-  assert.match(list, /Unreadable: the IC decisions could not be read\./);
-  assert.match(list, /onClick=\{load\}[\s\S]{0,300}Try again/);
+  const list = read('pages/investor/deals/CommitZone.jsx');
+  assert.match(list, /room === UNAVAILABLE/);assert.match(list,/The committee record could not be read/);
+  assert.match(list, /onRetry=\{load\}/);
 });
 
 test('/ic and /ic/:uid light the Deals row', () => {

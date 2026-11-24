@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {MemoryRouter} from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   CommitStrip, ConditionsCard, DecisionCard, HowThisWorks, MinutesCard, NoOpenDecision, UNAVAILABLE,
@@ -19,11 +20,12 @@ import {
 } from '../src/pages/investor/deals/CommitZone.jsx';
 
 const h = React.createElement;
-const html = (el) => renderToStaticMarkup(el);
+const html = (el) => renderToStaticMarkup(h(MemoryRouter,null,el));
 const ZONE = readFileSync(resolve(process.cwd(), 'frontend/src/pages/investor/deals/CommitZone.jsx'), 'utf8');
 
 const OPEN = {
   uid: 'd-open', title: 'Fixture decision', status: 'voting', created_by: 1,
+  roster: { available: false, eligible: null, to_vote: null, members: [], reason: 'No voting roster is set for this decision.' },
   tally: { yes: 1, no: 0, abstain: 1, recused: 1 }, votes_cast: 3, rationales: 2,
   votes: [
     { user_id: 1, user_name: 'Partner One', vote: 'yes', rationale: 'Within thesis', created_at: '2026-11-07 10:12:00' },
@@ -68,9 +70,16 @@ test('DE07 strip: votes cast leave the recusal out, and the meeting is drawn onl
 
 test('the decision card shows eligible voters (Not recorded), voted and recused, and one row per vote', () => {
   const out = html(h(DecisionCard, { decision: OPEN }));
-  assert.match(out, /<dt>Eligible voters<\/dt><dd><span[^>]*>Not recorded<\/span><\/dd>/);
+  assert.match(out, /<dt>Eligible voters<\/dt><dd[^>]*><span[^>]*>Not recorded<\/span><\/dd>/);
   assert.match(out, /<dt>Voted<\/dt><dd[^>]*>2<\/dd>/);
-  assert.match(out, /<dt>Recused<\/dt><dd[^>]*>1<\/dd>/);
+  assert.match(out, /<dt>Recused<\/dt><dd[^>]*>(?:<span[^>]*>⊘ <\/span>)1 <span[^>]*>· beside the tally<\/span><\/dd>/);
+  // D6144: with a roster set, eligible and to-vote are its figures; with none read at all, Unavailable (never Not recorded, never 0).
+  const rostered = html(h(DecisionCard, { decision: { ...OPEN, roster: { available: true, eligible: 5, to_vote: 2, members: [] } } }));
+  assert.match(rostered, /<dt>Eligible voters<\/dt><dd[^>]*>5<\/dd>/);
+  assert.match(rostered, /<dt>To vote<\/dt><dd[^>]*>2<\/dd>/);
+  const unread = html(h(DecisionCard, { decision: { ...OPEN, roster: undefined } }));
+  assert.match(unread, /<dt>Eligible voters<\/dt><dd[^>]*><span[^>]*>Unavailable<\/span><\/dd>/);
+  assert.doesNotMatch(unread, /<dt>To vote<\/dt>/);
   assert.match(out, /Partner.*Vote.*Rationale.*Recorded/s);
   assert.match(out, /7 Nov 2026, 10:12/);
   // An abstention with no reason reads Not recorded, not blank.
@@ -171,7 +180,7 @@ test('DE07b: with no open decision the page says so, with How voting works', () 
   // the empty store.
   const z = codeOnly(ZONE);
   assert.match(z, /current \? \([\s\S]*?\) : \(\s*<NoOpenDecision decided=\{decided\}/);
-  assert.match(z, /empty=\{<NoOpenDecision \/>\}/);
+  assert.match(z, /empty=\{<NoOpenDecision onOpen=\{\(\) => setOpening\(true\)\} \/>\}/);
 });
 
 test('long method text sits under How this works, not on the record', () => {
@@ -201,8 +210,11 @@ test('review #6876 (1): every place that prints a decision\'s rationales counts 
   assert.equal(`${OPEN.rationales} of ${OPEN.votes_cast}`, '2 of 3');
   assert.equal(`${ballotOf(OPEN).rationales} of ${ballotOf(OPEN).voted}`, '1 of 2');
   const code = codeOnly(ZONE);
+  const list=readFileSync(resolve(process.cwd(),'frontend/src/pages/ICDecisionsPage.jsx'),'utf8');
+  assert.match(list,/ballotOf\(d\)\.rationales/);
+  assert.match(list,/ballotOf\(d\)\.voted/);
   assert.doesNotMatch(code, /\$\{r\.rationales\} of \$\{r\.votes_cast\}/, 'a table or export still prints the Worker\'s count');
-  assert.equal((code.match(/`\$\{ballotOf\(r\)\.rationales\} of \$\{ballotOf\(r\)\.voted\}`/g) || []).length, 2, 'the table and the export');
+  assert.equal((code.match(/`\$\{ballotOf\(r\)\.rationales\} of \$\{ballotOf\(r\)\.voted\}`/g) || []).length, 1, 'the existing export; D6154’s list uses the same ballot model');
 });
 
 test('review #6876 (2): the current decision\'s strip and card count its own open conditions, and the cross-decision list says so', () => {

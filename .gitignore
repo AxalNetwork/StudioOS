@@ -181,3 +181,7 @@ private-payloads/
 *capture*.tar.gz
 *capture*.tgz
 *capture*.7z
+
+# D5505: local guard and preflight diagnostics, regenerated for each invocation.
+/guard-results.json
+/preflight-results.json

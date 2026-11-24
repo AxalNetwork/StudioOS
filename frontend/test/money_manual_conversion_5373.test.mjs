@@ -32,7 +32,6 @@ const rootPath = fileURLToPath(root);
 const ALLOW = [
   { kind: 'not-money', reason: "A percentage, ratio or rounding to two places, not an amount of currency: the line has a money word beside it.", files: {
     "frontend/src/pages/PortfolioPerformancePage.jsx": 1,
-    "frontend/src/pages/SpinoutLabMarketPage.jsx": 2,
     "frontend/src/pages/admin/insights/insightsModel.js": 1,
     "frontend/src/pages/admin/payments/dialogModel.js": 1,
     "frontend/src/pages/founder/callsModel.js": 1,
@@ -86,7 +85,7 @@ const ALLOW = [
     "frontend/src/pages/admin/fundAdmin/performanceModel.js": 5,
     "frontend/src/pages/hq/HqFundsPage.jsx": 1,
     "frontend/src/pages/investor/FundLedgerPanel.jsx": 1,
-    "frontend/src/pages/investor/InvestorFundLPs.jsx": 2,
+    "frontend/src/pages/investor/fundLpRecordModel.js": 2, // D6242: the register's dollar figures, moved from InvestorFundLPs.jsx
     "frontend/src/pages/investor/InvestorFundLanding.jsx": 2,
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
     "frontend/src/pages/investor/fundCallsModel.js": 2,
@@ -200,6 +199,8 @@ const ALLOW = [
     "cloudflare-worker/src/services/growCycle.ts": 1,
     // D6104: +1, burn multiple divides the USD-only ledger's cents into project_metrics dollars.
     "cloudflare-worker/src/services/growKpis.ts": 4,
+    // D6103: +1, the KPI export writes a `usd` KPI's whole dollars as cents.
+    "cloudflare-worker/src/services/growExport.ts": 1,
     "cloudflare-worker/src/services/marketReadingRead.ts": 1,
     "cloudflare-worker/src/services/publishSources.ts": 1,
     "cloudflare-worker/src/services/raiseClaims.ts": 1,

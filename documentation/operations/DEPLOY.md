@@ -128,6 +128,21 @@ of that year.
 
 ---
 
+### 1.4 Credentials and environments (D8069, #8069)
+
+Every job that reads a cloud credential names the GitHub environment that holds it. `frontend/test/workflow_environments_8069.test.mjs` fails the build when one does not.
+
+| Environment | Who may enter | Jobs |
+| --- | --- | --- |
+| `production` | `main` only, the owner approves | the release (`cloudflare-worker-deploy.yml` deploy, schema-drift, branches), `d1-migrate.yml`, and the merge-control, meeting-bot and archive-observer deploys |
+| `production-ops` | `main` only, the owner approves | the D1 backup, the DR drill and its synthetic outside restore, file recovery (snapshot and synthetic proof), the probes, branch provisioning and the gateway jobs |
+| `preview` | `main` only, no reviewer | the pull-request preview's deploy and delete (`pr-preview-deploy.yml`) |
+| `agent-compute-preview` | `main` only, independent review | the disabled compute host |
+
+The release's admission and rollback contract above is unchanged. A pull-request run enters none of these environments, so it holds no deploy credential. Each deploy and ops workflow grants no permission at the top (`permissions: {}`). Each job declares what it uses. `id-token: write` appears only on a job that exchanges the OIDC token (Claude's federation, the capacity planner, and from #8064 an AWS or Azure login).
+
+No workflow reads a long-lived AWS or Azure key. Cloudflare has no OIDC federation, so its tokens are scoped per Worker and per environment (#8064). The preview jobs read `PR_PREVIEW_CLOUDFLARE_API_TOKEN`, not the generic name. Until the repository copy of `CLOUDFLARE_API_TOKEN` is deleted, an absent environment secret of that name would fall back to the production-capable repository token. The [credential runbook](PRODUCTION_CREDENTIALS.md) has the cutover steps and the owner gates.
+
 ## 2. Pre-flight
 
 Run these before deploying. Read **exit codes**, not output — several of these
@@ -394,6 +409,61 @@ workspace mints tokens the deployed worker accepts. The worker validates
 against *its own* secret, and the two are not necessarily the same value. Use
 a real production session, or prove secret parity first. Skipping this step has
 already produced one false "production auth is broken" report.
+
+### 5.2 Which build is live, and its provenance (D8073, #8073)
+
+Each production deploy leaves three things behind:
+
+- **The served version.** `GET /api/public/version` answers
+  `{ sha, version_id, built_at, missing }`. Every field comes from the
+  bundle's own bindings and nothing is read from D1:
+  - `sha` comes from `WORKER_DEPLOY_VERSION`, which the deploy already stamps
+    with `GITHUB_SHA`;
+  - `version_id` comes from the `[version_metadata]` binding
+    `CF_VERSION_METADATA`;
+  - `built_at` comes from `WORKER_BUILT_AT`.
+
+  A field the deploy did not stamp is `null`, and `missing` names it.
+  `scripts/check-spa-live.mjs` reads the route on every host. With
+  `SMOKE_EXPECT_SHA` set, the served `sha` must equal it. Unset, it must be a
+  commit sha at all. A host serving another build fails the smoke and names
+  both shas.
+- **The record.** `scripts/deploy/record-deployment.mjs` writes one row to D1
+  `deployments` through `POST /api/internal/deployments` and appends the same
+  line to the run summary. The row holds the sha, the run id, the Worker
+  version id, the attestation URL, `built_at`, `deployed_at` and `rollback_of`.
+  - The route takes `Authorization: Bearer <DEPLOY_RECORD_TOKEN>`, a Worker
+    secret whose GitHub copy is held only by the `production` environment.
+  - Unset, the route answers 503. With a wrong token it answers 401.
+  - A re-run of the same deploy answers the row already there. A re-post
+    that disagrees with that row answers 409.
+- **The attestation.** `actions/attest-build-provenance` signs `docs/` and the
+  Worker bundle. Its URL is what the record's `attestation_url` points at.
+
+**What is live today.** The route, the record, the table and the smoke
+assertion ship with #8073. The deploy workflow lines are #8069's: the
+attestation step, `WORKER_BUILT_AT`, the `[version_metadata]` binding, the
+record step and `SMOKE_EXPECT_SHA`. They are proposed there as a diff, and
+until they land:
+- `version_id` and `built_at` read `null`;
+- the smoke checks only that some sha is served;
+- the record is written by hand from a shell that holds the token, for
+  example after an operator dispatch:
+
+```bash
+DEPLOY_RECORD_TOKEN=... GITHUB_SHA=<sha> GITHUB_RUN_ID=<run id> \
+WRANGLER_DEPLOY_LOG=deploy.log ATTESTATION_URL=<url> \
+node scripts/deploy/record-deployment.mjs
+```
+
+It exits 1, and the summary carries no line, when the record was not
+written. The deploy itself is not undone. Rollback mechanics are out of scope
+here. `rollback_of` only names the recorded deploy that a rollback undid.
+
+**Rollback of this change.** Reverting the PR removes the route, the smoke
+assertion and the script. The `deployments` table stays, unread, because
+migrations are forward-only. Unsetting `DEPLOY_RECORD_TOKEN` alone stops new
+records: the route answers 503.
 
 ---
 

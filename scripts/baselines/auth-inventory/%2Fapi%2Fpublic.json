@@ -154,6 +154,12 @@
     "kind": "link_token",
     "state": "unreviewed"
   },
+  "GET /api/public/version": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "public_by_design",
+    "note": "D8073: names the running build (commit sha, Worker version id, build time) from deploy-time bindings, with no D1 read. The repository and its deploy log are public, so it gives nothing away; the post-deploy smoke reads it with no credentials."
+  },
   "POST /api/public/analytics/pageview": {
     "review": "no_gate_found",
     "kind": "public_content",

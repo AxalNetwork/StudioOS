@@ -109,6 +109,24 @@ export const POLICY_REFUSALS = {
   // D7074: the capacity ceilings (aiPolicy.ts capacityCeilingsOf).
   invalid_ceiling: 'Each ceiling is a whole number in its range, up to 500 elastic runs and 50 lanes, or blank to stop offering it.',
   lanes_need_run_ceiling: 'Set the per-run ceiling first. Sub-agents share their agent’s monthly cap, and without a per-run ceiling one run’s cost has no bound.',
+  // D8070: the capability matrix.
+  capability_ungrantable: 'That capability is done by a person. No agent can be granted it.',
+  capability_unknown: 'Name capabilities from the catalogue, such as research.read or research.*.',
+  capability_not_offered: 'The platform does not offer that capability to agents this month. Change the ceiling first.',
+  capability_unreadable: 'The capability policy could not be read. Nothing was changed; try again.',
+  agent_not_found: 'That agent is not on the roster any more.',
+  not_granted: 'This agent does not hold that capability.',
+  invalid_enforced: 'Choose whether capabilities are enforced.',
+  already_enforced: 'Capabilities are already enforced.',
+  not_enforced: 'Capabilities are not enforced.',
   forbidden: 'Only a Super Admin can do this.',
+  // D8071: execution budgets.
+  budget_unreadable: 'The agent budgets could not be read. Nothing was changed; try again.',
+  above_platform_ceiling: (d) => (d?.field
+    ? `The ${String(d.field).replaceAll('_', ' ')} is above the platform figure. Raise the figure on Policies first.`
+    : 'That cap is above the platform figure. Raise the figure on Policies first.'),
+  invalid_scope: 'Name the workspace: a company or a project.',
+  scope_not_found: 'That workspace does not exist any more.',
+  task_not_found: 'That task does not exist any more.',
 };
 export const policyRefusal = (e) => wordsFor(POLICY_REFUSALS, e, 'The change could not be saved. Read the current policy before trying again.');

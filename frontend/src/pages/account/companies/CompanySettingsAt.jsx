@@ -1,3 +1,4 @@
+import InvestorFirmSettings from '../../investor/settings/InvestorFirmSettings.jsx';
 /**
  * D1140 (#3020, CMP19) — the full company settings at their address under
  * Portfolio (the owner's choice, 2026-10-27):
@@ -51,6 +52,13 @@ export default function CompanySettingsAt() {
   usePublishScope(uid && name ? scopeFor({ company: { uid, name } }) : null);
   if (loading) return null;
   if (!uid) {
+    if (user?.role === 'investor') {
+      const companyLink = company?.uid ? {
+        to: companySettingsPathFor(company.uid),
+        label: `Settings for ${company.company_name || 'your company'}`,
+      } : null;
+      return <InvestorFirmSettings companyLink={companyLink} />;
+    }
     if (company?.uid && user?.role === 'partner') {
       // D395: a partner's Firm Settings live here; the company's settings are one link away.
       return (

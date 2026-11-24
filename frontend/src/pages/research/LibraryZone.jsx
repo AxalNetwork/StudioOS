@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card, Pill, Stat } from '../../ui';
 import { formatCost } from '../../ui/assistCost';
 import { api } from '../../lib/api';
@@ -13,6 +13,7 @@ import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { createRecordGate } from './recordGate.js';
+import { SOURCES, answerableLine, roomOf, rowTitle } from './roomLibraryModel.js';
 import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
 import {
   UPLOAD_ACCEPT, answerabilityOf, filterLibrary, indexStateOf, isFiltered, libraryFiltersFrom,
@@ -372,7 +373,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   });
   const options = libraryOptions(items);
   const narrowed = isFiltered(filters);
-  const clearFilters = () => setFilters({ q: '', type: '', index: '', answerable: '', collection: '', view: 'all' });
+  const clearFilters = () => setFilters({ q: '', type: '', index: '', answerable: '', collection: '', source: '', view: 'all' });
   // Clicking the active chip clears it. Two of the four canvases carry no `All`
   // of their own, and adding one the artboard never drew is not this table's
   // call to make — so the chip that is on is also the way back off it.
@@ -477,6 +478,10 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 {payload.not_answerable > 0 ? ` · ${payload.not_answerable} not` : ''}
               </Pill>
             ) : null}
+            {/* D6913 (RS-14): with room files in the Library, the header names both counts, room rows counted. */}
+            {payload?.from_rooms > 0 && answerableLine(payload) ? (
+              <span className="text-[11.5px] text-axal-muted" data-testid="library-room-counts">{`${answerableLine(payload)} · ${payload.from_rooms} from data rooms`}</span>
+            ) : null}
             {/* D6281 (D3701's header departure): Upload document is the
                 header's one primary action. It opens the same picker as the
                 upload card below, so there is still one upload path. */}
@@ -577,7 +582,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           in Ask and Collection. They narrow the list already read; the Worker
           is not asked again. Each is a URL parameter. */}
       {items.length > 0 && (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-5" data-testid="library-filters" role="search">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-6" data-testid="library-filters" role="search">
           <label className="text-[12px] sm:col-span-1">Search documents
             <input type="search" className={inputClass} value={filters.q} placeholder="Title"
               onChange={(e) => setFilters({ q: e.target.value })} />
@@ -586,6 +591,12 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             <select className={inputClass} value={filters.type} onChange={(e) => setFilters({ type: e.target.value })}>
               <option value="">Any type</option>
               {options.type.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+          {/* D6913 (RS-14): All · Ours · Shared by clients · From data rooms. */}
+          <label className="text-[12px]">Source
+            <select className={inputClass} value={filters.source} onChange={(e) => setFilters({ source: e.target.value })} data-testid="library-source-filter">
+              {SOURCES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
             </select>
           </label>
           <label className="text-[12px]">Index state
@@ -683,18 +694,22 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             const ix = indexStateOf(d);
             const an = answerabilityOf(d);
             const problem = rowProblem(d);
+            // D6913 (RS-14, RS-16): a data-room reference: its room chip, Read-only, and why it lapsed when it has.
+            const room = roomOf(d);
             return {
             key: d.uid,
             cells: [
               {
-                text: d.title,
+                text: rowTitle(d),
                 node: <span id={`document-${encodeURIComponent(d.uid)}`} />,
                 // Cyan is theirs, amber is ours — the legend above says which,
                 // and the marks are the artboard's `seam` and `ours`.
-                seam: d.source === 'client' ? (d.source_label || 'From client') : null,
-                ours: d.source === 'client' ? null : 'Ours',
+                seam: room ? room.chip : d.source === 'client' ? (d.source_label || 'From client') : null,
+                ours: d.source === 'client' || room ? null : 'Ours',
                 // RS-06: a Failed or Unsupported row says why under its name.
-                sub: problem
+                sub: room
+                  ? (room.lost ? room.reasonWords : `Read-only${room.added ? ` · Added ${room.added}` : ''}`)
+                  : problem
                   ? `${problem.reason}${problem.action === 'replace' ? ` ${problem.label}` : ''}`
                   : (fmtBytes(d.size_bytes) || 'Size not recorded'),
               },
@@ -735,9 +750,23 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         because `read_only` is about writing and `Open` is a
                         read: the condition is whether this reader may read the
                         file, which the row says. */}
-                    <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)} data-testid={`library-open-${d.uid}`}>
-                      Open
-                    </button>
+                    {/* D6913: a room reference opens in its room (its download here answers 409 open_in_room), and a
+                        lapsed one offers only Remove from Library. */}
+                    {room ? (
+                      <>
+                        {room.lost ? null : (
+                          <Link to="/research/diligence" className={ghostButtonClass} data-testid={`library-open-room-${d.uid}`}>Open in room</Link>
+                        )}
+                        <button type="button" disabled={busy} onClick={() => remove(d.uid)} data-testid={`library-room-remove-${d.uid}`}
+                          className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                          Remove from Library
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)} data-testid={`library-open-${d.uid}`}>
+                        Open
+                      </button>
+                    )}
                     {/* A CLIENT'S DOCUMENT OFFERS NEITHER. Removing it is not
                         the reader's to do — the route 404s on it, because it is
                         not in their own set — and re-indexing it would index

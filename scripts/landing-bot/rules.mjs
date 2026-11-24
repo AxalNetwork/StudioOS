@@ -13,7 +13,7 @@
  * hold the same values there, and `frontend/test/landing_bot_core_6467.test.mjs` fails if either side drifts.
  */
 import { classify as classifyCi, infraFingerprint, VERDICTS } from '../lib/ciClassify.mjs';
-import { classify as classifyPaths } from '../merge-policy.mjs';
+import { classify as classifyPaths, PRIVILEGED } from '../merge-policy.mjs';
 
 /** The six automations. `push` writes a commit, `model` calls a model, `requeue` re-adds to the queue. */
 export const KINDS = Object.freeze({
@@ -35,6 +35,12 @@ export const BREAKER_ALERTS = Object.freeze([
   '[alert] the Actions queue is backed up',
   '[alert] merge queue stalled',
 ]);
+/**
+ * #8076 (D8076): queue admission limits the feeder applies before each entry. The owner may change either on #8076.
+ * PRIVILEGED_IN_QUEUE: `pr:privileged` PRs in the merge queue at once. PER_SLOT_IN_QUEUE: PRs of one slot at once.
+ */
+export const PRIVILEGED_IN_QUEUE = 1;
+export const PER_SLOT_IN_QUEUE = 3;
 /** Across kinds, per PR, in any 24 hours. */
 export const MAX_BOT_COMMITS_PER_DAY = 4;
 export const MAX_MODEL_RUNS_PER_DAY = 2;
@@ -47,6 +53,10 @@ export const LABELS = Object.freeze({
   needsSession: 'needs-session',
   mainRepair: 'main-repair',
   resolved: 'bot:resolved',
+  // #6476 owner addition: the keeper's own hand-back. `conflict` is only the PR-list indicator now (D6476-p5).
+  keeperTried: 'bot:keeper-tried',
+  // #6476 (D6476-p4): the ejection handler's add-only record that it handed a stranded removal back. Never removed.
+  handedBack: 'bot:handed-back',
 });
 export const REPAIR_BRANCH_PREFIX = 'repair/';
 export const STICKY_MARKER = '<!-- landing-bot -->';
@@ -255,20 +265,11 @@ export function budget(kind, env = {}, usage = {}) {
   return { allowed: reasons.length === 0, reasons };
 }
 
-/** Paths no bot writes, on top of everything merge-policy.mjs rates T2. */
-export const PROTECTED = Object.freeze([
-  /^\.github\//,
-  /^cloudflare-worker\/sql\//,
-  /^scripts\/ci\//,
-  /^merge-control\//,
-  /(?:^|\/)package\.json$/,
-  /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|[^/]*\.lock)$/,
-  /(?:^|\/)wrangler[^/]*\.toml$/,
-  /(?:^|\/)\.gitattributes$/,
-  /^AGENTS\.md$/,
-  /^CLAUDE\.md$/,
-  /(?:^|\/)CODEOWNERS$/,
-]);
+/**
+ * Paths no bot writes, on top of everything merge-policy.mjs rates T2. D8067: the privileged list, the same one T2,
+ * CODEOWNERS and the ruleset read (`merge-control/src/lib/classify.mjs` PRIVILEGED_PATHS).
+ */
+export const PROTECTED = PRIVILEGED;
 
 /**
  * Which of a bot's intended writes are refused. Every path (and a rename's old path) must clear PROTECTED and must

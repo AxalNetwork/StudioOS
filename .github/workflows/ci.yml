@@ -174,6 +174,7 @@ jobs:
       actions: read
     outputs:
       parts: ${{ steps.plan.outputs.parts }}
+      capacity_submission: ${{ steps.capacity.outputs.capacity_submission }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -198,11 +199,43 @@ jobs:
           ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: plan_artifact
         with:
           name: suite-plan
           path: suite-plan.json
           if-no-files-found: error
           retention-days: 3
+      # D7909: optional metadata only; no OIDC and no waiting. Failure cannot stop ordinary hosted CI.
+      - name: Prepare capacity pilot submission
+        id: capacity
+        if: github.repository == 'AxalNetwork/StudioOS' && github.event_name == 'push' && vars.CI_CAPACITY_ENABLED == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
+          CI_CAPACITY_EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CI_CAPACITY_CHILD_WORKFLOW_SHA: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
+          CAPACITY_PLAN_ARTIFACT_ID: ${{ steps.plan_artifact.outputs['artifact-id'] }}
+          CAPACITY_PLAN_FILE: ${{ github.workspace }}/suite-plan.json
+        run: node scripts/ci/capacity-submission.mjs
+
+  # D7909: default-off, main-push pilot only. No ordinary job depends on this submission.
+  capacity-submit:
+    name: capacity pilot submission
+    needs: plan
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && github.event_name == 'push' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && needs.plan.outputs.capacity_submission != '' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    # Exact local preparation pin; publication and activation remain held under #5719.
+    # D8335: the pin must be a commit on main. cb63d3997d is #8234's merge commit and carries the reviewed planner
+    # (blob 4f7dfaca) byte for byte. The first pin, 19927c89, became unreachable when its branch was deleted.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    with:
+      submission: ${{ needs.plan.outputs.capacity_submission }}
+      executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+      child_workflow_sha: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
 
   suite:
     name: suite (${{ matrix.part }})
@@ -316,8 +349,20 @@ jobs:
       # every event.
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
         env:
+          CI_FAILURE_DIR: ${{ runner.temp }}/ci-failures
+          CI_FAILURE_PART: ${{ matrix.part }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
         if: steps.macbook.outputs.delegated != 'true'
+      - name: Upload bounded failure evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-${{ matrix.part }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-failures/failures.json
+          if-no-files-found: ignore
+          retention-days: 3
       # D7124: the test files this pull request adds or edits, run again with
       # the clock 7 days and 9 days 11 hours ahead under libfaketime (as the
       # nightly does, D5398), so a date-bound test fails here and not on main
@@ -824,8 +869,8 @@ jobs:
 
   classify:
     name: why CI failed (D5398)
-    needs: suite
-    if: failure() && github.event_name == 'pull_request'
+    needs: [frontend, worker, verified, plan, suite, fast, landing, visual, drift, og-tags, dev-backend]
+    if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
@@ -841,7 +886,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node scripts/ci-classify.mjs
+      - name: Upload classified evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-classified-attempt-${{ github.run_attempt }}
+          path: ci-failures-classified.json
+          if-no-files-found: ignore
+          retention-days: 3
 
   # -------------------------------------------------------------------------
   # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
@@ -1035,6 +1090,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |

@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D5612 (#5612) — the route registry, the API index and the skill library are
  * generated, not committed, so every CI job that compiles, bundles or tests
@@ -221,14 +222,15 @@ test('focused contract jobs retain generation and contracts; the required sharde
   const ci = REAL.find(([file]) => file === 'ci.yml')[1];
   const { partsOf } = await import(new URL('scripts/test-drift-parts.mjs', ROOT));
   const scripts = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')).scripts;
-  const ciCovers = (ciSource, pkg) => {
+  const ciCovers = (ciSource, pkg, catalog = guardChain) => {
     const rest = partsOf(pkg).find((part) => part.name === 'rest');
     assert.ok(rest, 'test:drift has an unsharded rest part');
     const restCommands = rest.commands.join(' && ');
     assert.match(restCommands, /(^| && )npm run test:guards( && |$)/, 'rest runs test:guards');
     assert.match(restCommands, /node scripts\/check-dark-mode\.mjs/, 'rest runs check-dark-mode');
-    assert.match(pkg['test:guards'], /node scripts\/check-folder-docs\.mjs/);
-    assert.match(pkg['test:guards'], /node scripts\/check-decision-ids\.mjs/);
+    assert.equal(pkg['test:guards'], 'node scripts/run-guards.mjs');
+    assert.match(catalog, /node scripts\/check-folder-docs\.mjs/);
+    assert.match(catalog, /node scripts\/check-decision-ids\.mjs/);
     const suite = jobsOf(ciSource).find(j => j.job === 'suite');
     assert.ok(suite, 'ci.yml has the suite job');
     // D7108: the worker-* parts read no docs/ and skip the build; frontend-*
@@ -245,7 +247,7 @@ test('focused contract jobs retain generation and contracts; the required sharde
   };
   ciCovers(ci, scripts);
   assert.throws(() => ciCovers(ci.replace("'test:drift (full suite)'", "'incomplete suite'"), scripts));
-  assert.throws(() => ciCovers(ci, { ...scripts, 'test:guards': scripts['test:guards'].replace('node scripts/check-folder-docs.mjs && ', '') }));
+  assert.throws(() => ciCovers(ci, scripts, guardChain.replace('node scripts/check-folder-docs.mjs && ', '')));
   assert.throws(() => ciCovers(ci, { ...scripts, 'test:drift': scripts['test:drift'].replace(' && node scripts/check-dark-mode.mjs', '') }));
   assert.throws(() => ciCovers(ci.replace('name: Build the SPA\n        run: npm run build', 'name: Build the SPA\n        run: true'), scripts));
   // D7108 mutations: a condition that leaves rest unbuilt, and no build step at all.

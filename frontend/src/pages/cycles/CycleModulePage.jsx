@@ -8,9 +8,9 @@ import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
+import { growTabCounts } from './growOverviewModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, moduleSubtitle, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
-import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 
@@ -90,7 +90,7 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
  * With it, the table draws by stage: zero → one guided first action and
  * nothing else; few → rows, one Add and a plain count; many → everything.
  */
-export function ZeroState({ copy, add, more = [], lovable = null, testid = 'records-zero' }) {
+export function ZeroState({ copy, add, more = [], testid = 'records-zero' }) {
   const addHref = safeHref(add?.href);
   const className = 'inline-flex min-h-[44px] items-center justify-center rounded-[10px] bg-axal-violet px-4 py-2.5 text-[13.5px] font-bold text-white hover:bg-axal-violet-deep';
   return (
@@ -100,10 +100,9 @@ export function ZeroState({ copy, add, more = [], lovable = null, testid = 'reco
       {add?.onClick ? <button type="button" onClick={add.onClick} className={className} data-testid="records-zero-action">{add.text}</button>
         : addHref ? <Link to={addHref} state={add.state} data-testid="records-zero-action" aria-haspopup={add.onOpen ? 'dialog' : undefined}
           onClick={add.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); add.onOpen(); } } : undefined} className={className}>{add.text}</Link> : null}
-      {/* Another form's Add (never the same one twice) and LV7 stay reachable, subordinate to the first action. */}
+      {/* Another form's Add stays subordinate to the first action. */}
       {more.map((m) => <Link key={m.text} to={safeHref(m.href)} state={m.state} data-testid="records-zero-secondary-add"
         className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{m.text}</Link>)}
-      {lovable && <div className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="records-zero-secondary"><BuildInLovable lovable={lovable} /></div>}
     </div>
   );
 }
@@ -130,7 +129,7 @@ export function ExportButton({ onExport, className = 'whitespace-nowrap rounded-
   );
 }
 
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null, onExport = undefined }) {
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, progressive = null, onExport = undefined }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -152,7 +151,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
     const first = dominantAdd(firstRaw ? [firstRaw] : [], null, progressive);
     return (
       <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-records" data-stage="zero">
-        <ZeroState copy={progressive} add={first} more={addButtons.filter((a) => a !== firstRaw && a?.text && !a.onClick && safeHref(a.href))} lovable={lovable} />
+        <ZeroState copy={progressive} add={first} more={addButtons.filter((a) => a !== firstRaw && a?.text && !a.onClick && safeHref(a.href))} />
       </section>
     );
   }
@@ -170,9 +169,8 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
           })}
           {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
-          {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
           {/* D6043 (#6043): Export from the 'few' stage on (the zero stage returned above), once the list has read. */}
-          {lovable && <BuildInLovable lovable={lovable} />}</div>
+          </div>
         </div>
         {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
@@ -341,7 +339,7 @@ export function ModuleAsk({ asks }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
   // D5077 (#5077): the module's connector parts, drawn in the Sources region below the records; the
   // region's Connect or manage tools (`sourcesAction`); and the module's Eadwyn asks for the zero state.
   sources = null, sourcesAction = null, asks = null,
@@ -386,7 +384,7 @@ export default function CycleModulePage({
   ));
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} search={search} more={more} /> : header}
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} tabCounts={meta.key === 'grow' ? growTabCounts(slug, data) : null} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
@@ -400,9 +398,15 @@ export default function CycleModulePage({
         </div>
       ) : ownsHome ? (
         <>
-          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search })}
-          {doors}
-          {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
+          {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools).
+              D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read.
+              D6038 (#6038): a home that lists its own table gets its row control, Export and the tool doors; one
+              that sets `drawsTools` draws those doors itself (Company creation's supporting tools, BD11). */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
+            query, onQuery, rowAction, onExport, tools: toolLinks,
+            sources: sources ? <Sources action={sourcesAction}>{sources}</Sources> : null })}
+          {home.drawsTools ? null : doors}
+          {children}{sources && !home.placesSources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>
       ) : owned ? children : (
         <>
@@ -431,7 +435,6 @@ export default function CycleModulePage({
             onQuery={onQuery}
             onRetry={onRetryRecords || onRetry}
             add={add}
-            lovable={lovable}
             rowAction={rowAction}
             progressive={progressive}
             onExport={onExport}

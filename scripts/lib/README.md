@@ -96,6 +96,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `workspaceInvariants.mjs` | D5573: the six workspace invariants (tenant isolation, reviewed deploy, no double effect, checkpoints kept, no stranded compute, revoked/disallowed never execute) over one normalized observation set; an unexercised check fails. `fromReconcileRows` reads #4594's `RECONCILE` rows. Tests in `workspaceInvariants.test.mjs`. |
 | `workspaceReport.mjs` | D5573: the validation report (evidence class, sample size, config, commit, p50/p95, success %, retry amplification, PR and Git counts) as JSON and Markdown; a mock is only ever `local_mocked` and its cost is "not measured", never 0. Tests in `workspaceReport.test.mjs`. |
 | `prRisk.mjs` | D5580: hunk-level risk classes per overlapping PR pair, the four per-PR evidence fields and the dated advisory snapshot; `prRisk.test.mjs` holds the Delivery-cluster fixture. |
+| `privilegedPaths.mjs` | D8067: re-exports the one privileged-path list from `merge-control/src/lib/classify.mjs` and derives the generated CODEOWNERS block (`codeownersBlock`, `withCodeownersBlock`) and the ruleset's fnmatch file-path condition (`rulesetPaths`). |
 | `workIntent.mjs` | D5580 part 2: the WorkIntent view derived from the #5617 claim ref, STATUS claims and the claimant's open PRs (WorkItem fields it cannot fill are null), the duplicate/stale/disappeared-PR/invalid-slot/expiry rules and the soft proceed/coordinate/wait/serialize recommendation; tested in `workIntent.test.mjs`. |
 | `workflowFailureDispatch.test.mjs` | D6387: signed event admission, dispatch scope and error handling. |
 | `workflowFailureIssues.mjs` | D6387: identify and update actionable workflow repair episodes. |
@@ -114,6 +115,18 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `scanTrackerIssueBody.test.mjs` | D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. |
 
 | `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |
+| `networkDirectoryPlan.mjs` | D7672: pure source-classified Network directory planner; emits parameterized batches, provenance, held conflicts and aggregate reconciliation without accounts, memberships, ties or book writes. |
 
 | `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
 | `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
+| `runnerSupervisor.test.mjs` | D7889: ephemeral enrollment, credential inheritance and eligibility-first drain actions; kept outside the Merge Control import boundary. |
+| `ciFailures.mjs` | D5502: bounded test identities, safe reproductions and exact-base evidence attribution. |
+| `ciFailureReporter.mjs` | D5502: node:test JSONL evidence beside TAP without assertion values or stacks. |
+| `ciFailureCollector.mjs` | D5502: bounded Actions artifact reads, archive validation and tested-base comparison. |
+| `ciFailures.test.mjs` | D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. |
+| `guardCatalog.mjs` | D5505: ordered catalog access shared by guard readers and wiring tests. |
+| `guardRunner.mjs` | D5505: independent guard execution, prerequisites, process-group interruption and bounded metadata. |
+| `guardRunner.test.mjs` | D5505: multi-failure, prerequisite, real signal, clean-run and preserved-command contracts. |
+| `guardEvidence5505.test.mjs` | D5505: guard evidence normalization, exact-command inheritance and rest-part continuation. |
+| `queueDeadline.mjs` | D5974: bounded native queue membership and exact-head check evidence for the response-deadline warning. |
+| `queueTimeoutReport.test.mjs` | D5975: deterministic per-SHA latency, coverage gaps and unknown outcome regression checks. |

@@ -35,6 +35,7 @@ import { roomGatesAskNda } from '../src/services/dataRoomNda.ts';
 import { checklistRead } from '../src/services/dataRoomActivity.ts';
 import { searchRoom, DIMENSIONS } from '../src/services/dataRoomSearch.ts';
 import { daysLeft, purgeExpiredTrash, readTrash, TRASH_DAYS } from '../src/services/dataRoomTrash.ts';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
@@ -53,6 +54,7 @@ const DAY = 86_400_000;
 
 function freshDb() {
   const db = new DatabaseSync(':memory:');
+  applySuppressionLedger(db); // D6654
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER,
@@ -361,6 +363,7 @@ test('the sweep purges what has had its thirty days, oldest first, and nothing e
 
 test('a database without the Trash column still reads, and Remove refuses rather than deleting', async () => {
   const db = new DatabaseSync(':memory:');
+  applySuppressionLedger(db); // D6654
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT UNIQUE NOT NULL, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);`);
   for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas', 'raise_prospects', 'project_members', 'activity_logs']) {
@@ -390,6 +393,7 @@ test('a database without the Trash column still reads, and Remove refuses rather
 const UNFILTERED: Array<[string, string, string]> = [
   ['routes/account_companies.ts', "SELECT 'raise', project_id FROM data_room_files", 'which cycles hold any record; a file in Trash is still recorded'],
   ['routes/captable.ts', 'INSERT INTO data_room_files', 'a write of a new file'],
+  ['routes/company_creation_handoffs.ts', 'INSERT INTO data_room_files', 'a write of a new file'],
   ['routes/cycle_use_of_funds.ts', 'INSERT INTO data_room_files', 'a write of a new file'],
   ['routes/data_room.ts', 'LEFT JOIN data_room_files f ON f.id = l.file_id', 'the founder’s access log keeps naming what was opened'],
   ['routes/data_room.ts', 'INSERT INTO data_room_files', 'a write of a new file'],

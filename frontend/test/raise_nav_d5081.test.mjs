@@ -108,7 +108,7 @@ test('Fundraising readiness: Fix next priority opens the first priority’s work
   assert.equal(nextPriorityAction(read([row('narrative', { score: 9, evidence: 'measured', fix_href: '/raise/investor-narrative' })])), null, 'nothing needs attention: no action');
   for (const r of [null, undefined, { state: 'unreadable' }]) assert.equal(nextPriorityAction(r), null, 'a read not here or failed offers nothing');
   assert.equal(nextPriorityAction(read([row('team', { score: 2, missing: 'No CTO', fix_href: '/build/founding-team' })])), null, 'Team is assessed by a person, never a priority');
-  assert.match(read_('frontend/src/pages/cycles/CycleRoute.jsx'), /action=\{home && Object\.hasOwn\(home, 'action'\) \? home\.action : action\}/);
+  assert.match(read_('frontend/src/pages/cycles/CycleRoute.jsx'), /action=\{companyReadOnly \? null : home && Object\.hasOwn\(home, 'action'\) \? home\.action : action\}/);
 });
 
 test('the hub stays frozen: CycleRoute and App gain nothing for this part, and the decision is recorded', () => {

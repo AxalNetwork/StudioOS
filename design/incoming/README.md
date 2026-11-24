@@ -2749,6 +2749,27 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
 
 
+## Landed 2026-11-21 — HQ AI agents: capability policies, execution budgets and the agent registry (#8070, #8071, #8080)
+
+Three addenda to the landed `HQ AI Agents` canvas (D4137, SA0 to SA9), drawn on 2026-11-21 from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A.
+
+- **`HQ AI Agents Capability Policies`** (SA10 to SA14, SAP-H), Operations › Policies › Capabilities, D4137-p2.
+- **`HQ AI Agents Execution Budgets`** (SA15 to SA19, SAB-H), Operations › Spend › Agent budgets, D4137-p3.
+- **`HQ AI Agents Registry`** (SA20 to SA24, SAR-H), Roster › Registry, D4137-p4.
+
+Each file is the canvas export as published; no value was edited (the Axal mark already points at `/axal-mark.png`). The three canvases use the same eight sample agents. None is built yet.
+
+## Landed 2026-11-21 — Research Markets, Funds and Companies, and Network people, introductions, sources and organizations (#7703, #7738, #7809, #7676 to #7680)
+
+Seventeen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-19 (#7703, #7738) and 2026-11-21 (the rest), each as a page plus its boards. Landed at the owner's request before the briefs' owner questions were answered: every open question is drawn as its option A, and boards a brief says wait for a letter are marked "not for build until answered" on the canvas and in their decision.
+
+- **Research → Markets (#7703):** `Research Markets Observations` (RMO-00 to RMO-06, RMO-H) and `Licences Country Data Sheets` (LCD-00 to LCD-08, LCD-H), D7703; `Research Markets Market Study` (RST-00 to RST-18), D7703-p2; `Research Markets Market Study Models and Report` (RST-20 to RST-35; RST-26 and RST-27 held for Questions 4, 10 and 11), D7703-p3.
+- **Research → Funds (#7738):** `Research Funds Source Import Console` (FND-I00 to FND-I17), D7738; `Research Funds Directory Mandate Filters` (RFD-08 to RFD-17), D7031-p3; `Research Funds Profile Statements` (FND-P12 to FND-P23), D7032-p3.
+- **Research → Companies (#7809):** `Research Companies Trust and Coverage` (RCT), D7809; `Research Companies Search and Shortlist` (RCQ), D7809-p2; `Research Companies Competitor Evidence and Criteria` (RCE), D7809-p3; `Research Companies Investment Firms` (RCF), D7809-p4; `Research Companies Partnership Prospects` (RCN), D7809-p5.
+- **Network:** `Network People Directory` (NPD, #7676, D7676); `Network Requester Profile and Readiness` (NRD, #7677, D7677); `Network External Introduction Requests` (NIE, #7678, D7678); `Network Shared Source Import` (NSI, #7679, D7679); `Network Organizations People First` (NPO, #7680, D7680).
+
+Each file is the canvas export as published; no value was edited. Every person, firm, fund, source and figure is bracketed sample content. None is built yet.
+
 ## Landed 2026-11-17 — Program presentations: ten public pages and PDF decks (#6966 to #6975)
 
 Ten board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the briefs under #6965, each as a page plus its boards. The Spin-Out Lab pilot defines the program presentation kit, the admin entry points (PGS07) and the public Programs index (PGS08); the nine others reuse it:

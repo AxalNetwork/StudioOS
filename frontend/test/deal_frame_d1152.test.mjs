@@ -235,6 +235,7 @@ test('Share copies the current tab, reports failure; the company profile is a li
   const url = 'https://axal.example' + tab;
   const v = await mounted(tab, INVESTOR, handlerWith({
     '/api/deals/4$': () => response({ ...DEAL, company_profile_url: '/startups/harbor-ledger' }),
+    '/api/deals/4/summary$': () => response({ available: true }),
   }));
   const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   const written = [];
@@ -247,7 +248,8 @@ test('Share copies the current tab, reports failure; the company profile is a li
   try {
     assert.equal(v.hrefOf('deal-open-company-profile'), '/startups/harbor-ledger', 'the profile is in the header, not in Share');
     await v.click('deal-share');
-    assert.doesNotMatch(v.textOf('deal-share-menu'), /Open company profile/, 'Share holds Copy link only');
+    assert.doesNotMatch(v.textOf('deal-share-menu'), /Open company profile/, 'the company profile stays outside Share');
+    assert.ok(v.has('deal-download-summary'), 'the mounted deal header passes its deal id to the summary read');
     await v.click('deal-copy-link');
     assert.deepEqual(written, [url]);
     assert.match(v.text(), /Link copied\. Only people this deal admits can open it\./);

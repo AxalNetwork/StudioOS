@@ -108,6 +108,9 @@ export function appliesToLine(appliesTo) {
   return Array.isArray(appliesTo) && appliesTo.length > 0 ? `Applies to: ${appliesTo.map(roleLabel).join(', ')}` : 'Every account';
 }
 
+/** D7001 (#7001): the account recovery guide's button, in the member's own words. */
+export const RECOVERY_ACTION = 'Recover my account';
+
 /**
  * The guide's one primary action, or null when it has no page or this viewer
  * cannot open the page it names (then no button is drawn, as on HC5's
@@ -115,9 +118,17 @@ export function appliesToLine(appliesTo) {
  */
 export function goToTarget(placement, user, session = null) {
   if (!placement?.surface || !canOpenSurface(placement.surfaceInfo, user, session)) return null;
-  const label = placement.surface === '/auth/recover' ? 'Start recovery' : `Go to ${placement.surfaceInfo.label}`;
+  const label = placement.surface === '/auth/recover' ? RECOVERY_ACTION : `Go to ${placement.surfaceInfo.label}`;
   return { label, path: placement.surface };
 }
+
+/**
+ * D7001 (#7001): the public-tracker warning, beside Contact support's ticket button so it is read before a word is
+ * typed. It repeats the guide's own overview; the link goes to the private disclosure options.
+ */
+export const TRACKER_WARNING_ANCHOR = 'troubleshooting/contact-support';
+export const TRACKER_WARNING = 'Ordinary tickets and their replies may be mirrored to a public issue tracker. Do not include passwords, recovery codes or confidential records.';
+export const TRACKER_WARNING_LINK = Object.freeze({ label: 'Read private disclosure options', path: '/trust/disclosure' });
 
 /** The guide page's "On this page", in the canvas's order, only for the parts this guide has. */
 export function guideOutline(sub, { related = 0, feedback = false, stuck = false } = {}) {
@@ -125,6 +136,7 @@ export function guideOutline(sub, { related = 0, feedback = false, stuck = false
     sub?.overview && { id: 'overview', label: 'Overview' },
     Array.isArray(sub?.beforeYouStart) && sub.beforeYouStart.length > 0 && { id: 'before-you-start', label: 'Before you start' },
     Array.isArray(sub?.howto) && sub.howto.length > 0 && { id: 'steps', label: 'Steps' },
+    Array.isArray(sub?.recoveryRows) && sub.recoveryRows.length > 0 && { id: 'recovery', label: 'Connector recovery' },
     Array.isArray(sub?.tips) && sub.tips.length > 0 && { id: 'tips', label: 'Tips' },
     Array.isArray(sub?.pitfalls) && sub.pitfalls.length > 0 && { id: 'pitfalls', label: 'Pitfalls' },
     related > 0 && { id: 'related', label: 'Related guides' },
@@ -147,6 +159,20 @@ export function guideTicketDraft({ anchor, title, missing }) {
 }
 
 // ── Signed out ──────────────────────────────────────────────────────────────
+
+/**
+ * D7001 (#7001): the search's suggested queries. Each is drawn from the public guide index, so it finds a guide
+ * anyone can read, signed in or not (the test runs each one against the signed-out search).
+ */
+export const SEARCH_SUGGESTIONS = Object.freeze([
+  Object.freeze({ query: 'account recovery', anchor: 'account/auth-recovery' }),
+  Object.freeze({ query: 'account roles', anchor: 'getting-started/roles' }),
+  Object.freeze({ query: 'onboarding walkthrough', anchor: 'getting-started/onboarding' }),
+  Object.freeze({ query: 'contact support', anchor: 'troubleshooting/contact-support' }),
+]);
+
+/** The suggestions whose guide is still public; one whose guide left the public index is not offered. */
+export const searchSuggestions = () => SEARCH_SUGGESTIONS.filter((s) => PUBLIC_HELP_ANCHORS.has(s.anchor));
 
 /** The public guides, Account recovery first: the visitor who cannot sign in is the one most likely here. */
 export function publicGuides(sections) {
