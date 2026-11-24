@@ -42,9 +42,9 @@ function early() {
     figures: [],
     cards: [
       readinessCard([
-        { label: 'Investor narrative', value: 7 }, { label: 'Pitch deck', value: 5 }, { label: 'Data room', value: 3 },
-        { label: 'Cap table', value: 8 }, { label: 'Use of funds', value: 6 }, { label: 'Traction proof', value: 2 },
-        { label: 'Team', value: null }, { label: 'Product-market fit', value: 4 },
+        { key: 'narrative', label: 'Investor narrative', value: 7 }, { key: 'deck', label: 'Pitch deck', value: 5 }, { key: 'data_room', label: 'Data room', value: 3 },
+        { key: 'cap_table', label: 'Cap table', value: 8 }, { key: 'use_of_funds', label: 'Use of funds', value: 6 }, { key: 'traction', label: 'Traction proof', value: 2 },
+        { key: 'team', label: 'Team', value: null }, { key: 'pmf', label: 'Product-market fit', value: 4 },
       ]),
       emptyCard('Investor narrative', 'No version saved yet.', { text: 'Create narrative', href: '/raise/investor-narrative/new?project=7' }),
       { ...emptyCard('Pitch', 'No deck yet.', null), slug: 'pitch-deck', pitch_state: { state: 'ok', key: 'no_deck', label: 'No deck', version: null, live_links: 0, to_fix: null, unsaved_changes: false } },
@@ -78,7 +78,7 @@ function active() {
     figures: [],
     stage: { state: 'ok', key: 'run_the_raise', label: 'Run the raise', rule: 'At least one investor is in the pipeline' },
     primary_action: { state: 'ok', key: 'add_investor', label: 'Add investor', href: '/raise/capital-relationships/new?project=7', rule: 'At least one investor is in the pipeline' },
-    cards: [readinessCard([{ label: 'Investor narrative', value: 9 }, { label: 'Team', value: 7 }]),
+    cards: [readinessCard([{ key: 'narrative', label: 'Investor narrative', value: 9 }, { key: 'team', label: 'Team', value: 7 }]),
       ...base.cards.slice(1).map((c) => (c.slug === 'pitch-deck' ? { ...c, pitch_state: { state: 'ok', key: 'reviewed', label: 'Reviewed, ready to send', version: 6, live_links: 0, to_fix: 0, unsaved_changes: false } } : c))],
     next_steps: { state: 'ok', items: [{ item_key: 'data_room', label: 'Data room', text: '8 of 12 checklist items have a file', module_slug: 'data-room', href: '/raise/data-room?project=7', gain_points: 4 }] },
     connectors: [
@@ -114,7 +114,7 @@ test('RA-01 early raise: Prepare to raise, Prepare current, coverage with the un
   assert.match(out, /data-testid="raise-journey-run_the_raise" data-stage-status="later"/);
   assert.match(t, /Stage chosen from your records: No narrative version saved\./);
   // Readiness: 6 of 7 areas (PMF is RA-16's, not an area), Team named, never a 0.
-  assert.match(t, /Fundraising readiness 6 of 7 areas assessed Team has no score yet, so it is not counted\./);
+  assert.match(t, /Fundraising readiness 6 of 7 areas assessed None needs attention Team has no score yet, so it is not counted\./);
   // Next actions come before the score breakdown, at most three, Team never, an unknown gain Not recorded.
   assert.ok(out.indexOf('raise-next-actions') < out.indexOf('raise-detailed-readiness'), 'next actions before detailed readiness');
   assert.ok(out.indexOf('raise-readiness"') < out.indexOf('raise-next-actions'), 'the summary, then the actions');
