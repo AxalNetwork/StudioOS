@@ -221,7 +221,7 @@ test('D8348 passes beyond the cap inside seven days are admitted by handing each
   assert.equal(JSON.parse(after[0]).length, JSON.parse(before[0]).length + 3);
   await assert.rejects(c.submit(input(3)), /capacity_expired_request/);
   await assert.rejects(c.submit({ ...input(2004), parentRunId: 103 }), /capacity_parent_conflict/);
-  assert.equal(c.status(uuid(3)), null); assert.equal(await c.receipt(uuid(3), 'worker-1-of-6', 301, 1), null);
+  assert.deepEqual(c.status(uuid(3)), compactAggregate(f.store.compact(uuid(3))!, false)); assert.equal(await c.receipt(uuid(3), 'worker-1-of-6', 301, 1), null);
 
   // Restart: a new store over the same storage finds each request in exactly one place and carries on.
   const again = f.open();
@@ -515,17 +515,21 @@ test('D8348 compact reads are paged by identity, at most a hundred at a time', a
   assert.equal(f.store.compactPage('', 1)[0].failed, false);
 });
 
-test('D8348 with the outbox as it is today, a compacted pass loses its intent and is then kept for good', async t => {
+test('D8348 composed outbox retains a compact pass intent until the original expiry', async t => {
   const f = fixture(t);
   for (let n = 2; n <= CAPACITY_REQUEST_LIMIT + 1; n++) { await f.settled(n, 'success', START + n); f.sent(n, 'success'); }
   f.advance(LEASES_OVER);
   await f.capacity().submit(input(2001));
   assert.equal(f.consumer.evidence(f.store.compact(uuid(2))!, false), 'revisable');
-  // The real outbox deletes any intent whose full request is gone. Keeping it is the consumer half of this work.
+  // The composed publisher retains the known intent; no replacement check is created.
   const config = { repository, repositoryId: 7, appId: 23, executorSha: 'b'.repeat(40), approvedGroupId: 5, prerequisiteJobs: ['fast'], fullSuiteJobs: [], selfHostedProfiles: ['linux-x64'] } as unknown as ConstructorParameters<typeof CapacityOutbox>[2];
   await new CapacityOutbox(f.storage, async () => { throw new Error('fixture: no network'); }, config).publish(f.store, () => null, 'pilot');
-  assert.equal(f.consumer.evidence(f.store.compact(uuid(2))!, false), 'owed');
-  f.advance(CAPACITY_RETENTION_MS);
+  assert.equal(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?', `${uuid(2)}:pilot`).toArray().length, 1);
+  assert.equal(f.consumer.evidence(f.store.compact(uuid(2))!, false), 'revisable');
+  const expiry = f.store.compact(uuid(2))!.completedAt + CAPACITY_RETENTION_MS;
+  f.advance(expiry - f.state.now - 1); f.sweep();
+  assert.notEqual(f.store.compact(uuid(2)), null, 'the original seven-day window has not ended');
+  f.advance(1);
   for (let i = 0; i < 3; i++) f.sweep();
-  assert.notEqual(f.store.compact(uuid(2)), null, 'fail closed: the record waits for evidence instead of expiring without it');
+  assert.equal(f.store.compact(uuid(2)), null, 'the delivered pass leaves at its original expiry');
 });

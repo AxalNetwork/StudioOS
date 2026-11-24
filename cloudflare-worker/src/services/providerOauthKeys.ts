@@ -35,7 +35,8 @@ export type ManagedProviderKey =
   | 'tiktok'
   | 'x'
   | 'google_search_console'
-  | 'typeform';
+  | 'typeform'
+  | 'quickbooks';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'slack',
@@ -56,6 +57,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'x',
   'google_search_console',
   'typeform',
+  'quickbooks',
 ];
 
 export interface ProviderEnvVarPair {
@@ -77,6 +79,8 @@ export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret:
   google_search_console: { id: 'GOOGLE_SEARCH_CONSOLE_CLIENT_ID', secret: 'GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET' },
   // D5827 — the Typeform developer app registered by the owner for the pilot.
   typeform:   { id: 'TYPEFORM_CLIENT_ID',      secret: 'TYPEFORM_CLIENT_SECRET' },
+  // D5834 — the Intuit app registered by the owner; development and production keys are separate apps.
+  quickbooks: { id: 'QUICKBOOKS_CLIENT_ID',    secret: 'QUICKBOOKS_CLIENT_SECRET' },
   slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },
   hubspot:    { id: 'HUBSPOT_CLIENT_ID',       secret: 'HUBSPOT_CLIENT_SECRET' },
   salesforce: { id: 'SF_CLIENT_ID',            secret: 'SF_CLIENT_SECRET' },

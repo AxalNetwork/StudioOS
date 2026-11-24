@@ -23,6 +23,12 @@ export const licenceFeeInvoicesApi = {
   /** Issue the invoice for the licence year that holds today. */
   issue: (licenceUid) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices`, { method: 'POST' }),
   /**
+   * D5956 (#5956): the licence's one-off initial invoice (D5954), on the same POST with `{ kind: 'initial' }`. The
+   * Worker bills the latest pricing decision's accepted initial fee and surcharge, and refuses with its own sentence
+   * (`licence_not_started`, `no_pricing_decision`, `no_initial_fee`, `initial_invoice_exists`, …).
+   */
+  issueInitial: (licenceUid) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices`, { method: 'POST', body: JSON.stringify({ kind: 'initial' }) }),
+  /**
    * The running total received, in cents, with an optional note. `expectedRevision` is the invoice's
    * `revision` as the screen read it (D4694): a 409 `invoice_changed` means another write got there first.
    */

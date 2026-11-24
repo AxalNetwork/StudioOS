@@ -19,12 +19,12 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { SignJWT } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 const STUB = 'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
   + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
@@ -54,9 +54,6 @@ await build({
 });
 const worker = (await import(pathToFileURL(out).href)).default;
 
-const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 // Obviously synthetic. HQ holds this; the stub branch never checks it.
@@ -68,7 +65,7 @@ const REASON = 'Founder on FR cannot reach their data room (ticket 6120)';
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-type DB = ReturnType<typeof buildFresh>;
+type DB = ReturnType<typeof freshSchema>;
 function makeD1(db: DB) {
   return {
     prepare(sql: string) {
@@ -91,7 +88,7 @@ function makeD1(db: DB) {
 }
 
 function freshDb(): DB {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)')
     .run(HQ, 'admin', 'Hana HQ', 'hana@axal.example');

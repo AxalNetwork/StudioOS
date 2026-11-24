@@ -7,7 +7,15 @@ const positive = n => Number.isSafeInteger(n) && n > 0;
 const FIELDS = Object.freeze(['version', 'requestId', 'repository', 'logicalShard', 'event', 'parentWorkflowId',
   'parentRunId', 'parentAttempt', 'sourceSha', 'queueBaseSha', 'planDigest', 'planArtifactId', 'executorSha',
   'profile', 'generation', 'childRunId', 'childAttempt', 'startDeadline', 'executionDeadline']);
-const sameBinding = (a, b) => !!a && FIELDS.every(key => Object.hasOwn(a, key) && a[key] === b[key]);
+/**
+ * D7905/#8345: the dispatched child workflow revision. The coordinator pins it separately from the trusted control
+ * checkout (`executorSha`) when it sets `childWorkflowSha`; an unpinned receipt runs the child at `executorSha`.
+ */
+const childOf = r => r.childWorkflowSha ?? r.executorSha;
+const sameBinding = (a, b) => !!a && FIELDS.every(key => Object.hasOwn(a, key) && a[key] === b[key])
+  && childOf(a) === childOf(b) && a.childWorkflowSha === b.childWorkflowSha;
+const DENIALS = Object.freeze(['deniesRunnerAgent', 'deniesJobCredentials', 'deniesOidc', 'deniesAppCapabilities', 'deniesHostControl']);
+const instanceRef = value => typeof value === 'string' && value.length > 0 && value.length <= 200;
 const need = (condition, reason) => { if (!condition) throw new Refused(reason); };
 class Refused extends Error {}
 export const HOSTED_EVIDENCE_MAX_AGE_MS = 30_000;
@@ -21,21 +29,36 @@ export const HOSTED_EVIDENCE_MAX_AGE_MS = 30_000;
  * Each returned document has `binding` equal to the complete receipt, and integer `observedAt`.
  * There is deliberately no default positive reader. A trusted reader must reject unverifiable facts;
  * setting a flag or passing a fixture object from candidate code does not implement that reader.
+ *
+ * D7905/#8345: three entry points, chosen by WHICH port the executor calls (every executor caller passes
+ * phase 'execute', so the phase string cannot separate them):
+ * - inspectAdmission / verifyAdmission: before checkout, when no candidate byte and no boundary instance exist.
+ *   Provenance, included eligibility, and readBoundaryReadiness (`trusted-native-readiness`, policy digest, NO
+ *   instanceId). It never accepts or claims a live instance.
+ * - inspectExecution / verifyExecution: the run step, before install and again before test. Provenance, included
+ *   eligibility, and readBoundary for the live instance, which must equal the trusted job's own `boundary`
+ *   ({instanceId, policyDigest}) passed by the executor; a changed instance or policy refuses.
+ * - inspect / verifyIsolation: the accepted #8007 port, unchanged: it requires a live boundary document.
+ * Job, run and OIDC revisions bind to the child revision `childWorkflowSha ?? executorSha`; the control revision
+ * `executorSha` binds to the context and its presence on main is checked by admission, never against the job.
  */
-export function createHostedVerification({ readProvenance, readBoundary, readIncludedEligibility, now = Date.now } = {}) {
-  const inspect = async ({ receipt, context, profile, phase, signal: callerSignal } = {}) => {
+export function createHostedVerification({ readProvenance, readBoundary, readBoundaryReadiness, readIncludedEligibility, now = Date.now } = {}) {
+  const check = mode => async ({ receipt, context, profile, phase, boundary: expected, signal: callerSignal } = {}) => {
     const timeout = AbortSignal.timeout(10_000);
     const signal = callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout;
     const stopReason = () => callerSignal?.aborted ? 'hosted_verification_cancelled' : 'hosted_verification_timeout';
     try {
-      ({ receipt, context, profile } = structuredClone({ receipt, context, profile }));
+      ({ receipt, context, profile, expected } = structuredClone({ receipt, context, profile, expected }));
       const documents = [];
       let includedValidUntil = null;
       need(!signal.aborted, stopReason());
       need(['start', 'execute'].includes(phase), 'hosted_phase_invalid');
       need(['hosted', 'github-8'].includes(profile?.id) && receipt?.profile === profile.id, 'hosted_profile_refused');
+      const childSha = childOf(receipt);
       need(receipt.version === 1 && receipt.repository === REPOSITORY && context?.repository === REPOSITORY
         && SHA.test(receipt.sourceSha ?? '') && SHA.test(receipt.executorSha ?? '')
+        && (receipt.childWorkflowSha === undefined || SHA.test(receipt.childWorkflowSha))
+        && (context.childWorkflowSha === undefined || context.childWorkflowSha === childSha)
         && DIGEST.test(receipt.planDigest ?? '') && /^[A-Za-z0-9-]{8,100}$/.test(receipt.requestId ?? '')
         && /^worker-[1-6]-of-6$/.test(receipt.logicalShard ?? '')
         && ['parentRunId', 'parentAttempt', 'parentWorkflowId', 'generation', 'childRunId'].every(key => positive(receipt[key]))
@@ -84,18 +107,18 @@ export function createHostedVerification({ readProvenance, readBoundary, readInc
       need(claims?.runner_environment === 'github-hosted', 'hosted_provider_not_verified');
       need(claims.repository === REPOSITORY && positive(Number(claims.repository_id))
         && String(claims.run_id) === String(receipt.childRunId) && String(claims.run_attempt) === '1'
-        && claims.workflow_sha === receipt.executorSha && claims.sha === receipt.executorSha
+        && claims.workflow_sha === childSha && claims.sha === childSha
         && claims.workflow_ref === `${REPOSITORY}/${WORKFLOW}@refs/heads/main`
         && claims.event_name === 'workflow_dispatch' && claims.ref === 'refs/heads/main', 'hosted_oidc_identity_mismatch');
       need(run?.id === receipt.childRunId && run.run_attempt === 1 && run.path === WORKFLOW
-        && run.head_sha === receipt.executorSha && run.head_branch === 'main' && run.event === 'workflow_dispatch'
+        && run.head_sha === childSha && run.head_branch === 'main' && run.event === 'workflow_dispatch'
         && run.status === 'in_progress' && run.conclusion === null
         && [run.repository, run.head_repository].every(repo => repo?.full_name === REPOSITORY
           && String(repo.id) === String(claims.repository_id)), 'hosted_run_identity_mismatch');
       need(positive(Number(claims.check_run_id)), 'hosted_job_claim_unavailable');
       const started = Date.parse(job?.started_at);
       need(positive(job?.id) && job.run_id === receipt.childRunId && job.run_attempt === 1
-        && job.head_sha === receipt.executorSha && job.name === 'Admitted Worker shard'
+        && job.head_sha === childSha && job.name === 'Admitted Worker shard'
         && job.status === 'in_progress' && job.conclusion === null
         && job.check_run_url === `https://api.github.com/repos/${REPOSITORY}/check-runs/${claims.check_run_id}`
         && Number.isFinite(started) && started <= now() && started <= receipt.startDeadline, 'hosted_job_identity_mismatch');
@@ -115,22 +138,37 @@ export function createHostedVerification({ readProvenance, readBoundary, readInc
           && Number.isSafeInteger(lane.validUntil) && lane.validUntil > now(), 'included_lane_unverified');
         includedValidUntil = lane.validUntil;
       }
-      const boundary = await read(readBoundary, 'hosted_credential_boundary_unproven');
-      need(boundary.kind === 'trusted-native-inspection' && DIGEST.test(boundary.policyDigest ?? '')
-        && boundary.jobId === job.id && typeof boundary.instanceId === 'string' && boundary.instanceId.length > 0
-        && boundary.instanceId.length <= 200 && boundary.scope === 'dependency-install-and-tests'
-        && ['deniesRunnerAgent', 'deniesJobCredentials', 'deniesOidc', 'deniesAppCapabilities', 'deniesHostControl']
-          .every(key => boundary[key] === true), 'hosted_credential_boundary_unproven');
+      let boundary;
+      if (mode === 'admission') {
+        // Before checkout no instance exists: readiness of the reviewed policy only, and never an instance claim.
+        boundary = await read(readBoundaryReadiness, 'hosted_boundary_readiness_unproven');
+        need(boundary.kind === 'trusted-native-readiness' && DIGEST.test(boundary.policyDigest ?? '')
+          && boundary.jobId === job.id && !Object.hasOwn(boundary, 'instanceId') && boundary.scope === 'dependency-install-and-tests'
+          && DENIALS.every(key => boundary[key] === true), 'hosted_boundary_readiness_unproven');
+      } else {
+        // The run step pins the trusted job's own instance; a reader cannot nominate a different one.
+        if (mode === 'execution') need(instanceRef(expected?.instanceId) && DIGEST.test(expected.policyDigest ?? ''), 'hosted_boundary_instance_unbound');
+        boundary = await read(readBoundary, 'hosted_credential_boundary_unproven');
+        need(boundary.kind === 'trusted-native-inspection' && DIGEST.test(boundary.policyDigest ?? '')
+          && boundary.jobId === job.id && instanceRef(boundary.instanceId) && boundary.scope === 'dependency-install-and-tests'
+          && DENIALS.every(key => boundary[key] === true), 'hosted_credential_boundary_unproven');
+        if (mode === 'execution') need(boundary.instanceId === expected.instanceId && boundary.policyDigest === expected.policyDigest, 'hosted_boundary_instance_changed');
+      }
       const completedAt = validTime();
       need(documents.every(document => document.observedAt <= completedAt
         && completedAt - document.observedAt <= HOSTED_EVIDENCE_MAX_AGE_MS), 'hosted_evidence_stale');
       need(includedValidUntil === null || includedValidUntil > completedAt, 'included_lane_unverified');
       return { allowed: true, reason: 'trusted_hosted_evidence_verified',
-        boundary: { instanceId: boundary.instanceId, policyDigest: boundary.policyDigest, jobId: boundary.jobId, observedAt: boundary.observedAt } };
+        boundary: mode === 'admission'
+          ? { policyDigest: boundary.policyDigest, jobId: boundary.jobId, observedAt: boundary.observedAt }
+          : { instanceId: boundary.instanceId, policyDigest: boundary.policyDigest, jobId: boundary.jobId, observedAt: boundary.observedAt } };
     } catch (error) {
       return { allowed: false, reason: error instanceof Refused ? error.message
         : signal.aborted ? stopReason() : 'hosted_evidence_unavailable' };
     }
   };
-  return { inspect, verifyIsolation: async args => (await inspect(args)).allowed === true };
+  const inspect = check('live'), inspectAdmission = check('admission'), inspectExecution = check('execution');
+  const allowed = port => async args => (await port(args)).allowed === true;
+  return { inspect, verifyIsolation: allowed(inspect), inspectAdmission, verifyAdmission: allowed(inspectAdmission),
+    inspectExecution, verifyExecution: allowed(inspectExecution) };
 }

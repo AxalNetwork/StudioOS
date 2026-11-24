@@ -1,9 +1,15 @@
-/** D5618: one durable coordinator per repository, insert-only audit and restart-safe event/lease state. */
+/** D5618: one durable coordinator per repository, insert-only audit and restart-safe event/lease state. D5990: the policy check run. */
 import { DurableObject } from 'cloudflare:workers';
 import type { Delivery, Env, GithubApi, Run } from './types.ts';
 import { changeLease, type LeaseInput, type LeaseState } from './lib/lease.ts';
 import { cancellable, destroyedTarget, queueBranch, WORKFLOWS } from './lib/reconcile.ts';
-import { githubClient } from './github.ts';
+import { githubClient, POLICY_PERMISSIONS } from './github.ts';
+import { checkRunBody, decide, evaluate, policyTarget } from './policyCheck.ts';
+import type { Decision, PolicyTarget } from './policyCheck.ts';
+import { POLICY_VERSION } from './policy.ts';
+
+/** D5990: one decision per head and policy_version; `posted` turns true once its check run is created. */
+interface StoredDecision { decision: Decision; posted: boolean }
 
 export class RepoControl extends DurableObject<Env> {
   private serial: Promise<unknown> = Promise.resolve();
@@ -11,6 +17,9 @@ export class RepoControl extends DurableObject<Env> {
     super(ctx, env);
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, kind TEXT NOT NULL, delivery TEXT, detail TEXT NOT NULL)');
     ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS audit_event_delivery ON audit(delivery) WHERE kind = 'event'");
+    // D5990: the audit is append-only in the store itself, not only by convention.
+    ctx.storage.sql.exec("CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END");
+    ctx.storage.sql.exec("CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END");
   }
   private ordered<T>(fn: () => Promise<T>): Promise<T> {
     const result = this.serial.then(fn); this.serial = result.catch(() => undefined); return result;
@@ -38,11 +47,11 @@ export class RepoControl extends DurableObject<Env> {
       return { status: result.status, lease: result.lease };
     });
   }
-  private async client(injected?: GithubApi): Promise<GithubApi> {
+  private async client(injected?: GithubApi, permissions?: Readonly<Record<string, string>>): Promise<GithubApi> {
     const api = injected ?? await githubClient(this.env, async (input, init) => {
       if (await this.off()) throw new Error('kill switch enabled');
       return fetch(input, init);
-    });
+    }, permissions);
     return async (method, path, body) => {
       if (await this.off()) throw new Error('kill switch enabled');
       return api(method, path, body);
@@ -77,6 +86,8 @@ export class RepoControl extends DurableObject<Env> {
       this.audit('event', event.delivery, event);
       if (!previous) await this.ctx.storage.put(key, { done: false, event });
       await this.ctx.storage.put('last-delivery', { id: event.delivery, at: event.at });
+      const target = policyTarget(event);
+      if (target && !await this.off()) await this.policy(target, event.delivery, injectedApi);
       const sha = destroyedTarget(event);
       if (sha && !await this.off()) {
         const api = await this.client(injectedApi);
@@ -87,6 +98,30 @@ export class RepoControl extends DurableObject<Env> {
       }
       await this.ctx.storage.put(key, { done: true });
     });
+  }
+  /**
+   * D5990: decide once per head and policy_version, audit that decision once,
+   * then create the check run. A retry or a redelivery posts the stored
+   * decision, never a new one, so one SHA never gets two conclusions under
+   * one policy. A client or posting error throws before anything is marked
+   * posted, and the Queue retries it; evaluate itself never yields success
+   * on an error or a timeout.
+   */
+  private async policy(target: PolicyTarget, delivery: string, injectedApi?: GithubApi) {
+    const key = `policy:${target.head}:${POLICY_VERSION}`;
+    let stored = await this.ctx.storage.get<StoredDecision>(key);
+    if (stored?.posted) return;
+    const api = await this.client(injectedApi, POLICY_PERMISSIONS);
+    if (!stored) {
+      const decision = decide(await evaluate({ base: target.base, head: target.head }, { api }), target);
+      stored = { decision, posted: false };
+      await this.ctx.storage.put(key, stored);
+      this.audit('policy', delivery, { sha: decision.head, base: decision.base, event: decision.kind, pr: target.pr,
+        tier: decision.tier, conclusion: decision.conclusion, policy_version: decision.policy_version, at: Date.now() });
+    }
+    if (await this.off()) return;
+    await api('POST', 'check-runs', checkRunBody(stored.decision, this.env.REPOSITORY));
+    await this.ctx.storage.put(key, { ...stored, posted: true });
   }
   async reconcile(injectedApi?: GithubApi) {
     return this.ordered(async () => {

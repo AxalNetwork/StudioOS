@@ -10,8 +10,7 @@ on:
         type: choice
         options: [snapshot, synthetic-proof, suppression-drill]
         default: snapshot
-permissions:
-  contents: read
+permissions: {}
 concurrency:
   group: approved-file-recovery
   cancel-in-progress: false
@@ -21,6 +20,8 @@ jobs:
     # #6650/counsel approval and destination-prefix lock precede activation.
     if: vars.FILE_RECOVERY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'snapshot')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -85,7 +86,11 @@ jobs:
           PY
   synthetic-proof:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'synthetic-proof' && vars.FILE_DR_PREVIEW_ENABLED == 'true'
+    # D8069: the outside copy's keys are read only inside production-ops, like every DR and recovery job.
+    environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -111,6 +116,8 @@ jobs:
     # uses, and the restore must skip it. The script refuses the production database id.
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'suppression-drill' && vars.FILE_RECOVERY_PREVIEW_DRILL_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

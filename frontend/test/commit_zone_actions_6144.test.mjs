@@ -118,7 +118,7 @@ test('recusal needs a declaration and the finality acknowledgement, and sends re
   try {
     await ui.press('button-open-recuse');
     assert.equal(ui.dialogs().length, 1);
-    assert.match(textOf(ui.byId('recuse-replaces')), /You voted Yes\. Recusing replaces that vote\./);
+    assert.match(textOf(ui.byId('recuse-replaces')), /You voted Invest\. Recusing replaces that vote\./);
     assert.equal(propsOf(ui.byId('button-recuse')).disabled, true, 'a recusal without a declaration is offered');
     await ui.type('input-recusal-final', true);
     assert.equal(propsOf(ui.byId('button-recuse')).disabled, true, 'a recusal without a declaration is offered');
@@ -209,7 +209,7 @@ test('closing the vote and adding a condition write only after the dialog confir
   const ui = await setup();
   try {
     await act(async () => propsOf(ui.button('Close vote')).onClick());
-    assert.match(textOf(ui.byId('close-vote-tally')), /Yes 1 · No 0 · Abstain 0 · Recused 0/);
+    assert.match(textOf(ui.byId('close-vote-tally')), /Invest 1 · Pass 0 · Abstain 0 · Recused 0/);
     await ui.press('button-close-vote-defer');
     assert.deepEqual(ui.calls, [], 'choosing an outcome recorded it');
     await ui.press('button-close-vote-confirm');
