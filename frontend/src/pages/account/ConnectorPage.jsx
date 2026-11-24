@@ -27,6 +27,7 @@ import PosthogProjectsSection from './PosthogProjectsSection';
 import LinkedInSection, { LinkedInDisconnectChoice } from './LinkedInSection';
 import TeamsSection from './TeamsSection';
 import ConnectorMark from './ConnectorMark';
+import ConnectorPilotSection from './ConnectorPilotSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -168,6 +169,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
       {p.key === 'teams' && <TeamsSection p={p} />}
       {/* D1091 (GW1, GW2, GW8): Google Workspace's own section draws its permission and the files chosen. */}
       {p.key === 'google_workspace' && <GoogleWorkspaceFiles />}
+      {['typeform', 'google_search_console'].includes(p.key) && <ConnectorPilotSection provider={p.key} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (
