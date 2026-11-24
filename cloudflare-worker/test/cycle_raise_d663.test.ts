@@ -876,9 +876,11 @@ test('D1610 W3: the connected tools: not connected, connected with a count and i
            ('g1', 3, ${OTHER}, ${P}, 'pitch_deck', 'd1', 'x', 'slides', 'Other deck', '2026-10-30 00:00:00')`);
   tools = (await overview(db)).body.connectors;
   const by = (k: string) => tools.find((t: any) => t.key === k);
-  assert.deepEqual(by('github'), { key: 'github', label: 'GitHub', fact: 'Contributors to 2 repositories', as_of: '2026-10-30 09:15:00', state: 'connected' });
-  assert.deepEqual(by('mercury'), { key: 'mercury', label: 'Mercury', fact: 'No runway read yet', as_of: null, state: 'connected' }, 'no read stored: null, not a date');
-  assert.deepEqual([by('google').state, by('google').as_of], ['not_connected', null], 'another founder\'s and an inactive connection');
+  // D8258: each row also carries its freshness window and, when connected, Fresh, Stale or Not recorded.
+  assert.deepEqual(by('github'), { key: 'github', label: 'GitHub', fact: 'Contributors to 2 repositories', as_of: '2026-10-30 09:15:00', state: 'connected', fresh_within_hours: 168, freshness: 'stale' });
+  assert.deepEqual(by('mercury'), { key: 'mercury', label: 'Mercury', fact: 'No runway read yet', as_of: null, state: 'connected', fresh_within_hours: 48, freshness: 'not_recorded' }, 'no read stored: null, not a date');
+  // D8258: another founder's connection never counts; this founder's disconnected one is Disconnected, not Not connected.
+  assert.deepEqual([by('google').state, by('google').as_of, by('google').freshness], ['disconnected', null, null], 'another founder\'s and a lost connection');
   db.exec(`INSERT INTO mercury_raise_facts (integration_id, project_id, kind, fact_key, amount_cents, burn_cents, as_of) VALUES (2, ${P}, 'runway', 'runway', 3300000, 200000, '2026-10-28T09:14:00Z')`);
   const staff = await overview(db, ADMIN);
   for (const r of [await overview(db), staff]) {

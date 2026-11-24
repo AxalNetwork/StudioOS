@@ -10,7 +10,7 @@
  *   next_steps              readiness steps with their reason and gain (D1610)
  *   follow_ups_due          prospects with a next step due this week (D8256)
  *   open_objections         objections no narrative section answers yet, with who raised them (D8256)
- *   connectors              the connected sources and when each was last read (D1610)
+ *   connectors              the connected sources, when each was last read (D1610), its freshness and a lost connection (D8258)
  *   investor_activity       pipeline, deck-view and call-response counts, each with its own read meta (D6045)
  *
  * The states are #5129's (RA-08): a measured 0 is a value; nothing recorded is
@@ -385,24 +385,47 @@ export function activityView(raw) {
 
 // ---------- Connected evidence (RA-06) ------------------------------------
 
+/** D8258: the freshness words a connected source carries, from the Worker's window (`FRESH_WITHIN_HOURS`). */
+export const FRESHNESS = ['fresh', 'stale', 'not_recorded'];
+const SOURCE_STATES = ['connected', 'not_connected', 'disconnected', 'unreadable'];
+
+/** D8258: a window in plain words: "2 days", "1 week"; null when the read sent none. */
+export function windowWords(hours) {
+  if (!Number.isFinite(hours) || hours <= 0) return null;
+  if (hours % 168 === 0) return plural(hours / 168, 'week', 'weeks');
+  if (hours % 24 === 0) return plural(hours / 24, 'day', 'days');
+  return plural(hours, 'hour', 'hours');
+}
+
 /**
  * The sources Raise reads: `{ state: 'none' }` when nothing is connected (RA-06's one message),
  * `{ state: 'unavailable' }` when the list itself could not be read, else one row each.
  * Null when the read carries no list. A last read that is not recorded is never a date or 0.
+ *
+ * D8258 (RA-06, RA-09): a connected source is Fresh or Stale by its own window, or its last read is
+ * Not recorded; a lost connection is Disconnected (Reconnect), apart from a source that could not be
+ * read just now (Unavailable, Try again). An unknown state is Unavailable, never Connected.
  */
 export function sourcesView(raw) {
   const c = raw?.connectors;
   if (c == null) return null;
   if (!Array.isArray(c)) return { state: 'unavailable' };
-  const rows = c.filter((r) => r && (r.key || r.label)).map((r) => ({
-    key: r.key || r.label,
-    label: r.label || r.key,
-    state: ['connected', 'not_connected', 'unreadable'].includes(r.state) ? r.state : 'unreadable',
-    fact: typeof r.fact === 'string' && r.fact ? r.fact : null,
-    asOf: typeof r.as_of === 'string' && r.as_of ? r.as_of : null,
-  }));
+  const rows = c.filter((r) => r && (r.key || r.label)).map((r) => {
+    const state = SOURCE_STATES.includes(r.state) ? r.state : 'unreadable';
+    const asOf = typeof r.as_of === 'string' && r.as_of ? r.as_of : null;
+    const freshness = state !== 'connected' ? null : FRESHNESS.includes(r.freshness) ? r.freshness : asOf ? null : 'not_recorded';
+    return {
+      key: r.key || r.label,
+      label: r.label || r.key,
+      state,
+      fact: typeof r.fact === 'string' && r.fact ? r.fact : null,
+      asOf,
+      freshness,
+      window: state === 'connected' ? windowWords(r.fresh_within_hours) : null,
+    };
+  });
   if (!rows.some((r) => r.state !== 'not_connected')) return { state: 'none', rows };
-  return { state: 'ready', rows };
+  return { state: 'ready', rows, disconnected: rows.filter((r) => r.state === 'disconnected').map((r) => r.label) };
 }
 
 /** RA-01: Incorporate and the Co-Founder Agreement are Build's, linked under Related company setup. */
