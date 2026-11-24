@@ -9,7 +9,7 @@ import { TERMS, TERM_ORDER, termWord } from '../grants/grantsModel';
 import { indexWord } from './packageCompareModel';
 import Sheet from '../../../ui/Sheet';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { money, priceText, reviewedPrice, canAccept, operation, validReason, offerFailure, loadPending, savePending } from './packageOfferModel';
+import { money, priceText, reviewedPrice, canAccept, operation, validReason, offerFailure, loadPending, savePending, stateDecisionStatus } from './packageOfferModel';
 
 const CARD = 'min-w-0 space-y-3 rounded-xl border border-gray-200 bg-white p-4 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100';
 const BTN = 'min-h-[44px] cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 disabled:cursor-default disabled:opacity-50 dark:border-gray-700';
@@ -25,6 +25,7 @@ function Offers({ licenceUid, actorId, api = DEFAULT_API, storage = browserStora
   const [sheet, setSheet] = useState(null), [review, setReview] = useState(null), [step, setStep] = useState('review');
   const [price, setPrice] = useState(''), [override, setOverride] = useState(''), [reason, setReason] = useState('');
   const [dates, setDates] = useState({ starts_on: '', ends_on: '', expires_on: '' }), [history, setHistory] = useState(null);
+  const [stateRetryReady, setStateRetryReady] = useState(false);
   const [pending, setPending] = useState(() => loadPending(storage, storageKey));
   const alive = useRef(true), locked = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -41,9 +42,28 @@ function Offers({ licenceUid, actorId, api = DEFAULT_API, storage = browserStora
     try { await fn(); } catch (e) { if (alive.current) setError(e?.status < 500 ? offerFailure(e) : 'Unreadable: the review or history could not be read. No decision was submitted.'); }
     finally { locked.current = false; if (alive.current) setBusy(false); }
   }
+  async function reconcileState() {
+    if (!pending || locked.current || ['create', 'accept'].includes(pending.action)) return;
+    locked.current = true; setBusy(true); setError(''); setStateRetryReady(false);
+    try {
+      const [detail, history] = await Promise.all([api.detail(licenceUid, pending.offer), api.history(licenceUid, pending.offer)]);
+      if (!alive.current) return;
+      const status = stateDecisionStatus(pending, detail.offer, history.items, actorId);
+      if (status === 'recorded' || status === 'changed') {
+        keep(null); setSheet(null); setReview(null); setRound(n => n + 1);
+        setNotice(status === 'recorded' ? `A matching ${pending.action} decision is recorded for the original next revision. Current offer: ${detail.offer.state}, revision ${detail.offer.revision}.`
+          : `The recorded offer advanced to revision ${detail.offer.revision}. The earlier request is not confirmed by the returned history. Its old revision cannot change this offer; review the current record before a new decision.`);
+      } else if (status === 'unchanged') {
+        setStateRetryReady(true); setNotice('No matching decision is recorded in this read and the offer retains its original revision. You may retry that exact revision; the server allows only one transition. This action has no idempotency key.');
+      } else setError('The earlier outcome could not be reconciled. Keep the pending operation and read its history again.');
+    } catch { if (alive.current) setError('The recorded outcome is unreadable. The pending operation is retained; no decision was resent.'); }
+    finally { locked.current = false; if (alive.current) setBusy(false); }
+  }
   async function send(op) {
     if (!op || locked.current) return;
-    locked.current = true; setBusy(true); setError(''); keep(op);
+    const retrying = !!pending;
+    if (retrying && !['create', 'accept'].includes(op.action) && !stateRetryReady) return;
+    locked.current = true; setBusy(true); setError(''); setNotice(''); setStateRetryReady(false); keep(op);
     try {
       await (op.action === 'create' ? api.create(licenceUid, op.body) : api[op.action](licenceUid, op.offer, op.body));
       savePending(storage, storageKey, null);
@@ -51,8 +71,8 @@ function Offers({ licenceUid, actorId, api = DEFAULT_API, storage = browserStora
       setPending(null); setSheet(null); setReview(null); setNotice('Decision recorded. Read the current offer and branch delivery status separately; granted does not mean in force.'); setRound(n => n + 1);
     } catch (e) {
       if (!alive.current) return;
-      setError(offerFailure(e));
-      if (e?.status >= 400 && e.status < 500) { keep(null); setReview(null); setStep('review'); }
+      setError(retrying ? `${offerFailure(e)} The earlier outcome remains unconfirmed; the pending operation is retained.` : offerFailure(e));
+      if (!retrying && e?.status >= 400 && e.status < 500) { keep(null); setReview(null); setStep('review'); }
     } finally { locked.current = false; if (alive.current) setBusy(false); }
   }
   const begin = (offer, action) => { setSheet({ offer, action }); setStep('review'); setReview(null); setHistory(null); setPrice(priceText(offer.recommended_annual_fee_cents, offer.currency)); setOverride(''); setReason(''); setError(''); };
@@ -68,7 +88,7 @@ function Offers({ licenceUid, actorId, api = DEFAULT_API, storage = browserStora
     <section className={CARD}><h2 className="text-base font-bold">Axal VC package offers</h2><p>Immutable versions and prices for this licence. Accepting is an HQ decision; nothing is sent or signed here.</p>
       <button type="button" className={BTN} disabled={busy} onClick={() => { setError(''); setRound(n => n + 1); }}>Read offers again</button>
       {notice && <div role="status"><p>{notice}</p><Link className={BTN} to={`/admin/licences?licence=${encodeURIComponent(licenceUid)}&tab=deploy`}>Check branch delivery</Link></div>}{error && <p role="alert">{error}</p>}
-      {pending && <div role="alert"><p>An operation is awaiting confirmation. Its exact inputs and key are retained for this account and licence. Read before retrying; do not start another operation.</p><button type="button" className={BTN} disabled={busy} onClick={() => send(pending)}>Retry the same operation</button></div>}
+      {pending && <div role="alert"><p>An operation is awaiting confirmation. Its exact inputs and any applicable key are retained for this account and licence. Read before retrying; do not start another operation.</p>{['create', 'accept'].includes(pending.action) ? <button type="button" className={BTN} disabled={busy} onClick={() => send(pending)}>Retry the same operation</button> : <><button type="button" className={BTN} disabled={busy} onClick={reconcileState}>Read recorded decision</button>{stateRetryReady && <button type="button" className={BTN} disabled={busy} onClick={() => send(pending)}>Retry original revision</button>}</>}</div>}
       {items === null ? <p role="status">Reading recorded offers…</p> : <>
         {!items.some(o => o.state === 'accepted') && <p>No accepted Axal VC package recorded in this offer history. Programs may still be standalone grants; no package does not mean no programs.</p>}
         {items.length === 100 && <p>Showing the latest 100 offers. Older terms may exist; this is not a complete current-package inventory.</p>}
@@ -100,7 +120,7 @@ function Offers({ licenceUid, actorId, api = DEFAULT_API, storage = browserStora
         </> : <p>This records “{sheet.action}” for only this unaccepted offer at revision {offer.revision}. It does not terminate, reprice, invoice or replace an accepted package or its grants.</p>}
       </>}
       {sheet.action !== 'history' && <label className="block">Reason (10–500 characters)<textarea className={INPUT} disabled={blocked} value={reason} maxLength={500} onChange={e => setReason(e.target.value)} /></label>}
-      {error && <p role="alert">{error}</p>}{pending && <p role="alert">Outcome is awaiting confirmation; use “Retry the same operation” on the underlying page after closing this sheet.</p>}
+      {error && <p role="alert">{error}</p>}{pending && <p role="alert">Outcome is awaiting confirmation; close this sheet to use its retained retry or recorded-decision check on the page.</p>}
       </div>
     </Sheet>}
   </div>;

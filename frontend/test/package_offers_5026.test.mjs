@@ -6,7 +6,7 @@ import React, { act, useState } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import { mutationCheck } from './_form_d695.mjs';
 import { LicencePackageOffers } from '../src/pages/admin/licences/LicencePackageOffers.jsx';
-import { money, reviewedPrice, validReason, canAccept, operation, loadPending } from '../src/pages/admin/licences/packageOfferModel.js';
+import { money, reviewedPrice, validReason, canAccept, operation, loadPending, stateDecisionStatus } from '../src/pages/admin/licences/packageOfferModel.js';
 const h=React.createElement;
 const offer={uid:'offer-a',package_name:'Synthetic Learning',package_version:2,package_key:'talent_learning',currency:'JPY',recommended_annual_fee_cents:1200,state:'offered',revision:7,programs:[{program_key:'learning',terms:{capacity_cap:0}}],starts_on:'2027-01-01',ends_on:'2027-12-31'}; // Immutable synthetic contract dates
 const reviewed={offer,review_hash:'frozen-review-a',price:{accepted_annual_fee_cents:1200},conflicts:[],legal:{strategy:'per_program',legal_gate:'required_before_in_force',policy_version:3},grants:[{program_key:'learning',action:'created',terms:{capacity_cap:0}}],branch_sync:'Delivery reported separately.',accepted_program_allocation:'Not recorded; the package has its own price.'};
@@ -63,4 +63,27 @@ test('new decision guards are mutation-checked both ways, including override zer
   ['p.minor !== offer.recommended_annual_fee_cents && !validReason(reason)','false']
  ]);
  assert.equal(loadPending({getItem:()=>'{broken'},'key'),null);
+});
+
+test('a retry refusal never discards an earlier unknown keyed acceptance',async()=>{
+ const store=storage();const op=operation('accept',offer,reviewed,{accepted_annual_fee_cents:1200,override_reason:null},'Approved for this licence','fixed-key-5026');store.setItem('studioos:package-offer:42:licence-a',JSON.stringify(op));
+ const m=await mount(fake({accept:async()=>{throw Object.assign(Error('Revision changed'),{status:409});}}),store);
+ try{await m.click('Retry the same operation');assert.equal(store.map.size,1);assert.match(m.text(),/earlier outcome remains unconfirmed/);}finally{await m.unmount();}
+});
+test('a lost unkeyed transition is reconciled against actor/reason/revision history before any resend',async()=>{
+ let posts=0;const reason='Approved decline for this licence';const api=fake({decline:async()=>{posts++;throw Error('lost response');},detail:async()=>({offer:{...offer,state:'declined',revision:8}}),history:async()=>({items:[{action:'declined',actor_user_id:42,reason,detail_json:JSON.stringify({revision:8})}]})});
+ const m=await mount(api);try{await m.click('Decline Synthetic Learning');await fill(m,'Reason (10',reason);await m.click('Confirm decline');await m.click('Cancel');assert.equal(posts,1);await m.click('Read recorded decision');assert.equal(posts,1);assert.match(m.text(),/matching decline decision is recorded/);assert.doesNotMatch(m.text(),/operation is awaiting confirmation/);}finally{await m.unmount();}
+});
+test('an unchanged unkeyed transition may retry only after an explicit recorded-outcome check, using identical CAS inputs',async()=>{
+ const calls=[];const api=fake({decline:async(...a)=>{calls.push(a);if(calls.length===1)throw Error('lost');return{};},detail:async()=>({offer}),history:async()=>({items:[]})});const m=await mount(api);
+ try{await m.click('Decline Synthetic Learning');await fill(m,'Reason (10','Approved decline for this licence');await m.click('Confirm decline');await m.click('Cancel');assert.equal(calls.length,1);await m.click('Read recorded decision');assert.equal(calls.length,1);await m.click('Retry original revision');assert.deepEqual(calls[1],calls[0]);assert.equal(Object.hasOwn(calls[1][2],'idempotency_key'),false);}finally{await m.unmount();}
+});
+
+test('state reconciliation never invents an event match from only a desired state; actor, reason and next revision must match',async()=>{
+ const op=operation('decline',offer,null,null,'Recorded decline reason');const current={...offer,state:'declined',revision:8};
+ const event={action:'declined',actor_user_id:42,reason:'Recorded decline reason',detail_json:'{"revision":8}'};
+ assert.equal(stateDecisionStatus(op,current,[event],42),'recorded');
+ for(const delta of [{actor_user_id:99},{reason:'Another reason'},{detail_json:'{"revision":9}'}]) assert.equal(stateDecisionStatus(op,current,[{...event,...delta}],42),'changed');
+ const path='pages/admin/licences/packageOfferModel.js',src=readFileSync(new URL('../src/'+path,import.meta.url),'utf8');
+ await mutationCheck(src,path,m=>{assert.equal(m.stateDecisionStatus(op,current,[event],42),'recorded');assert.equal(m.stateDecisionStatus(op,current,[{...event,actor_user_id:99}],42),'changed');},[['Number(e.actor_user_id) === Number(actorId)','true'],["if (recorded) return 'recorded'","if (false) return 'recorded'"]]);
 });

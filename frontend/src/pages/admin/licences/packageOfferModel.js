@@ -18,7 +18,7 @@ export function operation(action, offer, review, price, reason, key = crypto.ran
 }
 export function offerFailure(error) {
   if (error?.status >= 400 && error.status < 500) return error?.message || 'Refused: read the offer and review its current consequences again.';
-  return 'Outcome unknown. Keep this operation and retry it with the same key, or read the offer again. Do not create a replacement decision.';
+  return 'Outcome unknown. Keep this operation and use its retained retry or recorded-outcome check. Do not create a replacement decision.';
 }
 export function loadPending(storage, key) {
   try {
@@ -29,4 +29,18 @@ export function loadPending(storage, key) {
 }
 export function savePending(storage, key, value) {
   try { if (value) storage?.setItem(key, JSON.stringify(value)); else storage?.removeItem(key); } catch { /* In-memory exact retry remains available if browser storage is unavailable. */ }
+}
+
+/** Unkeyed state changes use CAS, not invented idempotency keys: reconcile the recorded revision and event first. */
+export function stateDecisionStatus(op, offer, events, actorId) {
+  const target = { offer: 'offered', decline: 'declined', expire: 'expired', supersede: 'superseded' };
+  if (!Object.hasOwn(target, op?.action) || offer?.uid !== op.offer || !Number.isSafeInteger(offer.revision)) return 'unknown';
+  const revision = op.body.expected_revision;
+  const recorded = (events || []).some(e => {
+    let detail; try { detail = JSON.parse(e.detail_json || '{}'); } catch { return false; }
+    return e.action === target[op.action] && Number(e.actor_user_id) === Number(actorId) && e.reason === op.body.reason && detail.revision === revision + 1;
+  });
+  if (recorded) return 'recorded';
+  if (offer.revision > revision) return 'changed';
+  return offer.revision === revision ? 'unchanged' : 'unknown';
 }
