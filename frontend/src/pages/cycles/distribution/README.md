@@ -84,3 +84,5 @@ and Campaigns/:uid. No Distribution wildcard may shadow the existing Grow
 record route. Campaign screens must use #4447/#4483's existing store, router
 and grow client, with reads owned by their task; the shell reads no campaigns.
 Proposals retain their host's decisions; nothing posts or sends on mount.
+
+`SearchConsoleResults.jsx`, `searchConsoleModel.js` — D5841: explicit property binding/sync and dated property totals, weighted CTR and separate top-page detail.

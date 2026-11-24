@@ -1,3 +1,4 @@
+import TypeformJourney from '../TypeformJourney';
 /**
  * Validate's entry in CycleRoute.jsx's cycle table (D661, #1474; split out
  * by D5615, #5615): its modules, the Record a session action and the
@@ -204,6 +205,7 @@ const validate = {
           load={() => api.listWaitlistCustomers(ctx.projectId)}
           invite={(id) => api.inviteWaitlistCustomer(ctx.projectId, id)}
           followUp={(id) => api.followUpWaitlistCustomer(ctx.projectId, id)} />
+        <TypeformJourney projectId={ctx.projectId} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
         <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />

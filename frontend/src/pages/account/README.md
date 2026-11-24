@@ -113,3 +113,7 @@ D5810 (#5810): `teamsConnector.js` holds Microsoft Teams' rules on the shared
 Microsoft connection and the tab-only marker that returns Microsoft's sign-in to
 the Teams page; `TeamsSection.jsx` draws its three rows; `ConnectorMark.jsx`
 draws the local Teams mark and `BrandIcon` for everything else.
+
+`ConnectorPilotSection.jsx` — D5830/D5841: a selected-company venture and fixed OAuth task return for the survey/search connectors.
+
+`connectorPilotReturn.js` — controlled task-return notices; query markers never establish connection status or trigger a write.
