@@ -14,6 +14,7 @@
 import { classify } from '../merge-policy.mjs';
 import { clusters, escape, order, pairs } from './prOverlap.mjs';
 import { mergeStatus, requiredChecks } from './prRisk.mjs';
+import { blocksQueue } from './queueSkew.mjs';
 
 export const MARKER = '<!-- studioos-landing-list:v1 -->';
 export const TITLE = 'Landing list: green PRs, T2 first (D6469)';
@@ -105,6 +106,8 @@ export function entry(pr, now) {
     tier: t.tier, rules: t2Rules(t), modelChanged: modelChanged(pr), merge: mergeStatus(pr.detail),
     ageDays: ageDays(pr.created_at, now), changed_files: Number.isInteger(detail.changed_files) ? detail.changed_files : (pr.files?.length ?? null),
     files: pr.files, draft: false,
+    // D8432: what merging this head into its base would break; `not checked` when nobody asked or git could not say.
+    skew: pr.skew ?? { status: 'not checked', problems: [] },
   };
 }
 
@@ -112,14 +115,22 @@ export function entry(pr, now) {
 const mergeText = m => `${m.status}${m.mergeableState !== 'unknown' ? ` (${m.mergeableState})` : ''}`;
 const line = (e, i) => `${i + 1}. [#${e.number}](${e.url}) ${escape(e.title)} — ${e.tier}${e.modelChanged ? ' · **model-changed, owner lands**' : ''} · mergeable: ${escape(mergeText(e.merge))} · age: ${e.ageDays == null ? 'unknown' : `${e.ageDays} d`} · files: ${e.changed_files ?? 'unknown'}${e.tier === 'T2' && e.rules.length ? ` · T2: ${escape(e.rules.join(', '))}` : ''}`;
 
-/** The sticky issue body. Excluded PRs are counted by reason, never listed as green. */
-export function render(entries, { generatedAt, partial = false, excluded = {}, notes = [] } = {}) {
+/** D8432: why a held PR is held. A conflict has no detail; a break names each file, line and key. */
+const heldLine = (e, i) => `${i + 1}. [#${e.number}](${e.url}) ${escape(e.title)} — ${e.skew.status === 'conflict' ? 'conflicts with the base' : `the merge breaks ${e.skew.problems.slice(0, 3).map(p => escape(p)).join('; ')}${e.skew.problems.length > 3 ? `; and ${e.skew.problems.length - 3} more` : ''}`}`;
+
+/**
+ * The sticky issue body. Excluded PRs are counted by reason, never listed as green. A green PR whose merge with
+ * its base conflicts or breaks a workflow file (D8432) is listed apart, under its reason, and in neither queue list.
+ */
+export function render(all, { generatedAt, partial = false, excluded = {}, notes = [] } = {}) {
+  const held = all.filter(e => blocksQueue(e.skew)), entries = all.filter(e => !blocksQueue(e.skew));
   const owner = entries.filter(e => e.tier === 'T2' || e.modelChanged), auto = entries.filter(e => !(e.tier === 'T2' || e.modelChanged));
   const ex = Object.entries(excluded).filter(([, n]) => n > 0).sort((a, b) => a[0].localeCompare(b[0]));
   const section = (title, rows, offset) => `### ${title} (${rows.length})\n\n${rows.length ? rows.map((e, i) => line(e, i + offset)).join('\n') : 'None.'}`;
   return `${MARKER}\n## Landing list${partial ? ' (partial)' : ''}\n\nOpen, non-draft PRs whose required checks are all green on the current head, in landing order. Generated ${escape(generatedAt ?? 'at an unknown time')}.\n${partial ? '\nPartial: a GitHub read failed or a request cap was reached; a PR missing here is not evidence it is red.\n' : ''}\n`
     + section('Owner lands: T2 and model-changed', owner, 0) + '\n\n'
     + section('T0 / T1', auto, owner.length)
+    + (held.length ? `\n\n### Do not queue: merge the base in first (${held.length})\n\nGreen on their own head, but not once merged. Queueing one fails its queue run and every run built on it.\n\n${held.map(heldLine).join('\n')}` : '')
     + `\n\nNot listed: ${ex.length ? ex.map(([r, n]) => `${n} ${escape(r)}`).join(', ') : 'none'}.`
     + (notes.length ? '\n\n' + notes.map(n => `- ${escape(n)}`).join('\n') : '')
     + '\n\nTier is merge-policy.mjs over the REST file list (advisory; the `landing policy` check on the PR is authoritative). Order follows the overlap report (D5616). This job never labels, merges or queues (D6469).';
