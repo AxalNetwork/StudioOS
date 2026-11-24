@@ -198,6 +198,15 @@
 - name: "slot:S37"
   color: "5319E7"
   description: "Work queue of slot S37"
+- name: "slot:S38"
+  color: "5319E7"
+  description: "Work queue of slot S38"
+- name: "slot:S39"
+  color: "5319E7"
+  description: "Work queue of slot S39"
+- name: "slot:chatgptpro"
+  color: "B60205"
+  description: "Admin slot: console configuration on GitHub, Cloudflare, AWS and Azure (ChatGPT Pro, browser)"
 - name: "priority:P0"
   color: "BFDADC"
   description: "Canonical priority:P0 task label"
@@ -240,6 +249,12 @@
   color: "B60205"
   description: "Repair issue for a verified GitHub Actions workflow failure"
 
+# The privileged PR class (#8067, D8067). The landing policy workflow sets it on a pull request that changes a
+# path in merge-control/src/lib/classify.mjs PRIVILEGED_PATHS and takes it off when none is changed.
+- name: "pr:privileged"
+  color: "5319E7"
+  description: "Changes a privileged path: the owner reviews it, and no bot lands it"
+
 # The landing bot (#6467, under #5600). Its rules are scripts/landing-bot/rules.mjs.
 - name: "bot:off"
   color: "5C5C5C"
@@ -265,3 +280,14 @@
 - name: "bot:handed-back"
   color: "C5DEF5"
   description: "The ejection handler handed this queue removal back to the owner; the owner re-queues it (D6476-p4)"
+# Venture namespaces (D8078): one venture:<slug> label per entry in ventures.json,
+# written by `node scripts/lib/workIntent.mjs --venture-labels`. Only the owner
+# adds a venture, in a privileged PR (#8078 Q2 A).
+# venture-labels:begin (generated from ventures.json, D8078; never edit by hand)
+# venture-labels:end
+- name: "sla:7d"
+  color: "FBCA04"
+  description: "Security task due within seven days of filing (D8074)"
+- name: "sla:breached"
+  color: "B60205"
+  description: "Security task still open seven days after filing (D8074)"

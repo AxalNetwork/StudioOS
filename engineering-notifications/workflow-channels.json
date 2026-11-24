@@ -2,6 +2,11 @@
   "repository": "AxalNetwork/StudioOS",
   "workflows": [
     {
+      "id": null,
+      "path": ".github/workflows/admin-drift.yml",
+      "channel": "#axalvc-actions-admin-drift"
+    },
+    {
       "id": 416675427,
       "path": ".github/workflows/agent-compute-image.yml",
       "channel": "#axalvc-actions-agent-compute-image"
@@ -15,6 +20,11 @@
       "id": null,
       "path": ".github/workflows/agent-gateway-keys.yml",
       "channel": "#axalvc-actions-agent-gateway-keys"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/agent-provenance.yml",
+      "channel": "#axalvc-actions-agent-provenance"
     },
     {
       "id": 417193959,
@@ -260,6 +270,11 @@
       "id": null,
       "path": ".github/workflows/ossf-scorecard.yml",
       "channel": "#axalvc-actions-ossf-scorecard"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/ownership.yml",
+      "channel": "#axalvc-actions-ownership"
     },
     {
       "id": 295717983,

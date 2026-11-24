@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = raw('frontend/src/pages/admin/SpinoutModerationPage.jsx');
@@ -13,7 +14,7 @@ const API = raw('frontend/src/lib/api.js');
 const ROUTE = raw('cloudflare-worker/src/routes/spinout_moderation.ts');
 const BOARD = raw('frontend/src/pages/branch/BranchApprovals.jsx');
 // D1038 (#2390): Approvals' page moved to /admin/approvals.
-const HELD = raw('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+const HELD = approvalsPageSource();
 
 test('the list method, the route, and the page agree', () => {
   assert.match(API, /adminSpinoutModerationOpen:\s*\(\)\s*=>\s*request\('\/admin\/spinout-moderation'\)/);

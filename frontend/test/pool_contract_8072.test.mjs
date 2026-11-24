@@ -240,7 +240,7 @@ test('every exception names its owner, a reason and a date, and D8072 lists each
     for (const k of ex.allow) assert.ok(KINDS[k] || k.startsWith('write:'), k);
     assert.ok(d.includes(`\`${ex.workflow}\` › \`${ex.job}\``), `D8072 does not list ${ex.workflow} › ${ex.job}`);
   }
-  assert.equal(EXCEPTIONS.length, 9);
+  assert.equal(EXCEPTIONS.length, 10);
 });
 
 test('the command prints the table and exits 1 on a violation, 2 on a bad option', () => {

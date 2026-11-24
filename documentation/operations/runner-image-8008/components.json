@@ -1,0 +1,1530 @@
+{
+  "schema_version": 1,
+  "issue": 8008,
+  "image_status": "qualification pending",
+  "target": {
+    "os": "linux",
+    "architecture": "amd64",
+    "node_arch": "x64",
+    "libc": "glibc",
+    "keeper": "10001:10001",
+    "candidate": "10000:10000",
+    "source_checkpoint": "8c11fb864c3466fec684ec6bb92409d33973b2ec"
+  },
+  "source_revisions": [
+    {
+      "label": "planning_main",
+      "revision": "c2fb23a5cc4e440268dce3c65c579a0ee21bf469",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/bootstrap.sh",
+          "sha256": "648ff9c83c29fdbac2e53c961321fe9f96e411159afa224bbc8eca6e24d6a032"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "8420dba89da37d03a2cd3eda01ad68f297799fcce92115b204ddba2f6b2b93f0"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "0d25d33e751e90253cb3fd3407b8db3e032dea22c8116ca4315183d937e91071"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "0b4ac98854684cdcee6918116cf7734610b70cc028460edfd77c1d9e46772700"
+        },
+        {
+          "path": "package.json",
+          "sha256": "0ebfb262b9a79fad329d51cc182f7729d99f72499e6750b84ae9836450dbfe08"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+        },
+        {
+          "path": "cloudflare-worker/package.json",
+          "sha256": "49893016313f545a31185e6118b0e4b0e1bf88da65324d7942e75f775d1a2b59"
+        },
+        {
+          "path": "cloudflare-worker/package-lock.json",
+          "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b"
+        }
+      ],
+      "recipe_inventory": [
+        "agent-compute/Dockerfile",
+        "meeting-bot/Dockerfile"
+      ]
+    },
+    {
+      "label": "historical_chosen_main",
+      "revision": "d990215df2ed696f6b7572b904afe2c96a653f7b",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/bootstrap.sh",
+          "sha256": "648ff9c83c29fdbac2e53c961321fe9f96e411159afa224bbc8eca6e24d6a032"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "8420dba89da37d03a2cd3eda01ad68f297799fcce92115b204ddba2f6b2b93f0"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "0d25d33e751e90253cb3fd3407b8db3e032dea22c8116ca4315183d937e91071"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "0b4ac98854684cdcee6918116cf7734610b70cc028460edfd77c1d9e46772700"
+        },
+        {
+          "path": "package.json",
+          "sha256": "0ebfb262b9a79fad329d51cc182f7729d99f72499e6750b84ae9836450dbfe08"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+        },
+        {
+          "path": "cloudflare-worker/package.json",
+          "sha256": "49893016313f545a31185e6118b0e4b0e1bf88da65324d7942e75f775d1a2b59"
+        },
+        {
+          "path": "cloudflare-worker/package-lock.json",
+          "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b"
+        }
+      ],
+      "recipe_inventory": [
+        "agent-compute/Dockerfile",
+        "meeting-bot/Dockerfile"
+      ]
+    },
+    {
+      "label": "pr7981",
+      "revision": "db11f2f3da613f3542d2bf8f736acaa35735457d",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/bootstrap.sh",
+          "sha256": "648ff9c83c29fdbac2e53c961321fe9f96e411159afa224bbc8eca6e24d6a032"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "8420dba89da37d03a2cd3eda01ad68f297799fcce92115b204ddba2f6b2b93f0"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "0d25d33e751e90253cb3fd3407b8db3e032dea22c8116ca4315183d937e91071"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "0b4ac98854684cdcee6918116cf7734610b70cc028460edfd77c1d9e46772700"
+        },
+        {
+          "path": "package.json",
+          "sha256": "0ebfb262b9a79fad329d51cc182f7729d99f72499e6750b84ae9836450dbfe08"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+        },
+        {
+          "path": "cloudflare-worker/package.json",
+          "sha256": "49893016313f545a31185e6118b0e4b0e1bf88da65324d7942e75f775d1a2b59"
+        },
+        {
+          "path": "cloudflare-worker/package-lock.json",
+          "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b"
+        }
+      ],
+      "recipe_inventory": [
+        "agent-compute/Dockerfile",
+        "meeting-bot/Dockerfile"
+      ]
+    },
+    {
+      "label": "pr7972",
+      "revision": "513da8c5bf32eda4a4e8818f6fbbcd9bed63275c",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/bootstrap.sh",
+          "sha256": "648ff9c83c29fdbac2e53c961321fe9f96e411159afa224bbc8eca6e24d6a032"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "ef4097d67ce6bb95c72d3030bc2f1def79d72b3e32c458a7693af1965ff91187"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "bc00ee728d1e4f8f00ef8c6330a51b921dd9ec7d1c3fcbadc136302cdf304d74"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "dac7f6eab419ae65ea5562be5e42b235a2a2275e105bf2a9f78b21d39710a39a"
+        },
+        {
+          "path": "package.json",
+          "sha256": "0ebfb262b9a79fad329d51cc182f7729d99f72499e6750b84ae9836450dbfe08"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+        },
+        {
+          "path": "cloudflare-worker/package.json",
+          "sha256": "49893016313f545a31185e6118b0e4b0e1bf88da65324d7942e75f775d1a2b59"
+        },
+        {
+          "path": "cloudflare-worker/package-lock.json",
+          "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "sha256": "bfa26ee99a0592b540dc345d31c47c6573b9e2404c4dfd6ee38e6ca0cb76929a"
+        }
+      ],
+      "recipe_inventory": [
+        "agent-compute/Dockerfile",
+        "meeting-bot/Dockerfile"
+      ]
+    },
+    {
+      "label": "historical_s09_c36_receipt",
+      "revision": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "00a8cf3ff24aa60e0795874743c5add4016f72fdb846d17ae9d158160568b26a"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "sha256": "ac1e048586ee2a8d005bd0048b3795d801c4048f7422fb7087e20862cae46583"
+        },
+        {
+          "path": "scripts/ci/runners/trace-exporter.mjs",
+          "sha256": "5b4bd5bea35399918f131041f610d0dce10dc709a463cd88c5ea3ed9d5c9f529"
+        },
+        {
+          "path": "scripts/ci/runners/recovery-store.mjs",
+          "sha256": "b54b8c30903a11049f1a5ee3b9b0579cdce4186c2f83bd3edc002f9e7b4b353c"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "526bd1ab4f8f7650c908379041ee584c099c6b8356ea5dc3436cf7b8c0dbc894"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce"
+        }
+      ],
+      "role": "Exact independently ingested delivered S09 contract, not a combined S39 revision"
+    },
+    {
+      "label": "chosen_main",
+      "revision": "4ea24068f07974b05c5cc53df5150aecbe12e32b",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "b48baa92b5e79ac2e18ecf87ed0f298adf2a9d7a1e1ca3049edb946464f358f7"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "sha256": "1bfb6eabe711edc840436b241a9356bcbee5ee468ad96fd3c2fbedeb441f2550"
+        },
+        {
+          "path": "scripts/ci/runners/recovery-store.mjs",
+          "sha256": "1abe89d6d6aadd2e22fbf9bf1021bb094d965a1729c52b5a7592053471a6d8a6"
+        },
+        {
+          "path": "scripts/ci/runners/trace-exporter.mjs",
+          "sha256": "a6e145afc972470e2f7cb411be86e3e970e93b2af5a23e1f78717583fe576ac9"
+        },
+        {
+          "path": "scripts/ci/runners/ephemeral-supervisor.mjs",
+          "sha256": "0941d55ceb55f9e75010bab78ab6f0063b765a11b5aad46dfb7c6c5b731dee09"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "20395cf0d0f64835a4ed66594917d33c9d046bd6179274f45d5facf975a76272"
+        },
+        {
+          "path": "scripts/ci/runner-admission.mjs",
+          "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b"
+        },
+        {
+          "path": "scripts/ci/capacity-client.mjs",
+          "sha256": "db661bc784d94ab3b25963fd58529268f69b1dfdd518e48ef64509ed0268334f"
+        },
+        {
+          "path": "scripts/ci/capacity-planner.mjs",
+          "sha256": "257db087a54380571e94f41b1260d9d04d9f2c5178a8d06921af51d304ec9586"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce"
+        },
+        {
+          "path": ".github/workflows/capacity-planner.yml",
+          "sha256": "13bf7b84f6af86df10ea25a94f3dde7ba4a26301dce4dc45816f62b9fcdc7c85"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "025d51b59c75f5b1fa8792c12a485009eb075857531d1833cc7bb6b0f00bc562"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+        },
+        {
+          "path": "cloudflare-worker/package-lock.json",
+          "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d"
+        },
+        {
+          "path": "infra/runners/linux-x64.image.template.json",
+          "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79"
+        },
+        {
+          "path": "merge-control/src/ciCapacityRuntime.ts",
+          "sha256": "a64763138fe1ce80011e4d24c9373c501afa7ffce1884704846d5d584d7f4031"
+        }
+      ]
+    },
+    {
+      "label": "s39_reconciliation_checkpoint",
+      "revision": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "b48baa92b5e79ac2e18ecf87ed0f298adf2a9d7a1e1ca3049edb946464f358f7"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "sha256": "1bfb6eabe711edc840436b241a9356bcbee5ee468ad96fd3c2fbedeb441f2550"
+        },
+        {
+          "path": "scripts/ci/runners/recovery-store.mjs",
+          "sha256": "1abe89d6d6aadd2e22fbf9bf1021bb094d965a1729c52b5a7592053471a6d8a6"
+        },
+        {
+          "path": "scripts/ci/runners/trace-exporter.mjs",
+          "sha256": "a6e145afc972470e2f7cb411be86e3e970e93b2af5a23e1f78717583fe576ac9"
+        },
+        {
+          "path": "scripts/ci/runners/ephemeral-supervisor.mjs",
+          "sha256": "0941d55ceb55f9e75010bab78ab6f0063b765a11b5aad46dfb7c6c5b731dee09"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "20395cf0d0f64835a4ed66594917d33c9d046bd6179274f45d5facf975a76272"
+        },
+        {
+          "path": "scripts/ci/runner-admission.mjs",
+          "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b"
+        },
+        {
+          "path": "scripts/ci/capacity-executor.mjs",
+          "sha256": "c4e38dce5ade2fb8cc54b4fbd8e50fd35ac1d7bce9840fbf0f51e869e544782d"
+        },
+        {
+          "path": "scripts/ci/capacity-client.mjs",
+          "sha256": "1d41642cef891ad3a69b645f44cc7864e14d8fdf72c6e3d1974cc758866b4095"
+        },
+        {
+          "path": "scripts/ci/capacity-submission.mjs",
+          "sha256": "000216d35102d10f0b802a32f34d59d9ef4933556059003a374595b9bc51e7e8"
+        },
+        {
+          "path": "scripts/ci/capacity-planner.mjs",
+          "sha256": "62c659209e1718a4633403c2cf55089f3a4acf7744ef50f2445bad7621b040c8"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "3dc8db9207557680029737749ca7e749634b792608c2f28a999104c33b21d9e8"
+        },
+        {
+          "path": ".github/workflows/capacity-planner.yml",
+          "sha256": "d91e4ba176646a35ea804d0988f59f539cc30d0050acf594402b1ed159456c0b"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "85943729238ecf5e20ef4d5b5bfa31f8cdd710b9dc70e6d4334006796cb1ca80"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+        },
+        {
+          "path": "cloudflare-worker/package-lock.json",
+          "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d"
+        },
+        {
+          "path": "infra/runners/linux-x64.image.template.json",
+          "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79"
+        },
+        {
+          "path": "merge-control/src/ciCapacityRuntime.ts",
+          "sha256": "a31bbdfff189c9a7952aa6e4140fe51e0782f9af1908c89f4ae161bbc5ee2c98"
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "node",
+      "scope": "candidate",
+      "version": "22.23.3",
+      "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-x64.tar.gz",
+      "filename": "node-v22.23.3-linux-x64.tar.gz",
+      "sha256": "1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af",
+      "directory": "node-v22.23.3-linux-x64",
+      "authenticity": "Official HTTPS checksum/release metadata corroborated; downloaded archive SHA256 matched. Release-signature/attestation verification remains pending.",
+      "verification": "Authenticate official release checksum/signature; SHA256 archive before extraction; native version/architecture probe",
+      "archive_verification": {
+        "sha256_match": true,
+        "static_machine": "ELF64 little-endian x86_64",
+        "native_execution": "not run"
+      },
+      "bundled_npm_version": "10.9.9"
+    },
+    {
+      "name": "python",
+      "scope": "candidate",
+      "version": "3.11.18",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.11.18%2B20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "filename": "cpython-3.11.18+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "sha256": "3288c54cea3db350052019b3f8b558dd8a3da8afa6fda573f5fd2bcb37635b4a",
+      "directory": "python",
+      "authenticity": "Official HTTPS checksum/release metadata corroborated; downloaded archive SHA256 matched. Release-signature/attestation verification remains pending.",
+      "verification": "Authenticate official release checksum/signature; SHA256 archive before extraction; native version/architecture probe",
+      "archive_verification": {
+        "sha256_match": true,
+        "static_machine": "ELF64 little-endian x86_64",
+        "native_execution": "not run"
+      }
+    },
+    {
+      "name": "runner",
+      "scope": "host-only; excluded from candidate",
+      "version": "2.338.2",
+      "url": "https://github.com/actions/runner/releases/download/v2.338.2/actions-runner-linux-x64-2.338.2.tar.gz",
+      "filename": "actions-runner-linux-x64-2.338.2.tar.gz",
+      "sha256": "baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40",
+      "directory": ".",
+      "authenticity": "repository-recorded; upstream verification not performed",
+      "verification": "Authenticate official release checksum/signature; SHA256 archive before extraction; native version/architecture probe"
+    }
+  ],
+  "official_pin_sources": [
+    "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt",
+    "https://github.com/astral-sh/python-build-standalone/releases/tag/20261110",
+    "https://github.com/actions/runner/releases/tag/v2.338.2"
+  ],
+  "rootfs": {
+    "filename": "rootfs.tar",
+    "url": null,
+    "version": null,
+    "sha256": null,
+    "packages": []
+  },
+  "missing_inputs": [
+    {
+      "id": "rootfs",
+      "detail": "Official distro/snapshot source, exact version and rootfs.tar SHA256; no approved rootfs exists in this package"
+    },
+    {
+      "id": "system_packages",
+      "detail": "Complete immutable package/source ledger: shell, coreutils (sleep/mkdir/cp/chmod/id/uname/rm), git >=2.39 <3, loader/glibc/libstdc++/libgcc, actual ELF dependencies, NSS/DNS, C.UTF-8 locale, CA certificates and tzdata; exact versions and checksums missing Acquired archives additionally identify libcrypt.so.1 and bundled Tcl/Tk libraries; see qualification-progress.json. Do not assume glibc supplies libcrypt.so.1."
+    },
+    {
+      "id": "build_utilities",
+      "detail": "Pinned sha256sum, tar with gzip, ln and build-time dependencies in rootfs; include all bytes in rootfs ledger c36 requires date +%s and POSIX shell arithmetic/exec sleep."
+    },
+    {
+      "id": "build_toolchain",
+      "detail": "Approved native amd64 builder/BuildKit version and digest, OCI exporter version, SOURCE_DATE_EPOCH and normalized metadata settings"
+    },
+    {
+      "id": "security_tools",
+      "detail": "Approved syft/trivy/cosign versions, official release hashes/signatures and vulnerability database snapshot digest/time"
+    },
+    {
+      "id": "identity_policy",
+      "detail": "Owner-approved signing subject/issuer/key policy, provenance builder identity and vulnerability acceptance policy; no new exception"
+    },
+    {
+      "id": "upstream_authentication",
+      "detail": "Official HTTPS Node checksum and Python release digest match the acquired runtime archives. Release signatures/attestations and the eventual rootfs authenticity still need policy verification."
+    },
+    {
+      "id": "operator_engine_baseline",
+      "detail": "Exact intended node OS/kernel/architecture, Docker client/server version and digests, cgroup/freezer/security configuration, approved native builder/toolchain and current bounded operating authorization remain unsupplied. Source pins no Docker version."
+    }
+  ],
+  "locks": [
+    {
+      "path": "package-lock.json",
+      "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138",
+      "lockfileVersion": 3,
+      "linux_x64_native_entries": [
+        {
+          "path": "node_modules/@cloudflare/workerd-linux-64",
+          "version": "1.20261110.1",
+          "resolved": "https://registry.npmjs.org/@cloudflare/workerd-linux-64/-/workerd-linux-64-1.20261110.1.tgz",
+          "integrity": "sha512-i4080Pp6Q0nwS8OMqt3cbpJoWvbCrIlFKa+4Inbn+y2pWKTVsq6F9bgdi0l8CBZPMszd03gDlQR++dqMbErh2Q==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": ">=16"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@esbuild/linux-x64",
+          "version": "0.28.2",
+          "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.2.tgz",
+          "integrity": "sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": ">=18"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@img/sharp-libvips-linux-x64",
+          "version": "1.3.4",
+          "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.3.4.tgz",
+          "integrity": "sha512-GJ//SSXbnwSDes02umB3nDJLFcQzw8a18V8fyhqr6tV515tOEMdImjjxj1AoafMRz56F3PHgftnj1QEKSU1zkw==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "optional": true
+        },
+        {
+          "path": "node_modules/@img/sharp-linux-x64",
+          "version": "0.35.5",
+          "resolved": "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.35.5.tgz",
+          "integrity": "sha512-SxFtLTeJInhAA9Q836kux2vZNeOBQEx658qvbboZScr0wIARym3IcGmW7KpVD5sbVg0Ojy+udFQdayYIZyoNog==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "engines": {
+            "node": ">=20.9.0"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@rolldown/binding-linux-x64-gnu",
+          "version": "1.2.18",
+          "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.2.18.tgz",
+          "integrity": "sha512-xX1Tt4o5jUMma0vJsXp5eRZA9nOuyigb2dKJMMzZRmzMxLYGE9PaKKSqHPzPvSQgM8ZOEacSTQwDQcwWfh0xmQ==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "engines": {
+            "node": "^20.19.0 || >=22.12.0"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@tailwindcss/oxide-linux-x64-gnu",
+          "version": "4.3.5",
+          "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-linux-x64-gnu/-/oxide-linux-x64-gnu-4.3.5.tgz",
+          "integrity": "sha512-4uxQvtBvPuIdl13WfUBj9xMZHH14PtHZ8OZdtLmdyDtG66sCa1t599NZT+jagkUzRtWhuul1qRZQ1nAJscXN5g==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "engines": {
+            "node": ">= 20"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@typescript/typescript-linux-x64",
+          "version": "7.0.2",
+          "resolved": "https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-7.0.2.tgz",
+          "integrity": "sha512-EYdf2cNg7rgCWJnxCdJ+F3V39O8ihb37eHAu1LK8oAFizgTQbPOK7zHHXbPt8rX24COqODXeI3sIf0fCXG7H/A==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": ">=16.20.0"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/lightningcss-linux-x64-gnu",
+          "version": "1.33.0",
+          "resolved": "https://registry.npmjs.org/lightningcss-linux-x64-gnu/-/lightningcss-linux-x64-gnu-1.33.0.tgz",
+          "integrity": "sha512-ar+Ju7LmcN0Jo4FpL4hpFybwNG9/3A/Br5KW2n2jyODg3MEZXaDYADdemoNS+BDNfMgKvylJLj4S5tyRActuAg==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "engines": {
+            "node": ">= 12.0.0"
+          },
+          "optional": true
+        }
+      ],
+      "node_engine_requirements": {
+        ">=6.9.0": [
+          "node_modules/@babel/runtime"
+        ],
+        ">=22.0.0": [
+          "node_modules/@cloudflare/kv-asset-handler",
+          "node_modules/@simplewebauthn/server"
+        ],
+        ">=16": [
+          "node_modules/@cloudflare/workerd-darwin-64",
+          "node_modules/@cloudflare/workerd-darwin-arm64",
+          "node_modules/@cloudflare/workerd-linux-64",
+          "node_modules/@cloudflare/workerd-linux-arm64",
+          "node_modules/@cloudflare/workerd-windows-64",
+          "node_modules/workerd"
+        ],
+        ">=12": [
+          "node_modules/@cspotcode/source-map-support",
+          "node_modules/d3-array",
+          "node_modules/d3-color",
+          "node_modules/d3-ease",
+          "node_modules/d3-format",
+          "node_modules/d3-interpolate",
+          "node_modules/d3-path",
+          "node_modules/d3-scale",
+          "node_modules/d3-shape",
+          "node_modules/d3-time",
+          "node_modules/d3-time-format",
+          "node_modules/d3-timer",
+          "node_modules/escape-string-regexp",
+          "node_modules/internmap",
+          "node_modules/is-plain-obj",
+          "node_modules/picomatch"
+        ],
+        ">=18": [
+          "node_modules/@esbuild/aix-ppc64",
+          "node_modules/@esbuild/android-arm",
+          "node_modules/@esbuild/android-arm64",
+          "node_modules/@esbuild/android-x64",
+          "node_modules/@esbuild/darwin-arm64",
+          "node_modules/@esbuild/darwin-x64",
+          "node_modules/@esbuild/freebsd-arm64",
+          "node_modules/@esbuild/freebsd-x64",
+          "node_modules/@esbuild/linux-arm",
+          "node_modules/@esbuild/linux-arm64",
+          "node_modules/@esbuild/linux-ia32",
+          "node_modules/@esbuild/linux-loong64",
+          "node_modules/@esbuild/linux-mips64el",
+          "node_modules/@esbuild/linux-ppc64",
+          "node_modules/@esbuild/linux-riscv64",
+          "node_modules/@esbuild/linux-s390x",
+          "node_modules/@esbuild/linux-x64",
+          "node_modules/@esbuild/netbsd-arm64",
+          "node_modules/@esbuild/netbsd-x64",
+          "node_modules/@esbuild/openbsd-arm64",
+          "node_modules/@esbuild/openbsd-x64",
+          "node_modules/@esbuild/openharmony-arm64",
+          "node_modules/@esbuild/sunos-x64",
+          "node_modules/@esbuild/win32-arm64",
+          "node_modules/@esbuild/win32-ia32",
+          "node_modules/@esbuild/win32-x64",
+          "node_modules/@img/colour",
+          "node_modules/@sindresorhus/is",
+          "node_modules/color-string",
+          "node_modules/cookie",
+          "node_modules/esbuild",
+          "node_modules/globals",
+          "node_modules/node-releases",
+          "node_modules/recharts",
+          "node_modules/supports-color"
+        ],
+        "^12.22.0 || ^14.17.0 || >=16.0.0": [
+          "node_modules/@eslint-community/eslint-utils",
+          "node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys"
+        ],
+        "^12.0.0 || ^14.0.0 || >=16.0.0": [
+          "node_modules/@eslint-community/regexpp"
+        ],
+        "^20.19.0 || ^22.13.0 || >=24": [
+          "node_modules/@eslint/config-array",
+          "node_modules/@eslint/config-helpers",
+          "node_modules/@eslint/core",
+          "node_modules/@eslint/object-schema",
+          "node_modules/@eslint/plugin-kit",
+          "node_modules/eslint",
+          "node_modules/eslint-scope",
+          "node_modules/eslint-visitor-keys",
+          "node_modules/espree"
+        ],
+        ">=18.18.0": [
+          "node_modules/@humanfs/core",
+          "node_modules/@humanfs/node",
+          "node_modules/@humanfs/types"
+        ],
+        ">=12.22": [
+          "node_modules/@humanwhocodes/module-importer"
+        ],
+        ">=18.18": [
+          "node_modules/@humanwhocodes/retry"
+        ],
+        ">=20.9.0": [
+          "node_modules/@img/sharp-darwin-arm64",
+          "node_modules/@img/sharp-darwin-x64",
+          "node_modules/@img/sharp-freebsd-wasm32",
+          "node_modules/@img/sharp-linux-arm",
+          "node_modules/@img/sharp-linux-arm64",
+          "node_modules/@img/sharp-linux-ppc64",
+          "node_modules/@img/sharp-linux-riscv64",
+          "node_modules/@img/sharp-linux-s390x",
+          "node_modules/@img/sharp-linux-x64",
+          "node_modules/@img/sharp-linuxmusl-arm64",
+          "node_modules/@img/sharp-linuxmusl-x64",
+          "node_modules/@img/sharp-wasm32",
+          "node_modules/@img/sharp-webcontainers-wasm32",
+          "node_modules/@img/sharp-win32-arm64",
+          "node_modules/@img/sharp-win32-x64",
+          "node_modules/sharp"
+        ],
+        "^20.9.0": [
+          "node_modules/@img/sharp-win32-ia32"
+        ],
+        ">=6.0.0": [
+          "node_modules/@jridgewell/resolve-uri",
+          "node_modules/baseline-browser-mapping"
+        ],
+        ">= 18": [
+          "node_modules/@keyv/bigmap"
+        ],
+        "^14.21.3 || >=16": [
+          "node_modules/@noble/ciphers",
+          "node_modules/@noble/hashes"
+        ],
+        ">=14": [
+          "node_modules/@peculiar/asn1-asym-key",
+          "node_modules/@peculiar/asn1-cms",
+          "node_modules/@peculiar/asn1-csr",
+          "node_modules/@peculiar/asn1-ecc",
+          "node_modules/@peculiar/asn1-pfx",
+          "node_modules/@peculiar/asn1-pkcs8",
+          "node_modules/@peculiar/asn1-pkcs9",
+          "node_modules/@peculiar/asn1-rsa",
+          "node_modules/@peculiar/asn1-schema",
+          "node_modules/@peculiar/asn1-x509",
+          "node_modules/@peculiar/asn1-x509-attr",
+          "node_modules/@peculiar/asn1-x509-post-quantum"
+        ],
+        ">=20.0.0": [
+          "node_modules/@peculiar/x509",
+          "node_modules/react-router",
+          "node_modules/react-router-dom"
+        ],
+        ">=20": [
+          "node_modules/@playwright/test",
+          "node_modules/hashery",
+          "node_modules/playwright",
+          "node_modules/playwright-core",
+          "node_modules/qified"
+        ],
+        "^20.19.0 || >=22.12.0": [
+          "node_modules/@rolldown/binding-android-arm-eabi",
+          "node_modules/@rolldown/binding-android-arm64",
+          "node_modules/@rolldown/binding-darwin-arm64",
+          "node_modules/@rolldown/binding-darwin-x64",
+          "node_modules/@rolldown/binding-freebsd-x64",
+          "node_modules/@rolldown/binding-linux-arm-gnueabihf",
+          "node_modules/@rolldown/binding-linux-arm64-gnu",
+          "node_modules/@rolldown/binding-linux-arm64-musl",
+          "node_modules/@rolldown/binding-linux-ppc64-gnu",
+          "node_modules/@rolldown/binding-linux-s390x-gnu",
+          "node_modules/@rolldown/binding-linux-x64-gnu",
+          "node_modules/@rolldown/binding-linux-x64-musl",
+          "node_modules/@rolldown/binding-openharmony-arm64",
+          "node_modules/@rolldown/binding-win32-arm64-msvc",
+          "node_modules/@rolldown/binding-win32-x64-msvc",
+          "node_modules/@vitejs/plugin-react",
+          "node_modules/rolldown",
+          "node_modules/vite"
+        ],
+        ">= 20": [
+          "node_modules/@tailwindcss/oxide",
+          "node_modules/@tailwindcss/oxide-android-arm64",
+          "node_modules/@tailwindcss/oxide-darwin-arm64",
+          "node_modules/@tailwindcss/oxide-darwin-x64",
+          "node_modules/@tailwindcss/oxide-freebsd-x64",
+          "node_modules/@tailwindcss/oxide-linux-arm-gnueabihf",
+          "node_modules/@tailwindcss/oxide-linux-arm64-gnu",
+          "node_modules/@tailwindcss/oxide-linux-arm64-musl",
+          "node_modules/@tailwindcss/oxide-linux-x64-gnu",
+          "node_modules/@tailwindcss/oxide-linux-x64-musl",
+          "node_modules/@tailwindcss/oxide-win32-arm64-msvc",
+          "node_modules/@tailwindcss/oxide-win32-x64-msvc"
+        ],
+        "^20.19.0 || ^22.13.0 || >=23.5.0": [
+          "node_modules/@tailwindcss/oxide-wasm32-wasi",
+          "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@napi-rs/wasm-runtime"
+        ],
+        ">=16.20.0": [
+          "node_modules/@typescript/typescript-aix-ppc64",
+          "node_modules/@typescript/typescript-darwin-arm64",
+          "node_modules/@typescript/typescript-darwin-x64",
+          "node_modules/@typescript/typescript-freebsd-arm64",
+          "node_modules/@typescript/typescript-freebsd-x64",
+          "node_modules/@typescript/typescript-linux-arm",
+          "node_modules/@typescript/typescript-linux-arm64",
+          "node_modules/@typescript/typescript-linux-loong64",
+          "node_modules/@typescript/typescript-linux-mips64el",
+          "node_modules/@typescript/typescript-linux-ppc64",
+          "node_modules/@typescript/typescript-linux-riscv64",
+          "node_modules/@typescript/typescript-linux-s390x",
+          "node_modules/@typescript/typescript-linux-x64",
+          "node_modules/@typescript/typescript-netbsd-arm64",
+          "node_modules/@typescript/typescript-netbsd-x64",
+          "node_modules/@typescript/typescript-openbsd-arm64",
+          "node_modules/@typescript/typescript-openbsd-x64",
+          "node_modules/@typescript/typescript-sunos-x64",
+          "node_modules/@typescript/typescript-win32-arm64",
+          "node_modules/@typescript/typescript-win32-x64",
+          "node_modules/typescript"
+        ],
+        ">=0.4.0": [
+          "node_modules/acorn"
+        ],
+        ">=8": [
+          "node_modules/ansi-regex",
+          "node_modules/ansi-styles",
+          "node_modules/detect-libc",
+          "node_modules/find-up",
+          "node_modules/is-fullwidth-code-point",
+          "node_modules/locate-path",
+          "node_modules/p-locate",
+          "node_modules/path-exists",
+          "node_modules/path-key",
+          "node_modules/shebang-command",
+          "node_modules/shebang-regex",
+          "node_modules/string-width",
+          "node_modules/strip-ansi",
+          "node_modules/wrap-ansi",
+          "node_modules/yargs"
+        ],
+        ">=12.0.0": [
+          "node_modules/asn1js",
+          "node_modules/fdir",
+          "node_modules/tinyglobby"
+        ],
+        "^10 || ^12 || >=14": [
+          "node_modules/autoprefixer",
+          "node_modules/postcss"
+        ],
+        "18 || 20 || >=22": [
+          "node_modules/balanced-match",
+          "node_modules/minimatch"
+        ],
+        "20 || >=22": [
+          "node_modules/brace-expansion"
+        ],
+        "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7": [
+          "node_modules/browserslist"
+        ],
+        ">=6": [
+          "node_modules/camelcase",
+          "node_modules/clsx",
+          "node_modules/dequal",
+          "node_modules/escalade",
+          "node_modules/kleur",
+          "node_modules/p-limit",
+          "node_modules/p-try",
+          "node_modules/punycode",
+          "node_modules/tapable",
+          "node_modules/yargs-parser"
+        ],
+        ">=0.8": [
+          "node_modules/clone"
+        ],
+        ">=7.0.0": [
+          "node_modules/color-convert"
+        ],
+        ">=12.20": [
+          "node_modules/color-name"
+        ],
+        ">= 8": [
+          "node_modules/cross-spawn",
+          "node_modules/which"
+        ],
+        ">=6.0": [
+          "node_modules/debug"
+        ],
+        ">=0.10.0": [
+          "node_modules/decamelize",
+          "node_modules/esutils",
+          "node_modules/is-extglob",
+          "node_modules/is-glob",
+          "node_modules/object-assign",
+          "node_modules/react",
+          "node_modules/require-directory",
+          "node_modules/require-from-string",
+          "node_modules/source-map-js",
+          "node_modules/word-wrap"
+        ],
+        ">=10.13.0": [
+          "node_modules/enhanced-resolve",
+          "node_modules/glob-parent",
+          "node_modules/pngjs",
+          "node_modules/qrcode"
+        ],
+        ">=10": [
+          "node_modules/eslint/node_modules/escape-string-regexp",
+          "node_modules/eslint/node_modules/find-up",
+          "node_modules/eslint/node_modules/locate-path",
+          "node_modules/eslint/node_modules/p-limit",
+          "node_modules/eslint/node_modules/p-locate",
+          "node_modules/fuse.js",
+          "node_modules/semver",
+          "node_modules/yocto-queue"
+        ],
+        ">=0.10": [
+          "node_modules/esquery"
+        ],
+        ">=4.0": [
+          "node_modules/esrecurse",
+          "node_modules/estraverse"
+        ],
+        ">=0.8.x": [
+          "node_modules/events"
+        ],
+        "*": [
+          "node_modules/fraction.js"
+        ],
+        "6.* || 8.* || >= 10.*": [
+          "node_modules/get-caller-file"
+        ],
+        ">= 4": [
+          "node_modules/ignore"
+        ],
+        ">=16.x": [
+          "node_modules/image-size"
+        ],
+        ">=0.8.19": [
+          "node_modules/imurmurhash"
+        ],
+        ">= 0.8.0": [
+          "node_modules/levn",
+          "node_modules/optionator",
+          "node_modules/prelude-ls",
+          "node_modules/type-check"
+        ],
+        ">= 12.0.0": [
+          "node_modules/lightningcss",
+          "node_modules/lightningcss-android-arm64",
+          "node_modules/lightningcss-darwin-arm64",
+          "node_modules/lightningcss-darwin-x64",
+          "node_modules/lightningcss-freebsd-x64",
+          "node_modules/lightningcss-linux-arm-gnueabihf",
+          "node_modules/lightningcss-linux-arm64-gnu",
+          "node_modules/lightningcss-linux-arm64-musl",
+          "node_modules/lightningcss-linux-x64-gnu",
+          "node_modules/lightningcss-linux-x64-musl",
+          "node_modules/lightningcss-win32-arm64-msvc",
+          "node_modules/lightningcss-win32-x64-msvc"
+        ],
+        ">= 0.4": [
+          "node_modules/linebreak/node_modules/base64-js"
+        ],
+        ">=22.12.0": [
+          "node_modules/miniflare",
+          "node_modules/wrangler"
+        ],
+        "^10 || ^12 || ^13.7 || ^14 || >=15.0.1": [
+          "node_modules/nanoid"
+        ],
+        ">=16.0.0": [
+          "node_modules/pvutils"
+        ],
+        ">= 6.0.0": [
+          "node_modules/tsyringe"
+        ],
+        ">=20.18.1": [
+          "node_modules/undici"
+        ],
+        "^8.16.0 || ^10.6.0 || >=11.0.0": [
+          "node_modules/vite/node_modules/fsevents",
+          "node_modules/wrangler/node_modules/fsevents"
+        ],
+        ">=10.0.0": [
+          "node_modules/ws"
+        ],
+        ">= 14.6": [
+          "node_modules/yaml"
+        ]
+      },
+      "interpretation": "Lock inventory only, not an installed-image SBOM. glibc target; musl-only entries are not selected. Actual clean npm ci and all native/shard probes pending."
+    },
+    {
+      "path": "cloudflare-worker/package-lock.json",
+      "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d",
+      "lockfileVersion": 3,
+      "linux_x64_native_entries": [
+        {
+          "path": "node_modules/@cloudflare/workerd-linux-64",
+          "version": "1.20261110.1",
+          "resolved": "https://registry.npmjs.org/@cloudflare/workerd-linux-64/-/workerd-linux-64-1.20261110.1.tgz",
+          "integrity": "sha512-i4080Pp6Q0nwS8OMqt3cbpJoWvbCrIlFKa+4Inbn+y2pWKTVsq6F9bgdi0l8CBZPMszd03gDlQR++dqMbErh2Q==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": ">=16"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@esbuild/linux-x64",
+          "version": "0.28.2",
+          "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.2.tgz",
+          "integrity": "sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": ">=18"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@img/sharp-libvips-linux-x64",
+          "version": "1.3.4",
+          "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.3.4.tgz",
+          "integrity": "sha512-GJ//SSXbnwSDes02umB3nDJLFcQzw8a18V8fyhqr6tV515tOEMdImjjxj1AoafMRz56F3PHgftnj1QEKSU1zkw==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "optional": true
+        },
+        {
+          "path": "node_modules/@img/sharp-linux-x64",
+          "version": "0.35.5",
+          "resolved": "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.35.5.tgz",
+          "integrity": "sha512-SxFtLTeJInhAA9Q836kux2vZNeOBQEx658qvbboZScr0wIARym3IcGmW7KpVD5sbVg0Ojy+udFQdayYIZyoNog==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "libc": [
+            "glibc"
+          ],
+          "engines": {
+            "node": ">=20.9.0"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@rolldown/binding-linux-x64-gnu",
+          "version": "1.2.16",
+          "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.2.16.tgz",
+          "integrity": "sha512-TNKhgE3uJTsTzatUSSYt0Kgo+Oa2uSlSjz4r1aEIea7HX6ULBym4fAlYUhG1i6pjNf2njfCUAfKwr6C3E9Xg1w==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": "^20.19.0 || >=22.12.0"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@rolldown/binding-linux-x64-musl",
+          "version": "1.2.16",
+          "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-x64-musl/-/binding-linux-x64-musl-1.2.16.tgz",
+          "integrity": "sha512-7chXdpjXZ8qG0+mIxECN3cT9kvhZ3/oZhMX6Pp876P7CDrIy8nJswva6Mq357JR7eYXfuskwZxMeV1SzoZdHrA==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": "^20.19.0 || >=22.12.0"
+          },
+          "optional": true
+        },
+        {
+          "path": "node_modules/@typescript/typescript-linux-x64",
+          "version": "7.0.2",
+          "resolved": "https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-7.0.2.tgz",
+          "integrity": "sha512-EYdf2cNg7rgCWJnxCdJ+F3V39O8ihb37eHAu1LK8oAFizgTQbPOK7zHHXbPt8rX24COqODXeI3sIf0fCXG7H/A==",
+          "os": [
+            "linux"
+          ],
+          "cpu": [
+            "x64"
+          ],
+          "engines": {
+            "node": ">=16.20.0"
+          },
+          "optional": true
+        }
+      ],
+      "node_engine_requirements": {
+        "^22.18.0 || >=24.11.0": [
+          "node_modules/@babel/code-frame",
+          "node_modules/@babel/compat-data",
+          "node_modules/@babel/core",
+          "node_modules/@babel/generator",
+          "node_modules/@babel/helper-annotate-as-pure",
+          "node_modules/@babel/helper-compilation-targets",
+          "node_modules/@babel/helper-create-class-features-plugin",
+          "node_modules/@babel/helper-globals",
+          "node_modules/@babel/helper-member-expression-to-functions",
+          "node_modules/@babel/helper-optimise-call-expression",
+          "node_modules/@babel/helper-plugin-utils",
+          "node_modules/@babel/helper-replace-supers",
+          "node_modules/@babel/helper-skip-transparent-expression-wrappers",
+          "node_modules/@babel/helper-string-parser",
+          "node_modules/@babel/helper-validator-identifier",
+          "node_modules/@babel/helper-validator-option",
+          "node_modules/@babel/helpers",
+          "node_modules/@babel/parser",
+          "node_modules/@babel/plugin-proposal-decorators",
+          "node_modules/@babel/plugin-syntax-decorators",
+          "node_modules/@babel/template",
+          "node_modules/@babel/traverse",
+          "node_modules/@babel/types"
+        ],
+        ">=6.9.0": [
+          "node_modules/@babel/runtime",
+          "node_modules/@babel/runtime-corejs3",
+          "node_modules/gensync"
+        ],
+        ">=22.0.0": [
+          "node_modules/@cloudflare/kv-asset-handler",
+          "node_modules/@simplewebauthn/server"
+        ],
+        ">=16": [
+          "node_modules/@cloudflare/workerd-darwin-64",
+          "node_modules/@cloudflare/workerd-darwin-arm64",
+          "node_modules/@cloudflare/workerd-linux-64",
+          "node_modules/@cloudflare/workerd-linux-arm64",
+          "node_modules/@cloudflare/workerd-windows-64",
+          "node_modules/workerd"
+        ],
+        ">=12": [
+          "node_modules/@cspotcode/source-map-support",
+          "node_modules/picomatch"
+        ],
+        ">=18": [
+          "node_modules/@esbuild/aix-ppc64",
+          "node_modules/@esbuild/android-arm",
+          "node_modules/@esbuild/android-arm64",
+          "node_modules/@esbuild/android-x64",
+          "node_modules/@esbuild/darwin-arm64",
+          "node_modules/@esbuild/darwin-x64",
+          "node_modules/@esbuild/freebsd-arm64",
+          "node_modules/@esbuild/freebsd-x64",
+          "node_modules/@esbuild/linux-arm",
+          "node_modules/@esbuild/linux-arm64",
+          "node_modules/@esbuild/linux-ia32",
+          "node_modules/@esbuild/linux-loong64",
+          "node_modules/@esbuild/linux-mips64el",
+          "node_modules/@esbuild/linux-ppc64",
+          "node_modules/@esbuild/linux-riscv64",
+          "node_modules/@esbuild/linux-s390x",
+          "node_modules/@esbuild/linux-x64",
+          "node_modules/@esbuild/netbsd-arm64",
+          "node_modules/@esbuild/netbsd-x64",
+          "node_modules/@esbuild/openbsd-arm64",
+          "node_modules/@esbuild/openbsd-x64",
+          "node_modules/@esbuild/openharmony-arm64",
+          "node_modules/@esbuild/sunos-x64",
+          "node_modules/@esbuild/win32-arm64",
+          "node_modules/@esbuild/win32-ia32",
+          "node_modules/@esbuild/win32-x64",
+          "node_modules/@img/colour",
+          "node_modules/@modelcontextprotocol/sdk",
+          "node_modules/@sindresorhus/is",
+          "node_modules/accepts/node_modules/mime-types",
+          "node_modules/body-parser",
+          "node_modules/body-parser/node_modules/content-type",
+          "node_modules/content-disposition",
+          "node_modules/cookie",
+          "node_modules/esbuild",
+          "node_modules/express/node_modules/content-type",
+          "node_modules/express/node_modules/mime-types",
+          "node_modules/merge-descriptors",
+          "node_modules/negotiator",
+          "node_modules/negotiator/node_modules/content-type",
+          "node_modules/node-releases",
+          "node_modules/send/node_modules/mime-types",
+          "node_modules/supports-color",
+          "node_modules/type-is/node_modules/content-type",
+          "node_modules/type-is/node_modules/mime-types"
+        ],
+        ">=20": [
+          "node_modules/@hono/node-server",
+          "node_modules/@modelcontextprotocol/client",
+          "node_modules/@modelcontextprotocol/core",
+          "node_modules/cron-schedule"
+        ],
+        ">=20.9.0": [
+          "node_modules/@img/sharp-darwin-arm64",
+          "node_modules/@img/sharp-darwin-x64",
+          "node_modules/@img/sharp-freebsd-wasm32",
+          "node_modules/@img/sharp-linux-arm",
+          "node_modules/@img/sharp-linux-arm64",
+          "node_modules/@img/sharp-linux-ppc64",
+          "node_modules/@img/sharp-linux-riscv64",
+          "node_modules/@img/sharp-linux-s390x",
+          "node_modules/@img/sharp-linux-x64",
+          "node_modules/@img/sharp-linuxmusl-arm64",
+          "node_modules/@img/sharp-linuxmusl-x64",
+          "node_modules/@img/sharp-wasm32",
+          "node_modules/@img/sharp-webcontainers-wasm32",
+          "node_modules/@img/sharp-win32-arm64",
+          "node_modules/@img/sharp-win32-x64",
+          "node_modules/sharp"
+        ],
+        "^20.9.0": [
+          "node_modules/@img/sharp-win32-ia32"
+        ],
+        ">=6.0.0": [
+          "node_modules/@jridgewell/resolve-uri",
+          "node_modules/baseline-browser-mapping"
+        ],
+        ">= 20.19.0": [
+          "node_modules/@noble/hashes"
+        ],
+        ">=8.0.0": [
+          "node_modules/@opentelemetry/api"
+        ],
+        ">=14": [
+          "node_modules/@peculiar/asn1-asym-key",
+          "node_modules/@peculiar/asn1-cms",
+          "node_modules/@peculiar/asn1-csr",
+          "node_modules/@peculiar/asn1-ecc",
+          "node_modules/@peculiar/asn1-pfx",
+          "node_modules/@peculiar/asn1-pkcs8",
+          "node_modules/@peculiar/asn1-pkcs9",
+          "node_modules/@peculiar/asn1-rsa",
+          "node_modules/@peculiar/asn1-schema",
+          "node_modules/@peculiar/asn1-x509",
+          "node_modules/@peculiar/asn1-x509-attr",
+          "node_modules/@peculiar/asn1-x509-post-quantum",
+          "node_modules/empathic"
+        ],
+        ">=20.0.0": [
+          "node_modules/@peculiar/x509"
+        ],
+        "^20.19.0 || >=22.12.0": [
+          "node_modules/@rolldown/binding-android-arm-eabi",
+          "node_modules/@rolldown/binding-android-arm64",
+          "node_modules/@rolldown/binding-darwin-arm64",
+          "node_modules/@rolldown/binding-darwin-x64",
+          "node_modules/@rolldown/binding-freebsd-x64",
+          "node_modules/@rolldown/binding-linux-arm-gnueabihf",
+          "node_modules/@rolldown/binding-linux-arm64-gnu",
+          "node_modules/@rolldown/binding-linux-arm64-musl",
+          "node_modules/@rolldown/binding-linux-ppc64-gnu",
+          "node_modules/@rolldown/binding-linux-s390x-gnu",
+          "node_modules/@rolldown/binding-linux-x64-gnu",
+          "node_modules/@rolldown/binding-linux-x64-musl",
+          "node_modules/@rolldown/binding-openharmony-arm64",
+          "node_modules/@rolldown/binding-win32-arm64-msvc",
+          "node_modules/@rolldown/binding-win32-x64-msvc",
+          "node_modules/rolldown"
+        ],
+        ">=22.12.0 || ^24.0.0": [
+          "node_modules/@rolldown/plugin-babel"
+        ],
+        ">=16.20.0": [
+          "node_modules/@typescript/typescript-aix-ppc64",
+          "node_modules/@typescript/typescript-darwin-arm64",
+          "node_modules/@typescript/typescript-darwin-x64",
+          "node_modules/@typescript/typescript-freebsd-arm64",
+          "node_modules/@typescript/typescript-freebsd-x64",
+          "node_modules/@typescript/typescript-linux-arm",
+          "node_modules/@typescript/typescript-linux-arm64",
+          "node_modules/@typescript/typescript-linux-loong64",
+          "node_modules/@typescript/typescript-linux-mips64el",
+          "node_modules/@typescript/typescript-linux-ppc64",
+          "node_modules/@typescript/typescript-linux-riscv64",
+          "node_modules/@typescript/typescript-linux-s390x",
+          "node_modules/@typescript/typescript-linux-x64",
+          "node_modules/@typescript/typescript-netbsd-arm64",
+          "node_modules/@typescript/typescript-netbsd-x64",
+          "node_modules/@typescript/typescript-openbsd-arm64",
+          "node_modules/@typescript/typescript-openbsd-x64",
+          "node_modules/@typescript/typescript-sunos-x64",
+          "node_modules/@typescript/typescript-win32-arm64",
+          "node_modules/@typescript/typescript-win32-x64",
+          "node_modules/pkce-challenge",
+          "node_modules/typescript"
+        ],
+        ">= 0.6": [
+          "node_modules/accepts",
+          "node_modules/accepts/node_modules/mime-db",
+          "node_modules/content-type",
+          "node_modules/etag",
+          "node_modules/express/node_modules/cookie",
+          "node_modules/express/node_modules/mime-db",
+          "node_modules/forwarded",
+          "node_modules/mime-db",
+          "node_modules/mime-types",
+          "node_modules/range-parser",
+          "node_modules/send/node_modules/mime-db",
+          "node_modules/type-is/node_modules/mime-db"
+        ],
+        ">=8": [
+          "node_modules/ansi-regex",
+          "node_modules/ansi-styles",
+          "node_modules/detect-libc",
+          "node_modules/find-up",
+          "node_modules/is-fullwidth-code-point",
+          "node_modules/locate-path",
+          "node_modules/p-locate",
+          "node_modules/path-exists",
+          "node_modules/path-key",
+          "node_modules/shebang-command",
+          "node_modules/shebang-regex",
+          "node_modules/string-width",
+          "node_modules/strip-ansi",
+          "node_modules/wrap-ansi",
+          "node_modules/yargs"
+        ],
+        ">=12.0.0": [
+          "node_modules/asn1js"
+        ],
+        "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7": [
+          "node_modules/browserslist"
+        ],
+        ">= 0.8": [
+          "node_modules/bytes",
+          "node_modules/depd",
+          "node_modules/encodeurl",
+          "node_modules/fresh",
+          "node_modules/http-errors",
+          "node_modules/media-typer",
+          "node_modules/on-finished",
+          "node_modules/parseurl",
+          "node_modules/statuses",
+          "node_modules/unpipe",
+          "node_modules/vary"
+        ],
+        ">= 0.4": [
+          "node_modules/call-bind-apply-helpers",
+          "node_modules/call-bound",
+          "node_modules/dunder-proto",
+          "node_modules/es-define-property",
+          "node_modules/es-errors",
+          "node_modules/es-object-atoms",
+          "node_modules/get-intrinsic",
+          "node_modules/get-proto",
+          "node_modules/gopd",
+          "node_modules/has-symbols",
+          "node_modules/hasown",
+          "node_modules/math-intrinsics",
+          "node_modules/object-inspect",
+          "node_modules/side-channel",
+          "node_modules/side-channel-list",
+          "node_modules/side-channel-map",
+          "node_modules/side-channel-weakmap"
+        ],
+        ">=6": [
+          "node_modules/camelcase",
+          "node_modules/escalade",
+          "node_modules/flru",
+          "node_modules/jsesc",
+          "node_modules/json5",
+          "node_modules/kleur",
+          "node_modules/p-limit",
+          "node_modules/p-try",
+          "node_modules/yargs-parser"
+        ],
+        ">=7.0.0": [
+          "node_modules/color-convert"
+        ],
+        ">=6.6.0": [
+          "node_modules/cookie-signature"
+        ],
+        ">= 0.10": [
+          "node_modules/cors",
+          "node_modules/ipaddr.js",
+          "node_modules/proxy-addr",
+          "node_modules/raw-body"
+        ],
+        ">= 8": [
+          "node_modules/cross-spawn",
+          "node_modules/which"
+        ],
+        ">=6.0": [
+          "node_modules/debug"
+        ],
+        ">=0.10.0": [
+          "node_modules/decamelize",
+          "node_modules/iconv-lite",
+          "node_modules/object-assign",
+          "node_modules/require-directory",
+          "node_modules/require-from-string"
+        ],
+        ">=18.0.0": [
+          "node_modules/eventsource",
+          "node_modules/eventsource-parser"
+        ],
+        ">= 18": [
+          "node_modules/express",
+          "node_modules/router",
+          "node_modules/send",
+          "node_modules/serve-static",
+          "node_modules/type-is"
+        ],
+        ">= 16": [
+          "node_modules/express-rate-limit"
+        ],
+        ">=12.17.0": [
+          "node_modules/fast-check"
+        ],
+        ">= 18.0.0": [
+          "node_modules/finalhandler"
+        ],
+        "^8.16.0 || ^10.6.0 || >=11.0.0": [
+          "node_modules/fsevents"
+        ],
+        "6.* || 8.* || >= 10.*": [
+          "node_modules/get-caller-file"
+        ],
+        ">=16.9.0": [
+          "node_modules/hono"
+        ],
+        ">= 12": [
+          "node_modules/ip-address"
+        ],
+        ">=22.12.0": [
+          "node_modules/miniflare",
+          "node_modules/wrangler"
+        ],
+        "^18 || >=20": [
+          "node_modules/nanoid"
+        ],
+        ">=12.20.0": [
+          "node_modules/obug"
+        ],
+        ">=10.13.0": [
+          "node_modules/pngjs",
+          "node_modules/qrcode"
+        ],
+        ">=16.0.0": [
+          "node_modules/pvutils"
+        ],
+        ">=0.6": [
+          "node_modules/qs",
+          "node_modules/toidentifier"
+        ],
+        ">=10": [
+          "node_modules/semver"
+        ],
+        ">= 6.0.0": [
+          "node_modules/tsyringe"
+        ],
+        ">=20.18.1": [
+          "node_modules/undici"
+        ],
+        ">=18.12.0": [
+          "node_modules/verkit"
+        ],
+        ">=10.0.0": [
+          "node_modules/ws"
+        ],
+        ">= 14.6": [
+          "node_modules/yaml"
+        ]
+      },
+      "interpretation": "Lock inventory only, not an installed-image SBOM. glibc target; musl-only entries are not selected. Actual clean npm ci and all native/shard probes pending."
+    }
+  ],
+  "image_evidence": {
+    "oci_manifest_digest": null,
+    "docker_config_id": null,
+    "sbom_sha256": null,
+    "scan_report_sha256": null,
+    "signature_verification": null,
+    "provenance_sha256": null,
+    "native_qualification": null
+  }
+}

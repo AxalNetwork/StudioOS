@@ -91,16 +91,22 @@ function populated() {
         government: { value: null, as_of: null, source: null, reason: 'No source lists government-owned companies yet' },
       },
     },
+    // D7708 — the grid names the current window and the previous point's; capital is fed only by copied macro figures.
     heat: {
       status: 'ok', period_key: '2026-10', period_status: 'month_to_date',
+      window_start: '2026-09-05T04:00:00.000Z', window_end: '2026-10-05T04:00:00.000Z', window_reason: null,
+      previous_period_key: '2026-09', previous_window: { window_start: '2026-08-01T04:00:00.000Z', window_end: '2026-08-31T04:00:00.000Z', window_reason: null },
       sectors: SECTORS.map((sector, i) => ({
         sector,
         dimensions: Object.fromEntries(['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'].map((d) => [d,
-          i === 0 && d === 'demand' ? { value: 64, delta_pct: 8, source_count: 2 }
-            : { value: null, delta_pct: null, source_count: 0, reason: 'No live source yet for this sector' }])),
+          i === 0 && d === 'demand' ? { value: 64, delta_pct: 8, source_count: 2, context_only: false }
+            : i === 0 && d === 'capital' ? { value: 41, delta_pct: null, source_count: 1, context_only: true }
+              : { value: null, delta_pct: null, source_count: 0, context_only: null, reason: 'No live source yet for this sector' }])),
       })),
     },
-    demand_vs_supply: { status: 'ok', period_key: '2026-10', sectors: [{ sector: 'Agentic B2B', demand: 70, supply: 50, demand_delta_pct: 15, supply_delta_pct: 5, gap_pct: 10 }] },
+    demand_vs_supply: { status: 'ok', period_key: '2026-10', window_start: '2026-09-05T04:00:00.000Z', window_end: '2026-10-05T04:00:00.000Z', window_reason: null,
+      previous_window: { window_start: '2026-08-01T04:00:00.000Z', window_end: '2026-08-31T04:00:00.000Z', window_reason: null },
+      sectors: [{ sector: 'Agentic B2B', demand: 70, supply: 50, demand_delta_pct: 15, supply_delta_pct: 5, gap_pct: 10 }] },
     competition: {
       status: 'ok', as_of: '2026-09-30', total_companies: 300,
       by_sector: [{ label: 'software industry', companies: 40 }], other_sectors: { labels: 144, companies: 211 }, no_sector: 49,
@@ -179,9 +185,14 @@ test('panel: populated draws the totals, the split, the grid, the competition, t
   for (const s of ['300', '82', '60,829', '2,032', 'from 2 public fund lists', '49', 'Sectors tracked', '12',
     'last computed 2026-10-05 04:00', '21', 'listed companies']) assert.ok(t.includes(s), `missing ${s}`);
   // The grid: a live cell with its change, a cell with no live source.
-  assert.match(t, /Agentic B2B64 ▲ 8\.0%Not recordedNot recorded/, 'a cell with no live source must not read 0');
-  assert.match(t, /Bio-Automation(Not recorded){6}market_intel_indexes/);
-  assert.match(t, /2026-10 · month to date/);
+  assert.match(t, /Agentic B2B64 ▲ 8\.0%Not recorded41/, 'a cell with no live source must not read 0');
+  assert.match(t, /Bio-Automation(Not recorded){6}/);
+  // D7708 — the window each point covers and the previous point's; no rolling figure is called a month.
+  assert.match(t, /the score over 5 Sep 2026 to 5 Oct 2026\. The arrow compares it with the previous point, over 1 Aug 2026 to 31 Aug 2026\./);
+  assert.match(t, /2026-10 · window 5 Sep 2026 to 5 Oct 2026\./);
+  assert.doesNotMatch(t, /month to date|since last month|against the month before/);
+  assert.match(t, /Global context · the same figure for every sector: capital\./);
+  assert.match(t, /demand and supply · global · window 5 Sep 2026 to 5 Oct 2026, against 1 Aug 2026 to 31 Aug 2026/);
   // Demand against supply.
   assert.match(t, /\+10pp/);
   // Who is already building: the remainders and the missing counts.

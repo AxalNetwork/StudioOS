@@ -225,7 +225,7 @@ export default {
       id: 'auth-recovery',
       title: 'Account recovery (lost device)',
       overview:
-        "If you lose access to your authenticator app, you have two recovery paths: the ten single-use recovery codes you saved when you set up two-factor, or a trusted contact you nominated in advance who can vouch for you to the studio team.",
+        "If you lose access to your authenticator app, use a recovery code you saved when you set up two-factor, or a trusted contact you nominated in advance. If neither is available, the recovery page offers an admin review: the Axal team checks the request before access is restored.",
       howto: [
         'From /login, follow the Account recovery link to /auth/recover.',
         'The recovery page shows only the recovery methods enabled on your account. If backup codes are available, use a saved one.',
