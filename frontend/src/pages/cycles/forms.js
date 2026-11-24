@@ -1753,18 +1753,28 @@ const editTheme = {
   submit: (w, projectId, id, v) => w.validate.themeUpdate(projectId, id, editTheme.toBody(v)),
 };
 
+// D6007 (#6007, V23): the segment's own firmographics and disqualifiers, one per line, on Edit only.
+const segmentProfileFields = [
+  { kind: 'T', name: 'firmographics', k: 'Firmographics', input: 'textarea', max: 2000, ph: 'Company size: 50–200 people', note: 'One per line, as Label: value.' },
+  { kind: 'T', name: 'disqualifiers', k: 'Disqualifiers', input: 'textarea', max: 2000, ph: 'Under 20 staff', note: 'One per line. An empty box clears the list.' },
+];
 const editSegment = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-segment', title: 'Edit segment', sub: segment.sub,
-  fields: segmentFields,
+  fields: [...segmentFields, ...segmentProfileFields],
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since',
+      'firmographics', 'disqualifiers'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;
   },
-  toBody: (v) => onlyShown(v, segmentBody(v), { score_since: 'score_against' }),
+  toBody: (v) => onlyShown(v, {
+    ...segmentBody(v),
+    // An emptied box sends null, which clears the list; the Worker parses one per line.
+    firmographics: str(v.firmographics), disqualifiers: str(v.disqualifiers),
+  }, { score_since: 'score_against' }),
   submit: (w, projectId, id, v) => w.validate.segmentUpdate(projectId, id, editSegment.toBody(v)),
 };
 
