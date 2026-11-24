@@ -1,0 +1,1551 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-21T18:03:24.757248+00:00",
+  "image_status": "qualification pending",
+  "image_qualified": false,
+  "current_source": {
+    "revision": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+    "tree": "45e1f3acb44fe6bb0a346df867430d34b70128d2",
+    "files": [
+      {
+        "path": "scripts/ci/runners/profiles.json",
+        "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+      },
+      {
+        "path": "scripts/ci/runners/job-container.mjs",
+        "sha256": "b48baa92b5e79ac2e18ecf87ed0f298adf2a9d7a1e1ca3049edb946464f358f7"
+      },
+      {
+        "path": "scripts/ci/runners/executor-isolation.mjs",
+        "sha256": "1bfb6eabe711edc840436b241a9356bcbee5ee468ad96fd3c2fbedeb441f2550"
+      },
+      {
+        "path": "scripts/ci/runners/recovery-store.mjs",
+        "sha256": "1abe89d6d6aadd2e22fbf9bf1021bb094d965a1729c52b5a7592053471a6d8a6"
+      },
+      {
+        "path": "scripts/ci/runners/trace-exporter.mjs",
+        "sha256": "a6e145afc972470e2f7cb411be86e3e970e93b2af5a23e1f78717583fe576ac9"
+      },
+      {
+        "path": "scripts/ci/runners/ephemeral-supervisor.mjs",
+        "sha256": "0941d55ceb55f9e75010bab78ab6f0063b765a11b5aad46dfb7c6c5b731dee09"
+      },
+      {
+        "path": "scripts/ci/runner-execution.mjs",
+        "sha256": "20395cf0d0f64835a4ed66594917d33c9d046bd6179274f45d5facf975a76272"
+      },
+      {
+        "path": "scripts/ci/runner-admission.mjs",
+        "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b"
+      },
+      {
+        "path": "scripts/ci/capacity-executor.mjs",
+        "sha256": "c4e38dce5ade2fb8cc54b4fbd8e50fd35ac1d7bce9840fbf0f51e869e544782d"
+      },
+      {
+        "path": "scripts/ci/capacity-client.mjs",
+        "sha256": "1d41642cef891ad3a69b645f44cc7864e14d8fdf72c6e3d1974cc758866b4095"
+      },
+      {
+        "path": "scripts/ci/capacity-submission.mjs",
+        "sha256": "000216d35102d10f0b802a32f34d59d9ef4933556059003a374595b9bc51e7e8"
+      },
+      {
+        "path": "scripts/ci/capacity-planner.mjs",
+        "sha256": "62c659209e1718a4633403c2cf55089f3a4acf7744ef50f2445bad7621b040c8"
+      },
+      {
+        "path": ".github/workflows/runner-executor.yml",
+        "sha256": "3dc8db9207557680029737749ca7e749634b792608c2f28a999104c33b21d9e8"
+      },
+      {
+        "path": ".github/workflows/capacity-planner.yml",
+        "sha256": "d91e4ba176646a35ea804d0988f59f539cc30d0050acf594402b1ed159456c0b"
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "sha256": "85943729238ecf5e20ef4d5b5bfa31f8cdd710b9dc70e6d4334006796cb1ca80"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+      },
+      {
+        "path": "cloudflare-worker/package-lock.json",
+        "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d"
+      },
+      {
+        "path": "infra/runners/linux-x64.image.template.json",
+        "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79"
+      },
+      {
+        "path": "merge-control/src/ciCapacityRuntime.ts",
+        "sha256": "a31bbdfff189c9a7952aa6e4140fe51e0782f9af1908c89f4ae161bbc5ee2c98"
+      }
+    ]
+  },
+  "current_lock_engine_check": {
+    "source": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+    "targetNode": "22.23.3",
+    "semver": "7.8.6",
+    "checked": 365,
+    "excludedPlatformEntries": 192,
+    "mismatches": [],
+    "status": "Static lock engine ranges only; not clean install or native execution",
+    "exit": 0
+  },
+  "official_metadata": {
+    "recorded_utc": "2026-11-21T17:59:48.092843+00:00",
+    "checks": [
+      {
+        "url": "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt",
+        "argv": [
+          "curl",
+          "--proto",
+          "=https",
+          "--tlsv1.2",
+          "--location",
+          "--max-redirs",
+          "3",
+          "--connect-timeout",
+          "15",
+          "--max-time",
+          "45",
+          "--silent",
+          "--show-error",
+          "--fail-with-body",
+          "--output",
+          "../s31-8008-delivery/qualification-attempt/node-SHASUMS256.txt",
+          "--write-out",
+          "%{http_code}",
+          "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt"
+        ],
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      },
+      {
+        "url": "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20261110",
+        "argv": [
+          "curl",
+          "--proto",
+          "=https",
+          "--tlsv1.2",
+          "--location",
+          "--max-redirs",
+          "3",
+          "--connect-timeout",
+          "15",
+          "--max-time",
+          "45",
+          "--silent",
+          "--show-error",
+          "--fail-with-body",
+          "--output",
+          "../s31-8008-delivery/qualification-attempt/python-release.json",
+          "--write-out",
+          "%{http_code}",
+          "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20261110"
+        ],
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      }
+    ]
+  },
+  "archive_acquisition": {
+    "recorded_utc": "2026-11-21T18:01:43.974779+00:00",
+    "checks": [
+      {
+        "name": "node",
+        "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-x64.tar.gz",
+        "filename": "node-v22.23.3-linux-x64.tar.gz",
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      },
+      {
+        "name": "python",
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.11.18%2B20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "filename": "cpython-3.11.18+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      }
+    ]
+  },
+  "archive_inspection": {
+    "schema_version": 1,
+    "status": "verified archive bytes; native execution not performed",
+    "limitations": "ELF strings are observed, not a version-need proof. Dependencies may be supplied by the same archive. Rootfs, dynamic loading, signatures, image build/scan and intended-node compatibility remain unverified.",
+    "artifacts": [
+      {
+        "name": "node",
+        "filename": "node-v22.23.3-linux-x64.tar.gz",
+        "archive_sha256": "1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af",
+        "bundled_npm": "10.9.9",
+        "elf": [
+          {
+            "path": "node-v22.23.3-linux-x64/bin/node",
+            "sha256": "fde6a4bf8d0562f7751d1a2d6cb9b417c4cfe107bbcb0aa3e9a24e125e348f48",
+            "machine": "x86_64",
+            "interpreter": "/lib64/ld-linux-x86-64.so.2",
+            "needed": [
+              "libdl.so.2",
+              "libstdc++.so.6",
+              "libm.so.6",
+              "libgcc_s.so.1",
+              "libpthread.so.0",
+              "libc.so.6",
+              "ld-linux-x86-64.so.2"
+            ],
+            "observed_abi_version_strings": [
+              "CXXABI_1.3",
+              "CXXABI_1.3.5",
+              "CXXABI_1.3.7",
+              "CXXABI_1.3.9",
+              "GLIBCXX_3.4",
+              "GLIBCXX_3.4.11",
+              "GLIBCXX_3.4.14",
+              "GLIBCXX_3.4.15",
+              "GLIBCXX_3.4.17",
+              "GLIBCXX_3.4.18",
+              "GLIBCXX_3.4.19",
+              "GLIBCXX_3.4.20",
+              "GLIBCXX_3.4.21",
+              "GLIBCXX_3.4.9",
+              "GLIBC_2.10",
+              "GLIBC_2.12",
+              "GLIBC_2.14",
+              "GLIBC_2.16",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.25",
+              "GLIBC_2.27",
+              "GLIBC_2.28",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.6",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "python",
+        "filename": "cpython-3.11.18+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "archive_sha256": "3288c54cea3db350052019b3f8b558dd8a3da8afa6fda573f5fd2bcb37635b4a",
+        "bundled_npm": null,
+        "elf": [
+          {
+            "path": "python/bin/python3.11",
+            "sha256": "b8c56091244cc8a0ad37f60d3ecf4d7a2ca4a9127bb4bcb4c396a26e8ea46b68",
+            "machine": "x86_64",
+            "interpreter": "/lib64/ld-linux-x86-64.so.2",
+            "needed": [
+              "libpthread.so.0",
+              "libdl.so.2",
+              "libutil.so.1",
+              "librt.so.1",
+              "libm.so.6",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.10",
+              "GLIBC_2.11",
+              "GLIBC_2.12",
+              "GLIBC_2.13",
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.16",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.5",
+              "GLIBC_2.6",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          },
+          {
+            "path": "python/lib/itcl4.3.8/libtcl9itcl4.3.8.so",
+            "sha256": "c75b53bf753c6f0c9ec812ce7ccbd1ca782e9ee8416f1a23d47914a48f4a1ae5",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4"
+            ]
+          },
+          {
+            "path": "python/lib/libpython3.11.so.1.0",
+            "sha256": "5e9a38bc85cfb632f6d0f969cdb35893a7880a11bd0c4f1981838e51a0a564dc",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libdl.so.2",
+              "librt.so.1",
+              "libm.so.6",
+              "libpthread.so.0",
+              "libutil.so.1",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.10",
+              "GLIBC_2.11",
+              "GLIBC_2.12",
+              "GLIBC_2.13",
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.16",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.5",
+              "GLIBC_2.6",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          },
+          {
+            "path": "python/lib/libpython3.so",
+            "sha256": "a7d650e18a66e1131147e57e1d38046393b94e7fb5ec91b7fb1667483c4ab402",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "$ORIGIN/../lib/libpython3.11.so.1.0",
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.2.5"
+            ]
+          },
+          {
+            "path": "python/lib/libtcl9.0.so",
+            "sha256": "a7e60bf62e801b135a1b3b0405b77f8fe043eb22020a5a6803131a29ce04421b",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libdl.so.2",
+              "libpthread.so.0",
+              "libm.so.6",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.11",
+              "GLIBC_2.14",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          },
+          {
+            "path": "python/lib/libtcl9tk9.0.so",
+            "sha256": "3f3d8e0ba35fd5d4944ea2bd612ddb48de164ea69978cd5b7b11ccc77829c030",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libdl.so.2",
+              "libpthread.so.0",
+              "libm.so.6",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.7"
+            ]
+          },
+          {
+            "path": "python/lib/python3.11/lib-dynload/_crypt.cpython-311-x86_64-linux-gnu.so",
+            "sha256": "6038d0765af1c1dc7c45897e6421c1d65dd0f32d52674ce92a3f7ec330dff8d2",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libcrypt.so.1",
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.2.5",
+              "GLIBC_2.4"
+            ]
+          },
+          {
+            "path": "python/lib/python3.11/lib-dynload/_dbm.cpython-311-x86_64-linux-gnu.so",
+            "sha256": "1c5b9c77efe903cba050cb1fc25c9f523d078787107fd5384b1091d00e1f6169",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4"
+            ]
+          },
+          {
+            "path": "python/lib/python3.11/lib-dynload/_tkinter.cpython-311-x86_64-linux-gnu.so",
+            "sha256": "85898f588251d9d2678fa4a9ccc53a2dcbffcd68777900a7520ed94b7d6d6c5a",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libtcl9.0.so",
+              "libtcl9tk9.0.so",
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.2.5"
+            ]
+          },
+          {
+            "path": "python/lib/thread3.0.6/libtcl9thread3.0.6.so",
+            "sha256": "f5eb40cc87f2538df9a0e60163b256b6fd37c3cf79f9223260b296f06f8ff9c8",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.7"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "local_raw_evidence_sha256": {
+    "python-release.json": "2f441e912ea27abf19e019a1628e692c671ab1c9fea8d566a0fa477152bc3899",
+    "current-source.json": "97847f83d68ff7c57ed192b29df822a5e7b83b3921c88d09f6d4cef8fb3d2d89",
+    "archive-downloads.json": "094887a8eec095cb219274f748b7817099a6d0bf80bc02b84f4d1df30cd6832b",
+    "node-SHASUMS256.txt": "4fe99a2ba9d552a6f51c13ed68fb11104cfa5df601aec616be689253a8139e7a",
+    "runtime-archive-inspection.json": "3cb89226bc33340c3da46d603806aa98a21aec245f9f469084c75ba8c449dac0",
+    "current-lock-engines.json": "42b7320dc1d7334af2b91f5fdb78d5e545d7a1b96deae164790368c28efac8e2",
+    "upstream-http.json": "f6e3e5b51a0e507842fd715ed72687782eff17760c43b28148b9fafc3add0348"
+  },
+  "archive_inspection_exit": 0,
+  "executed_command": [
+    "python3",
+    "documentation/operations/runner-image-8008/verify-inputs.py",
+    "--inspect-runtime-archives",
+    "../s31-8008-delivery/qualification-attempt/inputs"
+  ],
+  "pending": [
+    "operator-approved native Linux amd64 builder access or immutable OCI/build evidence",
+    "approved rootfs/system package ledger and toolchain/scanner pins",
+    "native reproducible image build and mapping OCI manifest to Docker config ID",
+    "complete image/dependency SBOM and accepted immutable scan",
+    "signature/provenance policy verification",
+    "intended-node native runtime, six worker shards and isolation/cleanup evidence",
+    "operator-approved intended node OS/kernel/Docker/security baseline and current qualification authority; any later designated source requires a new delta receipt"
+  ],
+  "operator_coordination": "One host-specific request sent to S38/admin for the current private operator record. Actual designated 8c11 source receipt/reconciliation is complete; historical c36 is preserved and not requested again. Native gates remain NOT RUN.",
+  "s09_source_intake": {
+    "status": "VERIFIED source intake only",
+    "packet": {
+      "zip_sha256": "9c79c766eed5cc3bdca014eec8c1750ee6081c4bf31e8cd133c40a6c52e60b78",
+      "top_level_manifest_verified": [
+        {
+          "path": "README.md",
+          "sha256": "292a151cad483a3717d35940d1aecde3c8c06075f11eaef309ead13ecd045267"
+        },
+        {
+          "path": "RUNTIME-AND-CONTRACT.md",
+          "sha256": "cf81cc0384b2a6af67bf5839af538c5e0e07f351d4197e24dc7161e6adaa693e"
+        },
+        {
+          "path": "S09-C36-transfer.tar.gz",
+          "sha256": "55401a9e6b0c26e297761310e569789208f9423e248b381545b23964fc123ec7"
+        },
+        {
+          "path": "S39-INTEGRATION.md",
+          "sha256": "04e20c433c256753b6d7443c9345b0459661ce77259591ef97cac16ffb6d61bb"
+        },
+        {
+          "path": "SESSION-TASKS.md",
+          "sha256": "e76fadf034b32f98ac53b3e3a7661810b4ea38090a54f06ed896f7741703ed65"
+        },
+        {
+          "path": "coordinator-verification.json",
+          "sha256": "be99be9fcedd4187ad3b0ec0631bd614e83beedc7acca47774013449b9ce2d5c"
+        },
+        {
+          "path": "source/S09-7905-cumulative.bundle",
+          "sha256": "4d30cfb4299adc1d62489a7167083b0576f614ea755ec19184d83e7515ba880c"
+        },
+        {
+          "path": "source/SHA256SUMS",
+          "sha256": "6804a036b94463d64bea56819241eb0c245780ef1cfed778e6206f5129f4b9f7"
+        },
+        {
+          "path": "source/logs/mutations-at-c36bf920.log",
+          "sha256": "0672b359f3affed3d7c2d95a3dfeb1f113421480a29730fc7157332c68366b66"
+        },
+        {
+          "path": "source/logs/related-tests.log",
+          "sha256": "9969832db4c669441e059ac0796e3adc78fd39081d258bfc62ea20cbdff26175"
+        },
+        {
+          "path": "source/logs/s33-vectors-crosscheck.log",
+          "sha256": "05af7366433398ac7b0dc675e25df1f58949cde24b864d979e15c20c9d8a6060"
+        }
+      ],
+      "bundle_sha256": "4d30cfb4299adc1d62489a7167083b0576f614ea755ec19184d83e7515ba880c"
+    },
+    "audit": {
+      "schema_version": 1,
+      "recorded_utc": "2026-11-21T23:24:04.126442+00:00",
+      "head": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "parent": "cc3c3367ff6dfa803103414e998289c3b5793d0d",
+      "base": "4d6047987b3f26b1b1c9988f412f60b2fb081567",
+      "tree": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "git_blob": "74d6bc48fe5be244e6b12171aa6a1b3dc12db041",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "git_blob": "fca6d32490be5d113a2b658b67e177230a372375",
+          "sha256": "00a8cf3ff24aa60e0795874743c5add4016f72fdb846d17ae9d158160568b26a"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "git_blob": "0cfb7c3545ea612add2f188f2d619781e17284f7",
+          "sha256": "ac1e048586ee2a8d005bd0048b3795d801c4048f7422fb7087e20862cae46583"
+        },
+        {
+          "path": "scripts/ci/runners/trace-exporter.mjs",
+          "git_blob": "df7c7fa51997b6312d3576bb92b13d752a2ebc61",
+          "sha256": "5b4bd5bea35399918f131041f610d0dce10dc709a463cd88c5ea3ed9d5c9f529"
+        },
+        {
+          "path": "scripts/ci/runners/recovery-store.mjs",
+          "git_blob": "011690ecd650629ee1de08e7c7821cc74202d2f4",
+          "sha256": "b54b8c30903a11049f1a5ee3b9b0579cdce4186c2f83bd3edc002f9e7b4b353c"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "git_blob": "9f7a0a25122574db64babbe877c0d603b07f6037",
+          "sha256": "526bd1ab4f8f7650c908379041ee584c099c6b8356ea5dc3436cf7b8c0dbc894"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "git_blob": "e7e41b153402fdd4d26ffdb7eb594438c7b8eb23",
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce"
+        }
+      ],
+      "commands": [
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c^{tree}"
+          ],
+          "exit": 0,
+          "stdout": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c^"
+          ],
+          "exit": 0,
+          "stdout": "cc3c3367ff6dfa803103414e998289c3b5793d0d\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            "4d6047987b3f26b1b1c9988f412f60b2fb081567",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/profiles.json"
+          ],
+          "exit": 0,
+          "stdout": "74d6bc48fe5be244e6b12171aa6a1b3dc12db041\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/job-container.mjs"
+          ],
+          "exit": 0,
+          "stdout": "fca6d32490be5d113a2b658b67e177230a372375\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/job-container.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/executor-isolation.mjs"
+          ],
+          "exit": 0,
+          "stdout": "0cfb7c3545ea612add2f188f2d619781e17284f7\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/executor-isolation.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/trace-exporter.mjs"
+          ],
+          "exit": 0,
+          "stdout": "df7c7fa51997b6312d3576bb92b13d752a2ebc61\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/trace-exporter.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/recovery-store.mjs"
+          ],
+          "exit": 0,
+          "stdout": "011690ecd650629ee1de08e7c7821cc74202d2f4\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/recovery-store.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runner-execution.mjs"
+          ],
+          "exit": 0,
+          "stdout": "9f7a0a25122574db64babbe877c0d603b07f6037\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runner-execution.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:.github/workflows/runner-executor.yml"
+          ],
+          "exit": 0,
+          "stdout": "e7e41b153402fdd4d26ffdb7eb594438c7b8eb23\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "diff",
+            "--stat",
+            "4d6047987b3f26b1b1c9988f412f60b2fb081567",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c"
+          ],
+          "exit": 0,
+          "stdout": " .github/workflows/runner-executor.yml              |  13 +-\n documentation/architecture/decisions/D7905-p3.md   |  48 ++++\n documentation/architecture/decisions/D7905-p4.md   |  57 ++++\n frontend/test/fixtures/runner_cancel_7905.mjs      |  46 +--\n frontend/test/runner_executor.test.mjs             |   3 +-\n .../test/runner_executor_isolation_7905.test.mjs   | 162 ++---------\n frontend/test/runner_isolation_7905.test.mjs       |  16 +-\n .../test/runner_supervisor_lifecycle_7905.test.mjs | 313 +++++++++++++++++++++\n frontend/test/runner_trace_exporter_7905.test.mjs  | 190 +++++++++++++\n scripts/ci/runner-execution.mjs                    | 169 ++++++++---\n scripts/ci/runners/README.md                       |   2 +\n scripts/ci/runners/executor-isolation.mjs          |  23 +-\n scripts/ci/runners/job-container.mjs               | 105 +++++--\n scripts/ci/runners/recovery-store.mjs              |  55 ++++\n scripts/ci/runners/trace-exporter.mjs              | 176 ++++++++++++\n 15 files changed, 1121 insertions(+), 257 deletions(-)\n",
+          "stderr": ""
+        }
+      ],
+      "profile_unchanged_from_preparation": true,
+      "profile_runtime": {
+        "node": "22.23.3",
+        "python": "3.11.18",
+        "arch": "x64"
+      },
+      "contract_changes": [
+        "STUDIOOS_JOB_DEADLINE absolute epoch seconds replaces relative MAX_SECONDS; keeper executes shell arithmetic/date +%s/exec sleep",
+        "Installs and tests are separate candidate exec phases; supervisor retains the exact container through capture/export/removal",
+        "Exporter pauses exact container, copies /work/traces with Docker cp to a strictly bounded uncompressed USTAR parser, and publishes complete ready offer only",
+        "Durable ownership records retained until exact absence confirmed; host supports exclusive no-follow fsync/rename filesystem semantics"
+      ],
+      "engine_version_pin": "none supplied in source; operator must identify and qualify exact binary/server/build/security baseline",
+      "native_status": "NOT RUN; approved builder/rootfs and node baseline still not supplied",
+      "evidence_class": "source reconciliation only; not build, scan, image approval or native compatibility"
+    },
+    "independent_checks_not_claimed": "Retained S09 author test/mutation logs were checksum-verified, not rerun. No independent native execution or actual Docker behavior has been measured."
+  },
+  "draft_publication_preparation": {
+    "recorded_utc": "2026-11-22T11:12:09.275411+00:00",
+    "status": "Owner-authorized draft source publication; actual qualification pending",
+    "previous_package_commit": "18fcd5151bdbc7af8063cc045c656da189c2f434",
+    "verified_repository_main": "66a705b7ade7e3188f62f34bdb3e58345d8902d5",
+    "backlog_issue_5719": "closed",
+    "merged_prs": [
+      7972,
+      7981,
+      8055
+    ],
+    "planner_pr_8148": {
+      "pr": 8148,
+      "state": "open, unmerged, ready for review",
+      "head": "29eb838db6a703b9413f06089b40f1130f94c4b9",
+      "owner": "S39 reconciles actual landed/selected immutable revision"
+    },
+    "operator_input_record": "qualification-progress.json:operator_input_record",
+    "actual_qualification_gates": {
+      "native_reproducible_build": "NOT RUN",
+      "build_provenance": "NOT RUN",
+      "image_sbom": "NOT RUN",
+      "immutable_image_scan": "NOT RUN",
+      "signature_and_attestation_verification": "NOT RUN",
+      "image_approval": "NOT RUN",
+      "native_runtime_compatibility": "NOT RUN",
+      "actual_node_isolation_and_cleanup": "NOT RUN"
+    },
+    "scope": "Preparation publication only; no installation, build, scan, native execution, dispatch, registry publication or activation performed"
+  },
+  "operator_input_record": {
+    "schema_version": 1,
+    "issue": 8008,
+    "recorded_utc": "2026-11-22T11:12:09.275411+00:00",
+    "image_status": "qualification pending",
+    "image_qualified": false,
+    "record_kind": "Operator environment/authority pending; source field independently reconciled by S31",
+    "handling": "Complete the infrastructure/security/operating references in the established private handoff. Publish only nonsecret source identities, statuses and evidence hashes.",
+    "responsible_owners": {
+      "environment_and_authorization": "Operator with S18/S38",
+      "final_integration_candidate": "S39 with S09 executor ownership"
+    },
+    "inputs": [
+      {
+        "id": "approved_builder_or_oci",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Existing approved native Linux amd64 builder plus reviewed rootfs and immutable component/tool pins, or operator-produced immutable OCI artifacts with build, SBOM, accepted scan and provenance evidence. Identify the approval and evidence references."
+      },
+      {
+        "id": "reviewed_image_digest",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Reviewed immutable linux/amd64 candidate manifest digest, OCI archive/config identities and the mapping to the engine image ID. An unapproved template with a null digest is not a candidate."
+      },
+      {
+        "id": "exact_engine_security_baseline",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Exact container engine/version and effective security configuration used for qualification, with its reviewed baseline reference."
+      },
+      {
+        "id": "intended_node_baseline",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Intended-node architecture, OS/kernel, engine/security configuration, resource limits and required tooling. Distinct-machine pilot proof remains a separate later gate."
+      },
+      {
+        "id": "current_bounded_authorization",
+        "status": "NOT SUPPLIED",
+        "value": null,
+        "required": "Current bounded qualification reference/runbook, operating window, resource/time/spend bounds, stop conditions and named shutdown responsibility. Historical operating approval is not renewed."
+      },
+      {
+        "id": "final_executor_integration_revision",
+        "status": "VERIFIED RECEIPT AND STATIC RECONCILIATION",
+        "value": {
+          "head": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+          "tree": "45e1f3acb44fe6bb0a346df867430d34b70128d2",
+          "planner_pin": "19927c8960ec01377ff25d6d5a081ae8db080df5"
+        },
+        "required": "Freeze this designated source consistently; reconcile any later S39 delta before qualification. No repeated historical c36 delivery."
+      }
+    ],
+    "verified_older_source": {
+      "head": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "tree": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3",
+      "status": "Actual receipt and source checks verified previously; not final combined/native acceptance"
+    },
+    "planner_dependency": {
+      "pr": 8148,
+      "state": "merged",
+      "merge_commit": "daf122acccfba705c2cf4b9af9a24f7554538861",
+      "actual_combined_pin": "19927c8960ec01377ff25d6d5a081ae8db080df5"
+    },
+    "gates": {
+      "reproducible_build": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "provenance": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "image_sbom": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "installed_dependency_sbom": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "immutable_image_scan": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "signature_attestation_verification": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "image_approval": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "native_runtime": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "six_worker_shards": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "executor_isolation": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "credential_denial": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "lifecycle_cancellation_timing_resources": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "actual_node_cleanup": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "source_availability": {
+        "result": "PASS",
+        "evidence": "Actual public PR Git ref fetched, not a reported receipt"
+      },
+      "source_receipt": {
+        "result": "PASS",
+        "head": "241d0944b78dc61cda83b3a1e0952c2ad6114b51",
+        "tree": "af820484be4c93125c4795f5319dce9132c085ed",
+        "evidence_sha256": "68fbe5f3d349fb90221d275bebd8600f807aafa2fa9c5c29c9e2ac53b6dae094"
+      },
+      "interface_reconciliation": {
+        "result": "PASS",
+        "scope": "S31 static runtime contract, source hashes, executor ancestry, planner/caller and lock reconciliation only; not S09/S32/S34 security or source acceptance"
+      },
+      "operator_record": {
+        "result": "UNKNOWN",
+        "reason": "S38/admin assembling; completed current record not received; historical provider presence is not operating authority"
+      }
+    },
+    "authorization": "Owner authorizes necessary child-owned reconciliation/evidence draft publication and exact actions covered by current operator approval. No current host-specific operating record has been supplied; no new budget, infrastructure, permission or activation is granted.",
+    "updated_utc": "2026-11-22T20:35:57.703435+00:00",
+    "historical_reported_checkpoint": {
+      "head": "f13fa4bda352a52b9f25411c2e2580c1a1888abc",
+      "tree": "5be6c934eb27c6043279e42a95b7c0c435555c54",
+      "status": "Historical report preserved. Current actual receipt and interface reconciliation use the frozen 8c11 combined source, with d323 and merged executor ancestry independently verified."
+    },
+    "current_verified_source": {
+      "head": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+      "tree": "45e1f3acb44fe6bb0a346df867430d34b70128d2",
+      "parents": [
+        "241d0944b78dc61cda83b3a1e0952c2ad6114b51"
+      ],
+      "status": "Verified S39-designated correction candidate; native qualification and other owners review remain separate"
+    }
+  },
+  "historical_current_source": {
+    "revision": "270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0",
+    "files": [
+      {
+        "path": "scripts/ci/runners/profiles.json",
+        "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+      },
+      {
+        "path": "scripts/ci/runners/job-container.mjs",
+        "sha256": "ef4097d67ce6bb95c72d3030bc2f1def79d72b3e32c458a7693af1965ff91187"
+      },
+      {
+        "path": "scripts/ci/runners/executor-isolation.mjs",
+        "sha256": "bfa26ee99a0592b540dc345d31c47c6573b9e2404c4dfd6ee38e6ca0cb76929a"
+      },
+      {
+        "path": "scripts/ci/runner-execution.mjs",
+        "sha256": "bc00ee728d1e4f8f00ef8c6330a51b921dd9ec7d1c3fcbadc136302cdf304d74"
+      },
+      {
+        "path": "infra/runners/linux-x64.image.template.json",
+        "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79"
+      },
+      {
+        "path": "infra/runners/README.md",
+        "sha256": "d96f156232af14878856806c85b5f5f60ea9dcf448f4cab1122a61200a17e120"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+      },
+      {
+        "path": "cloudflare-worker/package-lock.json",
+        "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b"
+      }
+    ],
+    "verifiedContainer_predicate_unchanged": true,
+    "s18_candidate_template": {
+      "approved": false,
+      "version": null,
+      "digest": null,
+      "os": "linux",
+      "arch": "x64",
+      "runnerVersion": null,
+      "runnerDigest": null,
+      "nodeVersion": null,
+      "pythonVersion": null
+    },
+    "integration": "Published code now contains ACL staging and executor adapter. Unpublished S09 lifecycle changes and actual-node baseline requested from operator; no live wiring inferred."
+  },
+  "historical_lock_engine_check": {
+    "revision": "270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0",
+    "targetNode": "22.23.3",
+    "targetPython": "3.11.18",
+    "checked": 364,
+    "excludedPlatformEntries": 192,
+    "mismatches": [],
+    "semver": "7.8.5",
+    "exit": 0
+  },
+  "source_reconciliation": {
+    "schema_version": 1,
+    "recorded_utc": "2026-11-22T20:35:57.703435+00:00",
+    "candidate": {
+      "head": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+      "tree": "45e1f3acb44fe6bb0a346df867430d34b70128d2",
+      "parents": [
+        "241d0944b78dc61cda83b3a1e0952c2ad6114b51"
+      ],
+      "status": "Verified S39-designated correction candidate; native qualification and other owners review remain separate"
+    },
+    "superseded_checkpoint": {
+      "head": "7214b4c363c5f5bb589995557c1a80c1e8433a31",
+      "tree": "8ba4ee116dbba737fc716162c541b8bee46527be",
+      "delta": " documentation/architecture/decisions/D7909-p7.md   | 65 ++++++++++++++++++++++\n .../ci_capacity_auth_composition_8011.test.mjs     | 13 +++++\n frontend/test/ci_capacity_composed_7909.test.mjs   | 41 +++++++++++++-\n frontend/test/ci_capacity_pilot_7909.test.mjs      |  4 +-\n frontend/test/ci_capacity_transport.test.mjs       |  4 +-\n merge-control/src/ciCapacityRuntime.ts             | 28 +++++++---\n scripts/ci/capacity-client.mjs                     |  5 +-\n scripts/ci/capacity-executor.mjs                   | 23 ++++++--\n 8 files changed, 165 insertions(+), 18 deletions(-)\n"
+    },
+    "base_main": "4ea24068f07974b05c5cc53df5150aecbe12e32b",
+    "preparation_pr": {
+      "number": 8233,
+      "state": "merged"
+    },
+    "merged_executor": {
+      "pr": 8231,
+      "revision": "af71f2261b5f7a1fee65464b147f8625dd86eb1d",
+      "incorporated_published_source": "d323f599da89f87e7d84377b911361b329201e53",
+      "native_files_identical": true
+    },
+    "historical_c36": {
+      "head": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "tree": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3",
+      "status": "Preserved actual receipt; not requested again"
+    },
+    "ancestry": {
+      "c36": {
+        "revision": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+        "is_ancestor": true,
+        "exit": 0
+      },
+      "s09_published_d323": {
+        "revision": "d323f599da89f87e7d84377b911361b329201e53",
+        "is_ancestor": true,
+        "exit": 0
+      },
+      "merged_executor": {
+        "revision": "af71f2261b5f7a1fee65464b147f8625dd86eb1d",
+        "is_ancestor": true,
+        "exit": 0
+      },
+      "main": {
+        "revision": "4ea24068f07974b05c5cc53df5150aecbe12e32b",
+        "is_ancestor": true,
+        "exit": 0
+      },
+      "planner_pin": {
+        "revision": "19927c8960ec01377ff25d6d5a081ae8db080df5",
+        "is_ancestor": true,
+        "exit": 0
+      }
+    },
+    "files": [
+      {
+        "path": "scripts/ci/runners/profiles.json",
+        "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01",
+        "blob": "74d6bc48fe5be244e6b12171aa6a1b3dc12db041",
+        "historical_c36": {
+          "present": true,
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01",
+          "identical": true
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runners/job-container.mjs",
+        "sha256": "b48baa92b5e79ac2e18ecf87ed0f298adf2a9d7a1e1ca3049edb946464f358f7",
+        "blob": "e560f7181a902f05aa98d9fdce161badc2f4f5e6",
+        "historical_c36": {
+          "present": true,
+          "sha256": "00a8cf3ff24aa60e0795874743c5add4016f72fdb846d17ae9d158160568b26a",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "b48baa92b5e79ac2e18ecf87ed0f298adf2a9d7a1e1ca3049edb946464f358f7",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "b48baa92b5e79ac2e18ecf87ed0f298adf2a9d7a1e1ca3049edb946464f358f7",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runners/executor-isolation.mjs",
+        "sha256": "1bfb6eabe711edc840436b241a9356bcbee5ee468ad96fd3c2fbedeb441f2550",
+        "blob": "ec1114be4c084906a85759d25454bbbb7db59188",
+        "historical_c36": {
+          "present": true,
+          "sha256": "ac1e048586ee2a8d005bd0048b3795d801c4048f7422fb7087e20862cae46583",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "1bfb6eabe711edc840436b241a9356bcbee5ee468ad96fd3c2fbedeb441f2550",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "1bfb6eabe711edc840436b241a9356bcbee5ee468ad96fd3c2fbedeb441f2550",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runners/recovery-store.mjs",
+        "sha256": "1abe89d6d6aadd2e22fbf9bf1021bb094d965a1729c52b5a7592053471a6d8a6",
+        "blob": "6ad574a42b19607c07633a44256e30551f6bf1a1",
+        "historical_c36": {
+          "present": true,
+          "sha256": "b54b8c30903a11049f1a5ee3b9b0579cdce4186c2f83bd3edc002f9e7b4b353c",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "1abe89d6d6aadd2e22fbf9bf1021bb094d965a1729c52b5a7592053471a6d8a6",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "1abe89d6d6aadd2e22fbf9bf1021bb094d965a1729c52b5a7592053471a6d8a6",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runners/trace-exporter.mjs",
+        "sha256": "a6e145afc972470e2f7cb411be86e3e970e93b2af5a23e1f78717583fe576ac9",
+        "blob": "b531495b556a58647844002cf733f975e6b4c465",
+        "historical_c36": {
+          "present": true,
+          "sha256": "5b4bd5bea35399918f131041f610d0dce10dc709a463cd88c5ea3ed9d5c9f529",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "a6e145afc972470e2f7cb411be86e3e970e93b2af5a23e1f78717583fe576ac9",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "a6e145afc972470e2f7cb411be86e3e970e93b2af5a23e1f78717583fe576ac9",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runners/ephemeral-supervisor.mjs",
+        "sha256": "0941d55ceb55f9e75010bab78ab6f0063b765a11b5aad46dfb7c6c5b731dee09",
+        "blob": "04b3423aa4cdce6d7b275a6e3fbb538b54b25461",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "0941d55ceb55f9e75010bab78ab6f0063b765a11b5aad46dfb7c6c5b731dee09",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "0941d55ceb55f9e75010bab78ab6f0063b765a11b5aad46dfb7c6c5b731dee09",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runner-execution.mjs",
+        "sha256": "20395cf0d0f64835a4ed66594917d33c9d046bd6179274f45d5facf975a76272",
+        "blob": "477fcb812a2589dd274af083b742a4ef91d35d97",
+        "historical_c36": {
+          "present": true,
+          "sha256": "526bd1ab4f8f7650c908379041ee584c099c6b8356ea5dc3436cf7b8c0dbc894",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "20395cf0d0f64835a4ed66594917d33c9d046bd6179274f45d5facf975a76272",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "20395cf0d0f64835a4ed66594917d33c9d046bd6179274f45d5facf975a76272",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/runner-admission.mjs",
+        "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b",
+        "blob": "2d9fce4b66301abe012fea55e3f6628896226adc",
+        "historical_c36": {
+          "present": true,
+          "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b",
+          "identical": true
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "4ba448c0dd2615e829bbdd2fd688abe8f474f715929e8241f76a84d50a01247b",
+          "identical": true
+        }
+      },
+      {
+        "path": "scripts/ci/capacity-executor.mjs",
+        "sha256": "c4e38dce5ade2fb8cc54b4fbd8e50fd35ac1d7bce9840fbf0f51e869e544782d",
+        "blob": "7399c33153a1321977b9d8096ee4c03bed8c51e5",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": false
+        },
+        "current_main": {
+          "present": false
+        }
+      },
+      {
+        "path": "scripts/ci/capacity-client.mjs",
+        "sha256": "1d41642cef891ad3a69b645f44cc7864e14d8fdf72c6e3d1974cc758866b4095",
+        "blob": "057deedecb4caecc2669d2710418d447d1fa20ad",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "db661bc784d94ab3b25963fd58529268f69b1dfdd518e48ef64509ed0268334f",
+          "identical": false
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "db661bc784d94ab3b25963fd58529268f69b1dfdd518e48ef64509ed0268334f",
+          "identical": false
+        }
+      },
+      {
+        "path": "scripts/ci/capacity-submission.mjs",
+        "sha256": "000216d35102d10f0b802a32f34d59d9ef4933556059003a374595b9bc51e7e8",
+        "blob": "4538f31f5774729a0ffac5081093d244122025d3",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": false
+        },
+        "current_main": {
+          "present": false
+        }
+      },
+      {
+        "path": "scripts/ci/capacity-planner.mjs",
+        "sha256": "62c659209e1718a4633403c2cf55089f3a4acf7744ef50f2445bad7621b040c8",
+        "blob": "ec917c62ab61f79e4122efa045c1d184f057f028",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "257db087a54380571e94f41b1260d9d04d9f2c5178a8d06921af51d304ec9586",
+          "identical": false
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "257db087a54380571e94f41b1260d9d04d9f2c5178a8d06921af51d304ec9586",
+          "identical": false
+        }
+      },
+      {
+        "path": ".github/workflows/runner-executor.yml",
+        "sha256": "3dc8db9207557680029737749ca7e749634b792608c2f28a999104c33b21d9e8",
+        "blob": "5d845853617737a61017f8ce8deb75811e464a4a",
+        "historical_c36": {
+          "present": true,
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce",
+          "identical": false
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce",
+          "identical": false
+        }
+      },
+      {
+        "path": ".github/workflows/capacity-planner.yml",
+        "sha256": "d91e4ba176646a35ea804d0988f59f539cc30d0050acf594402b1ed159456c0b",
+        "blob": "4f7dfaca48403d2d0b9cc9e83403ebca48525a8d",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "13bf7b84f6af86df10ea25a94f3dde7ba4a26301dce4dc45816f62b9fcdc7c85",
+          "identical": false
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "13bf7b84f6af86df10ea25a94f3dde7ba4a26301dce4dc45816f62b9fcdc7c85",
+          "identical": false
+        }
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "sha256": "85943729238ecf5e20ef4d5b5bfa31f8cdd710b9dc70e6d4334006796cb1ca80",
+        "blob": "37d9c5f163c6739505aad648d56447f453354ab2",
+        "historical_c36": {
+          "present": true,
+          "sha256": "025d51b59c75f5b1fa8792c12a485009eb075857531d1833cc7bb6b0f00bc562",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "025d51b59c75f5b1fa8792c12a485009eb075857531d1833cc7bb6b0f00bc562",
+          "identical": false
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "025d51b59c75f5b1fa8792c12a485009eb075857531d1833cc7bb6b0f00bc562",
+          "identical": false
+        }
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138",
+        "blob": "412d9a101c061c4cf91f33ed746eb3cfa0c868f5",
+        "historical_c36": {
+          "present": true,
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138",
+          "identical": true
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138",
+          "identical": true
+        }
+      },
+      {
+        "path": "cloudflare-worker/package-lock.json",
+        "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d",
+        "blob": "f8a3b1d4be11f5c6deda6e25cefcd7a6535cb9d4",
+        "historical_c36": {
+          "present": true,
+          "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b",
+          "identical": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "156b2f54221786f3330490a5e0d2c87a2b40eed2057cc68aef11b8964669094d",
+          "identical": true
+        }
+      },
+      {
+        "path": "infra/runners/linux-x64.image.template.json",
+        "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79",
+        "blob": "1c575612d601925d6699e6278289bf26e4e5a048",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79",
+          "identical": true
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79",
+          "identical": true
+        }
+      },
+      {
+        "path": "merge-control/src/ciCapacityRuntime.ts",
+        "sha256": "a31bbdfff189c9a7952aa6e4140fe51e0782f9af1908c89f4ae161bbc5ee2c98",
+        "blob": "e92787f67afd0f9e1284b3597be1f7547145a8f3",
+        "historical_c36": {
+          "present": false
+        },
+        "merged_executor": {
+          "present": true,
+          "sha256": "a64763138fe1ce80011e4d24c9373c501afa7ffce1884704846d5d584d7f4031",
+          "identical": false
+        },
+        "current_main": {
+          "present": true,
+          "sha256": "a64763138fe1ce80011e4d24c9373c501afa7ffce1884704846d5d584d7f4031",
+          "identical": false
+        }
+      }
+    ],
+    "planner": {
+      "pin": "19927c8960ec01377ff25d6d5a081ae8db080df5",
+      "definition_identical": true,
+      "caller": ".github/workflows/ci.yml:capacity-submit",
+      "merged_pr_8148": "daf122acccfba705c2cf4b9af9a24f7554538861"
+    },
+    "gates": {
+      "reproducible_build": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "provenance": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "image_sbom": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "installed_dependency_sbom": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "immutable_image_scan": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "signature_attestation_verification": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "image_approval": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "native_runtime": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "six_worker_shards": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "executor_isolation": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "credential_denial": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "lifecycle_cancellation_timing_resources": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "actual_node_cleanup": {
+        "result": "NOT RUN",
+        "reason": "Approved immutable builder/rootfs or image, engine/node baseline and current operating authority not supplied to S31"
+      },
+      "source_availability": {
+        "result": "PASS",
+        "evidence": "Actual public PR Git ref fetched, not a reported receipt"
+      },
+      "source_receipt": {
+        "result": "PASS",
+        "head": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+        "tree": "45e1f3acb44fe6bb0a346df867430d34b70128d2",
+        "evidence_sha256": "ef974e010f12bbc03668bae13906559a671491a42de79ca2f2c4ebf8476ccb72"
+      },
+      "interface_reconciliation": {
+        "result": "PASS",
+        "scope": "S31 static runtime contract, source hashes, executor ancestry, planner/caller and lock reconciliation only; not S09/S32/S34 security or source acceptance"
+      },
+      "operator_record": {
+        "result": "UNKNOWN",
+        "reason": "S38/admin assembling; completed current record not received; historical provider presence is not operating authority"
+      }
+    },
+    "lock_engines": {
+      "source": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+      "targetNode": "22.23.3",
+      "semver": "7.8.6",
+      "checked": 365,
+      "excludedPlatformEntries": 192,
+      "mismatches": [],
+      "status": "Static lock engine ranges only; not clean install or native execution",
+      "exit": 0
+    },
+    "qualification_target": "One frozen candidate above; any later S39 revision requires a new explicit delta receipt before native execution",
+    "operator_request": {
+      "recipient": "S38/admin operator",
+      "status": "Sent privately through existing operator chat; exact existing host/artifact/actions requested",
+      "proposed_resource": "Existing Linux machine from historical provider record, subject to current admin verification; no new resource requested",
+      "actions": "Two offline clean builds, provenance/SBOM/immutable scan/signature checks, exact-boundary native probe and synthetic credential denial, six worker shards, lifecycle/cancellation/export and exact cleanup. No activation, provisioning or registry publication.",
+      "authority": "Not supplied; historical 20 November window is expired and not reused"
+    },
+    "cleanup": {
+      "s31_native_resources_created": 0,
+      "native_resource_cleanup": "NOT RUN",
+      "actual_node_residual_state": "UNKNOWN; no remote observation was made"
+    },
+    "limitations": [
+      "No approved rootfs/image digest; all image fields stay null",
+      "No native Linux execution or emulation substituted",
+      "No inherited acceptance from historical c36, aa55, 7214 or merged preparation",
+      "Source tests use synthetic engine/provider facts; failures/skips retained",
+      "S09 executor, S39 integration, S18 builder and operator/admin ownership preserved"
+    ],
+    "intermediate_receipt": {
+      "head": "241d0944b78dc61cda83b3a1e0952c2ad6114b51",
+      "tree": "af820484be4c93125c4795f5319dce9132c085ed",
+      "status": "Received and statically reconciled; superseded by one durable-write correction in three files"
+    },
+    "caller_identities": {
+      "observed_source_head": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+      "ci_workflow_blob": "37d9c5f163c6739505aad648d56447f453354ab2",
+      "planner_definition_pin": "19927c8960ec01377ff25d6d5a081ae8db080df5",
+      "planner_definition_blob": "4f7dfaca48403d2d0b9cc9e83403ebca48525a8d",
+      "child_workflow_blob": "5d845853617737a61017f8ce8deb75811e464a4a",
+      "trusted_code_revision_field": "CI_CAPACITY_EXECUTOR_SHA",
+      "configured_child_revision_field": "CI_CAPACITY_CHILD_WORKFLOW_SHA",
+      "observed_child_identity": "github.workflow_sha, compared with configured child revision",
+      "candidate_source_identity": "Authenticated admitted immutable source; separate from trusted executor and child-workflow identities",
+      "live_configured_values": "UNKNOWN; source declarations are not current authorized admin readback"
+    }
+  },
+  "updated_utc": "2026-11-22T20:35:57.703435+00:00"
+}

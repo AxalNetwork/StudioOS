@@ -11,9 +11,10 @@ import { investorFundHref } from '../src/lib/onboarding.js';
 
 const h = React.createElement;
 const ANSWERS = { investor_type: 'angel', country: 'Canada', accreditation_status: 'non_us', sectors: ['General Tech'], stages: ['Seed'], geos: ['Europe'], check_size: '$10k-$50k', thesis_text: 'Synthetic thesis', contribute_to_signals: false, anti_thesis_sectors: ['Parenting/Families'], lp_intent: 'maybe', lp_target_usd: '50000', notes: 'Synthetic note', mission_driven: 0.7 };
+const PERSISTED = { ...ANSWERS, _investor_onboarding_version: 2 };
 const PROFILE = { investor_type: 'angel', sectors: ['General Tech'], stages: ['Seed'], geos: ['Europe'], ticket_band: '$10k-$50k', thesis_text: 'Synthetic thesis', contribute_to_signals: false, anti_thesis_sectors: ['Parenting/Families'], anti_thesis_stages: [], firm_name: null, accreditation_status: 'non_us', country: 'Canada', lp_intent: 'maybe', lp_target_usd: '50000', notes: 'Synthetic note' };
 function Probe() { return h('span', { 'data-testid': 'location' }, useLocation().pathname); }
-async function fixture({ role = 'investor', step = 8, completed = false, profileFail = false, progressFail = false } = {}) {
+async function fixture({ role = 'investor', step = 7, legacy = false, completed = false, profileFail = false, progressFail = false } = {}) {
   const methods = ['onboardingGetProgress', 'onboardingSaveProgress', 'onboardingComplete', 'saveInvestorProfile', 'getMe'];
   const original = Object.fromEntries(methods.map(k => [k, api[k]]));
   const oldDispatch = globalThis.dispatchEvent;
@@ -21,7 +22,7 @@ async function fixture({ role = 'investor', step = 8, completed = false, profile
   const progress = [], copies = [], completions = [];
   const state = { profileFail, progressFail };
   api.getMe = async () => user;
-  api.onboardingGetProgress = async () => ({ flow: 'investor', step, total_steps: 9, data: { ...ANSWERS }, completed_at: completed ? '2026-11-01' : null });
+  api.onboardingGetProgress = async () => ({ flow: 'investor', step, total_steps: legacy ? 9 : 8, data: legacy ? { ...ANSWERS } : { ...PERSISTED }, completed_at: completed ? '2026-11-01' : null });
   api.onboardingSaveProgress = async v => { progress.push(v); if (state.progressFail) throw new Error('Synthetic unavailable progress'); return {}; };
   api.onboardingComplete = async flow => { completions.push(flow); return {}; };
   api.saveInvestorProfile = async v => { copies.push(v); if (state.profileFail) throw new Error('Synthetic unavailable profile'); return {}; };
@@ -40,7 +41,7 @@ test('a failed profile copy stays visible, retries the same answers and offers t
     await m.click('Finish profile'); await m.settle();
     assert.match(m.text(), /Your profile was not saved/);
     assert.equal(m.props('location').children, '/onboarding/investor');
-    assert.deepEqual(m.progress.at(-1).data, ANSWERS);
+    assert.deepEqual(m.progress.at(-1).data, PERSISTED);
     assert.equal(m.progress.at(-1).total_steps, 8);
     assert.deepEqual(m.completions, ['investor']);
     assert.deepEqual(m.copies, [PROFILE]);
@@ -79,14 +80,15 @@ test('an exploring member has a holding-page handoff and no fund door', async ()
 
 test('old slider and LP step indexes resume at LP intent with answers intact; earlier steps still resume', async () => {
   for (const step of [7, 8, 6]) {
-    const m = await fixture({ step });
+    const m = await fixture({ step, legacy: true });
     try {
       assert.match(m.text(), step === 6 ? /Anti-thesis \(hard exclusions\)/ : /LP commitment intent/);
       assert.doesNotMatch(m.text(), /What matters most|matching|match you|NEVER match/);
       assert.equal(m.copies.length, 0);
       if (step !== 6) {
+        await m.click('Continue'); await m.settle();
         await m.click('Finish profile'); await m.settle();
-        assert.deepEqual(m.progress.at(-1).data, ANSWERS);
+        assert.deepEqual(m.progress.at(-1).data, PERSISTED);
       }
     } finally { await m.close(); }
   }
@@ -100,7 +102,7 @@ test('final progress failure prevents completion and profile copy until the answ
     assert.equal(m.completions.length, 0); assert.equal(m.copies.length, 0);
     m.state.progressFail = false;
     await m.click('Finish profile'); await m.settle();
-    assert.deepEqual(m.progress.at(-1).data, ANSWERS);
+    assert.deepEqual(m.progress.at(-1).data, PERSISTED);
     assert.equal(m.completions.length, 1); assert.equal(m.copies.length, 1);
   } finally { await m.close(); }
 });
@@ -125,7 +127,7 @@ test('only admitted roles and recorded LP intent get the fund route', () => {
 
 test('every remaining step uses current thesis-fit copy and contains no unused value sliders', async () => {
   for (let step = 0; step < 8; step++) {
-    const m = await fixture({ step });
+    const m = await fixture({ step, legacy: true });
     try {
       assert.doesNotMatch(m.text(), /matching|match you|NEVER match|What matters most/);
       assert.ok(!m.nodes().some(n => n.tagName === 'INPUT' && m.props(n)?.type === 'range'));

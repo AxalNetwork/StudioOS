@@ -112,7 +112,7 @@ function workflowProblems(src){
  const bad=[];
  const candidate=src.indexOf('- name: Check out only the admitted immutable source'),admission=src.indexOf('- name: Independently admit this exact child before checkout');
  if(admission<0||candidate<admission)bad.push('candidate_before_admission');
- if(!src.includes('ref: ${{ github.workflow_sha }}'))bad.push('untrusted_control_revision');
+ if(!src.includes('ref: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}'))bad.push('untrusted_control_revision');
  if(!src.includes('ref: ${{ steps.admission.outputs.source_sha }}'))bad.push('unadmitted_source');
  if(!src.includes("vars.RUNNER_EXECUTOR_ENABLED == 'true'"))bad.push('caller_enabled');
  if(!src.includes("github.ref == 'refs/heads/main'"))bad.push('branch_definition_allowed');
@@ -128,7 +128,7 @@ test('staged workflow loads trusted control first, never enables callers, and ke
  const src=readFileSync(WORKFLOW,'utf8');assert.deepEqual(workflowProblems(src),[]);
  const changes=[
   ['candidate_before_admission',src.replace('- name: Independently admit this exact child before checkout','- name: Wrong boundary')],
-  ['untrusted_control_revision',src.replaceAll('ref: ${{ github.workflow_sha }}','ref: ${{ inputs.executor_ref }}')],
+  ['untrusted_control_revision',src.replaceAll('ref: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}','ref: ${{ inputs.executor_ref }}')],
   ['unadmitted_source',src.replace('ref: ${{ steps.admission.outputs.source_sha }}','ref: main')],
   ['caller_enabled',src.replace("vars.RUNNER_EXECUTOR_ENABLED == 'true'",'true')],
   ['branch_definition_allowed',src.replace("github.ref == 'refs/heads/main'",'true')],
@@ -137,13 +137,17 @@ test('staged workflow loads trusted control first, never enables callers, and ke
  ];
  for(const [reason,mutated]of changes)assert.ok(workflowProblems(mutated).includes(reason),reason);
  assert.match(src,/workflow_call:/);assert.match(src,/workflow_dispatch:/);assert.doesNotMatch(src,/uses:.*runner-executor\.yml@(?:main|agent\/)/);
- assert.ok(src.indexOf('Verify runtime and exact plan before candidate dependency scripts')<src.indexOf('run: npm ci'));
+ // #7905/D8007: no candidate dependency install runs as a host step for any profile; installs run inside the boundary.
+ assert.doesNotMatch(src,/run: npm ci/);
 });
 
-test('D7904 target admission has no hosted preflight dependency or OIDC minting permission',()=>{
+test('D7904 target admission has no hosted preflight dependency and stages only dispatch-scoped supervisor OIDC',()=>{
  const src=readFileSync(WORKFLOW,'utf8');
- assert.doesNotMatch(src,/id-token:|getIDToken|needs:|needs\.admit|runner-dispatch/);
- assert.match(src,/ref: \$\{\{ github\.workflow_sha \}\}/);
+ assert.doesNotMatch(src,/getIDToken|needs:|needs\.admit|runner-dispatch/);
+ assert.match(src,/id-token: write/);assert.doesNotMatch(src.split('jobs:')[0],/id-token:/);
+ assert.ok(src.includes("github.event_name == 'workflow_dispatch'"));
+ assert.ok(src.includes("assert re.fullmatch('[a-f0-9]{40}', os.environ['CONTROL_SHA'])"));
+ assert.match(src,/ref: \$\{\{ vars\.CI_CAPACITY_EXECUTOR_SHA \}\}/);
  assert.match(src,/permissions:\n      contents: read\n      actions: read/);
  assert.match(src,/inputs\.profile == 'linux-x64' && '\{"group":"StudioOS Worker Pool","labels":\["self-hosted","Linux","X64","studioos-worker-v1"\]\}'/);
  assert.match(src,/inputs\.profile == 'macos-arm64' && '\{"group":"StudioOS Worker Pool","labels":\["self-hosted","macOS","ARM64","studioos-worker-v1"\]\}'/);

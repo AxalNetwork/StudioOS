@@ -233,7 +233,7 @@ for (const writer of [true, false]) test(writer ? '4 (route): at 1024px /validat
   const m = await mount(h(MemoryRouter, { initialEntries: [`/validate${Q}`] }, h(Routes, null, h(Route, { path: '/validate', element: h(CycleRoute, { cycle: 'validate' }) }))));
   try {
     await m.act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); });
-    assert.ok(Boolean(m.by('cycle-overview')), 'the desktop overview');
+    assert.ok(Boolean(m.by('validate-overview-v2')), 'the desktop overview (D5998)');
     assert.ok(Boolean(m.by('validate-lead') && m.by('validate-meter')), 'the meter in the lead row');
     assert.equal(Boolean(m.by('phone-meter')), false, 'and no phone root');
     assert.match(m.text('validate-meter'), /4 · No target set/);

@@ -27,8 +27,9 @@ storage readers and guards must consume it rather than copy figures.
 writes or deletes an R2 object under a `record` prefix of the D6650 inventory. A
 record is written once (`putRecord` refuses an existing key), a replacement is a
 new key (the replaced object is kept), and the only delete is
-`eraseRecordObjects` with a stated reason, the door #6654's suppression ledger
-completes; a failed write's rollback of the object it just stored goes through
+`eraseRecordObjects` with a stated reason, which writes one D6654
+`record_suppression_ledger` row per key (a key hash, never the key) before it
+deletes, and deletes nothing when that write fails (except a rollback); a failed write's rollback of the object it just stored goes through
 it as `unreferenced`. `scripts/check-record-writes.mjs`
 fails the build on any other put or delete of a record prefix.
 
@@ -576,6 +577,12 @@ withdrawal. Every outcome is a sentence on the session (`digest_status`,
 columns and pending `validate_proposals`, and every model call goes through
 `aiRouter.run`.
 
+D6713: `formationPacks.ts` reads pinned/current catalogue obligations, keeps
+unsourced deadlines unknown, and prepares idempotent project-step/company-event
+inserts for the registered-case transaction. Company-only coverage remains
+`reminders:false`. `entityObligations.ts` uses the catalogue in production;
+its legacy pure schedule helper remains a compatibility/parity fixture.
+
 D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,
 seeded events and new-venture action are preserved; TypeScript maps `due_date`
@@ -740,3 +747,5 @@ D4811 (#4811): `templateSafety.ts` is the one predicate for a legal template's R
 
 `meta/` reads the shared Meta app credentials for WhatsApp and Facebook.
 | `fundLpMaintenance.ts` | D6237: closed LP patches, atomic commitment/removal checks and actor audit. |
+
+D6703: `formationPrefill.ts` projects minimal intake fields and store provenance, normalizing country names/codes without guessing cities. `formationState.ts` also reads unpaid open v2 cases as `draft_case`, after incorporated and paid-order evidence.

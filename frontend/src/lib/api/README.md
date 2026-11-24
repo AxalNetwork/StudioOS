@@ -520,3 +520,5 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 
 `growAds.js` (D4490) reads the mounted Ads endpoint; campaign budget and creative writes remain in `cycleWrites.js`.
 | `fundLps.js` | D6237: LP register correction/removal through mounted Worker routes. |
+
+D6703: `formationCases.js` creates/resumes HQ intake cases and saves revision-checked answer sets. Its new-company helper uses the existing project route first and retains the created project id on intake failure for a safe resume. Branch callers retain their existing formation flow.
