@@ -17,8 +17,17 @@ const ROUTES = resolve(process.cwd(), 'cloudflare-worker/src/routes');
 export const advisorRouteFiles = () => {
   const core = readFileSync(resolve(ROUTES, 'advisors.ts'), 'utf8');
   const split = [...core.matchAll(/^import \w+ from '\.\/(advisors_\w+)';$/gm)].map((m) => `${m[1]}.ts`);
-  return ['advisors.ts', ...split].map((f) => resolve(ROUTES, f))
-    .concat(resolve(ROUTES, '../services/advisorPractice.ts'));
+  const routes = ['advisors.ts', ...split].map((f) => resolve(ROUTES, f));
+  // D4704: domain rules moved out of the handlers. Read the actually imported
+  // domain services too, so DTO and state-policy guards still inspect them.
+  const domains = new Set([resolve(ROUTES, '../services/advisorPractice.ts')]);
+  for (const file of routes) {
+    for (const m of readFileSync(file, 'utf8').matchAll(/from '\.\.\/services\/([^']+)'/g)) {
+      const path = resolve(ROUTES, `../services/${m[1]}.ts`);
+      if (readFileSync(path, 'utf8').startsWith('/** D4704')) domains.add(path);
+    }
+  }
+  return [...routes, ...domains];
 };
 
 /** The router, its route modules and their shared kit, joined. */
