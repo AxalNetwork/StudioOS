@@ -92,8 +92,8 @@ is the schema as it stood before migration N. A test that needs the migrated
 schema calls it rather than replaying the files, which took 4–10 s per file.
 `schema_once_d4133.test.ts` holds the copy to a fresh build.
 `_schema_budget.mjs` (D8467) is what keeps that true. `_ts-loader.mjs` imports it, so every Worker test
-process counts the whole migration files it executes; one chain's worth is allowed (one build of the schema, or
-a few cuts of it) and each one past that throws, naming the file and the helper to call instead. The shared
+process counts the whole migration files it executes; two chains' worth is allowed (one build of the schema, and
+as much again for cuts or for re-running a migration) and each one past that throws, naming the file and the helper to call instead. The shared
 build is not counted. `scripts/test-schema-replays.txt` lists the files that were over when the rule arrived;
 a file leaves that list by being fixed, and a new file is added only when it is about the build itself.
 `SCHEMA_REPLAY_REPORT=<file>` turns the refusal off and writes each file's count, one JSON line per test file.

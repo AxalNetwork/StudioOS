@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { LIST, chain, install, overBudgetMessage, parseList, replayBudget, testFileOf } from './_schema_budget.mjs';
+import { CHAINS, LIST, chain, install, overBudgetMessage, parseList, replayBudget, testFileOf } from './_schema_budget.mjs';
 import { schemaInputs } from './_schema_once.mjs';
 import { BASELINE_CUTOFF } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -43,6 +43,9 @@ function world(t, { listed = [] } = {}) {
   const sql = Object.fromEntries(Object.entries(files).map(([name, text]) => [name.replace(/^\d+_|\.\w+$/g, ''), text]));
   return { root, sqlDir, sql };
 }
+
+/** One whole build of the miniature chain. */
+const full = (db, sql) => { for (const s of [sql.a, sql.b, sql.c]) db.exec(s); };
 
 /** A stand-in for DatabaseSync that records what reached it. */
 function fakeDatabase() {
@@ -89,19 +92,20 @@ test('the real chain is the one the shared build applies', () => {
   assert.equal(isMigration(`${migrations.at(-1).sql} `), false);
 });
 
-test('one chain is allowed; every whole migration past it is refused', () => {
+test('two chains are allowed; every whole migration past them is refused', () => {
+  assert.equal(CHAINS, 2, 'one build, and as much again for cuts and replayed migrations');
   const asked = [];
   const budget = replayBudget({ count: 3, isMigration: (sql) => sql.startsWith('M'), shared: () => false, listed: () => { asked.push(budget.replayed); return false; } });
-  assert.deepEqual(['M1', 'M2', 'M3'].map((sql) => budget.note(sql)), [false, false, false]);
+  assert.deepEqual(['M1', 'M2', 'M3', 'M4', 'M5', 'M6'].map((sql) => budget.note(sql)), [false, false, false, false, false, false]);
   assert.deepEqual(asked, [], 'the list is not read while the file is within budget');
   assert.equal(budget.note('SELECT 1'), false);
   assert.equal(budget.note(undefined), false);
   assert.equal(budget.note({ toString: () => 'M9' }), false, 'only strings are SQL');
-  assert.equal(budget.replayed, 3);
-  assert.equal(budget.note('M4'), true);
-  assert.equal(budget.note('M5'), true, 'still refused after the first refusal');
-  assert.deepEqual(asked, [4], 'the list is read once, on the first execution past the chain');
-  assert.equal(budget.replayed, 5);
+  assert.equal(budget.replayed, 6);
+  assert.equal(budget.note('M7'), true);
+  assert.equal(budget.note('M8'), true, 'still refused after the first refusal');
+  assert.deepEqual(asked, [7], 'the list is read once, on the first execution past the budget');
+  assert.equal(budget.replayed, 8);
 });
 
 test('a listed file is counted and never refused; the shared build is not counted', () => {
@@ -113,7 +117,7 @@ test('a listed file is counted and never refused; the shared build is not counte
   assert.deepEqual([budget.note('M'), budget.note('M'), budget.note('M')], [false, false, false]);
   assert.equal(budget.replayed, 0);
   shared = false;
-  assert.deepEqual([budget.note('M'), budget.note('M')], [false, true]);
+  assert.deepEqual([budget.note('M'), budget.note('M'), budget.note('M')], [false, false, true]);
 });
 
 test('the test file is read from the command line, whatever form its path takes', () => {
@@ -127,36 +131,39 @@ test('the test file is read from the command line, whatever form its path takes'
   assert.equal(testFileOf(['node', 'cloudflare-worker/test/_fixture.ts'], ROOT), null);
 });
 
-test('installed: SQL passes through untouched, and the call past one chain throws without running', (t) => {
+test('installed: SQL passes through untouched, and the call past two chains throws without running', (t) => {
   const { db, sql, proc, budget, logged } = setup(t);
   assert.equal(db.exec('SELECT 1'), 'ran');
   assert.equal(db.exec(sql.a, 'second argument'), 'ran');
   db.exec(sql.b); db.exec(sql.c);
   db.exec(sql.old); db.exec('CREATE TABLE z (id INTEGER);');
   assert.equal(budget.replayed, 3);
+  full(db, sql);
+  assert.equal(budget.replayed, 6);
   assert.throws(() => db.exec(sql.a), (error) => {
-    assert.equal(error.message, overBudgetMessage({ file: ME, replayed: 4, count: 3 }));
+    assert.equal(error.message, overBudgetMessage({ file: ME, replayed: 7, count: 3 }));
     return true;
   });
-  assert.throws(() => db.exec(sql.b), /has executed 5 whole migration files/);
-  assert.deepEqual(db.ran, ['SELECT 1', [sql.a, 'second argument'], sql.b, sql.c, sql.old, 'CREATE TABLE z (id INTEGER);']);
+  assert.throws(() => db.exec(sql.b), /has executed 8 whole migration files/);
+  assert.deepEqual(db.ran, ['SELECT 1', [sql.a, 'second argument'], sql.b, sql.c, sql.old, 'CREATE TABLE z (id INTEGER);', sql.a, sql.b, sql.c]);
   assert.equal(db.exec('SELECT 2'), 'ran', 'other SQL still runs');
   assert.equal(proc.exitCode, undefined);
   assert.deepEqual(logged, []);
   proc.exit();
   assert.equal(proc.exitCode, 1, 'a fixture that swallowed the error still fails its file');
-  assert.deepEqual(logged, [`✖ ${overBudgetMessage({ file: ME, replayed: 5, count: 3 })}`]);
+  assert.deepEqual(logged, [`✖ ${overBudgetMessage({ file: ME, replayed: 8, count: 3 })}`]);
 });
 
 test('the message says what the file did and what to do instead', () => {
   const message = overBudgetMessage({ file: ME, replayed: 769, count: 768 });
   assert.ok(message.startsWith(`${ME} has executed 769 whole migration files in this process; one build of the schema is 768.`));
+  assert.match(message, /may execute 2 builds' worth/);
   for (const part of ['freshSchema()', 'loadSchema(db)', 'openSchema()', '{ below: N }', "'./_schema_once.mjs'", LIST, 'D8467']) assert.ok(message.includes(part), part);
 });
 
 test('a file within budget leaves the exit code alone', (t) => {
   const { db, sql, proc, logged } = setup(t);
-  db.exec(sql.a); db.exec(sql.b); db.exec(sql.c);
+  full(db, sql); full(db, sql);
   proc.exit();
   assert.equal(proc.exitCode, undefined);
   assert.deepEqual(logged, []);
@@ -164,7 +171,7 @@ test('a file within budget leaves the exit code alone', (t) => {
 
 test('a failing file keeps its own exit code', (t) => {
   const { db, sql, proc, logged } = setup(t);
-  for (const s of [sql.a, sql.b, sql.c]) db.exec(s);
+  full(db, sql); full(db, sql);
   assert.throws(() => db.exec(sql.a));
   proc.exitCode = 7;
   proc.exit();
@@ -183,7 +190,7 @@ test('a listed file may replay the chain as often as it does today', (t) => {
 
 test('a file named only in a comment of the list is not listed', (t) => {
   const { db, sql } = setup(t, { listed: [`# ${ME}`, `cloudflare-worker/test/other.test.ts # not ${ME}`] });
-  for (const s of [sql.a, sql.b, sql.c]) db.exec(s);
+  full(db, sql); full(db, sql);
   assert.throws(() => db.exec(sql.a), /whole migration files/);
 });
 
@@ -191,11 +198,11 @@ test('report mode stops nothing and writes the count when the process ends', (t)
   const out = join(mkdtempSync(join(tmpdir(), 'schema-budget-report-')), 'report.jsonl');
   t.after(() => rmSync(join(out, '..'), { recursive: true, force: true }));
   const { db, sql, proc } = setup(t, { env: { SCHEMA_REPLAY_REPORT: out } });
-  for (let i = 0; i < 2; i += 1) for (const s of [sql.a, sql.b, sql.c]) assert.equal(db.exec(s), 'ran');
+  for (let i = 0; i < 3; i += 1) for (const s of [sql.a, sql.b, sql.c]) assert.equal(db.exec(s), 'ran');
   assert.equal(existsSync(out), false);
   proc.exit();
   assert.equal(proc.exitCode, undefined);
-  assert.deepEqual(readFileSync(out, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)), [{ file: ME, replayed: 6, chain: 3 }]);
+  assert.deepEqual(readFileSync(out, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)), [{ file: ME, replayed: 9, chain: 3 }]);
 });
 
 test('a process that executes no SQL reports nothing and reads no migration', (t) => {
@@ -230,8 +237,8 @@ test('a build made by the shared helper is not counted against the file', async 
   for (let i = 0; i < 3; i += 1) build(db, [sql.a, sql.b, sql.c]);
   assert.equal(budget.replayed, 0);
   assert.equal(db.ran.length, 9);
-  for (const s of [sql.a, sql.b, sql.c]) db.exec(s);
-  assert.throws(() => db.exec(sql.a), /whole migration files/, 'the file\'s own chain still counts');
+  full(db, sql); full(db, sql);
+  assert.throws(() => db.exec(sql.a), /whole migration files/, 'the file\'s own chains still count');
 });
 
 test('the list names Worker test files that exist, each once, in order', () => {

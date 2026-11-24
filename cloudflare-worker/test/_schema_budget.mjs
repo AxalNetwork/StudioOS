@@ -1,5 +1,5 @@
 /**
- * D8467 (#8467) — a Worker test file may replay the migration chain once.
+ * D8467 (#8467) — a Worker test file may replay the migration chain twice at most.
  *
  * WHY. One full build of the schema is the baseline and then every migration
  * above `BASELINE_CUTOFF`: 768 files and about 35 s on CI on 2026-11-24. A test
@@ -12,9 +12,9 @@
  * WHAT. `_ts-loader.mjs` imports this file, so it is loaded into every Worker
  * test process. It counts the whole migration files (above the cutoff, matched
  * by their exact text) that the process hands to `DatabaseSync.prototype.exec`.
- * One chain's worth is allowed: a file may build the schema itself once, or
- * build a few cuts of it. Every call past that throws, and says to
- * build once and copy (`freshSchema()`, `loadSchema(db)`, `openSchema()`, or
+ * Two chains' worth is allowed: one build of the schema, and as much again
+ * for cuts of it or for re-running a migration to test that it replays
+ * safely. Every call past that throws, and says to build once and copy (`freshSchema()`, `loadSchema(db)`, `openSchema()`, or
  * `{ below: N }` for the schema before migration N).
  *
  *   · The shared helper's own build (`_schema_once.mjs`) is not counted: which
@@ -44,6 +44,8 @@ import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPla
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export const SQL_DIR = fileURLToPath(new URL('../sql/', import.meta.url));
 export const LIST = 'scripts/test-schema-replays.txt';
+/** How many chains' worth of whole migration files one test file may execute. */
+export const CHAINS = 2;
 const TEST_FILE = /^cloudflare-worker\/test\/[^/]+\.test\.(?:ts|mjs)$/;
 const installed = Symbol.for('studioos.schemaReplayBudget');
 
@@ -89,14 +91,14 @@ export function testFileOf(argv, root = ROOT) {
 
 export function overBudgetMessage({ file, replayed, count }) {
   return `${file} has executed ${replayed} whole migration files in this process; one build of the schema is ${count}. `
-    + 'A Worker test file may replay the migration chain once (D8467). Build the schema once and give each test its own copy: '
+    + `A Worker test file may execute ${CHAINS} builds' worth (D8467). Build the schema once and give each test its own copy: `
     + "`freshSchema()`, `loadSchema(db)` or `openSchema()` from './_schema_once.mjs', with `{ below: N }` for the schema before migration N. "
     + `If this file is about the build itself, add it to ${LIST} with the reason.`;
 }
 
 /**
  * The counter. `note(sql)` is called with every string a test process executes. It returns true for each
- * whole migration file past one chain's worth, unless the file is listed; `listed` is asked once, then.
+ * whole migration file past `CHAINS` chains' worth, unless the file is listed; `listed` is asked once, then.
  */
 export function replayBudget({ count, isMigration, shared, listed }) {
   let replayed = 0;
@@ -106,7 +108,7 @@ export function replayBudget({ count, isMigration, shared, listed }) {
     note(sql) {
       if (typeof sql !== 'string' || !isMigration(sql) || shared()) return false;
       replayed += 1;
-      if (replayed <= count) return false;
+      if (replayed <= count * CHAINS) return false;
       if (allowed === null) allowed = listed();
       return !allowed;
     },
