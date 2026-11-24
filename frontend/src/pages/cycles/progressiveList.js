@@ -66,6 +66,17 @@ export const PROGRESSIVE = Object.freeze({
       heading: 'Make the company real',
       outcome: 'Track each filing, from incorporation to the bank account, and keep its proof with it.',
       action: 'Add your first filing', one: 'filing', many: 'filings',
+      // D6038 (#6038, BD26, BD30 E): before any company exists the page's one state is Incorporate first
+      // (`incorporateFirst`). The copy above is then the measured zero of a company with no filings yet.
+      incorporate: Object.freeze({
+        eyebrow: 'No company yet',
+        heading: 'Incorporate first',
+        outcome: 'Guided incorporation forms the company with Axal: you pay, Axal prepares the formation packet, and the company is filed with the state. Filings, papers and deadlines appear here after that.',
+        action: 'Start guided incorporation', href: '/incorporate',
+        secondary: 'Already incorporated elsewhere? Add a filing',
+        preview: Object.freeze(['Pay for the order', 'Formation packet ready', 'Filed with the state', 'EIN', '83(b) within 30 days of a grant', 'Bank account', 'IP assignment']),
+        previewNote: 'A preview with no figures, dates or states. Nothing is recorded until the order is paid.',
+      }),
     },
     'operating-systems': {
       heading: 'Connect what the company runs on',
@@ -180,4 +191,17 @@ export function dominantAdd(add, records, copy, usable = () => true) {
   const list = Array.isArray(add) ? add : [add || records?.add].filter(Boolean);
   const first = list.find((a) => a?.text && usable(a)) || null;
   return first && copy?.action ? { ...first, text: copy.action } : first;
+}
+
+/**
+ * D6038 (#6038, BD26): Company creation starts from the company. True only when
+ * the read measured that there is none: the entity summary read worked and found
+ * no paid order, no entity and no company (`facts.entity.has_company === false`),
+ * and the filings list read a measured zero. An unread summary or list is never
+ * taken for "no company": the page keeps its blocks and their own Unreadable.
+ */
+export function incorporateFirst(facts, records, query = {}) {
+  const entity = facts?.entity;
+  if (!entity || entity.state !== 'ok' || entity.has_company !== false) return false;
+  return listStage(records, query) === 'zero';
 }

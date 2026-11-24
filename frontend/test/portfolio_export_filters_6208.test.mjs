@@ -238,9 +238,11 @@ test('3. Overview Export over nothing loaded is disabled with its reason; a refu
 
 const PERF_POSITIONS = {
   items: [
-    { project_id: 1, project: { name: 'Lumen Robotics' }, total_invested: 3500000, vintage: 2025, fmv: 7600000, mark_as_of: '2026-03-31' },
-    { project_id: 2, project: { name: 'Kite Systems' }, total_invested: 1250000, vintage: 2026, fmv: 1250000, unmarked: true, mark_unavailable_reason: 'no_mark' },
+    { project_id: 1, project: { name: 'Lumen Robotics' }, total_invested: 3500000, vintage: 2025, fmv: 7600000, mark_as_of: '2026-03-31', distributed: 500000 },
+    { project_id: 2, project: { name: 'Kite Systems' }, total_invested: 1250000, vintage: 2026, fmv: 1250000, unmarked: true, mark_unavailable_reason: 'no_mark', distributed: 0 },
   ],
+  // D6206: the per-company distributions were read.
+  distributions: { available: true, total: 500000, unlisted: 0 },
 };
 const PERF_COMPLIANCE = { period: '2026-Q1', as_of: '2026-05-01', period_until: '2026-03-31', companies: [] };
 const quarter = (asOf, nav, paidIn, distributed, tvpi, count, unmarked) => ({
@@ -289,9 +291,9 @@ test('4. Performance Export writes the quarter-end series with every gap as Not 
     await m.click('button-export-portfolio-performance-cohorts');
     assert.match(m.downloads.files[1].name, /^portfolio-performance-cohorts-2-rows-/);
     assert.deepEqual(csvLines(await m.downloads.text()), [
-      'Vintage,Companies,Invested,Carrying value,Carried at cost,Carrying ÷ invested,Basis,As of',
-      '2025,1,"$3,500,000","$7,600,000",0,2.17×,Gross of fees and carry,Latest recorded marks',
-      '2026,1,"$1,250,000","$1,250,000",1,1.00×,Gross of fees and carry,Latest recorded marks',
+      'Vintage,Companies,Invested,Distributed,Carrying value,Carried at cost,DPI,TVPI,Basis,As of',
+      '2025,1,"$3,500,000","$500,000","$7,600,000",0,0.14×,2.31×,Gross of fees and carry,Latest recorded marks',
+      '2026,1,"$1,250,000",$0,"$1,250,000",1,0.00×,1.00×,Gross of fees and carry,Latest recorded marks',
     ]);
   } finally { await m.close(); }
 });

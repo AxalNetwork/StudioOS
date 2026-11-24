@@ -30,13 +30,24 @@
  * `included_response_ids` lookup of the held ids must miss an id twice, at
  * least `RECONCILE_CONFIRM_MS` apart.
  *
+ * SELECTION (D5828 part 2). The venture's `typeform_form_bindings` row
+ * (#5827) is the only selection. A sync row runs only while that binding
+ * names its connection, venture and form (`not_selected` otherwise, nothing
+ * stored); `selection.ts` keeps the sync rows' `status` in step with it.
+ *
+ * GRANT AND REGION (D5828 part 2). `ImportDeps.session` hands over #5827's
+ * decrypted access token and the data center recorded with it. Only `us`
+ * or `eu` is read; anything else is `region_unknown` and no request is
+ * built. The region is copied onto the sync row (no token ever is) so the
+ * responses link needs no decryption.
+ *
  * NO IDENTITY. Only ids, dates, the response type and the mapped answers'
  * qualifying text are stored; logs carry error names and codes only.
  */
 import type { Env } from '../../types';
 import { mappingSignature } from './signature';
 import { retractTypeformReviews } from './reviewCleanup';
-import { TypeformReadError, answerFor, formFields, regionOf, responseHead, responsesLink, typeformRead, RESPONSE_ID, type FetchLike, type FormField, type ReadTarget, type TypeformErrorCode } from './api';
+import { TypeformReadError, answerFor, formFields, responseHead, responsesLink, typeformRead, RESPONSE_ID, type FetchLike, type FormField, type ReadTarget, type TypeformErrorCode, type TypeformRegion } from './api';
 import { qualifyingAnswer, typeformMapping, MAX_MAPPINGS, type MappingRule } from './mappings';
 
 export const SYNC_LIMITS = Object.freeze({ pageSize: 200, pagesPerRun: 10, reconcileBatch: 25, reconcileMax: 1000 });
@@ -46,10 +57,19 @@ export const RECONCILE_CONFIRM_MS = 3600_000;
 export const LEDGER_MODULE = 'demand_signals';
 export const LEDGER_KIND = 'typeform_answer';
 
+/** What #5827's encrypted grant gives one run: the access token and the data center recorded at sign-in. */
+export interface ImportSession { accessToken: string; region: unknown }
+/** Thrown by `ImportDeps.session` while another caller refreshes the grant: the run is `busy`, and nothing is stored. */
+export class TypeformSessionBusy extends Error { constructor() { super('session_busy'); this.name = 'TypeformSessionBusy'; } }
+
 export interface ImportDeps {
   fetch: FetchLike;
-  /** The connection's access token. #5827 owns the grant and its refresh; a throw reads as access revoked. */
-  accessToken: (integrationId: number) => Promise<string>;
+  /**
+   * The connection's grant (#5827 owns it and its refresh; `live.ts` is the
+   * production one). A `TypeformReadError` is stored as its code, a
+   * `TypeformSessionBusy` is `busy`, and any other throw reads as access revoked.
+   */
+  session: (integrationId: number) => Promise<ImportSession>;
   now: () => number;
   /** This run's lease owner. */
   runId: string;
@@ -57,7 +77,7 @@ export interface ImportDeps {
   limits?: Partial<{ pageSize: number; pagesPerRun: number }>;
 }
 export interface SyncKey { integrationId: number; projectId: number; formId: string }
-export type SyncOutcome = 'ok' | 'partly' | 'busy' | 'stopped' | 'not_found' | 'not_stored' | TypeformErrorCode;
+export type SyncOutcome = 'ok' | 'partly' | 'busy' | 'stopped' | 'not_found' | 'not_selected' | 'not_stored' | TypeformErrorCode;
 export interface SyncResult {
   outcome: SyncOutcome; pages: number; read: number;
   new_completed: number; new_partial: number; upgraded: number; duplicates: number;
@@ -66,8 +86,8 @@ export interface SyncResult {
 
 interface SyncRow {
   id: number; integration_id: number; project_id: number; form_id: string; status: string; sync_state: string;
-  checkpoint_submitted_at: string | null; retry_after: string | null; config_json: string | null;
-  provider_key: string; integration_status: string;
+  checkpoint_submitted_at: string | null; retry_after: string | null; region: string | null;
+  provider_key: string; integration_status: string; selected: number;
 }
 interface ActiveMapping { id: number; field_id: string; field_type: string; rule: MappingRule; keep_text: boolean; signature: string }
 
@@ -78,7 +98,9 @@ export const ledgerKey = (formId: string, projectId: number, responseId: string,
 async function loadSync(env: Env, key: SyncKey): Promise<SyncRow | null> {
   return env.DB.prepare(
     `SELECT s.id, s.integration_id, s.project_id, s.form_id, s.status, s.sync_state, s.checkpoint_submitted_at, s.retry_after,
-            i.config_json, i.provider_key, i.status AS integration_status
+            s.region, i.provider_key, i.status AS integration_status,
+            EXISTS (SELECT 1 FROM typeform_form_bindings b
+                     WHERE b.project_id = s.project_id AND b.integration_id = s.integration_id AND b.form_id = s.form_id) AS selected
        FROM typeform_form_syncs s JOIN integrations i ON i.id = s.integration_id
       WHERE s.integration_id = ? AND s.project_id = ? AND s.form_id = ?`,
   ).bind(key.integrationId, key.projectId, key.formId).first<SyncRow>();
@@ -176,18 +198,28 @@ function failure(e: unknown, now: number): { state: SyncOutcome; retryAfter: str
   return { state: 'not_stored', retryAfter: null };
 }
 
-async function target(deps: ImportDeps, row: SyncRow): Promise<ReadTarget> {
-  let token = '';
-  try { token = await deps.accessToken(row.integration_id); } catch { throw new TypeformReadError('access_revoked'); }
-  return { region: regionOf(row.config_json), token, formId: row.form_id };
+/** Only the two data centers #5827 records; never a default. */
+export const validatedRegion = (value: unknown): TypeformRegion | null => (value === 'us' || value === 'eu' ? value : null);
+
+/** The grant for this run. The region goes onto the sync row (for the link); the token goes nowhere but the request. */
+async function target(env: Env, deps: ImportDeps, row: SyncRow): Promise<ReadTarget> {
+  let session: ImportSession;
+  try { session = await deps.session(row.integration_id); } catch (e) {
+    if (e instanceof TypeformReadError || e instanceof TypeformSessionBusy) throw e;
+    throw new TypeformReadError('access_revoked');
+  }
+  const region = validatedRegion(session?.region);
+  if (region !== row.region) await env.DB.prepare('UPDATE typeform_form_syncs SET region = ? WHERE id = ?').bind(region, row.id).run();
+  if (!region) throw new TypeformReadError('region_unknown');
+  return { region, token: typeof session.accessToken === 'string' ? session.accessToken : '', formId: row.form_id };
 }
 
-/** Preconditions every run checks before it reads: the row, the connection, the region and the provider's wait. */
+/** Preconditions every run checks before it reads: the row, the selection, the connection and the provider's wait. */
 async function admit(env: Env, row: SyncRow | null, now: number): Promise<SyncOutcome | null> {
   if (!row || row.provider_key !== 'typeform') return 'not_found';
   if (row.status !== 'active') return 'stopped';
+  if (Number(row.selected) !== 1) return 'not_selected';
   if (row.integration_status !== 'active') { await setState(env, row.id, 'access_revoked', iso(now)); return 'access_revoked'; }
-  if (!regionOf(row.config_json)) { await setState(env, row.id, 'region_unknown', iso(now)); return 'region_unknown'; }
   if (row.retry_after && Date.parse(row.retry_after) > now) return 'rate_limited';
   return null;
 }
@@ -204,7 +236,7 @@ export async function syncTypeformForm(env: Env, deps: ImportDeps, key: SyncKey)
   const pageSize = Math.min(SYNC_LIMITS.pageSize, Math.max(1, deps.limits?.pageSize ?? SYNC_LIMITS.pageSize));
   const pagesPerRun = Math.min(SYNC_LIMITS.pagesPerRun, Math.max(1, deps.limits?.pagesPerRun ?? SYNC_LIMITS.pagesPerRun));
   try {
-    const t = await target(deps, sync);
+    const t = await target(env, deps, sync);
     const form = await typeformRead(deps.fetch, t, 'forms.get');
     const { active, flagged } = await reviewMappings(env, sync.id, formFields(form), nowIso);
     out.needs_remap = flagged;
@@ -250,6 +282,7 @@ export async function syncTypeformForm(env: Env, deps: ImportDeps, key: SyncKey)
         WHERE id = ?`,
     ).bind(out.outcome, nowIso, nowIso, done ? 1 : 0, sync.id).run();
   } catch (e) {
+    if (e instanceof TypeformSessionBusy) { out.outcome = 'busy'; return out; }
     const f = failure(e, now);
     out.outcome = f.state; out.retry_after = f.retryAfter;
     await setState(env, sync.id, f.state, nowIso, { retryAfter: f.retryAfter }).catch(() => {});
@@ -293,7 +326,7 @@ export async function reconcileTypeformDeletions(env: Env, deps: ImportDeps, key
   const sync = row as SyncRow;
   if (!(await takeLease(env, sync.id, deps.runId, now))) return { ...out, outcome: 'busy' };
   try {
-    const t = await target(deps, sync);
+    const t = await target(env, deps, sync);
     const held = (await env.DB.prepare(
       "SELECT id, response_id, upstream_missing_at FROM typeform_responses WHERE sync_id = ? AND status = 'active' ORDER BY id LIMIT ?",
     ).bind(sync.id, SYNC_LIMITS.reconcileMax).all<{ id: number; response_id: string; upstream_missing_at: string | null }>()).results || [];
@@ -325,6 +358,7 @@ export async function reconcileTypeformDeletions(env: Env, deps: ImportDeps, key
     }
     await env.DB.prepare('UPDATE typeform_form_syncs SET last_reconciled_at = ?, updated_at = ? WHERE id = ?').bind(nowIso, nowIso, sync.id).run();
   } catch (e) {
+    if (e instanceof TypeformSessionBusy) { out.outcome = 'busy'; return out; }
     const f = failure(e, now);
     out.outcome = f.state;
     await setState(env, sync.id, f.state, nowIso, { retryAfter: f.retryAfter }).catch(() => {});
@@ -419,9 +453,10 @@ export async function setTypeformMappings(env: Env, syncId: number, fields: Form
 }
 
 export interface TypeformFormStatus {
-  state: string; last_synced_at: string | null; checkpoint: string | null; link: string | null;
+  state: string; active: boolean; last_synced_at: string | null; checkpoint: string | null; link: string | null;
   completed: number; partial: number; qualifying: number; withdrawn: number; provider_deleted: number;
-  needs_remap: Array<{ field_id: string; title: string | null; status: string }>;
+  /** D5828 part 3: ids and status only; a field's title never leaves the Worker. */
+  needs_remap: Array<{ field_id: string; status: string }>;
 }
 
 /**
@@ -433,7 +468,7 @@ export async function typeformFormStatus(env: Env, scope: Scope, formId: string)
   const id = await syncIdFor(env, scope, formId);
   if (id == null) return null;
   const s = await env.DB.prepare(
-    `SELECT s.sync_state, s.last_synced_at, s.checkpoint_submitted_at, s.form_id, i.config_json FROM typeform_form_syncs s JOIN integrations i ON i.id = s.integration_id WHERE s.id = ?`,
+    'SELECT status, sync_state, last_synced_at, checkpoint_submitted_at, form_id, region FROM typeform_form_syncs WHERE id = ?',
   ).bind(id).first<any>();
   const c = await env.DB.prepare(
     `SELECT COUNT(DISTINCT CASE WHEN response_type = 'completed' AND status <> 'provider_deleted' THEN response_id END) AS completed,
@@ -446,13 +481,13 @@ export async function typeformFormStatus(env: Env, scope: Scope, formId: string)
     `SELECT COUNT(DISTINCT a.response_row_id) AS n FROM typeform_answers a JOIN typeform_responses r ON r.id = a.response_row_id
       WHERE r.sync_id = ? AND r.status = 'active' AND r.response_type = 'completed'`,
   ).bind(id).first<{ n: number }>();
-  const remap = (await env.DB.prepare("SELECT field_id, field_title, status FROM typeform_field_mappings WHERE sync_id = ? AND status <> 'active' ORDER BY id")
+  const remap = (await env.DB.prepare("SELECT field_id, status FROM typeform_field_mappings WHERE sync_id = ? AND status <> 'active' ORDER BY id")
     .bind(id).all<any>()).results || [];
   return {
-    state: s.sync_state, last_synced_at: s.last_synced_at, checkpoint: s.checkpoint_submitted_at,
-    link: responsesLink(regionOf(s.config_json), s.form_id),
+    state: s.sync_state, active: s.status === 'active', last_synced_at: s.last_synced_at, checkpoint: s.checkpoint_submitted_at,
+    link: responsesLink(validatedRegion(s.region), s.form_id),
     completed: Number(c?.completed ?? 0), partial: Number(c?.partial ?? 0), qualifying: Number(q?.n ?? 0),
     withdrawn: Number(c?.withdrawn ?? 0), provider_deleted: Number(c?.provider_deleted ?? 0),
-    needs_remap: remap.map((r: any) => ({ field_id: r.field_id, title: r.field_title, status: r.status })),
+    needs_remap: remap.map((r: any) => ({ field_id: r.field_id, status: r.status })),
   };
 }

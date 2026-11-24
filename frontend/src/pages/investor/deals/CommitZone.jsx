@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { SHARE_BUTTON } from '../proofOfFundsModel';
 import { api } from '../../../lib/api';
 import { exportView } from '../../../lib/csvExport';
@@ -11,8 +11,11 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, StatedLimit } from '../../advisor/expertise/kit';
-import { ICDecisionsList } from '../../ICDecisionsPage';
-import {ballotOf} from '../../icDecisionModel';
+import { ICDecisionsList, OpenDecisionSheet } from '../../ICDecisionsPage';
+import {ballotOf, tallyText as tallyWords, VOTE_WORDS as RECORD_WORDS} from '../../icDecisionModel';
+import Sheet from '../../../ui/Sheet';
+import { YourVote } from './commit/VoteDialogs';
+import { rosterLine, refusalWords } from './commit/commitVoteModel';
 export {ballotOf} from '../../icDecisionModel';
 import FromMercury from '../FromMercury';
 import { CommitPhone, CommitRefused } from './CommitPhone';
@@ -43,10 +46,11 @@ import { CommitPhone, CommitRefused } from './CommitPhone';
  * route returns follow its own `current`, so they are drawn on the card only
  * when that is the same decision.
  *
- * ELIGIBLE VOTERS ARE NOT RECORDED. No voting roster is stored: the meeting's
- * attendee list is an invitation, not an entitlement to vote. So the card
- * says Not recorded where the canvas draws "6 eligible", and Votes cast has
- * no denominator. Nothing here counts the invitees as voters.
+ * ELIGIBLE VOTERS COME FROM THE DECISION'S OWN ROSTER (D6143). When its
+ * author has set none, the card says Not recorded where the canvas draws
+ * "6 eligible", and Votes cast has no denominator. The meeting's attendee
+ * list is an invitation, not an entitlement to vote: nothing here counts the
+ * invitees as voters.
  *
  * RECUSAL IS NOT ABSTENTION (D461). An abstention is a vote cast and stays
  * in the tally; a recusal is a declared conflict, written as the vote's
@@ -61,8 +65,14 @@ import { CommitPhone, CommitRefused } from './CommitPhone';
  * with neither says Not recorded; one whose owner is a user the second read
  * could not name says Unreadable.
  *
- * The close-vote and add-condition panels are unchanged until the dialogs
- * issue (DX14).
+ * D6144 (#6144, Deals v2 addendum B, D6142): everything an investor does on a
+ * decision happens here. Open a decision, Cast or change my vote, Recuse
+ * yourself, Close the vote and Add condition are in-product dialogs (the shared
+ * `Sheet`: focus trapped, returned to the opener), and a refused write stays
+ * in its dialog in the Worker's own words. The vote dialogs live in
+ * `commit/VoteDialogs.jsx`. `/deals/commit?decision=<uid>` forwards to the
+ * decision record at `/deals/commit/<uid>` (D6154), where the admin's Record
+ * position action stays.
  *
  * ON A PHONE (D6151 part 3, board DE27) the decision is drawn by
  * `CommitPhone.jsx` below 768px, from the same read, with a sticky Vote; the
@@ -102,12 +112,15 @@ export function openDecisionOf(room) {
  * no voting roster is stored.
  */
 
-/** What each stored vote value reads as. Recused and Abstain never share words. */
+/**
+ * What each stored vote value reads as. Recused and Abstain never share words.
+ * The words are the shared table's (D8248): `yes` reads Invest, `no` Pass.
+ */
 export const VOTE_WORDS = {
-  yes: { label: 'Yes', note: 'Counted in the tally' },
-  no: { label: 'No', note: 'Counted in the tally' },
-  abstain: { label: 'Abstain', note: 'A vote cast · counted in the tally' },
-  recused: { label: 'Recused', note: 'Conflict declared · not counted in the tally' },
+  yes: { label: RECORD_WORDS.yes, note: 'Counted in the tally' },
+  no: { label: RECORD_WORDS.no, note: 'Counted in the tally' },
+  abstain: { label: RECORD_WORDS.abstain, note: 'A vote cast · counted in the tally' },
+  recused: { label: RECORD_WORDS.recused, note: 'Conflict declared · not counted in the tally' },
 };
 
 /**
@@ -188,7 +201,7 @@ function RecordTable({ head, cols, rows, testid, empty }) {
 
 /**
  * A stored vote, drawn so that recusal and abstention differ in words and in
- * shape. Yes, No and Abstain are solid marks; Recused is a dashed mark with ⊘.
+ * shape. Invest, Pass and Abstain are solid marks; Recused is a dashed mark with ⊘.
  */
 export function VoteMark({ vote }) {
   const words = VOTE_WORDS[vote];
@@ -222,7 +235,7 @@ export function HowThisWorks({ label = 'How this works' }) {
       <StatedLimit title="What the committee records — and what it cannot">
         <p>
           <strong>A recusal is a declared conflict, recorded as one.</strong>{' '}
-          A vote is yes, no, abstain or recused. An abstention is a vote cast:
+          A vote is invest, pass, abstain or recused. An abstention is a vote cast:
           the voter was counted and declined, and stays in the tally. A recusal
           leaves the tally, and the vote is refused without the declaration
           written as its rationale. The page never draws one as the other.
@@ -230,7 +243,8 @@ export function HowThisWorks({ label = 'How this works' }) {
         <p className="mt-2">
           <strong>Every vote carries its reason.</strong> A vote is refused
           without a rationale; votes cast before that rule may have none, and
-          they read Not recorded rather than blank.
+          they read Not recorded rather than blank. Changing your vote replaces
+          the earlier one; a recusal is final.
         </p>
         <p className="mt-2">
           <strong>A decision opens on its first vote and closes when an outcome is
@@ -249,9 +263,10 @@ export function HowThisWorks({ label = 'How this works' }) {
           minutes writes what was recorded, and is disabled when nothing has been.
         </p>
         <p className="mt-2">
-          <strong>No voting roster and no quorum are stored,</strong> so eligible
-          voters read Not recorded and no tally is called met or unmet. The
-          meeting’s attendees are an invitation, not an entitlement to vote.
+          <strong>Who may vote is the decision’s own roster,</strong> set by the
+          person who opened it or an Admin; with none set, eligible voters read
+          Not recorded. No quorum is stored, so no tally is called met or unmet.
+          The meeting’s attendees are an invitation, not an entitlement to vote.
         </p>
       </StatedLimit>
     </details>
@@ -259,11 +274,12 @@ export function HowThisWorks({ label = 'How this works' }) {
 }
 
 /** DE07b, and the store that holds no decision at all. */
-export function NoOpenDecision({ decided = 0, onShowAll }) {
+export function NoOpenDecision({ decided = 0, onShowAll, onOpen }) {
   return (
     <section className="rounded-[10px] border border-axal-hairline bg-white p-6 dark:border-gray-800 dark:bg-gray-900 md:p-9" data-testid="commit-no-open">
       <h2 className="text-[20px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">No investment decision is open.</h2>
       <p className="mt-2 text-[13px] text-gray-600 dark:text-gray-400">Decisions appear here when a deal reaches IC.</p>
+      {onOpen ? <OpenDecisionButton onOpen={onOpen} className="mt-3" /> : null}
       {decided > 0 && onShowAll ? (
         <p className="mt-2 text-[12.5px] text-gray-600 dark:text-gray-400">
           {decided === 1 ? '1 decided decision is' : `${decided} decided decisions are`} under{' '}
@@ -277,9 +293,29 @@ export function NoOpenDecision({ decided = 0, onShowAll }) {
   );
 }
 
+/** A figure whose read failed: Unavailable, never Not recorded and never 0 (D5129). */
+function Unavailable() {
+  return <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Unavailable</span>;
+}
+
+/** + Open a decision (DE19): opens the shared dialog over the page. */
+export function OpenDecisionButton({ onOpen, className = '' }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      data-testid="button-open-decision"
+      className={`min-h-[44px] rounded-[7px] border border-gray-300 bg-white px-3 py-1.5 text-[12px] font-bold text-gray-800 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 ${className}`}
+    >
+      + Open a decision
+    </button>
+  );
+}
+
 /** The decision card: eligible, voted and recused, then one row per vote. */
 export function DecisionCard({ decision }) {
   const ballot = ballotOf(decision);
+  const roster = rosterLine(decision);
   const votes = decision.votes ?? [];
   return (
     <section className="rounded-[10px] border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="commit-decision">
@@ -295,9 +331,12 @@ export function DecisionCard({ decision }) {
           </p>
         </div>
         <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="commit-ballot">
-          <div className="flex items-center gap-1.5"><dt>Eligible voters</dt><dd><NotRecorded /></dd></div>
+          <div className="flex items-center gap-1.5"><dt>Eligible voters</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{roster.unreadable ? <Unavailable /> : roster.eligible === null ? <NotRecorded /> : roster.eligible}</dd></div>
+          {roster.eligible !== null && !roster.unreadable ? (
+            <div className="flex items-center gap-1.5"><dt>To vote</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{roster.toVote === null ? <NotRecorded /> : roster.toVote}</dd></div>
+          ) : null}
           <div className="flex items-center gap-1.5"><dt>Voted</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{ballot.voted}</dd></div>
-          <div className="flex items-center gap-1.5"><dt>Recused</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{ballot.recused}</dd></div>
+          <div className="flex items-center gap-1.5"><dt>Recused</dt><dd className="font-bold text-axal-ink dark:text-gray-100"><span aria-hidden="true">⊘ </span>{ballot.recused} <span className="font-normal">· beside the tally</span></dd></div>
         </dl>
       </div>
       <RecordTable
@@ -465,7 +504,7 @@ export function CommitStrip({ room, decision }) {
         testid="commit-tile-votes"
         label="Votes cast"
         value={String(ballot.voted)}
-        note={`${ballot.recused} recused, beside the tally · eligible voters not recorded`}
+        note={`${ballot.recused} recused, beside the tally · ${rosterLine(decision).eligible != null ? `${rosterLine(decision).eligible} eligible` : 'eligible voters not recorded'}`}
       />
       <CommitTile
         testid="commit-tile-conditions"
@@ -555,7 +594,10 @@ export default function InvestorCommitZone() {
   const [view, setView] = useState(() => new URLSearchParams(location.search).get('view') === 'decisions' ? 'decisions' : 'current');
   useEffect(() => { if(new URLSearchParams(location.search).get('view') === 'decisions') setView('decisions'); }, [location.search]);
   const [closing, setClosing] = useState(null);
+  const [closeChoice, setCloseChoice] = useState(null);
+  const [closeBusy, setCloseBusy] = useState(false);
   const [closeError, setCloseError] = useState('');
+  const [opening, setOpening] = useState(false);
   const [condForm, setCondForm] = useState(null);
   const [condActionError, setCondActionError] = useState('');
   const [minutesForm, setMinutesForm] = useState(null);
@@ -573,15 +615,11 @@ export default function InvestorCommitZone() {
   const current = useMemo(() => (ready ? openDecisionOf(room) : null), [ready, room]);
 
   /**
-   * How the tally reads, restated in the close-vote panel. `abstain` is
-   * counted and stays in the denominator; `recused` is counted beside it.
+   * How the tally reads, restated in the close-vote dialog. `abstain` is
+   * counted and stays in the denominator; `recused` is counted beside it. A
+   * count the read did not carry is Not recorded, never 0 (`tallyWords`).
    */
-  const tallyText = useMemo(() => {
-    if (!current) return null;
-    const t = current.tally || {};
-    const base = `${t.yes || 0} yes · ${t.no || 0} no · ${t.abstain || 0} abstain`;
-    return t.recused ? `${base} · ${t.recused} recused (out of the tally)` : base;
-  }, [current]);
+  const tallyText = current ? tallyWords(current.tally) : null;
 
   const decisionRows = useMemo(() => (decisions?.available ? decisions.rows : []), [decisions]);
   const decided = decisionRows.filter((row) => row.status === 'decided').length;
@@ -613,18 +651,22 @@ export default function InvestorCommitZone() {
         title: 'Only the partner who opened this decision, or an admin, may record its outcome.',
       };
     }
-    return { onClick: () => { setCloseError(''); setClosing(current.uid); }, busy: closing === current.uid };
+    return { onClick: () => { setCloseError(''); setCloseChoice(null); setClosing(current.uid); }, busy: closing === current.uid };
   }, [current, mine, closing]);
 
   async function recordDecision(decision) {
-    if (!closing) return;
+    if (!closing || !decision || closeBusy) return;
     setCloseError('');
+    setCloseBusy(true);
     try {
       await api.icUpdate(closing, { decision });
       setClosing(null);
       load();
     } catch (cause) {
-      setCloseError(cause?.message || 'The decision could not be recorded.');
+      // A refusal stays in the dialog, in the Worker's own words.
+      setCloseError(refusalWords(cause, 'The decision could not be recorded.'));
+    } finally {
+      setCloseBusy(false);
     }
   }
 
@@ -653,7 +695,7 @@ export default function InvestorCommitZone() {
       setCondForm(null);
       load();
     } catch (cause) {
-      setCondForm({ ...condForm, busy: false, error: cause?.message || 'The condition could not be recorded.' });
+      setCondForm({ ...condForm, busy: false, error: refusalWords(cause, 'The condition could not be recorded.') });
     }
   }
 
@@ -783,7 +825,7 @@ export default function InvestorCommitZone() {
   const rowActions = investorZoneActions('deals/commit', {
     handlers: { closeVote, addCondition, exportMinutes },
     view: {
-      header: ['Decision', 'Stage', 'Votes', 'Rationales', 'Outcome'],
+      header: ['Decision', 'Stage', 'Votes (invest/pass/abstain)', 'Rationales', 'Outcome'],
       rows: decisionRows,
       // Rationales count as the card counts them (ballotOf): a recusal is not a vote cast nor its declaration a rationale.
       cells: (r) => [
@@ -795,6 +837,10 @@ export default function InvestorCommitZone() {
       ],
     },
   });
+
+  // `?decision=<uid>` (#6144's address) is the decision record's: D6154 put one decision at `/deals/commit/<uid>`.
+  const decisionParam = new URLSearchParams(location.search).get('decision');
+  if (decisionParam) return <Navigate to={`/deals/commit/${encodeURIComponent(decisionParam)}`} replace />;
 
   return (
     <>
@@ -810,88 +856,139 @@ export default function InvestorCommitZone() {
         })}
         actions={rowActions}
       />
-      {/* THREE BUTTONS, NOT A FREE FIELD, because the store admits exactly
-          three outcomes — `invest`, `pass`, `defer` — and the route silently
-          coerces anything else to null, which would close nothing and look like
-          a save. The tally is restated here so the outcome is recorded beside
-          the votes it is meant to reflect rather than from memory. */}
+      {/* CLOSE THE VOTE (DE22). THREE CHOICES, NOT A FREE FIELD, because the
+          store admits exactly three outcomes — `invest`, `pass`, `defer` — and
+          the route silently coerces anything else to null, which would close
+          nothing and look like a save. The tally is restated so the outcome is
+          recorded beside the votes it is meant to reflect, and nothing is
+          written until Close vote confirms the choice. */}
       {closing && (
-        <div className="rounded-[10px] border border-amber-300 bg-amber-50/70 p-3 mb-3 dark:border-amber-900 dark:bg-amber-950/25" data-testid="panel-close-vote">
-          <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
-            Record the outcome of “{current?.title || closing}”
-          </p>
-          <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
-            {tallyText ? `${tallyText}. ` : ''}This closes the vote and stamps the time. It is not reversible from this page.
-          </p>
-          {closeError && (
-            <p className="mt-2 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-close-vote-error">{closeError}</p>
-          )}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {['invest', 'pass', 'defer'].map((decision) => (
+        <Sheet
+          title="Close the vote"
+          eyebrow={current?.title || closing}
+          width={520}
+          testId="panel-close-vote"
+          onClose={() => { if (!closeBusy) { setClosing(null); setCloseError(''); } }}
+        >
+          <div className="space-y-4 p-4">
+            <div>
+              <Eyebrow>Tally</Eyebrow>
+              <p className="mt-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="close-vote-tally">{tallyText}</p>
+              <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">Recused is a declared conflict, beside the tally and never in it.</p>
+            </div>
+            <fieldset>
+              <legend className="text-[12px] font-bold text-gray-900 dark:text-gray-100">Decision <span className="font-normal text-gray-500">· required</span></legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {['invest', 'pass', 'defer'].map((decision) => (
+                  <button
+                    key={decision}
+                    type="button"
+                    aria-pressed={closeChoice === decision}
+                    data-testid={`button-close-vote-${decision}`}
+                    onClick={() => setCloseChoice(decision)}
+                    className={`min-h-[44px] rounded-[7px] border px-3 py-1.5 text-[12px] font-bold ${closeChoice === decision
+                      ? 'border-axal-violet-deep bg-violet-50 text-violet-900 dark:border-violet-400 dark:bg-violet-950 dark:text-violet-200'
+                      : 'border-gray-300 bg-white text-gray-800 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`}
+                  >
+                    {decision === 'invest' ? 'Invest' : decision === 'pass' ? 'Pass' : 'Defer'}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            {current && openConditions.some((cond) => cond.decision_uid === current.uid) ? (
+              <p className="rounded-[8px] border border-amber-300 bg-amber-50 p-2.5 text-[11.5px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="close-vote-open-conditions">
+                {(() => { const n = openConditions.filter((cond) => cond.decision_uid === current.uid).length; return n === 1 ? '1 open condition stays' : `${n} open conditions stay`; })()} open after closing, and no transfer is recorded on the deal until each is met or waived.
+              </p>
+            ) : null}
+            <p className="text-[11.5px] text-gray-600 dark:text-gray-400">This closes the vote and records the time. It is not reversible from this page.</p>
+            {closeError && (
+              <div className="rounded-[8px] border border-red-200 bg-red-50 p-2.5 text-[12px] text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" role="alert" data-testid="status-close-vote-error">
+                <strong>Not saved.</strong> {closeError}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
               <button
-                key={decision}
                 type="button"
-                data-testid={`button-close-vote-${decision}`}
-                onClick={() => recordDecision(decision)}
-                className="rounded-[7px] border border-gray-300 bg-white px-[11px] py-1.5 text-[11px] font-bold text-gray-800 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                data-testid="button-close-vote-confirm"
+                disabled={!closeChoice || closeBusy}
+                onClick={() => recordDecision(closeChoice)}
+                className="min-h-[44px] rounded-[7px] bg-axal-violet-deep px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-violet-600"
               >
-                {decision === 'invest' ? 'Invest' : decision === 'pass' ? 'Pass' : 'Defer'}
+                {closeBusy ? 'Closing…' : 'Close vote'}
               </button>
-            ))}
-            <button
-              type="button"
-              data-testid="button-close-vote-cancel"
-              onClick={() => { setClosing(null); setCloseError(''); }}
-              className="rounded-[7px] px-[11px] py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-            >
-              Cancel
-            </button>
+              <button
+                type="button"
+                data-testid="button-close-vote-cancel"
+                disabled={closeBusy}
+                onClick={() => { setClosing(null); setCloseError(''); }}
+                className="min-h-[44px] rounded-[7px] border border-gray-300 bg-white px-3 py-1.5 text-[12px] font-bold text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>
+        </Sheet>
       )}
-      {/* ADD CONDITION — one sentence a later stage can check, attached to the
-          decision on the card. Open on arrival; Closing blocks on it. */}
+      {/* ADD CONDITION (DE23) — one sentence a later stage can check, attached
+          to the decision on the card. Open on arrival; Closing blocks on it. */}
       {condForm && current && (
-        <div className="rounded-[10px] border border-amber-300 bg-amber-50/70 p-3 mb-3 dark:border-amber-900 dark:bg-amber-950/25" data-testid="panel-add-condition">
-          <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
-            Add a condition to “{current.title}”
-          </p>
-          <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
-            It opens as <strong>open</strong> and an open condition is what blocks the wire at closing. The decision’s author or an admin marks it met or waived.
-          </p>
-          <textarea
-            rows={3}
-            value={condForm.body}
-            onChange={(e) => setCondForm({ ...condForm, body: e.target.value })}
-            aria-label="Condition"
-            data-testid="input-condition"
-            className="mt-2 w-full rounded-[8px] border border-gray-200 bg-white p-2.5 text-[12px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-            placeholder="The sentence a later stage checks — e.g. the evidence a transfer waits on."
-            maxLength={2000}
-          />
-          {condForm.error && (
-            <p className="mt-2 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-condition-form-error">{condForm.error}</p>
-          )}
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              data-testid="button-submit-condition"
-              onClick={submitCondition}
-              disabled={condForm.busy}
-              className="rounded-[7px] border border-gray-300 bg-white px-[11px] py-1.5 text-[11px] font-bold text-gray-800 hover:border-gray-400 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-            >
-              {condForm.busy ? 'Recording…' : 'Record the condition'}
-            </button>
-            <button
-              type="button"
-              data-testid="button-cancel-condition"
-              onClick={() => setCondForm(null)}
-              className="rounded-[7px] px-[11px] py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400"
-            >
-              Cancel
-            </button>
+        <Sheet
+          title="Add condition"
+          eyebrow={current.title || current.uid}
+          width={480}
+          testId="panel-add-condition"
+          onClose={() => { if (!condForm.busy) setCondForm(null); }}
+        >
+          <div className="space-y-3 p-4">
+            <label className="block text-[12px] font-bold text-gray-900 dark:text-gray-100">
+              Condition <span className="font-normal text-gray-500">· required</span>
+              <textarea
+                rows={3}
+                value={condForm.body}
+                onChange={(e) => setCondForm({ ...condForm, body: e.target.value })}
+                aria-label="Condition"
+                data-testid="input-condition"
+                className="mt-1 w-full rounded-[8px] border border-gray-300 bg-white p-2.5 text-[12.5px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                placeholder="The sentence a later stage checks — e.g. the evidence a transfer waits on."
+                maxLength={2000}
+              />
+            </label>
+            <p className="text-[11.5px] text-gray-600 dark:text-gray-400">
+              It opens as <strong>open</strong> and blocks Closing until it is met or waived. The decision’s author or an admin marks it met or waived.
+            </p>
+            {condForm.error && (
+              <div className="rounded-[8px] border border-red-200 bg-red-50 p-2.5 text-[12px] text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" role="alert" data-testid="status-condition-form-error">
+                <strong>Not saved.</strong> {condForm.error}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                data-testid="button-submit-condition"
+                onClick={submitCondition}
+                disabled={condForm.busy}
+                className="min-h-[44px] rounded-[7px] bg-axal-violet-deep px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-violet-600"
+              >
+                {condForm.busy ? 'Recording…' : 'Add condition'}
+              </button>
+              <button
+                type="button"
+                data-testid="button-cancel-condition"
+                disabled={condForm.busy}
+                onClick={() => setCondForm(null)}
+                className="min-h-[44px] rounded-[7px] border border-gray-300 bg-white px-3 py-1.5 text-[12px] font-bold text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>
+        </Sheet>
+      )}
+      {/* OPEN A DECISION (DE19/DE20), the same dialog All decisions uses. From
+          the current view the page stays here: the new Draft is the newest
+          decision not yet decided, so it is the one the card shows. */}
+      {opening && (
+        <OpenDecisionSheet onClose={() => setOpening(false)} onOpened={() => { setOpening(false); setView('current'); load(); }} />
       )}
       {room === REFUSED ? <CommitRefused /> : (
       <ZoneBody
@@ -899,7 +996,7 @@ export default function InvestorCommitZone() {
         error={room === UNAVAILABLE ? 'The committee record could not be read.' : ''}
         onRetry={load}
         isEmpty={Boolean(ready) && decisions?.available && decisions.total === 0}
-        empty={<NoOpenDecision />}
+        empty={<NoOpenDecision onOpen={() => setOpening(true)} />}
       >
         <div className="space-y-4">
           {current && view !== 'decisions' ? (
@@ -913,6 +1010,7 @@ export default function InvestorCommitZone() {
           {view === 'current' && (
             current ? (
               <>
+                <div className="flex justify-end"><OpenDecisionButton onOpen={() => setOpening(true)} /></div>
                 {/* ══ DE27: the same decision on a phone, below 768px ══ */}
                 <CommitPhone
                   decision={current}
@@ -927,6 +1025,7 @@ export default function InvestorCommitZone() {
                 />
                 <div className="hidden space-y-4 md:block" data-testid="commit-desktop">
                   <DecisionCard decision={current} />
+                  <YourVote decision={current} user={user} onSaved={load} renderMark={(vote) => <VoteMark vote={vote} />} />
                   <div className="grid gap-4 lg:grid-cols-12">
                     <div className="min-w-0 lg:col-span-8">
                       <ConditionsCard conditions={conditions.filter((cond) => cond.decision_uid === current.uid)} more={more} control={resolveControl} error={condActionError} />
@@ -939,7 +1038,7 @@ export default function InvestorCommitZone() {
                 <HowThisWorks />
               </>
             ) : (
-              <NoOpenDecision decided={decided} onShowAll={() => setView('decisions')} />
+              <NoOpenDecision decided={decided} onShowAll={() => setView('decisions')} onOpen={() => setOpening(true)} />
             )
           )}
 

@@ -28,7 +28,7 @@ import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { build } from 'esbuild';
 import { SignJWT } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 import { moveAccountOut, inviteAccount } from '../src/rpc/branchOps.ts';
 import { sha256Hex } from '../src/rpc/secret.ts';
 
@@ -58,8 +58,6 @@ const worker = (await import(pathToFileURL(out).href)).default;
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
-const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 const MIG_263 = read('cloudflare-worker/sql/migrations/263_branch_invitations.sql');
 const MIG_MOVE_REF = read('cloudflare-worker/sql/migrations/202611091211_branch_invitation_move_ref.sql');
 
@@ -98,7 +96,7 @@ function makeD1(db: any, opts: { failWrites?: RegExp } = {}) {
 }
 
 function hqDb() {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(HQ, 'admin', 'Hana HQ', 'hana@axal.example');

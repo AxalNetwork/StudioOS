@@ -111,7 +111,7 @@ export async function listStates(env: Env, projectId: number, limit = STATES_PAG
       f.id AS f_id, f.delivery_status AS f_status, f.done_at AS f_done_at,
       o.id AS o_id, o.kanban_status AS o_status, r.id AS r_id, r.tag AS r_tag, r.name AS r_name, r.published_at AS r_published_at,
       s.id AS s_id, s.state AS s_state,
-      e.id AS e_id, e.status AS e_status, e.result AS e_result
+      e.id AS e_id, CASE WHEN e.stopped_at IS NOT NULL THEN 'stopped' ELSE e.status END AS e_status, e.result AS e_result
     FROM build_plan_items i
     JOIN ai_rail_proposals q ON q.uid = i.proposal_uid
     LEFT JOIN mvp_features f ON i.landed_table = 'mvp_features' AND f.id = CAST(i.landed_id AS INTEGER) AND f.project_id = i.project_id

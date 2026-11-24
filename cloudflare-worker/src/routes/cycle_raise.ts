@@ -2,7 +2,7 @@
  * D663 — `/api/cycles/raise`: the Raise cycle's shared read (#1469's
  * contract) and the writes for the records migration 442 added.
  *
- *   GET /overview?project=:pid
+ *   GET /overview?project=:pid   (D8256: with follow_ups_due and open_objections)
  *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7], focus, meter, index }
  *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
  *       D6045 (#6045): + `stage`, `primary_action { key, label, href, rule }` (null for staff), the Pitch
@@ -152,6 +152,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
+import { followUpsDue, openObjections } from '../services/raiseNextActions';
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, FIGURE_LABEL, figures, nonCapitalFigures, nextSteps, connectors, capTablePlan, ownerRoomFileCount, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type RoomFileCount, type FigureKey, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
@@ -375,21 +376,24 @@ cycleRaise.get('/overview', async (c) => {
     .catch((e) => { console.warn('[cycle_raise] journey unreadable:', (e as Error)?.message); return journeyUnreadable(!staff); });
   const withPitch = (cs: Card[], j: Awaited<typeof journeyRead>) =>
     cs.map((card) => (card.slug === 'pitch-deck' ? { ...card, pitch_state: j.pitch_state } : card));
+  // D8256: next actions beyond readiness: follow-ups due and objections no section answers yet. Each part
+  // fails on its own; a staff read gets counts with no investor names.
+  const actionsRead = Promise.all([followUpsDue(ctx, { names: !staff }), openObjections(ctx, { names: !staff })]);
   if (staff) {
-    const [figs, cs, steps, tools, j] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
+    const [figs, cs, steps, tools, j, [follow_ups_due, open_objections]] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
       m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
-        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx), journeyRead]);
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx), journeyRead, actionsRead]);
     return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools,
-      stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
+      stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity, follow_ups_due, open_objections });
   }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
   const owner = isRoomOwner(s);
   const cardsRead = owner ? cards(ctx)
     : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
-  const [figs, cs, steps, tools, j] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx), journeyRead]);
+  const [figs, cs, steps, tools, j, [follow_ups_due, open_objections]] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx), journeyRead, actionsRead]);
   return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)),
-    stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
+    stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity, follow_ups_due, open_objections });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {

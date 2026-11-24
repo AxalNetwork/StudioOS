@@ -7,7 +7,7 @@ import FigureTile, { FigureBody } from './AnalyticsFigure.jsx';
 import { linkStatusLine } from './shareModel.js';
 import {
   ABSENCE, JOURNEY_NOTE, NO_MOST_READ, NO_VISITS, TIME_PER_CARD_NOTE,
-  cardRows, investorFigures, journeyRows, mostReadWords, ndaPill, newerVersionOf, nextStepsOf,
+  cardRows, investorFigures, journeyRows, mostReadWords, ndaPill, newerVersionOf, nextStepsOf, visitReadOf, visitReadsNote,
 } from './slideAnalyticsModel.js';
 
 /**
@@ -38,6 +38,11 @@ import {
  * keeps the four kinds of nothing apart (`AnalyticsFigure.jsx`): Tracking off,
  * Unavailable (the read failed), Measured zero, Not recorded. Reactions and
  * comments are not drawn: their founder read waits for proposal 9.
+ *
+ * D8249 (#8249): each visit on the journey says which cards it read, "Read 3
+ * cards · longest on Traction · 40 s", from the read's `visit_reads` (measured
+ * seconds per card per visit). A visit no heartbeat timed reads Not recorded;
+ * with Time per slide off no visit line is drawn (Tracking off is the tiles').
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -63,6 +68,24 @@ const expiryLine = (row) => {
   if (row.expires_at == null) return 'Never expires';
   return dayWords(row.expires_at) ? `Link expires ${dayWords(row.expires_at)}` : 'Expiry not recorded';
 };
+
+/** D8249: one visit's cards read under its journey step, or Not recorded, with the reason as text. */
+function VisitRead({ read, viewId }) {
+  if (!read) return null;
+  const testId = `viewer-analytics-visit-read-${viewId}`;
+  if (read.kind !== 'value') {
+    return (
+      <span className="text-[11.5px] italic text-axal-muted dark:text-gray-400" data-testid={testId} data-figure-state={read.kind}>
+        {`${read.words} · ${read.why}`}
+      </span>
+    );
+  }
+  return (
+    <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={testId} data-figure-state="value">
+      {read.words}<span className="font-mono">{` · ${read.sub}`}</span>
+    </span>
+  );
+}
 
 export default function ViewerAnalyticsSheet({ deck, row, projectId = null, since = null, changes = null, onClose }) {
   const [answer, setAnswer] = useState(null);
@@ -170,11 +193,15 @@ export default function ViewerAnalyticsSheet({ deck, row, projectId = null, sinc
                     {journey.map((r) => (
                       <li key={r.key} className="flex gap-3 border-t border-axal-hairline py-1.5 text-[12.5px] first:border-t-0 dark:border-gray-800" data-testid={`viewer-analytics-step-${r.kind}`}>
                         <span className="w-[7.5rem] shrink-0 font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{r.at}</span>
-                        <span className="text-axal-ink dark:text-gray-100">{r.words}</span>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-axal-ink dark:text-gray-100">{r.words}</span>
+                          <VisitRead read={visitReadOf(value, r)} viewId={r.view_id} />
+                        </span>
                       </li>
                     ))}
                   </ul>
                 ) : null}
+                {visitReadsNote(value) ? <p className={`m-0 ${MUTED}`} data-testid="viewer-analytics-visit-reads-note">{visitReadsNote(value)}</p> : null}
                 <p className={`m-0 ${MUTED}`}>{JOURNEY_NOTE}</p>
               </div>
             </div>

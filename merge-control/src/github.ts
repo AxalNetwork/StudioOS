@@ -15,14 +15,18 @@ export function treePath(sha: string): string {
   return `git/trees/${sha}?recursive=1`;
 }
 const base64url = (value: Uint8Array | string) => Buffer.from(value).toString('base64url');
-export async function githubClient(env: Env, fetcher: typeof fetch = fetch): Promise<GithubApi> {
+/** D5618's token scope: cancellation and reads. Unchanged, so a missing `checks` grant never breaks cancellation. */
+export const DEFAULT_PERMISSIONS: Readonly<Record<string, string>> = Object.freeze({ actions: 'write', contents: 'read' });
+/** D5990: the separate token the policy check uses: the compare and tree reads, and creating check runs. */
+export const POLICY_PERMISSIONS: Readonly<Record<string, string>> = Object.freeze({ checks: 'write', contents: 'read' });
+export async function githubClient(env: Env, fetcher: typeof fetch = fetch, permissions: Readonly<Record<string, string>> = DEFAULT_PERMISSIONS): Promise<GithubApi> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(env.REPOSITORY) || !/^\d+$/.test(env.GITHUB_APP_ID ?? '') || !/^\d+$/.test(env.GITHUB_INSTALLATION_ID ?? '') || !env.GITHUB_APP_PRIVATE_KEY) throw new Error('App not configured');
   const now = Math.floor(Date.now() / 1000);
   const input = `${base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${base64url(JSON.stringify({ iat: now - 60, exp: now + 540, iss: env.GITHUB_APP_ID }))}`;
   const signature = sign('RSA-SHA256', Buffer.from(input), createPrivateKey(env.GITHUB_APP_PRIVATE_KEY));
   const response = await fetcher(`https://api.github.com/app/installations/${env.GITHUB_INSTALLATION_ID}/access_tokens`, {
     method: 'POST', headers: { Authorization: `Bearer ${input}.${base64url(new Uint8Array(signature))}`, Accept: 'application/vnd.github+json', 'User-Agent': 'StudioOS-Merge-Control', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repositories: [env.REPOSITORY.split('/')[1]], permissions: { actions: 'write', contents: 'read' } }) });
+    body: JSON.stringify({ repositories: [env.REPOSITORY.split('/')[1]], permissions }) });
   if (!response.ok) throw new Error(`App authentication HTTP ${response.status}`);
   const { token } = await response.json<{ token: string }>();
   if (!token) throw new Error('missing installation token');

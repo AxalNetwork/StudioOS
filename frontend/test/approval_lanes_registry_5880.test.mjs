@@ -28,7 +28,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -37,6 +36,7 @@ import { LANES, HQ_LANES, GROUPS, isHqLane } from '../src/pages/admin/approvals/
 import { LANE_BY_KEY, HQ_GROUP, laneLabelOf } from '../src/pages/admin/approvals/inboxModel.js';
 import { readRoutesSource } from './_routesSource.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -162,11 +162,11 @@ function matchesRoute(path, routes) {
 
 /** `LaneDoor` and `HqDoor`'s cases, as { key: { to, text } }. */
 function doors() {
-  const src = readFileSync(resolve(root, 'frontend/src/pages/admin/approvals/AdminApprovals.jsx'), 'utf8');
+  const src = approvalsPageSource();
   const out = {};
   for (const fn of ['LaneDoor', 'HqDoor']) {
     const start = src.indexOf(`export function ${fn}(`);
-    assert.ok(start >= 0, `${fn} not found in AdminApprovals.jsx`);
+    assert.ok(start >= 0, `${fn} not found in the Approvals page`);
     const end = src.indexOf('\n}\n', start);
     for (const line of src.slice(start, end).split('\n')) {
       const keys = [...line.matchAll(/case '(\w+)':/g)].map((m) => m[1]);
