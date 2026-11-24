@@ -120,5 +120,13 @@ export const POLICY_REFUSALS = {
   already_enforced: 'Capabilities are already enforced.',
   not_enforced: 'Capabilities are not enforced.',
   forbidden: 'Only a Super Admin can do this.',
+  // D8071: execution budgets.
+  budget_unreadable: 'The agent budgets could not be read. Nothing was changed; try again.',
+  above_platform_ceiling: (d) => (d?.field
+    ? `The ${String(d.field).replaceAll('_', ' ')} is above the platform figure. Raise the figure on Policies first.`
+    : 'That cap is above the platform figure. Raise the figure on Policies first.'),
+  invalid_scope: 'Name the workspace: a company or a project.',
+  scope_not_found: 'That workspace does not exist any more.',
+  task_not_found: 'That task does not exist any more.',
 };
 export const policyRefusal = (e) => wordsFor(POLICY_REFUSALS, e, 'The change could not be saved. Read the current policy before trying again.');

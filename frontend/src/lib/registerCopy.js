@@ -61,10 +61,34 @@ export const REGISTER_ACTIONS = Object.freeze({
 /** The lane → the role the Worker's register route takes; `lp` folds into investor, and an advisor sends none. */
 export const LANE_ROLE = Object.freeze({ partner: 'partner', investor: 'investor', lp: 'investor', founder: 'founder', advisor: undefined });
 
-/** The heading and the line under it: the chosen plan when one is ready, else the audience's own words. */
-export function registerHeading(lane, selection) {
+/**
+ * D6989 (#6989): /register with `product=spinout-lab`. Applying to the Lab starts with an account, so the heading says
+ * so, and the stages are the order the code allows: `POST /api/auth/register` creates the account (role `exploring`);
+ * confirming the email signs the member in; `POST /api/spinout-lab/apply` takes an explorer's application at once
+ * (`routes/spinout_lab.ts`: founder or exploring); the team reviews the membership and sends the agreement; once it is
+ * signed an admin gives the role that opens the workspace (`MEMBERSHIP_STEPS`). No timing is promised.
+ */
+export const SPINOUT_LAB_PRODUCT = 'spinout-lab';
+export const SPINOUT_LAB_SIGNUP = Object.freeze({
+  title: 'Apply to Spin-Out Lab: start by creating your account.',
+  context: 'Programme: Spin-Out Lab',
+  stages: Object.freeze([
+    'Create your account',
+    'Confirm your email',
+    'Complete your application',
+    'Axal VC reviews your membership and sends an agreement',
+    'Sign the agreement and your workspace opens',
+  ]),
+});
+
+/**
+ * The heading and the line under it: the chosen plan when one is ready, else the Lab's heading when the sign-up is
+ * for it, else the audience's own words. The line under it is always the lane's.
+ */
+export function registerHeading(lane, selection, product = null) {
   const own = lane && LANE_COPY[lane] ? LANE_COPY[lane] : null;
-  const title = selection?.state === 'ready' ? `Create your account to get ${selection.name}` : own?.title || 'Create Your Account';
+  const lab = product === SPINOUT_LAB_PRODUCT ? SPINOUT_LAB_SIGNUP.title : null;
+  const title = selection?.state === 'ready' ? `Create your account to get ${selection.name}` : lab || own?.title || 'Create Your Account';
   const desc = own?.desc || "Creating an account is free. Your membership is reviewed before your workspace opens. No password to remember — we'll email you a secure link.";
   return { title, desc };
 }

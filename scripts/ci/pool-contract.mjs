@@ -39,7 +39,7 @@ export const PR_EVENTS = ['pull_request', 'pull_request_target', 'merge_group'];
 export const UNTRUSTED_GROUPS = ['untrusted'];
 export const TRUSTED_GROUPS = ['trusted'];
 /** The environments that deploy. Other environments (production-ops, landing-bot…) are #8069's. */
-export const DEPLOY_ENVIRONMENTS = ['production', 'pr-preview', 'agent-compute-preview'];
+export const DEPLOY_ENVIRONMENTS = ['production', 'preview', 'agent-compute-preview']; // D8069: preview (was pr-preview)
 /** GitHub-hosted labels: `ubuntu-24.04`, `ubuntu-latest`, `windows-…`, `macos-…`. */
 const HOSTED = /^(ubuntu|windows|macos)-[A-Za-z0-9.-]+$/;
 

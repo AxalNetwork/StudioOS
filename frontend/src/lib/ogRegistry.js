@@ -195,6 +195,16 @@ const ROUTES = [
     type: 'website',
     section: 'company',
   },
+  // D6996 (#6996): the catalogue page; plans are compared on /pricing, so it no longer shares that title.
+  // The company section's card, so no new image. Its words are the sections a visitor reads there.
+  {
+    path: '/pricing/products',
+    title: 'Products and token packs',
+    description:
+      'Profile bundles, how AI is priced and token packs, with prices read from the live catalogue. Signed-in members also buy add-ons and redeem promo codes here.',
+    type: 'website',
+    section: 'company',
+  },
   {
     // D4297 (#4297): the Influencer program; the company section's card, so no new image.
     path: '/influencers',
@@ -524,6 +534,21 @@ const ROUTES = [
     key: 'trust-disclosure',
     type: 'website',
     section: 'company',
+  },
+
+  // ---- Help Center (#6996) ----------------------------------------------
+  // The home's own words. Prefix, so each guide page takes the company card; each public guide's own
+  // title and description come from the guide index (`pages/docs/helpMeta.js`, read in Node by
+  // scripts/lib/helpGuides.mjs), so adding a public guide adds no row here.
+  {
+    path: '/help',
+    heading: 'How can we help?',
+    summary: 'Search the public guides, or browse them by area. Sign in to search every guide.',
+    title: 'Help Center',
+    description: 'Search the public Axal VC guides or browse them by area. Members sign in to search every guide.',
+    type: 'website',
+    section: 'company',
+    prefix: true,
   },
 
   // ---- Auth entry points --------------------------------------------------

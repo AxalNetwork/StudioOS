@@ -8,6 +8,7 @@ import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
+import { growTabCounts } from './growOverviewModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, moduleSubtitle, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
@@ -383,7 +384,7 @@ export default function CycleModulePage({
   ));
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} search={search} more={more} /> : header}
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} tabCounts={meta.key === 'grow' ? growTabCounts(slug, data) : null} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}

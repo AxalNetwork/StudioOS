@@ -12,7 +12,7 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, StatedLimit } from '../../advisor/expertise/kit';
 import { ICDecisionsList, OpenDecisionSheet } from '../../ICDecisionsPage';
-import {ballotOf, tallyText as tallyWords} from '../../icDecisionModel';
+import {ballotOf, tallyText as tallyWords, VOTE_WORDS as RECORD_WORDS} from '../../icDecisionModel';
 import Sheet from '../../../ui/Sheet';
 import { YourVote } from './commit/VoteDialogs';
 import { rosterLine, refusalWords } from './commit/commitVoteModel';
@@ -112,12 +112,15 @@ export function openDecisionOf(room) {
  * no voting roster is stored.
  */
 
-/** What each stored vote value reads as. Recused and Abstain never share words. */
+/**
+ * What each stored vote value reads as. Recused and Abstain never share words.
+ * The words are the shared table's (D8248): `yes` reads Invest, `no` Pass.
+ */
 export const VOTE_WORDS = {
-  yes: { label: 'Yes', note: 'Counted in the tally' },
-  no: { label: 'No', note: 'Counted in the tally' },
-  abstain: { label: 'Abstain', note: 'A vote cast · counted in the tally' },
-  recused: { label: 'Recused', note: 'Conflict declared · not counted in the tally' },
+  yes: { label: RECORD_WORDS.yes, note: 'Counted in the tally' },
+  no: { label: RECORD_WORDS.no, note: 'Counted in the tally' },
+  abstain: { label: RECORD_WORDS.abstain, note: 'A vote cast · counted in the tally' },
+  recused: { label: RECORD_WORDS.recused, note: 'Conflict declared · not counted in the tally' },
 };
 
 /**
@@ -198,7 +201,7 @@ function RecordTable({ head, cols, rows, testid, empty }) {
 
 /**
  * A stored vote, drawn so that recusal and abstention differ in words and in
- * shape. Yes, No and Abstain are solid marks; Recused is a dashed mark with ⊘.
+ * shape. Invest, Pass and Abstain are solid marks; Recused is a dashed mark with ⊘.
  */
 export function VoteMark({ vote }) {
   const words = VOTE_WORDS[vote];
@@ -232,7 +235,7 @@ export function HowThisWorks({ label = 'How this works' }) {
       <StatedLimit title="What the committee records — and what it cannot">
         <p>
           <strong>A recusal is a declared conflict, recorded as one.</strong>{' '}
-          A vote is yes, no, abstain or recused. An abstention is a vote cast:
+          A vote is invest, pass, abstain or recused. An abstention is a vote cast:
           the voter was counted and declined, and stays in the tally. A recusal
           leaves the tally, and the vote is refused without the declaration
           written as its rationale. The page never draws one as the other.
@@ -822,7 +825,7 @@ export default function InvestorCommitZone() {
   const rowActions = investorZoneActions('deals/commit', {
     handlers: { closeVote, addCondition, exportMinutes },
     view: {
-      header: ['Decision', 'Stage', 'Votes', 'Rationales', 'Outcome'],
+      header: ['Decision', 'Stage', 'Votes (invest/pass/abstain)', 'Rationales', 'Outcome'],
       rows: decisionRows,
       // Rationales count as the card counts them (ballotOf): a recusal is not a vote cast nor its declaration a rationale.
       cells: (r) => [

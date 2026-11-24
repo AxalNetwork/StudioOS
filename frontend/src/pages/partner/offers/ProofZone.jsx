@@ -14,7 +14,7 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote, zoneReadError } from './useGuardedWrite';
 import {
   PROOF_CONSENT, PROOF_CHIP_OF, proofConsentKey, proofProvenance, proofHeadline, proofSecondAction, proofChipCounts,
 } from './proofCards.js';
@@ -525,7 +525,7 @@ export default function PartnerProofZone() {
       return true;
     } catch (e) {
       if (generation !== request.current) return false;
-      setState({ loading: false, error: e?.message || 'The proof record did not load.', data: null });
+      setState({ loading: false, error: zoneReadError(e), data: null });
       return false;
     }
   }, []);
