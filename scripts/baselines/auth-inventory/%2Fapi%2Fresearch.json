@@ -54,6 +54,20 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/company-directory/:uid/completeness": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_company_facts_7828.test.ts",
+    "note": "A catalogue company record has no owner: the Companies rule (admitsCompanies, D7178) is checked before the record is read, the record is read through researchCompanyRead (D7819) so an absent, excluded or withdrawn record answers 404 with no facts, and no reviewer is projected."
+  },
+  "GET /api/research/company-directory/:uid/facts": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_company_facts_7828.test.ts",
+    "note": "A catalogue company record has no owner: the Companies rule (admitsCompanies, D7178) is checked before the record is read, the record is read through researchCompanyRead (D7819) so an absent, excluded or withdrawn record answers 404 with no facts, and no reviewer is projected."
+  },
   "GET /api/research/documents/:uid/download": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

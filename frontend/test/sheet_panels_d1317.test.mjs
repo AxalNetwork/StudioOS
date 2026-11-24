@@ -16,7 +16,7 @@ const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8'
 export const SHEET_PANELS = [
   ['Account › Builder', 'pages/account/builder/BuilderSection.jsx', 'testId={`builder-drawer-${drawer.kind}`}'],
   ['Accounts', 'pages/admin/consoles/UsersConsole.jsx', 'testId="account-drawer"'],
-  ['Approvals › item', 'pages/admin/approvals/AdminApprovals.jsx', 'testId="approvals-item"'],
+  ['Approvals › item', 'pages/admin/approvals/ApprovalsAssign.jsx', 'testId="approvals-item"'],
   ['Approvals › product tester', 'pages/admin/approvals/TesterBoard.jsx', 'testId="tester-drawer"'],
   ['Approvals › co-marketing pitch', 'pages/admin/approvals/PitchBoard.jsx', 'testId="pitch-drawer"'],
   ['Approvals › wellbeing expert', 'pages/admin/approvals/ExpertBoard.jsx', 'testId="expert-drawer"'],

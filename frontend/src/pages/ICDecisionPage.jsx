@@ -11,7 +11,7 @@ import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
 import {
   canChangeDecision, AUTHOR_ONLY_LINE, recusalBody, RECUSAL_FINAL_LINE, ownRecusal,
-  tallyText, VOTE_WORDS, CONDITION_WORDS, canOpenCommitRoom,
+  tallyText, VOTE_WORDS, voteWord, CONDITION_WORDS, canOpenCommitRoom,
 } from './icDecisionModel.js';
 
 const VOTES = ['yes', 'no', 'abstain'];
@@ -181,10 +181,10 @@ export default function ICDecisionPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm mb-2" />
             <div className="flex gap-2">
               {VOTES.map((v) => (
-                <button key={v} onClick={() => castVote(v)} disabled={busy || d.status==='decided' || !rationale.trim()}
+                <button key={v} type="button" data-testid={`ic-vote-${v}`} onClick={() => castVote(v)} disabled={busy || d.status==='decided' || !rationale.trim()}
                   title={rationale.trim() ? undefined : 'Every vote records its reason: write the rationale first.'}
                   className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
-                  Vote {VOTE_WORDS[v].toLowerCase()}
+                  {`Vote ${VOTE_WORDS[v].toLowerCase()}`}
                 </button>
               ))}
               <button type="button" onClick={() => setRecusing((x) => !x)} disabled={busy || d.status==='decided'} aria-expanded={recusing}
@@ -225,7 +225,7 @@ export default function ICDecisionPage() {
           {(d.votes || []).map((v, i) => (
             <li key={i} className="py-2 text-sm flex justify-between gap-3">
               <span className="text-gray-700 dark:text-gray-300">{v.user_name || `User ${v.user_id}`}</span>
-              <span className="text-gray-500">{VOTE_WORDS[v.vote] || v.vote}{v.rationale ? ` — ${v.rationale}` : ''}</span>
+              <span className="text-gray-500">{voteWord(v.vote)}{v.rationale ? ` — ${v.rationale}` : ''}</span>
             </li>
           ))}
           {(d.votes || []).length === 0 && <li className="py-2 text-sm text-gray-500">No votes yet.</li>}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { DataState, StateChip } from '../../ui';
 import { CycleCard } from './CycleOverview';
-import { chartSummary, coverageWords, gainLabel, lastRead, listWords, nextStepItems, pitchView, unassessedWords } from './raiseOverviewModel';
+import { attentionWords, chartSummary, coverageWords, gainLabel, lastRead, listWords, nextStepItems, pitchView, staleReadiness, unassessedWords } from './raiseOverviewModel';
 
 export { gainLabel, lastRead, nextStepItems };
 
@@ -41,9 +41,14 @@ export function RaiseValue({ state, value, reason = null, testId }) {
   return <span className="flex flex-col items-start gap-0.5" data-testid={testId} data-value-state={kind}><StateChip kind={kind} />{reason ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{reason}</span> : null}</span>;
 }
 
-/** RA-01, RA-04: the readiness summary, coverage first, the unassessed areas named; never a score of 0 for an unassessed area. */
-export function RaiseReadinessSummary({ view, search = '', onRetry }) {
+/**
+ * RA-01, RA-04: the readiness summary, coverage first, then how many areas need attention (D8257), the
+ * unassessed areas named; never a score of 0 for an unassessed area. RA-09 Stale: an area whose evidence
+ * changed since it was scored is named, with Re-assess for a viewer who may act.
+ */
+export function RaiseReadinessSummary({ view, search = '', onRetry, readOnly = false }) {
   const review = `/raise/fundraising-readiness${search && search.startsWith('?') ? search : ''}`;
+  const stale = staleReadiness(view);
   let body;
   if (view.state === 'unavailable') body = <DataState state="unavailable" size="block" what="Fundraising readiness" reason={view.reason} onRetry={onRetry} data-testid="raise-readiness-unavailable" />;
   else if (view.state === 'none') {
@@ -52,7 +57,15 @@ export function RaiseReadinessSummary({ view, search = '', onRetry }) {
     body = (
       <div className="flex flex-col gap-1">
         <p className="m-0 text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100" data-testid="raise-readiness-coverage">{coverageWords(view)}</p>
+        <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-200" data-testid="raise-readiness-attention" data-count={view.attention}>{attentionWords(view)}</p>
         <p className={`m-0 ${SUB}`}>{unassessedWords(view)}</p>
+        {stale ? (
+          <div className="mt-1 flex flex-col items-start gap-1.5" data-testid="raise-readiness-stale">
+            <StateChip kind="stale" lastGood={stale.since} />
+            <p className={`m-0 ${SUB}`}>{stale.sentence}</p>
+            {!readOnly ? <Link to={review} className={LINK} aria-label={`Re-assess ${stale.names.join(', ')}`}>Re-assess</Link> : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -342,13 +355,13 @@ export function RaiseDetailedReadiness({ view, defaultOpen = true, defaultMode =
         {mode === 'bars' ? (
           <div role="img" aria-labelledby={titleId} aria-describedby={sumId} className="flex flex-col gap-1.5" data-testid="raise-detailed-bars">
             {view.areas.map((a) => (
-              <div key={a.label} className="grid grid-cols-[10rem_minmax(0,1fr)_3.5rem_auto] items-center gap-3 text-[12.5px]" aria-hidden="true">
+              <div key={a.key || a.label} className="grid grid-cols-[10rem_minmax(0,1fr)_3.5rem_auto] items-center gap-3 text-[12.5px]" aria-hidden="true">
                 <span className="text-axal-ink dark:text-gray-100">{a.label}</span>
                 <span className={`h-2.5 overflow-hidden rounded-full ${a.score == null ? 'bg-[repeating-linear-gradient(45deg,#ececf1_0_4px,transparent_4px_8px)] dark:bg-[repeating-linear-gradient(45deg,#374151_0_4px,transparent_4px_8px)]' : 'bg-axal-ground dark:bg-gray-800'}`} data-bar-state={a.score == null ? 'not_recorded' : 'value'}>
                   {a.score != null ? <i className="block h-full rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${Math.max(0, Math.min(10, a.score)) * 10}%` }} /> : null}
                 </span>
                 <b className="font-mono text-axal-ink dark:text-gray-100">{a.score == null ? '' : `${a.score} / 10`}</b>
-                <span>{a.score == null ? <StateChip kind="not_recorded" /> : null}</span>
+                <span>{a.score == null ? <StateChip kind="not_recorded" /> : a.status === 'stale' ? <StateChip kind="stale" lastGood={a.assessedAt} /> : null}</span>
               </div>
             ))}
           </div>
@@ -357,9 +370,9 @@ export function RaiseDetailedReadiness({ view, defaultOpen = true, defaultMode =
             <thead><tr className="text-[10.5px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400"><th scope="col" className="py-1.5 font-extrabold">Area</th><th scope="col" className="py-1.5 font-extrabold">Score out of 10</th></tr></thead>
             <tbody>
               {view.areas.map((a) => (
-                <tr key={a.label} className="border-t border-axal-hairline dark:border-gray-800">
+                <tr key={a.key || a.label} className="border-t border-axal-hairline dark:border-gray-800">
                   <th scope="row" className="py-2 font-semibold text-axal-ink dark:text-gray-100">{a.label}</th>
-                  <td className="py-2 font-mono text-axal-ink dark:text-gray-100">{a.score == null ? <StateChip kind="not_recorded" /> : a.score}</td>
+                  <td className="py-2 font-mono text-axal-ink dark:text-gray-100">{a.score == null ? <StateChip kind="not_recorded" /> : <>{a.score}{a.status === 'stale' ? <> <StateChip kind="stale" lastGood={a.assessedAt} /></> : null}</>}</td>
                 </tr>
               ))}
             </tbody>

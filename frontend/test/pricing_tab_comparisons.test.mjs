@@ -15,6 +15,8 @@ const text = n => n.childNodes?.length ? n.childNodes.map(text).join('') : n.tex
 const walk = n => [n, ...(n.childNodes || []).flatMap(walk)];
 const props = n => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
 const cls = (n, c) => (props(n).className || '').split(' ').includes(c);
+// D5958 (PR-C1 to PR-C6): the phone comparison says what a cell means in words; the desktop table keeps its glyphs.
+const phoneWords = (v) => (v === '' ? 'Included' : v === '—' ? '—Not included' : v);
 const expected = [
   ['Founder', ['Free', 'Validate + Build', 'Raise + Grow'], 'Customer interviews', ['5', 'Unlimited', 'Unlimited']],
   ['Investor', ['Investor Basic', 'Investor Plus', 'Investor Pro', 'Institutional'], 'AI-assisted research', ['—', 'Plan allowance + AI tokens', 'Plan allowance + AI tokens', 'Negotiated']],
@@ -64,9 +66,9 @@ for (const member of [false, true]) {
         const phone = walk(compare).find(n => cls(n, 'axp-phone'));
         assert.deepEqual(walk(phone).filter(n => cls(n, 'axp-chip')).map(text), names, `${label} phone picker`);
         const phoneRow = walk(phone).find(n => cls(n, 'axp-row') && text(n.childNodes[0]) === feature);
-        assert.equal(text(phoneRow.childNodes[1]), values[1], `${label} default phone comparison`);
+        assert.equal(text(phoneRow.childNodes[1]), phoneWords(values[1]), `${label} default phone comparison`);
         await click(names.at(-1));
-        assert.equal(text(walk(phone).find(n => cls(n, 'axp-row') && text(n.childNodes[0]) === feature).childNodes[1]), values.at(-1), `${label} phone plan changes`);
+        assert.equal(text(walk(phone).find(n => cls(n, 'axp-row') && text(n.childNodes[0]) === feature).childNodes[1]), phoneWords(values.at(-1)), `${label} phone plan changes`);
       }
       await click('Models');
       assert.equal(nodes().filter(n => cls(n, 'axp-compare') || cls(n, 'axp-card-name')).length, 0, 'Models removes role plans and comparison');

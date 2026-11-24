@@ -189,3 +189,13 @@ and keeps nothing. The Statement sheet mounts it in its rail for the chosen
 date, and Edit ticks "Include as a cover note" with the proposal in that box.
 Decision notes: `documentation/architecture/decisions/D6888.md` and
 `documentation/architecture/decisions/D6888-p1.md`.
+D6907 part 2 (#6907, canvas PRM18 rail) adds Eadwyn's proposal of a right that
+is in the investor's signed paper but not recorded, on Ownership & rights:
+`ClauseProposals.jsx` is the card (Accept, Edit wording, Discard), and
+`clauseProposalModel.js` is its pure half (`proposalsOf`, `clauseLocation`,
+`unreadableDocs`, `railState`). It reads the clause read (D6907 part 1) only for
+the types `askableTypes` gives: not recorded, and no open request. Accept sends
+exactly one request to record the right, with the clause as its description,
+and Eadwyn never records one. A document it could not read is listed with its
+reason. Decision notes: `documentation/architecture/decisions/D6907.md` and
+`documentation/architecture/decisions/D6907-p2.md`.

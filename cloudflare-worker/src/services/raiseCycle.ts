@@ -530,6 +530,27 @@ export const FRESHNESS_WORDS: Record<Freshness, string> = {
   current: 'Current', stale: 'Stale · its inputs changed', not_recorded: 'Not recorded', unavailable: 'Unavailable',
 };
 
+/**
+ * D8257 (#8257): one readiness area's status, by the rule Fundraising readiness draws (RA-23,
+ * `readinessModel.js` `statusOf`), so the Overview counts what that page counts:
+ *   not_recorded   no check or person has scored it, or its score holds nothing
+ *   unavailable    its check could not read its store just now (the score's `missing` says Unavailable)
+ *   stale          its inputs changed since it was scored (D5071 freshness)
+ *   ready          scored, nothing missing
+ *   attention      scored, with something missing
+ *   missing        nothing to score yet (no score, or a measured 0), with something missing
+ */
+export type AreaStatus = 'ready' | 'attention' | 'missing' | 'stale' | 'unavailable' | 'not_recorded';
+export function readinessAreaStatus(s: Pick<ScoreRow, 'score' | 'missing'> | null | undefined, freshness?: Freshness | null): AreaStatus {
+  if (!s) return 'not_recorded';
+  const missing = String(s.missing ?? '').trim();
+  if (/^unavailable\b/i.test(missing)) return 'unavailable';
+  if (freshness === 'stale') return 'stale';
+  const score = s.score == null || !Number.isFinite(Number(s.score)) ? null : Number(s.score);
+  if (!missing) return score == null ? 'not_recorded' : 'ready';
+  return score == null || score === 0 ? 'missing' : 'attention';
+}
+
 export async function readinessCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('fundraising-readiness', 'All time', 'Each readiness item by its score out of 10, shaded by evidence; the overall score over time.', 'Readiness scores'), async (): Promise<CardBody> => {
     const { items, scores } = await loadReadiness(ctx);
@@ -542,11 +563,19 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
     }
     const latest = latestScores(scores);
     const history = readinessHistory(scores);
+    // D8257: each bar names its area by key, with its status and when it was last scored, so the
+    // Overview counts what needs attention and draws Stale without matching an area by its label.
+    const fresh = await readinessFreshness(ctx, latest, items);
     const series: unknown[] = [{
       kind: 'hbar',
       items: items.map((i) => {
         const s = latest.get(Number(i.id));
-        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? (EVIDENCE_TONE as Record<string, string>)[s.evidence] ?? 'grey' : 'grey' };
+        return {
+          label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? (EVIDENCE_TONE as Record<string, string>)[s.evidence] ?? 'grey' : 'grey',
+          key: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
+          status: readinessAreaStatus(s, fresh.get(i.item_key)),
+          assessed_at: s ? day(s.scored_at) : null,
+        };
       }),
       legend: EVIDENCE_LEGEND.map((l) => ({ ...l })),
     }];
