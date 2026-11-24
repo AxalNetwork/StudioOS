@@ -6,6 +6,7 @@ import RunEstimate from './RunEstimate';
 import { useRailOption } from '../ui/railCrumbs';
 import { railPressHeaders } from '../lib/railPage.js';
 import { CHECKING, guardRefusal } from './draftCheck';
+import { STATE_WORDS, isRefusal } from '../ui/dataState.js';
 
 /**
  * The band every artboard with an AI proposal closes with.
@@ -134,6 +135,22 @@ export function bandPage() {
   return path.replace(/\/+$/, '') || (path === '/' ? '/' : undefined);
 }
 
+/**
+ * D6242 (#6242): a refused or failed run in the platform's state words (D5129). A refusal (Eadwyn switched off,
+ * a record the caller may not draft over, the guard withholding the draft) reads "Refused"; anything else that
+ * stopped the run (the model unreachable, a guard that could not check, a draft that quoted a figure its
+ * material did not carry) reads "Unavailable". The sentence after the word is the Worker's where it wrote one.
+ */
+export const RUN_UNAVAILABLE = 'The draft could not be written right now. Nothing was kept; try again.';
+export const RUN_UNFAITHFUL = 'The draft quoted a figure that is not on this page, so it was not kept. Try again.';
+export const RUN_REFUSED = 'This draft was refused.';
+export function runOutcome(e, guard = guardRefusal(e)) {
+  const refused = guard?.code === 'guard_blocked_output' || e?.code === 'assist_off' || isRefusal(e) || Number(e?.status) === 402;
+  if (refused) return `${STATE_WORDS.refused} · ${guard?.message || (typeof e?.message === 'string' && e.message && e.code !== e.message ? e.message : RUN_REFUSED)}`;
+  const why = e?.code === 'draft_unfaithful' ? RUN_UNFAITHFUL : guard?.message || RUN_UNAVAILABLE;
+  return `${STATE_WORDS.unavailable} · ${why}`;
+}
+
 /** D778 part 3 (#2103): the press's own rail context (`railPressHeaders`, lib/railPage.js). */
 export const pressHeaders = railPressHeaders;
 
@@ -183,6 +200,10 @@ export default function ZoneDraft({
   // out, every other mount draws "Edit first" and no status, as before.
   editLabel = 'Edit first',
   status = null,
+  // D6242 (#6242): a refused or failed run opens on the platform's state word
+  // (D5129's `STATE_WORDS`): "Refused · …" or "Unavailable · …" (`runOutcome`).
+  // Left out, every other mount keeps its sentences as before.
+  stateWords = false,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -255,7 +276,8 @@ export default function ZoneDraft({
       setGuardLink(guard?.link || null);
       setNote(e?.code === 'nothing_to_draft'
         ? (nothingToDraft || 'There is nothing on this page to draft over yet.')
-        : guard?.message || 'That draft could not be written right now.');
+        : stateWords ? runOutcome(e, guard)
+          : guard?.message || 'That draft could not be written right now.');
     } finally { if (!stale()) setBusy(''); }
   };
 

@@ -226,7 +226,7 @@ for (const writer of [true, false]) test(`6 (route): at 1024px /validate draws "
   const m = await mount(h(MemoryRouter, { initialEntries: [`/validate${Q}`] }, h(Routes, null, h(Route, { path: '/validate', element: h(CycleRoute, { cycle: 'validate' }) }))));
   try {
     await m.act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); });
-    assert.ok(Boolean(m.by('cycle-overview')), 'the desktop overview');
+    assert.ok(Boolean(m.by('validate-overview-v2')), 'the desktop overview (D5998)');
     assert.match(m.text('validate-objective-line'), /^Trying to learn: Not recorded/);
     if (!writer) {
       assert.equal(Boolean(m.by('validate-objective-open')), false, 'a reader gets no control');

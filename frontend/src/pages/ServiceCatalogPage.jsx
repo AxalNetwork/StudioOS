@@ -51,6 +51,9 @@ const CAT_LABEL = {
  * nothing about licences. It is called with the rows the tab has loaded,
  * because an export of "this view" needs the view.
  */
+/** #4845: the visible amber focus ring the row's own controls take (OF-10). */
+const MENU_FOCUS = ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-700';
+
 export default function ServiceCatalogPage({ user, zoneActions, zoneFilters, role }) {
   return <MineTab user={user} zoneActions={zoneActions} zoneFilters={zoneFilters} role={role} />;
 }
@@ -293,6 +296,26 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const [loading, setLoading] = useState(false);
   const [listing, setListing] = useState('All');
   const [menuFor, setMenuFor] = useState(null);
+  // #4845 (D4845): the row menu is a real menu button. Opening it puts focus on
+  // its first item (the copy CSS hides cannot take focus, so the visible one
+  // does); Arrow keys, Home and End move between items; Escape closes it and
+  // returns focus to ⋯; Tab closes it and moves on.
+  const focusFirstItem = React.useCallback((node) => { node?.querySelector?.('[role="menuitem"]')?.focus?.(); }, []);
+  const menuKeys = (e) => {
+    const items = Array.from(e.currentTarget.querySelectorAll?.('[role="menuitem"]') || []);
+    const at = items.indexOf(document.activeElement);
+    const move = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
+    if (move !== undefined && items.length) {
+      e.preventDefault();
+      items[(move + items.length) % items.length].focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation?.();
+      const trigger = e.currentTarget.parentNode?.querySelector?.('[aria-haspopup="menu"]');
+      setMenuFor(null);
+      trigger?.focus?.();
+    } else if (e.key === 'Tab') setMenuFor(null);
+  };
   const [filter, setFilter] = useState('all');
   const [result, setResult] = useState(null);
   const [saved, setSaved] = useState('');
@@ -376,23 +399,25 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const statePill = (o) => <OfferStatus state={catalogState(o)} testId={`catalog-state-${o.id}`} />;
   const rowMenu = (o) => (
     <span className="relative inline-block">
-      <button type="button" aria-label={`More actions for ${o.title}`} aria-expanded={menuFor === o.id}
+      <button type="button" aria-label={`More actions for ${o.title}`} aria-haspopup="menu" aria-expanded={menuFor === o.id}
         onClick={() => setMenuFor((m) => (m === o.id ? null : o.id))} data-testid={`catalog-more-${o.id}`}
-        className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-axal-hairline text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 max-sm:h-11 max-sm:w-11">⋯</button>
+        onKeyDown={(e) => { if (e.key === 'ArrowDown' && menuFor !== o.id) { e.preventDefault(); setMenuFor(o.id); } }}
+        className={`ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-axal-hairline text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 max-sm:h-11 max-sm:w-11${MENU_FOCUS}`}><span aria-hidden="true">⋯</span></button>
       {menuFor === o.id && (
-        <span role="menu" className="absolute right-0 z-10 mt-1 flex w-36 flex-col rounded-md border border-axal-hairline bg-white p-1 text-left shadow-md dark:border-gray-700 dark:bg-gray-900"
+        <span role="menu" aria-label={`Actions for ${o.title}`} ref={focusFirstItem} onKeyDown={menuKeys}
+          className="absolute right-0 z-10 mt-1 flex w-36 flex-col rounded-md border border-axal-hairline bg-white p-1 text-left shadow-md dark:border-gray-700 dark:bg-gray-900"
           data-testid={`catalog-menu-${o.id}`}>
           <button type="button" role="menuitem" onClick={() => { setMenuFor(null); toggleListed(o); }}
-            className="rounded px-2 py-1.5 text-left text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800">{o.is_active ? 'Unlist' : 'List'}</button>
+            className={`rounded px-2 py-1.5 text-left text-[13px] hover:bg-gray-50 dark:hover:bg-gray-800 max-sm:min-h-[44px]${MENU_FOCUS}`}>{o.is_active ? 'Unlist' : 'List'}</button>
           <button type="button" role="menuitem" onClick={() => { setMenuFor(null); remove(o); }}
-            className="mt-1 rounded border-t border-axal-hairline px-2 py-1.5 text-left text-[12.5px] text-rose-700 hover:bg-rose-50 dark:border-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30">Delete</button>
+            className={`mt-1 rounded border-t border-axal-hairline px-2 py-1.5 text-left text-[13px] text-rose-700 hover:bg-rose-50 dark:border-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30 max-sm:min-h-[44px]${MENU_FOCUS}`}>Delete</button>
         </span>
       )}
     </span>
   );
   const editButton = (o) => (
-    <button type="button" onClick={() => edit(o)} data-testid={`catalog-edit-${o.id}`}
-      className="rounded-md px-2 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800 max-sm:min-h-[44px]">Edit</button>
+    <button type="button" onClick={() => edit(o)} data-testid={`catalog-edit-${o.id}`} aria-label={`Edit ${o.title}`} aria-haspopup="dialog"
+      className={`rounded-md px-2 py-1 text-[13px] font-semibold text-axal-ink hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800 max-sm:min-h-[44px]${MENU_FOCUS}`}>Edit</button>
   );
   const modelOf = (o) => (o.engagement_model ? MODEL_LABEL[o.engagement_model] : null);
 

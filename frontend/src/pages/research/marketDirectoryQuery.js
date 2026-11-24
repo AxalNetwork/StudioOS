@@ -30,7 +30,7 @@ export const MARKET_SORTS = [
   { value: 'supplied_count:desc', label: 'Taxonomy count, highest first' },
   { value: 'supplied_count:asc', label: 'Taxonomy count, lowest first' },
   { value: 'name:asc', label: 'Name, A to Z' },
-  { value: 'newest_source:desc', label: 'Newest source first' },
+  { value: 'newest_source:desc', label: 'Newest named evidence first' },
 ];
 
 export const MARKET_VIEWS = [
@@ -39,13 +39,35 @@ export const MARKET_VIEWS = [
   { key: 'analysis', label: 'Analysis' },
 ];
 
-/** `?fresh=`, by the newest source of any kind (the Worker's FRESH_BANDS). */
+/**
+ * `?fresh=` (the Worker's FRESH_BANDS). D7710: by the newest evidence that NAMES
+ * the market, dated by the date its source reports; inherited sector sources set no band.
+ */
 export const FRESH_OPTIONS = [
-  { value: '30', label: 'Last 30 days', chip: 'Newest source: last 30 days' },
-  { value: '90', label: '31 to 90 days', chip: 'Newest source: 31 to 90 days' },
-  { value: 'older', label: 'Older than 90 days (Stale)', chip: 'Newest source: older than 90 days' },
-  { value: 'none', label: 'No source recorded', chip: 'No source recorded' },
+  { value: '30', label: 'Named evidence, reported in the last 30 days', chip: 'Named evidence: reported in the last 30 days' },
+  { value: '90', label: 'Named evidence, reported 31 to 90 days ago', chip: 'Named evidence: reported 31 to 90 days ago' },
+  { value: 'older', label: 'Named evidence, reported over 90 days ago (Stale)', chip: 'Named evidence: reported over 90 days ago' },
+  { value: 'none', label: 'None named', chip: 'None named' },
 ];
+
+/** D7710: what a newest date measures (the Worker's DATE_BASES). */
+export const DATE_BASIS_LABEL = Object.freeze({
+  reported: 'date the source reports',
+  period_measured: 'end of the period measured',
+  retrieved: 'date retrieved',
+});
+/** A basis in words, or null for a basis the page does not know. */
+export const basisLabel = (b) => DATE_BASIS_LABEL[b] || null;
+/** A source's date with its basis: an annual figure shows the year it measures (`period 2024`). */
+export function datedByBasis(value, basis, day) {
+  if (!value) return 'Date not recorded';
+  if (basis === 'period_measured') {
+    return /^\d{4}-12-31/.test(String(value)) ? `period ${String(value).slice(0, 4)}` : `period to ${day(value)}`;
+  }
+  if (basis === 'retrieved') return `retrieved ${day(value)}`;
+  if (basis === 'reported') return `reported ${day(value)}`;
+  return day(value);
+}
 
 /** `?src=` (the Worker's SOURCE_KINDS). */
 export const SRC_OPTIONS = [
@@ -149,7 +171,7 @@ export function filterChips(v) {
   return chips;
 }
 
-/** The filters in a few words, for the sector page's Back link: “energy” · Germany · last 30 days. */
+/** The filters in a few words, for the sector page's Back link: “energy” · Germany · named evidence, reported in the last 30 days. */
 export function filterWords(v) {
   const words = [];
   if (v.q) words.push(`“${v.q}”`);

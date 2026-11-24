@@ -28,21 +28,21 @@
 // saw yesterday, in the rail, the body, the "on this page" list and search.
 // What changes is that an ADMIN can now read the admin docs the path guard has
 // been pointing at for four months. DECISIONS D61.
-import admin from './admin';
-import gettingStarted from './getting-started';
-import spinOutLab from './spin-out-lab';
-import build from './build';
-import validateGrow from './validate-grow';
-import capital from './capital';
-import legal from './legal';
-import partnerships from './partnerships';
-import network from './network';
-import portals from './portals';
-import integrations from './integrations';
-import account from './account';
-import troubleshooting from './troubleshooting';
-import workflows from './workflows';
-import changelog from './changelog';
+import admin from './admin.js';
+import gettingStarted from './getting-started.js';
+import spinOutLab from './spin-out-lab.js';
+import build from './build.js';
+import validateGrow from './validate-grow.js';
+import capital from './capital.js';
+import legal from './legal.js';
+import partnerships from './partnerships.js';
+import network from './network.js';
+import portals from './portals.js';
+import integrations from './integrations.js';
+import account from './account.js';
+import troubleshooting from './troubleshooting.js';
+import workflows from './workflows.js';
+import changelog from './changelog.js';
 
 export const SECTIONS = [
   gettingStarted,
