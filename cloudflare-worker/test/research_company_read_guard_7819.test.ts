@@ -27,6 +27,8 @@ export const PENDING_READERS = [
 export const MAINTENANCE_WRITERS: string[] = [
   // D7820 (#7820): an admin-only read (uid, name, source_name) for the review routes; it writes nothing to the table.
   'cloudflare-worker/src/services/researchCompanyReview.ts',
+  // D7825 (#7825): the admin domain review sets or clears website_verified_at on the reviewed company only.
+  'cloudflare-worker/src/services/researchRecordIdentity.ts',
 ];
 const OWN = 'cloudflare-worker/src/services/researchCompanyRead.ts';
 export function withoutComments(source: string, path = 'file.ts') {

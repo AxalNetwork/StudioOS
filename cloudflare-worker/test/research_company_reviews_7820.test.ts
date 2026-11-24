@@ -216,7 +216,7 @@ test('the one statement on the company table selects uid, name and source name, 
 });
 
 test('the guard passes with the one allowed line and fails without it; the pending list is unchanged', () => {
-  assert.deepEqual(MAINTENANCE_WRITERS, [SELF]);
+  assert.equal(MAINTENANCE_WRITERS.filter((p) => p === SELF).length, 1, 'its own line is on the list exactly once (#7825 adds its own beside it)');
   assert.ok(!PENDING_READERS.includes(SELF));
   const service = readFileSync(resolve(import.meta.dirname, '../src/services/researchCompanyReview.ts'), 'utf8');
   assert.deepEqual(checkReaders({ [SELF]: service }, PENDING_READERS, [SELF]).filter((e) => e.includes('researchCompanyReview')), []);

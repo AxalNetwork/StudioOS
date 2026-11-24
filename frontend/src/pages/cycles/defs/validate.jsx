@@ -26,6 +26,9 @@ import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePo
 import NotionInterviewImport from '../NotionInterviewImport';
 import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection, ThemeRecordParts } from '../ValidateSections';
 import HypothesisRecord from '../HypothesisRecord';
+// D5998 (#5998): Validate's V2 overview (boards V1, V2, V13), mounted through `Overview` as Grow's and Build's are.
+// Imported statically: its lead (`ValidateLead`, `ValidateObjective`, `PmfChip`) is already in the route's bundle.
+import ValidateOverview from '../ValidateOverview';
 import { painThemesApi } from '../../../lib/api/painThemes.js';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
@@ -152,6 +155,7 @@ export function RecordMount({ projectId, interviewId, setupKey, onClose, onStart
 
 const validate = {
   modules: MODULES.validate,
+  Overview: ValidateOverview,
   // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
   // click opens it over this page (`onOpen`); a new tab or a deep link follows
   // the href to the same place. The interview comes with it, or is made at Start.
