@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT, decodeJwt } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 import admin from '../src/routes/admin.ts';
 import security from '../src/routes/admin_security.ts';
@@ -34,8 +34,6 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { BRANCH_NOT_REACHED } from '../src/services/emergencyScope.ts';
 
 const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const HQ = 1;        // the Super Admin, the operator
@@ -47,7 +45,7 @@ const SEC_REASON = 'Incident SEC-9: containment drill';
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-type DB = ReturnType<typeof buildFresh>;
+type DB = ReturnType<typeof freshSchema>;
 /** A D1 over the database; `refuse(sql)` makes that statement fail as an unreadable store would. */
 function makeD1(db: DB, ctl: { refuse?: (sql: string) => boolean } = {}) {
   return {
@@ -76,7 +74,7 @@ function makeD1(db: DB, ctl: { refuse?: (sql: string) => boolean } = {}) {
 // every migration is the slow part, and each test needs its own database.
 const SNAP_DIR = mkdtempSync(join(tmpdir(), 'd4669-'));
 const SNAPSHOT = join(SNAP_DIR, 'schema.db');
-buildFresh(BASELINE, LATER, { dqs: true }).exec(`VACUUM INTO '${SNAPSHOT}'`);
+freshSchema({ dqs: true }).exec(`VACUUM INTO '${SNAPSHOT}'`);
 let copies = 0;
 after(() => rmSync(SNAP_DIR, { recursive: true, force: true }));
 

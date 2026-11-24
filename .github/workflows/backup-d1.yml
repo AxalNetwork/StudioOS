@@ -36,8 +36,7 @@ on:
         required: false
         default: 'studioos-db'
 
-permissions:
-  contents: read
+permissions: {}
 
 # Non-secret config only. Cloudflare creds are scoped to the individual
 # wrangler steps that consume them (Export / Upload / heartbeat) so they
@@ -50,6 +49,8 @@ jobs:
   backup:
     environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       # D4558: a step's `if:` cannot see its own `env:` (the defect D263 fixed
       # in dr-drill.yml), so the pager step reads this job-level flag.
@@ -92,7 +93,9 @@ jobs:
           node-version: '22'
 
       - name: Install wrangler
-        run: npm i -g wrangler@latest
+        run: |
+          npm ci --prefix cloudflare-worker --include=dev --no-audit --no-fund
+          printf '%s\n' "$GITHUB_WORKSPACE/cloudflare-worker/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Compute backup filename
         id: name

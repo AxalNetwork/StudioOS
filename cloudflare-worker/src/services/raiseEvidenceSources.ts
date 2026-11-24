@@ -82,7 +82,7 @@ const QUERIES = {
   themes: `SELECT id,title,updated_at FROM pain_groups WHERE project_id=?`,
   interviews: `SELECT id,interview_date,icp_fit,quote_consent,pains_json,notes,updated_at FROM discovery_interviews WHERE project_id=?`,
   signals: `SELECT id,kind,status,signal_date,source_kind,interview_id,session_id,evidence_file_key,amount_cents,currency,updated_at FROM demand_signals WHERE project_id=? AND status IN ('confirmed','counted')`,
-  experiments: `SELECT id,status,result,updated_at FROM hypothesis_experiments WHERE project_id=? AND result IS NOT NULL AND trim(result)<>''`,
+  experiments: `SELECT id,status,result,updated_at FROM hypothesis_experiments WHERE project_id=? AND status='done' AND result IS NOT NULL AND trim(result)<>''`,
   verdicts: `SELECT id,decision,decided_at FROM validation_decisions WHERE project_id=? AND state='given' AND superseded_at IS NULL`,
   metrics: `SELECT m.id,m.snapshot_date,m.source,m.mrr,m.arr,m.cac,m.ltv,m.monthly_churn_pct,m.active_users,m.new_users,m.net_burn,m.headcount,m.nrr_pct,m.paying_accounts,
     EXISTS(SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active'

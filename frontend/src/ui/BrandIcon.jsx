@@ -1264,6 +1264,8 @@ export const BRAND_MONOGRAM = Object.freeze({
   beehiiv: Object.freeze({ name: 'Beehiiv', reason: 'Beehiiv publishes its brand assets on beehiiv.com, which refused a direct read from the build environment on 2026-10-21 and 2026-11-07, so the mark is not copied by hand. Initials until a mark is recorded with its source and licence.' }),
   // D5827 (#5827): Typeform's connector. Its mark is not recorded with a source and licence yet.
   typeform: Object.freeze({ name: 'Typeform', reason: 'Typeform publishes its brand assets on typeform.com; no mark was recorded from them with its licence when the connector landed on 2026-11-15, so the mark is not copied by hand. Initials until one is.' }),
+  // D5834 (#5834): QuickBooks Online's connector. Intuit's mark is not recorded with a source and licence yet.
+  quickbooks: Object.freeze({ name: 'QuickBooks Online', reason: 'Intuit publishes its QuickBooks brand guidelines on intuit.com; no mark was recorded from them with its licence when the connector landed on 2026-11-23, so the mark is not copied by hand. Initials until one is.' }),
   affinity: Object.freeze({ name: 'Affinity', reason: 'Affinity CRM is affinity.co, not the Affinity design suite. The vendor newsroom (https://www.affinity.co/company/newsroom, read 2026-10-16) has no downloadable icon kit. Brandfetch and an n8n SVG were located, but their current vendor provenance and permitted treatment remain unverified. Initials until that is recorded.' }),
 });
 

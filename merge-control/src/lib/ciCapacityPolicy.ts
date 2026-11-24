@@ -18,6 +18,11 @@ export const CI_CAPACITY_BUDGETS = Object.freeze({
   inventoryMaxAgeMs: 30_000,
   reconcileMs: 15_000,
 });
+/** D8009: existing #7972 hosted job limit; never issue a longer lease even for immediate pickup. */
+export const HOSTED_JOB_CEILING_MS = 45 * 60_000;
+/** D7909: leave the existing 26-minute Linux Run step a bounded 20-second delivery allowance. */
+export const EXTERNAL_RUN_CEILING_MS = 26 * 60_000;
+export const RESULT_DELIVERY_RESERVE_MS = 20_000;
 export type CapacityBudgets = { [K in keyof typeof CI_CAPACITY_BUDGETS]: number };
 export type CapacityPolicy = {
   version: typeof CI_CAPACITY_VERSION;
@@ -26,6 +31,8 @@ export type CapacityPolicy = {
   maxIncludedWorkerShards: number;
   minimumHostedWorkerShards: number;
   approvedGroupId: number;
+  /** Pilot narrows the existing eight-request authority bound without increasing it. */
+  maxActiveRequests?: number;
   budgets: CapacityBudgets;
 };
 export type CiSubmission = {
@@ -39,6 +46,8 @@ export type CiSubmission = {
   queueBaseSha: string | null;
   event: CiEvent;
   executorSha: string;
+  /** Approved main workflow revision, separate from pinned control code. Legacy receipts bind to executorSha. */
+  childWorkflowSha?: string;
   planDigest: string;
   planArtifactId: number | null;
   shards: string[];
@@ -53,6 +62,8 @@ export type CiProvenance = {
   queueBaseSha: string | null;
   event: CiEvent;
   executorSha: string;
+  /** Approved main workflow revision, separate from pinned control code. Legacy receipts bind to executorSha. */
+  childWorkflowSha?: string;
   planDigest: string;
   planArtifactId: number | null;
   shards: string[];
@@ -84,6 +95,8 @@ export type ExecutionReceipt = {
   planDigest: string;
   planArtifactId: number | null;
   executorSha: string;
+  /** Approved main workflow revision, separate from pinned control code. Legacy receipts bind to executorSha. */
+  childWorkflowSha?: string;
   profile: CiProfile;
   generation: number;
   childRunId: number;
@@ -98,7 +111,13 @@ export type CiAttempt = Omit<ExecutionReceipt, 'childRunId'> & {
   phase: AttemptPhase;
   cancelDeadline: number | null;
   reason: string | null;
+  /** Negative test truth survives cancellation/cleanup; cleanup-unknown attempts retain their reservation. */
+  verifiedTestFailure?: boolean;
+  /** Owned dispatch at an unreviewed moving-main revision: cancellation only, never admission. */
+  rejectedWorkflowSha?: string;
 };
+/** A trusted adapter proved that no dispatch request was sent. Other errors remain ambiguous. */
+export class CapacityDispatchRefused extends Error {}
 export type LogicalShard = { name: string; generation: number; attempts: CiAttempt[] };
 export type PrerequisiteResult = { name: string; conclusion: 'success' | 'failure' | 'pending' };
 export type CapacityRequest = {
@@ -124,6 +143,11 @@ export type ChildObservation = {
   testStep: 'success' | 'failure' | 'not_run' | 'unknown';
   jobConclusion: 'success' | 'failure' | 'cancelled' | 'timed_out' | null;
   startedAt: number | null;
+  /** Trusted provider/authority observations, never caller-supplied result JSON. */
+  completedAt?: number | null;
+  cleanupConfirmed?: boolean;
+  exportComplete?: boolean;
+  executionOutcome?: 'completed' | 'setup_failure' | 'timed_out' | 'cleanup_failure' | 'export_failure' | 'unknown';
 };
 export type Aggregate = { status: 'pending' | 'success' | 'failure' | 'cancelled'; reason: string };
 
@@ -140,11 +164,13 @@ export function validateCapacityPolicy(policy: CapacityPolicy): void {
       || !Number.isSafeInteger(policy.maxExternalWorkerShards) || policy.maxExternalWorkerShards < 0
       || policy.maxExternalWorkerShards > 2 || !positive(policy.minimumHostedWorkerShards)
       || !Number.isSafeInteger(policy.maxIncludedWorkerShards) || policy.maxIncludedWorkerShards < 0
-      || policy.maxIncludedWorkerShards > 1) {
+      || policy.maxIncludedWorkerShards > 1
+      || (policy.maxActiveRequests !== undefined && (!positive(policy.maxActiveRequests) || policy.maxActiveRequests > 8))) {
     throw new Error('capacity_policy_refused');
   }
   if (Object.keys(b).length !== Object.keys(CI_CAPACITY_BUDGETS).length
       || Object.keys(CI_CAPACITY_BUDGETS).some(key => !positive(b[key as keyof CapacityBudgets])) || b.queueMs > CI_CAPACITY_BUDGETS.queueMs
+      || b.hostedStartMs >= HOSTED_JOB_CEILING_MS
       || b.externalStartMs + b.externalExecutionMs + b.cancellationMs + b.hostedStartMs
         + b.hostedExecutionMs + b.controlMarginMs > b.queueMs
       // A fenced included attempt must still leave a full hosted fallback inside the request deadline.
@@ -156,7 +182,7 @@ export function submissionMatches(input: CiSubmission, proof: CiProvenance, repo
   if (!input || input.version !== 1 || !UUID.test(input.requestId) || input.repository !== repository
       || !positive(input.parentRunId) || !positive(input.parentAttempt) || !positive(input.parentWorkflowId)
       || (input.event === 'merge_group' ? !SHA.test(input.queueBaseSha ?? '') : input.queueBaseSha !== null)
-      || !SHA.test(input.sourceSha) || !SHA.test(input.executorSha) || !DIGEST.test(input.planDigest)
+      || !SHA.test(input.sourceSha) || !SHA.test(input.executorSha) || (input.childWorkflowSha !== undefined && !SHA.test(input.childWorkflowSha)) || !DIGEST.test(input.planDigest)
       || !['push', 'merge_group'].includes(input.event)
       || (input.event === 'merge_group' ? input.planArtifactId !== null : !positive(input.planArtifactId ?? 0))
       || !Array.isArray(input.shards) || !input.shards.length || input.shards.length > 6
@@ -166,7 +192,7 @@ export function submissionMatches(input: CiSubmission, proof: CiProvenance, repo
       || new Set(input.prerequisites).size !== input.prerequisites.length) return false;
   return proof.repository === input.repository && proof.parentRunId === input.parentRunId
     && proof.parentAttempt === input.parentAttempt && proof.parentWorkflowId === input.parentWorkflowId
-    && proof.queueBaseSha === input.queueBaseSha && proof.sourceSha === input.sourceSha && proof.event === input.event && proof.executorSha === input.executorSha
+    && proof.queueBaseSha === input.queueBaseSha && proof.sourceSha === input.sourceSha && proof.event === input.event && proof.executorSha === input.executorSha && (proof.childWorkflowSha ?? proof.executorSha) === (input.childWorkflowSha ?? input.executorSha)
     && proof.executorOnMain && proof.planDigest === input.planDigest && proof.planArtifactId === input.planArtifactId
     && sameSet(proof.shards, input.shards) && sameSet(proof.prerequisites, input.prerequisites) && proof.parentLive;
 }
@@ -220,7 +246,7 @@ export function selectPools(
 export function receiptMatches(a: ExecutionReceipt, b: ExecutionReceipt): boolean {
   return a.version === 1 && b.version === 1 && a.requestId === b.requestId && a.repository === b.repository
     && a.event === b.event && a.parentWorkflowId === b.parentWorkflowId && a.logicalShard === b.logicalShard && a.parentRunId === b.parentRunId && a.parentAttempt === b.parentAttempt
-    && a.queueBaseSha === b.queueBaseSha && a.sourceSha === b.sourceSha && a.planDigest === b.planDigest && a.planArtifactId === b.planArtifactId && a.executorSha === b.executorSha
+    && a.queueBaseSha === b.queueBaseSha && a.sourceSha === b.sourceSha && a.planDigest === b.planDigest && a.planArtifactId === b.planArtifactId && a.executorSha === b.executorSha && (a.childWorkflowSha ?? a.executorSha) === (b.childWorkflowSha ?? b.executorSha)
     && a.childAttempt === b.childAttempt && a.profile === b.profile && a.generation === b.generation && a.childRunId === b.childRunId
     && a.startDeadline === b.startDeadline && a.executionDeadline === b.executionDeadline;
 }
@@ -233,7 +259,7 @@ export function activeAttempt(shard: LogicalShard): CiAttempt {
 
 export function admitReceipt(request: CapacityRequest, offered: ExecutionReceipt, now: number): boolean {
   const shard = request.shards.find(s => s.name === offered.logicalShard);
-  if (!shard || request.superseded || !request.parentLive || request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed'))
+  if (!shard || request.superseded || !request.parentLive || request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed' || a.verifiedTestFailure === true))
       || request.prerequisites.some(p => p.conclusion === 'failure') || now >= request.deadline) return false;
   const attempt = activeAttempt(shard);
   if (attempt.childRunId === null || !['queued', 'running'].includes(attempt.phase)) return false;
@@ -252,18 +278,36 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
   const shard = request.shards.find(s => s.name === observation.receipt.logicalShard);
   const attempt = shard?.attempts.find(a => a.generation === observation.receipt.generation);
   if (!shard || !attempt || !validChildObservation(attempt, observation)) return false;
+  if(attempt.rejectedWorkflowSha&&(observation.status!=='completed'||observation.conclusion!=='cancelled'
+    ||observation.testStep!=='not_run'||observation.cleanupConfirmed!==true))return false;
+  const alreadyEnded = ['passed', 'failed', 'cancelled'].includes(attempt.phase);
+  const ended = alreadyEnded || (observation.status === 'completed' && observation.cleanupConfirmed === true);
   if (observation.testStep === 'failure') {
     if (attempt.generation !== shard.generation || attempt.phase === 'passed') request.evidenceConflict = true;
-    attempt.phase = 'failed'; attempt.reason = 'test_failed'; return true;
+    attempt.verifiedTestFailure = true;
+    attempt.phase = ended ? 'failed' : 'cancellation_unknown';
+    attempt.reason = ended ? 'test_failed' : 'test_failed_cleanup_unverified'; return true;
+  }
+  if (attempt.verifiedTestFailure) {
+    attempt.phase = ended ? 'failed' : 'cancellation_unknown';
+    attempt.reason = ended ? 'test_failed' : 'test_failed_cleanup_unverified'; return true;
   }
   if (attempt.generation !== shard.generation || ['passed', 'failed', 'cancelled'].includes(attempt.phase)) return false;
   if (observation.status === 'completed') {
-    if (observation.conclusion === 'success' && (now >= attempt.executionDeadline
+    const finish = observation.completedAt;
+    const finishedInLease = Number.isSafeInteger(finish) && finish! >= request.acceptedAt
+      && observation.startedAt !== null && finish! >= observation.startedAt
+      && finish! < attempt.executionDeadline && finish! <= now;
+    if (observation.conclusion === 'success' && (!finishedInLease
         || observation.startedAt === null || !Number.isSafeInteger(observation.startedAt)
         || observation.startedAt < request.acceptedAt || observation.startedAt > attempt.startDeadline)) {
       attempt.phase = 'cancellation_unknown'; attempt.reason = 'late_completion_unverified'; return true;
     }
-    if (observation.conclusion === 'success' && observation.jobConclusion === 'success' && observation.testStep === 'success') {
+    if (observation.cleanupConfirmed !== true) {
+      attempt.phase = 'cancellation_unknown'; attempt.reason = 'cleanup_or_termination_unverified'; return true;
+    }
+    if (observation.conclusion === 'success' && observation.jobConclusion === 'success' && observation.testStep === 'success'
+        && observation.exportComplete !== false && (observation.executionOutcome === undefined || observation.executionOutcome === 'completed')) {
       if (attempt.phase === 'cancelling' || attempt.phase === 'cancellation_unknown') {
         attempt.phase = 'cancelled'; attempt.reason = 'completed_after_fence';
       } else { attempt.phase = 'passed'; attempt.reason = null; }
@@ -273,9 +317,9 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
       else { attempt.phase = 'cancelled'; attempt.reason = 'infrastructure_ended'; }
     } else if (observation.testStep === 'unknown') {
       attempt.phase = 'cancellation_unknown'; attempt.reason = 'test_outcome_unknown';
-    } else if (attempt.profile !== 'hosted' && observation.conclusion === 'failure' && observation.testStep === 'not_run') {
-      attempt.phase = 'cancelled'; attempt.reason = 'infrastructure_failed';
-    } else { attempt.phase = 'failed'; attempt.reason = 'execution_failed'; }
+    } else if (observation.conclusion === 'failure' && observation.testStep === 'not_run') {
+      attempt.phase = attempt.profile === 'hosted' ? 'failed' : 'cancelled'; attempt.reason = 'infrastructure_failed';
+    } else { attempt.phase = 'cancellation_unknown'; attempt.reason = 'execution_outcome_unverified'; }
     return true;
   }
   if (observation.status === 'in_progress' && attempt.phase === 'queued') {
@@ -289,7 +333,7 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
 }
 
 export function aggregateCapacity(request: CapacityRequest, now: number): Aggregate {
-  if (request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed'))
+  if (request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed' || a.verifiedTestFailure === true))
       || request.prerequisites.some(p => p.conclusion === 'failure')) return { status: 'failure', reason: 'verified_failure' };
   if (request.superseded || !request.parentLive) return { status: 'cancelled', reason: 'parent_inactive' };
   if (now >= request.deadline && (request.completedAt === null || request.completedAt >= request.deadline)) {

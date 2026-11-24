@@ -6,6 +6,8 @@
  *                                                    Google lists for them
  *   PUT    /api/search-console/property              { project, site_url | null } bind, change or unbind
  *   POST   /api/search-console/property/check        { project } re-verify the binding's access now
+ *   POST   /api/search-console/sync                  { project } D5840 part 2: run one sync of the bound property now
+ *   GET    /api/search-console/results?project=      D5840 part 2: the venture's weekly results, from stored rows only
  *
  * One property per venture, through one member's own `google_search_console`
  * connection, switched on for the venture's company. A binding another
@@ -14,6 +16,11 @@
  * the signed-in principal; the check repeats that and marks the selection `denied` (D5840's state)
  * when Google no longer grants it. The browser receives the capability, the
  * status and the chosen property's identifier and level: never a token.
+ *
+ * The sync and the results answer 503 `search_console_unavailable` until the owner sets
+ * `GOOGLE_SEARCH_CONSOLE_APPROVED=1` (D5839's flag). Only the member whose connection serves the binding may
+ * start a sync (`services/searchConsoleTrigger.ts`); any reader of the venture may read its results
+ * (`searchConsoleWeekly`). Neither ever carries a search query: the sync never requests that dimension.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -25,6 +32,8 @@ import { isSupportSession } from '../services/companyAccess';
 import { projectEnabled } from '../integrations/companyScope';
 import type { IntegrationRow } from '../integrations/registry';
 import { SEARCH_CONSOLE_KEY, searchConsoleAccessToken } from '../integrations/providers/google_search_console';
+import { SearchConsoleRefusal, searchConsoleWeekly } from '../services/searchConsoleSync';
+import { triggerSearchConsoleSync } from '../services/searchConsoleTrigger';
 import {
   SearchConsoleError, getSearchConsoleSite, isPropertyId, listSearchConsoleSites, type SearchConsoleSite,
 } from '../integrations/searchConsoleOAuth';
@@ -51,6 +60,27 @@ export const SEARCH_CONSOLE_REFUSALS: Record<string, string> = {
   sign_in_again: 'Google asked you to sign in to Search Console again.',
   search_console_busy: 'Search Console is refreshing this connection. Try again in a moment.',
   search_console_unreadable: 'Search Console could not be read. Nothing changed; try again.',
+  search_console_unavailable: 'Search Console is not available yet.',
+  no_property_selected: 'Choose a Search Console property for this venture first.',
+  property_denied: 'Your Google account no longer reaches this property. Check its access, or choose another property.',
+  property_revoked: 'Google asked you to sign in to Search Console again, then check the property.',
+};
+
+/**
+ * What each sync outcome's `error_code` means, in a sentence the Results screen can show (D5840 part 2).
+ * The codes are `services/searchConsoleSync.ts`'s; Google's own text is never passed through.
+ */
+export const SEARCH_CONSOLE_SYNC_OUTCOMES: Record<string, string> = {
+  property_denied: 'Google no longer grants this account access to the property. Nothing new was stored.',
+  grant_revoked: 'The Search Console sign-in was revoked. Sign in again, then check the property.',
+  rate_limited: 'Google asked us to slow down. The weeks already read are kept; try again later.',
+  google_unavailable: 'Google did not answer. The weeks already read are kept; try again later.',
+  request_budget: 'This sync reached its request limit. The weeks already read are kept; the next sync continues.',
+  malformed_response: 'Google answered in a form we could not read. Nothing from that answer was stored.',
+  selection_changed: 'The property changed while the sync ran. Nothing was stored for the old one.',
+  sync_in_progress: 'A sync of this property is already running.',
+  token_busy: 'The Search Console connection is refreshing. Try again in a moment.',
+  token_unavailable: 'The Search Console connection could not be read. Try again, or sign in again.',
 };
 
 class Refused extends Error {
@@ -81,7 +111,9 @@ const handle = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => 
     if (await isSupportSession(c)) throw new Refused(403, 'support_session_refused');
     return await fn(c, user);
   } catch (e) {
-    const refused = e instanceof Refused ? e : e instanceof SearchConsoleError ? refusalOf(e) : null;
+    const refused = e instanceof Refused ? e
+      : e instanceof SearchConsoleRefusal ? new Refused(e.status, e.code)
+        : e instanceof SearchConsoleError ? refusalOf(e) : null;
     if (!refused) throw e;
     if (refused.code === 'sign_in_again' || refused.code === 'search_console_unreadable') {
       console.warn('[search_console] google refused', { outcome: (e as Error).message });
@@ -239,6 +271,29 @@ r.post('/property/check', handle(async (c, user) => {
   }
   const now = await bindingOf(c.env, venture.id);
   return c.json({ ok: true, binding: now ? { ...publicBinding(now), own: true } : null });
+}));
+
+/** The sync and the results stay dark until the owner's approval flag (D5839). */
+function approved(c: C) {
+  if (c.env.GOOGLE_SEARCH_CONSOLE_APPROVED !== '1') throw new Refused(503, 'search_console_unavailable');
+}
+
+r.post('/sync', handle(async (c, user) => {
+  approved(c);
+  const b = await body(c);
+  const run = await triggerSearchConsoleSync(c.env, user, b.project, 'manual');
+  if (run.error_code) console.warn('[search_console] sync outcome', { status: run.status, outcome: run.error_code });
+  return c.json({
+    ok: true,
+    sync: { ...run, detail: run.error_code ? SEARCH_CONSOLE_SYNC_OUTCOMES[run.error_code] ?? null : null },
+  });
+}));
+
+r.get('/results', handle(async (c, user) => {
+  approved(c);
+  const results = await searchConsoleWeekly(c.env, user, c.req.query('project'));
+  const code = 'last_error_code' in results ? results.last_error_code : null;
+  return c.json({ ok: true, ...results, last_error_detail: code ? SEARCH_CONSOLE_SYNC_OUTCOMES[code] ?? null : null });
 }));
 
 export const mount: RouteMount = { path: '/api/search-console', router: r };

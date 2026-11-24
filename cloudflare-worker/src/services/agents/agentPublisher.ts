@@ -103,7 +103,13 @@ export type PublisherObservations = {
   approvals: { user_id: number; decision_uid: string }[];
   /** Open PRs a human coordinator has cleared this task to overlap. */
   coordination_cleared?: number[];
+  /**
+   * D8078 (#8078): the owner's venture namespaces from the root `ventures.json`, each venture's code in
+   * `ventures/<slug>/`. Needed only when the intent touches `ventures/`; absent then, the plan refuses.
+   */
+  ventures?: VentureNamespace[] | null;
 };
+export type VentureNamespace = { slug: string; company_id: number };
 
 export type PublisherRefusalCode =
   | 'publisher_disabled' | 'invalid_intent' | 'invalid_observation'
@@ -111,7 +117,7 @@ export type PublisherRefusalCode =
   | 'installation_suspended' | 'installation_stale' | 'repository_mismatch' | 'target_ref_mismatch'
   | 'duplicate_publish' | 'idempotency_conflict' | 'task_already_merged' | 'task_pr_declined'
   | 'github_forbidden' | 'github_rate_limited'
-  | 'protected_path' | 'scope_violation'
+  | 'protected_path' | 'venture_scope_violation' | 'scope_violation'
   | 'base_unknown' | 'base_moved'
   | 'agent_checks_failed' | 'agent_checks_missing'
   | 'required_checks_missing' | 'required_checks_pending' | 'required_checks_failed'
@@ -160,6 +166,24 @@ const positive = (v: unknown): v is number => Number.isSafeInteger(v) && (v as n
 const PASSING: ReadonlySet<CheckConclusion> = new Set(['success']);
 const FAILING: ReadonlySet<CheckConclusion> = new Set(['failure', 'cancelled', 'timed_out', 'action_required']);
 
+/** D8078: the slug rule `scripts/lib/workIntent.mjs` applies to `ventures.json`. */
+const VENTURE_SLUG = /^[a-z](?:[a-z0-9]|-(?=[a-z0-9])){1,39}$/;
+const VENTURE_ROOT = 'ventures/';
+
+/**
+ * D8078 (#8078): the paths an intent may not write across venture namespaces. A venture company's agent writes only
+ * inside its own `ventures/<slug>/`; any other company's agent writes no venture folder. `null` means the namespaces
+ * are needed (a path is under `ventures/`, or the company is a venture) and were not supplied.
+ */
+export function ventureScopeViolations(intent: Pick<PublishIntent, 'company_id' | 'files'>, ventures: VentureNamespace[] | null | undefined): string[] | null {
+  const paths = intent.files.map(f => f.path);
+  const touches = paths.some(p => p.startsWith(VENTURE_ROOT));
+  if (!Array.isArray(ventures)) return touches ? null : [];
+  const own = ventures.find(v => v.company_id === intent.company_id) ?? null;
+  if (!own) return paths.filter(p => p.startsWith(VENTURE_ROOT));
+  return paths.filter(p => !p.startsWith(`${VENTURE_ROOT}${own.slug}/`));
+}
+
 const refuse = (code: PublisherRefusalCode, retryable: boolean, extra: Omit<PublisherRefusal, 'ok' | 'code' | 'retryable'> = {}): PublisherRefusal =>
   ({ ok: false, code, retryable, ...extra });
 
@@ -205,6 +229,7 @@ function observationProblem(o: PublisherObservations): string | null {
   if (!Number.isSafeInteger(o.now_ms) || o.now_ms < 0) return 'now_ms';
   if (!Array.isArray(o.existing_prs) || o.existing_prs.some(pr => !positive(pr?.number) || !Array.isArray(pr.files))) return 'existing_prs';
   if (!Array.isArray(o.approvals) || o.approvals.some(a => !positive(a?.user_id) || typeof a.decision_uid !== 'string' || !UID.test(a.decision_uid))) return 'approvals';
+  if (o.ventures != null && (!Array.isArray(o.ventures) || o.ventures.some(v => typeof v?.slug !== 'string' || !VENTURE_SLUG.test(v.slug) || !positive(v.company_id)))) return 'ventures';
   return null;
 }
 
@@ -347,6 +372,9 @@ export async function planAgentPublish(intent: PublishIntent, obs: PublisherObse
   const paths = intent.files.map(f => f.path);
   const protectedPaths = paths.filter(path => PROTECTED_PATH.test(path));
   if (protectedPaths.length) return refuse('protected_path', false, { paths: protectedPaths });
+  const crossVenture = ventureScopeViolations(intent, obs.ventures);
+  if (crossVenture === null) return refuse('invalid_observation', true, { field: 'ventures' });
+  if (crossVenture.length) return refuse('venture_scope_violation', false, { paths: crossVenture });
   const allowed = Array.isArray(inst.allowed_paths) ? inst.allowed_paths : [];
   const outside = paths.filter(path => !allowedBy(allowed, path));
   if (outside.length) return refuse('scope_violation', false, { paths: outside });

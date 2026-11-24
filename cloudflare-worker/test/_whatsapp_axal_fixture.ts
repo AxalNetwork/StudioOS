@@ -14,6 +14,7 @@ import { applyEngineSchema } from './_engine_schema.mjs';
 import channels from '../src/routes/channels.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 export const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -53,6 +54,7 @@ const CHANNEL_MIGRATIONS = ['106_pain_groups.sql', '211_founder_validate_evidenc
 
 export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } = {}) {
   const { DB, db } = aiBudgetFixture();
+  applySuppressionLedger(db); // D6654: the record-erasure path writes its ledger row.
   db.exec(`
     ALTER TABLE users ADD COLUMN founder_id INTEGER;
     ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;

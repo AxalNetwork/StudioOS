@@ -505,7 +505,7 @@ governance.post('/documents/:uid/versions', async (c) => {
     // Another upload took this number first: its row stands, and this file is not recorded. D6651: this
     // request created the file under its own fresh key and no row names it, so it leaves through the
     // one record-erasure path as `unreferenced`.
-    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => {});
     return refuse(c, 409, { code: 'version_conflict', message: 'Another version was uploaded at the same moment. Reload and upload again.' });
   }
   await c.env.DB.prepare('UPDATE governance_documents SET updated_by = ?, updated_at = ? WHERE uid = ?').bind(Number(user.id), now(), doc.uid).run();

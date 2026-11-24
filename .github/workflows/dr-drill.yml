@@ -14,8 +14,7 @@ on:
     - cron: '0 6 1 * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 # Non-secret config only. Secrets are scoped to the specific steps that
 # consume them (see the drill + notify steps below) so they aren't exposed
@@ -36,6 +35,8 @@ jobs:
   drill:
     environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 60
     # D263 — a step's `if:` cannot see that step's own `env:`, so "Notify on
     # failure" used to test a variable that was always empty there, and it was
@@ -82,7 +83,8 @@ jobs:
 
       - name: Install wrangler + jq
         run: |
-          npm i -g wrangler@latest
+          npm ci --prefix cloudflare-worker --include=dev --no-audit --no-fund
+          printf '%s\n' "$GITHUB_WORKSPACE/cloudflare-worker/node_modules/.bin" >> "$GITHUB_PATH"
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Run DR drill
@@ -123,7 +125,11 @@ jobs:
   independent-file-drill:
     name: Synthetic outside file restore
     if: vars.FILE_DR_PREVIEW_ENABLED == 'true'
+    # D8069: the outside copy's keys are read only inside production-ops, like every DR and recovery job.
+    environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

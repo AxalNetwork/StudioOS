@@ -1,17 +1,16 @@
 name: Approved file recovery snapshot
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'synthetic-proof' && 'Synthetic independent file proof' || 'Approved file recovery snapshot' }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'synthetic-proof' && 'Synthetic independent file proof' || github.event_name == 'workflow_dispatch' && inputs.mode == 'suppression-drill' && 'Synthetic suppression drill (preview ledger)' || 'Approved file recovery snapshot' }}
 on:
   schedule:
     - cron: '30 2 * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Approved snapshot or synthetic independent-copy proof (never a live restore)'
+        description: 'Approved snapshot, synthetic independent-copy proof or synthetic suppression drill (never a live restore)'
         type: choice
-        options: [snapshot, synthetic-proof]
+        options: [snapshot, synthetic-proof, suppression-drill]
         default: snapshot
-permissions:
-  contents: read
+permissions: {}
 concurrency:
   group: approved-file-recovery
   cancel-in-progress: false
@@ -21,6 +20,8 @@ jobs:
     # #6650/counsel approval and destination-prefix lock precede activation.
     if: vars.FILE_RECOVERY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'snapshot')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -85,7 +86,11 @@ jobs:
           PY
   synthetic-proof:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'synthetic-proof' && vars.FILE_DR_PREVIEW_ENABLED == 'true'
+    # D8069: the outside copy's keys are read only inside production-ops, like every DR and recovery job.
+    environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -105,3 +110,20 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y age >/dev/null
           python3 scripts/file-recovery-independent.py drill
+  suppression-drill:
+    # D6654: synthetic objects only. One object is erased after its backup (a row in the preview D1's
+    # record_suppression_ledger), the ledger is read back through the same D1 adapter a live restore
+    # uses, and the restore must skip it. The script refuses the production database id.
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'suppression-drill' && vars.FILE_RECOVERY_PREVIEW_DRILL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Restore synthetic objects, skipping the one the preview ledger suppresses
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_RECOVERY_PREVIEW_D1_TOKEN: ${{ secrets.FILE_RECOVERY_PREVIEW_D1_TOKEN }}
+          FILE_RECOVERY_PREVIEW_D1_ID: ${{ vars.FILE_RECOVERY_PREVIEW_D1_ID }}
+        run: python3 scripts/file-recovery-drill.py --preview-d1

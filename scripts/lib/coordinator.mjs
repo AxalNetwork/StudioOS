@@ -12,7 +12,7 @@ export const VERDICTS = ['close_done', 'close_superseded', 'release_to_ready', '
   'keep_blocked_on_dependency', 'keep_blocked_on_design', 'keep_as_is', 'needs_status_fix', 'split_or_rescope'];
 /** Slots that never receive a new build task: the coordinator, and slots already carrying a programme. */
 export const SLOT_EXCLUDE = ['S01', 'S18', 'S32'];
-export const SLOT_RANGE = [1, 37];
+export const SLOT_RANGE = [1, 39];
 export const MARKER_VERSION = 'v1';
 /** A run id: starts with a letter or digit, so `--run --go` is never mistaken for one. */
 export const RUN_ID = /^[A-Za-z0-9][\w.-]{0,63}$/;
@@ -23,7 +23,11 @@ export function slotOf(label) {
   return m ? `S${m[1].padStart(2, '0')}` : null;
 }
 
-/** A slot is a standard one only if AGENTS.md defines it: upper-case S01 to S37. */
+/**
+ * A slot is a standard one only if AGENTS.md defines it: upper-case S01 to S39
+ * (D8059 made S38 and S39 standard). The admin slot, `slot:chatgptpro`, is
+ * named, not numbered: it never receives a build task, so it is not standard here.
+ */
 export function isStandardSlotLabel(label) {
   const m = /^slot:S(\d{2})$/.exec(String(label));
   return !!m && Number(m[1]) >= SLOT_RANGE[0] && Number(m[1]) <= SLOT_RANGE[1];

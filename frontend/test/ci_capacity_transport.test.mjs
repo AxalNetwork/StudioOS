@@ -5,16 +5,14 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { EventEmitter } from "node:events";
 import { executeShard, verifiedPlan, verifyRuntime, ownedPaths, main as executionMain } from "../../scripts/ci/runner-execution.mjs";
-import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, symlinkSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { plannerSubmission, main as plannerMain } from "../../scripts/ci/capacity-planner.mjs";
 import { buildPlan } from "../../scripts/test-drift-parts.mjs";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { createHash } from "node:crypto";
 import "../../merge-control/test/runtime-loader.mjs";
-const { CapacityControl } = await import("../../merge-control/src/ciCapacityRuntime.ts");
-import { authenticateCapacity, boundedJson, CAPACITY_ISSUER } from "../../merge-control/src/ciCapacityAuth.ts";
+import { authenticateCapacity, boundedJson } from "../../merge-control/src/ciCapacityAuth.ts";
 import { GithubCapacityPorts, capacityGithubClient } from "../../merge-control/src/ciCapacityGithub.ts";
 import { CapacityOutbox } from "../../merge-control/src/ciCapacityOutbox.ts";
 import { CiCapacity, SqlCapacityStore } from "../../merge-control/src/ciCapacity.ts";
@@ -22,134 +20,12 @@ import { CI_CAPACITY_BUDGETS } from "../../merge-control/src/lib/ciCapacityPolic
 import { resolveCatalogProfile } from "../../scripts/ci/runners/catalog.mjs";
 import { main as admissionMain, admitRunnerJob, githubReadApi } from "../../scripts/ci/runner-admission.mjs";
 import { createReceiptReader, submitCapacity, githubOidcToken } from "../../scripts/ci/capacity-client.mjs";
-const REPO = "AxalNetwork/StudioOS", PREFIX = "/repos/" + REPO, SOURCE = "a".repeat(40), EXEC = "b".repeat(40);
-const SHARDS = Array.from({ length: 6 }, (_, i) => `worker-${i + 1}-of-6`);
-const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const jwk = { ...publicKey.export({ format: "jwk" }), kid: "fixture-key", alg: "RS256", use: "sig" };
-const config = { repository: REPO, repositoryId: 7, executorSha: EXEC, approvedGroupId: 5, selfHostedProfiles:['linux-x64'], prerequisiteJobs: ["fast"], fullSuiteJobs: [], appId: 23, maxExternalWorkerShards: 0, maxIncludedWorkerShards: 0, publication: "pilot" };
-const plan = JSON.stringify({ version: 1, parts: SHARDS.map((name) => ({ name, script: "test:worker", files: [] })) });
-function submission() {
-  return { version: 1, requestId: "00000000-0000-4000-8000-000000007973", repository: REPO, parentRunId: 12, parentAttempt: 1, parentWorkflowId: 9, event: "push", sourceSha: SOURCE, queueBaseSha: null, executorSha: EXEC, planDigest: "sha256:" + createHash("sha256").update(plan).digest("hex"), planArtifactId: 45, shards: SHARDS, prerequisites: ["fast"] };
+import { REPO, PREFIX, SOURCE, EXEC, SHARDS, privateKey, config, plan, submission, claims, token, fixture as capacityFixture, options, unlock } from './ci_capacity_fixture_7909.mjs';
+function fixture(t){
+ t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});
+ return capacityFixture(t,{clockInstalled:true});
 }
-function claims(child) {
-  const now = Math.floor(Date.now() / 1e3);
-  return { iss: CAPACITY_ISSUER, aud: "fixture-capacity", sub: `repo:${REPO}:ref:refs/heads/main`, exp: now + 300, nbf: now - 1, iat: now, repository: REPO, repository_id: "7", run_id: String(child ?? 12), run_attempt: "1", event_name: child ? "workflow_dispatch" : "push", ref: "refs/heads/main", sha: child ? EXEC : SOURCE, workflow_ref: `${REPO}/.github/workflows/${child ? "runner-executor" : "ci"}.yml@refs/heads/main`, workflow_sha: EXEC, job_workflow_ref: `${REPO}/.github/workflows/capacity-planner.yml@${EXEC}`, job_workflow_sha: EXEC };
-}
-function token(value = claims()) {
-  const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: jwk.kid })).toString("base64url"), body = Buffer.from(JSON.stringify(value)).toString("base64url"), payload = header + "." + body;
-  return payload + "." + sign("RSA-SHA256", Buffer.from(payload), privateKey).toString("base64url");
-}
-function fixture(t) {
-  t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});
-  const db = new DatabaseSync(":memory:");
-  t.after(() => db.close());
-  const kv = new Map();
-  let alarm = null;
-  const storage = { sql: { exec(query, ...values) {
-    const rows = db.prepare(query).all(...values);
-    return { toArray: () => rows };
-  } }, transactionSync(fn) {
-    db.exec("BEGIN");
-    try {
-      const result2 = fn();
-      db.exec("COMMIT");
-      return result2;
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw e;
-    }
-  }, get: async (key) => kv.get(key), put: async (key, value) => {
-    kv.set(key, value);
-  }, setAlarm: async (at) => {
-    alarm = at;
-  }, deleteAlarm: async () => {
-    alarm = null;
-  } };
-  const repo = { id: 7, full_name: REPO };
-  const parent = { id: 12, run_attempt: 1, workflow_id: 9, path: ".github/workflows/ci.yml", head_sha: SOURCE, event: "push", head_branch: "main", repository: repo, head_repository: repo, status: "completed", conclusion: "success" };
-  const parentJobs=[{id:10,name:"fast",run_id:12,run_attempt:1,head_sha:SOURCE,status:"completed",conclusion:"success"}];
-  const runners=[];
-  const children = new Map(), checks = [], calls = [];
-  let result = "queued", cancelThrows = false, postLost = false, incomplete=false;
-  const api = async (method, path, body) => {
-    calls.push({ method, path, body });
-    const url = new URL("https://api.github.com" + path), p = url.pathname;
-    if (p === PREFIX + "/git/ref/heads/main") return { ref: "refs/heads/main", object: { type: "commit", sha: EXEC } };
-    if (p.startsWith(PREFIX + "/compare/")) return { status: "identical", base_commit: { sha: EXEC }, merge_base_commit: { sha: EXEC } };
-    if (p === PREFIX + "/actions/runs/12" || p === PREFIX + "/actions/runs/12/attempts/1") return structuredClone(parent);
-    if (p === PREFIX + "/actions/runs/12/artifacts") return { total_count: 1, artifacts: [{ id: 45, name: "suite-plan", expired: false, workflow_run: { id: 12, head_sha: SOURCE, repository_id: 7, head_repository_id: 7 } }] };
-    if (p === PREFIX + "/actions/runs/12/attempts/1/jobs") return {total_count:parentJobs.length,jobs:structuredClone(parentJobs)};
-    if (p === "/orgs/AxalNetwork/actions/runner-groups/5") return { id: 5, name: "StudioOS Worker Pool", visibility: "selected", allows_public_repositories:true, restricted_to_workflows: true, selected_workflows: [`${REPO}/.github/workflows/runner-executor.yml@refs/heads/main`] };
-    if (p.endsWith("/runner-groups/5/repositories")) return { total_count: 1, repositories: [repo] };
-    if (p.endsWith("/runner-groups/5/runners")) return { total_count: runners.length, runners:structuredClone(runners) };
-    if (p === PREFIX + "/actions/workflows/runner-executor.yml") return { id: 11, path: ".github/workflows/runner-executor.yml", state: "active" };
-    if (p === PREFIX + "/actions/workflows/runner-executor.yml/dispatches") {
-      const id = 100 + children.size;
-      children.set(id, { capacityProfile:body.inputs.profile, id, run_attempt: 1, workflow_id: 11, path: ".github/workflows/runner-executor.yml", head_sha: EXEC, event: "workflow_dispatch", head_branch: "main", repository: repo, head_repository: repo, display_title: `Worker executor | ${body.inputs.request_id} | ${body.inputs.part} | generation ${body.inputs.generation}`, status: "in_progress", conclusion: null });
-      return null;
-    }
-    if (p === PREFIX + "/actions/workflows/runner-executor.yml/runs") return { total_count: children.size, workflow_runs: [...children.values()] };
-    const child = /\/actions\/runs\/(\d+)(.*)/.exec(p);
-    if (child && children.has(Number(child[1]))) {
-      const run = children.get(Number(child[1]));
-      if (child[2] === "/cancel") {
-        if (cancelThrows) throw new Error("uncertain cancellation");
-        run.status = "completed";
-        run.conclusion = "cancelled";
-        return null;
-      }
-      if (child[2].endsWith("/jobs")&&incomplete)return {total_count:0,jobs:[]};
-      if (child[2].endsWith("/jobs")) return { total_count: 1, jobs: [{ id: run.id + 1e3, name: "Admitted Worker shard", run_id: run.id, run_attempt: 1, head_sha: EXEC, status: result === "queued" ? "in_progress" : "completed", conclusion: result === "queued" ? null : result, labels:run.capacityProfile==='hosted'?['ubuntu-latest']:resolveCatalogProfile(run.capacityProfile).target.labels, started_at: (new Date()).toISOString(), steps: [{ name: "Run admitted Worker shard", status: result === "queued" ? "queued" : "completed", conclusion: result === "queued" ? null : result }] }] };
-      return structuredClone(run);
-    }
-    if (p === PREFIX + "/check-runs" && method === "POST") {
-      const check = { ...body, id: 200 + checks.length, app: { id: 23 } };
-      checks.push(check);
-      if (postLost) throw new Error("POST acknowledgement lost");
-      return check;
-    }
-    if (p.startsWith(PREFIX + "/check-runs/") && method === "PATCH") {
-      const check = checks.find((c) => c.id === Number(p.split("/").at(-1)));
-      Object.assign(check, body);
-      return check;
-    }
-    if (p.endsWith("/check-runs")) return { total_count: checks.length, check_runs: checks };
-    throw new Error("unexpected fixture request " + method + " " + path);
-  };
-  const fetcher = async (input, init) => {
-    const url = new URL(String(input));
-    if (url.origin === CAPACITY_ISSUER) return Response.json({ keys: [jwk] });
-    if (url.pathname.includes("/access_tokens")) return Response.json({ token: "fixture-only-installation" });
-    try {
-      const body = init?.body ? JSON.parse(String(init.body)) : void 0;
-      const value = await api(init?.method ?? "GET", url.pathname + url.search, body);
-      return value === null ? new Response(null, { status: 204 }) : Response.json(value);
-    } catch {
-      return new Response("fixture unavailable", { status: 503 });
-    }
-  };
-  const ctx = { storage };
-  const env = { REPOSITORY: REPO, CAPACITY_ENABLED: "true", CAPACITY_OWNER_TOKEN: "fixture-owner", CAPACITY_AUDIENCE: "fixture-capacity", CAPACITY_CONFIG: JSON.stringify(config), GITHUB_APP_ID: "23", GITHUB_INSTALLATION_ID: "2", GITHUB_APP_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString() };
-  let control = new CapacityControl(ctx, env);
-  const clientFetch = async (input, init) => control.fetch(new Request(input, init));
-  return { storage, api, fetcher, parent, parentJobs, children, runners, missingResults:()=>{incomplete=true;}, checks, calls, env, alarm: () => alarm, restart: () => {
-    control = new CapacityControl(ctx, env);
-  }, tick: () => control.alarm(), clientFetch, control: () => control, result: (value) => {
-    result = value;
-    for (const r of children.values()) {
-      r.status = value === "queued" ? "in_progress" : "completed";
-      r.conclusion = value === "queued" ? null : value;
-    }
-  }, cancelUncertain: () => {
-    cancelThrows = true;
-  }, postLost: () => {
-    postLost = true;
-  } };
-}
-const options = (fetcher, child) => ({ url: "https://capacity.invalid", audience: "fixture-capacity", oidcToken: async () => token(claims(child)), fetcher });
-async function unlock(f) {
-  return f.control().fetch(new Request("https://capacity.invalid/capacity/switch", { method: "POST", headers: { authorization: "Bearer fixture-owner" }, body: '{"kill":false}' }));
-}
+
 test("signed OIDC transport survives restart, binds executor receipt, and publishes only pilot authority", async (t) => {
   const f = fixture(t);
   t.mock.method(globalThis, "fetch", f.fetcher);
@@ -226,7 +102,8 @@ test("unknown pages/rate limits, wrong group, and excessive bodies fail conserva
   await assert.rejects(incomplete.pages(PREFIX + "/actions/runs", "workflow_runs"), /incomplete/);
   const duplicate = new GithubCapacityPorts(async () => ({ total_count: 2, workflow_runs: [{ id: 1 }, { id: 1 }] }), config);
   await assert.rejects(duplicate.pages(PREFIX + "/actions/runs", "workflow_runs"), /duplicate/);
-  const group = new GithubCapacityPorts(async (_method,path) => path.endsWith('/repositories')?{total_count:1,repositories:[{id:7,full_name:REPO}]}:path.includes('/repositories?')?{total_count:1,repositories:[{id:7,full_name:REPO}]}:path.includes('/runners?')?{total_count:0,runners:[]}:{id:6,name:'StudioOS Worker Pool',visibility:'selected',allows_public_repositories:true,restricted_to_workflows:true,selected_workflows:[`${REPO}/.github/workflows/runner-executor.yml@refs/heads/main`]}, config);
+  const groupApi = async (_method,path) => path.endsWith('/repositories')?{total_count:1,repositories:[{id:7,full_name:REPO}]}:path.includes('/repositories?')?{total_count:1,repositories:[{id:7,full_name:REPO}]}:path.includes('/runners?')?{total_count:0,runners:[]}:{id:6,name:'StudioOS Worker Pool',visibility:'selected',allows_public_repositories:true,restricted_to_workflows:true,selected_workflows:[`${REPO}/.github/workflows/runner-executor.yml@refs/heads/main`]};
+  const group = new GithubCapacityPorts(async()=>{throw Error("repo client must not read org");},config,Date.now,undefined,groupApi);
   await assert.rejects(group.inventory(), /unapproved/);
   const rate = new GithubCapacityPorts(async () => {
     throw new Error("429");
@@ -296,7 +173,11 @@ test("the real observation adapter distinguishes infrastructure before tests fro
   assert.equal(id, 100);
   const receipt = { ...attempt, childRunId: id };
   f.result("failure");
-  assert.equal((await ports.observe(receipt))?.testStep, "failure");
+  assert.equal((await ports.observe(receipt))?.testStep, "unknown");
+  const verified = new GithubCapacityPorts(f.api, config, Date.now, async (owned, jobId) => ({
+    receipt: owned, jobId, observedAt: Date.now(), testStep: 'failure', executionOutcome: 'completed', cleanupConfirmed: true,
+  }));
+  assert.equal((await verified.observe(receipt))?.testStep, 'failure');
   const infra = new GithubCapacityPorts(async (method, path, body) => {
     const value = await f.api(method, path, body);
     if (path.includes("/jobs")) value.jobs[0].steps[0] = { name: "Run admitted Worker shard", status: "completed", conclusion: "skipped" };
@@ -375,7 +256,9 @@ test('real ports allow one confirmed infrastructure fallback and preserve an old
    else if(method==='GET'){value.status='completed';value.conclusion='failure';}
   }
   return value;
- },config);
+ },config,Date.now,async(receipt,jobId)=>receipt.childRunId===100?{receipt,jobId,observedAt:Date.now(),testStep:infrastructure?'not_run':'failure',executionOutcome:infrastructure?'setup_failure':'completed',cleanupConfirmed:true}:null,async(method,path,body)=>{
+  if(path.includes('/runner-groups/5/runners'))return {total_count:1,runners:[linuxMember()]};return f.api(method,path,body);
+ });
  const capacity=new CiCapacity(store,ports,REPO,{version:1,maxExternalWorkerShards:1,maxIncludedWorkerShards:0,minimumHostedWorkerShards:1,approvedGroupId:5,budgets:{...CI_CAPACITY_BUDGETS}});
  await capacity.submit(submission());await capacity.tick();await capacity.tick();await capacity.tick();
  const request=store.get(submission().requestId),shard=request.shards[0];
@@ -396,6 +279,11 @@ test('bounded publication cursor advances active requests and prunes orphaned in
  await outbox.publish(store,pending,'pilot');assert.equal(f.checks.length,6);
  const removed=f.checks[0].external_id.slice(0,36);f.storage.sql.exec('DELETE FROM ci_capacity_requests WHERE id = ?',removed);
  await outbox.publish(store,pending,'pilot');
+ assert.equal(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?',removed+':pilot').toArray().length,1,'an orphan with publication still owed retains its evidence');
+ const orphan=JSON.parse(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?',removed+':pilot').toArray()[0].state);
+ orphan.sent=JSON.stringify({status:'success',reason:'all_shards_verified'});
+ f.storage.sql.exec('UPDATE capacity_publications SET state=? WHERE id=?',JSON.stringify(orphan),removed+':pilot');
+ await outbox.publish(store,pending,'pilot');
  assert.equal(f.storage.sql.exec('SELECT state FROM capacity_publications WHERE id = ?',removed+':pilot').toArray().length,0);
 });
 
@@ -404,11 +292,13 @@ test('capacity App client scopes its token, fixes the API origin and caps authen
  const api=await capacityGithubClient({REPOSITORY:REPO,GITHUB_APP_ID:'23',GITHUB_INSTALLATION_ID:'2',GITHUB_APP_PRIVATE_KEY:privateKey.export({type:'pkcs8',format:'pem'}).toString()},async(url,init)=>{
   calls.push({url,init});return String(url).endsWith('/access_tokens')?Response.json({token:'fixture-installation'}):Response.json({ok:true});
  });
- assert.deepEqual(JSON.parse(calls[0].init.body),{repositories:['StudioOS'],permissions:{actions:'write',checks:'write',contents:'read',organization_self_hosted_runners:'read'}});
- for(let i=0;i<100;i++)await api('GET',PREFIX+'/actions/runs/12');
+ assert.deepEqual(JSON.parse(calls[0].init.body),{repositories:['StudioOS'],permissions:{actions:'write',checks:'write',contents:'read'}});
+ for(let i=0;i<100;i++){
+  await api('GET',PREFIX+'/actions/runs/12');
+ }
  await assert.rejects(api('GET',PREFIX+'/actions/runs/12'),/budget/);
  assert.equal(calls.every(c=>String(c.url).startsWith('https://api.github.com/')),true);
- assert.equal(calls.every(c=>c.init.redirect==='error'&&(c.init.signal instanceof AbortSignal)),true);
+ assert.equal(calls.every(c=>c.init.redirect==='error'&&c.init.signal instanceof AbortSignal),true);
 });
 
 const authorityModule=new URL('../../scripts/ci/executor-authority.mjs',import.meta.url);
@@ -426,7 +316,7 @@ async function executorTestDependencies({env,verifyIsolation,fetcher}) {
 const linuxMember=()=>({id:5,os:'linux',status:'online',busy:false,labels:['self-hosted','Linux','X64','studioos-worker-v1'].map(name=>({name}))});
 const macMember=(capability='studioos-macbook')=>({id:6,os:'osx',status:'online',busy:false,labels:['self-hosted','macOS','ARM64',capability].map(name=>({name}))});
 test('mixed inventory retains Linux while legacy and fully capable Macs stay outside the explicit milestone',async t=>{
- const f=fixture(t),ports=new GithubCapacityPorts(f.api,config);
+ const f=fixture(t),ports=new GithubCapacityPorts(f.api,config,Date.now,undefined,f.api);
  f.runners.push(linuxMember(),macMember(),{...macMember('studioos-worker-v1'),id:7});
  const inventory=await ports.inventory();
  assert.deepEqual(inventory.runners.map(r=>[r.id,r.profile]),[[5,'linux-x64']]);
@@ -440,7 +330,7 @@ test('mixed inventory retains Linux while legacy and fully capable Macs stay out
 });
 
 test('malformed inventory still refuses the snapshot; valid ineligible members are not authority errors',async t=>{
- const f=fixture(t),ports=new GithubCapacityPorts(f.api,config);
+ const f=fixture(t),ports=new GithubCapacityPorts(f.api,config,Date.now,undefined,f.api);
  f.runners.push(linuxMember());
  for(const patch of [{busy:'unknown'},{labels:null},{labels:[{name:7}]},{os:'unknown'},{id:0},{os:'linux',labels:macMember('studioos-worker-v1').labels}]){
   f.runners[1]={...macMember(),...patch};await assert.rejects(ports.inventory(),/runner_shape|runner_profile/);
@@ -524,8 +414,8 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
    await f.control().fetch(new Request('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'}));
    await assert.rejects(executionMain('run',cliEnv,dependencies),/superseded_before_execution/);
   }else{
-   assert.equal(await executionMain('run',cliEnv,dependencies),outcome==='failure'?(jointAuthority?1:23):0);
-   if(jointAuthority)assert.equal(liveChecks>0,true);
+   await assert.rejects(executionMain('run',cliEnv,dependencies),/container_profile_mismatch|execution_boundary_unavailable/);
+   assert.equal(liveChecks,0,'a partial boundary cannot authorize candidate execution');
   }
   if(outcome==='revoked')await f.control().fetch(new Request('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'}));
   const execution=()=>executeShard({admitted,paths:{source:process.cwd(),temp:dir},testDriver:join(process.cwd(),'scripts/test-drift-parts.mjs'),planPath,readReceipt:liveRead,gitHead:()=>SOURCE,gitClean:()=>true,killGroup:()=>{},run:(_binary,_args,options)=>{
@@ -535,7 +425,8 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
   }});
   if(outcome==='revoked'){await assert.rejects(execution(),/superseded_before_execution/);assert.equal(started,0);return;}
   const result=await execution();assert.equal(result.code,outcome==='failure'?23:0);assert.equal(started,1);
-  assert.equal(isolationChecks>=2&&oidcReads>=4,true);
+  assert.equal(isolationChecks>=2,true);
+  assert.equal(oidcReads,2,'the two trusted reader lifetimes each reuse a short-lived token; authority still verifies every read');
   if(outcome==='incomplete')f.missingResults();
   f.result(outcome==='failure'?'failure':'success');await f.tick();
   assert.equal(f.checks[0].status,outcome==='incomplete'?'in_progress':'completed');
@@ -550,4 +441,40 @@ test('a persisted Mac generation cannot retrieve a receipt under the Linux miles
  const store=new SqlCapacityStore(f.storage),record=store.get(submission().requestId);record.shards[0].attempts[0].profile='macos-arm64';store.save(record);
  const response=await f.clientFetch('https://capacity.invalid/capacity/receipt',{method:'POST',headers:{authorization:'Bearer '+token(claims(100))},body:JSON.stringify({requestId:record.submission.requestId,shard:SHARDS[0],generation:1,profile:'macos-arm64'})});
  assert.deepEqual(await response.json(),{active:false,receipt:null});
+});
+
+test('D8009 trusted outcome evidence binds the complete receipt, job, freshness and types', async t => {
+  const f=fixture(t),ports=new GithubCapacityPorts(f.api,config,Date.now,undefined,f.api);
+  const attempt={...submission(),logicalShard:SHARDS[0],profile:'hosted',generation:1,childRunId:null,childAttempt:1,startDeadline:Date.now()+60_000,executionDeadline:Date.now()+600_000};
+  await assert.rejects(ports.dispatch(attempt),/discovery_required/);
+  const receipt={...attempt,childRunId:await ports.discover(attempt)};f.result('failure');
+  const evidence={receipt,jobId:1100,observedAt:Date.now(),testStep:'failure',executionOutcome:'completed',cleanupConfirmed:true};
+  const read=async value=>new GithubCapacityPorts(f.api,config,Date.now,async()=>structuredClone(value)).observe(receipt);
+  assert.equal((await read(evidence)).testStep,'failure');
+  for(const field of ['version','requestId','repository','logicalShard','event','parentWorkflowId','parentRunId','parentAttempt','sourceSha','queueBaseSha','planDigest','planArtifactId','executorSha','profile','generation','childRunId','childAttempt','startDeadline','executionDeadline']){
+    assert.equal(await read({...evidence,receipt:{...receipt,[field]:'wrong'}}),null,field);
+  }
+  for(const patch of [{jobId:999},{observedAt:Date.now()+1},{observedAt:Date.now()-30_001},{testStep:'passed'},{executionOutcome:'retry'},{cleanupConfirmed:'true'}]){
+    assert.equal(await read({...evidence,...patch}),null,JSON.stringify(patch));
+  }
+  for(const executionOutcome of ['timed_out','cleanup_failure']){
+    const observed=await read({...evidence,testStep:'unknown',executionOutcome,cleanupConfirmed:false});
+    assert.equal(observed.testStep,'unknown');assert.equal(observed.cleanupConfirmed,false);assert.equal(observed.executionOutcome,executionOutcome);
+  }
+});
+
+test('D8009 adapter uses whole-job completion and refuses missing or incoherent timestamps', async t => {
+  const f=fixture(t),ports=new GithubCapacityPorts(f.api,config,Date.now,undefined,f.api);
+  const attempt={...submission(),logicalShard:SHARDS[0],profile:'hosted',generation:1,childRunId:null,childAttempt:1,startDeadline:Date.now()+60_000,executionDeadline:Date.now()+600_000};
+  await assert.rejects(ports.dispatch(attempt),/discovery_required/);
+  const receipt={...attempt,childRunId:await ports.discover(attempt)};f.result('success');
+  const observed=await ports.observe(receipt);
+  assert.equal(observed.completedAt,Date.now());assert.equal(observed.cleanupConfirmed,true);
+  for(const bad of [null,'invalid',new Date(Date.now()-1).toISOString()]){
+    const missing=new GithubCapacityPorts(async(method,path,body)=>{
+      const value=await f.api(method,path,body);if(path.includes('/jobs'))value.jobs[0].completed_at=bad;return value;
+    },config);
+    const result=await missing.observe(receipt);
+    assert.equal(result.completedAt,null);assert.equal(result.cleanupConfirmed,false);
+  }
 });

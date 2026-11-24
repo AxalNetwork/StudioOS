@@ -116,7 +116,7 @@ test('D699 one switch writer and account sheet member routes', () => {
   assert.doesNotMatch(sheet, /\/companies\/new|\/switch\//);
   assert.match(sheet, /Unreadable —/);
   const account = read('frontend/src/ui/phone/AccountSheet.jsx');
-  for (const route of ['/profile', '/account/usage', '/account/connectors', '/trust/me', '/my/events', '/pricing', '/wellbeing', '/referrals']) assert.ok(account.includes(`'${route}'`) || account.includes(`"${route}"`), route);
+  for (const route of ['/profile', '/account/usage', '/account/connectors', '/trust/me', '/my/events', '/pricing', '/wellbeing', '/referrals']) assert.ok(account.includes(`'${route}'`) || account.includes(`"${route}"`) || account.includes(`"${route}?`), route);
   assert.match(account, /onLogout\?\.\(\)/);
   const companyHtml = render(h(ActiveCompanyContext.Provider, { value: { company: { id: 1, company_name: 'Juniper Labs' }, companies: [], setCompany() {}, setCompanies() {} } },
     h(CompanySheet, { onClose() {} })));
@@ -128,7 +128,8 @@ test('D699 one switch writer and account sheet member routes', () => {
     h(AccountSheet, { user: { name: 'Ada Quill' }, onClose() {}, onLogout() {} })));
   assert.match(accountHtml, />AQ<\/span>/);
   assert.match(accountHtml, /Founder · Juniper Labs/);
-  assert.match(accountHtml, /Founder Wellbeing/);
+  assert.match(accountHtml, />Wellness</, 'D7118 part 2: the row is renamed Wellness');
+  assert.match(accountHtml, /href="\/wellbeing\?period=today"/, 'and opens Today in one tap');
   assert.match(accountHtml, /Refer &amp; Earn/);
   assert.match(accountHtml, /Log Out/);
   assert.match(accountHtml, /href="\/my\/events"/);
@@ -346,7 +347,8 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) offered.add(row.to);
   const sheets = read('frontend/src/ui/phone/CompanySheet.jsx') + read('frontend/src/ui/phone/AccountSheet.jsx');
   for (const [, to] of sheets.matchAll(/'(\/[a-z][a-z/-]*)'/g)) offered.add(to);
-  for (const [, to] of sheets.matchAll(/to="(\/[a-z][a-z/-]*)"/g)) offered.add(to);
+  // D7118 part 2: a row may open a page at a view (`/wellbeing?period=today`); its destination is the path.
+  for (const [, to] of sheets.matchAll(/to="(\/[a-z][a-z/-]*)(?:\?[^"]*)?"/g)) offered.add(to);
   for (const [to, from] of wanted) assert.ok(offered.has(to), `${to} (${from}) has no phone home`);
 
   // The switch and the create go through the one switch path.
