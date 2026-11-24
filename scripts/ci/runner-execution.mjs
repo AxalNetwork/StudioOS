@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /** D7886 (#7886): exact-plan Worker execution, immutable event context, scoped cleanup and real child-result truth. */
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { availableParallelism, totalmem } from 'node:os';
 import { EXECUTION_BUDGETS } from './runner-admission.mjs';
+import { FINISH_RESERVE_MS, JobContainer, REMOVAL_RESERVE_MS } from './runners/job-container.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { buildPlan, validatePlan } from '../test-drift-parts.mjs';
@@ -150,51 +151,203 @@ export async function withCancellation(body,{signals=process}={}){
  finally{signals.removeListener('SIGINT',cancel);signals.removeListener('SIGTERM',cancel);}
 }
 
-/** The exact container this run owns, recorded before start so the workflow's cleanup step can remove it after process loss. */
-export const containerRecordPath=paths=>join(paths.temp,'container-owner.json');
-const EXIT={execution_cancelled:130,execution_timed_out:124};
+/**
+ * S32 F1/F3: removal is inspect, rm and the absence check (3 x 30s). The Linux Run step is wrapped at 26 minutes from
+ * its start; process start (performance.timeOrigin) less a small margin bounds that conservatively.
+ */
+export const LINUX_RUN_STEP_MS=26*60000, RUN_STEP_MARGIN_MS=5000;
+export const runStepDeadline=(origin=performance.timeOrigin)=>Math.floor(origin)+LINUX_RUN_STEP_MS-RUN_STEP_MARGIN_MS;
 
-/** Create, re-admit against the live container, run interruptibly, and remove the exact container on every path. */
-export async function runInContainer({job,executionIsolation,admit,current,paths,planPath,signal,log=console.error}){
- need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function','container_profile_mismatch');
- const record=containerRecordPath(paths);
- job.onOwned=owned=>writeFileSync(record,JSON.stringify(owned)+'\n',{mode:0o600,flag:'wx'});
- let code=1;
- try{
-  need(!signal?.aborted,'execution_cancelled');
-  job.create(current.identity,{source:paths.source,plan:planPath});
-  need(!signal?.aborted,'execution_cancelled');
-  const live=await admit(executionIsolation);
-  need(live?.allowed===true&&JSON.stringify(live.identity)===JSON.stringify(current.identity),'receipt_superseded_before_execution');
-  await job.runCandidateInterruptible({receipt:current.identity,admitted:live,signal});
-  code=0;
- }catch(error){
-  const reason=signal?.aborted?'execution_cancelled':error?.message;
-  code=EXIT[reason]??1;log(`container_execution_${code===0?'ok':'failed'}: ${/^[a-z_]+$/.test(reason??'')?reason:'unexpected'}`);
- }finally{
-  try{job.cleanup(current.identity);if(job.owned===null)rmSync(record,{force:true});}
-  catch{log('container_cleanup_failed: the record stays for the cleanup step');code=code||1;}
- }
- return code;
+/**
+ * Proposed supervisor exit (D8010): a real nonzero TEST exit first; then cancelled 130, timed out 124; zero only
+ * for an observed test success whose removal was verified AND whose traces were exported to a completed offer.
+ * An absent exporter or unverified cleanup is never successful proof. `category` is the coarse truth the
+ * coordinator needs: success | test_failure | cancelled | timed_out | infrastructure | incomplete_cleanup.
+ * `cleanupComplete` is always reported too, so a test failure with incomplete cleanup still says so.
+ */
+/*
+ * S32 (#8009, durable tail): `overran` is true when the run reached its outcome after the lifecycle bound. The
+ * durable-store writes after a verified removal are synchronous local fsyncs that cannot be interrupted or abandoned
+ * without leaving the record's state unknown, so they are not raced; instead, a run that finishes past the bound is
+ * never reported as success. A real test failure, cancellation or timeout keeps its own result and exit.
+ */
+export function classifyOutcome({install,test,exported,cleanup,infrastructure,aborted,overran=false}){
+ const realTestFailure=test?.status==='failure'&&Number.isSafeInteger(test.exitCode)&&test.exitCode>0;
+ const statuses=[install?.status,test?.status];
+ const cancelled=statuses.includes('cancelled')||(aborted&&!realTestFailure&&test?.status!=='success');
+ const timedOut=statuses.includes('timed_out');
+ const testPassed=test?.status==='success';
+ const exportOk=exported?.state==='complete';
+ const cleanupOk=['complete','none'].includes(cleanup?.state);
+ const result=realTestFailure?'test_failure':cancelled?'cancelled':timedOut?'timed_out'
+  :infrastructure?'infrastructure':install&&install.status!=='success'?'install_failure'
+  :testPassed&&!cleanupOk?'cleanup_failure':testPassed&&!exportOk?'export_failure':testPassed&&overran?'deadline_overrun':testPassed?'success':'unknown';
+ const category={test_failure:'test_failure',cancelled:'cancelled',timed_out:'timed_out',cleanup_failure:'incomplete_cleanup',success:'success'}[result]??'infrastructure';
+ const code=realTestFailure?test.exitCode:cancelled?130:timedOut?124:result==='success'?0:1;
+ return {result,category,code,cleanupComplete:cleanupOk};
 }
 
-/** Workflow cleanup: remove a container a lost supervisor left behind, by its exact record only, then this run's files. */
-export async function recoverOwned(paths,{recover}){
- const record=containerRecordPath(paths);let text=null;
- try{text=readFileSync(record,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
- if(text===null)return 'none';
- const outcome=recover(JSON.parse(text));rmSync(record,{force:true});return outcome;
+/** Installs and tests run only inside a verified execution boundary job; any other route refuses (#7905, D8007). */
+export function requireExecutionBoundary(dependencies){
+ need(dependencies?.job&&typeof dependencies.executionIsolation==='function','execution_boundary_unavailable');
+ return dependencies.job;
+}
+
+/**
+ * S32 F1/F3: wait for `work` no longer than `until`, and stop waiting on `signal`. The callee keeps whatever it was
+ * doing (read-only admission or inspection), but the supervisor's own timeline never passes the phase deadline.
+ */
+export async function withinPhase(work,{until,signal,now=Date.now,timers={setTimeout,clearTimeout},expired='phase_budget_exhausted'}){
+ need(Number.isSafeInteger(until)&&until-now()>0,expired);
+ need(!signal?.aborted,'execution_cancelled');
+ let timer,abort;
+ const stop=new Promise((_,reject)=>{
+  timer=timers.setTimeout(()=>reject(new Error(expired)),until-now());
+  abort=()=>reject(new Error('execution_cancelled'));signal?.addEventListener('abort',abort,{once:true});
+ });
+ try{return await Promise.race([Promise.resolve().then(work),stop]);}
+ finally{timers.clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+}
+/** A phase signal: the run's cancellation, or the phase deadline, whichever comes first. */
+const phaseSignal=(signal,until,now=Date.now)=>AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(Math.max(1,until-now()))]);
+
+/**
+ * S32 C3: what an unconfirmed create leaves behind, after exact-name reconciliation. `exact` is adopted and
+ * removed through the normal exact-ID path (recorded on the cleanup as reconciled); every other state is
+ * incomplete cleanup and keeps the durable create intent for the cleanup step and the next prepare.
+ */
+const createCleanup=(job)=>{
+ const retained=Boolean(job.intentRecorded),state=job.createReconciliation?.state;
+ if(state==='absent')return {state:'unverified',reason:'create_unconfirmed_absent',retained};
+ if(state==='conflict')return {state:'unknown',reason:'create_name_conflict',retained};
+ return {state:'unknown',reason:'create_unconfirmed',retained};
+};
+
+/**
+ * The supervisor owns the whole lifecycle: create, live re-admission, install, test, capture, bounded export,
+ * then verified exact-ID removal. Ownership evidence is written to the durable store before start and removed
+ * only once the engine reports the exact container gone; any failed or uncertain removal keeps it.
+ *
+ * S32 F1/F3: one lifecycle bound (the earlier of the receipt and the Run step wrapper) covers every mandatory
+ * phase. Create, re-admission, install, the boundary recheck and the test end FINISH_RESERVE_MS before it; the
+ * export ends REMOVAL_RESERVE_MS before it; inspect, rm and the absence check end by it. Each engine call is
+ * bounded by its phase deadline, and the supervisor never waits on any phase past that deadline.
+ * S32 F6: every engine call is interruptible. The run's cancellation stops create, re-admission, install, the
+ * recheck, the test and the export; removal is never cancellable.
+ */
+export async function runInContainer({job,executionIsolation,admit,recheck=null,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null,stepDeadline=null}){
+ // #8345: hosted and github-8 run only inside a trusted JobContainer serving that same profile; linux-x64 is unchanged.
+ const profileId=current?.profile?.id;
+ need((profileId==='linux-x64'||(['hosted','github-8'].includes(profileId)&&job instanceof JobContainer&&job.profileId===profileId))
+  &&typeof executionIsolation==='function'&&typeof admit==='function'&&store,'container_profile_mismatch');
+ const identity=current.identity;
+ // The earlier of the receipt and the step wrapper bounds work, export and removal alike.
+ const bound=Number.isSafeInteger(stepDeadline)?Math.min(identity.executionDeadline,stepDeadline):identity.executionDeadline;
+ const workUntil=bound-FINISH_RESERVE_MS,exportUntil=bound-REMOVAL_RESERVE_MS;
+ job.workDeadline=bound;
+ let record=null,infrastructure=null,install=null,test=null,exported={state:exporter?'not_run':'not_configured'},cleanup={state:'none'};
+ job.onOwned=owned=>{store.write(owned);record=owned;};
+ if(typeof store.writeIntent==='function')job.onCreateIntent=intent=>store.writeIntent(intent);
+ try{
+  if(!signal?.aborted){
+   await job.create(identity,{source:paths.source,plan:planPath},{signal});
+   if(!signal?.aborted){
+    const live=await withinPhase(()=>admit(executionIsolation,{signal:phaseSignal(signal,workUntil,now),until:workUntil}),{until:workUntil,signal,now,expired:'admission_budget_exhausted'});
+    if(!(live?.allowed===true&&JSON.stringify(live.identity)===JSON.stringify(identity)))infrastructure='receipt_superseded_or_isolation_refused';
+    else{
+     install=await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'install'});
+     // D8007: the same verified boundary instance is re-checked before tests; a changed or unverifiable one stops here.
+     const instance=job.boundaryIdentity?.()??null;
+     if(install.status!=='success')test={phase:'test',status:'not_run',exitCode:null,signal:null};
+     else{
+      let rechecked=false,reason='boundary_recheck_failed';
+      try{rechecked=instance&&typeof recheck==='function'&&await withinPhase(()=>recheck({signal:phaseSignal(signal,workUntil,now)}),{until:workUntil,signal,now,expired:'recheck_budget_exhausted'})===true&&JSON.stringify(job.boundaryIdentity())===JSON.stringify(instance);}
+      catch(error){reason=/^[a-z_]+$/.test(error?.message??'')?error.message:reason;}
+      if(!rechecked){infrastructure=reason;test={phase:'test',status:'not_run',exitCode:null,signal:null};}
+      else test=await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'test'});
+     }
+    }
+   }
+  }
+ }catch(error){infrastructure=/^[a-z_]+$/.test(error?.message??'')?error.message:'unexpected';}
+ // Capture/export while the container still exists, only inside the lease and never eating the removal reserve.
+ if(exporter&&record&&job.owned){
+  if(exportUntil-now()<=0)exported={state:'skipped_no_budget'};
+  else{try{exported=await withinPhase(()=>exporter({receipt:identity,container:{id:record.id,owner:record.owner},observedTest:test,signal,deadline:exportUntil}),{until:exportUntil,now,expired:'export_budget_exhausted'});}
+   catch(error){exported={state:'failed',...(error?.message==='export_budget_exhausted'?{reason:'export_budget_exhausted'}:{})};}}
+ }
+ // S32 C3: a create whose ID never came back may have left an engine object; that is not a clean 'none'.
+ if(!record&&job.createAttempted)cleanup=createCleanup(job);
+ if(record){
+  const reconciled=job.createReconciliation?.state==='exact'?{reconciled:'create_unconfirmed'}:{};
+  try{
+   await job.cleanup(identity,{until:bound});
+   if(await job.verifyRemoved(record,{until:bound})){store.remove(record.owner);cleanup={state:'complete',...reconciled};}
+   else cleanup={state:'unverified',retained:true,...reconciled};
+  }catch{cleanup={state:'failed',retained:true,...reconciled};}
+ }
+ // Measured after the durable tail (store.write/remove are synchronous local fsyncs): past the bound is not success.
+ const overrunMs=Math.max(0,now()-bound),overran=overrunMs>0;
+ const outcome=classifyOutcome({install,test,exported,cleanup,infrastructure,aborted:Boolean(signal?.aborted),overran});
+ log(JSON.stringify({component:'runner-executor',event:'container_outcome',category:outcome.category,result:outcome.result,supervisorExit:outcome.code,cleanupComplete:outcome.cleanupComplete,install,test,export:exported,cleanup,infrastructure,lifecycle:{overran,overrunMs}}));
+ if(output)output({category:outcome.category,result:outcome.result,test_exit:test?.exitCode??'',cleanup:cleanup.state,export:exported.state});
+ return outcome.code;
+}
+
+/**
+ * Exact recovery from the durable store: remove the recorded container only while the engine still reports its
+ * ID, label and name, and delete the record only once the engine reports it gone. A record whose recovery fails
+ * or stays uncertain is kept for a later attempt. `select` limits which records this caller may act on.
+ * S32 C3: a create intent with no ID record is reconciled by its exact fixed name only (`recoverIntent`); an
+ * absent name or a verified exact removal drops it, a conflict or unreadable engine keeps it.
+ */
+export async function recoverRetained(store,{recover,verifyRemoved,recoverIntent=null,select=()=>true,log=console.error}){
+ const results=[];
+ for(const record of store.list()){
+  if(record.invalid){results.push({record:record.invalid,state:'invalid_retained'});continue;}
+  if(record.intent){
+   const intent=record.intent;
+   if(!select(intent))continue;
+   if(typeof recoverIntent!=='function'){results.push({owner:intent.owner,state:'intent_unknown_retained'});continue;}
+   try{
+    const outcome=await recoverIntent(intent);
+    if(outcome==='absent'||outcome==='removed'){store.removeIntent(intent.owner);results.push({owner:intent.owner,state:`intent_${outcome}`});}
+    else results.push({owner:intent.owner,state:'intent_unverified_retained'});
+   }catch(error){results.push({owner:intent.owner,state:error?.message==='container_intent_conflict'?'intent_conflict_retained':'intent_failed_retained'});}
+   continue;
+  }
+  if(!select(record))continue;
+  try{
+   const outcome=await recover(record);
+   if(outcome==='removed'||outcome==='absent'){
+    if(await verifyRemoved(record)){store.remove(record.owner);results.push({owner:record.owner,state:outcome});}
+    else results.push({owner:record.owner,state:'unverified_retained'});
+   }else results.push({owner:record.owner,state:'unknown_retained'});
+  }catch{results.push({owner:record.owner,state:'failed_retained'});}
+ }
+ if(results.length)log(JSON.stringify({component:'runner-executor',event:'container_recovery',results}));
+ return results;
 }
 
 /** A reviewed adapter may be supplied by trusted code; no environment/request field injects receipt JSON as authority. */
 export async function main(mode,env=process.env,dependencies={}){
  const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT});
- if(mode==='prepare'){prepareOwned(paths);return 0;}
+ if(mode==='prepare'){
+  // A container a lost or failed earlier run left on this host is recovered exactly before new work; a record
+  // that still cannot be recovered is kept, and does not block this run's own preparation.
+  if(dependencies.store)await recoverRetained(dependencies.store,dependencies);
+  prepareOwned(paths);return 0;
+ }
  if(mode==='cleanup'){
-  // Recovery failure must not leave this run's files; it still fails the step so the leftover is visible.
-  let failure=null;
-  if(dependencies.recover){try{await recoverOwned(paths,dependencies);}catch(error){failure=error;}}
-  cleanupOwned(paths);if(failure)throw failure;return 0;
+  // This run's own records only. Its files are removed either way; a retained record fails the step visibly.
+  const prefix=`${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}-`;
+  let retained=[];
+  if(dependencies.store){
+   try{retained=(await recoverRetained(dependencies.store,{...dependencies,select:r=>r.owner.startsWith(prefix)})).filter(r=>/retained$/.test(r.state));}
+   catch{retained=[{state:'store_unreadable_retained'}];}
+  }
+  cleanupOwned(paths);
+  need(retained.length===0,'container_recovery_retained');return 0;
  }
  need(mode==='verify-plan'||mode==='run','invalid_execution_mode');
  const initial=JSON.parse(env.ADMITTED_JSON??'null');
@@ -202,14 +355,14 @@ export async function main(mode,env=process.env,dependencies={}){
  const {admitRunnerJob,githubReadApi}=await import('./runner-admission.mjs');
  const request={requestId:initial.identity.requestId,generation:initial.identity.generation,shard:initial.identity.logicalShard,profile:initial.identity.profile};
  const context={repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??'.github/workflows/runner-executor.yml',childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT};
- const {job:_job,executionIsolation:_exec,admissionIsolation,...admission}=dependencies;
+ const {job:_job,executionIsolation:_exec,admissionIsolation,store:_s,exporter:_e,recover:_r,verifyRemoved:_v,...admission}=dependencies;
  const readReceipt=()=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),verifyIsolation:admissionIsolation,...admission,context,phase:'execute',signal:AbortSignal.timeout(60000)});
  const current=await readReceipt();need(current.allowed&&JSON.stringify(current.identity)===JSON.stringify(initial.identity),'receipt_superseded_before_execution');
  const sqlite=await import('node:sqlite');
  verifyRuntime(current.profile,{sqlite:()=>{const db=new sqlite.DatabaseSync(':memory:');try{return db.prepare('SELECT 1 AS ok').get().ok===1;}finally{db.close();}}});
- const python=execFileSync('python3',['-c','import platform,sqlite3,sys;print(platform.machine());print(platform.python_version());print(sqlite3.sqlite_version)'],{encoding:'utf8'}).trim().split('\n');
+ const python=execFileSync('python3',['-c','import platform,sqlite3,sys;print(platform.machine());print(platform.python_version());print(sqlite3.sqlite_version)'],{encoding:'utf8',timeout:30000}).trim().split('\n');
  need(python[0]===(current.profile.arch==='arm64'?'arm64':'x86_64')&&python[1]===current.profile.pythonVersion&&/^3\./.test(python[2]),'python_runtime_mismatch');
- need(execFileSync('git',['rev-parse','HEAD'],{cwd:paths.source,encoding:'utf8'}).trim()===current.sourceSha,'candidate_checkout_sha_mismatch');
+ need(execFileSync('git',['rev-parse','HEAD'],{cwd:paths.source,encoding:'utf8',timeout:30000}).trim()===current.sourceSha,'candidate_checkout_sha_mismatch');
  const scripts=JSON.parse(readFileSync(join(paths.source,'package.json'),'utf8')).scripts;
  const artifact=current.plan.mode==='parent-artifact'?readFileSync(join(paths.temp,'parent-plan','suite-plan.json')):null;
  const bytes=verifiedPlan({event:current.originalEvent,part:current.shard,expectedDigest:current.plan.digest,artifactBytes:artifact,scripts,sourceRoot:paths.source});
@@ -220,13 +373,16 @@ export async function main(mode,env=process.env,dependencies={}){
  }
  // Cancellation is live before any container exists, so a stop during create, re-admission or the run cleans up.
  return await withCancellation(async signal=>{
-  if(dependencies.job){
-   // Linux self-hosted: installs and tests both run inside the per-run container; nothing candidate-controlled runs on the host.
-   const {job,executionIsolation,admissionIsolation:_pre,...rest}=dependencies;
-   return runInContainer({job,executionIsolation,current,paths,planPath,signal,
-    admit:verifyIsolation=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation,context,phase:'execute',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])})});
+  {
+   // Installs and tests run only inside a verified boundary job (the Linux container today); nothing runs on the host.
+   const job=requireExecutionBoundary(dependencies);
+   const {executionIsolation,job:_job,admissionIsolation:_pre,store:_store,exporter:_exporter,...rest}=dependencies;
+   const exporter=dependencies.exporter??(await import('./runners/trace-exporter.mjs')).createTraceExporter({stagingRoot:join(paths.temp,'trace-export'),engine:job.engine});
+   return runInContainer({job,executionIsolation,current,paths,planPath,signal,store:dependencies.store,exporter,stepDeadline:runStepDeadline(),
+    recheck:({signal:phase}={})=>executionIsolation({receipt:current.identity,context,profile:current.profile,phase:'execute',signal:phase??signal}),
+    output:env.GITHUB_OUTPUT?values=>appendFileSync(env.GITHUB_OUTPUT,Object.entries(values).map(([k,v])=>`${k}=${v}\n`).join('')):null,
+    admit:(verifyIsolation,{signal:phase}={})=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation,context,phase:'execute',signal:AbortSignal.any([phase??signal,AbortSignal.timeout(60000)])})});
   }
-  const result=await executeShard({admitted:current,paths,testDriver:join(paths.source,'scripts','test-drift-parts.mjs'),planPath,readReceipt,signal});return result.code;
  });
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
@@ -237,9 +393,14 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
    const { trustedAuthority }=await import('./executor-authority.mjs');
    dependencies={...await trustedAuthority(process.env),...(isolationFor(JSON.parse(process.env.ADMITTED_JSON??'null')?.identity?.profile)??{})};
   }
-  if(mode==='cleanup'){
+  if(mode==='run'&&dependencies.job){
+   const { recoveryStore }=await import('./runners/recovery-store.mjs');
+   dependencies.store=recoveryStore({create:true});
+  }
+  if(mode==='cleanup'||mode==='prepare'){
    const { JobContainer }=await import('./runners/job-container.mjs');
-   dependencies={recover:record=>JobContainer.recover(record)};
+   const { recoveryStore }=await import('./runners/recovery-store.mjs');
+   dependencies={store:recoveryStore(),recover:record=>JobContainer.recover(record),verifyRemoved:record=>JobContainer.isRemoved(record),recoverIntent:intent=>JobContainer.recoverIntent(intent)};
   }
   process.exitCode=await main(mode,process.env,dependencies);}catch{console.error('runner_execution_denied_or_failed');process.exitCode=1;}
 }

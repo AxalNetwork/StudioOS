@@ -283,7 +283,7 @@ export async function purgeFile(
   if (keys.length) {
     if (!env.FILES) throw new PurgeIncomplete();
     // D6651: a Trash purge goes through the one record-erasure path.
-    try { await eraseRecordObjects(env.FILES, keys, 'purge'); }
+    try { await eraseRecordObjects(env.FILES, keys, 'purge', { db: env.DB }); }
     catch (e) {
       console.error('[data_room_trash] object delete failed; kept in Trash for the next sweep', e instanceof Error ? e.message : 'error');
       throw new PurgeIncomplete();

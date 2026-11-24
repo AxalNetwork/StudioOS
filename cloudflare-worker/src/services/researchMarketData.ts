@@ -60,7 +60,8 @@ function cursorPoint(params: WorldBankParams, raw: unknown): Point {
   } catch { throw new ImportRequestError('invalid_cursor'); }
 }
 
-async function providerJson(url: string): Promise<any> {
+/** One bounded JSON read: 250,000 bytes and 12 seconds, no redirect; failures are classified, bodies never kept. */
+export async function providerJson(url: string): Promise<any> {
   let response: Response;
   try { response = await fetch(url, { headers: { Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(12_000) }); }
   catch { throw new ImportFailure('provider_transport'); }

@@ -344,7 +344,8 @@ async function mounted(url, o = {}) {
   const requests = [];
   const handle = handlerFor(o);
   globalThis.fetch = async (u, options = {}) => { requests.push([String(u), options.method || 'GET', options.body]); return handle(String(u), options); };
-  globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  // D5075: `phone` makes every matchMedia match, as below 1024px.
+  globalThis.matchMedia = () => ({ matches: !!o.phone, addEventListener() {}, removeEventListener() {} });
   localStorage.setItem('user', JSON.stringify(OWNER));
   const create = document.createElement.bind(document);
   document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
@@ -416,6 +417,28 @@ test('Convert at a next-round price runs a round from Today and draws the modell
     assert.equal(v.count('captable-bar'), 2);
     assert.equal(v.count('captable-bar-cannot'), 2, 'the dashed hairline for what cannot convert');
     assert.equal(v.text(v.by('captable-cannot-line')), CANNOT_CONVERT_LINE);
+  } finally { await v.close(); }
+});
+
+test('RA-26 B at phone width: the Modelled conversion is one card an instrument, what did not convert says why, and View table opens the table', async () => {
+  const v = await mounted('/raise/cap-table/instruments?project_id=3', { phone: true });
+  try {
+    assert.equal(v.count('captable-inst-card'), 4, 'the record as cards');
+    await v.change(v.by('captable-convert-price'), '1.03');
+    await v.change(v.by('captable-convert-raise'), '3,000,000');
+    await v.press(v.by('captable-convert-go'));
+    assert.ok(v.ids().includes('tag-modelled'));
+    assert.equal(v.count('captable-converted-table'), 0, 'no table first on a phone');
+    assert.equal(v.count('captable-converted-card'), 4);
+    assert.equal(v.count('captable-converted-card-skip'), 2);
+    assert.equal(v.text(v.all('captable-converted-card').find((n) => /Northwind/.test(v.text(n)))).trim(),
+      'Northwind Angels Conversion price $0.82 Cap price $0.82 beats the discount price $0.88: cap wins Shares 182,927 % after the round 1.32%');
+    const toggle = v.by('captable-converted-view-table');
+    assert.equal(v.text(toggle).trim(), 'View table');
+    await v.press(toggle);
+    assert.match(v.text(v.by('captable-converted-table')), /182,927 1\.32%/);
+    assert.equal(v.props(v.by('captable-converted-view-table'))['aria-expanded'], true);
+    assert.equal(v.count('captable-bar'), 2, 'the chart still draws');
   } finally { await v.close(); }
 });
 

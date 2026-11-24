@@ -13,7 +13,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import CycleOverview, { CycleCard, FIGURE_COLS, figureCols, lastCardSpan } from '../src/pages/cycles/CycleOverview.jsx';
-import RaiseLead, { RaiseAsk, RaiseFromTools, RaiseNextSteps, gainLabel, lastRead, nextStepItems } from '../src/pages/cycles/RaiseOverviewLead.jsx';
+// D6046 (#6046): Raise › Overview is V2 (`RaiseOverview.jsx`). The lead row's Next steps and From your tools
+// became its next actions (RA-04) and connected evidence (RA-06), held to D1466's rules below; the shared
+// grid rules are checked on Grow, which still draws `CycleOverview`'s cards.
+import { RaiseAsk, RaiseConnectedEvidence, RaiseNextActions, gainLabel, lastRead, nextStepItems } from '../src/pages/cycles/RaiseOverviewLead.jsx';
+import { RaiseOverviewView } from '../src/pages/cycles/RaiseOverview.jsx';
+import { nextActionsView, sourcesView } from '../src/pages/cycles/raiseOverviewModel.js';
 import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
 import { CHECKOUT_EVENT } from '../src/components/checkout/checkoutEntry.js';
 import { installDocument } from './_contracts_dom.mjs';
@@ -37,7 +42,7 @@ test('RO00, RO09: the figure row has one column per figure up to its width, neve
     [4, 'xl:grid-cols-4', /grid-cols-3|grid-cols-6/],
     [6, 'min-[90rem]:grid-cols-6', /xl:grid-cols-4/],
   ]) {
-    const out = html(h(CycleOverview, { cycle: 'raise', data: { ...OVERVIEWS.raise, figures: figuresOf(n) } }));
+    const out = html(h(CycleOverview, { cycle: 'grow', data: { ...OVERVIEWS.grow, figures: figuresOf(n) } }), '/grow');
     const cls = gridClass(out, 'cycle-figures');
     assert.ok(cls.includes(want), `${n} figures: ${cls}`);
     assert.doesNotMatch(cls, never, `${n} figures leave no empty track`);
@@ -49,17 +54,17 @@ test('RO00, RO09: the figure row has one column per figure up to its width, neve
 });
 
 test('RO00: module cards are equal height per row, three columns from 1280, and the last card fills its row', () => {
-  const out = html(h(CycleOverview, { cycle: 'raise', data: OVERVIEWS.raise }));
+  const out = html(h(CycleOverview, { cycle: 'grow', data: OVERVIEWS.grow }), '/grow');
   const cls = gridClass(out, 'cycle-cards');
   assert.match(cls, /items-stretch/);
   assert.doesNotMatch(cls, /items-start/, 'items-start left cards of uneven height');
   assert.match(cls, /lg:grid-cols-2 xl:grid-cols-3/);
-  // Seven cards: Capital relationships spans the whole last row in both layouts.
+  // Seven cards: the last (Durable company-building) spans the whole last row in both layouts.
   assert.equal(lastCardSpan(7), 'lg:col-span-2 xl:col-span-3');
-  assert.match(out, /class="[^"]*lg:col-span-2 xl:col-span-3" data-testid="cycle-card-capital-relationships"/);
+  assert.match(out, /class="[^"]*lg:col-span-2 xl:col-span-3" data-testid="cycle-card-durable-company-building"/);
   assert.equal((out.match(/col-span-/g) || []).length, 2, 'only the last card spans');
   // The spanning card lays its charts side by side rather than stretching one.
-  assert.match(out, /data-testid="cycle-card-capital-relationships"[\s\S]*?class="grid grid-cols-1 items-start gap-5 lg:grid-cols-2" data-testid="card-charts-wide"/);
+  assert.match(out, /data-testid="cycle-card-durable-company-building"[\s\S]*?class="grid grid-cols-1 items-start gap-5 lg:grid-cols-2" data-testid="card-charts-wide"/);
   assert.equal((out.match(/card-charts-wide/g) || []).length, 1, 'only the spanning card');
   // Every count fills its rows at 2 and 3 columns.
   for (let n = 1; n <= 12; n++) {
@@ -102,15 +107,19 @@ test('RO06: a card holding more than two charts is cut off with "More in the mod
 });
 
 test('RO14: a read-only summary has an amber Read only bar, no primary action and no Ask', () => {
-  const staff = { ...OVERVIEWS.raise, mode: 'summary', read_only: true, figures: figuresOf(4) };
-  const out = html(h(CycleOverview, { cycle: 'raise', data: staff, action: { label: 'Build your deck', href: '/raise/pitch' }, ask: h('button', { 'data-testid': 'raise-ask' }, 'Ask') }));
+  const staff = { ...OVERVIEWS.raise, mode: 'summary', read_only: true, figures: figuresOf(4), primary_action: null };
+  // D6046: Raise's own V2 page; the shared overview keeps the same rule for the cycles that still draw it.
+  const out = html(h(RaiseOverviewView, { raw: staff, status: 'ready', projectId: 7 }));
   assert.match(out, /data-testid="cycle-overview-read-only"/);
   assert.match(text(out), /Read only · HQ summary\./);
-  assert.doesNotMatch(out, /data-testid="cycle-action"/, 'no Build your deck');
+  assert.doesNotMatch(out, /data-testid="cycle-action"/, 'no primary action');
   assert.doesNotMatch(out, /data-testid="raise-ask"/, 'no Ask');
-  const member = html(h(CycleOverview, { cycle: 'raise', data: OVERVIEWS.raise, action: { label: 'Build your deck', href: '/raise/pitch' }, ask: h('button', { 'data-testid': 'raise-ask' }, 'Ask') }));
-  assert.match(member, /data-testid="cycle-action"[^>]*>Build your deck</);
-  assert.match(member, /cycle-action[\s\S]*data-testid="raise-ask"/, 'a member sees Ask after the primary action');
+  const shared = html(h(CycleOverview, { cycle: 'validate', data: { ...OVERVIEWS.validate, mode: 'summary', read_only: true }, action: { label: 'Record a session', href: '/validate/record' }, ask: h('button', { 'data-testid': 'cycle-ask' }, 'Ask') }), '/validate');
+  assert.match(text(shared), /Read only · HQ summary\./);
+  assert.doesNotMatch(shared, /data-testid="cycle-action"|data-testid="cycle-ask"/);
+  const member = html(h(CycleOverview, { cycle: 'validate', data: OVERVIEWS.validate, action: { label: 'Record a session', href: '/validate/record' }, ask: h('button', { 'data-testid': 'cycle-ask' }, 'Ask') }), '/validate');
+  assert.match(member, /data-testid="cycle-action"[^>]*>Record a session</);
+  assert.match(member, /cycle-action[\s\S]*data-testid="cycle-ask"/, 'a member sees Ask after the primary action');
   assert.doesNotMatch(member, /cycle-overview-read-only/);
 });
 
@@ -173,10 +182,10 @@ test('RO13: both upgrade controls open checkout with the Worker catalogue key', 
 });
 
 test('RO15, RO11: a refusal is the Worker sentence in muted ink; only a failed read is red', () => {
-  const refused = html(h(CycleOverview, { cycle: 'raise', data: null, status: 'refused', message: 'You cannot open this venture’s Raise. Switch company, or ask its founder for access.' }));
+  const refused = html(h(RaiseOverviewView, { raw: null, status: 'refused', message: 'You cannot open this venture’s Raise. Switch company, or ask its founder for access.' }));
   assert.match(refused, /role="status"[^>]*data-testid="cycle-overview-refused">You cannot open this venture’s Raise\. Switch company, or ask its founder for access\.</);
   assert.doesNotMatch(refused, /text-red|role="alert"|cycle-overview-unreadable/);
-  const failed = html(h(CycleOverview, { cycle: 'raise', data: null, status: 'unreadable' }));
+  const failed = html(h(RaiseOverviewView, { raw: null, status: 'unreadable' }));
   assert.match(text(failed), /The Raise overview could not be read\. This is not a claim that nothing is recorded\./);
   const phone = html(h(PhoneCycleRoot, { cycle: 'raise', raw: null, status: 'refused', message: 'This venture could not be found.' }));
   assert.match(phone, /data-testid="phone-root-refused">This venture could not be found\.</);
@@ -186,7 +195,7 @@ test('RO15, RO11: a refusal is the Worker sentence in muted ink; only a failed r
   assert.match(route, /setOverviewStatus\(refused \? 'refused' : 'unreadable'\);/);
 });
 
-test('RO04: Next steps list the biggest gains first, never Team, at most three, and an unknown gain is Not recorded', () => {
+test('RO04: next actions list the biggest gains first, never Team, at most three, and an unknown gain is Not recorded', () => {
   const part = { state: 'ok', items: [
     { item_key: 'cap_table', label: 'Cap table', text: 'No vesting recorded for the founders', module_slug: 'cap-table', href: '/raise/cap-table', gain_points: 2 },
     { item_key: 'team', label: 'Team', text: 'A person assesses this', module_slug: 'fundraising-readiness', href: '/raise/fundraising-readiness', gain_points: 9 },
@@ -197,24 +206,26 @@ test('RO04: Next steps list the biggest gains first, never Team, at most three, 
   assert.deepEqual(nextStepItems(part).map((i) => i.item_key), ['data_room', 'pitch_deck', 'cap_table']);
   assert.equal(gainLabel(9), '+9 points');
   for (const g of [null, undefined, 0, -1, NaN]) assert.equal(gainLabel(g), null, String(g));
-  const out = html(h(RaiseNextSteps, { part, cards: OVERVIEWS.raise.cards, search: '?project_id=7' }));
-  assert.doesNotMatch(out, /next-step-team/, 'Team is never a step');
-  assert.match(text(out), /Next steps The steps that raise your readiness most Data room No customer contracts or LOIs uploaded Data room \+4 points Open ›/);
+  const raw = { cards: OVERVIEWS.raise.cards, next_steps: part };
+  const out = html(h(RaiseNextActions, { view: nextActionsView(raw, '?project_id=7') }));
+  assert.doesNotMatch(out, /raise-next-team/, 'Team is never a step');
+  assert.match(text(out), /3 actions to improve readiness At most three, most useful first 1 of 3 Data room Why: No customer contracts or LOIs uploaded Readiness impact \+4 points Open Data room/);
   assert.match(out, /href="\/raise\/data-room\?project_id=7"/, 'each step opens its module for the same venture');
-  const unknown = html(h(RaiseNextSteps, { part: { state: 'ok', items: [part.items[3]] } }));
-  assert.match(unknown, /data-testid="next-step-gain-unrecorded">Not recorded</);
+  const unknown = html(h(RaiseNextActions, { view: nextActionsView({ next_steps: { state: 'ok', items: [part.items[3]] } }) }));
+  assert.match(unknown, /data-testid="raise-next-impact-unrecorded">Readiness impact · Not recorded</);
   assert.doesNotMatch(unknown, /\+0 points/);
-  const empty = html(h(RaiseNextSteps, { part: { state: 'empty', items: [] }, search: '?project_id=7' }));
-  assert.match(text(empty), /Score readiness No readiness items are scored yet .*Not recorded Score readiness/);
-  assert.match(empty, /href="\/raise\/fundraising-readiness\?project_id=7"/);
-  const failed = html(h(RaiseNextSteps, { part: { state: 'unreadable' }, onRetry() {} }));
-  assert.match(failed, /role="alert"[^>]*>.*Next steps could not be read\..*Try again/);
-  const ro = html(h(RaiseNextSteps, { part, readOnly: true }));
+  const empty = html(h(RaiseNextActions, { view: nextActionsView({ next_steps: { state: 'empty', items: [{ item_key: 'readiness', label: 'Fundraising readiness', text: 'No readiness item is scored yet', module_slug: 'fundraising-readiness', href: '/raise/fundraising-readiness?project=7&add=1', gain_points: null }] } }) }));
+  assert.match(text(empty), /Fundraising readiness Why: No readiness item is scored yet Readiness impact · Not recorded/);
+  assert.match(empty, /href="\/raise\/fundraising-readiness\?project=7&amp;add=1"/);
+  const failed = html(h(RaiseNextActions, { view: nextActionsView({ next_steps: { state: 'unreadable' } }), onRetry() {} }));
+  assert.match(text(failed), /Next actions could not be read\./);
+  assert.match(failed, /Try again|Retry/);
+  const ro = html(h(RaiseNextActions, { view: nextActionsView(raw), readOnly: true }));
   assert.doesNotMatch(ro, /<a /, 'a read-only viewer gets no links that write');
   assert.match(text(ro), /Read only\. The founder takes these steps\./);
 });
 
-test('RO07: From your tools says when each source was last read; a missing read is Not recorded, never a date or 0', () => {
+test('RO07: connected evidence says when each source was last read; a missing read is Not recorded, never a date or 0', () => {
   assert.equal(lastRead('28 Oct, 09:14'), 'Read 28 Oct, 09:14');
   for (const v of [null, undefined, '']) assert.equal(lastRead(v), 'Last read · Not recorded');
   const part = [
@@ -223,29 +234,26 @@ test('RO07: From your tools says when each source was last read; a missing read 
     { key: 'stripe', label: 'Stripe', fact: null, as_of: null, state: 'not_connected' },
     { key: 'notion', label: 'Notion', fact: null, as_of: null, state: 'unreadable' },
   ];
-  const out = html(h(RaiseFromTools, { part, onRetry() {} }));
+  const out = html(h(RaiseConnectedEvidence, { view: sourcesView({ connectors: part }), onRetry() {} }));
   const t = text(out);
   assert.match(t, /Mercury 16\.5 months of runway · cash and net burn Read 28 Oct, 09:14/);
   assert.match(t, /GitHub Contributors to 2 repositories Last read · Not recorded/);
-  assert.match(out, /data-testid="tool-stripe"[\s\S]*?Not connected · <a[^>]*href="\/account\/connectors"[^>]*>Connect</);
-  assert.match(out, /data-testid="tool-notion"[\s\S]*?role="alert"[\s\S]*?Notion could not be read\./);
-  assert.equal((out.match(/role="alert"/g) || []).length, 1, 'red only for the row that could not be read');
-  assert.equal((out.match(/class="[^"]*text-red-700/g) || []).length, 1);
+  assert.match(out, /data-testid="raise-source-stripe"[\s\S]*?Not connected[\s\S]*?<a[^>]*href="\/account\/connectors"[^>]*>Connect</);
+  assert.match(out, /data-testid="raise-source-notion"[\s\S]*?Notion could not be read\.[\s\S]*?data-platform-state="unavailable"/);
+  assert.equal((out.match(/data-platform-state="unavailable"/g) || []).length, 1, 'Unavailable only for the row that could not be read');
   assert.doesNotMatch(t, /\b0\b|@/, 'no zero and no email');
-  const failed = html(h(RaiseFromTools, { part: { state: 'unreadable' }, onRetry() {} }));
-  assert.match(text(failed), /Your connected tools could not be read\. Try again/);
+  const failed = html(h(RaiseConnectedEvidence, { view: sourcesView({ connectors: { state: 'unreadable' } }), onRetry() {} }));
+  assert.match(text(failed), /Your connected sources could not be read\./);
 });
 
-test('RO03: the lead row draws only the parts the read returns, side by side at 3 : 2', () => {
-  assert.equal(html(h(RaiseLead, { data: OVERVIEWS.raise })), '', 'no part, no row: an absent part is not an empty one');
-  const both = html(h(RaiseLead, { data: { ...OVERVIEWS.raise, next_steps: { state: 'empty', items: [] }, connectors: [] } }));
-  assert.match(both, /xl:grid-cols-\[minmax\(0,3fr\)_minmax\(0,2fr\)\]/);
-  assert.match(both, /raise-next-steps[\s\S]*raise-from-tools/);
-  const one = html(h(RaiseLead, { data: { ...OVERVIEWS.raise, connectors: [] } }));
-  assert.doesNotMatch(one, /grid-cols-\[minmax/, 'one card alone spans the row');
-  const page = html(h(CycleOverview, { cycle: 'raise', data: OVERVIEWS.raise, lead: h('div', { 'data-testid': 'lead-slot' }) }));
+test('RO03: the page draws only the parts the read returns; the shared lead slot sits between the figures and the cards', () => {
+  const bare = html(h(RaiseOverviewView, { raw: { ...OVERVIEWS.raise }, status: 'ready' }));
+  assert.doesNotMatch(bare, /raise-next-actions|raise-connected-evidence|raise-investor-activity/, 'an absent part is not an empty one');
+  const both = html(h(RaiseOverviewView, { raw: { ...OVERVIEWS.raise, next_steps: { state: 'empty', items: [] }, connectors: [] }, status: 'ready' }));
+  assert.match(both, /raise-next-actions[\s\S]*raise-connected-evidence/);
+  const page = html(h(CycleOverview, { cycle: 'validate', data: OVERVIEWS.validate, lead: h('div', { 'data-testid': 'lead-slot' }) }), '/validate');
   assert.match(page, /cycle-figures[\s\S]*lead-slot[\s\S]*cycle-cards/, 'the lead row sits between the figures and the cards');
-  assert.doesNotMatch(html(h(CycleOverview, { cycle: 'raise', data: null, lead: h('div', { 'data-testid': 'lead-slot' }) })), /lead-slot/, 'not while loading');
+  assert.doesNotMatch(html(h(CycleOverview, { cycle: 'validate', data: null, lead: h('div', { 'data-testid': 'lead-slot' }) }), '/validate'), /lead-slot/, 'not while loading');
 });
 
 test('RO00, RO08: Raise header Ask opens Eadwyn on "Raise · Overview", only where the panel serves the viewer', () => {
@@ -254,9 +262,9 @@ test('RO00, RO08: Raise header Ask opens Eadwyn on "Raise · Overview", only whe
   // D1443 (#3706, part 5 #3992): Ask opens the Ask panel (HeaderAsk → PageAsk), which serves only where a rail serves the viewer.
   assert.match(lead, /<HeaderAsk label="Raise · Overview" testId="raise-ask" \/>/);
   assert.doesNotMatch(lead, /\bFill\b/, 'Ask, never Fill');
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /ask=\{cycle === 'raise' && projectId \? <RaiseAsk \/> : null\}/);
-  assert.match(route, /lead=\{cycle === 'raise' \? <RaiseLead data=\{rawOverview\} search=\{q\}/);
+  // D6046: Raise's V2 page draws the Ask beside its action, for a viewer who is not reading only.
+  const page = read('frontend/src/pages/cycles/RaiseOverview.jsx');
+  assert.match(page, /const more = readOnly \|\| !projectId \? null : <>\{role === 'founder' \? <ShareStatusButton projectId=\{projectId\} \/> : null\}<RaiseAsk \/><\/>;/);
 });
 
 test('the Raise Overview canvases are on disk, unedited intake', () => {

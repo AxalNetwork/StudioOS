@@ -39,8 +39,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { OG_ROUTES, ogTagsFor } from '../frontend/src/lib/ogRegistry.js';
+import { OG_ROUTES, ogTagsFor, staticBodyFor } from '../frontend/src/lib/ogRegistry.js';
+import { DOOR_LINKS } from '../frontend/src/lib/siteLinks.js';
+import { structuredDataFor, withStructuredData } from '../frontend/src/lib/structuredData.js';
 import { programOgRoutes } from './lib/programCatalog.mjs';
+// D6996 (#6996): each public Help Center guide's own page, from the guide index.
+import { helpOgRoutes } from './lib/helpGuides.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -112,6 +116,31 @@ ${lines.map((l) => (l ? `  ${l}` : '')).join('\n')}
   <!-- END og:managed -->`;
 }
 
+/** D6995: the header's role and Pricing links, as the public nav draws them (`lib/siteLinks.js`). */
+const HEADER_LINKS = [...DOOR_LINKS, { label: 'Pricing', to: '/pricing' }];
+
+const STATIC_BODY = /(<!-- BEGIN static-body -->)[\s\S]*?(<!-- END static-body -->)/;
+
+/**
+ * D6995 (#6995): the route's own heading, offer and links, written inside `#root` so a crawler or a reader with
+ * JavaScript off reads the page, not the shared fallback. React's `createRoot(...).render` replaces everything
+ * inside `#root` on boot, so this block is replaced, never added to, and the hydrated page draws in its place.
+ */
+export function staticBodyBlock(pathname, overrides = {}) {
+  const body = staticBodyFor(pathname, overrides);
+  const a = (l, style = 'color:#4b5563;') => `<a href="${esc(l.to)}" style="${style}">${esc(l.label)}</a>`;
+  return [
+    '<div data-static-body="" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:calc(100vh - 44px);padding:0 16px;font-family:sans-serif;text-align:center;color:#6b7280;">',
+    `      <nav aria-label="Main" style="font-size:13px;"><a href="/" style="color:#111827;font-weight:600;">Axal VC</a> · ${HEADER_LINKS.map((l) => a(l)).join(' · ')}</nav>`,
+    `      <h1 style="margin:0;max-width:40rem;font-size:24px;font-weight:600;color:#111827;">${esc(body.heading)}</h1>`,
+    ...(body.summary ? [`      <p style="margin:0;max-width:34rem;font-size:15px;line-height:1.5;">${esc(body.summary)}</p>`] : []),
+    `      <p style="margin:0;font-size:15px;">${a(body.primaryLink, 'color:#111827;font-weight:600;')}</p>`,
+    `      <p style="margin:0;font-size:13px;">${a({ label: 'Privacy policy', to: '/privacy' })} · ${a({ label: 'Terms of service', to: '/terms' })}</p>`,
+    '      <p style="margin:0;font-size:14px;">Loading…</p>',
+    '    </div>',
+  ].join('\n');
+}
+
 /** Replace the shell's head metadata with this route's. */
 function renderRoute(shell, pathname, overrides = {}) {
   const tags = ogTagsFor(pathname, overrides);
@@ -132,6 +161,11 @@ function renderRoute(shell, pathname, overrides = {}) {
     // No <head> is not something we should paper over silently.
     throw new Error('Shell HTML has no <head> — cannot inject metadata.');
   }
+  // D6995: the markers stay, so re-running replaces the block again and the output converges.
+  if (!STATIC_BODY.test(html)) throw new Error('Shell HTML has no static-body markers — cannot write the page body.');
+  html = html.replace(STATIC_BODY, (_, begin, end) => `${begin}\n    ${staticBodyBlock(pathname, overrides)}\n    ${end}`);
+  // D7004 (#7004): the route's JSON-LD, from recorded facts only, in its own `ld:managed` block.
+  html = withStructuredData(html, structuredDataFor(pathname));
   return { html, tags };
 }
 
@@ -146,7 +180,8 @@ async function main() {
   // routes (a program's page that is also a registry path keeps the program's title).
   // One render per path, the later entry winning: a check of a path listed twice would otherwise compare the
   // registry's render against the program's, which the write left on disk (#7121).
-  const routes = [...new Map([...OG_ROUTES, ...(await programOgRoutes())].map((r) => [r.path, r])).values()];
+  // D6996 (#6996): each public Help Center guide's own page, after the registry's and the programs' routes.
+  const routes = [...new Map([...OG_ROUTES, ...(await programOgRoutes()), ...helpOgRoutes()].map((r) => [r.path, r])).values()];
   const shellFile = path.join(OUT_DIR, 'index.html');
   if (!fs.existsSync(shellFile)) {
     console.error(
@@ -195,7 +230,10 @@ async function main() {
   console.log(`\nPrerendered ${written} routes into ${path.relative(ROOT, OUT_DIR)}/`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// D6995: importable by the test without writing anything.
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

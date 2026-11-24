@@ -41,7 +41,6 @@ import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
 import { ValidateLead } from './ValidateNextAction';
-import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import { PmfChip } from './PmfMethod';
@@ -53,7 +52,7 @@ import { FillModule } from './FillRowsPanel';
 import ModuleWorkingHere from '../team/ModuleWorkingHere.jsx';
 import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth, useTabletWidth } from '../../ui/phone/usePhoneWidth';
-import { editFor, formsFor } from './forms';
+import { addressFormFor, editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
 import { cellView, cycleOf, linkEvidenceAction, pickOwnerAction, queryFromSearch } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -432,7 +431,14 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // its own (D695). The open Add is the address's: `/new` opens the first form,
   // `?form=<key>` a later one. The open Edit is the row the history entry names
   // (`state.editing`), so Back closes it as it closes an Add.
-  const forms = useMemo(() => (slug && def ? formsFor(cycle, slug) : []), [cycle, slug, def]);
+  // D8259: a form only its own link opens (`addressFormFor`, Add a suggested filing) joins the list, last, while
+  // `?form=` names it, so `/new` opens it as any Add; it never draws an Add button (`addressOnly`, below).
+  const formKey = searchParams.get('form');
+  const forms = useMemo(() => {
+    const own = slug && def ? formsFor(cycle, slug) : [];
+    const extra = own.length ? addressFormFor(cycle, slug, formKey) : null;
+    return extra ? [...own, extra] : own;
+  }, [cycle, slug, def, formKey]);
   const edit = slug && def ? editFor(cycle, slug) : null;
   // D1025 (#2862): Cap table's `/new` is Record an issuance (CT12a), not the old Add holder form.
   const capTableAdding = adding && cycle === 'raise' && slug === CAP_TABLE;
@@ -942,16 +948,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           onRetryCard={retryCard}
           action={action}
           search={q}
-          // D1466 (#3714): Raise's lead row (Next steps, From your tools), drawn from the read's own parts.
           // D4589 (#4589): Validate's next action, the same Worker focus the phone root draws;
           // #5999: beside it the same meter and "Set a target" (`CycleMeter.jsx`).
-          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} />
-            : cycle === 'validate' && rawOverview ? <ValidateLead raw={rawOverview} search={q} openAction={openAction} projectId={projectId} onChanged={() => setReload((n) => n + 1)} /> : null}
+          // D6046 (#6046): Raise draws its own Overview (`defs/raise.jsx`), so its lead row and Ask left this branch.
+          lead={cycle === 'validate' && rawOverview ? <ValidateLead raw={rawOverview} search={q} openAction={openAction} projectId={projectId} onChanged={() => setReload((n) => n + 1)} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
-          // D1466 (RO00): Raise's header Ask, beside Build your deck.
-          ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
-          // D6897 part 4 (#6897, RA-31): a cycle's own header controls beside the action (Raise: Share outside Axal).
+          // D6897 part 4 (#6897, RA-31): a cycle's own header controls beside the action (Raise's V2 Overview draws its own, D6046).
           more={projectId ? def?.overviewMore?.({ projectId, role: user?.role ?? null }) ?? null : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
@@ -981,7 +984,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const defRowAction = fnOf(def.rowActions, slug);
     // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
     // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
-    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
+    // D6007 (#6007): it is handed the page's search params, so a mode (Compare segments) can own the page.
+    // D6865 part 2 (#6891): Grow › Feedback's home also reads the venture's query and whether Eadwyn is on here.
+    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), searchParams, search: q, fillsOn: Boolean(fillsOn) }) ?? null;
     const Bands = home?.Bands || PlainBands;
     body = (
       <ModulePage
@@ -1010,7 +1015,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         action={companyReadOnly ? null : home && Object.hasOwn(home, 'action') ? home.action : action}
         // D6001 (#6001): a def's Add may open a dialog of its own (Customer research's Add a lead).
         add={narrativeAdmin || companyReadOnly ? undefined : forms.length && projectId
-          ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
+          ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } })).filter((_, i) => !forms[i].addressOnly)
           : fnOf(def.add, slug)?.(q, openAction, defCtx)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
@@ -1044,7 +1049,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
             ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
         </> : aboveRecords}
-        {...(phone && isPartnerNetwork ? { showAboveRecordsWhenEmpty: true } : {})}
+        // D6033 (#6033): a def may name the modules whose part above the records also shows before any record.
+        {...(phone && (isPartnerNetwork || def.aboveRecordsWhenEmpty?.includes(slug)) ? { showAboveRecordsWhenEmpty: true } : {})}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}

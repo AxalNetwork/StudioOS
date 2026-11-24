@@ -52,6 +52,7 @@ export default function InvestorIntroRequest({ targets, states, request, ready, 
       </label>
       <small>{message.length.toLocaleString('en-US')} of {INTRO_MESSAGE_MAX.toLocaleString('en-US')} characters</small>
       <small>An ask is not consent. It records your request to be introduced to {target.label}; neither person has agreed, and no introduction has been made.</small>
+      <small>Sending tells the founder in the app, with your name and message. They may accept or decline; until they answer, you may withdraw it.</small>
       {quotaReady && <small>Sending uses one of your {left} {left === 1 ? 'ask' : 'asks'} left{quota.value.quarter ? ` for ${quota.value.quarter}` : ' this quarter'}.</small>}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={BUTTON} disabled={blocked} onClick={send}>Send ask</button>

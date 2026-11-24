@@ -53,6 +53,7 @@ function fixture() {
   applyAcceptRetryKeys(db); // D5352
   // D690 (#1692): the tracked list and Experiments' links read 460's stores.
   db.exec(sqlOf('460_validate_record_stores.sql'));
+  db.exec(sqlOf('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP and profile columns
   // D693 (#1704): Verdict is the seventh card, over migration 464's decisions.
   db.exec(sqlOf('464_verdict_decisions.sql'));
   // D6011 (#6011): the market card reads each figure's source from `market_figures`.

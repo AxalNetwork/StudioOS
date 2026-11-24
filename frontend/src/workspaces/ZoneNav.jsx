@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ACCENT, zonePath as shellZonePath, zoneForPath } from './shellConfig';
 import { LensNavLink } from './lens';
@@ -111,23 +111,25 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
     const grouped = new Set(groups.flatMap((g) => g.zones.map((z) => z.slug)));
     const rest = bucket.zones.filter((z) => !grouped.has(z.slug));
     return (
-      <nav
-        aria-label={`${bucket.label} sections`}
-        className={`flex flex-wrap items-end gap-x-4 gap-y-2 ${className}`}
-        data-testid="zone-nav-grouped"
-      >
-        <Pill to={`${bucket.prefix}${search}`} end on={activeSlug === null} testid="link-zone-overview" accent={accent}>
-          Overview
-        </Pill>
-        {groups.map((g) => (
-          <div key={g.key || g.label} role="group" aria-label={g.label} className="flex flex-col gap-1">
-            <span aria-hidden="true" className="pl-1 text-[10px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400">
-              {g.label}
-            </span>
-            <div className="flex flex-wrap gap-1.5">{g.zones.map(zonePill)}</div>
-          </div>
-        ))}
-        {rest.map(zonePill)}
+      <nav aria-label={`${bucket.label} sections`} className={className} data-testid="zone-nav-grouped">
+        {/* #4845 (D4845, OF-09a): below 640px the row is one full-width switcher
+            naming the current zone, and the grouped row is from 640px up. */}
+        <ZoneSwitcher bucket={bucket} groups={groups} rest={rest} active={activeSlug === null ? null : active}
+          search={search} accent={accent} />
+        <div className="hidden flex-wrap items-end gap-x-4 gap-y-2 sm:flex" data-testid="zone-nav-groups">
+          <Pill to={`${bucket.prefix}${search}`} end on={activeSlug === null} testid="link-zone-overview" accent={accent}>
+            Overview
+          </Pill>
+          {groups.map((g) => (
+            <div key={g.key || g.label} role="group" aria-label={g.label} className="flex flex-col gap-1">
+              <span aria-hidden="true" className="pl-1 text-[12px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400">
+                {g.label}
+              </span>
+              <div className="flex flex-wrap gap-1.5">{g.zones.map(zonePill)}</div>
+            </div>
+          ))}
+          {rest.map(zonePill)}
+        </div>
       </nav>
     );
   }
@@ -217,7 +219,7 @@ function Pill({ to, end, on, testid, accent, children }) {
       // D593: the current pill takes the role's dark pair — `tintDark`
       // ground, `deepDark` ink — where it used to keep its light tint, a
       // pale lozenge on the dark ground that the canvases never drew.
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
       style={{
         fontWeight: on ? 700 : 600,
         '--zn-ink': on ? accent.deep : '#615c6e',
@@ -235,5 +237,77 @@ function Pill({ to, end, on, testid, accent, children }) {
     >
       {children}
     </LensNavLink>
+  );
+}
+
+/**
+ * #4845 (D4845, Offers v2 OF-09a) — a grouped zone row on a phone: one
+ * full-width 44px button that names the bucket and the current zone
+ * ("Offers · Proof ▾") and opens, in the page's flow, the same links the row
+ * draws: Overview, then each group under its visible label. Each link is a
+ * 44px target and the same `LensNavLink` the row uses, so a deep link, the lens
+ * and `aria-current` mean what they mean on the row. Escape closes the list and
+ * puts focus back on the button; choosing a zone closes it.
+ *
+ * A disclosure of links rather than the canvas's `aria-haspopup="listbox"`:
+ * every entry is a route, and a listbox would hide that from a screen reader.
+ */
+function ZoneSwitcher({ bucket, groups, rest, active, search, accent }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const button = useRef(null);
+  const close = (refocus) => { setOpen(false); if (refocus) button.current?.focus?.(); };
+  const link = (zone, to, end = false) => (
+    <LensNavLink
+      key={zone.slug}
+      to={to}
+      end={end}
+      aria-current={(zone.slug === 'overview' ? active === null : zone.slug === active?.slug) ? 'page' : undefined}
+      onClick={() => close(false)}
+      data-testid={`link-zone-switch-${zone.slug}`}
+      className="flex min-h-[44px] items-center rounded-md px-3 text-[14px] font-semibold text-axal-ink hover:bg-axal-ground aria-[current=page]:bg-amber-50 aria-[current=page]:text-amber-900 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 dark:text-gray-100 dark:hover:bg-gray-800 dark:aria-[current=page]:bg-amber-950 dark:aria-[current=page]:text-amber-200"
+      style={{ outlineColor: accent.ink }}
+    >
+      {zone.label}
+    </LensNavLink>
+  );
+  return (
+    <div className="sm:hidden" data-testid="zone-switcher">
+      <button
+        ref={button}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="zone-switcher-button"
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border border-axal-hairline bg-white px-3 text-left text-[14px] font-semibold text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        style={{ outlineColor: accent.ink }}
+      >
+        <span className="min-w-0 truncate">
+          <span className="font-normal text-axal-muted dark:text-gray-400">{bucket.label} ·</span> {active?.label || 'Overview'}
+          <span className="sr-only">, choose another section</span>
+        </span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          className="mt-1.5 flex flex-col gap-0.5 rounded-lg border border-axal-hairline bg-white p-1 dark:border-gray-700 dark:bg-gray-900"
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); close(true); } }}
+          data-testid="zone-switcher-panel"
+        >
+          {link({ slug: 'overview', label: 'Overview' }, `${bucket.prefix}${search}`, true)}
+          {groups.map((g) => (
+            <div key={g.key || g.label} role="group" aria-labelledby={`${panelId}-${g.key || g.label}`} className="flex flex-col gap-0.5">
+              <span id={`${panelId}-${g.key || g.label}`} className="px-3 pt-2 text-[12px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400">
+                {g.label}
+              </span>
+              {g.zones.map((z) => link(z, `${zonePath(bucket, z)}${search}`))}
+            </div>
+          ))}
+          {rest.map((z) => link(z, `${zonePath(bucket, z)}${search}`))}
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -48,13 +48,11 @@ import { Hono } from 'hono';
 import admin from '../src/routes/admin.ts';
 import { hasTotpConfigured } from '../src/services/authTotp.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 
-const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const HOLDER = 1;     // the one Super Admin — may open any record
@@ -83,7 +81,7 @@ function appFor(router: any) {
 const app = appFor(admin);
 
 function freshDb() {
-  const db = buildFresh(BASELINE, LATER);
+  const db = freshSchema();
   const user = db.prepare('INSERT INTO users (id, email, name, role, email_verified) VALUES (?, ?, ?, ?, 1)');
   user.run(HOLDER, 'hq@axal.example', 'Hana', 'admin');
   user.run(ENROLLED, 'enrolled@example.com', 'Ed', 'founder');

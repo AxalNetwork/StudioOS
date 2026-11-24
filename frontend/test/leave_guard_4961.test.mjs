@@ -142,3 +142,46 @@ test('turning it off puts everything back, and a confirm that throws never traps
   guard.set(true); guard.dispose();
   assert.equal(win.listenerCount('beforeunload'), 0);
 });
+
+test('D7816: a destination that keeps the work goes through unasked; every other one still asks', () => {
+  const win = fakeWindow(5); const navigator = navigatorOf(); const asked = []; const seen = [];
+  installLeaveGate(win);
+  win.addEventListener('popstate', (e) => seen.push(e.state));
+  const keeps = (path) => path.pathname.startsWith('/research/projects/p1');
+  const guard = createLeaveGuard({ win, navigator, keeps, confirmLeave: (m) => { asked.push(m); return false; } });
+  guard.set(true);
+  // A Link's target (a path object) and a path navigate() (a string) inside the project.
+  navigator.push({ pathname: '/research/projects/p1/findings', search: '', hash: '' });
+  navigator.replace('/research/projects/p1?tab=x#top');
+  // Mutation checked: ignore `keeps` → both ask, are declined, and `calls` is empty.
+  assert.deepEqual(navigator.calls.map((c) => c[0]), ['push', 'replace']);
+  assert.deepEqual(asked, []);
+  // Back to another tab of the project: the browser already moved, and the router hears it once.
+  win.location = { pathname: '/research/projects/p1/evidence', search: '', hash: '' };
+  win.history.state = { idx: 4 };
+  win.dispatchEvent(new win.PopStateEvent('popstate', { state: { idx: 4 } }));
+  assert.deepEqual([asked, seen, win.history.goCalls], [[], [{ idx: 4 }], []]);
+  // Out of the project still asks, by link and by Back, and the Back walk measures from the tab it kept.
+  navigator.push({ pathname: '/research/projects' });
+  win.location = { pathname: '/research/projects', search: '', hash: '' };
+  win.history.state = { idx: 3 };
+  win.dispatchEvent(new win.PopStateEvent('popstate', { state: { idx: 3 } }));
+  assert.equal(asked.length, 2);
+  assert.deepEqual(win.history.goCalls, [1]);
+  assert.equal(navigator.calls.length, 2);
+});
+
+test('D7816: a destination test that throws or answers anything but true asks, as with none', () => {
+  const win = fakeWindow(); const navigator = navigatorOf(); const asked = [];
+  const guard = createLeaveGuard({ win, navigator, keeps: () => { throw new Error('bad'); }, confirmLeave: (m) => { asked.push(m); return true; } });
+  guard.set(true);
+  navigator.push('/a');
+  guard.dispose();
+  const other = navigatorOf();
+  const truthy = createLeaveGuard({ win, navigator: other, keeps: () => 'yes', confirmLeave: (m) => { asked.push(m); return true; } });
+  truthy.set(true);
+  other.push('/b');
+  // Mutation checked: read any truthy answer as keeping → the second push is not asked and this has one entry.
+  assert.deepEqual(asked, [LEAVE_MESSAGE, LEAVE_MESSAGE]);
+  truthy.dispose();
+});

@@ -126,7 +126,7 @@ test('the pages and the fixture are gone, not orphaned', () => {
   assert.doesNotMatch(read('frontend/src/App.jsx'), /AdvisorResearchWorkspace/);
 });
 
-test('the Advisory tabs are deliberately still here', () => {
+test('the Advisory capabilities remain in their active Practice and legacy pages', () => {
   // D12 scoped these OUT and this test asserted the FIXTURE had to stay until
   // #124 unblocked. D31 corrected that: D12 named partner_office_hours.ts as
   // the only possible home without checking `advisors.ts`, which carries the
@@ -140,9 +140,9 @@ test('the Advisory tabs are deliberately still here', () => {
     'the Advisory fixture is deleted — the tabs read advisors.ts now (documentation/architecture/DECISIONS.md D31)');
   assert.doesNotMatch(read('frontend/src/App.jsx'), /path="\/advisor\/advisory\/opportunities"/);
   for (const p of [
-    'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
+    'frontend/src/pages/advisor/practice/OpportunitiesZone.jsx',
     'frontend/src/pages/advisor/advisory/ClientsPage.jsx',
-    'frontend/src/pages/advisor/advisory/EngagementsPage.jsx',
+    'frontend/src/pages/advisor/practice/EngagementsZone.jsx',
     'frontend/src/pages/advisor/advisory/DeliveryPage.jsx',
     'frontend/src/pages/advisor/advisory/ContractsPage.jsx',
   ]) {
@@ -164,9 +164,9 @@ test('#124 is unfrozen and /office-hours is retired — the licence boundary is 
   // partner_office_hours.ts carries the identical DTO defects and is
   // deliberately out of scope, not quietly swept in.
   for (const p of [
-    'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
+    'frontend/src/pages/advisor/practice/OpportunitiesZone.jsx',
     'frontend/src/pages/advisor/advisory/ClientsPage.jsx',
-    'frontend/src/pages/advisor/advisory/EngagementsPage.jsx',
+    'frontend/src/pages/advisor/practice/EngagementsZone.jsx',
     'frontend/src/pages/advisor/advisory/DeliveryPage.jsx',
     'frontend/src/pages/advisor/advisory/ContractsPage.jsx',
   ]) {

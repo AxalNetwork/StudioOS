@@ -34,7 +34,7 @@ import {
 import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
-  TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
+  TERMS_KINDS, TOLD_VIA, addAgendaItem, decideMarketProposal, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
   markHeld, obligationKind, obligationState, openMinutes, removeAgendaItem, removeEntryStep, removeMarket, removeObligation, removePartner, removePartnerDeal, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
   updateAgendaItem, updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updatePartnerDeal, updateRole,
 } from '../growWriters';
@@ -348,6 +348,13 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
   statuses: opts(FEEDBACK_STATUS, LABEL),
   themes: await feedbackThemes(rc.env, rc.projectId),
   roadmap_items: await roadmapItems(rc.env, rc.projectId),
+  // D6865 part 2 (#6891, GR-21B, GR-24, GR-25): the Add feedback and Save as feedback sheets' "Customer record"
+  // chooser, from the venture's own contacts (newest first, at most 200), as Edit's is. A writer's read (`cycle_records.ts`).
+  contacts: ((await rc.env.DB.prepare(
+    'SELECT uid, name, email, organization, audience, status FROM contacts WHERE project_id = ? ORDER BY COALESCE(last_activity_at, created_at) DESC, id DESC LIMIT 200',
+  ).bind(rc.projectId).all<{ uid: string; name: string | null; email: string; organization: string | null; audience: string; status: string | null }>()).results || [])
+    .map((p) => ({ value: String(p.uid), label: [p.name || p.email, p.organization, capital(p.audience)].filter(Boolean).join(' · '),
+      name: p.name ?? null, email: p.email ?? null, organization: p.organization ?? null, audience: p.audience, status: p.status ?? null })),
 }));
 
 // ── Distribution — id: the channel's uid ────────────────────────────────────
@@ -802,7 +809,10 @@ function typedRevenueCents(v: unknown): number {
   return parsed.minor;
 }
 
-const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email'] as const;
+const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email', 'markets'] as const;
+
+/** A read that may fail without failing the record: null when it did. */
+const softRead = async <T>(run: () => Promise<T>): Promise<T | null> => { try { return await run(); } catch { return null; } };
 
 const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS['partner-network'], async (rc, id) => {
   const g = await rc.env.DB.prepare(
@@ -863,9 +873,15 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
   }, { side: true, ...writersOnly }),
   // Introductions are not linked to partners (decision 10).
   section('introductions', 'Introductions', async () => ({ rows: [notRecorded('From Network', 'Introductions are not linked to partners')] }), { side: true }),
-], async (_rc, id, record): Promise<RecordAction[]> => {
+], async (rc, id, record): Promise<RecordAction[]> => {
   const { g } = loadedOf(record);
   const actions: RecordAction[] = [];
+  // D8254: the venture's markets, and the ones this partner is linked to now. A failed read leaves the field out, never empty.
+  const marketChoices = await softRead(async () => {
+    const all = (await rc.env.DB.prepare('SELECT id, uid, name FROM markets WHERE project_id = ? ORDER BY name COLLATE NOCASE LIMIT 200').bind(rc.projectId).all<Any>()).results || [];
+    const linked = new Set(((await rc.env.DB.prepare('SELECT market_id FROM growth_partner_markets WHERE partner_id = ?').bind(g.id).all<Any>()).results || []).map((x) => Number(x.market_id)));
+    return { options: all.map((m) => ({ value: String(m.uid), label: String(m.name) })), value: all.filter((m) => linked.has(Number(m.id))).map((m) => String(m.uid)) };
+  });
   if (g.stage !== 'paused' && g.stage !== 'ended') {
     actions.push({ key: 'pause', label: 'Pause', kind: 'write', confirm: { title: `Pause ${g.name}?`, cta: 'Pause' },
       execute: (c) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, { stage: 'paused' }) })) });
@@ -918,6 +934,7 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'renewal_on', label: 'Renewal', kind: 'T', input: 'date', value: g.renewal_on ?? '' },
       { key: 'contact_name', label: 'Contact', kind: 'T', value: g.contact_name ?? '' },
       { key: 'contact_email', label: 'Contact email', kind: 'T', input: 'email', value: g.contact_email ?? '' },
+      ...(marketChoices && marketChoices.options.length ? [{ key: 'markets', label: 'Markets this partner works', kind: 'CK' as const, value: marketChoices.value, options: marketChoices.options }] : []),
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, pick(body, PARTNER_EDIT)) })),
   }, remove(`Remove ${g.name}?`, 'For a partner added by mistake: it leaves the partner list, its card and its counts. A partner with revenue or deals stays; end it instead.',
@@ -940,6 +957,54 @@ const ENTRY_STEP_EDIT = ['text', 'owner_name', 'due_on'] as const;
 /** The step a row names is checked in its own store (the venture's), then against this market by the writer. */
 const stepRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'market_entry_steps', id: refOf(field(body, 'step')) }];
 
+/**
+ * D6120 (#6120, GR-22, GR-27): the market record's own values, unformatted, for the Markets record page: each
+ * part's score and source, readiness, the decision and its day, the attached country, the size, the entry steps
+ * (with due and done days, so the page can say Overdue), the localisation checks and the replies to a market ask.
+ * Each store is read on its own: a failed one is `null` with its `*_state` 'unreadable', never an empty list.
+ */
+async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof readiness>) {
+  const read = async <T>(run: () => Promise<T>): Promise<T | null> => { try { return await run(); } catch { return null; } };
+  const steps = await read(async () => ((await rc.env.DB.prepare(
+    'SELECT uid, text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30',
+  ).bind(m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), text: String(x.text), owner_name: x.owner_name ?? null, due_on: x.due_on ?? null, done_at: x.done_at ?? null })));
+  const stepsTotal = await read(async () => Number((await rc.env.DB.prepare('SELECT COUNT(*) AS n FROM market_entry_steps WHERE market_id = ?').bind(m.id).first<{ n: number }>())?.n ?? 0));
+  const ticks = await read(async () => new Map(((await rc.env.DB.prepare('SELECT key, done_at FROM market_localisation WHERE market_id = ?')
+    .bind(m.id).all<{ key: string; done_at: string | null }>()).results || []).map((r) => [r.key, r.done_at])));
+  // A country read that fails is `false`; one the store no longer lists is `null` (the code is kept and shown).
+  const country = m.geography_ref ? await read(async () => (await rc.env.DB.prepare('SELECT code, name, region FROM research_countries WHERE code = ?')
+    .bind(m.geography_ref).first<{ code: string; name: string; region: string | null }>()) ?? undefined).then((c) => (c === null ? false : c ?? null)) : null;
+  const replies = await read(async () => ((await rc.env.DB.prepare(
+    `SELECT r.uid, r.name, r.message, r.created_at FROM update_ask_replies r
+       JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
+      WHERE u.project_id = ? AND a.kind = 'market' AND a.link_ref = CAST(? AS TEXT) ORDER BY r.id DESC LIMIT 20`,
+  ).bind(rc.projectId, m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), name: x.name ?? null, message: x.message ?? null, created_at: x.created_at ?? null })));
+  // D8251 (#8251, GR-24): Eadwyn's open proposals on this market, newest first; a failed read is `proposals: null`.
+  const proposals = await read(async () => ((await rc.env.DB.prepare(
+    `SELECT uid, kind, payload, sources, created_at FROM market_proposals WHERE market_id = ? AND state = 'proposed' ORDER BY id DESC LIMIT 20`,
+  ).bind(m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), kind: String(x.kind), payload: JSON.parse(String(x.payload)), sources: JSON.parse(String(x.sources)), created_at: x.created_at ?? null })));
+  // D8254 (#8254): the venture's partners linked to this market; a failed read is `partners: null`, never an empty list.
+  const partners = await read(async () => ((await rc.env.DB.prepare(
+    `SELECT p.uid, p.name, p.type, p.stage FROM growth_partner_markets l JOIN growth_partners p ON p.id = l.partner_id
+      WHERE l.market_id = ? AND p.project_id = ? ORDER BY p.name COLLATE NOCASE LIMIT 50`,
+  ).bind(m.id, rc.projectId).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), name: String(x.name), type: x.type ?? null, stage: x.stage ?? null })));
+  return {
+    state: m.state, decision: m.decision ?? null, decided_on: m.decided_on ?? null,
+    scores: MARKET_PARTS.map(([k, l]) => ({ key: k, part: l, score: m[`${k}_score`] ?? null, source: m[`${k}_source`] ?? null })),
+    readiness: rd.score, missing: rd.missing, weakest: rd.weakest,
+    geography_ref: m.geography_ref ?? null,
+    country: country ? { code: country.code, name: country.name, region: country.region ?? null } : null,
+    country_state: !m.geography_ref ? 'none' : country === false ? 'unreadable' : country ? 'ok' : 'unlisted',
+    size: m.size_cents != null ? { cents: m.size_cents, currency: m.size_currency ?? null, source: m.size_source ?? null } : null,
+    steps, steps_total: stepsTotal, steps_state: steps && stepsTotal != null ? 'ok' : 'unreadable',
+    localisation: ticks ? LOCALISATION_KEYS.map((k) => ({ key: k, label: label(k), done_at: ticks.get(k) ?? null })) : null,
+    localisation_state: ticks ? 'ok' : 'unreadable',
+    replies, replies_state: replies ? 'ok' : 'unreadable',
+    proposals, proposals_state: proposals ? 'ok' : 'unreadable',
+    partners, partners_state: partners ? 'ok' : 'unreadable',
+  };
+}
+
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
   if (!m) throw vanished();
@@ -951,6 +1016,7 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     pills: [pill(m.state), ...(m.decision ? [{ text: label(m.decision), tone: m.decision === 'enter' ? 'ok' : 'grey' }] : [])],
     facts: [part('demand', 'Demand evidence'), part('regulation', 'Regulation'), part('partners', 'Partners'), part('cost', 'Cost to enter')],
     createdBy: m.created_by, createdAt: m.created_at,
+    parts: { market: await marketParts(rc, m, rd) },
   }, { m });
 }, [
   section('entry-plan', 'Entry plan', async (rc, _id, record) => {
@@ -1032,6 +1098,13 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     confirm: { title: 'Remove this entry step?', body: 'It leaves the entry plan. Activity keeps a line that a step was removed.', cta: 'Remove' },
     references: stepRef,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
+  }, {
+    // D8251: Accept writes through Edit market (a score) or Add entry step (a plan); Dismiss writes nothing.
+    key: 'accept-proposal', label: 'Accept', kind: 'write', row_only: true,
+    execute: (c, _id, body) => refusing(async () => { await decideMarketProposal(c.env, c.projectId, userOf(c), id, field(body, 'proposal'), 'accept'); return { ok: true, record: { uid: id } }; }),
+  }, {
+    key: 'dismiss-proposal', label: 'Dismiss', kind: 'write', row_only: true,
+    execute: (c, _id, body) => refusing(async () => { await decideMarketProposal(c.env, c.projectId, userOf(c), id, field(body, 'proposal'), 'dismiss'); return { ok: true, record: { uid: id } }; }),
   }, {
     key: 'localisation-check', label: 'Tick a localisation check', kind: 'write', row_only: true,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),

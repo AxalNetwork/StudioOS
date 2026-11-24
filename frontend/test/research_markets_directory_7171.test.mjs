@@ -21,7 +21,7 @@ import {
   readMarketQuery, sectorHref, thesisFrom, thesisMatch, thesisMatchCount, writeMarketQuery,
 } from '../src/pages/research/marketDirectoryQuery.js';
 import {
-  AnalysisView, DirectoryBody, ResultLine, ThesisSection, ageAt, groupPage, newestKind,
+  AnalysisView, DirectoryBody, ResultLine, ThesisSection, ageAt, groupPage, sourcesLine,
 } from '../src/pages/research/MarketDirectory.jsx';
 import MarketsBack from '../src/pages/research/MarketsBack.jsx';
 
@@ -37,15 +37,18 @@ const READ_AT = '2026-11-16T09:40:00.000Z';
 const STORAGE = {
   slug: 'energy-storage', name: 'Energy storage', mi_sector: 'Climate Intelligence', company_count: 7, supplied_count: 312, as_of: '2026-10-01',
   countries: { status: 'recorded', value: [{ code: 'DE', count: 4 }, { code: 'NL', count: 2 }, { code: 'DK', count: 1 }] },
-  source_count: { status: 'recorded', value: 6 },
-  newest_source_at: { status: 'recorded', value: '2026-11-12T00:00:00Z' },
+  // D7710: the headline is the evidence naming the market; the four sector-level sources sit beside it.
+  source_count: { status: 'recorded', value: 2 },
+  newest_source_at: { status: 'recorded', value: '2026-11-10 08:00:00' },
+  newest_source_basis: 'reported',
+  distinct_source_count: { status: 'recorded', value: 6 },
   sources_by_kind: {
-    market_intel: { count: 4, newest: { status: 'recorded', value: '2026-11-12T00:00:00Z' } },
-    signal_evidence: { count: 2, newest: { status: 'recorded', value: '2026-11-10 08:00:00' } },
+    market_intel: { count: 4, newest: { status: 'recorded', value: '2025-12-31' }, basis: 'period_measured' },
+    signal_evidence: { count: 2, newest: { status: 'recorded', value: '2026-11-10 08:00:00' }, basis: 'reported' },
   },
   sources: [
-    { kind: 'market_intel', key: 'grid-filings', rows: 3, newest: '2026-11-12T00:00:00Z' },
-    { kind: 'signal_evidence', key: 'storage-auctions', rows: 2, newest: '2026-11-10 08:00:00' },
+    { kind: 'signal_evidence', key: 'storage-auctions', rows: 2, newest: '2026-11-10 08:00:00', basis: 'reported' },
+    { kind: 'market_intel', key: 'grid-filings', rows: 3, newest: '2025-12-31', basis: 'period_measured' },
   ],
 };
 const OLD = {
@@ -53,20 +56,25 @@ const OLD = {
   countries: { status: 'recorded', value: [{ code: 'DE', count: 1 }] },
   source_count: { status: 'recorded', value: 1 },
   newest_source_at: { status: 'recorded', value: '2026-07-03 10:00:00' },
+  newest_source_basis: 'reported',
+  distinct_source_count: { status: 'recorded', value: 1 },
   sources_by_kind: {
-    market_intel: { count: 0, newest: { status: 'not_recorded', value: null, reason: 'No source of this kind' } },
-    signal_evidence: { count: 1, newest: { status: 'recorded', value: '2026-07-03 10:00:00' } },
+    market_intel: { count: 0, newest: { status: 'not_recorded', value: null, reason: 'No source of this kind' }, basis: null },
+    signal_evidence: { count: 1, newest: { status: 'recorded', value: '2026-07-03 10:00:00' }, basis: 'reported' },
   },
-  sources: [{ kind: 'signal_evidence', key: 'efficiency-news', rows: 1, newest: '2026-07-03 10:00:00' }],
+  sources: [{ kind: 'signal_evidence', key: 'efficiency-news', rows: 1, newest: '2026-07-03 10:00:00', basis: 'reported' }],
 };
 const SPACE = {
   slug: 'space-hardware', name: 'Space hardware', mi_sector: 'Autonomous Robotics', company_count: 0, supplied_count: 80, as_of: '2026-10-01',
   countries: { status: 'not_recorded', value: null, reason: 'No company in the directory is placed in this market' },
-  source_count: { status: 'not_recorded', value: null, reason: 'No live source yet: no live market-intelligence row for its tracked sector and no evidence behind an active signal that names this market' },
-  newest_source_at: { status: 'not_recorded', value: null, reason: 'No live source yet' },
+  // D7710: only inherited sector sources, so none named and no band.
+  source_count: { status: 'not_recorded', value: null, reason: 'None named: no evidence behind an active signal names this market' },
+  newest_source_at: { status: 'not_recorded', value: null, reason: 'None named: no evidence behind an active signal names this market' },
+  newest_source_basis: null,
+  distinct_source_count: { status: 'recorded', value: 3 },
   sources_by_kind: {
-    market_intel: { count: 0, newest: { status: 'not_recorded', value: null, reason: 'No source of this kind' } },
-    signal_evidence: { count: 0, newest: { status: 'not_recorded', value: null, reason: 'No source of this kind' } },
+    market_intel: { count: 3, newest: { status: 'recorded', value: '2026-11-14T00:00:00Z' }, basis: 'retrieved' },
+    signal_evidence: { count: 0, newest: { status: 'not_recorded', value: null, reason: 'No source of this kind' }, basis: null },
   },
   sources: [],
 };
@@ -117,7 +125,7 @@ test('RMD-05: the sector link carries the view with the row open; Back can only 
   assert.equal(sectorHref(OLD, v).split('?')[0], '/research/markets/sector/energy-efficiency', 'an unmapped market opens its own page');
   const back = marketsBackHref('q=energy&country=DE&fresh=30&open=energy-storage');
   assert.equal(back.href, '/research/markets?q=energy&country=DE&fresh=30&open=energy-storage');
-  assert.equal(back.words, '“energy” · Germany · last 30 days');
+  assert.equal(back.words, '“energy” · Germany · named evidence, reported in the last 30 days');
   // Mutation checked: return `from` as is → the link leaves the directory.
   assert.equal(marketsBackHref('https://example.org/x').href, '/research/markets');
   assert.equal(marketsBackHref('//example.org').href, '/research/markets');
@@ -135,7 +143,7 @@ test('the sector pages draw the Back link, and the redirect from a market keeps 
 
 test('active filters are chips, each removing only itself', () => {
   const chips = filterChips(readMarketQuery(p('q=energy&country=DE&country=NL&fresh=30')));
-  assert.deepEqual(chips.map((c) => c.label), ['Search: energy', 'Country: Germany', 'Country: Netherlands', 'Newest source: last 30 days']);
+  assert.deepEqual(chips.map((c) => c.label), ['Search: energy', 'Country: Germany', 'Country: Netherlands', 'Named evidence: reported in the last 30 days']);
   assert.deepEqual(chips[1].patch, { country: ['NL'] });
 });
 
@@ -144,18 +152,20 @@ test('active filters are chips, each removing only itself', () => {
 test('RMD-01: five columns; ages from the read time; Stale past 90 days; Not recorded with the Worker\'s reason', () => {
   const view = readMarketQuery(p(''));
   const t = words(at('/research/markets', h(DirectoryBody, { markets: ready(DATA), view, onPatch: () => {} })));
-  for (const col of ['Market and tracked sector', 'Taxonomy company count not market size', 'Countries represented', 'Distinct sources', 'Latest source']) {
+  for (const col of ['Market and tracked sector', 'Taxonomy company count not market size', 'Countries represented', 'Sources naming it', 'Latest source']) {
     assert.ok(t.includes(col), col);
   }
-  assert.match(t, /Energy storage Tracked sector Climate Intelligence 312 DE 4 · NL 2 · DK 1 3 countries 6 4 sector-level · 2 name it 2026-11-12 4 days ago · sector-level/);
+  // D7710: the named count leads, the inherited count beside it; Latest says what its date measures.
+  assert.match(t, /Energy storage Tracked sector Climate Intelligence 312 DE 4 · NL 2 · DK 1 3 countries 2 name this market · 4 sector-level, inherited 2026-11-10 6 days ago · date the source reports/);
   assert.match(t, /Energy efficiency services Not mapped yet · no tracked sector 38/);
-  assert.match(t, /2026-07-03 135 days ago · names this market Stale · 135 days/);
+  assert.match(t, /2026-07-03 135 days ago · date the source reports Stale · 135 days/);
   assert.match(t, /Not recorded · No company in the directory is placed in this market/);
-  assert.match(t, /Not recorded · No live source yet/);
+  assert.match(t, /None named 3 sector-level, inherited Not recorded · None named/, 'a market with only inherited sources reads none named');
   assert.doesNotMatch(t, /Your thesis/, 'no thesis column without a thesis');
   assert.match(t, /1–3 of 82 Previous Next/);
   assert.equal(ageAt('2026-07-03 10:00:00', READ_AT), 135);
-  assert.equal(newestKind(STORAGE), 'sector-level');
+  assert.deepEqual(sourcesLine(SPACE), { head: 'None named', named: 0, sub: '3 sector-level, inherited' });
+  assert.deepEqual(sourcesLine(OLD), { head: '1', named: 1, sub: 'names this market · 0 sector-level, inherited' });
 });
 
 test('RMD-04: the open row tells sector-level sources from evidence naming the market, and says what the count is not', () => {
@@ -164,7 +174,8 @@ test('RMD-04: the open row tells sector-level sources from evidence naming the m
   assert.match(markup, /aria-expanded="true" aria-controls="market-details-energy-storage"/);
   const t = words(markup);
   assert.match(t, /Germany 4 companies Netherlands 2 companies Denmark 1 company/);
-  assert.match(t, /Sources · 6 distinct Sector-level 4 grid-filings 2026-11-12 Names this market 2 storage-auctions 2026-11-10/);
+  // D7710: evidence naming the market first; an annual sector figure shows the year it measures.
+  assert.match(t, /Sources · 6 distinct Names this market 2 storage-auctions reported 2026-11-10 Sector-level, inherited 4 grid-filings period 2025/);
   assert.match(t, /It is a count of companies, not the size of the market\. Taxonomy as of 2026-10-01\./);
   assert.match(t, /Market size and growth Not recorded · No source we hold records market size or growth/);
   assert.match(t, /Open sector Climate Intelligence →/);
@@ -190,14 +201,15 @@ test('RMD-06B: Analysis is dated coverage from the summary, both country reasons
   const summary = {
     markets: 82, supplied_total: 9640, fresh: { 30: 48, 90: 6, older: 7, none: 21 },
     countries: { recorded: 66, no_company: 9, no_placeable_country: 7, distinct: 23 }, tracked: { mapped: 74, unmapped: 8 },
-    by_sector: [{ sector: 'Climate Intelligence', markets: 9, sector_sources: 4, newest_sector_source: { status: 'recorded', value: '2026-06-18T00:00:00Z' }, named_markets: 2 }],
+    by_sector: [{ sector: 'Climate Intelligence', markets: 9, sector_sources: 4, newest_sector_source: { status: 'recorded', value: '2026-06-18T00:00:00Z' }, newest_sector_basis: 'retrieved', named_markets: 2 }],
     unmapped: { markets: 8, named_markets: 1 }, stale_days: 90,
   };
   const t = words(at('/', h(AnalysisView, { summary, readAt: READ_AT, asOf: '2026-10-01' })));
   assert.match(t, /Documented coverage of the 82 markets · read 2026-11-16 · taxonomy as of 2026-10-01 · counts, not market size or growth/);
-  assert.match(t, /Last 30 days 48 31 to 90 days 6 Older than 90 days · Stale 7 No source recorded \(Not recorded\) 21/);
+  assert.match(t, /Last 30 days 48 31 to 90 days 6 Older than 90 days · Stale 7 None named \(Not recorded\) 21/);
+  assert.match(t, /markets have dated evidence that names them, by the date its source reports\. Inherited sector sources set no band\./);
   assert.match(t, /No company placed \(Not recorded\) 9 No placeable country \(Not recorded\) 7/);
-  assert.match(t, /Climate Intelligence 9 4 2026-06-18 Stale · 151 days 2/);
+  assert.match(t, /Climate Intelligence 9 4 retrieved 2026-06-18 Stale · 151 days 2/);
   assert.match(t, /Not mapped yet 8 Not applicable Not applicable 1/);
 });
 
