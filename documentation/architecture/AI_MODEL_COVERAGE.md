@@ -218,7 +218,7 @@ rerank: Rank supplied research passages and relationship matches by relevance.
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Partner network"`; `railMatrix.json option draft:grow/talent`
 - Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 16 more
-- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 31 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 29 more
 - Studio / Eadwyn: **wired**, `services/advisor/rerank.ts (rerank)`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 10 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 8 more
@@ -353,7 +353,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 69 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 45 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 46 more
 
 ### `@cf/deepseek-ai/deepseek-v4.1-flash-1017`
 
@@ -576,7 +576,7 @@ chat: Short summaries, labels and lightweight record explanations.
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 77 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 74 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 75 more
 
 ### `@cf/ai4bharat/indictrans2-en-indic-1B`
 
@@ -601,7 +601,7 @@ chat: Long-document research and cross-source synthesis.
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `/api/ai/modules on "Founder · Raise"`; and 4 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `ST2 on "Founder · Grow · Product improvement"`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 58 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 56 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
@@ -806,7 +806,7 @@ chat: Investor narratives, distribution copy and multilingual summaries.
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 57 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 61 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 62 more
 
 ### `@cf/moondream/moondream3.1-9B-A2B`
 

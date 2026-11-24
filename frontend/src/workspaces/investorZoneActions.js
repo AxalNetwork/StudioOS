@@ -238,9 +238,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // D497 (#1023): question 8 on #1023 asks whether this reuses the
-    // `intro_propositions` flow between two of your accepted ties.
-    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
+    // D6637 / D6263 Q8: offer between two accepted ties through existing propositions.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // D6258: the list is derived from the relationship book, and since D572
@@ -284,11 +283,11 @@ export const INVESTOR_ZONE_ACTIONS = {
   // specified actions each, an empty row on screen, and a test excluding them
   // for a reason that had stopped being true. The gap was shipped, not deferred.
   'research/diligence': [
-    // The zone's own StatedLimit argues this one, and the note says the same
-    // thing it does: "a request button that wrote nowhere would be worse than
-    // the conversation it replaced."
-    // Data-room requests live on the deal’s Documents tab; this list shows granted rooms.
-    { label: 'New request', unbuilt: 'a room is asked for on its deal: open the deal, then Documents, then Ask for access. The founder decides, and you get a notice either way', hover: 'Ask for a data room from the deal’s Documents tab.' },
+    // D6269 (#6269): `New request` is withheld, not drawn disabled. A request
+    // is made on its deal (Documents, then Ask for access), where the founder
+    // can answer it, and this list has no one deal to open; the Investor
+    // Research v2 Rooms canvas (IRV-02) draws no such control. The page's
+    // Requests block lists what came of yours.
     // D6266: a room already shows the deals on its company that you may open; there is nothing to attach by hand.
     { label: 'Attach to deal', unbuilt: 'a room shows the deals on its company that you are invited to or committed on, with their stage and a link; there is nothing to attach by hand', hover: 'Each room already shows its deal when you are invited to it.' },
     { label: 'Export', kind: 'export' },
@@ -302,10 +301,13 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
     { label: 'Export', kind: 'export' },
   ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); Edit thesis opens Settings › My thesis. They
+  // replace New deep-dive, Export and Cite in a memo.
   'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
-    { label: 'Export', kind: 'export' },
-    { label: 'Cite in a memo', unbuilt: 'nothing carries a sector into a memo' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'Edit thesis', kind: 'handler', handler: 'editThesis', primary: true },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
   // `Add document`, and it opens the same file picker. It was

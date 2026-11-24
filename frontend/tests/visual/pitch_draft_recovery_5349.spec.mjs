@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import { keyOf } from '../../src/pages/raise/pitch/deckAutosave.js';
 import { prepare } from './_editor.mjs';
 
+// #7247: a handler here awaits `route.fetch()`; if the test ends while that request is in flight, the await throws
+// "route.fetch: Test ended" and fails a passing test. Unrouting waits for running handlers and drops that error.
+test.afterEach(async ({ page }) => {
+  // A test that closed its own tab has no routes left to wait for.
+  if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const first = 'draft-one';
 const second = 'draft-two';
 
@@ -29,7 +36,11 @@ for (const width of [1440, 390]) {
     const names = (page) => phone
       ? page.getByTestId('pitch-editor-phone').locator('ol > li > button:first-child')
       : page.getByTestId(/^pitch-editor-rail-\d+$/);
-    const expectNames = (page, titles) => expect(names(page)).toHaveText(titles.map((title) => new RegExp(title)));
+    // Each rail item contains its title, in order, and there are no others.
+    const expectNames = async (page, titles) => {
+      await expect(names(page)).toHaveCount(titles.length);
+      for (const [i, title] of titles.entries()) await expect(names(page).nth(i)).toContainText(title);
+    };
     const urlOf = ({ projectId }) => `/raise/pitch/edit?project_id=${projectId}`;
     const draftOf = ({ deckId }) => `/api/decks/${deckId}/draft`;
 

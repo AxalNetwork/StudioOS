@@ -287,8 +287,16 @@ export type CreateRevisionResult =
   | { ok: true; revisionUid: string; seq: number; replayed: boolean; cost: Cost }
   | Refusal;
 
+/**
+ * D5585 part 2: a release re-pin. `repinnedComponents` names earlier component revisions a composite revision may pin
+ * although they are no longer their assets' heads (the caller has checked each was pinned by a manifest that was
+ * published). Only `component` edges of a composite take it; every other check stands.
+ */
+export interface CreateRevisionOptions { repinnedComponents?: ReadonlySet<string> }
+
 export async function createRevision(
   env: Pick<Env, 'DB'>, ctx: ValidationContext, input: CreateRevisionInput, limits: WorkGraphLimits = WORK_GRAPH_LIMITS,
+  options: CreateRevisionOptions = {},
 ): Promise<CreateRevisionResult> {
   const m = new Meter(env);
   const deps = input.dependencies ?? [];
@@ -380,7 +388,8 @@ export async function createRevision(
       const v = validateWorkGraph({ assets: [depAsset] }, ctx);
       if (v.length) return m.refuse('wrong_tenant', [uid, d.assetUid], { violations: v });
       if (r.tombstoned_at !== null) return m.refuse('tombstoned', [d.revisionUid]);
-      if (r.head_revision_uid !== d.revisionUid) {
+      if (r.head_revision_uid !== d.revisionUid
+        && !(isComposite && d.kind === 'component' && options.repinnedComponents?.has(d.revisionUid))) {
         return m.refuse(isComposite ? 'composite_incompatible' : 'stale_dependency', [d.assetUid, d.revisionUid, String(r.head_revision_uid)]);
       }
     }
@@ -495,7 +504,23 @@ export type AdvanceHeadResult =
 /** Approval policies under which a head may move only with a person's approval of the exact bytes (D5579 §1). */
 export const APPROVAL_REQUIRED_POLICIES: ReadonlySet<string> = new Set(['human_publication']);
 
-export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, input: AdvanceHeadInput): Promise<AdvanceHeadResult> {
+/**
+ * D5585: statements a caller adds to the CAS batch, so they commit with the head move or not at all (a release's
+ * queued outbox effects). Each statement must hold only when THIS batch's swap applied: guard it on the
+ * `advance_head` event with `idempotencyKey` and `requestHash` (inserted just before it, `WHERE changes() > 0`).
+ */
+export interface AdvanceHooks {
+  afterSwap?: (swap: { idempotencyKey: string; requestHash: string; at: string }) => D1PreparedStatement[];
+  /**
+   * D5585 part 2: earlier component revisions a release re-pin pins on purpose. The swap still requires each to be a
+   * live (untombstoned) revision, and every other edge of the revision to be at its asset's head.
+   */
+  repinnedComponents?: readonly string[];
+}
+
+export async function advanceHead(
+  env: AdvanceHeadEnv, ctx: ValidationContext, input: AdvanceHeadInput, hooks: AdvanceHooks = {},
+): Promise<AdvanceHeadResult> {
   const m = new Meter(env);
   if (!keyOk(input.idempotencyKey) || actorMalformed(input.actor) || typeof input.revisionUid !== 'string'
     || (input.expectedRevisionUid !== null && typeof input.expectedRevisionUid !== 'string')
@@ -613,6 +638,7 @@ export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, i
     if (!v.ok) return refuseAudited('bytes_unverified', [rev.revision_uid, v.code, v.detail], { cause: v.code, detail: v.detail, digest: version.digest });
   }
   const approverId = approval && approval.reviewer.kind === 'person' ? approval.reviewer.userId : null;
+  const repinned = JSON.stringify(hooks.repinnedComponents ?? []);
   let results: D1Result[];
   try {
     results = await m.batch([
@@ -623,10 +649,15 @@ export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, i
             AND EXISTS (SELECT 1 FROM work_graph_revisions r WHERE r.revision_uid = ? AND r.asset_uid = ? AND r.tombstoned_at IS NULL)
             AND NOT EXISTS (
               SELECT 1 FROM work_graph_edges e JOIN work_graph_assets d ON d.asset_uid = e.to_asset_uid
-               WHERE e.from_revision_uid = ? AND d.head_revision_uid IS NOT e.to_revision_uid)
+               WHERE e.from_revision_uid = ? AND d.head_revision_uid IS NOT e.to_revision_uid
+                 AND NOT (e.edge_kind = 'component' AND e.to_revision_uid IN (SELECT value FROM json_each(?))))
+            AND NOT EXISTS (
+              SELECT 1 FROM work_graph_edges e JOIN work_graph_revisions p ON p.revision_uid = e.to_revision_uid
+               WHERE e.from_revision_uid = ? AND p.tombstoned_at IS NOT NULL)
             AND NOT EXISTS (
               SELECT 1 FROM work_graph_revision_flags f WHERE f.revision_uid = ? AND f.cleared_at IS NULL)`,
-      ).bind(rev.revision_uid, asset.id, input.expectedRevisionUid, rev.revision_uid, asset.id, rev.revision_uid, rev.revision_uid),
+      ).bind(rev.revision_uid, asset.id, input.expectedRevisionUid, rev.revision_uid, asset.id, rev.revision_uid, repinned,
+        rev.revision_uid, rev.revision_uid),
       env.DB.prepare(
         `INSERT INTO work_graph_events (tenant_id, company_id, project_id, asset_uid, action, actor_kind, actor_user_id,
            agent_run_id, charge_id, base_revision_uid, revision_uid, head_seq, approval_ref, approval_digest, approver_user_id,
@@ -637,6 +668,7 @@ export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, i
       ).bind(row.tenant_id, row.company_id, row.project_id, asset.id, kind, userId, runId, chargeId, input.expectedRevisionUid,
         rev.revision_uid, asset.id, approval?.ref ?? null, approval?.contentDigest ?? null, approverId,
         input.idempotencyKey, hash, at),
+      ...(hooks.afterSwap?.({ idempotencyKey: input.idempotencyKey, requestHash: hash, at }) ?? []),
     ]);
   } catch (e) {
     const raced = await replay();
@@ -654,7 +686,8 @@ export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, i
       code = 'stale_revision';
       ids = [rev.revision_uid, String(input.expectedRevisionUid), String(currentHead.revisionUid)];
     } else {
-      const stale = await staleEdges(env, m, rev.revision_uid);
+      const stale = (await staleEdges(env, m, rev.revision_uid))
+        .filter((s) => !(s.edgeKind === 'component' && hooks.repinnedComponents?.includes(s.pinnedRevisionUid)));
       const flags = stale.length ? [] : (await m.all<{ flag: string }>(env.DB.prepare(
         'SELECT flag FROM work_graph_revision_flags WHERE revision_uid = ? AND cleared_at IS NULL ORDER BY flag',
       ).bind(rev.revision_uid))).map((f) => f.flag);

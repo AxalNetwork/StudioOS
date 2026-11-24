@@ -7,6 +7,8 @@ import { PRODUCT_PAGES } from '../../data/productPages';
 import { FOUNDER_TIERS, INVESTOR_TIERS } from '../../data/pricing';
 import { pricedTier } from '../../lib/plansPricing';
 import { PRICE_READING, PRICE_UNREAD, usePlansRead } from '../../lib/planPrices';
+import { registerPathFor, specFor } from '../../lib/planIntent';
+import { majorToMinor } from '../../lib/money';
 import NotFoundPage from '../NotFoundPage';
 import './doors.css';
 
@@ -62,8 +64,22 @@ export function resolvePlans(door, catalogue = CATALOGUE) {
     const tier = tierFor(door, p.tier, catalogue);
     if (!tier) return [];
     // D1050: the plan is called what /pricing calls it, the catalogue tier's name.
-    return [{ ...p, name: tier.name || p.name, price: formatPrice(tier, catalogue.reading), period: '/ month', features: tier.features.slice() }];
+    // #6983 (X1): a plan priced by agreement says so, and never prints "Price not read".
+    if (p.custom) return [{ ...p, name: tier.name || p.name, price: 'Custom', period: p.custom.note, cta: p.custom.cta, to: p.custom.to, features: tier.features.slice() }];
+    return [{ ...p, name: tier.name || p.name, price: formatPrice(tier, catalogue.reading), period: '/ month', features: tier.features.slice(), to: planRegisterPath(door, tier) }];
   });
+}
+
+/**
+ * #6984 (X2): a paid plan's button opens registration with that plan, as Pricing's cards do (`registerPathFor`):
+ * `plan`, `interval` (the door shows the monthly price, so monthly) and the Pricing return as `next`, with `seen`
+ * when a price was read. A tier with no paid card (the free plan) keeps the door's lane link.
+ */
+export function planRegisterPath(door, tier) {
+  const found = door.catalogue && tier?.id ? specFor(`${door.catalogue}:${tier.id}`) : null;
+  if (!found) return undefined;
+  const seen = typeof tier.priceMonthly === 'number' && tier.priceMonthly > 0 ? majorToMinor(tier.priceMonthly, 'USD') : null;
+  return registerPathFor({ lane: found.spec.lane, tab: found.tab, planKey: found.spec.storage, interval: 'monthly', seen });
 }
 
 /** A chapter's list, with any `{price}` filled from the catalogue (or the line left out). */
@@ -133,7 +149,7 @@ function PlanCard({ p, to }) {
       <ul className="ax-door-plan-feats">
         {p.features.map((f) => <li key={f}><span className="ax-door-tick" aria-hidden="true">✓</span>{f}</li>)}
       </ul>
-      <Link to={to} className="ax-btn ax-door-plan-cta">{p.cta}</Link>
+      <Link to={p.to || to} className="ax-btn ax-door-plan-cta">{p.cta}</Link>
     </div>
   );
 }
@@ -188,6 +204,11 @@ export default function DoorPage({ door: key }) {
               <h1 id="ax-door-h" className="ax-h1">{door.h1}</h1>
               <p className="ax-door-who">{door.who}</p>
               <div className="ax-row-btns">{ctas}</div>
+              {door.lpSignIn && (
+                <p className="ax-door-who ax-door-lp-signin">
+                  {door.lpSignIn.lead} <Link to={door.lpSignIn.to}>{door.lpSignIn.t}</Link>
+                </p>
+              )}
             </div>
           </div>
         </section>

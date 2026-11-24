@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ghostButtonClass } from '../kit';
+import { isNoPartnerProfile, offerGhostButtonClass } from '../kit';
 
 /**
  * Offers · one way to write a record and tell the truth about it (#4688).
@@ -53,6 +53,48 @@ export function writeFailureText(error, fallback = 'That did not save.') {
   return fallback;
 }
 
+/**
+ * #4845 (D4845): the sentence a FAILED READ shows inside an Offers zone's
+ * Unavailable state (#5129's `SectionState`, "<what> could not be read. …").
+ * It is chosen by the failure's kind and never taken from the response: a read
+ * that fails carries whatever the server or the network layer said, and that
+ * text is not written for a member.
+ */
+export const READ_FAILURE_DEFAULT = 'Nothing here is out of date; it just isn’t shown.';
+export function readFailureText(error) {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || ({ forbidden: 403, session_expired: 401, rate_limited: 429, network_error: 0 })[code];
+  if (status === 401) return 'Your session has ended. Sign in again to see it.';
+  if (status === 403) return 'This account cannot read it.';
+  if (status === 429) return 'Too many requests at once. Wait a moment and try again.';
+  if (error instanceof TypeError || code === 'network_error' || error?.status === 0) return 'Axal could not be reached. Check your connection and try again.';
+  return READ_FAILURE_DEFAULT;
+}
+
+/**
+ * What a zone keeps as `state.error` when its read throws: the no-firm refusal
+ * as it came, so `isNoPartnerProfile(state.error)` still sees it (and the zone
+ * draws `NoPartnerProfile`, never this text), and otherwise the written
+ * sentence above. So the raw response never reaches `ZoneBody`.
+ */
+export function zoneReadError(error) {
+  const raw = typeof error?.message === 'string' ? error.message : '';
+  return isNoPartnerProfile(raw) ? raw : readFailureText(error);
+}
+
+/**
+ * D4844: the field a refused save names, so the editor can put the sentence on
+ * that field (OF-02b). Only a bounded 400/422 naming a well-formed field counts,
+ * the same rule `writeFailureText` uses for the sentence; anything else is null.
+ */
+export function writeFailureField(error) {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || (code === 'validation_error' ? 422 : 0);
+  if (status !== 400 && status !== 422) return null;
+  const field = error?.field || error?.data?.field;
+  return typeof field === 'string' && /^[a-z][\w.[\]-]{0,79}$/i.test(field) ? field : null;
+}
+
 export function useGuardedWrite(load) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -67,7 +109,7 @@ export function useGuardedWrite(load) {
       await write();
     } catch (e) {
       setNote({
-        ok: false, scope, text: writeFailureText(e, failed),
+        ok: false, scope, text: writeFailureText(e, failed), field: writeFailureField(e),
         retry: () => save(write, opts),
       });
       setBusy(false);
@@ -115,14 +157,19 @@ export function WriteNote({ note, busy = false, onReload }) {
     : note.refreshFailed ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-300';
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="write-note">
-      <p role={note.ok ? 'status' : 'alert'} className={`text-[12px] font-semibold ${tone}`}>{note.text}</p>
+      {/* D4844: a tick, a cross or a warning sign leads the sentence, so saved,
+          not saved and saved-but-not-refreshed differ by shape, not colour alone. */}
+      <p role={note.ok ? 'status' : 'alert'} className={`flex items-start gap-1.5 text-[13px] font-semibold ${tone}`} data-save-status={!note.ok ? 'not-saved' : note.refreshFailed ? 'saved-unrefreshed' : 'saved'}>
+        <span aria-hidden="true">{!note.ok ? '✕' : note.refreshFailed ? '!' : '✓'}</span>
+        <span>{note.text}</span>
+      </p>
       {!note.ok && note.retry && (
-        <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => note.retry()}>
+        <button type="button" className={offerGhostButtonClass} disabled={busy} onClick={() => note.retry()}>
           Retry
         </button>
       )}
       {note.refreshFailed && onReload && (
-        <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => onReload()}>
+        <button type="button" className={offerGhostButtonClass} disabled={busy} onClick={() => onReload()}>
           Reload the list
         </button>
       )}

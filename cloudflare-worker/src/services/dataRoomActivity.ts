@@ -38,7 +38,8 @@ import { grantFolderScope, tierAdmits, type FolderScope } from './dataRoomAccess
 import { DILIGENCE_CHECKLIST } from './raiseCycle';
 import { csvCell } from './capTableRegister';
 
-export const ACTIVITY_ACTIONS = ['open_room', 'download', 'blocked'] as const;
+// D6869: an investor adding a room file to their Library, or removing it, is the room's activity too.
+export const ACTIVITY_ACTIONS = ['open_room', 'download', 'blocked', 'library_add', 'library_remove'] as const;
 export type ActivityAction = typeof ACTIVITY_ACTIONS[number];
 export const ACTIVITY_PAGE_SIZE = 50;
 export const ACTIVITY_DEFAULT_DAYS = 30;
@@ -67,7 +68,7 @@ export function parseActivityQuery(get: (k: string) => string | undefined, today
   if (days > ACTIVITY_MAX_DAYS) return { ok: false, code: 'bad_period', detail: `A period is at most ${ACTIVITY_MAX_DAYS} days.` };
   const action = get('action') || null;
   if (action !== null && !(ACTIVITY_ACTIONS as readonly string[]).includes(action)) {
-    return { ok: false, code: 'bad_action', detail: 'action is open_room, download or blocked.' };
+    return { ok: false, code: 'bad_action', detail: 'action is open_room, download, blocked, library_add or library_remove.' };
   }
   const rawPage = get('page');
   const page = rawPage === undefined || rawPage === '' ? 1 : Number(rawPage);
@@ -80,7 +81,7 @@ export function parseActivityQuery(get: (k: string) => string | undefined, today
 
 type Figures = { opened: number; downloaded: number; blocked: number };
 const zero = (): Figures => ({ opened: 0, downloaded: 0, blocked: 0 });
-const FIGURE: Record<ActivityAction, keyof Figures> = { open_room: 'opened', download: 'downloaded', blocked: 'blocked' };
+const FIGURE: Partial<Record<ActivityAction, keyof Figures>> = { open_room: 'opened', download: 'downloaded', blocked: 'blocked' };
 const add = (f: Figures, action: string, n: number) => {
   const k = FIGURE[action as ActivityAction];
   if (k) f[k] += Number(n) || 0;
@@ -199,6 +200,7 @@ export async function activityRead(env: Env, projectId: number, q: ActivityQuery
 
 export const ACTION_WORDS: Record<ActivityAction, string> = {
   open_room: 'Opened the room', download: 'Downloaded', blocked: 'Blocked: NDA not signed',
+  library_add: 'Added to their Library', library_remove: 'Removed from their Library',
 };
 export const CSV_HEADER = ['When (UTC)', 'What', 'Investor', 'Email', 'File'];
 

@@ -33,19 +33,23 @@ export function analysisTiles(analysis, { readFailed = false } = {}) {
     { k: 'Competitors', v: String(cands.length), sub: cands.length ? 'direct + adjacent in this run' : 'none recorded yet' },
     { k: 'Direct', v: String(cands.filter((c) => c.category !== 'adjacent').length), sub: 'category = direct' },
     { k: 'Adjacent', v: String(cands.filter((c) => c.category === 'adjacent').length), sub: 'category = adjacent' },
-    { k: 'Sources fetched', v: String(fetched), sub: 'public URLs, not a database' },
+    // D7175: the reads tried beside the reads fetched, so a failed read shows.
+    { k: 'Sources fetched', v: String(fetched), sub: `${fetched} of ${(analysis.sources || []).length} tried · public URLs` },
   ];
 }
 
 /** The inputs row: what the person actually gave the run, blanks as Not recorded. */
 export function inputsRow(inputs = {}) {
   const val = (v) => (Array.isArray(v) ? v.join(', ') : String(v ?? '').trim());
+  const given = inputs || {};
   return [
-    ['Market', val(inputs.market)],
-    ['Customer', val(inputs.target_customer)],
-    ['Geography', val(inputs.geography)],
-    ['Depth', val(inputs.depth)],
-    ['Known competitors', val(inputs.known_competitors)],
+    ['Market', val(given.market)],
+    ['Customer', val(given.target_customer)],
+    ['Geography', val(given.geography)],
+    // D7175 part 2 (RS-13 B1): the region the run was focused on.
+    ['Region', val(given.region_focus)],
+    ['Depth', val(given.depth)],
+    ['Known competitors', val(given.known_competitors)],
   ].map(([k, v]) => (v ? { k, v } : { k, nr: true }));
 }
 
@@ -114,4 +118,219 @@ export function landscapeRead(analysis) {
 export function notesWithRead(notes, read) {
   const had = String(notes ?? '').trim();
   return had ? `${had}\n\nLandscape read:\n${read}` : `Landscape read:\n${read}`;
+}
+
+/* ---------------------------------------------------------------------------
+ * D7175 (#7175, canvas D7041, boards RS-13): a fixed subject, and no finding
+ * without a source. One evidence vocabulary for setup, results, the saved list
+ * and the export, read from the Worker's `evidence` (never worked out here
+ * from a guess), and the readings the subject card, the findings and the
+ * competitor table draw.
+ * ------------------------------------------------------------------------- */
+
+/** The evidence words, as the canvas's vocabulary names them. `tone` picks the chip's shape. */
+export const EVIDENCE = Object.freeze({
+  supported: { word: 'Supported', tone: 'ok' },
+  partial: { word: 'Partial', tone: 'partial' },
+  insufficient: { word: 'Insufficient evidence', tone: 'insufficient' },
+  no_candidates: { word: 'No candidates', tone: 'none' },
+  unavailable: { word: 'Sources unavailable', tone: 'unavailable' },
+});
+
+/** The evidence chip's label for a run: null when the run has no status (not complete). */
+export function evidenceLabel(evidence) {
+  const e = evidence && EVIDENCE[evidence.status];
+  if (!e) return null;
+  if (evidence.status === 'supported') return `${e.word} · every finding names a source`;
+  if (evidence.status === 'partial' && evidence.findings) return `${e.word} · ${evidence.findings_with_source} of ${evidence.findings} findings have a source`;
+  return e.word;
+}
+
+/** Source id → its number: fetched sources only, from 1, in the order the API lists them (as the export numbers them). */
+export function sourceNumbers(sources = []) {
+  const m = new Map();
+  for (const s of sources) if (sourceFetched(s)) m.set(String(s.id), m.size + 1);
+  return m;
+}
+
+/**
+ * The findings as the page draws them: Source facts and Interpretation apart,
+ * each with the numbers of the fetched sources it cites. A citation to a
+ * source that failed or was removed is dropped, and a finding left with none
+ * is `noSource` ("No source in this run"), never drawn as cited.
+ */
+export function findingsOf(out = {}, sources = []) {
+  const n = sourceNumbers(sources);
+  const rows = (Array.isArray(out?.findings) ? out.findings : [])
+    .filter((f) => String(f?.text ?? '').trim())
+    .map((f) => {
+      const cites = [...new Set((Array.isArray(f.source_ids) ? f.source_ids : []).map((id) => n.get(String(id))).filter(Boolean))];
+      return { text: String(f.text).trim(), kind: f.kind === 'interpretation' ? 'interpretation' : 'fact', cites, noSource: !cites.length };
+    });
+  return { facts: rows.filter((r) => r.kind === 'fact'), interpretation: rows.filter((r) => r.kind === 'interpretation') };
+}
+
+/** One source chip's words: "homepage · fetched", "about · Unavailable · 503", "homepage · Unavailable · timed out". */
+export function sourceChip(s, n) {
+  const ok = sourceFetched(s);
+  const code = Number(s?.status);
+  return { n: ok ? n : null, ok, label: `${s?.kind || 'page'} · ${ok ? 'fetched' : `Unavailable · ${code || 'timed out'}`}`, url: s?.url || '' };
+}
+
+/**
+ * What a competitor's classification rests on: its source chips, how many of
+ * its reads came back, and whether the classification is unconfirmed (no
+ * fetched source: its site failed, or it has no website and nothing was tried).
+ */
+export function candidateSupport(c, sources = []) {
+  const n = sourceNumbers(sources);
+  const mine = sources.filter((s) => String(s.candidate_id) === String(c?.id));
+  const chips = mine.map((s) => sourceChip(s, n.get(String(s.id))));
+  const fetched = chips.filter((x) => x.ok).length;
+  return { chips, fetched, tried: mine.length, unconfirmed: fetched === 0, notAttempted: !mine.length && !c?.url && !c?.domain };
+}
+
+/** The classification word a row shows: an unconfirmed one says so. */
+export function classificationWord(c, support) {
+  const base = c?.category === 'adjacent' ? 'Adjacent' : 'Direct';
+  return support?.unconfirmed ? `${base} · unconfirmed` : base;
+}
+
+/** The failed reads, for the Partial bar's "Retry the N reads". */
+export function failedReads(sources = []) {
+  return sources.filter((s) => !sourceFetched(s));
+}
+
+/** A website as the card prints it: the host, without scheme or `www.`. */
+export function siteHost(website) {
+  const raw = String(website ?? '').trim();
+  if (!raw) return '';
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`).hostname.replace(/^www\./, '');
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * The subject card's state from one read of `GET /research/company-directory/:uid`
+ * (`read` is { loading, error, data }): loading · unavailable (the read failed;
+ * only the name from the link is shown) · missing (no such company) · ok, with
+ * the website's own state: verified, not_verified or not_recorded.
+ */
+export function subjectCard(read, linkName = '') {
+  if (!read || read.loading) return { state: 'loading', name: linkName };
+  if (read.error) return { state: Number(read.error.status) === 404 ? 'missing' : 'unavailable', name: linkName };
+  const item = read.data?.item || {};
+  const website = String(item.website ?? '').trim();
+  const websiteStatus = !website ? 'not_recorded' : (item.website_status === 'verified' || item.website_verified_at) ? 'verified' : 'not_verified';
+  return {
+    state: 'ok',
+    uid: item.uid || null,
+    name: item.name || linkName,
+    website,
+    host: siteHost(website),
+    websiteStatus,
+    verifiedAt: item.website_verified_at || null,
+    source: item.source_name || null,
+    sourceUrl: item.source_url || null,
+    license: item.source_license || null,
+    asOf: item.as_of || null,
+    sector: String(item.sector ?? '').trim(),
+  };
+}
+
+/**
+ * Self-match protection in the Known competitors field: a typed name that is
+ * the subject's name, uid or site is refused there, as the Worker refuses it.
+ */
+export function isSubjectName(subject, typed) {
+  if (!subject) return false;
+  const key = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const t = key(typed);
+  if (!t) return false;
+  if (t === key(subject.name) || (subject.uid && t === key(subject.uid))) return true;
+  const host = siteHost(subject.website);
+  return !!host && /\./.test(t) && siteHost(t) === host;
+}
+
+/**
+ * Revise the search (RS-13 B3): the setup form with this run's subject and
+ * inputs kept, so the reader changes what they want and runs again.
+ */
+export function reviseHref(analysis) {
+  const i = analysis?.inputs || {};
+  const p = new URLSearchParams({ tab: 'analyses' });
+  if (analysis?.subject_uid) {
+    p.set('company', analysis.subject_uid);
+    if (i.subject?.name) p.set('name', i.subject.name);
+  }
+  for (const [k, v] of [['market', i.market], ['customer', i.target_customer], ['geography', i.geography],
+    ['region', i.region_focus], ['depth', i.depth], ['known', i.known_competitors]]) {
+    const t = String(v ?? '').trim();
+    if (t) p.set(k, t.slice(0, 200));
+  }
+  return `/research/companies?${p.toString()}`;
+}
+
+/** Known competitors as a list: comma, semicolon or newline separate names. */
+export const splitNames = (s) => String(s || '').split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+
+/* ---------------------------------------------------------------------------
+ * D7175 part 2 (#7175, canvas D7041, boards RS-13 A2, A5, B3).
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Known competitors as tokens (RS-13 A2): `typed` (one name, or several
+ * separated by commas, semicolons or new lines) is added to `tokens`, each
+ * name once (case ignored). A name that is the subject's name, uid or site is
+ * never added: it is returned in `refused`, so the field can say why.
+ */
+export function addKnown(tokens, typed, subject) {
+  const next = [...(tokens || [])];
+  const refused = [];
+  for (const name of splitNames(typed)) {
+    if (subject && isSubjectName(subject, name)) { refused.push(name); continue; }
+    if (!next.some((t) => t.toLowerCase() === name.toLowerCase())) next.push(name);
+  }
+  return { tokens: next, refused };
+}
+
+/**
+ * When a running analysis started (RS-13 A5). The row is made, with status
+ * running, as the run starts, and only a new run is ever running (a rerun is
+ * a proposal and never sets it), so its `created_at` is the start. Null for
+ * any other status.
+ */
+export function runStartedAt(analysis) {
+  return analysis?.status === 'running' && analysis?.created_at ? analysis.created_at : null;
+}
+
+/**
+ * "What the run did" (RS-13 B3): three lines, each with the time its step
+ * finished when the run recorded it (`output.run_steps`, from part 2 on);
+ * `timed` is false for a run that recorded none. The counts are the step's
+ * own when recorded: what discovery returned, not what was added by hand
+ * since.
+ */
+export function runSteps(analysis) {
+  const i = analysis?.inputs || {};
+  const stored = Array.isArray(analysis?.output?.run_steps) ? analysis.output.run_steps : [];
+  const step = (k) => stored.find((s) => s && s.step === k) || null;
+  const d = step('discovery');
+  const r = step('read');
+  const companies = d && d.companies != null && Number.isFinite(Number(d.companies)) ? Number(d.companies) : (analysis?.candidates || []).length;
+  const tried = r && r.tried != null ? Number(r.tried) : Number(analysis?.evidence?.sources_tried ?? (analysis?.sources || []).length);
+  const fetched = r && r.fetched != null ? Number(r.fetched) : null;
+  const searched = `Searched “${String(i.market || '').trim()}”${i.region_focus ? `, ${i.region_focus}` : ''}, ${i.depth === 'deep' ? 'Deep dive' : 'Quick scan'}`;
+  const found = `Discovery returned ${companies} ${companies === 1 ? 'company' : 'companies'} · `
+    + (tried === 0 && companies === 0 ? 'nothing to read'
+      : `${tried} ${tried === 1 ? 'read' : 'reads'} tried${fetched == null ? '' : `, ${fetched} fetched`}`);
+  const word = EVIDENCE[analysis?.evidence?.status]?.word;
+  const lines = [
+    { k: 'search', at: step('search')?.at || null, text: searched },
+    { k: 'discovery', at: r?.at || d?.at || null, text: found },
+    { k: 'saved', at: step('saved')?.at || null, text: `Saved as complete${word ? ` · ${word}` : ''}` },
+  ];
+  return { lines, timed: lines.some((l) => l.at) };
 }

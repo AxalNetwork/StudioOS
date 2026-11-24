@@ -16,8 +16,9 @@
  * gap in the series, never a 0. A recorded 0 stays 0.
  *
  * NO TOTAL SCORE. Coverage is the read's coarse band per skill axis (covered,
- * partial, gap), never a number. The scorecard rows on each tab are slots for
- * SCORING's canvas (#2428), which draws them once its per-deal read lands.
+ * partial, gap), never a number. D6168 (#6168): each tab draws its scopes'
+ * rows from the venture scorecard's read (`SCORECARD_ROWS`, `ScopeRows`), and
+ * points to the Evidence tab for what the founder shared (`EVIDENCE_LINK`).
  */
 
 import { NOT_RECORDED } from '../../lib/absence';
@@ -108,10 +109,6 @@ export function personView(p) {
     role: roleWord(p.role),
     archetype: p.archetype?.label || null,
     roles,
-    fullTime: p.full_time_since ? dateText(p.full_time_since) : null,
-    fullTimeReason: p.full_time_reason || NOT_RECORDED,
-    fit: p.founder_market_fit || null,
-    fitReason: p.founder_market_fit_reason || NOT_RECORDED,
   };
 }
 
@@ -242,6 +239,8 @@ export function tractionView(read) {
   return {
     state: history ? 'recorded' : b.state,
     months,
+    // D6164 part 2 (DE25): which months the founder reported, for the month table.
+    reportedMonths: history ? history.filter((m) => m.state === 'reported').map((m) => m.month) : [],
     reported: history ? history.filter((m) => m.state === 'reported').length : 0,
     lastShared: history ? history.filter((m) => m.state === 'reported').map((m) => m.month).sort().at(-1) || null : null,
     series,
@@ -283,26 +282,30 @@ export function chartSummary(title, points) {
   return { text: `${title}: ${fmt(first)} in ${dateText(first.month)}, ${fmt(last)} in ${dateText(last.month)}.${gapText}`, gaps };
 }
 
-// ---------------------------------------------------------------- DL24 slots
+// ---------------------------------------------------------------- DL24: the scorecard rows and the evidence
 
-/** The slots from sibling canvases on these tabs (DL24): each says where it comes from and why it is empty. */
-export const SLOTS = {
-  teamRow: { eye: 'SC row · Venture scorecard canvas', title: 'Team · on the scorecard', line: 'The Team row shows here once the per-deal score read lands (SCORING, #3280). This is not a score of zero.' },
-  marketRows: { eye: 'SC rows · Venture scorecard canvas', title: 'Scorecard rows', line: 'Market, Product-market fit, Geographic and Political and regulatory show here once the per-deal score read lands (SCORING, #3280). This is not a score of zero.' },
-  tractionRows: { eye: 'SC rows · Venture scorecard canvas', title: 'Scorecard rows', line: 'Traction and Financial show here once the per-deal score read lands (SCORING, #3280). This is not a score of zero.' },
-  evidence: { eye: 'VR10 · Raise evidence canvas', title: 'Evidence the founder shared', line: 'The founder’s shared evidence shows here once the investor evidence read lands (PIPE-RAISE, #3291).' },
-};
+/**
+ * D6168 (#6168): the scorecard scopes each tab draws as rows, in SCORING's
+ * order (v1 canvas DL4, DL5, DL6). Each row is the Scorecard tab's own, read
+ * from `GET /api/venture-scores/deal/:dealId`.
+ */
+export const SCORECARD_ROWS = Object.freeze({
+  team: Object.freeze(['team']),
+  market: Object.freeze(['market', 'pmf', 'geographic', 'political']),
+  traction: Object.freeze(['traction', 'financial']),
+});
 
-/** A slot fed by the read: its own reason when the read says one, Unreadable when the read failed. */
-export function slotOf(slot, block) {
-  if (block === undefined) return { ...slot, state: 'waiting' };
-  const b = blockOf(block);
-  if (b.state === 'unreadable') return { ...slot, state: 'unreadable', line: `${slot.title} could not be read. That is not the same as none. Try again.` };
-  return { ...slot, state: 'waiting', line: b.reason ? `${b.reason}. ${slot.line}` : slot.line };
-}
-
-/** Words for the team values band, advisors and geography the read holds no figure for. */
-export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';
+/**
+ * D6168: the founder's shared evidence is one link away, on the Evidence tab.
+ * No count is drawn here: the evidence read (`GET /api/deals/:id/evidence`)
+ * logs each read as an open of the evidence (`open_evidence`), and visiting
+ * Market or Traction is not one.
+ */
+export const EVIDENCE_LINK = Object.freeze({
+  title: 'Evidence the founder shared',
+  line: 'What the founder shared with you, with each item’s source and date, is on the Evidence tab.',
+  act: 'Open the Evidence tab',
+});
 
 
 /** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */
@@ -335,3 +338,95 @@ export function tractionCsv(view) {
   }
   return rows.map(row => row.map(tractionCsvCell).join(',')).join('\r\n') + '\r\n';
 }
+
+
+// ---------------------------------------------------------------- D6164 part 2: Team, Market and Traction to the Evidence addendum
+
+/**
+ * D6164 part 2 (#6164, DE23 to DE25 of D6163's canvas). The three tabs keep
+ * their places in the tab row: moving them under the Scorecard's scopes is a
+ * placement the canvas draws pending the owner, and the tab set is #5903's.
+ * What changes is what each tab draws, in the canvas's words.
+ */
+export const TEAM_WORDS = Object.freeze({
+  people: 'People, as they published themselves',
+  noArchetype: 'No archetype published',
+  noRoles: 'No prior roles published',
+  coverageTitle: 'Team coverage by skill area',
+  coverageLine: 'A band for the team as a whole, never a person’s number. Shown where at least two published members contribute.',
+  values: 'Team values band',
+  advisors: 'Advisors',
+  advisorsLine: 'How many, and their roles.',
+  next: 'Next: Diligence, the next step on this deal.',
+});
+
+/** DE23: how many people are listed, and who is not. */
+export function peopleLine(n) {
+  const count = Number.isInteger(n) && n >= 0 ? n : 0;
+  return `${count} published · anyone with a private profile is not listed`;
+}
+
+/** DE24: the competitors' sorts. Search and sort are the browser's; the read is unchanged. */
+export const COMPETITOR_SORTS = Object.freeze([['name', 'Name A–Z'], ['name_desc', 'Name Z–A']]);
+
+/**
+ * DE24: the competitors a search and a sort leave. The search reads the name
+ * and why it matters; a row with no name sorts first under A–Z, as the empty
+ * string does.
+ */
+export function competitorsView(rows, { query = '', sort = 'name' } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const q = String(query ?? '').trim();
+  const needle = q.toLocaleLowerCase('en');
+  const shown = (needle
+    ? list.filter((r) => [r?.name, r?.why_it_matters].some((x) => String(x ?? '').toLocaleLowerCase('en').includes(needle)))
+    : list.slice());
+  const key = (r) => String(r?.name ?? '').toLocaleLowerCase('en');
+  shown.sort((a, b) => key(a).localeCompare(key(b), 'en'));
+  if (sort === 'name_desc') shown.reverse();
+  return {
+    total: list.length,
+    shown,
+    line: needle ? `${shown.length} of ${list.length} match “${q}”` : null,
+    none: needle && !shown.length ? `No competitor matches “${q}”.` : null,
+  };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** DE25: how many of the months were reported, in the canvas's words. */
+export function monthsLine(view) {
+  if (!view || view.state !== 'recorded') return null;
+  const reported = view.reportedMonths?.length || 0;
+  const gaps = (view.months?.length || 0) - reported;
+  return `${plural(reported, 'month', 'months')} reported, ${gaps} not reported. A month not reported is a gap, never 0.`;
+}
+
+export const NOT_IN_UPDATE = 'Not in this update';
+export const NO_UPDATE = 'No update shared for this month';
+
+/**
+ * DE25: one row a month, newest first. A month the founder did not report is
+ * Not reported, with no figure; a reported month without a figure says it was
+ * not in that update. A recorded 0 stays 0.
+ */
+export function monthRows(view) {
+  if (!view || view.state !== 'recorded') return [];
+  const reported = new Set(view.reportedMonths || []);
+  const at = (key, month) => (view.series?.[key] || []).find((p) => p.month === month) || { value: null };
+  const cell = (p, suffix = '') => (p.value == null ? null : `${figureText(p.value, p.unit)}${suffix}`);
+  return [...(view.months || [])].reverse().map((month) => {
+    const mrr = at('mrr', month), customers = at('customers', month), growth = at('growth', month);
+    if (!reported.has(month)) return { month, label: dateText(month) || month, reported: false };
+    return {
+      month,
+      label: dateText(month) || month,
+      reported: true,
+      mrr: cell(mrr),
+      customers: cell(customers),
+      growth: cell(growth),
+      source: sourceText(mrr.source) || sourceText(customers.source) || sourceText(growth.source) || null,
+    };
+  });
+}
+

@@ -29,7 +29,7 @@ const ZONES = {
   visibility: {
     file: 'VisibilityZone.jsx',
     empty: 'No surface is recorded yet',
-    emptyAction: 'Add a surface', headerAction: 'Add a surface',
+    emptyAction: 'Add a surface', headerAction: '+ Add surface', // #4843: OF-05's primary action
     editorId: 'surface-editor', submit: 'Add surface',
     fill: { Name: 'Axal directory' }, shown: 'Axal directory',
     createApi: 'createPartnerSurface', updateApi: 'updatePartnerSurface',
@@ -46,7 +46,7 @@ const ZONES = {
     // Edit sits behind View proof, so the row journey opens the card first.
     empty: 'Show founders why they should hire you',
     emptyAction: 'Add your first proof', headerAction: '+ Add proof', openRow: 'View proof',
-    editorId: 'proof-editor', submit: 'Add item',
+    editorId: 'proof-editor', submit: 'Save proof', // D4844: the editor is the shared Sheet
     fill: { Title: 'Seed round for a fintech' }, shown: 'Seed round for a fintech',
     createApi: 'createPartnerProof', updateApi: 'updatePartnerProof',
     edit: { field: 'Title', value: 'Seed round, revised', save: 'Save' },
@@ -198,12 +198,13 @@ const journeys = {
   async unreadableThenRetryClearsIt(cfg, Zone) {
     await withZone(cfg, Zone, async (m) => {
       const t = m.text();
-      assert.ok(t.includes('This did not load'), 'an unreadable store says unreadable');
+      // D4844: Proof draws #5129's Unavailable state (the shared vocabulary); the others still say "This did not load".
+      assert.ok(t.includes('This did not load') || t.includes('Unavailable'), 'an unreadable store says unreadable');
       assert.ok(!t.includes(cfg.empty), 'and never claims to be empty');
       assert.ok(!m.has(cfg.emptyAction), 'no first-record action over a store that was not read');
       await m.click('Try again');
       await m.flush();
-      assert.ok(!m.text().includes('This did not load'), 'a successful retry clears the error');
+      assert.ok(!m.text().includes('This did not load') && !m.text().includes('Unavailable'), 'a successful retry clears the error');
       assert.ok(m.text().includes(cfg.empty), 'now it can say empty, because it read it');
     }, (s) => { s.readFails = 1; });
   },
@@ -279,7 +280,7 @@ const HOOK_MUTATIONS = {
 const mutation = (cfg) => ({
   'the editor sits behind the list (needs an existing row)': {
     visibility: { zone: [['{adding && (\n        <div className="mb-6', '{adding && items.length > 0 && (\n        <div className="mb-6']] },
-    proof: { zone: [['{adding && (\n        <div className="mb-6', '{adding && items.length > 0 && (\n        <div className="mb-6']] },
+    proof: { zone: [['{adding && (\n        <ProofSheet', '{adding && items.length > 0 && (\n        <ProofSheet']] },
     fit: { zone: [['{sheet && (\n        <FitRuleSheet', '{sheet && items.length > 0 && (\n        <FitRuleSheet']] },
   }[cfg.name],
   'the draft is dropped when a save fails': {

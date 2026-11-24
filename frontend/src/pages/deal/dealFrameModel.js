@@ -385,6 +385,21 @@ export const ACTIVITY_FILTERS = [
   ['all', 'All'], ['mine', 'Mine'], ['deal', 'Deal'], ['documents', 'Documents'], ['diligence', 'Diligence'],
 ];
 
+/**
+ * D6164 part 3 (DE27, the owner's answer A): an investor's Activity chips, the activity's own and then
+ * Firm notes, whose key is the address's `?show=notes`. Staff and a founder keep `ACTIVITY_FILTERS`.
+ */
+export const INVESTOR_ACTIVITY_CHIPS = [...ACTIVITY_FILTERS, ['notes', 'Firm notes']];
+
+/** The chip an address's `?show=` names; anything else is All. */
+export function activityChoice(word) {
+  const key = String(word ?? '');
+  return INVESTOR_ACTIVITY_CHIPS.some(([k]) => k === key) ? key : 'all';
+}
+
+/** Who reads the firm's notes (DE27): never another firm, never the founder. */
+export const FIRM_NOTES_LINE = 'Only your firm sees these notes. No other firm and not the founder.';
+
 /** The rows one chip shows. */
 export function activityShown(events, filter) {
   const rows = Array.isArray(events) ? events : [];
@@ -400,7 +415,7 @@ export function activityShown(events, filter) {
 export function activityEmpty(filter) {
   if (filter === 'mine') return 'None of your own activity on this deal is recorded.';
   if (filter === 'deal') return 'No deal activity you can read is recorded.';
-  if (filter === 'documents') return 'No document activity you can read is recorded. Documents show once you hold the venture’s NDA.';
+  if (filter === 'documents') return 'No document activity you can read is recorded. Catalogue documents require the venture’s NDA; data room files and deck versions require their own grants. NDA signatures show only to their parties and the venture’s founder or an admin.';
   if (filter === 'diligence') return 'No diligence activity you can read is recorded. A case shows to its own owner and reviewers.';
   return EMPTY.activity;
 }

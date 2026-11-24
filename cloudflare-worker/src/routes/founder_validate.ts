@@ -75,6 +75,7 @@ import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railC
 import { HINT_DEPS, HintRefused, THEME_JOBS, hintSection, themeHints } from '../services/ai/themeHints';
 import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecordOrThrow } from '../services/recordStore';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -603,7 +604,7 @@ founderValidate.get('/evidence/:projectId/export.csv', async (c) => {
     items = await required('evidence', linkedEvidenceFor({ env: c.env, projectId }));
     citations = await required('decisions', decisionCitations(c.env, projectId));
     experiments = await required('experiments', c.env.DB.prepare(
-      `SELECT hypothesis_id, title, method, target, status, result FROM hypothesis_experiments
+      `SELECT hypothesis_id, title, method, target, CASE WHEN stopped_at IS NOT NULL THEN 'stopped' ELSE status END AS status, result FROM hypothesis_experiments
         WHERE project_id = ? ORDER BY hypothesis_id, id LIMIT 5000`,
     ).bind(projectId).all<ExportExperiment>());
   } catch (e) {
@@ -1232,7 +1233,8 @@ founderValidate.post('/interviews/:id/recording', async (c) => {
   // D1170 — an interview recording counts to the venture's owner (D1169 §1).
   const storage = await assertStorageRoom(c.env, { projectId: Number(owner.project_id) }, file.size, s.user);
   try {
-    await c.env.FILES.put(key, await file.arrayBuffer(), {
+    // D6651: interview audio is a record, written once under a fresh key.
+    await putRecordOrThrow(c.env.FILES, key, await file.arrayBuffer(), {
       httpMetadata: { contentType: mime },
       customMetadata: {
         owner_user_id: String(s.user.id),

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Lightbox } from '../../../ui';
 import * as v2 from './deckV2Adapter.js';
 import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
@@ -8,6 +8,7 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { recordHref, walkthroughCell, walkthroughOf } from './walkthroughModel.js';
 import ViewerAnalyticsSheet from './ViewerAnalyticsSheet.jsx';
 import { OFF_KEEPS, SWITCH_FAILED, TIME_PER_SLIDE, analyticsCellWords } from './slideAnalyticsModel.js';
+import { linkStatusLine } from './shareModel.js';
 
 /**
  * D1565 (#3812, PD-8 · pd35) — "Share, one link per investor": this version's
@@ -38,6 +39,13 @@ import { OFF_KEEPS, SWITCH_FAILED, TIME_PER_SLIDE, analyticsCellWords } from './
  * has a newer current version than the one these links froze: the figures
  * whose words changed and the cards added or removed, from the Worker's
  * `GET /api/decks/:id/changes-since`. Nothing is drawn on the current version.
+ *
+ * D6061 (#6061, PS-07): a Status column says, for every investor, whether
+ * their link is live and until when, or when it was withdrawn or expired
+ * (`shareModel.linkStatusLine`), so revoke and expiry are visible per row and
+ * not only behind Withdraw. `onLinks` hands the read to Share's page, which
+ * counts it in "Investor links (n)" and names the chosen investor's own links,
+ * without a second read.
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -113,7 +121,7 @@ function WalkthroughCell({ walk, read, row, href, busy, onAttach, onRetry }) {
   );
 }
 
-export default function InvestorLinksTable({ deck, projectId = null, refreshKey = 0 }) {
+export default function InvestorLinksTable({ deck, projectId = null, refreshKey = 0, onLinks = null }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [refusal, setRefusal] = useState('');
@@ -148,6 +156,10 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
     setBlock(null);
     v2.investorLinks(deck.id).then(setBlock);
   }, [deck?.id]);
+  // D6061: the page above reads the same answer, never its own copy.
+  const told = useRef(onLinks);
+  told.current = onLinks;
+  useEffect(() => { told.current?.(block); }, [block]);
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const withdraw = async () => {
@@ -197,7 +209,7 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[12px]">
             <thead>
-              <tr className={EYE}>{['Investor', 'Version (frozen)', 'NDA', 'Expiry', 'View cap', TIME_PER_SLIDE, ...(walkColumn ? [WALKTHROUGH] : []), 'Analytics', ''].map((h) => <th key={h || 'actions'} scope="col" className="py-1 pr-2 font-semibold">{h || <span className="sr-only">Actions</span>}</th>)}</tr>
+              <tr className={EYE}>{['Investor', 'Version (frozen)', 'Status', 'NDA', 'Expiry', 'View cap', TIME_PER_SLIDE, ...(walkColumn ? [WALKTHROUGH] : []), 'Analytics', ''].map((h) => <th key={h || 'actions'} scope="col" className="py-1 pr-2 font-semibold">{h || <span className="sr-only">Actions</span>}</th>)}</tr>
             </thead>
             <tbody>
               {rows.map((r) => (
@@ -210,6 +222,9 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
                   <td className="py-1.5 pr-2">
                     <span className="block font-mono">{versionWords(r, deck)}</span>
                     {sinceLine ? <span className={`block ${MUTED}`} data-testid={`investor-link-changes-${r.id}`}>{sinceLine}</span> : null}
+                  </td>
+                  <td className="py-1.5 pr-2" data-testid={`investor-link-status-${r.id}`}>
+                    <span className={r.status === 'live' ? 'font-semibold text-emerald-700 dark:text-emerald-300' : MUTED}>{linkStatusLine(r)}</span>
                   </td>
                   <td className="py-1.5 pr-2">{ndaWords(r.nda)}</td>
                   <td className="py-1.5 pr-2">{expiryWords(r)}</td>
@@ -234,7 +249,7 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
                   </td>
                   <td className="py-1.5">
                     {r.status === 'live' ? <button type="button" className={GHOST} onClick={() => { setRefusal(''); setConfirm(r); }} data-testid={`investor-link-withdraw-${r.id}`}>Withdraw</button>
-                      : <span className={MUTED}>{statusWords[r.status] || r.status}</span>}
+                      : null}
                   </td>
                 </tr>
               ))}
@@ -242,7 +257,8 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
           </table>
         </div>
       )}
-      {sheet ? <ViewerAnalyticsSheet deck={deck} row={sheet} projectId={projectId} onClose={() => setSheet(null)} /> : null}
+      {/* D6062: the sheet says when the deck has a newer version than this link opens, from the same changes-since read. */}
+      {sheet ? <ViewerAnalyticsSheet deck={deck} row={sheet} projectId={projectId} since={since.status === 'ready' ? since.data : null} changes={sinceLine} onClose={() => setSheet(null)} /> : null}
       {confirm ? (
         <Lightbox label={WITHDRAW_TITLE} title={WITHDRAW_TITLE} width={480} onClose={() => setConfirm(null)} testId="investor-link-withdraw-confirm"
           footer={(

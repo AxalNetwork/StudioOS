@@ -10,6 +10,8 @@ import {
   CREDENTIAL_FILE_MAX, CREDENTIAL_TYPES, ExpertReviewError, auditExpert, credentialFiles, credentialFilesFor, expertDecision,
   ownExpert, reviewDto, reviewTarget, saveCredentials,
 } from '../services/wellbeing/expertReview';
+import { eraseRecordObjects } from '../services/recordErasure';
+import { putRecordOrThrow } from '../services/recordStore';
 
 const reviews = new Hono<{ Bindings: Env }>();
 export async function expertReviewResult(c: Context<{ Bindings: Env }>, fn: () => Promise<Response>) {
@@ -23,22 +25,77 @@ export async function expertReviewResult(c: Context<{ Bindings: Env }>, fn: () =
 }
 const result = expertReviewResult;
 
+// D5876: the same scoped classification feeds both counts and active pages.
+function boardScope(actor: Awaited<ReturnType<typeof requireAdmin>>) {
+  return [SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, isSuperAdmin(actor) ? 1 : 0, actor.id];
+}
+
+reviews.get('/admin/experts/summary', async (c) => {
+  const actor = await requireAdmin(c);
+  return result(c, async () => {
+    const grouped = await c.env.DB.prepare(`WITH board_experts AS (
+      SELECT e.*, CASE
+        WHEN e.hidden_by_admin <> 0 THEN 'hidden'
+        WHEN e.decision_state = 'declined' THEN 'declined'
+        WHEN e.verified <> 0 OR e.decision_state = 'verified' THEN 'verified'
+        WHEN e.profile_completion_pct >= 70 THEN 'verify'
+        ELSE 'incomplete'
+      END AS board_tab
+      FROM experts e LEFT JOIN users u ON u.id = e.user_id
+      WHERE substr(e.uid, 1, ?) <> ? AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
+    )
+      SELECT board_tab, COUNT(*) AS n FROM board_experts GROUP BY board_tab`)
+      .bind(...boardScope(actor)).all<{ board_tab: string; n: number }>();
+    if (!grouped.success || !Array.isArray(grouped.results)) throw new Error('Expert summary was not returned');
+    const counts = { verify: 0, incomplete: 0, verified: 0, declined: 0, hidden: 0 };
+    for (const { board_tab, n } of grouped.results) {
+      if (Object.hasOwn(counts, board_tab)) counts[board_tab as keyof typeof counts] = n;
+    }
+    return c.json({ counts });
+  });
+});
+
 reviews.get('/admin/experts', async (c) => {
   const actor = await requireAdmin(c);
   return result(c, async () => {
     const limit = Number(c.req.query('limit') ?? 25); const offset = Number(c.req.query('offset') ?? 0);
     const state = c.req.query('state') ?? 'all';
-    if (!['all', 'pending', 'verified', 'declined'].includes(state) || !Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) {
-      return refuse(c, 400, { code: 'invalid_page', message: 'Choose a review state, a limit from 1 to 200, and a nonnegative offset.' });
+    const tab = c.req.query('board_tab') ?? '';
+    if (!['all', 'pending', 'verified', 'declined'].includes(state) ||
+      !['', 'verify', 'incomplete', 'verified', 'declined', 'hidden'].includes(tab) ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) {
+      return refuse(c, 400, { code: 'invalid_page', message: 'Choose a review state or board tab, a limit from 1 to 200, and a nonnegative offset.' });
     }
-    const elevated = isSuperAdmin(actor) ? 1 : 0;
-    const count = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM experts e LEFT JOIN users u ON u.id = e.user_id
-      WHERE substr(e.uid, 1, ?) <> ? AND (? = 'all' OR e.decision_state = ?) AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)`)
-      .bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, state, state, elevated, actor.id).first<{ n: number }>();
-    const rows = await c.env.DB.prepare(`SELECT e.* FROM experts e LEFT JOIN users u ON u.id = e.user_id
-      WHERE substr(e.uid, 1, ?) <> ? AND (? = 'all' OR e.decision_state = ?) AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
-      ORDER BY datetime(e.created_at), e.id LIMIT ? OFFSET ?`)
-      .bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, state, state, elevated, actor.id, limit, offset).all<any>();
+    const criteria = [...boardScope(actor), state, state, tab, tab];
+    const [count, rows] = await Promise.all([
+      c.env.DB.prepare(`WITH board_experts AS (
+        SELECT e.*, CASE
+          WHEN e.hidden_by_admin <> 0 THEN 'hidden'
+          WHEN e.decision_state = 'declined' THEN 'declined'
+          WHEN e.verified <> 0 OR e.decision_state = 'verified' THEN 'verified'
+          WHEN e.profile_completion_pct >= 70 THEN 'verify'
+          ELSE 'incomplete'
+        END AS board_tab
+        FROM experts e LEFT JOIN users u ON u.id = e.user_id
+        WHERE substr(e.uid, 1, ?) <> ? AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
+      )
+        SELECT COUNT(*) AS n FROM board_experts WHERE (? = 'all' OR decision_state = ?) AND (? = '' OR board_tab = ?)`)
+        .bind(...criteria).first<{ n: number }>(),
+      c.env.DB.prepare(`WITH board_experts AS (
+        SELECT e.*, CASE
+          WHEN e.hidden_by_admin <> 0 THEN 'hidden'
+          WHEN e.decision_state = 'declined' THEN 'declined'
+          WHEN e.verified <> 0 OR e.decision_state = 'verified' THEN 'verified'
+          WHEN e.profile_completion_pct >= 70 THEN 'verify'
+          ELSE 'incomplete'
+        END AS board_tab
+        FROM experts e LEFT JOIN users u ON u.id = e.user_id
+        WHERE substr(e.uid, 1, ?) <> ? AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
+      )
+        SELECT * FROM board_experts WHERE (? = 'all' OR decision_state = ?) AND (? = '' OR board_tab = ?)
+        ORDER BY datetime(created_at), id LIMIT ? OFFSET ?`)
+        .bind(...criteria, limit, offset).all<any>(),
+    ]);
     if (!count || !Number.isSafeInteger(count.n) || ('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Review rows were not returned');
     const files = await credentialFilesFor(c.env, rows.results.map((r) => Number(r.id)));
     return c.json({ items: await Promise.all(rows.results.map((r) => reviewDto(c.env, r, files.get(Number(r.id)) ?? [], true))), total: Number(count.n), limit, offset });
@@ -110,9 +167,14 @@ reviews.put('/experts/me/credentials/files', async (c) => {
     if (!valid) return refuse(c, 415, { code: 'file_type_mismatch', message: 'The file bytes do not match the declared type.' });
     const uid = crypto.randomUUID(); const key = `wellbeing/credentials/${row.id}/${uid}.${CREDENTIAL_TYPES[type]}`;
     const name = (c.req.header('x-file-name') || `Credential.${CREDENTIAL_TYPES[type]}`).replace(/[\x00-\x1f\x7f/\\]/g, '_').slice(0, 200);
-    await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: type } });
+    // D6651: credential evidence is a record, written once under a fresh key. When its row is not
+    // written, the file this request just stored is named by nothing and leaves through the one
+    // record-erasure path as `unreferenced`; a cleanup failure never masks the answer.
+    await putRecordOrThrow(c.env.FILES, key, bytes, { httpMetadata: { contentType: type } });
+    const dropStored = () => eraseRecordObjects(c.env.FILES!, key, 'unreferenced', { db: c.env.DB }).catch(() => { /* inaccessible orphan; no DB reference */ });
+    let saved: D1Result[];
     try {
-      const saved = await c.env.DB.batch([
+      saved = await c.env.DB.batch([
         c.env.DB.prepare(`INSERT INTO expert_credential_files(uid, expert_id, file_key, file_name, file_type, file_size, uploaded_by)
           SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM expert_credential_files WHERE expert_id = ?) < 10`)
           .bind(uid, row.id, key, name, type, size, user.id, row.id),
@@ -120,8 +182,8 @@ reviews.put('/experts/me/credentials/files', async (c) => {
           decline_reason = NULL, decision_token = NULL, review_version = review_version + 1 WHERE id = ?
           AND EXISTS (SELECT 1 FROM expert_credential_files WHERE uid = ?)`).bind(row.id, uid),
       ]);
-      if (Number(saved[0].meta?.changes) !== 1) { await c.env.FILES.delete(key); return refuse(c, 409, { code: 'file_limit', message: 'Ten credential files are already recorded. Remove an old one first.' }); }
-    } catch (e) { try { await c.env.FILES.delete(key); } catch { /* inaccessible orphan; no DB reference */ } throw e; }
+    } catch (e) { await dropStored(); throw e; }
+    if (Number(saved[0].meta?.changes) !== 1) { await dropStored(); return refuse(c, 409, { code: 'file_limit', message: 'Ten credential files are already recorded. Remove an old one first.' }); }
     return c.json({ files: await credentialFiles(c.env, row.id) }, 201);
   });
 });
@@ -150,7 +212,8 @@ reviews.delete('/experts/me/credentials/files/:fileUid', async (c) => {
     if (!file) return refuse(c, 404, { code: 'file_not_found', message: 'Credential file not found.' });
     // Keep the key available for retries if storage fails. R2 deletion is
     // idempotent, so a later D1 failure can also be retried with this row.
-    await c.env.FILES.delete(file.file_key);
+    // D6651: the expert removing their own file goes through the one record-erasure path.
+    await eraseRecordObjects(c.env.FILES, file.file_key, 'owner_removed', { db: c.env.DB });
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM expert_credential_files WHERE uid = ? AND expert_id = ?').bind(c.req.param('fileUid'), row.id),
       c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,

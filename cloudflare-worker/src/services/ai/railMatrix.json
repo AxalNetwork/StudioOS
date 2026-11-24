@@ -3235,37 +3235,6 @@
   },
   {
    "pageKey": "Founder · Research · Companies",
-   "optionKey": "analyse:sources",
-   "optionLabel": "Refresh sources",
-   "kind": "research",
-   "handler": "draft",
-   "routeTask": "rail_research",
-   "models": [
-    {
-     "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Default",
-     "line": "Long sources, cited answers"
-    },
-    {
-     "id": "@cf/openai/gpt-oss-120b",
-     "role": "Alternative",
-     "line": "Weighs conflicting sources"
-    },
-    {
-     "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Deeper",
-     "line": "Finds the right records first"
-    }
-   ],
-   "more": [
-    {
-     "id": "@cf/baai/bge-reranker-base",
-     "line": "Puts the most relevant on top"
-    }
-   ]
-  },
-  {
-   "pageKey": "Founder · Research · Companies",
    "optionKey": "extract:candidate",
    "optionLabel": "Add",
    "kind": "research",
@@ -3538,6 +3507,58 @@
    "pageKey": "Investor · Fund · Capital calls",
    "optionKey": "draft:lp-reminder",
    "optionLabel": "Draft the reminder",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Alternative",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Deeper",
+     "line": "Short drafts and replies"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Investor · Fund · LPs",
+   "optionKey": "draft:lp-summary",
+   "optionLabel": "Summarise this LP",
+   "kind": "numbers",
+   "handler": "draft",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Deeper",
+     "line": "Reads figures out of documents"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Investor · Fund",
+   "optionKey": "draft:quarterly-letter",
+   "optionLabel": "Draft the letter",
    "kind": "write",
    "handler": "draft",
    "routeTask": "rail_write",
@@ -3990,37 +4011,6 @@
    "pageKey": "Advisor · Research · Companies",
    "optionKey": "rerun:analysis",
    "optionLabel": "Re-run",
-   "kind": "research",
-   "handler": "form",
-   "routeTask": "rail_research",
-   "models": [
-    {
-     "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Default",
-     "line": "Long sources, cited answers"
-    },
-    {
-     "id": "@cf/openai/gpt-oss-120b",
-     "role": "Alternative",
-     "line": "Weighs conflicting sources"
-    },
-    {
-     "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Deeper",
-     "line": "Finds the right records first"
-    }
-   ],
-   "more": [
-    {
-     "id": "@cf/baai/bge-reranker-base",
-     "line": "Puts the most relevant on top"
-    }
-   ]
-  },
-  {
-   "pageKey": "Advisor · Research · Companies",
-   "optionKey": "refresh:sources",
-   "optionLabel": "Refresh sources",
    "kind": "research",
    "handler": "form",
    "routeTask": "rail_research",

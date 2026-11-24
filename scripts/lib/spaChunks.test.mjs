@@ -114,6 +114,8 @@ test('#3590: capture CLI preserves entry identity and distinguishes an absent ca
       0, { entries: ['/assets/index-new.js'], reason: null }, 0, { entries: ['/assets/index-old.js'], reason: null },
       0, { entries: [], reason: 'cache-miss' },
     ]);
+    // Fixture pages in a temporary folder.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'docs/index.html'), '<script type="module" src="/assets/exact-entry.js"></script>');
     const withShell = command();
     const shellManifest = JSON.parse(readFileSync(output, 'utf8'));
@@ -143,6 +145,7 @@ globalThis.fetch=async(input,init={})=>{
  const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin'};
  if(p==='/api/auth/google/config') return Response.json({configured:false,popup:false,client_id:null});
  if(p==='/api/health') return Response.json({connectors_oauth:{github:true}});
+ if(p==='/api/public/version') return Response.json({sha:'a'.repeat(40),version_id:null,built_at:null,missing:['version_id','built_at']});
  if(p.startsWith('/api/')) return Response.json({}, {status:503});
  if(p.startsWith('/assets/')) {
   if(process.env.FAULT==='retry' && ['/assets/index-current.js','/assets/lazy-current.js'].includes(p)) {
@@ -176,7 +179,9 @@ globalThis.fetch=async(input,init={})=>{
 function smoke(fault = '', stale = false, malformed = false, absent = false, nested = false, artifact = false) {
   const dir = mkdtempSync(join(tmpdir(), 'spa-live-3590-'));
   try {
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'fake.mjs'), FAKE_FETCH);
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'index.html'), '<script type="module" src="/assets/index-current.js"></script>');
     mkdirSync(join(dir, 'assets'));
     writeFileSync(join(dir, 'assets/index-current.js'), map(['assets/lazy-current.js','assets/lazy-current.css','assets/shared.js']));

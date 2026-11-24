@@ -2,6 +2,11 @@
   "repository": "AxalNetwork/StudioOS",
   "workflows": [
     {
+      "id": null,
+      "path": ".github/workflows/admin-drift.yml",
+      "channel": "#axalvc-actions-admin-drift"
+    },
+    {
       "id": 416675427,
       "path": ".github/workflows/agent-compute-image.yml",
       "channel": "#axalvc-actions-agent-compute-image"
@@ -10,6 +15,16 @@
       "id": 417238805,
       "path": ".github/workflows/agent-compute-preview.yml",
       "channel": "#axalvc-actions-agent-compute-preview"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/agent-gateway-keys.yml",
+      "channel": "#axalvc-actions-agent-gateway-keys"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/agent-provenance.yml",
+      "channel": "#axalvc-actions-agent-provenance"
     },
     {
       "id": 417193959,
@@ -40,6 +55,11 @@
       "id": 383619772,
       "path": ".github/workflows/build-worker-contracts.yml",
       "channel": "#axalvc-actions-build-worker-contracts"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/capacity-planner.yml",
+      "channel": "#axalvc-actions-capacity-planner"
     },
     {
       "id": 389078766,
@@ -107,9 +127,19 @@
       "channel": "#axalvc-actions-deck-visual"
     },
     {
+      "id": 425238679,
+      "path": ".github/workflows/dependency-review.yml",
+      "channel": "#axalvc-actions-dependency-review"
+    },
+    {
       "id": 280437837,
       "path": ".github/workflows/dr-drill.yml",
       "channel": "#axalvc-actions-dr-drill"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/file-recovery.yml",
+      "channel": "#axalvc-actions-file-recovery"
     },
     {
       "id": 385718276,
@@ -153,6 +183,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-bot-main-repair.yml",
+      "channel": "#axalvc-actions-landing-bot-main-repair"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-bot-model-round.yml",
       "channel": "#axalvc-actions-landing-bot-model-round"
     },
@@ -160,6 +195,16 @@
       "id": null,
       "path": ".github/workflows/landing-bot-model.yml",
       "channel": "#axalvc-actions-landing-bot-model"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-refresh.yml",
+      "channel": "#axalvc-actions-landing-bot-refresh"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-conflict-indicator.yml",
+      "channel": "#axalvc-actions-landing-conflict-indicator"
     },
     {
       "id": null,
@@ -175,6 +220,11 @@
       "id": 280914788,
       "path": ".github/workflows/lfs-budget.yml",
       "channel": "#axalvc-actions-lfs-budget"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/macbook-worker.yml",
+      "channel": "#axalvc-actions-macbook-worker"
     },
     {
       "id": 356755115,
@@ -217,6 +267,16 @@
       "channel": "#axalvc-actions-migration-immutability"
     },
     {
+      "id": null,
+      "path": ".github/workflows/ossf-scorecard.yml",
+      "channel": "#axalvc-actions-ossf-scorecard"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/ownership.yml",
+      "channel": "#axalvc-actions-ownership"
+    },
+    {
       "id": 295717983,
       "path": ".github/workflows/post-deploy-smoke.yml",
       "channel": "#axalvc-actions-post-deploy-smoke"
@@ -230,6 +290,11 @@
       "id": 349437953,
       "path": ".github/workflows/pr-preview.yml",
       "channel": "#axalvc-actions-pr-preview"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/pr-preview-deploy.yml",
+      "channel": "#axalvc-actions-pr-preview-deploy"
     },
     {
       "id": 404322234,
@@ -272,9 +337,19 @@
       "channel": "#axalvc-actions-round-call-worker-contracts"
     },
     {
+      "id": null,
+      "path": ".github/workflows/included-compute-canary.yml",
+      "channel": "#axalvc-actions-included-compute-canary"
+    },
+    {
       "id": 416139951,
       "path": ".github/workflows/runner-benchmark.yml",
       "channel": "#axalvc-actions-runner-benchmark"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/runner-executor.yml",
+      "channel": "#axalvc-actions-runner-executor"
     },
     {
       "id": null,

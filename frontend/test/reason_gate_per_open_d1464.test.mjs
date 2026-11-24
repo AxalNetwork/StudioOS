@@ -202,7 +202,7 @@ test('RR09: the founder\'s Support reads card draws rows, the empty line, or Unr
 
 test('the rail: CycleRoute turns Eadwyn off while a per-open read shows, and the founder\'s Activity tabs carry the card', () => {
   const route = src('pages/cycles/CycleRoute.jsx');
-  assert.match(route, /readOnlyFor=\{narrativeAdmin \|\| supportOpen \? 'founder-record' : null\}/);
+  assert.match(route, /readOnlyFor=\{narrativeAdmin \|\| supportOpen \|\| companyRoleReadOnly \? 'founder-record' : null\}/);
   assert.match(route, /onSupportRead=\{setSupportOpen\}/);
   assert.match(src('pages/raise/dataroom/DataRoomTool.jsx'), /SupportReadsCard record="data-room"/);
   assert.match(src('pages/raise/caprel/CapRelTool.jsx'), /SupportReadsCard record="capital-relationships"/);

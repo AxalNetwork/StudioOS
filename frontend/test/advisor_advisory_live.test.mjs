@@ -19,7 +19,11 @@ import { resolve, join } from 'node:path';
 import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const DIR = resolve(process.cwd(), 'frontend/src/pages/advisor/advisory');
-const pages = () => readdirSync(DIR).filter((f) => f.endsWith('.jsx'));
+const pages = () => [
+  ...readdirSync(DIR).filter((f) => f.endsWith('.jsx')),
+  '../practice/OpportunitiesZone.jsx', '../practice/EngagementsZone.jsx',
+  '../practice/SessionsZone.jsx', '../practice/SessionActions.jsx',
+];
 const src = (f) => readFileSync(join(DIR, f), 'utf8');
 
 test('the fixture module is deleted', () => {
@@ -40,12 +44,14 @@ test('no advisory page imports from a data/ fixture directory', () => {
 
 test('every tab is wired to the real API', () => {
   const required = {
-    'OpportunitiesPage.jsx': [
-      'getMyAdvisor', 'listMyAdvisorBookings', 'confirmAdvisorBooking',
-      'cancelAdvisorBooking', 'listAdvisorSlots', 'createAdvisorSlot',
+    '../practice/OpportunitiesZone.jsx': [
+      'listMyAdvisorBookings', 'confirmAdvisorBooking', 'cancelAdvisorBooking',
+      'listMyAdvisorServices',
     ],
     'ClientsPage.jsx': ['getMyAdvisor', 'listMyAdvisorBookings'],
-    'EngagementsPage.jsx': ['listMyAdvisorBookings', 'completeAdvisorBooking', 'noShowAdvisorBooking'],
+    '../practice/EngagementsZone.jsx': ['listMyAdvisorEngagements', 'advanceMyAdvisorEngagement', 'recordMyAdvisorEngagementRenewal'],
+    '../practice/SessionsZone.jsx': ['listMyAdvisorSlots', 'listMyAdvisorBookings'],
+    '../practice/SessionActions.jsx': ['createAdvisorSlot', 'completeAdvisorBooking', 'noShowAdvisorBooking'],
     'DeliveryPage.jsx': ['listMyAdvisorBookings', 'listBookingReviews'],
     'ContractsPage.jsx': ['esignList'],
   };
@@ -147,7 +153,7 @@ test('an advisor reviews their counterparty, never themselves', () => {
     'and it must be labelled as being about the counterparty, not about the advisor');
   assert.match(src('DeliveryPage.jsx'), /r\.reviewer_role === 'advisor' \? 'Your review of them' : 'Their review of you'/,
     'the two directions must never render identically');
-  for (const f of ['ClientsPage.jsx', 'EngagementsPage.jsx']) {
+  for (const f of ['ClientsPage.jsx', '../practice/EngagementsZone.jsx']) {
     assert.ok(
       !src(f).includes('api.fileAdvisorReview('),
       `${f} files a review — filing belongs on Delivery, in one place`,

@@ -163,6 +163,19 @@ export function useCohortPlaces() {
 }
 
 /**
+ * The places half of a cohort read (`useCohortRecord`'s value), pure: the
+ * same answer `useCohortPlaces` gives, for a surface that already holds the
+ * record and should not read the brief twice (D6992:
+ * `components/site/LabProgramCard.jsx`).
+ */
+export function placesFromRecord(record) {
+  const retry = record?.retry;
+  if (record?.status !== 'ok') return { status: record?.status || 'loading', places: null, retry };
+  const n = record.cohort?.places;
+  return n == null ? { status: 'error', places: null, retry } : { status: 'ok', places: n, retry };
+}
+
+/**
  * D385 — the open cohort AS THE SERVER NAMES IT, from the public
  * `GET /spinout-lab/brief`: its name ("November 2026"), start, end,
  * application deadline and places.
@@ -249,7 +262,8 @@ export function placesLabel(places) {
  */
 export const PIPELINE_PHASES = [
   {
-    name: 'Validate', days: 'Days 1–7',
+    name: 'Test demand', days: 'Days 1–7',
+    desc: 'Problem, customer interviews and market sizing, to a go or no-go decision.',
     backendWeek: 1, color: 'violet',
     gate: 'discovery evidence the record can show',
     items: [
@@ -261,6 +275,7 @@ export const PIPELINE_PHASES = [
   },
   {
     name: 'Build', days: 'Days 8–14',
+    desc: 'MVP scope, a 90-day roadmap, a prototype or landing page, and first drafts of the brand and deck.',
     backendWeek: 2, color: 'teal',
     gate: 'a scope and a surface, both written down',
     items: [
@@ -272,6 +287,7 @@ export const PIPELINE_PHASES = [
   },
   {
     name: 'Pitch', days: 'Days 15–21',
+    desc: 'A first venture-readiness score, advisor office hours and a co-founder match.',
     backendWeek: 3, color: 'amber',
     gate: 'a score, and someone who has read it',
     items: [
@@ -282,13 +298,11 @@ export const PIPELINE_PHASES = [
     ],
   },
   {
-    name: 'Fund', days: 'Days 22–28',
+    name: 'Prepare to raise', days: 'Days 22–28',
+    desc: 'Cap table, founder vesting and IP assignment, then partner pitch sessions and term-sheet review.',
     backendWeek: 4, color: 'pink',
     gate: 'a raise the record supports',
-    // items[0] and items[1] are jurisdiction-specific — see pipelineItemsFor().
     items: [
-      'Delaware C-Corp incorporation',
-      '83(b) election filing',
       'Cap table, founder vesting and IP assignment',
       'Partner pitch sessions and term sheet review',
       'Graduate: venture-ready company',
@@ -297,19 +311,34 @@ export const PIPELINE_PHASES = [
 ];
 
 /**
- * Jurisdiction-specific wording for the incorporation lines.
- *
- * These live on Fund rather than a separate "Structure" phase because
- * incorporation and capital happen in the SAME program week — Week 4
- * ("Incorporate & Capital").
+ * D6991 (#6991, owner answer F1 on #6976): the Lab's week names and one line
+ * each, for every public surface that names the weeks — the homepage band, the
+ * Lab page, the brief and the methodology page's Lab section. No page declares
+ * its own. The methodology page's Validate, Build, Raise, Grow are the company
+ * lifecycle, not these weeks, and it says so.
  */
-export function pipelineItemsFor(phase, jurisdictionKey) {
-  if (phase.name !== 'Fund') return phase.items;
+export const LAB_WEEKS = Object.freeze(PIPELINE_PHASES.map((p, i) => Object.freeze({
+  n: `Week ${i + 1}`, name: p.name, desc: p.desc, days: p.days,
+})));
+
+/**
+ * Formation has no week of its own (owner answer F1: the week was not named,
+ * so it reads "depends on your starting point"). A founder who already has an
+ * entity keeps it; one who does not forms it in the Lab. The worker still
+ * checks it before the last gate opens: `MILESTONES` week 4 requires
+ * `incorporation_completed` (cloudflare-worker/src/services/spinoutLabCatalog.ts).
+ */
+export const LAB_FORMATION = 'Formation depends on your starting point. Wherever it falls, the Lab checks incorporation and the founder equity filing before its last gate opens.';
+
+/** The formation lines for a jurisdiction: its incorporation and its founder equity filing. */
+export function formationItemsFor(jurisdictionKey) {
   const j = labJurisdiction(jurisdictionKey);
-  const items = [...phase.items];
-  items[0] = j.incLine;
-  items[1] = j.filingInc;
-  return items;
+  return [j.incLine, j.filingInc];
+}
+
+/** A week's items. Formation is not in any week (see LAB_FORMATION and formationItemsFor). */
+export function pipelineItemsFor(phase) {
+  return phase.items;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,13 +416,39 @@ export function outcomeBadgesFor(jurisdictionKey) {
 // Apply targets
 // ---------------------------------------------------------------------------
 /**
- * The logged-out CTA. Deliberately carries only `lane` and `product`:
- * `pages/RegisterPage.jsx` reads exactly those two params, so any third —
- * a `track`, say — would be dropped in silence and the page would be
- * promising a choice nothing records.
+ * The logged-out and signed-in apply targets with no starting point chosen.
+ * D6989 (#6989): a chosen starting point rides on top of these through
+ * `labApplyHref()`, never as a fourth query param on /register: RegisterPage
+ * reads `lane` and `product`, and carries the rest only inside `next`, the
+ * same-origin return path it keeps across sign-up (`pendingNext.js`).
  */
 export const LAB_APPLY_HREF = '/register?lane=founder&product=spinout-lab';
 export const LAB_APPLY_HREF_SIGNED_IN = '/spinout-lab/apply';
+
+/**
+ * D6989: the Lab's three starting points, the ids of `LAB_TRACKS`
+ * (`spinoutLabArsenal.js`) and of the Worker's `LAB_TRACK_IDS`
+ * (`routes/spinout_lab.ts`), which stores one on the application.
+ */
+export const LAB_TRACK_IDS = Object.freeze(['form', 'fit', 'line']);
+
+/** A known starting point from a query string (`?track=fit`), or null. */
+export function trackFromSearch(search) {
+  const t = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('track');
+  return LAB_TRACK_IDS.includes(t) ? t : null;
+}
+
+/**
+ * The apply link for a chosen starting point. Signed in, the application page
+ * with `?track=`. Signed out, /register with the application page (and its
+ * `track`) as `next`, so the choice survives sign-up and is preselected when
+ * the member lands there. An unknown track gives the plain link.
+ */
+export function labApplyHref(track, { signedIn = false } = {}) {
+  if (!LAB_TRACK_IDS.includes(track)) return signedIn ? LAB_APPLY_HREF_SIGNED_IN : LAB_APPLY_HREF;
+  const apply = `${LAB_APPLY_HREF_SIGNED_IN}?track=${track}`;
+  return signedIn ? apply : `${LAB_APPLY_HREF}&next=${encodeURIComponent(apply)}`;
+}
 export const LAB_CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
 
 // ---------------------------------------------------------------------------

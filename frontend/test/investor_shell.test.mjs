@@ -344,9 +344,10 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
     /const shows = \(section\) => !known \|\| zone === section;/,
     'the investor Network page must narrow to the zone it was given');
   // And the fund zone pages own their own composition, so the generic investor
-  // chrome must not be stacked on top of them either.
+  // chrome must not be stacked on top of them either. D6233 (#6233): nor on the
+  // locked surface, which is the one FundLocked every Fund route draws.
   assert.match(codeOnly(read(`${investorDir}/InvestorWorkspacePage.jsx`)),
-    /key === 'fund' && fundUnlocked && children\) return children/,
+    /if \(page === 'fund'\) return fundUnlocked && children \? children : <FundLocked /,
     'the four Fund zone pages get the generic header stacked above their own');
 });
 
@@ -485,9 +486,11 @@ test('a failed read is never rendered as an empty one', () => {
   const network = codeOnly(read(`${investorDir}/InvestorNetworkWorkspace.jsx`));
   assert.match(network, /const detailFor = \(error, value, describe\)/,
     'the three section headings must read the error before the null');
-  for (const source of ['errors.relationships', 'errors.introductions', 'errors.organizations']) {
+  for (const source of ['errors.relationships', 'errors.introductions']) {
     assert.ok(network.includes(`detailFor(${source}`), `${source} is not consulted by its heading`);
   }
+  assert.match(network, /id="organizations" title="Organizations" detail=\{detailFor\(errors\.relationships, relationships,/,
+    'Organizations must use the error from the relationship read it shares with the book');
   assert.ok(!/'Loading propositions'|'Loading relationship records'|'Loading attributed context'/.test(network),
     'a heading still hard-codes a loading string a failed fetch can never leave');
   // And a fund with no LP count reads as absent, not as zero.

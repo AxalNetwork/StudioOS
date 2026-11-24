@@ -346,7 +346,7 @@ test('Product roadmap\'s read carries the milestone groups, the releases and eac
   ], 'newest first, each with what it shipped');
   assert.equal(g.releases_total, 2);
   // The canvas's table is unchanged.
-  assert.deepEqual(body.records?.cols?.map((c: any) => c.label) ?? body.cols?.map((c: any) => c.label), ['Item', 'Column', 'Moves', 'Owner', 'Date']);
+  assert.deepEqual(body.records?.cols?.map((c: any) => c.label) ?? body.cols?.map((c: any) => c.label), ['Item', 'Column', 'State', 'Moves', 'Owner', 'Date']);
 });
 
 test('with nothing from GitHub the part says so, and an unreadable store is Unreadable, never empty', async () => {

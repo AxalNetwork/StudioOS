@@ -3,19 +3,20 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import OfferPages from '../../../ui/OfferPages.jsx';
 import {
-  // `StatCard` went with the four tiles it drew: the strip is the artboard's
-  // own composition now, and `VisTile` below is the tile that can render `Not
-  // recorded` as a chip rather than as an em dash a reader reads as zero.
-  ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, NotComputable, NoPartnerProfile,
-  isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
+  ZoneBody, Unrecorded, Pill,
+  Section, Field, NotComputable, NotMeasured, NoPartnerProfile,
+  isNoPartnerProfile, moneyDollars,
+  // #4845: the Offers field, actions and empty state (D4844), so this zone's
+  // controls are 14px, 44px on a phone and carry the amber focus ring.
+  OfferEmpty, OfferHeading, offerInputClass as inputClass, offerButtonClass as buttonClass,
+  offerGhostButtonClass as ghostButtonClass, offerDangerButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
-import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { FOOT, TREND_WHY, captionOf, missingSource, sourceRows } from './visibilityModel';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote, zoneReadError } from './useGuardedWrite';
 
 /**
  * Offers · Visibility — `/offers/visibility`.
@@ -111,7 +112,7 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
             <button type="button" className={buttonClass} disabled={busy}
               onClick={() => onSave(row, draft, () => setEdit(false))}>Save</button>
             <button
-              type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
+              type="button" className={`${offerDangerButtonClass} ml-auto`}
               disabled={busy}
               title="Removes the surface and the attributions pointing at it. Retiring is usually the right move instead."
               onClick={() => onDelete(row)}
@@ -126,30 +127,56 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
   );
 }
 
-function AttributionRow({ row, surfaces, onSet, onClear, busy }) {
+/**
+ * Where one engagement came from: a select named by the engagement it sets, so a
+ * screen reader hears "Where Pricing sprint came from" rather than an unnamed list.
+ * Empty is a REAL choice, not a prompt: an engagement whose source nobody knows
+ * must be recordable as exactly that.
+ */
+function AttributionSelect({ row, surfaces, onSet, onClear, busy }) {
   return (
-    <tr className="border-t border-axal-hairline align-top">
+    <select
+      className={inputClass}
+      aria-label={`Where ${row.need_title || 'this engagement'} came from`}
+      value={row.surface_id ?? ''}
+      disabled={busy || surfaces.length === 0}
+      onChange={(e) => (e.target.value ? onSet(row, Number(e.target.value)) : onClear(row))}
+    >
+      <option value="">Not attributed</option>
+      {surfaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>
+  );
+}
+
+const engagementName = (row) => row.need_title || <Unrecorded>Untitled</Unrecorded>;
+const engagementMeta = (row) => `${row.founder_name || row.engagement_uid} · ${row.status}`;
+
+function AttributionRow(props) {
+  const { row } = props;
+  return (
+    <tr className="border-t border-axal-hairline align-top dark:border-gray-800">
       <td className="py-2 pr-3">
-        <div className="font-semibold">{row.need_title || <Unrecorded>Untitled</Unrecorded>}</div>
-        <div className="text-[11px] text-axal-faint">
-          {row.founder_name || row.engagement_uid} · {row.status}
-        </div>
+        <div className="font-semibold">{engagementName(row)}</div>
+        <div className="text-[12px] text-gray-600 dark:text-gray-400">{engagementMeta(row)}</div>
       </td>
       <td className="py-2 pr-3 tabular-nums">{row.price != null ? moneyDollars(row.price) : <Unrecorded />}</td>
-      <td className="py-2 pr-3">
-        <select
-          className={inputClass}
-          value={row.surface_id ?? ''}
-          disabled={busy || surfaces.length === 0}
-          onChange={(e) => (e.target.value ? onSet(row, Number(e.target.value)) : onClear(row))}
-        >
-          {/* Empty is a REAL choice, not a prompt: an engagement whose source
-              nobody knows must be recordable as exactly that. */}
-          <option value="">Not attributed</option>
-          {surfaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </td>
+      <td className="py-2 pr-3"><AttributionSelect {...props} /></td>
     </tr>
+  );
+}
+
+/** #4845 (OF-09): on a phone the same engagement is a labelled record, its select full width. */
+function AttributionCard(props) {
+  const { row } = props;
+  return (
+    <li className="border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-800" data-testid={`attribution-card-${row.engagement_id}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <b className="min-w-0 text-[14px]">{engagementName(row)}</b>
+        <span className="shrink-0 text-[13px] tabular-nums">{row.price != null ? moneyDollars(row.price) : <Unrecorded />}</span>
+      </div>
+      <div className="text-[12px] text-gray-600 dark:text-gray-400">{engagementMeta(row)}</div>
+      <AttributionSelect {...props} />
+    </li>
   );
 }
 
@@ -177,7 +204,8 @@ export default function PartnerVisibilityZone() {
     } catch (e) {
       setState({
         loading: false,
-        error: e?.message || 'The surface record did not load.',
+        // #4845: a written sentence (`zoneReadError`), never the response's text.
+        error: zoneReadError(e),
         data: null,
         attribution: null,
       });
@@ -200,6 +228,10 @@ export default function PartnerVisibilityZone() {
   const items = Array.isArray(d?.items) ? d.items : [];
   const attribution = state.attribution || [];
   const active = items.filter((s) => s.is_active);
+  // #4843 (D4843): the OF-05 table, its caption and the missing-source action.
+  const rows = sourceRows(items);
+  const caption = captionOf(d);
+  const missing = missingSource(d, items);
 
   /**
    * `By engagements` is the one label on this artboard with a source, and it is
@@ -221,12 +253,6 @@ export default function PartnerVisibilityZone() {
   };
   const view = 'engagements';
   const visible = [...items].sort(ORDERINGS[view]);
-  // The artboard's `Best converter`, over the whole set rather than the sorted
-  // view — they are the same list here, and reading `items` says so.
-  const best = items.reduce(
-    (top, s2) => (Number(s2.engagement_count) > Number(top?.engagement_count ?? 0) ? s2 : top),
-    null,
-  );
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
@@ -244,6 +270,19 @@ export default function PartnerVisibilityZone() {
   // arrived, and `error` is cleared so the shared "This did not load" card —
   // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
   const unlinked = isNoPartnerProfile(state.error);
+  const attributionProps = (row) => ({
+    row,
+    surfaces: active,
+    busy,
+    onSet: (r, surfaceId) => run(
+      () => api.setPartnerEngagementSource(r.engagement_id, { surface_id: surfaceId }),
+      'Attributed.', `attr:${r.engagement_id}`,
+    ),
+    onClear: (r) => run(
+      () => api.clearPartnerEngagementSource(r.engagement_id),
+      'Attribution cleared.', `attr:${r.engagement_id}`,
+    ),
+  });
 
   return (
     <>
@@ -309,13 +348,18 @@ export default function PartnerVisibilityZone() {
       )}
       <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
+        // #4845: #5129's loading and Unavailable states (`SectionState`), as the
+        // other Offers zones draw them, in place of the older "This did not
+        // load" card.
+        what="Your surfaces"
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={reload}
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
-          <NothingYet
+          <OfferEmpty
+            testId="visibility-empty"
             title="No surface is recorded yet"
             body={
               'A surface is anywhere the firm appears and work can come from — a '
@@ -332,103 +376,109 @@ export default function PartnerVisibilityZone() {
         )}
       >
         <div className="space-y-6">
-          <ZoneHeading
-            title="Where the firm appears, and what each produced"
-            blurb={
-              'Ranked by engagements rather than by reach. A listing with a large '
-              + 'audience and no work is below a referral with one — that ordering '
-              + 'is the point of the zone.'
-            }
+          {/* #4843 (D4843, board OF-05): the zone answers one question, with one primary action. */}
+          <OfferHeading
+            title="Where does our work come from?"
+            blurb="Engagements and won value by the surface that brought them in."
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
-                {adding ? 'Cancel' : 'Add a surface'}
+              <button type="button" className={adding ? ghostButtonClass : buttonClass} onClick={() => toggleAdding(!adding)} data-testid="visibility-add">
+                {adding ? 'Cancel' : '+ Add surface'}
               </button>
             )}
           />
 
-          {/* ══ THE ARTBOARD'S FOUR TILES, AND THE TWO IT ASKS FOR THAT THIS
-              PRODUCT CANNOT ANSWER ══════════════════════════════════════════
-
-              `po3`'s strip is `Leads · Engagements · Best converter · Directory
-              views`. Two of those four are real here and two are not, and the
-              difference is which side the absence sits on.
-
-              `Engagements` and `Best converter` count rows: `engagement_sources`
-              (migration 209) is a join, so every figure is a named row and a
-              surface nobody attributed counts toward nothing.
-
-              `Leads` and `Directory views` are the product's own gaps, not this
-              firm's. A lead is a `founder_needs` row and nothing records which
-              surface a founder arrived through; a view needs an impression
-              pipeline, not a table. D56 says a tile with no store behind it is
-              not drawn — so these two are `Not recorded` with the reason rather
-              than a zero, because a zero on `Leads` would read as "nobody came"
-              when it means "nobody counted". */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <VisTile label="Leads" nr note="no store records which surface a founder arrived through" />
-            <VisTile
-              label="Engagements"
-              value={String(d?.engagement_total ?? 0)}
-              note={d?.unattributed_count ? `${d.unattributed_count} name no surface` : 'each names its source'}
-            />
-            {best
-              ? <VisTile label="Best converter" value={best.name} note={`${best.engagement_count} engagement${Number(best.engagement_count) === 1 ? '' : 's'} sourced`} />
-              : <VisTile label="Best converter" nr note="no engagement names a surface yet" />}
-            <VisTile label="Directory views" nr note="no impression pipeline — never estimated" />
-          </div>
-
-          {/* THE ARTBOARD'S LINKAGE NOTE, and it is the sentence that makes the
-              Engagements column trustworthy: this zone counts named rows rather
-              than modelling a total, so nothing appears here that does not
-              exist in Delivery. */}
-          <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
-            <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Delivery:</strong>{' '}
-            Every engagement in Delivery names the surface that sourced it, so this column counts named
-            rows rather than modelling a total. Nothing appears here that does not exist there
-            {d?.unattributed_count
-              ? `, and the ${d.unattributed_count} that name no surface are counted toward none of them.`
-              : '.'}
-          </div>
-
-          <Instrument
-            testid="visibility-surfaces"
-            title="Surfaces"
-            meta="Sorted by engagements, not views"
-            cols="1.6fr .9fr .8fr 1fr 1.1fr"
-            head={['Surface', 'Views', 'Leads', 'Engagements', 'Lead → engagement']}
-            rows={visible.map((row) => ({
-              key: row.id,
-              cells: [
-                {
-                  text: row.name,
-                  sub: KIND_LABEL[row.kind] || row.kind,
-                  ...(row.is_active ? {} : { pill: 'Retired', pillTone: 'neutral' }),
-                },
-                // THREE COLUMNS THE ARTBOARD DRAWS AND THIS STORE CANNOT FILL,
-                // and the instNote below names each. The artboard itself
-                // renders an em dash where a surface has no view counter —
-                // "inventing one would make the widest column the least true" —
-                // and here that is every row rather than two of them.
-                { nr: true },
-                { nr: true },
-                { text: String(row.engagement_count ?? 0) },
-                { nr: true },
-              ],
-            }))}
-            note={'Views and Leads read "Not recorded" on every row, and the ratio between them with them: a view count needs an impression pipeline rather than a table, and nothing in the product records which surface a founder arrived through. The artboard renders an em dash where a surface has no view counter on the grounds that inventing one would make the widest column the least true — here that applies to every row, so the column is stated absent rather than filled. Engagements is real and is the ordering: a listing with a large audience and no work sits below a referral with one, which is the whole point of the zone.'}
-          />
-
-          {d?.unattributed_note && (
-            <p className="text-[12.5px] leading-relaxed text-axal-muted">
-              {d.unattributed_note}{' '}
-              <span className="text-axal-faint">
-                They are not shared out across the surfaces below — a count that
-                guessed would make the largest row the least true.
-              </span>
-            </p>
+          {/* Missing attribution is an action, not an explanation. */}
+          {missing && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 dark:border-amber-800 dark:bg-amber-950/30" data-testid="visibility-missing">
+              <span aria-hidden="true" className="grid h-6 w-6 place-items-center rounded-full bg-amber-200 text-[12px] font-extrabold text-amber-900 dark:bg-amber-900 dark:text-amber-100">!</span>
+              <div className="min-w-0 flex-1 text-[13px] text-axal-ink dark:text-gray-100">
+                <b className="block">{missing.title}</b>
+                <span className="text-[12.5px] text-axal-muted dark:text-gray-400">{missing.line}</span>
+              </div>
+              {missing.canFix && (
+                <a href="#visibility-attribution" className={`${ghostButtonClass} max-sm:min-h-[44px]`} data-testid="visibility-review">Review attribution</a>
+              )}
+            </div>
           )}
 
-          <Section title="Surfaces">
+          <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="visibility-sources">
+            {caption && <p className="m-0 px-3 pt-2.5 text-[12px] font-bold uppercase tracking-[.08em] text-gray-600 dark:text-gray-400" data-testid="visibility-caption">{caption}</p>}
+            {/* A desk reads a table; a phone reads the same rows as labelled cards (OF-09). */}
+            <table className="hidden w-full text-left text-[13px] sm:table">
+              <thead className="text-[12px] font-bold uppercase tracking-[.06em] text-gray-600 dark:text-gray-400">
+                <tr>
+                  {['Source', 'Kind', 'Engagements', 'Won', 'Views', 'Trend'].map((h, i) => (
+                    <th key={h} scope="col" className={`px-3 py-2 ${i === 2 || i === 3 ? 'text-right' : ''}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t border-axal-hairline align-middle dark:border-gray-800" data-testid={`visibility-row-${r.id}`}>
+                    <td className="px-3 py-2"><b>{r.name}</b>{r.retired && <span className="ml-2"><Pill tone="neutral">Retired</Pill></span>}</td>
+                    <td className="px-3 py-2">{r.kind}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.engagements}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.won == null ? <NotMeasured label="Not recorded" /> : moneyDollars(r.won)}</td>
+                    <td className="px-3 py-2"><NotMeasured why={r.viewsWhy} testId={`visibility-views-${r.id}`} /></td>
+                    <td className="px-3 py-2"><NotMeasured label="Not recorded" why={TREND_WHY} testId={`visibility-trend-${r.id}`} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ul className="m-0 flex list-none flex-col p-0 sm:hidden" data-testid="visibility-cards">
+              {rows.map((r) => (
+                <li key={r.id} className="border-t border-axal-hairline px-3 py-3 first:border-t-0 dark:border-gray-800">
+                  <div className="flex items-baseline justify-between gap-2"><b className="text-[14px]">{r.name}</b><span className="text-[12px] text-axal-muted dark:text-gray-400">{r.kind}</span></div>
+                  <dl className="m-0 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[13px]">
+                    <dt className="text-axal-muted dark:text-gray-400">Engagements</dt><dd className="m-0 text-right tabular-nums">{r.engagements}</dd>
+                    <dt className="text-axal-muted dark:text-gray-400">Won</dt><dd className="m-0 text-right tabular-nums">{r.won == null ? 'Not recorded' : moneyDollars(r.won)}</dd>
+                    <dt className="text-axal-muted dark:text-gray-400">Views</dt><dd className="m-0 text-right"><NotMeasured why={r.viewsWhy} /></dd>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="visibility-foot">{FOOT}</p>
+
+          <Section title="Where each engagement came from">
+            <div id="visibility-attribution" className="scroll-mt-24" data-testid="visibility-attribution">
+              {attribution.length === 0 ? (
+                <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-400">
+                  No engagement yet. Win work and it appears here to be attributed;
+                  until it is, it counts toward no surface.
+                </p>
+              ) : (
+                <>
+                  {/* #4845 (OF-09): a table from 640px, labelled records below it, so no
+                      engagement's select needs the page to scroll sideways. */}
+                  <table className="hidden w-full text-left text-[13px] sm:table" data-testid="attribution-table">
+                    <thead className="text-[12px] font-extrabold uppercase tracking-[.06em] text-gray-600 dark:text-gray-400">
+                      <tr>
+                        <th scope="col" className="pb-1 pr-3">Engagement</th>
+                        <th scope="col" className="pb-1 pr-3">Value</th>
+                        <th scope="col" className="pb-1 pr-3">Came from</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attribution.map((row) => <AttributionRow key={row.engagement_id} {...attributionProps(row)} />)}
+                    </tbody>
+                  </table>
+                  <ul className="m-0 list-none p-0 sm:hidden" data-testid="attribution-cards">
+                    {attribution.map((row) => <AttributionCard key={row.engagement_id} {...attributionProps(row)} />)}
+                  </ul>
+                </>
+              )}
+            </div>
+            {/* Scoped by a PREFIXED key, not a bare id. A surface id and an
+                engagement id are both small integers drawn from different
+                sequences, so `scope === row.id` would eventually show a surface's
+                "Saved." under an unrelated engagement row — a message about a
+                write that did not happen there. */}
+            <WriteNote note={String(note?.scope || '').startsWith('attr:') && !note.refreshFailed ? note : null} busy={busy} />
+            <OfferPages label="Attribution" result={state.attributionPage} busy={busy || state.loading} onPage={setPage} />
+          </Section>
+
+          <Section title="Manage surfaces">
             <div>
               {visible.map((row) => (
                 <SurfaceRow
@@ -462,101 +512,12 @@ export default function PartnerVisibilityZone() {
             nothingToDraft="No surface is recorded yet, so there is nothing to compare."
           />
 
-          <Section title="Where each engagement came from">
-            {attribution.length === 0 ? (
-              <p className="text-[12.5px] leading-relaxed text-axal-muted">
-                No engagement yet. Win work and it appears here to be attributed —
-                until it is, it counts toward no surface.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-[12.5px]">
-                  <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                    <tr>
-                      <th className="pb-1 pr-3">Engagement</th>
-                      <th className="pb-1 pr-3">Value</th>
-                      <th className="pb-1 pr-3">Came from</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attribution.map((row) => (
-                      <AttributionRow
-                        key={row.engagement_id}
-                        row={row}
-                        surfaces={active}
-                        busy={busy}
-                        onSet={(r, surfaceId) => run(
-                          () => api.setPartnerEngagementSource(r.engagement_id, { surface_id: surfaceId }),
-                          'Attributed.', `attr:${r.engagement_id}`,
-                        )}
-                        onClear={(r) => run(
-                          () => api.clearPartnerEngagementSource(r.engagement_id),
-                          'Attribution cleared.', `attr:${r.engagement_id}`,
-                        )}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {/* Scoped by a PREFIXED key, not a bare id. A surface id and an
-                engagement id are both small integers drawn from different
-                sequences, so `scope === row.id` would eventually show a surface's
-                "Saved." under an unrelated engagement row — a message about a
-                write that did not happen there. */}
-            <WriteNote note={String(note?.scope || '').startsWith('attr:') && !note.refreshFailed ? note : null} busy={busy} />
-            <OfferPages label="Attribution" result={state.attributionPage} busy={busy || state.loading} onPage={setPage} />
-          </Section>
-
-          <StatedLimit title="What this zone does not claim">
-            <p>
-              <strong>No view count.</strong> {items[0]?.views_note
-                || 'No impression is recorded anywhere in the product, so a view count would be invented rather than measured.'}{' '}
-              The column stays on the page as a stated absence rather than being
-              removed, because a reader who came for reach deserves to be told it
-              is not measured rather than left to assume it is zero.
-            </p>
-            <p className="mt-2">
-              <strong>No leads-per-surface ratio.</strong> {d?.lead_ratio_note
-                || 'Leads per surface is not recorded anywhere, so the ratio has an absent denominator.'}
-            </p>
-            <p className="mt-2">
-              <strong>Attribution is what somebody recorded.</strong> Nothing infers
-              a source, so a surface that produced work nobody attributed reads as
-              producing none. The unattributed count above is how large that gap
-              currently is — and it is shown rather than shared out, so no row is
-              credited with work it may not have produced.
-            </p>
-          </StatedLimit>
-
-          <p className="text-[12px] text-axal-faint">
+          <p className="text-[12px] text-gray-600 dark:text-gray-400">
             Passing on a lead with a named reason lives on{' '}
             <Link to="/offers/audience-fit" className="text-amber-700 underline">Audience fit</Link>.
           </p>
         </div>
       </ZoneBody>
     </>
-  );
-}
-
-/**
- * The strip tile, in the anatomy the artboards share.
- *
- * `StatCard` is this bucket's older primitive and is still used elsewhere in
- * the file; the strip is the artboard's own composition, so it takes the
- * artboard's own tile — which is also the one that can draw `Not recorded` as a
- * chip rather than as an em dash a reader mistakes for zero.
- */
-function VisTile({ label, value, note, nr = false }) {
-  return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1.5">
-        {nr ? <NotRecorded /> : (
-          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
-        )}
-      </div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
-    </div>
   );
 }

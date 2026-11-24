@@ -95,7 +95,8 @@ test('each reader keeps a frame: a member the app\'s header, sidebar and footer,
   assert.match(app, /path="\/pricing\/products" element=\{<TokensRedirect>\{user \? guard\(/, 'a signed-in reader gets the app frame');
   const page = read('frontend/src/pages/ProductsPage.jsx');
   assert.match(page, /import SitePage from '\.\.\/components\/site\/SitePage';/);
-  assert.match(page, /if \(!member\) return <SitePage title="Plans and pricing">\{page\}<\/SitePage>;/, 'a visitor gets the site nav and footer');
+  // D6996 (#6996): no title of its own; the registry's /pricing/products entry names it.
+  assert.match(page, /if \(!member\) return <SitePage>\{page\}<\/SitePage>;/, 'a visitor gets the site nav and footer');
   assert.match(read('frontend/src/components/site/SitePage.jsx'), /<PublicNav \/>[\s\S]*<PublicFooter \/>/);
 });
 

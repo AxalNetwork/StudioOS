@@ -365,7 +365,11 @@ test('the collector reads no interviewee name, note or quote, and no buyer, cust
   const base = d1Over(db);
   const spy: any = { ...base, prepare: (q: string) => { seen.push(q); return base.prepare(q); } };
   const out = await collectPmfInputs({ DB: spy } as any, P, TODAY);
-  const all = seen.join('\n');
+  // D6017 (#6017): the one reviewed use of an experiment's result is whether one exists; its text is never selected.
+  // Mutation checked: `x.result` added to the experiment read's select list.
+  const PRESENCE = "trim(COALESCE(x.result, '')) != ''";
+  assert.ok(seen.some((q) => q.includes(PRESENCE)), 'a Done experiment counts only with a recorded result');
+  const all = seen.map((q) => q.split(PRESENCE).join('')).join('\n');
   for (const col of ['interviewee_name', 'interviewee_role', 'interviewee_company', 'notes', 'hypotheses_json', 'quote', ' who', 'customer,', 'result', 'x.title', 'claim,', 'reasoning']) {
     assert.ok(!all.includes(col), `no statement selects ${col.trim()}`);
   }

@@ -8,6 +8,12 @@ export interface Env {
   TYPEFORM_APP_APPROVED?: string;
   TYPEFORM_CLIENT_ID?: string;
   TYPEFORM_CLIENT_SECRET?: string;
+  /** D5834: `1` once the owner's Intuit app is approved; the QuickBooks connector is off until then. */
+  QUICKBOOKS_APP_APPROVED?: string;
+  QUICKBOOKS_CLIENT_ID?: string;
+  QUICKBOOKS_CLIENT_SECRET?: string;
+  /** D5834: `production` reads Intuit's production API; anything else is the sandbox. */
+  QUICKBOOKS_ENVIRONMENT?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
@@ -114,6 +120,8 @@ export interface Env {
   // Used by the boot guards in auth.ts to decide whether to throw on missing
   // secrets vs warn-and-fallback.
   ENVIRONMENT?: string;
+  /** Fixed recipient of the scheduled production HQ magic-link insert probe. */
+  MAGIC_INSERT_CANARY_EMAIL?: string;
   /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
   PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
@@ -149,6 +157,16 @@ export interface Env {
   // D452 — git ref or deploy id stamped at provision/deploy time; branch health
   // returns it so HQ can persist `licence_deployments.last_version` on read.
   WORKER_DEPLOY_VERSION?: string;
+  // D8073 — the build's UTC time, stamped beside WORKER_DEPLOY_VERSION at
+  // deploy (`--var WORKER_BUILT_AT:<iso>`). Unset, /api/public/version says so.
+  WORKER_BUILT_AT?: string;
+  // D8073 — the `[version_metadata]` binding (Cloudflare's own id for the
+  // running Worker version). Proposed on #8069; absent, version_id is null.
+  CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
+  /** D8073: the bearer token the production deploy job records a deploy with. Unset, the record refuses. */
+  DEPLOY_RECORD_TOKEN?: string;
+  /** D8080: the bearer token the deploy job syncs the agent registry with. Unset, the sync refuses. */
+  AGENT_REGISTRY_TOKEN?: string;
   // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
   // generates it per deployment, puts the plaintext here and writes its SHA-256
   // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
@@ -205,6 +223,17 @@ export interface Env {
   // owner has registered https://axal.vc and https://app.axal.vc as
   // Authorized JavaScript origins on that client.
   GOOGLE_SIGNIN_POPUP?: string;
+  // D6957 — Sign in with Apple for the web (routes/auth_apple.ts). The
+  // Services ID is the OAuth client_id; the Team ID and Key ID sign the client
+  // secret with the private key (the .p8 file's contents, a wrangler secret).
+  // /api/auth/apple/config answers configured only when all four are set, and
+  // /login shows the Apple button only then. APPLE_SIGNIN_RETURN_BASE_URL
+  // overrides the host of the registered return URL (default PUBLIC_BASE_URL).
+  APPLE_SIGNIN_SERVICES_ID?: string;
+  APPLE_SIGNIN_TEAM_ID?: string;
+  APPLE_SIGNIN_KEY_ID?: string;
+  APPLE_SIGNIN_PRIVATE_KEY?: string;
+  APPLE_SIGNIN_RETURN_BASE_URL?: string;
   // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
   // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
   // spreadsheets scope never forces calendar users to re-consent. Resolution
@@ -322,6 +351,9 @@ export interface Env {
   // When any of the three is unset, /api/linkedin/oauth/start returns 503
   // and the UI hides the OAuth tab while still allowing the CSV-export
   // walkthrough to function.
+  /** #3725: Axal's Eventbrite app. Both unset keeps the Eventbrite syndication channel switched off. */
+  EVENTBRITE_CLIENT_ID?: string;
+  EVENTBRITE_CLIENT_SECRET?: string;
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
   LINKEDIN_REDIRECT_URI?: string;
@@ -387,12 +419,27 @@ export interface Env {
   AGENT_AUTONOMY?: string;
   /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
   AGENT_RUNTIME?: string;
+  /** D7077 (#7077): JSON model id → agent runs the queue may start a minute (`"*"` for any other model), shared fairly across teams (`src/agents/modelBudget.ts`). Unset = no limit. */
+  AGENT_MODEL_RPM?: string;
   /** D4555 (#4555): `cloudflare_sdk` selects the Agent Skills SDK adapter on the run path, read only when ENVIRONMENT is `preview` (`skillEngineOf`). Declared nowhere in wrangler.toml. */
   AGENT_SKILL_RUNTIME?: string;
   /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
   AGENT_INFERENCE_STUB?: string;
-  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
+  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. D7073: an engine run with none is refused `gateway_required`, and a value that cannot name a gateway refuses every run. */
   AGENT_AI_GATEWAY?: string;
+  /** D7073-p2 (#7073): the `agents` gateway's Run token, sent as `cf-aig-authorization` on the accounts' calls. A secret. Unset: engine runs are refused `accounts_unconfigured`. */
+  AGENT_AI_GATEWAY_TOKEN?: string;
+  /** D7073-p2: the stored-key aliases of the model accounts on the `agents` gateway, in order (never `default`). Unset skips the slot. */
+  AGENT_CLAUDE_ALIAS_1?: string;
+  AGENT_CLAUDE_ALIAS_2?: string;
+  AGENT_CLAUDE_ALIAS_3?: string;
+  AGENT_OPENAI_ALIAS?: string;
+  /** D7073-p2: the Claude accounts' model, a priced `PROVIDER_MODELS` id (`anthropic/claude-sonnet-5-5`). */
+  AGENT_CLAUDE_MODEL?: string;
+  /** D7073-p2: the OpenAI account's model, the review's own variable (`gpt-5.3-codex`); priced by the catalogue or AGENT_OPENAI_RATES. */
+  OPENAI_MODEL?: string;
+  /** D7073-p2: USD per 1M tokens for an OPENAI_MODEL the catalogue does not price, as JSON {tokens_in, tokens_cached, tokens_out}. */
+  AGENT_OPENAI_RATES?: string;
   /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
   AGENT_COMPUTE?: string;
   /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */
@@ -515,6 +562,13 @@ export interface Env {
   STREAM_API_TOKEN?: string;
   // #4176: verifies Stream's Webhook-Signature (owner step B).
   STREAM_WEBHOOK_SECRET?: string;
+  // D5585 part 3 (#5585): `preview` lets `drainReleaseEffects` deliver WorkGraph release effects through the real
+  // provider adapters. Unset (the default) it delivers nothing. D5585 part 7: the every-minute cron runs one bounded
+  // drain on minutes `% 5 === 2` while it is `preview`, and returns before any D1 read while it is not.
+  WORK_GRAPH_RELEASE_DELIVERY?: string;
+  // D5585 part 7 (#5585): `on` opens the Super-Admin release routes (`routes/admin_work_graph_releases.ts`). Unset
+  // (the default) or any other value, every one of them refuses 404 `release_admin_off` before any D1 read.
+  WORK_GRAPH_RELEASE_ADMIN?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
@@ -555,6 +609,8 @@ export interface Env {
   WORK_GRAPH_LEASE?: DurableObjectNamespace;
   /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
   WORK_GRAPH_LEASES?: string;
+  /** D5582 part 3: Super Admin drafting routes, only "preview" on a preview deployment enables them. */
+  WORK_GRAPH_DRAFTING?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.

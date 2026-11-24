@@ -7,7 +7,8 @@
  * This pins:
  *   - every hub block reads its section's live list, shows at most the
  *     canvas's number of rows, links to its section, and says so in one
- *     sentence when the list is empty or fails;
+ *     sentence when the list is empty (a failed read is D6992's Unavailable,
+ *     pinned in `resources_events_cohort_6992.test.mjs`);
  *   - no row, figure, filter or person from the canvas is typed into source:
  *     the canvas's directory names real people, and none of them ships;
  *   - the directory figures are D675's counts from `/api/public/stats`, each
@@ -88,8 +89,8 @@ test('each hub block reads its section\'s live list, at the canvas\'s row count'
     'each block calls the read its own section page makes');
   assert.equal(calls.find(([k]) => k === 'events')[1].limit, 4, 'the events read asks for four');
 
-  // A failed read is an empty list on the page: the hook catches into [].
-  assert.match(code(read(FILES.lib)), /\.catch\(\(\) => \{ if \(alive\) setItems\(\[\]\); \}\)/);
+  // D6992: a failed read is Unavailable, never an empty list: the hook no longer catches into [].
+  assert.doesNotMatch(code(read(FILES.lib)), /setItems\(\[\]\)/);
   for (const k of ['members', 'events', 'articles', 'circles', 'jobs']) {
     assert.match(code(read(FILES.hub)), new RegExp(`useLiveList\\(HUB_LOADERS\\.${k}\\)`), `the hub mounts the ${k} read`);
   }
@@ -97,17 +98,18 @@ test('each hub block reads its section\'s live list, at the canvas\'s row count'
 
 test('the hub draws its rows from the lists it is handed, links each block, and says when one is empty', () => {
   const loading = render(React.createElement(hub.ResourcesBody, { stats: null, members: null, events: null, articles: null, sectors: null, circles: null, jobs: null }));
-  assert.equal(count(loading, 'Loading…'), 5, 'each block says it is loading, and draws no row');
+  assert.equal(count(loading, 'Loading…'), 6, 'each block, and the programmes slot, says it is loading, and draws no row');
 
-  const empty = render(React.createElement(hub.ResourcesBody, { stats: null, members: [], events: [], articles: [], sectors: [], circles: [], jobs: [] }));
+  const noCohort = { status: 'ok', cohort: { open: false, name: null } };
+  const empty = render(React.createElement(hub.ResourcesBody, { stats: null, members: [], events: [], articles: [], sectors: [], circles: [], jobs: [], cohort: noCohort }));
   for (const line of [
-    'No one is listed in the directory yet.', 'Nothing is scheduled right now.', 'No articles are published yet.',
+    'No one is listed in the directory yet.', 'No events are scheduled right now.', 'No programme is open for applications right now.', 'No articles are published yet.',
     'No circles are open yet.', 'No open roles right now.',
   ]) assert.ok(empty.includes(line), `the empty sentence "${line}" is drawn`);
 
   for (const [text, to] of [
     ['Browse all →', '/directory'], ['Calendar →', '/events'], ['All articles →', '/articles'],
-    ['All circles →', '/circles'], ['All roles →', '/jobs'], ['Request directory access →', '/contact'],
+    ['All circles →', '/circles'], ['All roles →', '/jobs'], ['Request directory access →', '/contact?topic=directory'],
   ]) assert.ok(empty.includes(`href="${to}" data-discover="true">${text}</a>`), `${text} links ${to}`);
   assert.match(empty, /Verified members only\./, 'the canvas\'s access line stays');
 

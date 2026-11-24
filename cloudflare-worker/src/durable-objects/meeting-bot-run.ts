@@ -12,6 +12,7 @@ import {
   BOT_HEARTBEAT_MS, BOT_PROCESSING_MAX_MS, BotError, botRow, botSession, botView, botConfigured, botMemberEnabled, botVentureName, terminal,
   type BotRun, type BotStatus,
 } from '../services/meetingBots';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 export const BOT_RENEWAL_LEAD_MS = 20_000;
 export const BOT_CALLBACK_WINDOW_MS = 5 * 60_000;
@@ -485,7 +486,8 @@ export class MeetingBotRun implements DurableObject {
   }
   private async upload(req: Request, run: BotRun) {
     const seq=Number(req.headers.get('x-bot-chunk')), token=req.headers.get('x-bot-upload')??'';
-    const ticket=await this.state.storage.get<UploadTicket>(`chunk:${seq}`);
+    const ticketKey=`chunk:${seq}`;
+    const ticket=await this.state.storage.get<UploadTicket>(ticketKey);
     if (!ticket || ticket.used || ticket.expires<Date.now() || !constantTimeEqual(token,ticket.token)) throw new BotError(401,'invalid_upload','This upload permission is invalid or has already been used.');
     const draining=await this.draining(run);
     if (run.started_at === null || !draining && (Date.now() >= run.started_at + run.limit_minutes*60_000 || run.status!=='recording') || !await this.allowed(run)) throw new BotError(409,'bot_not_recording','The bot is no longer recording.');
@@ -501,7 +503,8 @@ export class MeetingBotRun implements DurableObject {
     const saved=await putChunk(this.env,session,run.user_id,seq,'audio/wav',bytes,ticket.start);
     try { await botSession(this.env,run); }
     catch {
-      await this.env.FILES!.delete(saved.objectPath);
+      // D886: recording permission ended, so the chunk is not kept. D6651: it leaves through the one record-erasure path.
+      await eraseRecordObjects(this.env.FILES!, saved.objectPath, 'erasure_request', { db: this.env.DB });
       await this.env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ? AND seq = ?').bind(session.id,seq).run();
       throw new BotError(409,'consent_required','The recording permission ended during upload.');
     }

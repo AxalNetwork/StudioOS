@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D235 — a runtime bootstrap is a safety net for a DECLARED object, never the
  * only declaration.
@@ -34,25 +35,26 @@ import {
   statementsOf,
   LEDGER,
 } from '../../scripts/check-runtime-schema-declared.mjs';
-import { buildFresh, objectNames, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { objectNames, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 
-const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const LATER = postCutoffMigrations(ROOT) as Array<{ name: string; sql: string }>;
 const M287 = '287_runtime_schema_declared.sql';
 
 /** The fresh build step 9 compares against production, with and without 287. */
-const withAll = () => buildFresh(BASELINE, LATER.map((m) => m.sql));
+const withAll = () => freshSchema();
 // "Without 287" is the build 287 was written against: every migration before
 // it. Dropping 287 from the whole list is not a build that can exist once a
 // later migration alters a table 287 declares (D4291's ALTERs of
 // referral_attributions), so the counterfactual stops where 287 starts, and
 // "what 287 adds" compares that prefix with and without it.
 const AT287 = LATER.findIndex((m) => m.name === M287);
-const upTo287 = () => buildFresh(BASELINE, LATER.slice(0, AT287 + 1).map((m) => m.sql));
-const without287 = () => buildFresh(BASELINE, LATER.slice(0, AT287).map((m) => m.sql));
+// D8354: the same prefixes from the cache: `below` keeps every numbered migration under it, and no stamped one.
+const upTo287 = () => freshSchema({ below: 288 });
+const without287 = () => freshSchema({ below: 287 });
 
 /** The fourteen objects 287 declares, as step 9 names them. */
 const DECLARED = [
@@ -444,6 +446,5 @@ test('the drift check and this guard build the same database from one list', () 
   const guard = read('scripts/check-runtime-schema-declared.mjs');
   assert.match(guard, /import \{[^}]*\bbuildFresh\b[^}]*\bpostCutoffMigrations\b[^}]*\} from '\.\/check-baseline-drift\.mjs'/);
   assert.doesNotMatch(guard, /readdirSync\([^)]*migrations/, 'the guard must not list migrations itself');
-  const pkg = JSON.parse(read('package.json'));
-  assert.match(pkg.scripts['test:guards'], /node --no-warnings scripts\/check-runtime-schema-declared\.mjs/);
+  assert.match(guardChain, /node --no-warnings scripts\/check-runtime-schema-declared\.mjs/);
 });

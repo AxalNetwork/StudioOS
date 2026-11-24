@@ -34,8 +34,9 @@ import {
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, attentionOf, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
-  passAnswersInvitation, settingsOfSpec, sortRows, viewChanged,
+  passAnswersInvitation, settingsOfSpec, sortRows, viewChanged, csvAvailability, flowCsv, flowCsvName,
 } from './flowModel';
+import { downloadCsv, stamp } from '../../../lib/csvExport';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
 import { FlowTable, PhoneCards } from './FlowTable';
 import {
@@ -172,8 +173,18 @@ function useScoresAndFit(ids) {
  * you. Its read answers alone: a failure says Unreadable with Try again for
  * the strip and never 0, and the board below is unaffected.
  */
-export function AttentionStrip({ read, onRetry, newHref }) {
-  const a = attentionOf(read, unreadSources);
+function StaleRule({rule,onSaved}) {
+ const [days,setDays]=useState(rule.days??'');const [busy,setBusy]=useState(false);const [error,setError]=useState(null);
+ useEffect(()=>setDays(rule.days??''),[rule.days]);
+ async function save(){setBusy(true);setError(null);try{await dealFlowApi.setAttentionRule(days===''?null:Number(days));onSaved?.();}catch{setError('The firm’s stale rule could not be saved.');}finally{setBusy(false);}}
+ return <details className="text-xs"><summary className={`cursor-pointer font-semibold ${TAP}`}>Firm stale rule</summary><div className="mt-2 flex flex-wrap items-end gap-2">
+ <label>Days in stage<input aria-label="Firm stale days" type="number" min="1" max="3650" step="1" value={days} onChange={e=>setDays(e.target.value)} className={`ml-2 w-20 rounded border border-axal-hairline p-1 dark:border-gray-700 dark:bg-gray-900 ${TAP}`} /></label>
+ <button type="button" disabled={busy||(days!==''&&(!Number.isInteger(Number(days))||Number(days)<1||Number(days)>3650))} onClick={save} className={`font-semibold underline disabled:opacity-50 ${TAP}`}>{busy?'Saving…':'Save firm rule'}</button>
+ <span className="text-axal-muted dark:text-gray-400">Leave empty to keep stale Not recorded.</span>{error&&<span role="alert">{error}</span>}</div></details>;
+}
+
+export function AttentionStrip({ read, onRetry, newHref, recorded, onRuleSaved }) {
+  const a = attentionOf(read, unreadSources, recorded);
   const head = <b className="text-[13.5px]">Needs your attention</b>;
   const shell = 'flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900';
   if (a.kind === 'loading') return <section className={shell} aria-label="Needs your attention" aria-busy="true" data-testid="dealflow-attention">{head}<span className="text-[12.5px] text-axal-muted dark:text-gray-400">Reading…</span></section>;
@@ -193,12 +204,14 @@ export function AttentionStrip({ read, onRetry, newHref }) {
       {a.items.length ? (
         <div className="flex flex-wrap gap-1.5">
           {a.items.map((i) => (
-            <Link key={i.key} to={newHref} aria-label={i.label} className={`inline-flex items-center rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800 ${TAP}`} data-testid={`dealflow-attention-${i.key}`}>
+            i.key !== 'new' ? <span key={i.key} className="rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold dark:border-gray-700" data-testid={`dealflow-attention-${i.key}`}>{i.word}</span> : <Link key={i.key} to={newHref} aria-label={i.label} className={`inline-flex items-center rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800 ${TAP}`} data-testid={`dealflow-attention-${i.key}`}>
               {i.word}
             </Link>
           ))}
         </div>
-      ) : <span className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-attention-none">Nothing new for you{a.unread.length ? ' from the ways in that could be read' : ''}.</span>}
+      ) : <span className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-attention-none">{recorded ? 'No recorded items need your attention' : 'Nothing new for you'}{a.unread.length ? ' from the ways in that could be read' : ''}.</span>}
+      {recorded?.data?.stale?.state === 'not_recorded' && <span className="text-xs text-axal-muted dark:text-gray-400">Stale · Not recorded: {recorded.data.stale.reason}</span>}
+      {recorded?.data?.rule?.writable && <StaleRule rule={recorded.data.rule} onSaved={onRuleSaved} />}
       {a.unread.length > 0 && (
         <span className="text-[12.5px] text-amber-800 dark:text-amber-300" data-testid="dealflow-attention-unread">
           {a.unread.join(', ')} could not be read, so there may be more.
@@ -270,6 +283,7 @@ export default function DealFlow({ view, scope }) {
   // D4635: one accepted weighting for the control and the sort: a save re-reads it, and the order follows.
   const [weights, retryWeights] = useRead(() => ventureScoresApi.weights(), []);
   // D4815 part 3: the strip's one read, the inbox New for you already lists; not made under New for you itself.
+  const [attention, retryAttention] = useRead(() => (lists ? dealFlowApi.attention() : Promise.resolve(null)), [lists]);
   const [inbox, retryInbox] = useRead(() => (lists ? dealFlowApi.inbox() : Promise.resolve(null)), [lists]);
   // D6145 (#6145): who a deal can be given to, for the peek's picker and "Assign to me".
   const [owners, retryOwners] = useRead(() => (lists ? dealFlowApi.owners() : Promise.resolve(null)), [lists]);
@@ -356,6 +370,17 @@ export default function DealFlow({ view, scope }) {
   const ownerCtx = { me: owners.data?.scope === 'firm' ? me : null, busy, onAssign: (row, id) => { if (!busy) assignOwner(row, id); } };
 
   const viewList = views.kind === 'unreadable' ? 'failed' : views.data;
+  // D6150: Export CSV writes `shown` (every filtered, sorted row), never only the page on screen.
+  const csvState = csvAvailability({ rows: shown, columns: settings.columns, scores, fits });
+  const csv = view === 'table' && scope !== 'new' ? {
+    ...csvState, count: shown.length,
+    onExport: () => {
+      try {
+        const { header, rows: lines } = flowCsv(shown, settings.columns);
+        downloadCsv(flowCsvName({ viewName: activeView?.name || null, scope, day: stamp() }), header, lines);
+      } catch (e) { reportError('DealFlow:csv', e); }
+    },
+  } : null;
   const controls = lists && (
     <div className="flex flex-col gap-2" data-testid="dealflow-controls">
       <div className="flex flex-wrap items-center gap-2">
@@ -372,7 +397,7 @@ export default function DealFlow({ view, scope }) {
             columns={settings.columns} onColumns={(columns) => setSettings({ columns })} defaults={DEFAULT_COLUMNS}
             cards={settings.cards} onCards={(cards) => setSettings({ cards })}
             onPick={(v) => (v ? navigate(settingsHref({ ...settingsOfSpec(v.spec), viewUid: v.uid })) : navigate(viewHref({ view, scope })))}
-            onSave={() => setDialog({ kind: 'save' })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} />
+            onSave={() => setDialog({ kind: 'save' })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} csv={csv} />
         </div>
       </div>
       <FilterChips filters={settings.filters} onFilters={(filters) => setSettings({ filters })} />
@@ -422,7 +447,7 @@ export default function DealFlow({ view, scope }) {
         {nothing || (view === 'board'
           ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />)
-          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
+          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowTable rows={shown} columns={settings.columns} sort={settings.sort} onSort={(sort) => setSettings({ sort })} filters={settings.filters}
               onMin={(key, min) => setSettings({ filters: { ...settings.filters, min: { ...settings.filters.min, [key]: min } } })}
               picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} words={words} onWords={setWords} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />))}
@@ -434,7 +459,7 @@ export default function DealFlow({ view, scope }) {
     <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow">
       <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} onWeightsSaved={retryWeights} />
       {controls}
-      {lists && <AttentionStrip read={inbox} onRetry={retryInbox} newHref={settingsHref({ view, scope: 'new', settings })} />}
+      {lists && <AttentionStrip read={inbox} recorded={attention} onRuleSaved={retryAttention} onRetry={() => {retryInbox();retryAttention();}} newHref={settingsHref({ view, scope: 'new', settings })} />}
       <FlowOwnerContext.Provider value={ownerCtx}>{body}</FlowOwnerContext.Provider>
       {toast && (
         <div className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-[13px] ${toast.kind === 'refused' ? 'border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} role={toast.kind === 'refused' ? 'alert' : 'status'} data-testid="dealflow-toast">
@@ -444,10 +469,11 @@ export default function DealFlow({ view, scope }) {
         </div>
       )}
       {picked.length > 0 && (
+        // D5902 (DE03d): on a phone the bar's Compare and Clear are 44px targets.
         <div className="flex items-center gap-3" data-testid="dealflow-compare-bar">
           <span className="text-[13px]">{picked.length} selected</span>
-          {picked.length >= 2 ? <Link to={compareHref(picked)} className="font-semibold underline" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
-          <button type="button" className="text-[13px] underline" onClick={() => setPicked([])}>Clear</button>
+          {picked.length >= 2 ? <Link to={compareHref(picked)} className="inline-flex items-center font-semibold underline max-sm:min-h-[44px]" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
+          <button type="button" className="text-[13px] underline max-sm:min-h-[44px]" onClick={() => setPicked([])}>Clear</button>
         </div>
       )}
       <OtherDealActivity surviving={flowUnreadable} />

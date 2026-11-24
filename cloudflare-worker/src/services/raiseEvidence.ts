@@ -150,7 +150,7 @@ function founderItem(row:RaiseEvidenceItem,found:EvidenceCandidate|undefined,fai
 }
 async function decisionItem(ctx:RaiseEvidenceContext,row:RaiseEvidenceItem){
   try{return founderItem(row,await live(ctx,row));}
-  catch(error){return founderItem(row,undefined,error instanceof RaiseEvidenceError&&error.code==='unreadable');}
+  catch(error){return founderItem(row,undefined,(error instanceof RaiseEvidenceError)&&error.code==='unreadable');}
 }
 async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'area'|'source_table'|'source_ref'>,collected?:CollectedEvidence){
   // D6864: typed evidence is its own source, so the stored row is the current one.
@@ -556,6 +556,13 @@ export async function investorEvidence(env:Env,projectId:number,investorUserId:n
   await logOpenEvidence(env,projectId,investorUserId);
   return view;
 }
+/** #6629 (D6629): the same read for the deal summary PDF, by the same audience, NDA and sharing rules, and not logged:
+ *  the download writes its own `data_room_access_log` row once the file is made. Null for a reader with no audience. */
+export async function investorEvidenceView(env:Env,projectId:number,investorUserId:number){
+  const aud=await evidenceAudience(env,projectId,investorUserId);
+  if(!aud)return null;
+  return sharedView(env,projectId,aud,await evidenceNda(env,projectId,investorUserId));
+}
 /** #6173 (D6173): the investment case's Main evidence, the coverage this investor's `investorEvidence` read shows, by
  *  the same audience, NDA and sharing rules. Counts by area, kind and source only, never an item; not logged as an open,
  *  since nothing is opened (the Evidence block's own read logs `open_evidence`). `null` when the investor is no audience. */
@@ -564,6 +571,17 @@ export async function investorEvidenceCoverage(env:Env,projectId:number,investor
   if(!aud)return null;
   const view=await sharedView(env,projectId,aud,await evidenceNda(env,projectId,investorUserId));
   return {coverage:view.coverage,partial:view.partial};
+}
+/** #6172: Team evidence metadata through the same sharing gates as the Evidence tab.
+ * Caller has already checked deal access and NDA. No item or individual score is disclosed. */
+export async function dealTeamEvidence(env: Env, projectId: number, userId: number, staffOrOwner: boolean) {
+  const audience = staffOrOwner ? STAFF_AUDIENCE(userId) : await evidenceAudience(env, projectId, userId);
+  if (!audience) return { state: 'not_recorded', reason: 'No Team evidence is shared with you on this deal.' };
+  const view = await sharedView(env, projectId, audience, true);
+  if (!('groups' in view.coverage)) return view.coverage;
+  const teamKinds = new Set(EVIDENCE_RULES.filter(rule => rule.backs.includes('team')).map(rule => rule.kind));
+  const groups = view.coverage.groups.filter(group => teamKinds.has(group.kind));
+  return { state: 'recorded', data: { groups, partial: view.partial, source: 'Shared Team evidence' } };
 }
 /** D6167 (#6167, D4631's `staff` audience): an Admin or an Operating Partner on the deal page reads the projection an
  *  investor reads, never the founder's own pack: what the founder shared beyond Private, through every grant's folders,

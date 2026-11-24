@@ -366,6 +366,133 @@ export async function sendAgreementAssignedEmailResult(
 }
 
 // ---------------------------------------------------------------------------
+// D5585 part 5 (#5585) — the release sign-off email. The native e-sign service
+// sends it in place of the agreement email above for an envelope of document
+// type `work_graph_release` (`signingEmailFor` in routes/esign.ts): the release
+// owner is asked to sign the release they own. It names the release by ids only
+// (line, manifest, digest), never its content, and makes no claim beyond what
+// signing does: the e-sign service records the owner's signature, or their
+// decline, on this envelope. Transactional, like the agreement email: the same
+// suppression check, the same link expiry and access-log lines, no unsubscribe.
+// ---------------------------------------------------------------------------
+export interface ReleaseSignEmailInput {
+  recipientName: string;
+  /** The release line's asset uid: the name the line goes by. */
+  lineAssetUid: string;
+  manifestUid: string;
+  /** The manifest's sha256 digest, hex. */
+  digest: string;
+  signLink: string;
+  linkExpiryDays?: number;
+}
+
+/** The release sign-off email's subject, text and HTML. Pure, so a test reads exactly what is sent. */
+export function releaseSignEmailContent(i: ReleaseSignEmailInput): { subject: string; html: string; text: string } {
+  const days = i.linkExpiryDays ?? 7;
+  const greet = i.recipientName ? `Hi ${i.recipientName.split(' ')[0]},` : 'Hi,';
+  const shortDigest = i.digest.slice(0, 12);
+  const subject = `Sign release ${i.lineAssetUid} (sha256:${shortDigest})`;
+  const line = escapeHtml(i.lineAssetUid);
+  const manifest = escapeHtml(i.manifestUid);
+  const digest = escapeHtml(i.digest);
+  const link = escapeHtml(i.signLink);
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:4px 12px 4px 0;font-size:12px;color:#6b7280;white-space:nowrap;vertical-align:top;">${label}</td>` +
+    `<td style="padding:4px 0;font-size:13px;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;">${value}</td></tr>`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;"><tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;"><span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">StudioOS releases</span></td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Sign release ${line}</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 18px;line-height:1.6;">${escapeHtml(greet)}</p>
+  <p style="font-size:14px;color:#374151;margin:0 0 18px;line-height:1.65;">
+    You own this release line, so you are asked to sign the release below. It is identified by its manifest and digest.
+  </p>
+  <table cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px;margin:0 0 18px;width:100%;">
+    ${row('Release line', line)}
+    ${row('Manifest', manifest)}
+    ${row('Digest', `sha256:${digest}`)}
+  </table>
+  <p style="font-size:14px;color:#374151;margin:0 0 24px;line-height:1.65;">
+    Signing records your signature against this manifest digest in the e-signature record. You can decline instead.
+  </p>
+</td></tr>
+<tr><td style="padding:0 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">
+    <a href="${link}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 32px;border-radius:14px;">Review &amp; sign release</a>
+  </td></tr></table>
+</td></tr>
+<tr><td style="padding:0 32px 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;">
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or paste this link into your browser:</p>
+    <a href="${link}" style="color:#2563eb;word-break:break-all;font-size:12px;">${link}</a>
+  </div>
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    This link is unique to you and expires in ${days} days. Every access is logged for compliance.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [
+    greet,
+    '',
+    'You own this release line, so you are asked to sign the release below. It is identified by its manifest and digest.',
+    '',
+    `  Release line: ${i.lineAssetUid}`,
+    `  Manifest:     ${i.manifestUid}`,
+    `  Digest:       sha256:${i.digest}`,
+    '',
+    'Signing records your signature against this manifest digest in the e-signature record. You can decline instead.',
+    '',
+    `Review and sign here: ${i.signLink}`,
+    '',
+    `This link expires in ${days} days. Every access is logged.`,
+    '',
+    '— StudioOS releases',
+  ].join('\n');
+  return { subject, html, text };
+}
+
+export async function sendReleaseSignEmailResult(env: Env, to: string, input: ReleaseSignEmailInput): Promise<EmailSendResult> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — release sign-off email not sent');
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = releaseSignEmailContent(input);
+    const rawEmail = buildRawEmail(to, subject, html, text, 'StudioOS releases <noreply@axal.vc>');
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] Release sign-off email send failed:', err);
+      return { ok: false, reason: 'refused' };
+    }
+    return { ok: true, reason: null };
+  } catch (e: any) {
+    console.error(`[EMAIL] Release sign-off email failed: ${e?.message || 'Unknown error'}`);
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Task #8 (X-1) — Partner invitation email. Sent from `noreply@axal.vc`
 // when an admin issues a partnership invitation. The CTA opens the
 // chatbot wizard at `${APP_URL}/partner-onboarding/${token}` (handled

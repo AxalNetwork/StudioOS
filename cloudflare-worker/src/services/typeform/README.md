@@ -17,6 +17,16 @@ source records for Validate's review (#5829). No webhook.
   response with its ledger rows, the checkpoint after each whole page, the
   24 hour overlap, 429/401/404 handling, provider-deletion reconciliation,
   backfill, withdrawal, mapping replacement and the form's counts.
+- `selection.ts` — the sync rows follow the venture's one binding (#5827):
+  the bound form's row is active, every other row of the venture stopped
+  and kept (D5828 part 2). It never chooses a form.
+- `live.ts` — the production `ImportDeps`: #5827's decrypted grant and the
+  data center recorded with it, no redirects, and how a grant failure reads
+  to the importer.
+- `signature.ts` — stable semantic mapping identity, independent of titles and choice order.
+- `reviewCleanup.ts` — retract derived evidence in the source removal's batch, retaining tombstones.
+- `review.ts` — versioned same-venture targets, private proposals, explicit review and separate counts (D5829).
+- `reviewCounts.ts` — per-form completed, matching-answer and confirmed-signal reconciliation.
 
 The rules for adding to this folder:
 
@@ -31,5 +41,7 @@ The rules for adding to this folder:
 - **Absence is not deletion.** Only `reconcileTypeformDeletions`, by two
   explicit id lookups an hour or more apart, marks a response
   `provider_deleted`.
+- **The binding is the only selection.** No code here picks a form; a sync
+  row the binding does not name is `not_selected` and never read.
 - **The checkpoint moves only after a whole page is written,** forward only,
   and only by the run that holds the lease.

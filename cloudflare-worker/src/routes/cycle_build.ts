@@ -6,7 +6,6 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
-import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { lovableRepositories } from '../integrations/providers/github/lovableMark';
 import { lovablePart } from '../services/lovableAppLinks';
@@ -29,10 +28,15 @@ import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, deleteRoadmapItem, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
+import { connectionAction, connectionWhy, notConnectedTools, systemsPart, systemsWithoutCompany, toolSyncLines, withLastFailures } from '../services/operatingSystemsView';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
+import { eraseRecordObjects } from '../services/recordErasure';
+import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
+import { suggestedFilings } from '../services/suggestedFilings';
+import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -527,16 +531,52 @@ async function mustHaves(env: Env, projectId: number): Promise<any[]> {
   ).bind(projectId).all<any>());
 }
 
+const BURN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** A real day's ISO week: its Monday (`YYYY-MM-DD`) and its number. */
+function isoWeekOf(day: Date): { monday: string; week: number } {
+  const monday = new Date(day.valueOf() - ((day.getUTCDay() + 6) % 7) * 86400_000);
+  const thursday = new Date(monday.valueOf() + 3 * 86400_000);
+  const jan1 = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  return { monday: monday.toISOString().slice(0, 10), week: 1 + Math.floor((thursday.valueOf() - jan1) / (7 * 86400_000)) };
+}
+/**
+ * D6025 (#6025): the burn-up's points, from Done must-haves per day of completion. By month when
+ * completions fall in three months or more (`2026-07`, dated the 1st, as before); otherwise by ISO
+ * week (`W45`, dated its Monday) when they fall in three weeks or more; otherwise by day (`12 Nov`).
+ * Only real days are grouped by week or day; a line still needs three real points, so fewer stays
+ * `too_little` and no point is invented. Each point's value is the count in that period, in date order.
+ */
+export function burnupPoints(perDay: Array<[string, number]>): Array<{ date: string; label: string; n: number }> {
+  const add = (into: Map<string, { date: string; label: string; n: number }>, key: string, date: string, label: string, n: number) => {
+    const at = into.get(key);
+    if (at) at.n += n; else into.set(key, { date, label, n });
+  };
+  const months = new Map<string, { date: string; label: string; n: number }>();
+  for (const [day, n] of perDay) add(months, day.slice(0, 7), `${day.slice(0, 7)}-01`, day.slice(0, 7), n);
+  const sorted = (m: Map<string, { date: string; label: string; n: number }>) => [...m.values()].sort((a, b) => a.date.localeCompare(b.date));
+  if (months.size >= 3) return sorted(months);
+  const weeks = new Map<string, { date: string; label: string; n: number }>();
+  const days = new Map<string, { date: string; label: string; n: number }>();
+  for (const [raw, n] of perDay) {
+    const day = dateOnly(raw.slice(0, 10));
+    if (!day) continue;
+    const { monday, week } = isoWeekOf(day);
+    add(weeks, monday, monday, `W${String(week).padStart(2, '0')}`, n);
+    add(days, raw.slice(0, 10), raw.slice(0, 10), `${day.getUTCDate()} ${BURN_MONTHS[day.getUTCMonth()]}`, n);
+  }
+  return weeks.size >= 3 ? sorted(weeks) : days.size >= 3 ? sorted(days) : sorted(months);
+}
+
 async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads a must-have row.
-  // #4603 part 3: one scan of the must-haves, grouped by state, hypothesis and month of completion (a Done
-  // must-have's, when dated), gives the counts, the burn-up and the Hypothesis filter's options; each group's
+  // #4603 part 3: one scan of the must-haves, grouped by state, hypothesis and day of completion (a Done
+  // must-have's, when dated; D6025 made it the day, so the burn-up can fall back to weeks or days), gives the counts, the burn-up and the Hypothesis filter's options; each group's
   // claim is looked up once. `missing` is the page's dominant action (D6031, BD8): the next blocked
   // must-have, else the next one due (the earliest due date), else the first not done, each in read order
   // on a tie; as `[title, status]`. Three LIMIT 1 subqueries rather than one sorted scan, so each stops at
   // its first match: the blocked one on `idx_mvp_features_must_groups`, the due one on `idx_mvp_features_must_due`.
   const groups = rows(await env.DB.prepare(
-    `SELECT g.status, g.hypothesis_id, h.claim AS test_hypothesis, g.month, g.n,
+    `SELECT g.status, g.hypothesis_id, h.claim AS test_hypothesis, g.day, g.n,
             COALESCE(
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status = 'Blocked'
                 ORDER BY sort_order, id LIMIT 1),
@@ -547,12 +587,12 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
             (SELECT COUNT(*) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > '' AND due_date < ?
                 AND delivery_status IS NOT 'Done') AS overdue
        FROM (SELECT delivery_status AS status, hypothesis_id,
-                    CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 7) END AS month,
+                    CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 10) END AS day,
                     COUNT(*) AS n
                FROM mvp_features WHERE project_id = ? AND is_must_have = 1
-              GROUP BY delivery_status, hypothesis_id, month) g
+              GROUP BY delivery_status, hypothesis_id, day) g
        LEFT JOIN hypotheses h ON h.id = g.hypothesis_id AND h.project_id = ?`,
-  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null; overdue: number | null }>());
+  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; day: string | null; n: number; missing: string | null; overdue: number | null }>());
   const total = groups.reduce((t, g) => t + number(g.n), 0);
   const doneCount = groups.filter(g => g.status === 'Done').reduce((t, g) => t + number(g.n), 0);
   const blockedCount = groups.filter(g => g.status === 'Blocked').reduce((t, g) => t + number(g.n), 0);
@@ -563,12 +603,10 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   // first ten characters with today's ten; the range walks D6031's `idx_mvp_features_must_due`, so only must-haves
   // dated before today are read.
   const overdue = number(groups[0]?.overdue);
-  // Done must-haves per month of completion.
-  const history = new Map<string, number>();
-  for (const g of groups) if (g.month != null) history.set(String(g.month), (history.get(String(g.month)) ?? 0) + number(g.n));
-  const points = [...history.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  // Done must-haves per month, week or day of completion (D6025).
+  const points = burnupPoints(groups.filter(g => g.day != null).map(g => [String(g.day), number(g.n)]));
   let cumulative = 0;
-  const dated: Array<{ date: string; value: number | null; label: string }> = points.map(([month, n]) => ({ date: `${month}-01`, value: (cumulative += n), label: month }));
+  const dated: Array<{ date: string; value: number | null; label: string }> = points.map(point => ({ date: point.date, value: (cumulative += point.n), label: point.label }));
   const ship = dateOnly(p.mvp_target_date);
   if (ship) dated.push({ date: p.mvp_target_date!, value: null, label: 'Ship' });
   dated.sort((a, b) => a.date.localeCompare(b.date));
@@ -697,19 +735,68 @@ async function prototypeGithub(env: Env, p: Project) {
  */
 /** The four columns, in board order: the list's ordinal sort, and what the writers accept (D690). */
 const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
+/**
+ * #6036 (D6036, BD25): Late is an item past its target date that is not Done; Unlinked is an item that
+ * moves no feedback theme and no KPI. Each is ONE SQL expression, read by the facts' aggregate, by both
+ * list paths (the SQL page and the in-memory one read the same column) and by the Late and Unlinked
+ * filters, so the strip's count and the filtered list can never disagree. `a` is the table alias prefix.
+ * A target date SQLite's `date()` cannot read is no date: never Late.
+ */
+const lateSql = (a: string) => `(CASE WHEN LOWER(COALESCE(${a}kanban_status, '')) <> 'done' AND date(${a}target_date) IS NOT NULL
+      AND date(${a}target_date) < date('now') THEN 'yes' ELSE 'no' END)`;
+const linkSql = (a: string) => `(CASE WHEN TRIM(COALESCE(${a}feedback_theme, '')) = '' AND TRIM(COALESCE(${a}kpi_key, '')) = '' THEN 'unlinked' ELSE 'linked' END)`;
 const ROADMAP_FROM = `FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ?`;
-const ROADMAP_COLS = 'SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id, u.name AS owner';
+const ROADMAP_COLS = 'SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id, u.name AS owner, '
+  + `${lateSql('o.')} AS late, ${linkSql('o.')} AS link`;
 const ROADMAP_LIST: ListSql = {
-  keys: { column: 'o.kanban_status' }, orders: { column: ROADMAP_COLUMNS }, defaultSort: 'column', readOrder: 'o.sort_order, o.id',
+  keys: { column: 'o.kanban_status', late: lateSql('o.'), link: linkSql('o.') }, orders: { column: ROADMAP_COLUMNS }, defaultSort: 'column', readOrder: 'o.sort_order, o.id',
   filters: { column: { sql: 'LOWER(o.kanban_status)', values: ROADMAP_COLUMNS } },
 };
+/** #6036: what an item waits on (unresolved blockers' titles, in edge order) and how many items it blocks; its state is `okrGraph.ts`'s. */
+type RoadmapLinks = { state: OkrState; waitsOn: string[]; blocks: number };
+type RoadmapEdge = OkrEdge & { blocker: string | null; blocker_status: string | null };
+/** Every dependency edge of the venture whose two ends are its own items, with the blocker's title and column: one read per module page. */
+async function roadmapEdges(env: Env, projectId: number): Promise<RoadmapEdge[]> {
+  return rows(await env.DB.prepare(
+    `SELECT d.okr_id, d.blocks_okr_id, b.objective AS blocker, b.kanban_status AS blocker_status
+       FROM okr_dependencies d
+       JOIN roadmap_okrs b ON b.id = d.okr_id AND b.project_id = d.project_id
+       JOIN roadmap_okrs t ON t.id = d.blocks_okr_id AND t.project_id = d.project_id
+      WHERE d.project_id = ? ORDER BY d.id`,
+  ).bind(projectId).all<RoadmapEdge>());
+}
+/** Each listed item's links. A blocker off this page still decides Blocked: its column came with its edge. */
+function roadmapLinks(items: any[], edges: RoadmapEdge[]): Map<number, RoadmapLinks> {
+  const nodes = new Map<number, { id: number; kanban_status: string | null }>();
+  for (const e of edges) nodes.set(Number(e.okr_id), { id: Number(e.okr_id), kanban_status: e.blocker_status ?? null });
+  for (const i of items) nodes.set(Number(i.id), { id: Number(i.id), kanban_status: i.kanban_status ?? null });
+  const states = statesFor([...nodes.values()], edges);
+  const out = new Map<number, RoadmapLinks>();
+  for (const i of items) {
+    const id = Number(i.id);
+    const waitsOn = edges.filter(e => Number(e.blocks_okr_id) === id && !isResolved({ id: e.okr_id, kanban_status: e.blocker_status }))
+      .map(e => (typeof e.blocker === 'string' && e.blocker.trim() ? e.blocker : `Item ${e.okr_id}`));
+    // A Done item blocks nothing any more, whatever its edges say.
+    const blocks = isResolved(i) ? 0 : edges.filter(e => Number(e.okr_id) === id).length;
+    out.set(id, { state: states.get(id) ?? 'provisional', waitsOn, blocks });
+  }
+  return out;
+}
+const STATE_TONE: Record<OkrState, string> = { blocked: 'red', in_flight: 'blue', provisional: 'grey', done: 'green' };
 const isPosthogKpi = (k: unknown) => typeof k === 'string' && k.startsWith('posthog-');
-function roadmapRow(i: any, kpiWords: (k: unknown) => unknown): RecordRow {
+function roadmapRow(i: any, kpiWords: (k: unknown) => unknown, links: Map<number, RoadmapLinks>): RecordRow {
+  const own = links.get(Number(i.id)) ?? { state: 'provisional' as OkrState, waitsOn: [], blocks: 0 };
+  const late = i.late === 'yes';
+  // #6036 (BD25): the State column says the word, what it waits on, and Late; never a colour alone.
+  const stateText = [own.state === 'blocked' ? `Blocked · waits on ${own.waitsOn.join(', ')}` : STATE_LABELS[own.state],
+    ...(own.blocks ? [`Blocks ${own.blocks}`] : []), ...(late ? ['Late'] : [])].join(' · ');
   // Moves reads the feedback theme an item answers and the KPI it moves.
   return record(i.id,
-    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
-    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
+    { item: i.objective, column: i.kanban_status, state: { text: stateText, tone: late && own.state !== 'blocked' ? 'amber' : STATE_TONE[own.state] },
+      moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
+    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null,
+      state: own.state, late: late ? 'yes' : 'no', link: i.link === 'unlinked' ? 'unlinked' : 'linked', blocks: own.blocks, waits_on: own.waitsOn.join(', ') || null },
     { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
       kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null });
 }
@@ -717,13 +804,14 @@ function roadmapRow(i: any, kpiWords: (k: unknown) => unknown): RecordRow {
 export async function roadmapItemRows(env: Env, projectId: number): Promise<RecordRow[]> {
   const items = await roadmapItems(env, projectId);
   const kpiWords = await roadmapKpiWords(env, projectId, items.some(x => isPosthogKpi(x.kpi_key)));
-  return items.map(i => roadmapRow(i, kpiWords));
+  const links = roadmapLinks(items, await roadmapEdges(env, projectId));
+  return items.map(i => roadmapRow(i, kpiWords, links));
 }
 async function roadmapItems(env: Env, projectId: number): Promise<any[]> {
   // A literal, so the schema guard reads its columns (the paged read is built and is not read by it).
   return rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
-            u.name AS owner
+            u.name AS owner, ${lateSql('o.')} AS late, ${linkSql('o.')} AS link
        FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ? ORDER BY o.sort_order, o.id`,
   ).bind(projectId).all<any>());
@@ -739,17 +827,21 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
   // The overview: one row per stored column value, with the Now/Next/Later/Done counts, the total, and whether any
   // item names a PostHog KPI. #4603 part 3: the module page also needs every Theme and KPI for its filters, so it
   // groups the one scan by column, theme and KPI instead of scanning again for them (one row per combination).
-  type Group = { kanban_status: string; feedback_theme?: unknown; kpi_key?: unknown; n: number; posthog?: number };
+  // #6036 (BD25): each group also counts its Late and Unlinked items, so the strip's two figures are exact over
+  // the whole list, paged or not, from the same scan (one aggregate, as D6034's backend list asks).
+  type Group = { kanban_status: string; feedback_theme?: unknown; kpi_key?: unknown; n: number; posthog?: number; late: number; unlinked: number };
+  const tallies = `SUM(CASE WHEN ${lateSql('')} = 'yes' THEN 1 ELSE 0 END) AS late, SUM(CASE WHEN ${linkSql('')} = 'unlinked' THEN 1 ELSE 0 END) AS unlinked`;
   const byColumn: Group[] = opts.rows
     ? rows(await env.DB.prepare(
-      `SELECT kanban_status, feedback_theme, kpi_key, COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?
+      `SELECT kanban_status, feedback_theme, kpi_key, COUNT(*) AS n, ${tallies} FROM roadmap_okrs WHERE project_id = ?
         GROUP BY kanban_status, feedback_theme, kpi_key`,
     ).bind(p.id).all<Group>())
     : rows(await env.DB.prepare(
-      `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog
+      `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog, ${tallies}
          FROM roadmap_okrs WHERE project_id = ? GROUP BY kanban_status`,
     ).bind(p.id).all<Group>());
   const itemCount = byColumn.reduce((t, r) => t + number(r.n), 0);
+  const lateCount = byColumn.reduce((t, r) => t + number(r.late), 0), unlinkedCount = byColumn.reduce((t, r) => t + number(r.unlinked), 0);
   const buckets = ROADMAP_COLUMNS.map(s => byColumn.filter(r => r.kanban_status === s).reduce((t, r) => t + number(r.n), 0));
   const posthogNamed = byColumn.some(r => (opts.rows ? isPosthogKpi(r.kpi_key) : number(r.posthog) === 1));
   // Items shipped per month: each month's distinct items moved to Done, one row per month.
@@ -769,26 +861,35 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
   if (opts.rows) {
     const sql = opts.query ? listPageSql(ROADMAP_LIST, opts.query) : null;
     const kpiWords = await roadmapKpiWords(env, p.id, posthogNamed);
+    const edges = await roadmapEdges(env, p.id);
     if (sql) {
       const read = await sqlPage(env, ROADMAP_COLS, ROADMAP_FROM, sql, p.id, itemCount);
-      itemRows = read.found.map(i => roadmapRow(i, kpiWords));
+      const links = roadmapLinks(read.found, edges);
+      itemRows = read.found.map(i => roadmapRow(i, kpiWords, links));
       paged = read.paged;
       // The Theme and KPI filters offer every item's values, not the page's: the groups above carry each one.
       const of = (key: 'theme' | 'kpi', column: 'feedback_theme' | 'kpi_key') =>
         optionsOf(byColumn.filter(g => g[column] != null).map((g, at) => record(at, {}, { [key]: g[column] as any })), key);
       themes = of('theme', 'feedback_theme'); kpis = of('kpi', 'kpi_key');
     } else {
-      itemRows = (await roadmapItems(env, p.id)).map(i => roadmapRow(i, kpiWords));
+      const items = await roadmapItems(env, p.id);
+      const links = roadmapLinks(items, edges);
+      itemRows = items.map(i => roadmapRow(i, kpiWords, links));
       themes = optionsOf(itemRows, 'theme'); kpis = optionsOf(itemRows, 'kpi');
     }
   }
   return { card: card('product-roadmap', itemCount ? 'ok' : 'empty', series, 'All time', itemCount ? null : 'No roadmap items yet. Now, Next and Later appear here.', itemCount ? next(p, 'product-roadmap', buckets[1] ? 'Move the next planned item into Now' : null) : next(p, 'product-roadmap', 'Add item', true)),
-    cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
+    cols: [['item', 'Item'], ['column', 'Column'], ['state', 'State'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: itemRows,
-    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: themes }, { key: 'kpi', label: 'KPI', options: kpis }],
+    // #6036 (BD25): the strip's Late and Unlinked figures are these two filters, counted over the whole list.
+    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: themes }, { key: 'kpi', label: 'KPI', options: kpis },
+      { key: 'late', label: 'Late', options: [{ value: 'yes', label: 'Late', count: lateCount }] },
+      { key: 'link', label: 'Links', options: [{ value: 'unlinked', label: 'Unlinked', count: unlinkedCount }, { value: 'linked', label: 'Linked', count: itemCount - unlinkedCount }] }],
       sort: { key: 'column', label: 'Column' }, orders: { column: [...ROADMAP_COLUMNS] } },
     ...(paged ? { paged } : {}),
-    facts: { items: itemCount, shipped_this_month: months.get(thisMonth) ?? 0 },
+    // #6036 (BD25): the figure strip: the four columns, shipped this month, Late and Unlinked, each over every item.
+    facts: { items: itemCount, shipped_this_month: months.get(thisMonth) ?? 0,
+      now: buckets[0], next: buckets[1], later: buckets[2], done: buckets[3], late: lateCount, unlinked: unlinkedCount },
     ...(opts.parts ? { parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } } : {}) };
 }
 
@@ -870,6 +971,46 @@ async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; s
   return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? { pct: null, source: null } : { pct: Number(pool), source: 'model' };
 }
 
+/** D6037 (#6037): existing founding stores, with failures isolated per part. */
+async function foundingFacts(env: Env, p: Project, founders: any[], pool: {pct:number|null;source:string|null}) {
+  const read = async (sql:string) => { try { return rows(await env.DB.prepare(sql).bind(p.id).all<any>()); } catch { return null; } };
+  const [filings, agreements, contributions, holders, hiring] = await Promise.all([
+    read("SELECT * FROM formation_steps WHERE project_id=? AND kind='83b' ORDER BY id DESC"),
+    read("SELECT d.*, party.user_id AS party_user_id FROM documents d JOIN cofounder_agreement_parties party ON party.document_id=d.id WHERE d.project_id=? AND d.template_name='cofounder_agreement' ORDER BY d.created_at DESC,d.id DESC"),
+    read('SELECT * FROM founder_contributions WHERE project_id=? ORDER BY on_date DESC,id DESC'),
+    read('SELECT id,name,ownership_pct FROM cap_table_holders WHERE project_id=?'),
+    read('SELECT id,title,team,target_start,status FROM job_postings WHERE project_id=? ORDER BY id DESC'),
+  ]);
+  // Recorded pool percentages include granted options; legacy holder percentages
+  // do not identify that overlap. Do not subtract both as disjoint shares.
+  const known = holders!=null && holders.every(h=>h.ownership_pct!=null) && pool.pct!=null && pool.source !== 'record';
+  const remainder = known ? Math.round((100-holders!.reduce((n,h)=>n+Number(h.ownership_pct),0)-pool.pct!)*100)/100 : null;
+  const valid = remainder != null && remainder >= 0 && remainder <= 100;
+  return { option_pool_pct:pool.pct, option_pool_source:pool.source,
+    unallocated_pct:valid?remainder:null,
+    unallocated_reason:valid?null:pool.source==='record'?'Recorded pool includes granted options; its overlap with holder percentages is not recorded.':known?'Holder and pool percentages exceed 100%.':holders==null?'Holder percentages unavailable.':'Every holder percentage and the option pool must be recorded.',
+    other_holders:holders?.filter(h=>!founders.some(f=>f.id===h.id)).map(h=>({name:h.name,equity:h.ownership_pct}))??null,
+    signatures:null, agreement_reason:'The latest document status is recorded; individual party signatures are not stored. A signed-of-total count is not recorded.',
+    hiring: hiring==null?{state:'unreadable',rows:null}:{state:'ok',rows:hiring},
+    contributions: contributions==null?{state:'unreadable',rows:null}:{state:'ok',rows:contributions.filter(c=>founders.some(h=>h.id===c.holder_id)).map(c=>({...c,founder:founders.find(h=>h.id===c.holder_id)?.name}))},
+    founders:founders.map(h=>{
+      const filing=filings?.find(f=>f.for_holder_id===h.id);
+      const agreement=h.user_id==null?null:agreements?.find(d=>d.party_user_id===h.user_id);
+      const start=typeof h.start_date==='string'?dateOnly(h.start_date.slice(0,10)):null;
+      const cliff=start&&h.cliff_months!=null?longDate(addMonths(start,Number(h.cliff_months))):null;
+      const fully=start&&h.total_months!=null?longDate(addMonths(start,Number(h.total_months))):null;
+      return {id:Number(h.id),name:h.name,role:h.founder_role,equity:h.ownership_pct,
+        vesting:vestingText(h.start_date,h.cliff_months,h.total_months),start:h.start_date??null,cliff,fully,
+        vested_pct:h.shares&&h.vested_shares!=null?Math.max(0,Math.min(100,Math.round(100*Number(h.vested_shares)/Number(h.shares)))):null,
+        agreement:agreements==null?'Unavailable':!agreement?'Not recorded':agreement.status==='signed'?'Signed':'Awaiting',
+        agreement_date:agreement?(agreement.status==='signed'?agreement.signed_at??null:agreement.created_at??null):null,
+        filing:{text:filings==null?'Unavailable':!filing?'No 83(b) filing recorded':filing.state==='done'?'Filed':filing.due_date?`Due ${filing.due_date}`:'No due date recorded',
+          href:filing?`/build/company-creation/step-${filing.id}?project=${p.id}`:`/build/company-creation?project=${p.id}`},
+      };
+    }),
+  };
+}
+
 async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
@@ -877,7 +1018,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   // every founder (a segment and a vesting bar each), so every founder is read;
   // investors and option holders are not, nor is their agreement.
   const founderRows = rows(await env.DB.prepare(
-    `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares,
+    `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares, h.user_id,
             v.start_date, v.cliff_months, v.total_months, v.vested_shares,
             (SELECT d.status FROM documents d
               JOIN cofounder_agreement_parties party ON party.document_id = d.id
@@ -888,6 +1029,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
        LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
       WHERE h.project_id = ? AND h.founder_role IS NOT NULL ORDER BY h.id`,
   ).bind(p.id).all<any>());
+  const pageFacts = opts.pageFacts ? await foundingFacts(env,p,founderRows,await optionPool(env,p)) : null;
   const equityKnown = founderRows.length && founderRows.every(h => h.ownership_pct != null);
   const series: ChartSpec[] = [];
   if (equityKnown) series.push({ kind: 'stack', rows: [{ label: 'Equity', parts: founderRows.map(h => number(h.ownership_pct)) }], tones: founderRows.map((_, i) => ['v1', 'v2', 'v3', 'grey'][i % 4]), legend: founderRows.map((h, i) => ({ label: h.name, tone: ['v1', 'v2', 'v3', 'grey'][i % 4] })) });
@@ -900,16 +1042,16 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     founder: h.name, role: h.founder_role, equity: h.ownership_pct == null ? null : percent(number(h.ownership_pct)),
     vesting: vestingText(h.start_date, h.cliff_months, h.total_months),
     agreement: h.agreement_status == null ? null : h.agreement_status === 'signed' ? 'Signed' : 'Awaiting',
+    filing: pageFacts?.founders.find(f=>f.id===Number(h.id))?.filing ?? null,
   }, { role: h.founder_role ?? null, equity: h.ownership_pct == null ? null : number(h.ownership_pct) },
   { role: h.founder_role ?? null, ownership_pct: h.ownership_pct ?? null }));
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
   return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: `/raise/cap-table?project=${p.id}` } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
-    cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
+    cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement'], ['filing','83(b)']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
     // #4603 part 2b: the option pool is a module-page fact (the overview and the phone read the card only), so the overview does not read the cap table.
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(opts.pageFacts ? await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source })) : {}),
-      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.', ...(pageFacts ?? {}) },
     ...(opts.parts ? { parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
       founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } } : {}) };
 }
@@ -950,7 +1092,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+export async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -1021,8 +1163,17 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
       filings: combined.length, next_filing_due: nextFilingDue,
       // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
-      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
-        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
+      next_filing: nextFiling ? { id: nextFiling.id, title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null,
+      // #6038 (D6038, BD25, BD26, BD29): the module page's company-first blocks, each read and failing on its own.
+      // The overview reads none of them (#4603's budget), so its card is the module page's card, unchanged.
+      ...(opts.pageFacts ? {
+        entity: await entitySummary(env, p, order ?? null, steps),
+        elections: await electionRows(env, p, viewer, steps),
+        papers: await companyPapers(env, p, viewer),
+        // #8259 (D8259, BD28): the pack's filings not yet added or dismissed, failing on its own.
+        suggestions: await suggestedFilings(env, p, order ?? null, steps),
+      } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1052,7 +1203,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     'SELECT COUNT(*) AS n FROM project_core_systems WHERE project_id = ?',
   ).bind(p.id).first<{ n: number }>())?.n);
   const connectors = p.company_id == null ? [] : rows(await env.DB.prepare(
-    `SELECT s.kind, s.used_by, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at
+    `SELECT s.kind, s.used_by, i.id, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at
        FROM project_core_systems s
        JOIN integrations i ON i.id = s.integration_id
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
@@ -1097,6 +1248,8 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
        LEFT JOIN users u ON u.id = i.user_id
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
+  // D5078: why each failing tool or system failed, from its latest failed sync (the parts only; one statement, none when nothing fails).
+  if (opts.parts) await withLastFailures(env, [...tools, ...connectors]);
   const toolCounts = p.company_id == null ? null : opts.parts
     ? { total: tools.length, connected: tools.filter(tool => tool.status === 'active').length, failing: tools.filter(tool => tool.status === 'error').length }
     : await env.DB.prepare(
@@ -1117,23 +1270,31 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') AND i.status = 'error'
         AND i.provider_key IN (SELECT value FROM json_each(?)) ORDER BY i.id LIMIT 1`,
   ).bind(p.company_id, JSON.stringify(REGISTRY.map(d => d.key))).all<any>());
+  // D5078 (#5078, BD12): each tool's action by its state (Connected → Manage, Failing or Reconnect
+  // required → Reconnect, the owner's only), and why it is not connected, in words.
   const toolRows = tools.map((tool, index) => {
     const descriptor = getDescriptor(tool.provider_key);
     const metadata = CONNECTOR_METADATA[tool.provider_key];
     const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? connectHref(descriptor.key, p.id) : null;
+    const toolState = systemStateOf(tool, tool.status);
+    const { action, reason } = connectionAction(tool, toolState, viewer.id, !!viewerMember, href);
     return record(`tool-${index}`, {
       tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
-      state: SYSTEM_STATE_LABEL[systemStateOf(tool, tool.status)],
+      state: SYSTEM_STATE_LABEL[toolState],
       last_sync: tool.last_synced_at ?? null,
       failed_at: tool.last_error_at ?? null,
       feeds: metadata?.feeds.map(key => MODULE_LABELS[key] ?? key).join(' · ') || 'Not recorded',
       owner: tool.user_id === viewer.id ? 'You' : viewerMember ? tool.owner_name ?? null : null,
-      action: href ? { text: 'Open', href } : null,
-    });
+      action: action ? { text: action.text, href: action.href } : null,
+      reason: [connectionWhy(tool, toolState, tool.user_id === viewer.id || !!viewerMember), reason].filter(Boolean).join(' ') || null,
+    }, { state: toolState, intent: action?.intent ?? 'none' });
   });
   const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));
   // Code and Hosting are shown only in the Tools part, so the overview (OVERVIEW) does not read them.
   const code = !opts.parts || p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // D5078 (#5078): the sync lines of every enabled tool, not GitHub's only, bounded and labelled as the latest.
+  const syncs = !opts.parts || p.company_id == null ? null
+    : await toolSyncLines(env, tools, (userId: number) => userId === viewer.id || !!viewerMember);
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
   let hosting: any = null;
   if (opts.parts) {
@@ -1177,26 +1338,32 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       orders: { state: [...SYSTEM_STATE_ORDER] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
       tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null, reconnect: p.company_id == null ? null : reconnectFact },
-    ...(opts.parts ? { parts: { tools: {
-      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
+    ...(opts.parts ? { parts: {
+      // D5078 (#5078, BD20 A/B): the five systems, one state each driving its line and its action; no rows without a company.
+      systems: p.company_id == null ? systemsWithoutCompany() : systemsPart(SYSTEM_KINDS.map(k => {
+        const c = byKind.get(k);
+        return { kind: k, label: SYSTEM_LABEL[k], workspace: k === 'workspace',
+          connection: c ? { ...c, owner_name: tools.find(tool => c.id != null && tool.id === c.id)?.owner_name ?? null } : null };
+      }), viewer.id, !!viewerMember, p.id),
+      tools: {
+      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action'],['reason','Why']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
+      // D5078 (#5078, BD12): the Build-feeding tools the company has not connected, with what each would feed and Connect.
+      not_connected: p.company_id == null ? [] : notConnectedTools(tools.map(tool => String(tool.provider_key)), p.id),
       state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
-      syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
+      syncs: syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
       hosting,
     } } } : {}) };
 
 }
 
-/** How many sync lines Tools shows, newest first. */
-export const SYNC_LINES = 20;
+/** How many sync lines Tools shows, newest first (D5078: `services/operatingSystemsView.ts` reads them). */
+export { SYNC_LINES } from '../services/operatingSystemsView';
 const repositoriesOf = (configJson: string | null): string[] => {
   try { const cfg = JSON.parse(configJson || '{}'); return Array.isArray(cfg.repositories) ? cfg.repositories.filter((r: unknown): r is string => typeof r === 'string') : []; }
   catch { return []; }
-};
-const parsed = (raw: string | null): Record<string, unknown> | null => {
-  try { const v = JSON.parse(raw || 'null'); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
 };
 
 /**
@@ -1219,6 +1386,12 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
       WHERE i.provider_key = 'github' ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
   const sees = (userId: number) => userId === viewer.id || viewerMember;
+  await withLastFailures(env, github);
+  const codeAction = (g: any) => {
+    const conn = { ...g, provider_key: 'github' }, state = systemStateOf(g, g.status);
+    const { action, reason } = connectionAction(conn, state, viewer.id, viewerMember, connectHref('github', p.id));
+    return { action: action ? { text: action.text, href: action.href } : null, reason: [connectionWhy(conn, state, sees(g.user_id)), reason].filter(Boolean).join(' ') || null };
+  };
   const systems = await Promise.all(github.map(async (g) => {
     const repositories = repositoriesOf(g.config_json);
     const fed = (await fedCounts(env, g.id, 'github', null, p.id)).filter(m => (m.count ?? 0) > 0);
@@ -1229,39 +1402,11 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
       repositories: sees(g.user_id) ? repositories : null, repositories_total: repositories.length,
       feeds: fed.map(m => ({ module: m.module, label: m.label, href: m.href ? `${m.href}?project_id=${p.id}` : null, count: m.count })),
       owner: g.user_id === viewer.id ? 'You' : viewerMember ? g.owner_name ?? null : null,
-      action: { text: 'Open', href: connectHref('github', p.id) },
+      // D5078: the Code system's action follows its state, as every tool row's does.
+      ...codeAction(g),
     };
   }));
-  const code = { state: systems.length ? 'ok' : 'empty', systems, reason: systems.length ? null : 'No GitHub connection is enabled for this company.' };
-  if (!github.length) return { code, syncs: { state: 'empty', rows: [], reason: 'No GitHub sync yet.' } };
-  const owners = new Map(github.map(g => [Number(g.id), Number(g.user_id)]));
-  let logs: any[];
-  try {
-    logs = rows(await env.DB.prepare(
-      `SELECT id, integration_id, status, response_summary, payload_json, created_at FROM integration_logs
-        WHERE event_type = 'sync' AND integration_id IN (SELECT value FROM json_each(?))
-        ORDER BY created_at DESC, id DESC LIMIT ?`,
-    ).bind(JSON.stringify([...owners.keys()]), SYNC_LINES).all<any>());
-  } catch {
-    return { code, syncs: { state: 'unreadable', rows: [], reason: 'The sync history could not be read.' } };
-  }
-  const lines = logs.map((l) => {
-    const payload = parsed(l.payload_json);
-    const failed = l.status !== 'ok';
-    const arrived = failed ? [] : syncArrivals(payload);
-    const repos = Array.isArray(payload?.repositories) ? (payload!.repositories as unknown[]).filter((r): r is string => typeof r === 'string') : null;
-    const more = Number.isSafeInteger(payload?.repositories_more) ? Number(payload!.repositories_more) : 0;
-    return {
-      id: `sync-${l.id}`, at: l.created_at ?? null, provider: 'GitHub',
-      state: failed ? 'failed' : payload?.partial === true ? 'partial' : 'done',
-      repositories: repos && sees(owners.get(Number(l.integration_id)) ?? -1) ? repos : null,
-      repositories_more: repos ? more : null,
-      arrived: arrived.map(a => ({ module: a.module, label: a.label, count: a.count, stored: a.stored })),
-      text: failed ? null : syncArrivalsText(arrived),
-      error: failed ? syncErrorWords(l.response_summary) : null,
-    };
-  });
-  return { code, syncs: { state: lines.length ? 'ok' : 'empty', rows: lines, reason: lines.length ? null : 'No GitHub sync yet.' } };
+  return { code: { state: systems.length ? 'ok' : 'empty', systems, reason: systems.length ? null : 'No GitHub connection is enabled for this company.' } };
 }
 
 const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer, opts?: ReadOpts) => Promise<ModuleRead>> = {
@@ -1278,7 +1423,7 @@ async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, 
   }
 }
 
-async function context(c: any): Promise<Project | Response> {
+export async function context(c: any): Promise<Project | Response> {
   const user = await requireAuth(c);
   const raw = c.req.query('project');
   if (!raw || !/^\d+$/.test(raw) || Number(raw) < 1) return c.json({ detail: 'Valid project is required' }, 400);
@@ -1767,6 +1912,82 @@ async function patchRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   return c.json({ ok: true, id });
 }
 
+/**
+ * D6033 (#6033, BD25): Solution design's risks as a list, 25 a page, read on its own.
+ * The module read keeps its counts only (#4603 part 2, 2026-11-07), so this read
+ * adds no statement to it. It has the module read's gate (`context`), lists the
+ * risks tied to no feature too (an accepted Build Plan risk writes none,
+ * buildPlanAccept.ts), and gives a writer the owners and features Add offers.
+ */
+export const RISKS_PER_PAGE = 25;
+const RISK_STATES = ['open', 'mitigating', 'closed'] as const;
+const RISK_ROW_FROM = `FROM venture_risks r
+       LEFT JOIN users u ON u.id = r.owner_user_id
+       LEFT JOIN mvp_features f ON f.id = r.feature_id AND f.project_id = r.project_id
+      WHERE r.project_id = ?
+        AND (? = '' OR r.state = ?)
+        AND (? = '' OR (? = 'tied' AND r.feature_id IS NOT NULL) OR (? = 'untied' AND r.feature_id IS NULL))`;
+const RISK_TOTAL_SQL = 'SELECT COUNT(*) AS n ' + RISK_ROW_FROM;
+const RISK_PAGE_SQL = `SELECT r.id, r.title, r.severity, r.state, r.mitigation, r.owner_user_id, u.name AS owner, f.id AS feature_id, f.title AS feature,
+        EXISTS (SELECT 1 FROM build_plan_items i WHERE i.project_id = r.project_id AND i.landed_table = 'venture_risks' AND i.landed_id = CAST(r.id AS TEXT)) AS from_plan
+       ` + RISK_ROW_FROM + `
+      ORDER BY CASE r.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, CASE r.state WHEN 'closed' THEN 1 ELSE 0 END, r.id
+      LIMIT ? OFFSET ?`;
+app.get('/risks', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const viewer = await requireAuth(c);
+  const state = c.req.query('state') ?? '';
+  const feature = c.req.query('feature') ?? '';
+  const rawPage = c.req.query('page') ?? '1';
+  if (state && !(RISK_STATES as readonly string[]).includes(state)) return c.json({ error: 'invalid_state', detail: 'State is open, mitigating or closed' }, 400);
+  if (feature && !['tied', 'untied'].includes(feature)) return c.json({ error: 'invalid_feature', detail: 'Feature is tied or untied' }, 400);
+  if (!/^[1-9]\d{0,5}$/.test(rawPage)) return c.json({ error: 'invalid_page', detail: 'Page is a whole number from 1' }, 400);
+  const page = Number(rawPage);
+  const filter = [state, state, feature, feature, feature];
+  const writes = canWrite(project, viewer);
+  // Five reads, each on its own; none is in the module read (D6033).
+  const [counts, total, found, owners, features] = await Promise.all([
+    c.env.DB.prepare(`SELECT COUNT(*) AS all_n,
+        COALESCE(SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END), 0) AS open_n,
+        COALESCE(SUM(CASE WHEN state = 'mitigating' THEN 1 ELSE 0 END), 0) AS mitigating_n,
+        COALESCE(SUM(CASE WHEN state = 'closed' THEN 1 ELSE 0 END), 0) AS closed_n,
+        COALESCE(SUM(CASE WHEN feature_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS tied_n,
+        COALESCE(SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END), 0) AS high_n,
+        COALESCE(SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END), 0) AS medium_n,
+        COALESCE(SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END), 0) AS low_n
+       FROM venture_risks WHERE project_id = ?`).bind(project.id).first<Record<string, unknown>>(),
+    c.env.DB.prepare(RISK_TOTAL_SQL).bind(project.id, ...filter).first<{ n: number }>(),
+    c.env.DB.prepare(RISK_PAGE_SQL).bind(project.id, ...filter, RISKS_PER_PAGE, (page - 1) * RISKS_PER_PAGE).all<any>(),
+    // A writer's Add offers the company's members and the venture's features; a reader is sent neither.
+    c.env.DB.prepare('SELECT u.id, u.name FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? AND ? = 1 ORDER BY lower(u.name), u.id')
+      .bind(project.company_id ?? -1, writes ? 1 : 0).all<any>(),
+    c.env.DB.prepare('SELECT id, title FROM mvp_features WHERE project_id = ? AND ? = 1 ORDER BY lower(title), id LIMIT 500').bind(project.id, writes ? 1 : 0).all<any>(),
+  ]);
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const k = (counts ?? {}) as Record<string, unknown>;
+  const matched = n(total?.n);
+  return c.json({
+    rows: ((found.results ?? []) as any[]).map(r => ({
+      id: Number(r.id), title: r.title, severity: r.severity, state: r.state,
+      mitigation: typeof r.mitigation === 'string' && r.mitigation.trim() ? r.mitigation.trim() : null,
+      owner: r.owner_user_id == null ? null : { you: Number(r.owner_user_id) === Number(viewer.id), name: r.owner ?? null },
+      feature: r.feature_id == null ? null : { id: Number(r.feature_id), title: r.feature },
+      from_plan: n(r.from_plan) === 1,
+    })),
+    total: matched, page, per_page: RISKS_PER_PAGE, pages: Math.max(1, Math.ceil(matched / RISKS_PER_PAGE)),
+    counts: {
+      all: n(k.all_n), open: n(k.open_n), mitigating: n(k.mitigating_n), closed: n(k.closed_n),
+      tied: n(k.tied_n), untied: n(k.all_n) - n(k.tied_n),
+      high: n(k.high_n), medium: n(k.medium_n), low: n(k.low_n),
+    },
+    can_write: writes,
+    ...(writes ? { choices: {
+      owners: ((owners.results ?? []) as any[]).map(u => ({ value: String(u.id), label: u.name ?? 'Unnamed member' })),
+      features: ((features.results ?? []) as any[]).map(f => ({ value: String(f.id), label: f.title })),
+    } } : {}),
+  });
+});
+
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision
 // 16), any other key off the list a 400. Old rows keep the key they hold.
@@ -2104,7 +2325,8 @@ async function deleteFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Respons
     logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_deleted', `Filing deleted: ${existing.title}`),
   ]);
   if (existing.proof_file_key && c.env.FILES) {
-    try { await c.env.FILES.delete(existing.proof_file_key); }
+    // D6651: the venture removing its own filing goes through the one record-erasure path.
+    try { await eraseRecordObjects(c.env.FILES, existing.proof_file_key, 'owner_removed', { db: c.env.DB }); }
     catch (e) { console.warn('[cycle_build] deleted filing proof not removed:', (e as Error)?.message); }
   }
   return c.json({ ok: true, deleted: id });

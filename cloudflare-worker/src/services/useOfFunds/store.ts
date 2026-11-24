@@ -119,7 +119,7 @@ function claim(env:Env,s:Scope,scenarioId:number,expected:number|null):D1Prepare
 async function planBatch(env:Env,statements:D1PreparedStatement[],stale?:()=>Promise<number>) {
   try { return await env.DB.batch(statements); }
   catch(e) {
-    if(stale&&e instanceof Error&&/integer overflow/i.test(e.message)) throw staleError(await stale());
+    if(stale&&(e instanceof Error)&&/integer overflow/i.test(e.message)) throw staleError(await stale());
     // Only the fixed JSON assertion below parses JSON inside these batches.
     if(e instanceof Error && /malformed JSON/i.test(e.message)) throw legacyRepair(true);
     throw e;

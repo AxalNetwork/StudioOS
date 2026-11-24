@@ -1,0 +1,173 @@
+# D7886 (#7886): staged trusted reusable Worker executor. No caller cutover or live authority is enabled here.
+name: Trusted Worker executor
+run-name: "Worker executor | ${{ inputs.request_id }} | ${{ inputs.part }} | generation ${{ inputs.generation }}"
+
+on:
+  workflow_call:
+    inputs:
+      request_id:
+        type: string
+        required: true
+      generation:
+        type: string
+        required: true
+      part:
+        type: string
+        required: true
+      profile:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Opaque durable coordinator request (not authority)
+        type: string
+        required: true
+      generation:
+        description: Exact current lease generation
+        type: string
+        required: true
+      part:
+        description: Existing logical Worker shard
+        type: string
+        required: true
+      profile:
+        description: Reviewed capability profile
+        type: choice
+        options: [hosted, github-8, linux-x64, macos-arm64]
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: runner-executor-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  worker:
+    name: Admitted Worker shard
+    # Target admission runs before candidate checkout; no hosted controller gates pickup.
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.RUNNER_EXECUTOR_ENABLED == 'true'
+    permissions:
+      contents: read
+      actions: read
+      # Prepared dispatch-only supervisor capability; activation remains disabled and owner-gated.
+      id-token: write
+    # Fixed main-definition pool allowlist; input is never a runner label or group.
+    # Independent catalog admission on the selected target must agree before checkout.
+    # D7907: github-8 is GitHub-hosted included compute (group 6), separate from the self-hosted pool.
+    runs-on: ${{ fromJSON(inputs.profile == 'linux-x64' && '{"group":"StudioOS Worker Pool","labels":["self-hosted","Linux","X64","studioos-worker-v1"]}' || inputs.profile == 'macos-arm64' && '{"group":"StudioOS Worker Pool","labels":["self-hosted","macOS","ARM64","studioos-worker-v1"]}' || inputs.profile == 'github-8' && '{"group":"StudioOS Included Compute","labels":["studioos-bench-linux-8"]}' || '"ubuntu-latest"') }}
+    timeout-minutes: ${{ inputs.profile == 'hosted' && 45 || inputs.profile == 'github-8' && 38 || 35 }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      TZ: UTC
+      EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+      CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+      CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
+    steps:
+      - name: Validate separately reviewed control and workflow revisions
+        env:
+          CONTROL_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CHILD_SHA: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
+          ACTUAL_CHILD_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 - <<'PYCODE'
+          import os, re
+          assert re.fullmatch('[a-f0-9]{40}', os.environ['CONTROL_SHA'])
+          assert re.fullmatch('[a-f0-9]{40}', os.environ['CHILD_SHA'])
+          assert os.environ['CHILD_SHA'] == os.environ['ACTUAL_CHILD_SHA']
+          PYCODE
+      - name: Check out trusted admission code before any candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: AxalNetwork/StudioOS
+          ref: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          path: studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}-control
+          persist-credentials: false
+      - name: Select reviewed native Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22.23.3'
+          package-manager-cache: false
+      - name: Select reviewed native Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11.18'
+      - name: Prepare only this run's directories
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" prepare
+      - name: Independently admit this exact child before checkout
+        id: admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          LEASE_GENERATION: ${{ inputs.generation }}
+          PART: ${{ inputs.part }}
+          PROFILE: ${{ inputs.profile }}
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" admit
+      - name: Check out only the admitted immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: AxalNetwork/StudioOS
+          ref: ${{ steps.admission.outputs.source_sha }}
+          path: studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}-source
+          persist-credentials: false
+      - name: Download the authenticated parent's exact plan
+        if: steps.admission.outputs.plan_mode == 'parent-artifact'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ steps.admission.outputs.plan_artifact_id }}
+          run-id: ${{ steps.admission.outputs.parent_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}/parent-plan
+          merge-multiple: true
+      - name: Verify runtime and exact plan before candidate dependency scripts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
+          ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" verify-plan
+      # #7905/D8007: no candidate install runs as a host step for any profile. Installs and tests run only inside
+      # the verified execution boundary that the Run step owns; without one the Run step refuses.
+      - name: Run admitted Worker shard
+        id: tests
+        timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || inputs.profile == 'github-8' && 29 || 26 }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
+          ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" run
+      - name: Upload test traces
+        if: always() && steps.tests.outcome != 'skipped'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runner-executor-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          # Only a committed export offer (COMPLETE.json written last, published pending → ready) is uploaded.
+          path: ${{ runner.temp }}/studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}/trace-export/*/ready
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Remove only this child's files
+        if: always()
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" cleanup

@@ -7,15 +7,17 @@ on:
       - 'cloudflare-worker-tail/**'
       - '.github/workflows/archive-observer-deploy.yml'
   workflow_dispatch:
-permissions:
-  contents: read
+permissions: {}
 concurrency:
   group: archive-observer-deploy
   cancel-in-progress: false
 jobs:
   deploy:
+    environment: production
     if: github.ref == 'refs/heads/main' && vars.ARCHIVE_OBSERVER_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -34,6 +34,7 @@ import { ensureCompetitorSchema } from './competitorSchema';
 import type { AnalysisInputs } from './competitorAnalysis';
 import { FINDING_KINDS, isFindingKind } from './interviewFindings';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
+import { putRecordOrThrow } from './recordStore';
 
 /**
  * A refusal a route can return as-is. `sentence` is always one this file
@@ -150,8 +151,9 @@ export async function writeSegment(env: Env, input: SegmentInput): Promise<{ id:
   const source = (SEGMENT_SOURCES as readonly string[]).includes(String(input.source)) ? String(input.source) : 'manual';
   const norm = segmentNameNorm(name);
   const existing = await env.DB.prepare(
-    'SELECT id, name FROM customer_segments WHERE project_id = ? AND name_norm = ?',
-  ).bind(input.projectId, norm).first<{ id: number; name: string }>();
+    'SELECT id, name, archived_at FROM customer_segments WHERE project_id = ? AND name_norm = ?',
+  ).bind(input.projectId, norm).first<{ id: number; name: string; archived_at: string | null }>();
+  if (existing?.archived_at) throw new WriterError(409, 'This segment name is archived. Choose another name.');
   if (existing) return { id: Number(existing.id), name: existing.name, created: false };
   const steps = segmentSteps(input);
   // A segment with none of the five steps writes the columns every caller has
@@ -285,7 +287,7 @@ export const DEMAND_KINDS = ['loi', 'pre_sale', 'waitlist', 'need_to_have', 'wou
 export const DEMAND_STATUSES = ['confirmed', 'counted', 'to_confirm'] as const;
 /** D1092: `google_forms` is a Form response the founder's mapping qualified; it arrives `to_confirm`.
  *  D1605: `posthog` is an answer to a survey question the founder marked, accepted from a proposal; it arrives `to_confirm`. */
-export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms', 'posthog'] as const;
+export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms', 'posthog', 'typeform'] as const;
 
 export type DemandSignalInput = {
   projectId: number;
@@ -303,6 +305,8 @@ export type DemandSignalInput = {
   note?: unknown;
   /** D5352: internal accept retry key; never taken from an HTTP body. */
   sourceProposalId?: number | null;
+  /** D5829: internal source identity; never copied from a request body. */
+  sourceTypeformKey?: string;
 };
 
 export async function writeDemandSignal(env: Env, input: DemandSignalInput): Promise<{ id: number }> {
@@ -321,7 +325,7 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
   // D690 (#1692) — "pre-sales and letters of intent only" (CO:309): a
   // need-to-have mention or a waitlist sign-up names no amount.
   if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) {
-    throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+    throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   }
   const currency = amount != null ? (String(input.currency ?? 'usd').trim().toLowerCase() || 'usd') : null;
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -356,14 +360,26 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
     ).bind(input.projectId, sourceProposalId).first<{ id: number }>();
     if (existing) return { id: Number(existing.id) };
   }
-  const row = await env.DB.prepare(
-    `INSERT INTO demand_signals
+  const typeformKey = sourceKind === 'typeform' ? input.sourceTypeformKey ?? null : null;
+  if (typeformKey) {
+    const existing = await env.DB.prepare('SELECT id FROM demand_signals WHERE project_id = ? AND source_typeform_key = ?')
+      .bind(input.projectId, typeformKey).first<{ id: number }>();
+    if (existing) return { id: Number(existing.id) };
+  }
+  const values = [input.projectId, kind, trimOrNull(input.who, 200), amount, currency, period, date, status, sourceKind,
+    interviewId, sessionId, trimOrNull(input.note, 1000), input.userId, sourceProposalId];
+  const row = typeformKey
+    ? await env.DB.prepare(
+      `INSERT INTO demand_signals
+       (project_id, kind, who, amount_cents, currency, period, signal_date, status, source_kind, interview_id, session_id, note, created_by, source_proposal_id, source_typeform_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(project_id, source_typeform_key) DO UPDATE SET source_typeform_key = excluded.source_typeform_key RETURNING id`,
+    ).bind(...values, typeformKey).first<{ id: number }>()
+    : await env.DB.prepare(
+      `INSERT INTO demand_signals
        (project_id, kind, who, amount_cents, currency, period, signal_date, status, source_kind, interview_id, session_id, note, created_by, source_proposal_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-  ).bind(
-    input.projectId, kind, trimOrNull(input.who, 200), amount, currency, period, date, status, sourceKind,
-    interviewId, sessionId, trimOrNull(input.note, 1000), input.userId, sourceProposalId,
-  ).first<{ id: number }>();
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(...values).first<{ id: number }>();
   if (!row) throw new WriterError(500, 'The signal was not written');
   await recordActor(env, input.userId, input.projectId, 'demand-signals', `signal-${row.id}`, 'demand_signal_written', `Signal ${kind} ${status}`);
   return { id: Number(row.id) };
@@ -735,34 +751,83 @@ export async function checkHypothesisOwner(env: Env, projectId: number, ownerUse
 // Segments — Edit
 // ---------------------------------------------------------------------------
 
+/** D6007 (#6007): at most this many firmographic pairs and disqualifiers on one segment. */
+export const SEGMENT_PROFILE_MAX = 12;
+
+/**
+ * D6007: firmographics as `[{ label, value }]`. Accepts that array, or text with one `Label: value` per line (the
+ * record's Edit form). `undefined` keeps the stored list; `null`, `''` or an empty list clears it.
+ */
+export function segmentFirmographics(v: unknown): Array<{ label: string; value: string }> | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  const items: unknown[] = Array.isArray(v) ? v : typeof v === 'string' ? v.split('\n').filter((l) => l.trim() !== '') : [v];
+  const out = items.map((item) => {
+    let label: unknown; let value: unknown;
+    if (typeof item === 'string') {
+      const i = item.indexOf(':');
+      if (i < 1) throw new WriterError(400, 'Write each firmographic as "Label: value"');
+      label = item.slice(0, i); value = item.slice(i + 1);
+    } else if (item && typeof item === 'object') {
+      ({ label, value } = item as { label?: unknown; value?: unknown });
+    }
+    const l = trimOrNull(label, 60); const val = trimOrNull(value, 200);
+    if (!l || !val) throw new WriterError(400, 'Each firmographic needs a label and a value');
+    return { label: l, value: val };
+  });
+  if (out.length > SEGMENT_PROFILE_MAX) throw new WriterError(400, `At most ${SEGMENT_PROFILE_MAX} firmographics on a segment`);
+  return out.length ? out : null;
+}
+
+/** D6007: disqualifiers as `["Under 20 staff"]`. Accepts that array or text with one per line, as firmographics do. */
+export function segmentDisqualifiers(v: unknown): string[] | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  const items: unknown[] = Array.isArray(v) ? v : typeof v === 'string' ? v.split('\n') : [v];
+  const out = items.map((x) => trimOrNull(x, 200)).filter((x): x is string => !!x);
+  if (out.length > SEGMENT_PROFILE_MAX) throw new WriterError(400, `At most ${SEGMENT_PROFILE_MAX} disqualifiers on a segment`);
+  return out.length ? out : null;
+}
+
 /** Edit a segment. Omitted keys are kept; a name another segment holds answers 409. */
 export async function updateSegment(
   env: Env,
-  input: { projectId: number; userId: number | null; segmentId: number; name?: unknown; description?: unknown } & SegmentSteps,
+  input: { projectId: number; userId: number | null; segmentId: number; name?: unknown; description?: unknown;
+    firmographics?: unknown; disqualifiers?: unknown } & SegmentSteps,
 ): Promise<{ id: number }> {
   const row = await env.DB.prepare(
-    `SELECT id, name, description, who_they_are, context, job_to_be_done, urgency, value_promised, value_source, score_since
-       FROM customer_segments WHERE id = ? AND project_id = ?`,
+    `SELECT id, name, description, who_they_are, context, job_to_be_done, urgency, value_promised, value_source, score_since,
+            firmographics_json, disqualifiers_json
+       FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL`,
   ).bind(input.segmentId, input.projectId).first<Record<string, string | null>>();
   if (!row) throw new WriterError(404, 'Segment not found on this project');
   const name = input.name === undefined ? String(row.name) : trimOrNull(input.name, 120);
   if (!name) throw new WriterError(400, 'A segment needs a name');
   const norm = segmentNameNorm(name);
-  const clash = await env.DB.prepare('SELECT id FROM customer_segments WHERE project_id = ? AND name_norm = ? AND id <> ?')
-    .bind(input.projectId, norm, input.segmentId).first();
-  if (clash) throw new WriterError(409, 'Another segment already has that name');
+  const clash = await env.DB.prepare('SELECT id, archived_at FROM customer_segments WHERE project_id = ? AND name_norm = ? AND id <> ?')
+    .bind(input.projectId, norm, input.segmentId).first<{ id: number; archived_at: string | null }>();
+  if (clash) throw new WriterError(409, clash.archived_at != null
+    ? 'This segment name is archived. Choose another name.'
+    : 'Another segment already has that name');
   const steps = segmentSteps(input);
   const keep = (k: (typeof SEGMENT_STEP_KEYS)[number]) => (steps[k] === undefined ? row[k] ?? null : steps[k]);
-  await env.DB.prepare(
+  // D6007: the two lists keep their stored JSON unless the body names them.
+  const firmographics = segmentFirmographics(input.firmographics);
+  const disqualifiers = segmentDisqualifiers(input.disqualifiers);
+  const firmographicsJson = firmographics === undefined ? row.firmographics_json ?? null : firmographics ? JSON.stringify(firmographics) : null;
+  const disqualifiersJson = disqualifiers === undefined ? row.disqualifiers_json ?? null : disqualifiers ? JSON.stringify(disqualifiers) : null;
+  const updated = await env.DB.prepare(
     `UPDATE customer_segments
         SET name = ?, name_norm = ?, description = ?, who_they_are = ?, context = ?, job_to_be_done = ?, urgency = ?,
-            value_promised = ?, value_source = ?, score_since = ?, updated_at = datetime('now')
-      WHERE id = ? AND project_id = ?`,
+            value_promised = ?, value_source = ?, score_since = ?, firmographics_json = ?, disqualifiers_json = ?,
+            updated_at = datetime('now')
+      WHERE id = ? AND project_id = ? AND archived_at IS NULL`,
   ).bind(
     name, norm, input.description === undefined ? row.description ?? null : trimOrNull(input.description, 1000),
     keep('who_they_are'), keep('context'), keep('job_to_be_done'), keep('urgency'), keep('value_promised'),
-    keep('value_source'), keep('score_since'), input.segmentId, input.projectId,
+    keep('value_source'), keep('score_since'), firmographicsJson, disqualifiersJson, input.segmentId, input.projectId,
   ).run();
+  if (Number(updated.meta?.changes) !== 1) throw new WriterError(404, 'Segment not found on this project');
   await recordActor(env, input.userId, input.projectId, 'ideal-customer-profile', input.segmentId, 'segment_edited', `Segment ${input.segmentId} edited`);
   return { id: input.segmentId };
 }
@@ -1288,7 +1353,7 @@ export async function updateDemandSignal(
     if (!Number.isInteger(n) || n <= 0) throw new WriterError(400, 'amount_cents must be a positive whole number, or omitted');
     amount = n;
   }
-  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   const currency = amount == null ? null
     : (String(input.currency === undefined ? (row.currency ?? 'usd') : (input.currency ?? 'usd')).trim().toLowerCase() || 'usd');
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -1354,7 +1419,8 @@ export async function attachDemandEvidence(
     fileName = String(input.file.name || `evidence.${ext}`).replace(/[\r\n"]/g, '').slice(0, 200) || `evidence.${ext}`;
     // D1170 — Validate evidence counts to the venture's owner (D1169 §1).
     storage = await assertStorageRoom(env, { projectId: input.projectId }, input.file.size, input.userId == null ? null : { id: input.userId });
-    await env.FILES.put(key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
+    // D6651: evidence is a record, written once under a fresh key; a replacement points the row at the newest key.
+    await putRecordOrThrow(env.FILES, key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
   }
   const stmts = [];
   if (key) stmts.push(env.DB.prepare("UPDATE demand_signals SET evidence_file_key = ?, evidence_file_name = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
@@ -1367,9 +1433,7 @@ export async function attachDemandEvidence(
   }));
   await env.DB.batch(stmts);
   if (storage) await noteStorageLanded(env, storage);
-  if (key && row.evidence_file_key && row.evidence_file_key.startsWith(EVIDENCE_PREFIX)) {
-    try { await env.FILES?.delete(row.evidence_file_key); } catch (e) { console.warn('[validateWriters] old evidence not deleted:', (e as Error)?.message); }
-  }
+  // D6651: the replaced evidence file is a record and is kept; the row now points at the newest key.
   return { id: input.signalId, file_name: fileName };
 }
 
@@ -1515,10 +1579,10 @@ export const EVIDENCE_KINDS = ['interview', 'signal', 'metric', 'experiment'] as
  * experiment, each checked to be this venture's. Adding it again updates its
  * direction and strength. A link logs a row on each side that has a record.
  */
-export async function addEvidence(
+export async function evidenceStatements(
   env: Env,
   input: { projectId: number; userId: number | null; hypothesisId: number; kind: unknown; ref_id: unknown; direction?: unknown; strength?: unknown },
-): Promise<{ link: string }> {
+) {
   const h = await env.DB.prepare('SELECT id, code FROM hypotheses WHERE id = ? AND project_id = ?')
     .bind(input.hypothesisId, input.projectId).first<{ id: number; code: string }>();
   if (!h) throw new WriterError(404, 'Hypothesis not found on this project');
@@ -1566,7 +1630,11 @@ export async function addEvidence(
       entityId: other.id, action: 'evidence_linked', summary: `Linked to ${h.code}`,
     }));
   }
-  const results = await env.DB.batch(stmts);
+  return stmts;
+}
+
+export async function addEvidence(env: Env, input: Parameters<typeof evidenceStatements>[1]): Promise<{ link: string }> {
+  const results = await env.DB.batch(await evidenceStatements(env, input));
   const id = Number((results[0] as { results?: Array<{ id: number }> })?.results?.[0]?.id);
   return { link: `evidence-${id}` };
 }
@@ -1647,7 +1715,7 @@ export async function setLinkStrength(
   ]);
 }
 
-export const EXPERIMENT_STATUSES = ['planned', 'running', 'done'] as const;
+export const EXPERIMENT_STATUSES = ['planned', 'running', 'done', 'stopped'] as const;
 
 /**
  * Add an experiment to a claim.
@@ -1704,17 +1772,26 @@ export async function addExperiment(
 /** Move an experiment of this claim to planned, running or done, with its result. */
 export async function setExperimentStatus(
   env: Env,
-  input: { projectId: number; userId: number | null; hypothesisId: number; experiment_id: unknown; status: unknown; result?: unknown },
+  input: { projectId: number; userId: number | null; hypothesisId: number; experiment_id: unknown; status: unknown; result?: unknown; result_direction?: unknown },
 ): Promise<void> {
   const status = String(input.status ?? '');
   if (!(EXPERIMENT_STATUSES as readonly string[]).includes(status)) throw new WriterError(400, `status must be one of ${EXPERIMENT_STATUSES.join(', ')}`);
   const eid = intId(input.experiment_id);
   const ex = eid == null ? null : await env.DB.prepare(
-    'SELECT e.id, e.result, h.code FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id WHERE e.id = ? AND e.hypothesis_id = ? AND e.project_id = ? AND h.project_id = ?',
-  ).bind(eid, input.hypothesisId, input.projectId, input.projectId).first<{ id: number; result: string | null; code: string }>();
+    'SELECT e.*, h.code FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id WHERE e.id = ? AND e.hypothesis_id = ? AND e.project_id = ? AND h.project_id = ?',
+  ).bind(eid, input.hypothesisId, input.projectId, input.projectId).first<{ id: number; result: string | null; code: string; result_direction?: string | null; result_recorded_at?: string | null; stopped_at?: string | null }>();
   if (!ex) throw new WriterError(404, 'Experiment not found on this hypothesis');
-  await env.DB.prepare("UPDATE hypothesis_experiments SET status = ?, result = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
-    .bind(status, input.result === undefined ? ex.result : trimOrNull(input.result, 1000), ex.id, input.projectId).run();
+  const result = input.result === undefined ? ex.result : trimOrNull(input.result, 1000);
+  const direction = input.result_direction === undefined ? (status === 'done' ? ex.result_direction ?? null : null) : trimOrNull(input.result_direction, 30);
+  if (direction != null && !['supports', 'contradicts', 'inconclusive'].includes(direction)) throw new WriterError(400, 'Choose a valid result direction');
+  if (direction && (status !== 'done' || !result)) throw new WriterError(400, 'A result direction needs a completed experiment with an observed result');
+  await env.DB.prepare(`UPDATE hypothesis_experiments SET status = ?, result = ?, result_direction = ?,
+    stopped_at = CASE WHEN ? = 'stopped' THEN COALESCE(stopped_at, datetime('now')) ELSE NULL END,
+    result_recorded_at = CASE WHEN ? = 'done' AND ? IS NOT NULL THEN
+      CASE WHEN result IS ? THEN COALESCE(result_recorded_at, datetime('now')) ELSE datetime('now') END ELSE NULL END,
+    updated_at = datetime('now') WHERE id = ? AND project_id = ?`)
+    .bind(status === 'stopped' ? 'planned' : status, result, status === 'done' ? direction : null,
+      status, status, result, result, ex.id, input.projectId).run();
   await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'experiment_status_set', `${ex.code} experiment ${status}`);
 }
 
@@ -1779,4 +1856,60 @@ export async function writeInterviewFinding(env: Env, input: InterviewFindingInp
   await recordActor(env, input.userId, input.projectId, module as ModuleSlug, null, 'interview_finding_written',
     `${prior ? 'Updated' : 'Added'} a ${input.kind.replace(/_/g, ' ')} from interview ${input.interviewId}`);
   return { id: Number(row.id), module, created: !prior };
+}
+
+/** D6003: retain interview history and fit; only active segments participate in current scoring. */
+export async function archiveSegment(env: Env, input: { projectId: number; userId: number | null; segmentId: number }): Promise<void> {
+  const row = await env.DB.prepare('SELECT id FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL')
+    .bind(input.segmentId, input.projectId).first();
+  if (!row) throw new WriterError(404, 'Segment not found on this project');
+  const result = await env.DB.batch([
+    // D6007: an archived segment is never the primary ICP.
+    env.DB.prepare('UPDATE customer_segments SET archived_at = CURRENT_TIMESTAMP, is_primary = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND archived_at IS NULL')
+      .bind(input.segmentId, input.projectId),
+    // Keep the ordinary cycle activity format, and log only the UPDATE that changed a row.
+    env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1')
+      .bind(input.projectId, input.userId, 'validate.ideal-customer-profile', String(input.segmentId), 'segment_archived', `Segment ${input.segmentId} archived`, input.userId == null ? 'system' : `user:${input.userId}`),
+  ]);
+  if (Number(result[0]?.meta?.changes) !== 1) throw new WriterError(404, 'Segment not found on this project');
+}
+
+/**
+ * D6007 (#6007): set or clear the venture's primary ICP. Exactly one active segment per venture holds it (the
+ * partial unique index on `customer_segments`), so setting one clears the other in the same batch. Each change
+ * that moves the flag is logged on the segment; setting the segment that already holds it is a no-op.
+ */
+export async function setPrimarySegment(
+  env: Env,
+  input: { projectId: number; userId: number | null; segmentId: number; primary: unknown },
+): Promise<{ id: number; primary: boolean; previous: number | null }> {
+  if (typeof input.primary !== 'boolean') throw new WriterError(400, 'primary must be true or false');
+  const row = await env.DB.prepare('SELECT id, is_primary FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL')
+    .bind(input.segmentId, input.projectId).first<{ id: number; is_primary: number }>();
+  if (!row) throw new WriterError(404, 'Segment not found on this project');
+  const prior = await env.DB.prepare('SELECT id FROM customer_segments WHERE project_id = ? AND is_primary = 1')
+    .bind(input.projectId).first<{ id: number }>();
+  const previous = prior ? Number(prior.id) : null;
+  if (Boolean(row.is_primary) === input.primary) return { id: input.segmentId, primary: input.primary, previous };
+  const actor = input.userId == null ? 'system' : `user:${input.userId}`;
+  const log = (action: string, details: string) => env.DB.prepare(
+    'INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1',
+  ).bind(input.projectId, input.userId, 'validate.ideal-customer-profile', String(input.segmentId), action, details, actor);
+  const stmts = input.primary
+    ? [
+      env.DB.prepare('UPDATE customer_segments SET is_primary = 0, updated_at = CURRENT_TIMESTAMP WHERE project_id = ? AND is_primary = 1 AND id <> ?')
+        .bind(input.projectId, input.segmentId),
+      env.DB.prepare('UPDATE customer_segments SET is_primary = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND archived_at IS NULL AND is_primary = 0')
+        .bind(input.segmentId, input.projectId),
+      log('segment_primary_set', previous == null ? `Segment ${input.segmentId} set as primary ICP` : `Segment ${input.segmentId} set as primary ICP, replacing segment ${previous}`),
+    ]
+    : [
+      env.DB.prepare('UPDATE customer_segments SET is_primary = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND is_primary = 1')
+        .bind(input.segmentId, input.projectId),
+      log('segment_primary_cleared', `Segment ${input.segmentId} is no longer the primary ICP`),
+    ];
+  const result = await env.DB.batch(stmts);
+  const changed = result[input.primary ? 1 : 0];
+  if (Number(changed?.meta?.changes) !== 1) throw new WriterError(409, 'The segment changed while saving. Try again.');
+  return { id: input.segmentId, primary: input.primary, previous: input.primary ? previous : null };
 }

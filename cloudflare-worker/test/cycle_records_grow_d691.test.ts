@@ -20,9 +20,9 @@
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -38,13 +38,8 @@ import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const ROOT = process.cwd();
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 // Assembled at run time, as cycle_activity_d690 does, so no literal reads as a credential.
 const JWT_SECRET = ['fixture', 'key', 'for', 'd691', 'grow', 'records'].join('-');
 
@@ -204,6 +199,10 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const role = await rec(db, 'team-expansion', 31);
   assert.deepEqual(role.body.facts.slice(1, 3).map((f: any) => f.value), [2, 1]);
   const ob = await rec(db, 'durable-company-building', 51);
+  assert.equal(ob.body.parts.meeting, true, 'D6122: only the persisted board_meeting type gets the meeting strip');
+  db.prepare("UPDATE compliance_events SET event_type = 'tax' WHERE id = 51").run();
+  assert.equal((await rec(db, 'durable-company-building', 51)).body.parts.meeting, false);
+  db.prepare("UPDATE compliance_events SET event_type = 'board_meeting' WHERE id = 51").run();
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
   assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null]]);

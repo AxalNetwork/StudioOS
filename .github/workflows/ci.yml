@@ -174,6 +174,7 @@ jobs:
       actions: read
     outputs:
       parts: ${{ steps.plan.outputs.parts }}
+      capacity_submission: ${{ steps.capacity.outputs.capacity_submission }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -198,11 +199,43 @@ jobs:
           ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: plan_artifact
         with:
           name: suite-plan
           path: suite-plan.json
           if-no-files-found: error
           retention-days: 3
+      # D7909: optional metadata only; no OIDC and no waiting. Failure cannot stop ordinary hosted CI.
+      - name: Prepare capacity pilot submission
+        id: capacity
+        if: github.repository == 'AxalNetwork/StudioOS' && github.event_name == 'push' && vars.CI_CAPACITY_ENABLED == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
+          CI_CAPACITY_EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CI_CAPACITY_CHILD_WORKFLOW_SHA: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
+          CAPACITY_PLAN_ARTIFACT_ID: ${{ steps.plan_artifact.outputs['artifact-id'] }}
+          CAPACITY_PLAN_FILE: ${{ github.workspace }}/suite-plan.json
+        run: node scripts/ci/capacity-submission.mjs
+
+  # D7909: default-off, main-push pilot only. No ordinary job depends on this submission.
+  capacity-submit:
+    name: capacity pilot submission
+    needs: plan
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && github.event_name == 'push' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && needs.plan.outputs.capacity_submission != '' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    # Exact local preparation pin; publication and activation remain held under #5719.
+    # D8335: the pin must be a commit on main. cb63d3997d is #8234's merge commit and carries the reviewed planner
+    # (blob 4f7dfaca) byte for byte. The first pin, 19927c89, became unreachable when its branch was deleted.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    with:
+      submission: ${{ needs.plan.outputs.capacity_submission }}
+      executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+      child_workflow_sha: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
 
   suite:
     name: suite (${{ matrix.part }})
@@ -211,9 +244,13 @@ jobs:
     # where `verified` is skipped, and when its lookup failed).
     if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
     runs-on: ubuntu-latest
-    # #3911 gave the single job 90 minutes. One part is a fraction of it; a
-    # real hang still stops here.
-    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    # D7881: only the optional Mac part reserves time for its bounded handoff
+    # and a complete hosted fallback. The queue's existing bound is 90 minutes.
+    timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 83 || 50 }}
     strategy:
       # Queue entries cannot land after a failure. PRs and pushes report every part.
       fail-fast: ${{ github.event_name == 'merge_group' }}
@@ -224,6 +261,8 @@ jobs:
         part: ${{ fromJSON(github.event_name == 'merge_group' && '["frontend-1-of-2","frontend-2-of-2","worker-1-of-6","worker-2-of-6","worker-3-of-6","worker-4-of-6","worker-5-of-6","worker-6-of-6","rest"]' || needs.plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Check merge queue ref still exists
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
@@ -294,13 +333,60 @@ jobs:
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
         run: bash scripts/ci/queue-ref-alive.sh
+      # D7881: the controller only delegates the selected Worker part. It
+      # preserves a real test failure and returns to hosted on unavailability.
+      - name: Try the MacBook for one Worker shard
+        id: macbook
+        if: vars.MACBOOK_WORKER_ENABLED == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ matrix.part }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+        run: node scripts/ci/macbook-worker.mjs
       # D5608: trace what each test file reads and how long it takes, on the
       # queue and on main only (never a PR run, never a benchmark branch). An
       # empty value leaves the tracer inert, so the run line is the same for
       # every event.
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
         env:
+          CI_FAILURE_DIR: ${{ runner.temp }}/ci-failures
+          CI_FAILURE_PART: ${{ matrix.part }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
+        if: steps.macbook.outputs.delegated != 'true'
+      - name: Upload bounded failure evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-${{ matrix.part }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-failures/failures.json
+          if-no-files-found: ignore
+          retention-days: 3
+      # D7124: the test files this pull request adds or edits, run again with
+      # the clock 7 days and 9 days 11 hours ahead under libfaketime (as the
+      # nightly does, D5398), so a date-bound test fails here and not on main
+      # (#7108: 6 h 25 min with nothing merged). Non-draft PRs only, in the
+      # `rest` part, which has every install and the built SPA; never under
+      # merge_group. No changed test file: nothing is installed.
+      - name: Changed tests with the clock moved ahead (D7124)
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft && matrix.part == 'rest'
+        env:
+          FUTURE_CLOCK_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(node scripts/future-clock-changed.mjs --list)
+          if [ -z "$files" ]; then exit 0; fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq faketime
+          node scripts/future-clock-changed.mjs
+      - name: Collect the delegated Mac test traces
+        if: always() && steps.macbook.outputs.delegated == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macbook-worker-traces
+          run-id: ${{ steps.macbook.outputs.child_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/test-traces
       - name: Upload this part's test traces
         if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
         continue-on-error: true
@@ -310,6 +396,14 @@ jobs:
           path: ${{ runner.temp }}/test-traces
           if-no-files-found: ignore
           retention-days: 3
+      - name: Cancel the owned Mac run when CI is cancelled
+        if: cancelled() && steps.macbook.outputs.child_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ matrix.part }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+          CHILD_RUN_ID: ${{ steps.macbook.outputs.child_run_id }}
+        run: node scripts/ci/macbook-worker.mjs --cancel-owned
 
   # D5608: one dependency and timing artifact per commit, merged from the
   # parts' traces. Advisory: neither `landing` nor `gate` needs it, so its
@@ -370,27 +464,52 @@ jobs:
             cloudflare-worker/package-lock.json
         id: node
         if: ${{ !cancelled() }}
-      - name: Install gitleaks
+      - name: Load trusted scanner installer
+        id: scanner_pins
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          MAIN_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        shell: bash
         run: |
           set -euo pipefail
-          GITLEAKS_VERSION=8.21.2
-          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          for attempt in 1 2 3 4 5; do
-            if curl -sSfL --connect-timeout 10 --max-time 120 -o /tmp/gitleaks.tar.gz "$URL"; then
-              break
-            fi
-            if [ "$attempt" = 5 ]; then
-              echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} after 5 attempts — this is a network failure, not a secret finding."
-              exit 1
-            fi
-            echo "gitleaks download attempt ${attempt} failed; retrying in $((attempt * 5))s"
-            sleep $((attempt * 5))
+          case "$EVENT" in
+            pull_request) trusted="$PR_BASE" ;;
+            merge_group) trusted="$GROUP_BASE" ;;
+            push|schedule)
+              [[ "$REF" == refs/heads/main ]] || exit 1
+              trusted="$MAIN_SHA" ;;
+            *) echo "Unsupported scanner acquisition event" >&2; exit 1 ;;
+          esac
+          [[ "$trusted" =~ ^[0-9a-f]{40}$ ]] || { echo "Missing trusted scanner base" >&2; exit 1; }
+          git cat-file -e "$trusted^{commit}" || git fetch --no-tags origin "$trusted" --depth=1
+          installer="$RUNNER_TEMP/trusted-scanner-installer"
+          mkdir -p "$installer"
+          for source in install-scanner.mjs scanner-acquisition.mjs scanner-tools.json; do
+            git show "$trusted:scripts/ci/$source" > "$installer/$source"
           done
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
-        id: install_scanner
+          echo "installer=$installer/install-scanner.mjs" >> "$GITHUB_OUTPUT"
+          node "$installer/install-scanner.mjs" gitleaks --metadata
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Restore pinned gitleaks archive
+        id: scanner_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}
+      - name: Install gitleaks
+        id: install_scanner
+        run: node "${{ steps.scanner_pins.outputs.installer }}" gitleaks
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}
+      - name: Save verified gitleaks archive on main only
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.install_scanner.outcome == 'success' && steps.scanner_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
       - name: Determine scan range
         id: range
         run: |
@@ -428,7 +547,7 @@ jobs:
             --no-banner \
             --exit-code=1
         id: scan
-        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.install_scanner.outcome == 'success' && steps.range.outcome == 'success' }}
       - name: Load static checkers from the trusted base
         shell: bash
         env:
@@ -750,8 +869,8 @@ jobs:
 
   classify:
     name: why CI failed (D5398)
-    needs: suite
-    if: failure() && github.event_name == 'pull_request'
+    needs: [frontend, worker, verified, plan, suite, fast, landing, visual, drift, og-tags, dev-backend]
+    if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
@@ -767,7 +886,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node scripts/ci-classify.mjs
+      - name: Upload classified evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-classified-attempt-${{ github.run_attempt }}
+          path: ci-failures-classified.json
+          if-no-files-found: ignore
+          retention-days: 3
 
   # -------------------------------------------------------------------------
   # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
@@ -819,6 +948,13 @@ jobs:
       - name: Licences console in the browser (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/licences_console_5933.spec.js --retries=0
+      # #7517 (D7517): Advisor › Expertise, its Overview and five zones, at 390,
+      # 768 and 1440 in light and dark: no WCAG 2.2 AA axe violation in its
+      # column, the phone section row, More and 44px targets. Same docs/ and
+      # fixtures pattern as the step above; no trace is recorded.
+      - name: Expertise axe and phone navigation (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/expertise_axe_7517.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -954,6 +1090,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |

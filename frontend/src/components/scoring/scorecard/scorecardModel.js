@@ -385,5 +385,11 @@ export function evidenceOf(s, masked) {
   return { state: 'graded', text: parts.join(' · '), mix };
 }
 
-/** The views on the Evidence tab that hold a scope's own context (D1151): Team, Market and Traction. */
+/** The views that hold a scope's own context (D1151): Team, Market and Traction, under the Scorecard tab since D6164 part 3. */
 export const CONTEXT_VIEW = Object.freeze({ team: 'team', market: 'market', traction: 'traction' });
+
+/** D6168 (#6168): the scope an address names (`?scope=team`), when it is one of the eleven; otherwise none. */
+export function scopeParam(word) {
+  const key = String(word ?? '');
+  return SCOPES.some((s) => s.key === key) ? key : null;
+}

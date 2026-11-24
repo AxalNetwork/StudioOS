@@ -64,6 +64,7 @@ import { renderLegalPdf, type LegalRenderer } from '../../services/legalPaperRen
 import { fileRowStatement, newFileUid } from '../../services/legalDocumentFiles';
 import type { AxalEntityKey, DocumentKind } from '../../services/legalDocFormat';
 import { acquireRefreshLease } from '../refreshLease';
+import { putRecord } from '../../services/recordStore';
 
 const PROVIDER_KEY = 'docusign';
 const SCOPES = ['signature', 'extended'];
@@ -540,7 +541,9 @@ async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeI
   const ciphertext = await encryptBytes(env, buf);
   const key = `esign/signed/${envelopeUuid}.pdf.enc`;
   if (env.FILES) {
-    await env.FILES.put(key, ciphertext, {
+    // D6651: write-once. A repeated pull of the same envelope finds its signed copy already stored
+    // and keeps it; the stored copy is never replaced.
+    await putRecord(env.FILES, key, ciphertext, {
       httpMetadata: { contentType: 'application/octet-stream' },
       customMetadata: { inner_content_type: 'application/pdf', encrypted: '1' },
     });

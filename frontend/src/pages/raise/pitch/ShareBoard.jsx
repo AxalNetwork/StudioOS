@@ -5,10 +5,12 @@ import { posthogApi } from '../../../lib/api/posthog';
 import { reportError } from '../../../lib/log';
 import { figureText } from '../../cycles/fromPosthogModel';
 import {
-  NDA_FILTERS, NDA_LINE, NO_LINKS, NO_VIEWS, UNREADABLE,
-  boardState, dailyBars, dropRows, dropTitle, funnelRows, posthogLine,
+  NDA_FILTERS, NDA_LINE, NO_LINKS, NO_VIEWS, UNREADABLE, ZERO_DAY_NOTE,
+  boardState, dailyBars, dropRows, dropTitle, funnelRows, overviewFigures, periodWords, posthogLine,
 } from './shareBoardModel';
+import FigureTile, { FigureBody } from './AnalyticsFigure.jsx';
 import { NOT_RECORDED } from './pitchStudioModel';
+import ShareFeedback from './ShareFeedback';
 
 /**
  * D4254 P4 (#4272, ps7, ps7x, ps7b) — Share & analytics, the top of the tile:
@@ -16,7 +18,19 @@ import { NOT_RECORDED } from './pitchStudioModel';
  * links, first views marked, 30 days), the two funnels side by side, where
  * readers drop off on a version against the one before it, and the PostHog line.
  * Everything comes from the daily read (D4272); the investors table below it is
- * StudioAnalytics' own.
+ * StudioAnalytics' own. D6064 (#6064): viewer feedback (`ShareFeedback.jsx`) has its
+ * own read and its own states, under the same version filter.
+ *
+ * D6062 (#6062, Pitch Studio v2 PS-08 A): three tiles over the chart, from the
+ * same daily read: Visits (first views and revisits), the most-read card on
+ * the version shown, and how many links reached the ask of those opened. Each
+ * keeps the four kinds of nothing apart (`AnalyticsFigure.jsx`); a day with no
+ * views draws a grey line, a measured zero. The canvas's Reactions & feedback
+ * tile is not drawn: it waits for proposal 9 (ShareFeedback below is D6064's).
+ *
+ * D8250 (#8250): under Visits, how many investor links were opened; under the
+ * most-read card, its seconds per link on average. Both count share links, the
+ * only identity a link has, and read Not recorded, never 0, with no data.
  */
 
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -81,13 +95,14 @@ export default function ShareBoard({ deckId, projectId, versions = [] }) {
         <div className="flex flex-col gap-3.5" data-testid="share-board-loading"><div className={`${SKEL} h-40`} /><div className={`${SKEL} h-32`} /></div>
       ) : state === 'unreadable' ? (
         <div className={`${CARD} flex flex-wrap items-center justify-between gap-3 p-4`} data-testid="share-board-unreadable">
-          <span className={MUTED}>{UNREADABLE}</span>
+          <span className={MUTED}>{`${UNREADABLE} Not zero: the read failed.`}</span>
           <button type="button" className={BTN} onClick={load}>Try again</button>
         </div>
       ) : state === 'no-links' ? (
         <div className={`${CARD} p-6 text-center ${MUTED}`} data-testid="share-board-no-links">{NO_LINKS}</div>
       ) : (
         <>
+          <OverviewTiles data={d} />
           <ViewsPerDay days={d.days} empty={state === 'no-views'} />
           <div className="grid gap-3.5 md:grid-cols-2" data-testid="share-board-funnels">
             <Funnel title="NDA links" funnel={d.funnels?.nda} gated testId="share-board-funnel-nda" />
@@ -96,6 +111,8 @@ export default function ShareBoard({ deckId, projectId, versions = [] }) {
           <DropOff dropoff={d.dropoff} />
         </>
       )}
+
+      <ShareFeedback deckId={deckId} version={version} />
 
       {line ? (
         <p className={`m-0 ${MUTED}`} data-testid={`share-board-posthog-${line.kind}`}>
@@ -106,6 +123,39 @@ export default function ShareBoard({ deckId, projectId, versions = [] }) {
       ) : null}
     </section>
   );
+}
+
+/** PS-08 A's tiles: Visits, Most-read card, Reached the ask, and the period they cover. */
+export function OverviewTiles({ data }) {
+  const f = overviewFigures(data);
+  const period = periodWords(data);
+  return (
+    <section className="flex flex-col gap-1.5" data-testid="share-board-tiles" aria-label="Investor analytics">
+      {period ? <span className={`${MUTED} text-right`} data-testid="share-board-period">{period}</span> : null}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <FigureTile label="Visits">
+          <FigureBody fig={f.visits} testId="share-board-visits" />
+          <ReaderLine fig={f.investors} testId="share-board-investors" />
+        </FigureTile>
+        <FigureTile label="Most-read card">
+          <FigureBody fig={f.mostRead} testId="share-board-most-read" />
+          <ReaderLine fig={f.perReader} testId="share-board-per-reader" />
+        </FigureTile>
+        <FigureTile label="Reached the ask" fig={f.ask} testId="share-board-ask" />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * D8250 (#8250): a reader line under a tile's figure, counted by link. A value
+ * is one quiet line; Not recorded keeps its chip and why. An unreadable read
+ * draws nothing here: the tile's own figure already says Unavailable.
+ */
+export function ReaderLine({ fig, testId }) {
+  if (!fig || fig.kind === 'unreadable') return null;
+  if (fig.kind === 'value') return <em className="text-[11.5px] not-italic text-axal-muted dark:text-gray-400" data-figure-state="value" data-testid={testId}>{fig.value}</em>;
+  return <FigureBody fig={fig} testId={testId} />;
 }
 
 export function ViewsPerDay({ days, empty }) {
@@ -128,10 +178,13 @@ export function ViewsPerDay({ days, empty }) {
               {b.first ? <span className="text-[8px] leading-none text-axal-ink dark:text-gray-100" aria-hidden>●</span> : null}
               <span className="w-full rounded-t-[2px] bg-teal-500 dark:bg-teal-400" style={{ height: `${b.openPct}%` }} />
               <span className="w-full bg-axal-violet dark:bg-violet-400" style={{ height: `${b.ndaPct}%` }} />
+              {/* D6062: a counted day with no views is a grey line, a measured zero. */}
+              {!b.nda && !b.open ? <span className="h-[2px] w-full bg-gray-300 dark:bg-gray-600" data-zero-day="" /> : null}
             </div>
           ))}
         </div>
       )}
+      {empty ? null : <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="share-board-zero-note">{ZERO_DAY_NOTE}</span>}
     </section>
   );
 }

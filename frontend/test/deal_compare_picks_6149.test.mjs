@@ -24,6 +24,7 @@ import { api } from '../src/lib/api.js';
 import { dealFlowApi } from '../src/lib/api/dealFlow.js';
 import { dealViewsApi } from '../src/lib/api/dealViews.js';
 import { ventureScoresApi } from '../src/lib/api/ventureScores.js';
+import { tagHolding } from './_tagHolding.mjs';
 
 const h = React.createElement;
 const sc = (scope, band, conf = 'High', state = 'scored') => ({ scope, state, band, confidence_word: conf });
@@ -40,14 +41,16 @@ const VENTURES = () => [
   venture({ id: '3', name: 'Copperline Energy', daysInStage: null, scores: scoresOf('failed', 3), fit: 'failed', traction: 'failed' }),
 ];
 const markup = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(CompareView, props)));
-const strip = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+// Tags are removed until none is left and &amp; is decoded last, so no entity is decoded twice (Code Scanning).
+const untag = (s) => { for (let prev = null; prev !== s;) { prev = s; s = s.replace(/<[^>]+>/g, ''); } return s; };
+const strip = (s) => untag(s).replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
 /** The table's body rows as on screen: [label, ...cell text], read from the rendered markup. */
 const screenRows = (html) => {
   const table = html.slice(html.indexOf('data-testid="dealflow-compare-table"'), html.indexOf('</table>'));
   return [...table.matchAll(/<tr[^>]*>(<th scope="row".*?)<\/tr>/g)].map(([, tr]) => [...tr.matchAll(/<t[hd][^>]*>(.*?)<\/t[hd]>/g)].map(([, cell]) => strip(cell)));
 };
 /** The href of the link with this test id (React writes `href` after the other props). */
-const hrefOf = (html, id) => html.match(new RegExp(`<a[^>]*data-testid="${id}"[^>]*>`))?.[0]?.match(/href="([^"]*)"/)?.[1]?.replace(/&amp;/g, '&');
+const hrefOf = (html, id) => (tagHolding(html, `data-testid="${id}"`, (t) => t.startsWith('<a')) || null)?.match(/href="([^"]*)"/)?.[1]?.replace(/&amp;/g, '&');
 const csvRows = (csv) => csv.split('\n').slice(1).map((line) => line.split(','));
 
 test('Remove: each venture card links to the same address without it, keyboard-reachable and 44px on a phone', () => {
@@ -162,7 +165,9 @@ test('print: only the comparison prints, the chart gives way to the table, the h
   const html = markup({ ventures: VENTURES() });
   assert.match(html, /data-testid="dealflow-compare-page" data-compare-print=""/);
   assert.match(html, /<style>[^<]*@media print/);
-  assert.match(html, /<div data-print="hide"><ul[^>]*data-testid="dealflow-compare-chart"/, 'the chart does not print; the table holds its bands');
+  // D6151: the chart is desktop-only (the phone stacks the sections), and still never prints.
+  assert.match(html, /<div class="hidden md:block" data-print="hide"><ul[^>]*data-testid="dealflow-compare-chart"/, 'the chart does not print; the table holds its bands');
+  assert.match(html, /<div class="hidden md:block print:block"><div class="max-h-\[65vh\] overflow-auto" id="compare-table"/, 'the table prints at any width');
   assert.match(html, /<div class="[^"]*" data-print="hide">(?:(?!<\/div>).)*dealflow-compare-add(?:(?!<\/div>).)*dealflow-compare-csv(?:(?!<\/div>).)*dealflow-compare-print/, 'the toolbar does not print');
   assert.match(html, /data-print="hide" data-testid="dealflow-compare-remove-1"/, 'Remove does not print');
   assert.match(html, /data-print="cards"/);

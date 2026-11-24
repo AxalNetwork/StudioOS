@@ -24,7 +24,7 @@ test('I6 renders the requested institutional fund surfaces', () => {
   assert.match(page, /<WorkerRail[\s\S]*?workspace="Fund"[\s\S]*?role="investor"/,
     'the landing must mount the shared Worker AI rail');
   assert.match(page, /function EmptyFundDetail/);
-  assert.match(page, /items\.length === 0\s*\?\s*<EmptyFundDetail \/>/);
+  assert.match(page, /items\.length === 0\s*\?\s*<EmptyFundDetail[\s/]/);
 });
 
 test('I6 composes live fund sources and preserves detailed tools', () => {
@@ -70,11 +70,11 @@ test('I6 does not ship canvas sample funds, LPs, figures, or models', () => {
   ]) assert.doesNotMatch(page, new RegExp(sample, 'i'));
 });
 
-test('I6 includes an inert institutional locked state', () => {
-  assert.match(page, /data-testid="investor-fund-locked"/);
-  assert.match(page, /aria-hidden="true"/);
-  assert.match(styles, /\.i6-locked-preview[^}]+pointer-events:none/);
-  assert.match(page, /Institutional add-on/);
+test('I6 draws the shared institutional locked state (D6233, FV2)', () => {
+  // #6233: the blurred preview is gone (FV2 draws none, and it could only hold invented figures);
+  // /funds draws FundLocked, the surface every Fund zone draws. fund_locked_6233 holds its contents.
+  assert.match(page, /if \(!fundUnlocked\) return <FundLocked zone="overview" \/>;/);
+  assert.doesNotMatch(styles, /i6-locked/);
 });
 
 test('I6 is responsive and supports dark mode', () => {

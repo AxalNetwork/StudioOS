@@ -1,14 +1,23 @@
 name: Remediate code scanning alerts
 
+# D8074: also Dependabot and secret-scanning alerts (read only through the App credential), the 7-day SLA
+# pass, and a weekly counts-only digest. The hourly sweep files a task within an hour of a new alert.
 on:
   schedule:
-    - cron: '23 */2 * * *'
+    - cron: '23 * * * *'
+    # The weekly digest. scripts/scan-remediation/sla.mjs DIGEST_CRON carries the same string.
+    - cron: '41 8 * * 1'
   workflow_dispatch:
     inputs:
       alert:
         description: 'One Code Scanning alert number (leave empty for a backlog sweep)'
         required: false
         type: string
+      digest:
+        description: 'Send the weekly security digest now instead of reconciling'
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -24,10 +33,10 @@ jobs:
       name: scan-remediation
       deployment: false
     permissions:
-      contents: write
+      contents: read
       issues: write
-      pull-requests: write
-      security-events: write
+      pull-requests: read
+      security-events: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -54,13 +63,19 @@ jobs:
         with:
           app-id: ${{ secrets.SCAN_REMEDIATION_APP_ID }}
           private-key: ${{ secrets.SCAN_REMEDIATION_APP_PRIVATE_KEY }}
-          permission-contents: write
+          permission-contents: read
           permission-issues: write
-          permission-pull-requests: write
-          permission-security-events: write
-      - name: Reconcile Code Scanning alerts
+          permission-pull-requests: read
+          permission-security-events: read
+          permission-vulnerability-alerts: read
+          permission-secret-scanning-alerts: read
+      - name: Reconcile security alerts
         env:
           SCAN_ALERT: ${{ inputs.alert }}
+          SCAN_DIGEST: ${{ inputs.digest }}
+          SCAN_SCHEDULE: ${{ github.event.schedule }}
+          # Only the digest run receives the webhook; the hourly sweep never holds it.
+          SLACK_GITHUB_WEBHOOK_URL: ${{ (inputs.digest || github.event.schedule == '41 8 * * 1') && secrets.SLACK_GITHUB_WEBHOOK_URL || '' }}
           SCAN_REMEDIATION_BOT_LOGIN: ${{ steps.app.outputs.app-slug && format('{0}[bot]', steps.app.outputs.app-slug) || 'github-actions[bot]' }}
           GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
         run: node scripts/scan-remediation/run.mjs

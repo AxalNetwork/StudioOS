@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D5612 (#5612) — the route registry, the API index and the skill library are
  * generated, not committed, so every CI job that compiles, bundles or tests
@@ -43,7 +44,9 @@ const isComment = (l) => l.trimStart().startsWith('#');
 export function needsGenerated(cmd) {
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?tsc(?:\s|$)/m.test(cmd)) return 'tsc';
   if (/(?:^|[\s;&|(])node\b[^\n]*\s--test(?:\s|=|$)/m.test(cmd)) return 'node --test';
-  if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?wrangler(?:@\S+)?\s+(?:deploy|dev|versions|publish)\b/m.test(cmd)) return 'wrangler';
+  // D7146: the preview config's script (scripts/pr-preview-worker.mjs) imports nothing, so a
+  // wrangler run on that config alone reads no generated module; the test below pins that.
+  if (/(?:^|[\s;&|(])(?:npx\s+(?:--yes\s+|--no-install\s+)?)?wrangler(?:@\S+)?\s+(?:deploy|dev|versions|publish)\b(?![^\n]*--config wrangler\.pr-preview\.toml(?:\s|$))/m.test(cmd)) return 'wrangler';
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?vite(?:\s|$)/m.test(cmd)) return 'vite';
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?playwright\s+test\b/m.test(cmd)) return 'playwright test';
   return null;
@@ -198,6 +201,10 @@ test('the guard flags a job with no generate step, and passes one with it', () =
   assert.deepEqual(ungenerated([['x.yml', wf(build)]]), []);
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx wrangler deploy --env production\n')]]).length, 1);
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: wrangler d1 export studioos-db --remote\n')]]), [], 'wrangler d1 reads no source');
+  // D7146: the preview config's script imports nothing, so deploying it needs no generated module.
+  assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME"\n')]]), []);
+  assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx --yes wrangler@4.125.0 deploy --config wrangler.toml --env production\n')]]).length, 1);
+  assert.doesNotMatch(readFileSync(new URL('scripts/pr-preview-worker.mjs', ROOT), 'utf8'), /^\s*import\b|\bimport\(/m, 'the preview script must stay import-free, or its deploy needs the generated modules');
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: npm run test:worker\n')]]), [], 'npm run test:* generates through its pre hook');
   const pw = '      - name: visual\n        run: npx --no-install playwright test -c playwright.visual.config.js\n';
   assert.deepEqual(ungenerated([['x.yml', wf(pw)]]), ['x.yml › worker › visual: runs playwright test before the generated modules are built'], 'playwright test starts vite');
@@ -215,14 +222,15 @@ test('focused contract jobs retain generation and contracts; the required sharde
   const ci = REAL.find(([file]) => file === 'ci.yml')[1];
   const { partsOf } = await import(new URL('scripts/test-drift-parts.mjs', ROOT));
   const scripts = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')).scripts;
-  const ciCovers = (ciSource, pkg) => {
+  const ciCovers = (ciSource, pkg, catalog = guardChain) => {
     const rest = partsOf(pkg).find((part) => part.name === 'rest');
     assert.ok(rest, 'test:drift has an unsharded rest part');
     const restCommands = rest.commands.join(' && ');
     assert.match(restCommands, /(^| && )npm run test:guards( && |$)/, 'rest runs test:guards');
     assert.match(restCommands, /node scripts\/check-dark-mode\.mjs/, 'rest runs check-dark-mode');
-    assert.match(pkg['test:guards'], /node scripts\/check-folder-docs\.mjs/);
-    assert.match(pkg['test:guards'], /node scripts\/check-decision-ids\.mjs/);
+    assert.equal(pkg['test:guards'], 'node scripts/run-guards.mjs');
+    assert.match(catalog, /node scripts\/check-folder-docs\.mjs/);
+    assert.match(catalog, /node scripts\/check-decision-ids\.mjs/);
     const suite = jobsOf(ciSource).find(j => j.job === 'suite');
     assert.ok(suite, 'ci.yml has the suite job');
     // D7108: the worker-* parts read no docs/ and skip the build; frontend-*
@@ -239,7 +247,7 @@ test('focused contract jobs retain generation and contracts; the required sharde
   };
   ciCovers(ci, scripts);
   assert.throws(() => ciCovers(ci.replace("'test:drift (full suite)'", "'incomplete suite'"), scripts));
-  assert.throws(() => ciCovers(ci, { ...scripts, 'test:guards': scripts['test:guards'].replace('node scripts/check-folder-docs.mjs && ', '') }));
+  assert.throws(() => ciCovers(ci, scripts, guardChain.replace('node scripts/check-folder-docs.mjs && ', '')));
   assert.throws(() => ciCovers(ci, { ...scripts, 'test:drift': scripts['test:drift'].replace(' && node scripts/check-dark-mode.mjs', '') }));
   assert.throws(() => ciCovers(ci.replace('name: Build the SPA\n        run: npm run build', 'name: Build the SPA\n        run: true'), scripts));
   // D7108 mutations: a condition that leaves rest unbuilt, and no build step at all.

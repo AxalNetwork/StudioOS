@@ -22,8 +22,8 @@ import Sheet from '../../../ui/Sheet.jsx';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
 export const TOOL = 'inline-flex items-center gap-1.5 rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
-const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const CHIP = (on) => `rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200' : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`;
+const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink max-sm:min-h-[44px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const CHIP = (on) => `rounded-full border px-2.5 py-1 text-[12px] font-semibold max-sm:min-h-[44px] ${on ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200' : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`;
 const REFUSED = 'm-0 text-[12.5px] text-red-700 dark:text-red-300';
 
 /** A toolbar control's 44px target below `md` (D4815 part 3, DX3). */
@@ -133,7 +133,7 @@ export function SavedViewFields({ views, activeUid, onPick, onSave, onDelete, cl
  * scopes (board). Each change is still the address (`settingsHref`); the
  * button names the saved view in use.
  */
-export function ViewSettings({ view, views, activeUid, sort, onSort, columns, onColumns, defaults, cards, onCards, onPick, onSave, onDelete }) {
+export function ViewSettings({ view, views, activeUid, sort, onSort, columns, onColumns, defaults, cards, onCards, onPick, onSave, onDelete, csv = null }) {
   const active = (views?.items || []).find((v) => v.uid === activeUid) || null;
   return (
     <Popover label={active ? `View settings · ${active.name}` : 'View settings'} testId="dealflow-view-settings" wide align="right" tap>
@@ -149,9 +149,28 @@ export function ViewSettings({ view, views, activeUid, sort, onSort, columns, on
             <span className={EYE}>{view === 'table' ? 'Columns' : 'Card scopes'}</span>
             {view === 'table' ? <ColumnFields columns={columns} onColumns={onColumns} defaults={defaults} /> : <CardScopeFields cards={cards} onCards={onCards} />}
           </section>
+          {view === 'table' && csv && <ExportCsvField csv={csv} close={close} />}
         </div>
       )}
     </Popover>
+  );
+}
+
+/**
+ * D6150 (#6150): Export CSV, the table as filtered and sorted, every row rather than one page, in the visible
+ * columns. While the scores or a visible fit cannot be read it is not offered, and says why.
+ */
+export function ExportCsvField({ csv, close }) {
+  return (
+    <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" aria-label="Export">
+      <span className={EYE}>Export</span>
+      <button type="button" className={`${TOOL} ${TAP} w-fit disabled:cursor-not-allowed disabled:opacity-50`} disabled={!csv.ok}
+        title={csv.ok ? undefined : csv.why} aria-describedby="dealflow-csv-note"
+        onClick={() => { csv.onExport(); close?.(); }} data-testid="dealflow-export-csv">Export CSV</button>
+      <span id="dealflow-csv-note" className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="dealflow-export-csv-note">
+        {csv.ok ? `All ${csv.count} ${csv.count === 1 ? 'row' : 'rows'} these filters match, in the columns shown. Scores are bands, never numbers.` : csv.why}
+      </span>
+    </section>
   );
 }
 

@@ -5,7 +5,8 @@ import PublicFooter from '../components/PublicFooter';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
 import { DOOR_LINKS } from '../lib/siteLinks';
-import { openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
+import { HOME_HEADLINE, HOME_OFFER, HOME_PRIMARY } from '../lib/siteHome';
+import { LAB_WEEKS, openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
 import { numberWordCap } from '../lib/numberWords';
 import { DIMENSIONS } from '../lib/scoringViewModel';
 import { SLIDE_META } from '../lib/pitchDeckViewModel';
@@ -88,13 +89,6 @@ const STEPS = [
   { n: '01', title: 'Join', desc: 'Create an account. Your membership is reviewed after you sign up.' }, // #6988 (X6): what MEMBERSHIP_STEPS says happens
   { n: '02', title: 'Get matched', desc: 'The record routes you to the founders, partners, or advisors your profile actually fits.' },
   { n: '03', title: 'Unlock the network', desc: 'Collaborate from one workspace. Capital reads the same record when the work is ready.' },
-];
-
-const LAB_WEEKS = [
-  { n: 'Week 1', title: 'Idea & Customer', desc: 'Problem definition, ICP, market sizing, ≥5 logged interviews' },
-  { n: 'Week 2', title: 'Solution & Roadmap', desc: 'MVP scope, 90-day OKRs, brand v1, pitch deck v1' },
-  { n: 'Week 3', title: 'Validate & Team', desc: 'Readiness score, advisor cadence, co-founder decision, revenue proof' },
-  { n: 'Week 4', title: 'Incorporate & Capital', desc: 'Entity, founder stock, 83(b), use of funds, investor intros' },
 ];
 
 // The canvas's card copy, corrected where the code says otherwise (D677's
@@ -191,13 +185,11 @@ function Hero({ stats }) {
       <div className="ax-hero-veil" aria-hidden="true" />
       <div className="ax-wrap ax-hero-body">
         <div className="ax-lbl">The global venture creation network</div>
-        <h1 id="ax-hero-h" className="ax-h1">Where we <em>build</em> the rails for the next generation of ventures</h1>
-        <p className="ax-hero-copy">
-          Axal VC is the operating platform for venture creation: venture tools, a global partner network,
-          and capital when you’re ready to scale, all in one system for turning an idea into an organization.
-        </p>
+        {/* D6995: the same words the prerender writes into / before JavaScript runs (lib/siteHome.js). */}
+        <h1 id="ax-hero-h" className="ax-h1">{HOME_HEADLINE.lead}<em>{HOME_HEADLINE.em}</em>{HOME_HEADLINE.tail}</h1>
+        <p className="ax-hero-copy">{HOME_OFFER}</p>
         <div className="ax-row-btns" style={{ marginTop: 34 }}>
-          <Link to="/register" className="ax-btn ax-btn-lg ax-btn-primary">Join Axal VC →</Link>
+          <Link to={HOME_PRIMARY.to} className="ax-btn ax-btn-lg ax-btn-primary">{HOME_PRIMARY.label} →</Link>
           {/* #6988 (X6): not /directory, which may list nobody; the platform page until #7006 (B2). */}
           <Link to="/platform" className="ax-btn ax-btn-lg ax-btn-quiet">See the platform</Link>
         </div>
@@ -340,7 +332,7 @@ function LabBand() {
             {LAB_WEEKS.map((w) => (
               <li key={w.n} className="ax-week">
                 <div className="ax-mono ax-week-n">{w.n}</div>
-                <div className="ax-week-t">{w.title}</div>
+                <div className="ax-week-t">{w.name}</div>
                 <div className="ax-week-d">{w.desc}</div>
               </li>
             ))}

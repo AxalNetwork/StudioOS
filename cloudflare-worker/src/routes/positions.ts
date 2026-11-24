@@ -29,7 +29,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { logAdminAction } from '../services/adminAudit';
-import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { mapError, nowIso, newUid, todayIso } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
   periodComplete, periodCounts, reportDue, REPORT_DUE_DEFAULT_DAYS,
@@ -176,6 +176,39 @@ function gpScopeStatement(scope: PositionScope) {
   };
 }
 
+/**
+ * D6206 (#6206): each company's recorded distributions under a position scope,
+ * cut at `asOf` when one is given. The rows and the rule are `/analytics`'s
+ * own (same scope predicate; a positive amount with a YYYY-MM-DD date, on or
+ * before the cut), so the list's distributed figures add up to that read's
+ * `distributed`. Only what `portfolio_distributions` stores is read.
+ *
+ * A failed read (thrown, unsuccessful or malformed, D6201) is reported as
+ * unavailable, never as an empty set: nothing distributed and a read that did
+ * not answer are different facts.
+ */
+async function distributedByProject(env: Env, scope: PositionScope, asOf: string | null):
+  Promise<{ available: true; by: Map<number, number>; total: number } | { available: false; reason: string }> {
+  const reply = await env.DB.prepare(
+    `SELECT project_id, amount, distribution_date
+       FROM portfolio_distributions
+      WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0
+             OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)`,
+  ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => null);
+  if (!hasQueryResults(reply)) return { available: false, reason: 'Portfolio distributions could not be read.' };
+  const by = new Map<number, number>();
+  let total = 0;
+  for (const d of reply.results) {
+    const amount = Number(d.amount) || 0;
+    const date = isoDate(d.distribution_date);
+    if (!(amount > 0) || !date || (asOf && date > asOf)) continue;
+    const pid = Number(d.project_id);
+    by.set(pid, (by.get(pid) || 0) + amount);
+    total += amount;
+  }
+  return { available: true, by, total };
+}
+
 // GET /api/positions — portfolio ownership summary (one row per project)
 r.get('/', async (c) => {
   try {
@@ -187,6 +220,14 @@ r.get('/', async (c) => {
     // metrics beside it used the mark as of the requested date, so one page
     // could show a position and the totals priced on different days.
     const listAsOf = isoDate(c.req.query('as_of'));
+    // D6887 (#6887): the rows are cut at the same date. Before, `as_of` moved
+    // only the marks, so a company funded after the date was still listed and
+    // the rows' invested total did not equal the analytics `paid_in` beside it.
+    // Both queries below keep a cheque dated on or before `as_of` (bound twice;
+    // with none, every row), dated the way `/analytics` dates it
+    // (`isoDate(position_date) || isoDate(created_at)`): its position date when
+    // that starts YYYY-MM-DD, else when it was recorded (`created_at` is NOT
+    // NULL, so every cheque has a date).
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
     // handful of holdings.
@@ -202,8 +243,10 @@ r.get('/', async (c) => {
          LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
         WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
                OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
+          AND (? IS NULL OR (CASE WHEN p.position_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                                  THEN substr(p.position_date, 1, 10) ELSE substr(p.created_at, 1, 10) END) <= ?)
         GROUP BY p.project_id`
-    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, listAsOf, listAsOf).all<any>();
     // Latest ownership/round per project, also in one pass, over the same rows:
     // for a company read as GP, the latest of their funds' rounds.
     const latestRows = await c.env.DB.prepare(
@@ -213,15 +256,18 @@ r.get('/', async (c) => {
                  FROM portfolio_positions q
                 WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(q.project_id AS TEXT) || ',') > 0
                        OR instr(',' || ? || ',', ',' || CAST(q.fund_id AS TEXT) || ',') > 0)
+                  AND (? IS NULL OR (CASE WHEN q.position_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                                          THEN substr(q.position_date, 1, 10) ELSE substr(q.created_at, 1, 10) END) <= ?)
                 GROUP BY q.project_id) l
            ON l.project_id = p.project_id AND l.d = COALESCE(p.position_date, p.created_at)
          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
                 OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
          GROUP BY p.project_id`
-    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, listAsOf, listAsOf, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
     const marks = await scopedLatestMarks(c.env, scope, listAsOf);
+    const distributed = await distributedByProject(c.env, scope, listAsOf);
 
     const items = (rows.results || []).map((row: any) => {
       const pid = Number(row.project_id);
@@ -247,6 +293,8 @@ r.get('/', async (c) => {
         // Vintage = year of first cheque, so cohort analysis is derived
         // from real position dates rather than a hand-kept field.
         vintage: row.first_date ? Number(String(row.first_date).slice(0, 4)) || null : null,
+        /** D6887: the first cheque's date (YYYY-MM-DD), on or before `as_of` when one is given. */
+        first_date: isoDate(row.first_date),
         // #125 — carrying value. `unmarked: true` means we are showing
         // cost because no mark exists; the UI must say so rather than
         // presenting cost as a valuation.
@@ -261,8 +309,15 @@ r.get('/', async (c) => {
         mark_basis: carried.fmv == null ? null : mark?.basis ?? null,
         /** Which fund's mark answered, or null for a firm-level one (D4644 §3). */
         mark_fund_id: carried.fmv == null ? null : mark?.fund_id ?? null,
+        /**
+         * D6206: Σ this company's recorded distributions on or before `as_of`.
+         * A measured 0 when none is recorded; null only when the distributions
+         * read failed (`distributions.available` is then false).
+         */
+        distributed: distributed.available ? Math.round((distributed.by.get(pid) || 0) * 100) / 100 : null,
       };
     });
+    const listedIds = new Set(items.map((i: any) => i.project_id));
     // D1057: the read says which companies it lists. An investor sees the ones they hold a confirmed
     // commitment in (finding 8); an admin, every recorded position. D4636 part 3: a GP of record
     // is also told which funds' positions were added.
@@ -270,6 +325,23 @@ r.get('/', async (c) => {
       items,
       scope: scope.held == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE,
       fund_scope: gpScopeStatement(scope),
+      /** D6226: the Worker's UTC date, so the page ages a mark without the browser clock. */
+      today: todayIso(),
+      /**
+       * D6206: whether the per-company `distributed` figures were read. When
+       * they were, `total` is the scope's whole distributed figure (the one
+       * `/analytics` sums for the same date) and `unlisted` the part of it
+       * recorded against a company with no listed position, so the rows
+       * reconcile to the book. When they were not, only the distributions
+       * fields are unavailable; the rest of the read still answers.
+       */
+      distributions: distributed.available
+        ? {
+            available: true,
+            total: Math.round(distributed.total * 100) / 100,
+            unlisted: Math.round([...distributed.by].reduce((s, [pid, v]) => (listedIds.has(pid) ? s : s + v), 0) * 100) / 100,
+          }
+        : { available: false, reason: distributed.reason },
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -365,6 +437,11 @@ r.get('/marks', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D6201: D1 may reject or resolve an unsuccessful/malformed read. Neither is an empty set.
+function hasQueryResults<T>(reply: { success?: boolean; results?: T[] } | null): reply is { success?: boolean; results: T[] } {
+  return reply != null && reply.success !== false && Array.isArray(reply.results);
+}
+
 r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -387,9 +464,14 @@ r.get('/analytics', async (c) => {
            FROM portfolio_distributions
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0
                  OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)`,
-      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => null),
       scopedLatestMarks(c.env, scope, c.req.query('as_of') ? today : null),
     ]);
+
+    if (!hasQueryResults(distributions)) {
+      const reason = 'Portfolio distributions could not be read.';
+      return c.json({ available: false, reason, detail: reason }, 503);
+    }
 
     // The quarter-end read (D463): with an explicit `as_of`, only flows ON OR
     // BEFORE the date count — a quarter-end export must not include a wire
@@ -442,6 +524,9 @@ r.get('/analytics', async (c) => {
       // returned on every read, explicit or not.
       as_of_default: readAt.slice(0, 10),
       read_at: readAt,
+      // D6226: the Worker's UTC date, whatever `as_of` was asked; mark age is
+      // measured at it. Taken from the same clock read as `read_at` (D6207).
+      today: readAt.slice(0, 10),
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
       /** D4644: positions whose recorded mark could not be used, and why not. */
@@ -494,7 +579,7 @@ r.get('/kpi-compliance', async (c) => {
            FROM portfolio_kpi_definitions
           WHERE fund_id IS NULL AND cadence = ?
           ORDER BY sort_order`,
-      ).bind(cadence).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(cadence).all<any>().catch(() => null),
       c.env.DB.prepare(
         `SELECT DISTINCT p.project_id, pr.uid, pr.name
            FROM portfolio_positions p
@@ -508,8 +593,18 @@ r.get('/kpi-compliance', async (c) => {
           WHERE status = 'submitted'
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)
           GROUP BY project_id, period`,
-      ).bind(scope.visibleCsv, scope.visibleCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(scope.visibleCsv, scope.visibleCsv).all<any>().catch(() => null),
     ]);
+
+    if (!hasQueryResults(defs)) {
+      const reason = 'Required KPIs could not be read.';
+      return c.json({ available: false, reason, detail: reason }, 503);
+    }
+
+    if (!hasQueryResults(updates)) {
+      const reason = 'Submitted portfolio updates could not be read.';
+      return c.json({ available: false, reason, detail: reason }, 503);
+    }
 
     // #6204 (D6204): each company's due day for this period. The term is the reporting duty's own
     // (`reporting_duties.due_days`, `after_end`, at this cadence) for the caller's book: the duties
@@ -638,15 +733,25 @@ r.get('/:projectUid', async (c) => {
           WHERE project_id = ?
             AND (? IS NULL OR fund_id IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY as_of_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
       c.env.DB.prepare(
         `SELECT uid, distribution_date, amount, kind, note
            FROM portfolio_distributions
           WHERE project_id = ?
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY distribution_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
     ]);
+    // #5847: a failed marks or distributions read is Unreadable, never an
+    // empty history, "None recorded" or $0. The page reads a refused read as
+    // Unreadable (`readOf`); an empty but successful read is still [].
+    const unread = markRows.results == null ? 'marks' : distRows.results == null ? 'distributions' : null;
+    if (unread) {
+      const reason = unread === 'marks'
+        ? "Unreadable — this company's valuation marks could not be read. Try again."
+        : "Unreadable — this company's distributions could not be read. Try again.";
+      return c.json({ available: false, source: unread, detail: reason, reason }, 503);
+    }
     const marks = markRows.results || [];
     const invested = (rounds.results || []).reduce((a: number, x: any) => a + (Number(x.invested_amount) || 0), 0);
     const roll = rollUpPosition(invested, marks.length > 0 ? Number(marks[0].fmv) : null);
@@ -662,6 +767,8 @@ r.get('/:projectUid', async (c) => {
         latest_mark_as_of: marks.length > 0 ? marks[0].as_of_date : null,
         latest_mark_basis: marks.length > 0 ? marks[0].basis : null,
       },
+      /** D6226: the Worker's UTC date, so the latest mark's age is measured against it. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });

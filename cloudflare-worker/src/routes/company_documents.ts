@@ -36,6 +36,7 @@ import { requireAuth, canAccessFounderResource } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
 import { archivedRefusal, companyWriteDenial, isArchived, isSupportSession, viewerIsMember, type WriteDenial } from '../services/companyAccess';
+import { putRecord } from '../services/recordStore';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -72,7 +73,7 @@ export interface Doc {
 }
 
 /** The R2 pointer a row holds, or null. Read here only; never returned. */
-function pointerOf(content: string | null): { r2_key: string; content_type: string } | null {
+export function pointerOf(content: string | null): { r2_key: string; content_type: string } | null {
   if (!content) return null;
   try {
     const p = JSON.parse(content);
@@ -225,7 +226,9 @@ r.post('/company/:uid/documents', async (c) => {
     if (!files) return refuse(c, 503, { code: 'storage_unconfigured', message: 'Document storage is not configured on this deployment.' });
     const r2Key = `company-documents/${access.company.uid}/${crypto.randomUUID()}`;
     try {
-      await files.put(r2Key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { companyId: String(access.company.id), userId: String(user.id) } });
+      // D6651: a company document original is a record, written once.
+      const stored = await putRecord(files, r2Key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { companyId: String(access.company.id), userId: String(user.id) } });
+      if (!stored.ok) throw new Error('record_exists');
     } catch (e) {
       return refuse(c, 502, { code: 'storage_failed', message: 'The file could not be stored. Try again.', raw: e });
     }

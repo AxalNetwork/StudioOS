@@ -242,14 +242,14 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" \/>\)\} \/>/);
   assert.match(app, /\{ under: \/\^\\\/raise\\\/investor-narrative\(\\\/\|\$\)\/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary \}/);
   const guard = app.slice(app.indexOf('function RoleGuard('), app.indexOf('function AuthScreen('));
-  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
+  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} held={held} />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} held={held} />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
     'the boundary is drawn instead of the redirect, only for a refused role');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin\(user\);/);
   assert.match(route, /const drafts = !record && slug && !narrativeAdmin && /);
   assert.match(route, /const fillKind = !record && slug && !narrativeAdmin && /);
-  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length/);
-  assert.match(route, /rowAction=\{!narrativeAdmin && edit/);
+  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length/);
+  assert.match(route, /rowAction=\{!narrativeAdmin && !companyReadOnly && edit/);
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);

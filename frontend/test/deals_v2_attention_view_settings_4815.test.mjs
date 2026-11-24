@@ -87,8 +87,9 @@ function Root() {
 const page = (url) => h(MemoryRouter, { key: url, initialEntries: [url] }, h(Routes, null, h(Route, { path: '*', element: h(Root) })));
 
 function stubs(inbox) {
-  const was = { flow: dealFlowApi.flow, inbox: dealFlowApi.inbox, listDeals: api.listDeals, batch: ventureScoresApi.batch, weights: ventureScoresApi.weights, fit: dealViewsApi.fit, list: dealViewsApi.list, screening: api.dealScreening, commitRoom: api.icCommitRoom };
+  const was = { attention:dealFlowApi.attention, flow: dealFlowApi.flow, inbox: dealFlowApi.inbox, listDeals: api.listDeals, batch: ventureScoresApi.batch, weights: ventureScoresApi.weights, fit: dealViewsApi.fit, list: dealViewsApi.list, screening: api.dealScreening, commitRoom: api.icCommitRoom };
   const calls = [];
+  dealFlowApi.attention = async () => ({stale:{state:'recorded',count:0},diligence:{state:'recorded',count:0},rule:{writable:false}});
   dealFlowApi.flow = async () => ({ scope: 'you', by_stage: {}, items: [{ uid: 'u1', deal_id: 1, venture: 'Acme Robotics', sector: 'Robotics', round_status: 'active', stage: 'diligence', owner: null, entered_via: 'invited', days_in_stage: 3, ask: 1000000, can_open: true }] });
   dealFlowApi.inbox = async () => { calls.push('inbox'); return inbox(calls.length); };
   api.listDeals = async () => [{ id: 1, project_name: 'Acme Robotics', status: 'active', currency: 'EUR' }];
@@ -101,7 +102,7 @@ function stubs(inbox) {
   return {
     calls,
     restore: () => {
-      Object.assign(dealFlowApi, { flow: was.flow, inbox: was.inbox });
+      Object.assign(dealFlowApi, { attention:was.attention, flow: was.flow, inbox: was.inbox });
       Object.assign(api, { listDeals: was.listDeals, dealScreening: was.screening, icCommitRoom: was.commitRoom });
       Object.assign(ventureScoresApi, { batch: was.batch, weights: was.weights });
       Object.assign(dealViewsApi, { fit: was.fit, list: was.list });
@@ -147,7 +148,7 @@ test('mounted: nothing new reads as such; New for you itself draws no strip', as
   try {
     await act(async () => t.root.render(page('/deals')));
     await t.settle();
-    assert.equal(t.text(t.byId('dealflow-attention-none')), 'Nothing new for you.');
+    assert.equal(t.text(t.byId('dealflow-attention-none')), 'No recorded items need your attention.');
     await act(async () => t.root.render(page('/deals?scope=new')));
     await t.settle();
     assert.equal(t.byId('dealflow-attention'), undefined);

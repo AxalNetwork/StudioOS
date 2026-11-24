@@ -29,6 +29,8 @@ import {
   type DeckChunk,
   type DeckReview,
 } from '../services/deckExtract';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const deckReviewer = new Hono<{ Bindings: Env }>();
 
@@ -170,10 +172,12 @@ deckReviewer.post('/upload', async (c) => {
   // extraction/review still proceed if the bucket isn't configured (dev).
   if (c.env.FILES) {
     try {
-      await c.env.FILES.put(r2Key, bytes, {
+      // D6651: an archived pitch file is a record, written once.
+      const stored = await putRecord(c.env.FILES, r2Key, bytes, {
         httpMetadata: { contentType: mime },
         customMetadata: { user_id: String(user.id), review_id: id, filename: file.name || 'deck' },
       });
+      if (!stored.ok) throw new Error('record_exists');
       rawRetained = 1;
     } catch (e) {
       console.warn('[deck-reviewer] R2 archive failed:', (e as Error).message);
@@ -313,7 +317,8 @@ deckReviewer.delete('/:id/raw', async (c) => {
   if (!row) return c.json({ error: 'not_found' }, 404);
   if (row.r2_key && c.env.FILES) {
     try {
-      await c.env.FILES.delete(String(row.r2_key));
+      // D6651: the retention purge goes through the one record-erasure path.
+      await eraseRecordObjects(c.env.FILES, String(row.r2_key), 'owner_removed', { db: c.env.DB });
     } catch (e) {
       console.warn('[deck-reviewer] R2 purge failed:', (e as Error).message);
     }
@@ -333,7 +338,8 @@ deckReviewer.delete('/:id', async (c) => {
   if (!row) return c.json({ error: 'not_found' }, 404);
   if (row.r2_key && c.env.FILES) {
     try {
-      await c.env.FILES.delete(String(row.r2_key));
+      // D6651: the owner deleting the review goes through the one record-erasure path.
+      await eraseRecordObjects(c.env.FILES, String(row.r2_key), 'owner_removed', { db: c.env.DB });
     } catch {
       /* noop */
     }

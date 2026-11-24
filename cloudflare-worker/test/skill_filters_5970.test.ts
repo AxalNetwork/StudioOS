@@ -202,7 +202,7 @@ test('D5970: the route refuses each bad filter with a 400 and its code, and stay
 test('D5970: an unfiltered read is the read it was: no `filters`, the whole catalogue, the campaign', async () => {
   const w = world();
   const r = await ok(w, '');
-  assert.deepEqual(Object.keys(r).sort(), ['coverage', 'next_page', 'pass_bar', 'published_evaluation', 'skills']);
+  assert.deepEqual(Object.keys(r).sort(), ['coverage', 'executions', 'next_page', 'pass_bar', 'published_evaluation', 'skills']);
   assert.deepEqual(r.coverage.by_scope, { hq: { draft: 1, published: 2, retired: 1, review_requested: 0 }, company: { draft: 0, published: 1, retired: 0, review_requested: 0 } });
   assert.deepEqual(r.coverage.adoption, { links: 1, agents: 1, pinned_behind_current: 1, published_without_links: 1 });
   assert.equal(typeof r.coverage.sources.library_files, 'number');
@@ -319,4 +319,74 @@ test('D5970: filters add no read: the same prepared statements with and without 
     VALUES (?, 'hq', ?, ?, 'A fixture.', 'brief', 'published', 1, ${SUPER})`);
   for (let i = 0; i < 30; i++) insert.run(i.toString(16).padStart(32, '0'), `fixture-x${i}`, `X${i}`);
   assert.equal(await reads(FILTERED), plain, 'nor does the catalogue\'s size under a filter');
+});
+
+test('D4536: the HQ read suggests only current published HQ pairs in the filtered catalogue', async () => {
+  const w = world();
+  const skill = w.db.prepare(`INSERT INTO agent_skills (uid, scope, company_id, slug, name, purpose, output_kind, status, current_version, created_by)
+    VALUES (?, ?, ?, ?, ?, 'draft purpose', 'brief', ?, 1, ${SUPER})`);
+  const version = w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (?, 1, '---', 'Synthetic', ?, '[]', '[]', 'brief', ?, ?, ${SUPER})`);
+  const first = '1'.repeat(32), second = '2'.repeat(32);
+  const purpose = 'Summarize investor reporting entries for the portfolio review.';
+  for (const [uid, scope, company, status, text] of [
+    [second, 'hq', null, 'published', 'Review portfolio investor reporting entries and summarize exceptions.'],
+    [first, 'hq', null, 'published', purpose],
+    ['3'.repeat(32), 'company', 1, 'published', purpose],
+    ['4'.repeat(32), 'hq', null, 'retired', purpose],
+    ['5'.repeat(32), 'hq', null, 'published', 'Describe valuation assumptions and reconcile payment receipts.'],
+  ] as const) {
+    const id = skill.run(uid, scope, company, 'overlap-' + uid[0], 'Synthetic', status).lastInsertRowid;
+    version.run(id, text, '[{"slug":"investor_reporting","level":"proficient"}]', '["cfo"]');
+  }
+  const all = await ok(w, '?page=1&role=cfo');
+  const overlap = all.coverage.overlap;
+  assert.deepEqual({ ...overlap, suggestions: undefined }, {
+    available: true, source_rows: 4, skipped_metadata: 1, compared_pairs: 3, total_suggestions: 1, suggestions: undefined,
+  });
+  assert.deepEqual(overlap.suggestions.map(({ score, ...pair }: { score: number }) => {
+    assert.ok(score > 0.30);
+    return pair;
+  }), [{
+    label: 'Possible overlap', left: { skill_uid: first, version: 1 }, right: { skill_uid: second, version: 1 },
+    shared_roles: ['cfo'], primary_tag: 'investor_reporting', output_kind: 'brief',
+  }]);
+  assert.deepEqual((await ok(w, '?uid=' + first)).coverage.overlap.suggestions, []);
+  assert.deepEqual((await ok(w, '?status=draft')).coverage.overlap, {
+    available: true, source_rows: 0, skipped_metadata: 0, compared_pairs: 0, total_suggestions: 0, suggestions: [],
+  });
+  assert.deepEqual((await ok(w, '?role=cfo&from=2026-10-01&to=2026-10-02')).coverage.overlap, overlap);
+  assert.equal((await get(w, HQ, ADMIN)).status, 403);
+
+  const db = w.env.DB;
+  w.env.DB = { ...db, prepare: (query: string) => {
+    if (query.includes('v.purpose, v.output_kind, v.taxonomy_json, v.roles_json')) throw new Error('Fixture read failed');
+    return db.prepare(query);
+  } };
+  const failed = await ok(w, '');
+  assert.equal(failed.coverage.overlap.available, false);
+  assert.ok(failed.coverage.by_scope);
+  assert.equal(failed.published_evaluation.history, 'published');
+});
+
+test('D4536: overlap bounds the scan and keeps a deterministic twenty-pair sample', async () => {
+  const w = world();
+  const skill = w.db.prepare(`INSERT INTO agent_skills (uid, scope, slug, name, purpose, output_kind, status, current_version, created_by)
+    VALUES (?, 'hq', ?, 'Synthetic', 'Draft purpose', 'brief', 'published', 1, ${SUPER})`);
+  const version = w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (?, 1, '---', 'Synthetic', 'Summarize investor reporting entries', '[]', '[]', 'brief',
+      '[{"slug":"investor_reporting","level":"proficient"}]', '["cfo"]', ${SUPER})`);
+  const uid = (i: number) => i.toString(16).padStart(32, '0');
+  for (let i = 7; i >= 1; i--) version.run(skill.run(uid(i), 'synthetic-' + i).lastInsertRowid);
+  const capped = (await ok(w, '?role=cfo')).coverage.overlap;
+  assert.equal(capped.total_suggestions, 21);
+  assert.equal(capped.suggestions.length, 20);
+  assert.deepEqual(capped.suggestions[0].left, { skill_uid: uid(1), version: 1 });
+  assert.deepEqual(capped.suggestions[0].right, { skill_uid: uid(2), version: 1 });
+  assert.equal(capped.suggestions[0].score, 1);
+  for (let i = 8; i <= 249; i++) skill.run(uid(i), 'synthetic-' + i);
+  assert.deepEqual((await ok(w, '?page=1')).coverage.overlap, {
+    available: false, reason: 'Too many published HQ skills to compare. Narrow the catalogue filters.',
+  });
+  assert.deepEqual((await ok(w, '?role=cfo')).coverage.overlap, capped);
 });

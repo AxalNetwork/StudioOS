@@ -1,9 +1,13 @@
-/** D4494: Distribution Inbox reads and personal read receipts; this router cannot send mail. */
+/**
+ * D4494: Distribution Inbox reads and personal read receipts; this router cannot send mail.
+ * D6865 part 2 (#6891): a thread's replies name the feedback item each was saved as.
+ */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
 import { INBOX_READ_LIMIT, loadInbox, markInboxRead } from '../services/growInbox';
+import { repliesSavedAsFeedback } from '../services/feedbackLoop';
 import { refuse } from '../util/refusal';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -55,7 +59,12 @@ router.get('/:contactUid', async (c) => {
     const inbox = await loadInbox(c.env, user, project, uid);
     const contact = inbox.contacts[0];
     if (!contact) throw new InboxRefusal(404, 'contact_not_found', 'Prospect not found.');
-    return c.json({ thread: inbox.threads[0], recipient: contact.email, accounts: inbox.accounts, can_write: canWrite, state: inbox.complete ? 'ready' : 'unreadable' });
+    // D6865 part 2 (#6891, GR-24): each reply already saved as feedback names its item; a failed
+    // read of the links says so (`feedback_state`) and never draws a reply as unsaved.
+    const saved = await repliesSavedAsFeedback(c.env, project, uid).catch(() => null);
+    const thread = { ...inbox.threads[0], messages: inbox.threads[0].messages.map((m) => ({ ...m, feedback: saved ? saved[m.key] ?? null : null })) };
+    return c.json({ thread, recipient: contact.email, accounts: inbox.accounts, can_write: canWrite, state: inbox.complete ? 'ready' : 'unreadable',
+      feedback_state: saved ? 'ready' : 'unreadable' });
   } catch (error) { return failure(c, error); }
 });
 router.post('/:contactUid/read', async (c) => {

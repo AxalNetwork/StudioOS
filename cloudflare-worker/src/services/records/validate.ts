@@ -19,7 +19,7 @@ import { sessionPlacementRows } from '../../routes/founder_validate_structure';
 import { loadSession, type SessionRow } from '../interviewSessions';
 import {
   MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews, recordingConsentText,
-  contradictsByGroup, loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
+  contradictsByGroup, loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf, firmographicsOf, disqualifiersOf,
   type ClaimStatus, type HypRow, type InterviewRow, type LinkRow,
 } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
@@ -31,9 +31,9 @@ import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
 import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
-  addCompetitorSignal, addEvidence, addExperiment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
+  addCompetitorSignal, addEvidence, addExperiment, archiveSegment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
   INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
-  splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
+  splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment, setPrimarySegment,
   updateTheme, updateThemeStatement,
 } from '../validateWriters';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
@@ -855,7 +855,7 @@ const segmentMemo = memo<{ s: Any; total: number; summary: ReturnType<typeof seg
 
 function loadSegment(ctx: RecordContext, id: string) {
   return segmentMemo(ctx, id, async () => {
-    const s = await ctx.env.DB.prepare('SELECT * FROM customer_segments WHERE id = ? AND project_id = ?').bind(Number(id), ctx.projectId).first<Any>();
+    const s = await ctx.env.DB.prepare('SELECT * FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL').bind(Number(id), ctx.projectId).first<Any>();
     if (!s) throw vanished();
     const c = vctx(ctx);
     const [segments, interviews] = await Promise.all([loadSegments(c), loadInterviews(c)]);
@@ -879,7 +879,11 @@ const icp: ModuleSpec = {
     return {
       title: String(s.name),
       sub: joined(`One of ${plural(total, 'segment', 'segments')}`, s.updated_at ? `updated ${dMon(s.updated_at)}` : null),
-      pills: evidence ? [{ text: `${STRENGTH[evidence]} evidence`, tone: evidence === 'pattern' ? 'vio' : 'grey' }] : [],
+      pills: [
+        ...(evidence ? [{ text: `${STRENGTH[evidence]} evidence`, tone: evidence === 'pattern' ? 'vio' : 'grey' }] : []),
+        // D6007 (#6007, V23): the venture's one primary ICP.
+        ...(Number(s.is_primary) === 1 ? [{ text: '★ Primary ICP', tone: 'vio' }] : []),
+      ],
       facts: [
         { label: 'Interviews', value: summary?.interviews ?? 0 },
         { label: 'Strong fit', value: summary?.strong ?? 0 },
@@ -946,6 +950,23 @@ const icp: ModuleSpec = {
       },
     },
     {
+      // D6007 (#6007, V23): stored on the segment itself, never derived from interviews (those are "From interviews").
+      key: 'profile', title: 'Firmographics and disqualifiers', side: true,
+      read: async (ctx, id) => {
+        const { s } = await loadSegment(ctx, id);
+        const firmographics = firmographicsOf(s.firmographics_json) ?? [];
+        const disqualifiers = disqualifiersOf(s.disqualifiers_json) ?? [];
+        return {
+          rows: [
+            ...firmographics.map((f) => ({ a: f.label, b: f.value })),
+            ...disqualifiers.map((d) => ({ a: 'Disqualifier', b: d, tone: 'amb' as const })),
+          ],
+          empty: 'No firmographics or disqualifiers recorded on this segment.',
+          action: 'edit',
+        };
+      },
+    },
+    {
       key: 'persona', title: 'Persona card', side: true,
       read: async () => ({ rows: [{ a: 'Export', b: 'PDF', action: 'export-persona' }] }),
     },
@@ -956,7 +977,27 @@ const icp: ModuleSpec = {
     const { s } = await loadSegment(ctx, id);
     const segmentId = Number(s.id);
     return [
-      { key: 'compare-segments', label: 'Compare segments', kind: 'link', href: `/validate/ideal-customer-profile?project=${ctx.projectId}` },
+      {
+        key: 'archive', label: 'Archive', kind: 'write', tone: 'danger',
+        confirm: { title: 'Archive this segment?', body: 'It leaves the active list and chart. Interviews keep their fit and historical segment link; they appear as unassigned until you choose an active segment.', cta: 'Archive' },
+        execute: (c) => refusing(async () => {
+          await archiveSegment(c.env, { projectId: c.projectId, userId: userId(c), segmentId });
+          return { ok: true };
+        }),
+      },
+      // D6007 (#6007): Compare opens the module's compare mode with this segment chosen.
+      { key: 'compare-segments', label: 'Compare segments', kind: 'link', href: `/validate/ideal-customer-profile?project=${ctx.projectId}&compare=${segmentId}` },
+      Number(s.is_primary) === 1
+        ? {
+          key: 'clear-primary', label: 'Clear primary ICP', kind: 'write',
+          confirm: { title: 'Clear the primary ICP?', body: 'No segment will be the primary ICP until you choose one.', cta: 'Clear' },
+          execute: (c) => refusing(async () => ({ ok: true, record: await setPrimarySegment(c.env, { projectId: c.projectId, userId: userId(c), segmentId, primary: false }) })),
+        }
+        : {
+          key: 'set-primary', label: 'Set as primary ICP', kind: 'write',
+          confirm: { title: 'Make this the primary ICP?', body: 'A venture has one primary ICP; any other segment that holds it stops holding it.', cta: 'Set as primary' },
+          execute: (c) => refusing(async () => ({ ok: true, record: await setPrimarySegment(c.env, { projectId: c.projectId, userId: userId(c), segmentId, primary: true }) })),
+        },
       // #1658's client action draws the PDF; PNG is not built (decision 15).
       { key: 'export-persona', label: 'Export persona', kind: 'link', href: `/validate/ideal-customer-profile/${segmentId}?project=${ctx.projectId}&export=persona` },
       {
@@ -972,6 +1013,12 @@ const icp: ModuleSpec = {
             { key: 'value_promised', label: 'Value promised', kind: 'T', value: s.value_promised ?? '', placeholder: '[What changes for them]' },
             { key: 'value_source', label: 'Source for the value', kind: 'T', value: s.value_source ?? '' },
             { key: 'score_since', label: 'Score against interviews since', kind: 'T', input: 'date', value: s.score_since ?? '' },
+            // D6007 (#6007): one per line; an empty box clears the list.
+            { key: 'firmographics', label: 'Firmographics', kind: 'T', input: 'textarea', max: 2000,
+              value: (firmographicsOf(s.firmographics_json) ?? []).map((f) => `${f.label}: ${f.value}`).join('\n'),
+              placeholder: 'Company size: 50–200 people', note: 'One per line, as Label: value.' },
+            { key: 'disqualifiers', label: 'Disqualifiers', kind: 'T', input: 'textarea', max: 2000,
+              value: (disqualifiersOf(s.disqualifiers_json) ?? []).join('\n'), placeholder: 'Under 20 staff', note: 'One per line.' },
           ],
         },
         execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateSegment(c.env, {
@@ -979,6 +1026,7 @@ const icp: ModuleSpec = {
           name: field(body, 'name'), description: field(body, 'description'), who_they_are: field(body, 'who_they_are'),
           context: field(body, 'context'), job_to_be_done: field(body, 'job_to_be_done'), urgency: field(body, 'urgency'),
           value_promised: field(body, 'value_promised'), value_source: field(body, 'value_source'), score_since: field(body, 'score_since'),
+          firmographics: field(body, 'firmographics'), disqualifiers: field(body, 'disqualifiers'),
         }) })),
       },
     ];
@@ -1271,7 +1319,7 @@ const demand: ModuleSpec = {
     const date = d.prefix === 'signal' ? d.row.signal_date : d.prefix === 'revenue' ? d.row.received_on : String(d.row.created_at ?? '').slice(0, 10);
     const status = d.prefix === 'signal' ? STATUS[String(d.row.status)] ?? ['To confirm', 'amb'] : d.prefix === 'revenue' ? STATUS.confirmed : STATUS.counted;
     const bar = kind === 'waitlist' ? await waitlistBar(ctx) : null;
-    const amountReason = kind === 'need_to_have' || kind === 'waitlist' ? 'Amounts are for pre-sales and letters of intent only' : 'No amount recorded';
+    const amountReason = kind === 'need_to_have' || kind === 'waitlist' ? 'Waitlist and need-to-have signals do not carry amounts' : 'No amount recorded';
     return {
       title: joined(word, who),
       sub: joined(amount ? `${amount}${period ? ` ${period}` : ''}` : null, dMon(date) ? `recorded ${dMon(date)}` : null),
@@ -1363,9 +1411,11 @@ const demand: ModuleSpec = {
         key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
         form: { title: 'Edit signal', cta: 'Save', foot: 'Waitlist sign-ups count toward the bar you set.', fields: [
           { key: 'kind', label: 'Kind', kind: 'CH', value: d.row.kind,
-            options: opts([['need_to_have', 'Need-to-have mention'], ['waitlist', 'Waitlist sign-up'], ['pre_sale', 'Pre-sale'], ['loi', 'Letter of intent']]) },
+            options: opts([['need_to_have', 'Need-to-have mention'], ['waitlist', 'Waitlist sign-up'], ['pre_sale', 'Pre-sale'], ['loi', 'Letter of intent'], ['would_pay', 'Would pay']]) },
           { key: 'who', label: 'Who', kind: 'T', value: d.row.who ?? '', placeholder: '[Customer, lead or interviewee]' },
-          { key: 'amount_cents', label: 'Amount', kind: 'T', input: 'money', value: d.row.amount_cents ?? '', note: 'Pre-sales and letters of intent only.' },
+          { key: 'amount_cents', label: 'Amount', kind: 'T', input: 'money', value: d.row.amount_cents ?? '', note: 'Pre-sales, letters of intent and willingness to pay.' },
+          { key: 'currency', label: 'Currency', kind: 'T', value: d.row.currency ?? '' },
+          { key: 'period', label: 'Period', kind: 'CH', value: d.row.period ?? '', options: opts([['', 'Not recorded'], ['once', 'Once'], ['month', 'Monthly'], ['year', 'Yearly']]) },
           { key: 'signal_date', label: 'Date', kind: 'T', input: 'date', value: d.row.signal_date ?? '' },
           { key: 'status', label: 'Status', kind: 'CH', value: d.row.status, options: DEMAND_STATUSES.filter((s) => s !== 'counted').map((s) => ({ value: s, label: STATUS[s][0] })),
             note: 'To confirm: said, not yet in writing.' },
@@ -1415,7 +1465,7 @@ const demand: ModuleSpec = {
 
 // ── Experiments and evidence: one hypothesis ─────────────────────────────────
 
-const EXPERIMENT_STATUS: Record<string, [string, string]> = { planned: ['Planned', 'grey'], running: ['Running', 'vio'], done: ['Done', 'ok'] };
+const EXPERIMENT_STATUS: Record<string, [string, string]> = { planned: ['Planned', 'grey'], running: ['Running', 'vio'], done: ['Done', 'ok'], stopped: ['Stopped', 'grey'] };
 const EVIDENCE_KIND: Record<string, string> = { interview: 'Interview', signal: 'Demand signal', metric: 'KPI', experiment: 'Experiment' };
 
 type HypothesisData = { h: Any; claim: ReturnType<typeof claimsOf>[number] | null; links: LinkRow[]; model: PainGroupModel };
@@ -1501,7 +1551,7 @@ const experiments: ModuleSpec = {
       key: 'experiments', title: 'Experiments',
       read: async (ctx, id) => {
         const res = await ctx.env.DB.prepare(
-          'SELECT id, title, method, target, result, status FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id',
+          'SELECT * FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id',
         ).bind(Number(id), ctx.projectId).all<Any>();
         // D1082 (#2947): each row's last Build in Lovable, from D1068's handoff store. Its own read: a
         // failure leaves the experiments drawn, with no "Opened in Lovable on" line.
@@ -1515,11 +1565,11 @@ const experiments: ModuleSpec = {
         const writer = canWrite(ctx.project, ctx.user);
         return {
           rows: (res.results || []).map((x) => {
-            const [word, tone] = EXPERIMENT_STATUS[String(x.status)] ?? ['Planned', 'grey'];
-            return { a: String(x.title), b: joined(x.method, x.target ? `target ${x.target}` : null, x.result), c: word, tone,
+            const [word, tone] = x.stopped_at ? ['Stopped', 'grey'] : x.status === 'done' ? [x.result?.trim() ? 'Completed with result' : 'Result needed', x.result?.trim() ? 'ok' : 'warn'] : EXPERIMENT_STATUS[String(x.status)] ?? ['Not recorded', 'grey'];
+            return { a: String(x.title), b: joined(x.method, x.target ? `Success bar: ${x.target}` : null, x.result, x.result_direction), c: word, tone,
               action: { key: 'experiment-status', body: { experiment_id: Number(x.id) } },
               lovable: { cycle: 'validate' as const, project_id: ctx.projectId, record: { kind: 'experiment', id: String(x.id) },
-                can_launch: writer && String(x.status) === 'planned', opened_at: opened.get(String(x.id)) ?? null } };
+                can_launch: writer && String(x.status) === 'planned' && !x.stopped_at, opened_at: opened.get(String(x.id)) ?? null } };
           }),
           empty: 'No experiment yet.',
           action: 'add-experiment',
@@ -1663,12 +1713,13 @@ const experiments: ModuleSpec = {
           { key: 'experiment_id', label: 'Experiment', kind: 'CH', required: true,
             options: (experimentsRes.results || []).map((x) => ({ value: String(x.id), label: x.title })) },
           { key: 'status', label: 'Status', kind: 'CH', required: true, options: EXPERIMENT_STATUSES.map((s) => ({ value: s, label: EXPERIMENT_STATUS[s][0] })) },
-          { key: 'result', label: 'Result', kind: 'T' },
+          { key: 'result', label: 'Observed result', kind: 'T' },
+          { key: 'result_direction', label: 'Direction', kind: 'CH', options: [{ value: '', label: 'Not recorded' }, { value: 'supports', label: 'Supports' }, { value: 'contradicts', label: 'Contradicts' }, { value: 'inconclusive', label: 'Inconclusive' }] },
         ] },
         references: (body) => [{ store: 'hypothesis_experiments', id: refId(field(body, 'experiment_id')) }],
         execute: (c, _id, body) => refusing(async () => {
           await setExperimentStatus(c.env, { projectId: c.projectId, userId: userId(c), hypothesisId,
-            experiment_id: field(body, 'experiment_id'), status: field(body, 'status'), result: field(body, 'result') });
+            experiment_id: field(body, 'experiment_id'), status: field(body, 'status'), result: field(body, 'result'), result_direction: field(body, 'result_direction') });
           return { ok: true };
         }),
       });

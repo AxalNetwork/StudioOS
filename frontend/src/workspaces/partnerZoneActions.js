@@ -110,8 +110,11 @@ export const PARTNER_ZONE_ACTIONS = {
   // The SECOND is still exact. Nothing in this product publishes a proof page:
   // `is_published` is computed for the firm's own reading, and there is no
   // public route that renders it, so there is nothing to preview.
+  // D4844 (#4844): NOT THE PRIMARY ANY MORE. Proof's one primary is `+ Add
+  // proof` in the zone's heading (OF-03 draws it alone in amber); asking for
+  // consent is about a result that already exists, so it is a secondary op.
   'offers/proof': [
-    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent', primary: true },
+    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent' },
     { label: 'Preview public page', unbuilt: 'no public proof page is published yet, so there is nothing to preview' },
     { label: 'Export', kind: 'export' },
   ],
@@ -303,10 +306,15 @@ export const PARTNER_ZONE_ACTIONS = {
   // it that this table never named.)
   // `Attach to proposal` STAYS PROSE: a reading attaches from its own page,
   // and nothing on this one carries a reading or a sector onto a proposal.
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); New market research is drawn and disabled:
+  // a research project opens for the founder licence only. Re-run stale (D593)
+  // stays; Attach to proposal and Export are replaced.
   'research/markets': [
     { label: 'Re-run stale', kind: 'handler', handler: 'reRunStale' },
-    { label: 'Attach to proposal', unbuilt: 'nothing carries a sector onto a proposal' },
-    { label: 'Export', kind: 'export' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'New market research', unbuilt: 'research projects open for the founder licence only; this licence has none to start' },
   ],
   // BOTH OPS ARE THE PAGE'S OWN NOW. `Add document` said "the add-document form
   // below takes a file or a link" — true of the form and not of the op, which

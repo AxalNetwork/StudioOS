@@ -24,7 +24,7 @@ import { newVersionLine } from '../raise/narrative/narrativeModel.js';
 import { CHANNEL_KINDS, channelOptions } from './distribution/channelsModel.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
-import { currencyCode, plainAmount } from '../../lib/money.js';
+import { currencyCode, plainAmount, parseMinor, toMajorString } from '../../lib/money.js';
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -365,7 +365,9 @@ const market = {
 
 const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Compliance'], ['risk', 'Risk'], ['culture', 'Culture']]);
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
-const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
+const REMIND_PRESETS = [30, 14, 7, 1, 0];
+const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
+const remindField = { note: 'At most three reminders.', kind: 'CK', name: 'remind', k: 'Remind', opts: REMIND_PRESETS.map(n=>({value:String(n),label:reminderLabel(n),checked:n===14||n===1})) };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
 // D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
 const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
@@ -842,6 +844,16 @@ export const FORMS = {
   // Build's six canvas forms join from `BUILD_FORMS` below (#1656 PR 3b).
 };
 
+/**
+ * D8259: forms only their own address opens (`/new?form=<key>`), never an Add button: Add a suggested filing.
+ * CycleRoute looks here after `formsFor`, so `formsFor` stays the module's buttons.
+ */
+export function addressFormFor(cycle, slug, key) {
+  const byCycle = Object.prototype.hasOwnProperty.call(ADDRESS_FORMS, cycle) ? ADDRESS_FORMS[cycle] : null;
+  const list = byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : [];
+  return list.find((f) => f.key === key) || null;
+}
+
 /** All Add forms for a module, in button order. */
 export function formsFor(cycle, slug) {
   const byCycle = Object.prototype.hasOwnProperty.call(FORMS, cycle) ? FORMS[cycle] : null;
@@ -1129,8 +1141,6 @@ const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
 /** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
 const KEEP_TYPED_OWNER = '__typed';
 // #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
-const REMIND_PRESETS = [30, 14, 7, 1, 0];
-const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
 const editObligation = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-obligation',
@@ -1472,16 +1482,18 @@ const SINCE = 'since';
 const segmentFields = [
   { kind: 'T', name: 'name', k: 'Segment', ph: 'Segment name', required: true, max: 120 },
   { kind: 'T', name: 'who_they_are', k: 'Who they are', ph: 'Role at company type, size, where', max: 1000 },
+  { kind: 'T', name: 'context', k: 'Context', ph: 'When and where the need arises', max: 1000 },
   { kind: 'T', name: 'job_to_be_done', k: 'Job to be done', ph: 'What they are trying to get done', max: 1000 },
   { kind: 'CH', name: 'urgency', k: 'Urgency', opts: URGENCY, def: 2 },
   { kind: 'T', name: 'value_promised', k: 'Value promised', ph: 'What changes for them', max: 1000 },
+  { kind: 'T', name: 'value_source', k: 'Source for the value', ph: 'The evidence behind the promised value', max: 1000 },
   { kind: 'CH', name: 'score_against', k: 'Score against', opts: [{ value: 'all', label: 'All interviews' }, { value: SINCE, label: 'Interviews since a date' }], def: 0 },
   // The second chip reveals its date (decision 2).
   { kind: 'T', name: 'score_since', k: 'Interviews since', input: 'date', required: true, when: { name: 'score_against', value: SINCE } },
 ];
 const segmentBody = (v) => ({
-  name: str(v.name), who_they_are: str(v.who_they_are), job_to_be_done: str(v.job_to_be_done),
-  urgency: v.urgency || null, value_promised: str(v.value_promised),
+  name: str(v.name), who_they_are: str(v.who_they_are), context: str(v.context), job_to_be_done: str(v.job_to_be_done),
+  urgency: v.urgency || null, value_promised: str(v.value_promised), value_source: str(v.value_source),
   score_since: v.score_against === SINCE ? str(v.score_since) : null,
 });
 const segment = {
@@ -1544,21 +1556,43 @@ const competitor = {
 const SIGNAL_KIND = [
   { value: 'need_to_have', label: 'Need-to-have mention' }, { value: 'waitlist', label: 'Waitlist sign-up' },
   { value: 'pre_sale', label: 'Pre-sale' }, { value: 'loi', label: 'Letter of intent' },
+  { value: 'would_pay', label: 'Would pay' },
 ];
 /** The kinds the route takes an amount for (`writeDemandSignal`). */
-export const AMOUNT_KINDS = ['pre_sale', 'loi'];
+export const AMOUNT_KINDS = ['pre_sale', 'loi', 'would_pay'];
 const SIGNAL_STATUS = [{ value: 'confirmed', label: 'Confirmed' }, { value: 'to_confirm', label: 'To confirm' }];
 const signalFields = [
   { kind: 'CH', name: 'kind', k: 'Kind', opts: SIGNAL_KIND, def: 2, required: true },
   { kind: 'T', name: 'who', k: 'Who', ph: 'Customer, lead or interviewee', max: 200 },
-  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '$1,200 · pre-sales and letters of intent only', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'currency', k: 'Currency', ph: 'EUR', def: 'usd', max: 3, when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'CH', name: 'period', k: 'Period', opts: [{ value: '', label: 'Not recorded' }, { value: 'once', label: 'Once' }, { value: 'month', label: 'Monthly' }, { value: 'year', label: 'Yearly' }], def: '', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'signal_date', k: 'Date', input: 'date', ph: '12 Oct' },
   { kind: 'CH', name: 'status', k: 'Status', opts: SIGNAL_STATUS, def: 0, note: 'To confirm: said, not yet in writing.' },
 ];
+// Unknown historical codes retain an explicit minor-unit count.
+const signalAmount = (v) => {
+  const code = String(str(v.currency) || 'usd').toUpperCase();
+  const text = String(v.amount || '').trim();
+  if (!currencyCode(code) && /^[A-Z]{3}$/.test(code)) {
+    const count = /^(\d+)\s+minor units?$/i.exec(text);
+    const minor = count ? Number(count[1]) : Number.NaN;
+    if (Number.isSafeInteger(minor) && minor > 0) return { ok: true, minor };
+    return { ok: false, message: 'For this currency, enter a positive count such as 4321 minor units.' };
+  }
+  const typed = code === 'USD' ? text.replace(/^\$/, '') : text;
+  return parseMinor(typed, code);
+};
 // A hidden Amount is not submitted, so a kind that takes none sends null.
 const signalBody = (v) => {
-  const amount = AMOUNT_KINDS.includes(v.kind) ? toCents(v.amount) : null;
-  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : 'usd', signal_date: str(v.signal_date), status: v.status || null };
+  const amount = AMOUNT_KINDS.includes(v.kind) && str(v.amount) ? signalAmount(v).minor ?? Number.NaN : null;
+  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : String(str(v.currency) || 'usd').toLowerCase(), period: amount == null ? null : str(v.period), signal_date: str(v.signal_date), status: v.status || null };
+};
+const signalCheck = (v) => {
+  if (!AMOUNT_KINDS.includes(v.kind) || !str(v.amount)) return {};
+  const parsed = signalAmount(v);
+  if (!parsed.ok) return { amount: parsed.message };
+  return parsed.minor > 0 ? { amount: null } : { amount: 'Enter an amount greater than zero, or leave it empty.' };
 };
 const signal = {
   key: 'signal', cta: 'Record signal', button: 'Record signal',
@@ -1566,6 +1600,7 @@ const signal = {
   sub: 'Evidence that someone wants this, with its date.',
   foot: 'Waitlist sign-ups count toward the bar you set.',
   fields: signalFields,
+  check: signalCheck,
   toBody: signalBody,
   submit: (w, projectId, v) => w.validate.signal(projectId, signal.toBody(v)),
 };
@@ -1718,18 +1753,28 @@ const editTheme = {
   submit: (w, projectId, id, v) => w.validate.themeUpdate(projectId, id, editTheme.toBody(v)),
 };
 
+// D6007 (#6007, V23): the segment's own firmographics and disqualifiers, one per line, on Edit only.
+const segmentProfileFields = [
+  { kind: 'T', name: 'firmographics', k: 'Firmographics', input: 'textarea', max: 2000, ph: 'Company size: 50–200 people', note: 'One per line, as Label: value.' },
+  { kind: 'T', name: 'disqualifiers', k: 'Disqualifiers', input: 'textarea', max: 2000, ph: 'Under 20 staff', note: 'One per line. An empty box clears the list.' },
+];
 const editSegment = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-segment', title: 'Edit segment', sub: segment.sub,
-  fields: segmentFields,
+  fields: [...segmentFields, ...segmentProfileFields],
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'job_to_be_done', 'urgency', 'value_promised', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since',
+      'firmographics', 'disqualifiers'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;
   },
-  toBody: (v) => onlyShown(v, segmentBody(v), { score_since: 'score_against' }),
+  toBody: (v) => onlyShown(v, {
+    ...segmentBody(v),
+    // An emptied box sends null, which clears the list; the Worker parses one per line.
+    firmographics: str(v.firmographics), disqualifiers: str(v.disqualifiers),
+  }, { score_since: 'score_against' }),
   submit: (w, projectId, id, v) => w.validate.segmentUpdate(projectId, id, editSegment.toBody(v)),
 };
 
@@ -1755,20 +1800,27 @@ const editSignal = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-signal', title: 'Edit signal', sub: signal.sub,
   fields: signalFields,
+  check: signalCheck,
   // Only a `signal-` record is the founder's own (a `revenue-` or `waitlist-` one is not).
   idOf: recordId(/^signal-[1-9]\d*$/),
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'who', 'signal_date', 'status'])(row);
+    for (const key of ['currency', 'period']) if (Object.hasOwn(e, key)) v[key] = e[key] ?? '';
     if (v.signal_date) v.signal_date = dateText(v.signal_date);
     // The record's Edit gives no amount as '', which is no amount, not 0.
-    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : String(Number(e.amount_cents) / 100);
+    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : toMajorString(e.amount_cents, String(e.currency || 'usd').toUpperCase()) ?? `${e.amount_cents} minor units`;
     return v;
   },
   // An amount is sent when its box was shown, and cleared when the kind takes none.
   toBody: (v) => {
-    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount', currency: 'amount' });
-    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null });
+    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount' });
+    if (!Object.hasOwn(v, 'amount')) {
+      delete body.currency;
+      if (Object.hasOwn(v, 'period')) body.period = str(v.period);
+    }
+    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null, period: null });
+    if (Object.hasOwn(v, 'amount') && !str(v.amount)) Object.assign(body, { amount_cents: null, currency: null, period: null });
     return body;
   },
   submit: (w, projectId, id, v) => w.validate.signalUpdate(projectId, id, editSignal.toBody(v)),
@@ -1915,14 +1967,17 @@ const buildItem = {
   title: 'Add item',
   sub: 'A roadmap item moves a KPI or answers a feedback theme.',
   foot: 'Issues from a connected GitHub repository land here too.',
-  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
-  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' },
+    // D6036 (#6036): the feature the item ships, from Solution design; Nothing keeps it unlinked.
+    { kind: 'CH', name: 'feature_id', k: 'Feature', opts: [NOTHING], def: 0, optionsFrom: 'features' }],
+  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id), feature_id: idOrNull(v.feature_id) }),
   // D6097: a feedback record's Add to roadmap (`/build/product-roadmap/new?feedback_theme=Speed`) opens it with that theme chosen.
   fromQuery: (q) => feedbackThemeOf(q.get('feedback_theme')),
   // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
   loadOptions: buildOptions('product-roadmap', (read) => ({
     kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
     waits_on_id: { options: [NOTHING, ...readChips(read, 'waits_on_id')], def: 0 }, owner_user_id: ownersOf(read),
+    feature_id: { options: [NOTHING, ...readChips(read, 'feature_id')], def: 0 },
   })),
   submit: (w, projectId, v) => w.build.roadmapItem(projectId, buildItem.toBody(v)),
 };
@@ -2031,6 +2086,39 @@ const buildFiling = {
     return made;
   },
 };
+
+/** D8259 (#8259, BD28): a suggestion's values reach the form on its address; anything else is ignored. */
+const SUGGESTION_KINDS = new Set(['franchise_tax', 'annual_report', 'other']);
+export function suggestedFilingValues(q) {
+  const out = {};
+  const title = (q.get('title') || '').trim();
+  if (title && title.length <= 200) out.title = title;
+  if (SUGGESTION_KINDS.has(q.get('kind'))) out.kind = q.get('kind');
+  if (q.get('jurisdiction') === 'Federal') out.jurisdiction = 'Federal';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(q.get('due_date') || '')) out.due_date = q.get('due_date');
+  return out;
+}
+/**
+ * D8259 (#8259, BD28 A): "Add to my filings" on a suggested filing. The same filing, form and write as Add filing,
+ * opened with the suggestion's name, kind and date, which the founder can change. It has no Add button of its own:
+ * it is in ADDRESS_FORMS, not FORMS, and is `addressOnly`, so only a suggestion's link opens it, at `?form=suggested`.
+ * Nothing is filed.
+ */
+const buildSuggestedFiling = {
+  ...buildFiling,
+  key: 'suggested', cta: 'Add to my filings', button: 'Add to my filings', addressOnly: true,
+  title: 'Add a suggested filing',
+  sub: 'A filing from Axal’s pack for your company. Check the date before you save it. Nothing is filed.',
+  fields: [{ kind: 'T', name: 'title', k: 'Filing', required: true, ph: 'Delaware franchise tax + annual report' }, ...filingFields, proofField],
+  fromQuery: suggestedFilingValues,
+  toBody: (v) => ({ ...filingBody(v), title: str(v.title) }),
+  // Add filing's own submit (its proof upload and retry, D4600), with the suggestion's name on the filing it creates.
+  submit: (w, projectId, v, memory = {}) => buildFiling.submit({ ...w, build: { ...w.build,
+    formationStep: (id, body, key) => w.build.formationStep(id, { ...body, title: str(v.title) }, key) } }, projectId, v, memory),
+};
+
+/** D8259: the forms `addressFormFor` opens. */
+const ADDRESS_FORMS = { build: { 'company-creation': [buildSuggestedFiling] } };
 
 /** D4600: the label the Add filing button takes once only the proof upload is left. */
 const PROOF_RETRY = 'Retry proof upload';
@@ -2298,5 +2386,6 @@ export function validate(form, values) {
     const kept = typeof f.keep === 'function' ? f.keep(values || {}) : null;
     if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text) && String(kept?.value ?? '') !== text) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
   }
-  return { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  const checked = { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  return Object.fromEntries(Object.entries(checked).filter(([, message]) => message));
 }

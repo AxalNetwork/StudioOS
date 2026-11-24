@@ -133,7 +133,6 @@ date cloudflare-worker/test/cycle_records_grow_d691.test.ts
 date cloudflare-worker/test/cycle_validate_d659.test.ts
 date cloudflare-worker/test/data_room_capabilities_5074.test.ts
 date cloudflare-worker/test/data_room_founder_reads_d374.test.ts
-date cloudflare-worker/test/data_room_grants_2461.test.ts
 date cloudflare-worker/test/data_room_part2_d1103.test.ts
 date cloudflare-worker/test/data_room_requests_d1104.test.ts
 date cloudflare-worker/test/dataroom_deck_sources_d1602.test.ts
@@ -145,7 +144,6 @@ date cloudflare-worker/test/deck_batch_retry_d1600.test.ts
 date cloudflare-worker/test/deck_batch_sweep_4374.test.ts
 date cloudflare-worker/test/deck_coedit_d1577.test.ts
 date cloudflare-worker/test/deck_draft_outside_lab_d663.test.ts
-date cloudflare-worker/test/deck_ensembles_load_d1551.test.ts
 date cloudflare-worker/test/deck_export_render_3655.test.ts
 date cloudflare-worker/test/deck_grid_runbook_d1547.test.ts
 date cloudflare-worker/test/deck_image_takedown_4375.test.ts
@@ -323,7 +321,6 @@ date cloudflare-worker/test/relationships_d1356.test.ts
 date cloudflare-worker/test/relationships_intro_lifecycle_d4329.test.ts
 date cloudflare-worker/test/report_figures_d1059.test.ts
 date cloudflare-worker/test/reporting_duties_d1058.test.ts
-date cloudflare-worker/test/reporting_reader_d1061.test.ts
 date cloudflare-worker/test/research_overview_d536.test.ts
 date cloudflare-worker/test/revenue_ledger_d363.test.ts
 date cloudflare-worker/test/revshare_window_warnings.test.mjs
@@ -451,7 +448,6 @@ date frontend/test/pipeline_board_live_4701.test.mjs
 date frontend/test/pitch_canonical_routes_4853.test.mjs
 date frontend/test/pitch_editing_ops_d1515.test.mjs
 date frontend/test/pitch_v2_lightbox_d1604.test.mjs
-date frontend/test/platform_overview_d4860.test.mjs
 date frontend/test/practice_delivery_4833.test.mjs
 date frontend/test/practice_earnings_4834.test.mjs
 date frontend/test/practice_financial_4713.test.mjs
@@ -644,7 +640,6 @@ sleep frontend/test/data_room_tool_d1101.test.mjs
 sleep frontend/test/dd_case_tabs_d1251.test.mjs
 sleep frontend/test/dd_reviewer_views_d1252.test.mjs
 sleep frontend/test/deal_commitment_context_4633.test.mjs
-sleep frontend/test/deal_flow_board_d1240.test.mjs
 sleep frontend/test/deal_flow_part5_d1241.test.mjs
 sleep frontend/test/deal_frame_d1152.test.mjs
 sleep frontend/test/deal_insights_tabs_d1154.test.mjs

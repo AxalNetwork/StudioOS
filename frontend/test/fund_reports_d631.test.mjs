@@ -10,7 +10,7 @@ import { mountContracts } from './_contracts_dom.mjs';
 import FundReportPeriodPage, { PeriodEditor } from '../src/pages/FundReportPeriodPage.jsx';
 import { readableFund, readablePeriod } from '../src/hooks/useFundReport.js';
 import { fundReportsApi } from '../src/lib/api/fundReports.js';
-import { ReportContents } from '../src/pages/investor/InvestorFundReporting.jsx';
+import InvestorFundReporting, { ReportContents } from '../src/pages/investor/InvestorFundReporting.jsx';
 export const page = { currency: 'USD', can_manage: true, periods: [], fund: { id: 10, name: 'Recorded Fund', status: 'investing', vintage_year: 2026, size_cents: 1000000, lp_count: 2,
   gp: { name: 'Recorded GP', title: null, entity: 'GP entity', email: 'gp@example.test' }, providers: { fund_admin: 'Recorded administrator', auditor: null, legal_counsel: null, custodian: null, valuation_policy: null } },
   totals: { committed_cents: 200000, invested_cents: 22222, invested_reason: null }, lpa: { status: 'signed', version: 3, updated_at: '2026-07-01' } };
@@ -27,18 +27,18 @@ test('real F1 renders recorded cents, live count, GP, LPA and missing providers 
   assert.match(html, /<b>Not recorded<\/b><small>Auditor has not been recorded/);
   assert.doesNotMatch(html, /€|\[Firm\]|\[12\]/);
 });
-test('real F1 loading, Unreadable, denied and corrupt reads cannot expose stale totals', () => {
+test('real F1 loading, Unavailable, denied and corrupt reads cannot expose stale totals', () => {
   for (const Component of [FundPage, FundReportPeriodPage]) {
     const data = { ...page, period };
     const loading = render(Component, { ...ready(data), loading: true });
     assert.match(loading, /aria-busy="true"/); assert.doesNotMatch(loading, /\$2,000|Recorded letter|Recorded Fund|Q2 2026/);
     const failed = render(Component, { ...ready(data), error: { status: 503 } });
-    assert.match(failed, /Unreadable/); assert.match(failed, /Try again/); assert.doesNotMatch(failed, /\$2,000|Recorded letter|Recorded Fund|Q2 2026/);
+    assert.match(failed, /Unavailable/); assert.match(failed, /Try again/); assert.doesNotMatch(failed, /\$2,000|Recorded letter|Recorded Fund|Q2 2026/);
     const refused = render(Component, { ...ready(data), error: { status: 404 } });
     assert.match(refused, /Fund not available/); assert.doesNotMatch(refused, /\$2,000|Recorded letter|Save draft/);
   }
   const corrupt = render(FundPage, ready({ ...page, totals: { committed_cents: '200000', invested_cents: null } }));
-  assert.match(corrupt, /Unreadable/); assert.doesNotMatch(corrupt, /\$2,000/);
+  assert.match(corrupt, /Unavailable/); assert.doesNotMatch(corrupt, /\$2,000/);
 });
 test('real F1 empty LP state, absent amounts, absent LPA and LP actions stay honest', () => {
   const html = render(FundPage, ready({ ...page, can_manage: false, fund: { ...page.fund, lp_count: 0, size_cents: null }, totals: { committed_cents: 0, invested_cents: null, invested_reason: 'No attributed positions are recorded.' }, lpa: null,
@@ -158,5 +158,37 @@ test('the report editor saves the displayed order and requires confirmation befo
     await view.unmount();
     api.fundsSaveReportPeriod = saveDraft;
     fundReportsApi.deleteDraft = deleteDraft;
+  }
+});
+
+
+test('D6255: managers see the notice receipt on an issued period, including delivery failure', () => {
+  const issued = { ...period, status: 'issued' };
+  const partial = { ...issued, delivery_status: 'partial', delivered_count: 1, undelivered_count: 2, lps_notified_at: '2026-07-15T10:00:00Z' };
+  const detail = render(FundReportPeriodPage, ready({ ...page, period: partial }));
+  assert.match(detail, /LPs notified at.*<time dateTime="2026-07-15T10:00:00Z">[^<]+<\/time>1 notified · 2 without an active linked account/);
+  assert.match(render(FundReportPeriodPage, ready({ ...page, period: { ...issued, delivery_status: 'failed' } })), /LP notices.*Delivery failed/);
+  assert.doesNotMatch(render(FundReportPeriodPage, ready({ ...page, can_manage: false, period: partial })), /LPs notified at|without an active linked account/);
+});
+
+test('D6255: the Delivered column uses scoped period receipts even when legacy reports exist', async t => {
+  t.mock.method(api, 'fundsList', async () => ({ items: [{ id: 10, name: 'Recorded Fund', can_manage: true }] }));
+  const legacy = t.mock.method(api, 'lpReportsList', async () => ({ items: [
+    { uid: 'legacy-current', period: 'Q2 2026', status: 'published', narrative: 'Superseded archive row' },
+    { uid: 'legacy-older', period: 'Q1 2026', status: 'published', narrative: 'Older report' },
+  ] }));
+  const receipts = t.mock.method(api, 'fundsReportPeriods', async () => ({ items: [
+    { ...period, status: 'issued', delivery_status: 'sent', delivered_count: 2, lps_notified_at: '2026-07-15T10:00:00Z' },
+    { id: 2, period: 'Q3 2026', status: 'issued', delivery_status: 'failed' },
+    { id: 3, period: 'Q4 2026', status: 'draft' },
+  ] }));
+  const view = await mountContracts(React.createElement(InvestorFundReporting), '/funds/reporting?fund=10');
+  try {
+    assert.equal(legacy.mock.calls.length, 0, 'the archive reads only the selected fund periods');
+    assert.deepEqual(receipts.mock.calls.map(call => call.arguments), [[10]]);
+    assert.match(view.text(), /Delivered.*Q2 2026.*2 notified.*Q3 2026.*Delivery failed.*Q4 2026.*Not sent/s);
+    assert.doesNotMatch(view.text(), /Superseded archive row|Older report/);
+  } finally {
+    await view.unmount();
   }
 });

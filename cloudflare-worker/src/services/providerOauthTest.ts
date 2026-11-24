@@ -391,5 +391,6 @@ export async function testOauthCreds(
     case 'tiktok':     return { ok: false, reachable: false, detail: 'Verify TikTok credentials by completing an approved member sign-in.' };
     case 'google_search_console': return { ok: false, reachable: false, detail: 'Verify Search Console credentials by completing an approved member sign-in.' };
     case 'typeform':   return { ok: false, reachable: false, detail: 'Verify Typeform credentials by completing an approved member sign-in.' };
+    case 'quickbooks': return { ok: false, reachable: false, detail: 'Verify the Intuit app by completing an approved member sign-in to a sandbox company.' };
   }
 }

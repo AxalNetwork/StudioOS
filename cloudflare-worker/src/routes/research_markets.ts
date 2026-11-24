@@ -1,15 +1,18 @@
 /**
  * Research · Markets and · Geographies (D533, issue #1080 step 2).
  *
- *   GET /api/research/markets                the 82 markets, searchable, sortable, paged; each with
- *                                            its countries, source count and newest source date (D6284)
+ *   GET /api/research/markets                the 82 markets, searchable (name or tracked sector), filtered
+ *                                            by country, source freshness and source type with counts per
+ *                                            option, sortable, paged; each with its countries, source count
+ *                                            and newest source date (D6284), and a coverage summary (D7171)
  *   GET /api/research/markets/:slug          one market: its companies, funds, signals, sub-markets
  *   GET /api/research/geographies            countries with company and fund counts
  *   GET /api/research/geographies/:code      one country: companies by market, its largest
  *                                            companies by headcount, its funds with their
  *                                            aggregates, and its signals (country, then region)
  *   GET /api/research/listed-companies       the listed companies: `signal_companies` and SEC EDGAR's
- *                                            (migration 404, D595), each labelled by source, paged
+ *                                            (migration 404, D595), each labelled by source, paged;
+ *                                            `in_both` counts the result's tickers held by both (D7172)
  *
  * Every read is signed-in only (`requireAuth`), and every count goes through
  * the crosswalk in `services/researchTaxonomy.ts`, so a company or fund is
@@ -25,9 +28,11 @@
  * holds for that market today. The two are labelled apart because they are
  * not the same claim.
  *
- * The market index series and source mix read live market-intelligence rows
- * only, through `services/market_intel/liveRows.ts` (D538, #1078). A stub row
- * or an index computed before D538 never reaches a response.
+ * The market index series reads live market-intelligence indexes only,
+ * through `services/market_intel/liveRows.ts` (D538, #1078). A stub row or an
+ * index computed before D538 never reaches a response. D7710 (#7710): each
+ * index point carries the window it covers (D7708); the all-time source mix
+ * is gone (no page read it).
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -35,8 +40,8 @@ import { readListedTotals, type ListedTotals } from '../services/listedCompanies
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
-import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
-import { periodKey } from '../services/market_intel/scoring';
+import { distinctObservationsSql, liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON, retrievedAtSql } from '../services/market_intel/liveRows';
+import { periodKey, storedWindow, WINDOW_DAYS } from '../services/market_intel/scoring';
 import {
   focusTokens, listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector,
   mapFundFocus, mapFundHq, mapSignalTags, type Country, type Overrides,
@@ -165,7 +170,10 @@ export const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 
 export const INDEX_MONTHS = 6;
 export const NO_SECTOR_REASON = 'This market has no market-intelligence sector yet';
 
-interface IndexRow { period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number }
+interface IndexRow {
+  period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number;
+  window_start?: string | null; window_end?: string | null;
+}
 
 /** The month before `period` ('YYYY-MM'). */
 function previousPeriod(period: string): string {
@@ -193,10 +201,13 @@ export function indexSeries(rows: IndexRow[], current: string, reason: string) {
       points: pts.map((p) => {
         const prev = byPeriod.get(previousPeriod(p.period_key));
         const change = p.delta_pct ?? (prev ? Math.round((p.value - prev.value) * 10) / 10 : null);
+        // D7710: the window the point covers (D7708), stored at compute time; never derived.
+        const w = storedWindow(p);
         return {
           period: p.period_key, value: p.value, change,
           change_basis: p.delta_pct != null ? 'delta_pct' : (prev ? 'previous_month' : null),
           sources: p.source_count, month_to_date: p.period_key === current,
+          window_start: w.window_start, window_end: w.window_end, window_reason: w.window_reason,
         };
       }),
     };
@@ -206,38 +217,30 @@ export function indexSeries(rows: IndexRow[], current: string, reason: string) {
 
 async function marketIndex(env: Env, sector: string | null) {
   if (!sector) {
-    return { sector: null, reason: NO_SECTOR_REASON, series: indexSeries([], '', NO_SECTOR_REASON), source_mix: [] };
+    return { sector: null, reason: NO_SECTOR_REASON, series: indexSeries([], '', NO_SECTOR_REASON) };
   }
-  const [idx, mix] = await Promise.all([
-    env.DB.prepare(
-      `SELECT period_key, dimension, value, delta_pct, source_count
-         FROM market_intel_indexes
-        WHERE sector = ? AND geo = 'global' AND ${liveIndexSql()}
-        ORDER BY period_key`,
-    ).bind(sector).all<IndexRow>(),
-    env.DB.prepare(
-      `SELECT source_key, COUNT(*) AS rows, MAX(ts) AS latest
-         FROM market_intel_rows
-        WHERE sector = ? AND ${liveRowSql()}
-        GROUP BY source_key ORDER BY rows DESC, source_key`,
-    ).bind(sector).all<{ source_key: string; rows: number; latest: string }>(),
-  ]);
+  const idx = await env.DB.prepare(
+    `SELECT period_key, dimension, value, delta_pct, source_count, window_start, window_end
+       FROM market_intel_indexes
+      WHERE sector = ? AND geo = 'global' AND ${liveIndexSql()}
+      ORDER BY period_key`,
+  ).bind(sector).all<IndexRow>();
   const series = indexSeries(idx.results || [], periodKey(), NO_LIVE_SOURCE_REASON);
   const recorded = Object.values(series).some((d: any) => d.status === 'recorded');
-  return { sector, reason: recorded ? null : NO_LIVE_SOURCE_REASON, series, source_mix: mix.results || [] };
+  return { sector, reason: recorded ? null : NO_LIVE_SOURCE_REASON, series };
 }
 
 // ---------------------------------------------------------------------------
 // Markets
 // ---------------------------------------------------------------------------
 
-const MARKET_SORTS = ['name', 'company_count', 'supplied_count'] as const;
+const MARKET_SORTS = ['name', 'company_count', 'supplied_count', 'newest_source'] as const;
 
 // ---------------------------------------------------------------------------
 // Per-market coverage for the Markets filters (D6284, #6284 · RS-03).
 //
-// Three derived fields, read for the page only and in a fixed number of
-// queries whatever the page size (no query per market):
+// Three derived fields, read in a fixed number of queries whatever the
+// directory's size (no query per market):
 //   countries         where the directory's companies in this market are based
 //                     (the D533 company-sector and company-country crosswalk);
 //   source_count      distinct live sources: the tracked sector's live
@@ -248,34 +251,151 @@ const MARKET_SORTS = ['name', 'company_count', 'supplied_count'] as const;
 // Each is `{ status: 'recorded', value }` or `{ status: 'not_recorded', value:
 // null, reason }` — a market no source covers reads null with its reason,
 // never 0. No market size or growth is derived: no store records one.
+//
+// D7710 (#7710), owner answer A: `source_count`, `newest_source_at`, the fresh
+// band and filter, the coverage bands and the `newest_source` sort read only
+// evidence that NAMES the market. Inherited sector-level sources sit beside it
+// in `sources_by_kind.market_intel`, read over the index window (D7708: rows
+// retrieved in the 30 days before the read), each observation once.
+// `distinct_source_count` counts a source key in both sets once. Every newest
+// date names its basis (`reported`, `period_measured` or `retrieved`).
+//
+// D7171 (#7171): the coverage is read for EVERY market, not the page, so the
+// `country`, `fresh` and `src` filters, their counts per option and the total
+// cover the whole directory before it is paged. `sources_by_kind` splits the
+// sources into sector-level (market intelligence, shared by every market in
+// the tracked sector) and evidence that names the market, each with its own
+// count and newest date, counted over the whole list, not the capped one.
 // ---------------------------------------------------------------------------
 
 export const NO_COMPANY_REASON = 'No company in the directory is placed in this market';
 export const NO_COUNTRY_REASON = 'No company in this market records a country the crosswalk can place';
-export const NO_SOURCE_REASON =
-  'No live source yet: no live market-intelligence row for its tracked sector and no evidence behind an active signal that names this market';
+export const NO_SOURCE_REASON = 'None named: no evidence behind an active signal names this market';
 export const NO_SOURCE_DATE_REASON = 'No source row for this market records a date';
+export const NO_DISTINCT_REASON =
+  'No source: no evidence names this market and no live market-intelligence row for its tracked sector in the index window';
+/** D7710: what a newest date measures. */
+export const DATE_BASES = ['reported', 'period_measured', 'retrieved'] as const;
+export type DateBasis = typeof DATE_BASES[number];
+export const NO_KIND_REASON = 'No source of this kind';
 /** At most this many sources are listed per market; `source_count` counts them all. */
 export const SOURCES_CAP = 20;
+
+/** D7171, D7710: the freshness bands of `?fresh=`, by the newest evidence that names the market. */
+export const FRESH_BANDS = ['30', '90', 'older', 'none'] as const;
+/** D7171: the source kinds of `?src=`: evidence naming the market, sector-level only, none. */
+export const SOURCE_KINDS = ['named', 'sector', 'none'] as const;
+/** A newest source older than this many days is Stale (the page's STALE_AT). */
+export const STALE_DAYS = 90;
+/** At most this many values of a repeatable filter are read. */
+const MAX_FILTER_VALUES = 20;
 
 type Recorded<T> = { status: 'recorded'; value: T } | { status: 'not_recorded'; value: null; reason: string };
 const recorded = <T>(value: T): Recorded<T> => ({ status: 'recorded', value });
 const notRecorded = <T>(reason: string): Recorded<T> => ({ status: 'not_recorded', value: null, reason });
 
-interface MarketSource { kind: 'market_intel' | 'signal_evidence'; key: string; rows: number; newest: string | null }
+interface MarketSource { kind: 'market_intel' | 'signal_evidence'; key: string; rows: number; newest: string | null; basis: DateBasis | null }
 
 /** `ts` is ISO ('…T…Z'), `observed_at` is SQLite ('… …'); compared on one form. */
 const dateKey = (d: string | null) => String(d ?? '').replace(' ', 'T');
 const maxDate = (a: string | null, b: string | null) => (a == null ? b : b == null ? a : (dateKey(b) > dateKey(a) ? b : a));
 
-async function pageCoverage(
+/** A stored date as UTC milliseconds; a date with no zone is UTC, as SQLite writes it. */
+function utcMs(d: string | null): number | null {
+  if (!d) return null;
+  const k = dateKey(d);
+  const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(k) || !k.includes('T') ? k : `${k}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** Whole days from `d` to `now`, or null when `d` is not a date. */
+export function ageDays(d: string | null, now: number): number | null {
+  const ms = utcMs(d);
+  return ms == null ? null : Math.max(0, Math.floor((now - ms) / 86_400_000));
+}
+
+/** The `?fresh=` band a market's newest source falls in. */
+export function freshBand(newest: Recorded<string>, now: number): typeof FRESH_BANDS[number] {
+  const age = newest.status === 'recorded' ? ageDays(newest.value, now) : null;
+  if (age == null) return 'none';
+  return age <= 30 ? '30' : age <= STALE_DAYS ? '90' : 'older';
+}
+
+interface KindSummary { count: number; newest: Recorded<string>; basis: DateBasis | null }
+interface Coverage {
+  countries: Recorded<Array<{ code: string; count: number }>>;
+  source_count: Recorded<number>;
+  newest_source_at: Recorded<string>;
+  newest_source_basis: DateBasis | null;
+  distinct_source_count: Recorded<number>;
+  sources_by_kind: { market_intel: KindSummary; signal_evidence: KindSummary };
+  sources: MarketSource[];
+}
+
+/** The `?src=` kind of a market: any evidence naming it, else sector-level only, else none. */
+export function sourceKind(cov: Pick<Coverage, 'sources_by_kind'>): typeof SOURCE_KINDS[number] {
+  if (cov.sources_by_kind.signal_evidence.count > 0) return 'named';
+  return cov.sources_by_kind.market_intel.count > 0 ? 'sector' : 'none';
+}
+
+const countryCodes = (cov: Pick<Coverage, 'countries'>) =>
+  cov.countries.status === 'recorded' ? cov.countries.value.map((x) => x.code) : [];
+
+/**
+ * D7710: one kind's count and newest date. The newest date takes the strongest
+ * basis any source in the list has (the period measured over the retrieval
+ * date), so a figure fetched again never moves it when a period is recorded.
+ */
+function kindSummary(list: MarketSource[]): KindSummary {
+  const rank = (b: DateBasis | null) => (b == null ? -1 : DATE_BASES.length - DATE_BASES.indexOf(b));
+  const best = list.reduce<DateBasis | null>((acc, s) => (s.newest && rank(s.basis) > rank(acc) ? s.basis : acc), null);
+  const newest = list.filter((s) => s.basis === best).reduce<string | null>((acc, s) => maxDate(acc, s.newest), null);
+  return {
+    count: list.length,
+    newest: newest ? recorded(newest) : notRecorded<string>(list.length ? NO_SOURCE_DATE_REASON : NO_KIND_REASON),
+    basis: newest ? best : null,
+  };
+}
+
+/** D7710: the index window's start (D7708: the `WINDOW_DAYS` days before `now`), as an ISO stamp. */
+export const windowStart = (now: number) => new Date(now - WINDOW_DAYS * 86_400_000).toISOString();
+
+/**
+ * The live market-intelligence sources of each tracked sector: one grouped
+ * query. D7710: over the index window by D7708's rule (retrieved in the
+ * `WINDOW_DAYS` days before the read), each observation once (D7707's
+ * identity). A source's newest date is the last day measured where its rows
+ * record one, else its newest retrieval date, and says which.
+ */
+async function sectorSources(env: Env, sectors: string[], now: number) {
+  const miBySector = new Map<string, MarketSource[]>();
+  if (!sectors.length) return miBySector;
+  const r = await env.DB.prepare(
+    `SELECT sector, source_key, ${distinctObservationsSql()} AS rows,
+            MAX(observed_period_end) AS period_end, MAX(${retrievedAtSql()}) AS retrieved
+       FROM market_intel_rows
+      WHERE sector IN (SELECT value FROM json_each(?)) AND ${liveRowSql()} AND ${retrievedAtSql()} >= ?
+      GROUP BY sector, source_key`,
+  ).bind(JSON.stringify(sectors), windowStart(now))
+    .all<{ sector: string; source_key: string; rows: number; period_end: string | null; retrieved: string | null }>();
+  for (const row of r.results || []) {
+    const list = miBySector.get(row.sector) ?? [];
+    const basis: DateBasis | null = row.period_end ? 'period_measured' : (row.retrieved ? 'retrieved' : null);
+    list.push({ kind: 'market_intel', key: row.source_key, rows: Number(row.rows), newest: row.period_end ?? row.retrieved ?? null, basis });
+    miBySector.set(row.sector, list);
+  }
+  return miBySector;
+}
+
+async function marketCoverage(
   env: Env,
-  page: Array<{ slug: string; mi_sector: string | null }>,
+  markets: Array<{ slug: string; mi_sector: string | null }>,
   cos: CompanyRow[],
   ov: Overrides,
+  now: number,
 ) {
-  const slugs = new Set(page.map((m) => m.slug));
-  const sectors = [...new Set(page.map((m) => m.mi_sector).filter((s): s is string => !!s))];
+  const slugs = new Set(markets.map((m) => m.slug));
+  const sectors = [...new Set(markets.map((m) => m.mi_sector).filter((s): s is string => !!s))];
 
   // Countries: the companies already read, through the crosswalk.
   const inMarket = new Map<string, number>();
@@ -291,22 +411,8 @@ async function pageCoverage(
     byCountry.set(m, per);
   }
 
-  // Live market-intelligence sources: one grouped query for the page's tracked
-  // sectors, passed as one bound JSON array (no placeholder list to build).
-  const miBySector = new Map<string, MarketSource[]>();
-  if (sectors.length) {
-    const r = await env.DB.prepare(
-      `SELECT sector, source_key, COUNT(*) AS rows, MAX(ts) AS newest
-         FROM market_intel_rows
-        WHERE sector IN (SELECT value FROM json_each(?)) AND ${liveRowSql()}
-        GROUP BY sector, source_key`,
-    ).bind(JSON.stringify(sectors)).all<{ sector: string; source_key: string; rows: number; newest: string | null }>();
-    for (const row of r.results || []) {
-      const list = miBySector.get(row.sector) ?? [];
-      list.push({ kind: 'market_intel', key: row.source_key, rows: Number(row.rows), newest: row.newest ?? null });
-      miBySector.set(row.sector, list);
-    }
-  }
+  // Live market-intelligence sources, passed as one bound JSON array.
+  const miBySector = await sectorSources(env, sectors, now);
 
   // Signal evidence: one grouped query over active signals, mapped by tags here.
   const ev = await env.DB.prepare(
@@ -326,29 +432,145 @@ async function pageCoverage(
         kind: 'signal_evidence', key: row.source_key,
         rows: (prev?.rows ?? 0) + Number(row.rows),
         newest: maxDate(prev?.newest ?? null, row.newest ?? null),
+        // `observed_at` is the date the source reports.
+        basis: 'reported',
       });
       evBySlug.set(slug, per);
     }
   }
 
-  return (m: { slug: string; mi_sector: string | null }) => {
+  const of = (m: { slug: string; mi_sector: string | null }): Coverage => {
     const per = byCountry.get(m.slug);
     const countries: Recorded<Array<{ code: string; count: number }>> = per && per.size
       ? recorded(countList(per, 'code') as Array<{ code: string; count: number }>)
       : notRecorded((inMarket.get(m.slug) ?? 0) > 0 ? NO_COUNTRY_REASON : NO_COMPANY_REASON);
 
-    const sources: MarketSource[] = [
-      ...(m.mi_sector ? (miBySector.get(m.mi_sector) ?? []) : []),
-      ...(evBySlug.get(m.slug)?.values() ?? []),
-    ].sort((a, b) => dateKey(b.newest).localeCompare(dateKey(a.newest)) || a.kind.localeCompare(b.kind) || a.key.localeCompare(b.key));
-    const newest = sources.reduce<string | null>((acc, s) => maxDate(acc, s.newest), null);
+    const mi = m.mi_sector ? (miBySector.get(m.mi_sector) ?? []) : [];
+    const named = [...(evBySlug.get(m.slug)?.values() ?? [])];
+    const sources: MarketSource[] = [...mi, ...named]
+      .sort((a, b) => dateKey(b.newest).localeCompare(dateKey(a.newest)) || a.kind.localeCompare(b.kind) || a.key.localeCompare(b.key));
+    // D7710: the headline reads evidence that names the market; inherited sources sit beside it.
+    const namedKind = kindSummary(named);
+    const distinct = new Set(sources.map((src) => src.key)).size;
     return {
       countries,
-      source_count: sources.length ? recorded(sources.length) : notRecorded<number>(NO_SOURCE_REASON),
-      newest_source_at: newest ? recorded(newest)
-        : notRecorded<string>(sources.length ? NO_SOURCE_DATE_REASON : NO_SOURCE_REASON),
+      source_count: named.length ? recorded(named.length) : notRecorded<number>(NO_SOURCE_REASON),
+      newest_source_at: namedKind.newest.status === 'recorded' ? namedKind.newest
+        : notRecorded<string>(named.length ? NO_SOURCE_DATE_REASON : NO_SOURCE_REASON),
+      newest_source_basis: namedKind.basis,
+      distinct_source_count: distinct ? recorded(distinct) : notRecorded<number>(NO_DISTINCT_REASON),
+      sources_by_kind: { market_intel: kindSummary(mi), signal_evidence: namedKind },
       sources: sources.slice(0, SOURCES_CAP),
     };
+  };
+  return { of, miBySector };
+}
+
+/** A repeatable query parameter (`?country=DE&country=NL` or `?country=DE,NL`), trimmed, at most 20. */
+function many(values: string[] | undefined): string[] {
+  return [...new Set((values || []).flatMap((v) => String(v).split(',')).map((v) => v.trim()).filter(Boolean))]
+    .slice(0, MAX_FILTER_VALUES);
+}
+
+export interface MarketFilters {
+  q: string;
+  country: string[];
+  fresh: typeof FRESH_BANDS[number] | '';
+  src: typeof SOURCE_KINDS[number] | '';
+  sector: string[];
+}
+type Facet = 'country' | 'fresh' | 'src';
+interface Filterable {
+  name: string; mi_sector: string | null; supplied_count?: number;
+  countries: Coverage['countries']; newest_source_at: Coverage['newest_source_at']; sources_by_kind: Coverage['sources_by_kind'];
+}
+
+/** Whether `q` matches the market's name or its tracked sector, and which. */
+export function queryMatch(m: Pick<Filterable, 'name' | 'mi_sector'>, q: string): 'name' | 'sector' | null {
+  const needle = q.toLowerCase();
+  if (!needle) return null;
+  if (m.name.toLowerCase().includes(needle)) return 'name';
+  return m.mi_sector && m.mi_sector.toLowerCase().includes(needle) ? 'sector' : null;
+}
+
+/**
+ * Whether a market passes every filter but `skip` (a facet's counts are taken
+ * over the set its own filter does not narrow). A market whose countries are
+ * Not recorded matches no country: it is never treated as being in one.
+ */
+export function passes(m: Filterable, f: MarketFilters, now: number, skip: Facet | null = null): boolean {
+  if (f.q && !queryMatch(m, f.q)) return false;
+  if (f.sector.length && !(m.mi_sector && f.sector.includes(m.mi_sector))) return false;
+  if (skip !== 'country' && f.country.length && !countryCodes(m).some((c) => f.country.includes(c))) return false;
+  if (skip !== 'fresh' && f.fresh && freshBand(m.newest_source_at, now) !== f.fresh) return false;
+  if (skip !== 'src' && f.src && sourceKind(m) !== f.src) return false;
+  return true;
+}
+
+/** Counts per option of each filter, over the markets the other filters leave. */
+export function marketFacets(all: Filterable[], f: MarketFilters, now: number) {
+  const over = (skip: Facet) => all.filter((m) => passes(m, f, now, skip));
+  const byCountry = new Map<string, number>();
+  let countryNotRecorded = 0;
+  const cSet = over('country');
+  for (const m of cSet) {
+    const codes = countryCodes(m);
+    if (!codes.length) countryNotRecorded += 1;
+    for (const code of codes) bump(byCountry, code);
+  }
+  const fSet = over('fresh');
+  const sSet = over('src');
+  return {
+    country: { total: cSet.length, options: countList(byCountry, 'code'), not_recorded: countryNotRecorded },
+    fresh: { total: fSet.length, options: FRESH_BANDS.map((value) => ({ value, count: fSet.filter((m) => freshBand(m.newest_source_at, now) === value).length })) },
+    src: { total: sSet.length, options: SOURCE_KINDS.map((value) => ({ value, count: sSet.filter((m) => sourceKind(m) === value).length })) },
+  };
+}
+
+/**
+ * The coverage summary (the Analysis view, RMD-06B) over the markets the
+ * filters leave: how fresh their newest sources are, which record a country
+ * and why not, how many a tracked sector claims, and per tracked sector its
+ * sector-level sources and how many of its markets evidence names. Counts of
+ * markets only: no size, growth or ranking.
+ */
+export function coverageSummary(set: Filterable[], miBySector: Map<string, MarketSource[]>, now: number) {
+  const fresh = Object.fromEntries(FRESH_BANDS.map((b) => [b, 0])) as Record<typeof FRESH_BANDS[number], number>;
+  const countries = { recorded: 0, no_company: 0, no_placeable_country: 0, distinct: 0 };
+  const seen = new Set<string>();
+  const sectors = new Map<string, { markets: number; named_markets: number }>();
+  let unmapped = 0;
+  let unmappedNamed = 0;
+  for (const m of set) {
+    fresh[freshBand(m.newest_source_at, now)] += 1;
+    if (m.countries.status === 'recorded') {
+      countries.recorded += 1;
+      for (const c of m.countries.value) seen.add(c.code);
+    } else if (m.countries.reason === NO_COUNTRY_REASON) countries.no_placeable_country += 1;
+    else countries.no_company += 1;
+    const named = m.sources_by_kind.signal_evidence.count > 0 ? 1 : 0;
+    if (!m.mi_sector) { unmapped += 1; unmappedNamed += named; continue; }
+    const s = sectors.get(m.mi_sector) ?? { markets: 0, named_markets: 0 };
+    s.markets += 1;
+    s.named_markets += named;
+    sectors.set(m.mi_sector, s);
+  }
+  countries.distinct = seen.size;
+  const supplied_total = set.reduce((n, m) => n + (Number(m.supplied_count) || 0), 0);
+  const by_sector = [...sectors.entries()].map(([sector, s]) => {
+    const k = kindSummary(miBySector.get(sector) ?? []);
+    return { sector, markets: s.markets, sector_sources: k.count, newest_sector_source: k.newest, newest_sector_basis: k.basis, named_markets: s.named_markets };
+  }).sort((a, b) => b.markets - a.markets || a.sector.localeCompare(b.sector));
+  return {
+    markets: set.length,
+    // The taxonomy's own company counts, summed: labelled apart, never a market size.
+    supplied_total,
+    fresh,
+    countries,
+    tracked: { mapped: set.length - unmapped, unmapped },
+    by_sector,
+    unmapped: { markets: unmapped, named_markets: unmappedNamed },
+    stale_days: STALE_DAYS,
   };
 }
 
@@ -360,12 +582,29 @@ researchMarkets.get('/markets', async (c) => {
   const limit = intParam(c.req.query('limit'), LIST_CAP, 1, MAX_LIMIT);
   const offset = intParam(c.req.query('offset'), 0, 0, 10_000);
 
+  // D7171: a filter that cannot be read is refused, never dropped: an ignored
+  // filter would answer the whole directory under a filtered heading.
+  const country = many(c.req.queries('country')).map((v) => v.toUpperCase());
+  if (country.some((v) => !/^[A-Z]{2}$/.test(v))) {
+    return refuse(c, 400, { code: 'invalid_country', message: 'A country filter is a two-letter country code, such as DE.' });
+  }
+  const freshRaw = String(c.req.query('fresh') || '');
+  if (freshRaw && !(FRESH_BANDS as readonly string[]).includes(freshRaw)) {
+    return refuse(c, 400, { code: 'invalid_fresh', message: 'Source freshness is one of 30, 90, older or none.' });
+  }
+  const srcRaw = String(c.req.query('src') || '');
+  if (srcRaw && !(SOURCE_KINDS as readonly string[]).includes(srcRaw)) {
+    return refuse(c, 400, { code: 'invalid_src', message: 'Source type is one of named, sector or none.' });
+  }
+  const filters: MarketFilters = {
+    q, country, sector: many(c.req.queries('sector')),
+    fresh: freshRaw as MarketFilters['fresh'], src: srcRaw as MarketFilters['src'],
+  };
+
   const [rows, sectors, ov, cos] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT slug, name, company_count AS supplied_count, as_of
-         FROM research_market_directory
-        WHERE (? = '' OR name LIKE '%' || ? || '%')`,
-    ).bind(q, q).all<{ slug: string; name: string; supplied_count: number; as_of: string }>(),
+      `SELECT slug, name, company_count AS supplied_count, as_of FROM research_market_directory`,
+    ).all<{ slug: string; name: string; supplied_count: number; as_of: string }>(),
     listMarketSectors(c.env),
     loadOverrides(c.env),
     companies(c.env),
@@ -378,7 +617,7 @@ researchMarkets.get('/markets', async (c) => {
     if (m) bump(counts, m); else unmapped += 1;
   }
 
-  const items = (rows.results || []).map((r) => ({
+  const base = (rows.results || []).map((r) => ({
     slug: r.slug,
     name: r.name,
     mi_sector: sectorOf.get(r.slug)?.mi_sector ?? null,
@@ -387,17 +626,35 @@ researchMarkets.get('/markets', async (c) => {
     supplied_label: SUPPLIED_LABEL,
     as_of: r.as_of,
   }));
+  const now = Date.now();
+  const { of, miBySector } = await marketCoverage(c.env, base, cos, ov, now);
+  const all = base.map((m) => ({ ...m, ...of(m) }));
+  const items = all.filter((m) => passes(m, filters, now));
+
   const sign = dir === 'asc' ? 1 : -1;
   items.sort((a, b) => {
+    if (sort === 'newest_source') {
+      // A market with no dated source sorts last either way.
+      const an = a.newest_source_at.value; const bn = b.newest_source_at.value;
+      if (!an || !bn) return (an ? 0 : 1) - (bn ? 0 : 1) || byName(a, b);
+      return sign * dateKey(an).localeCompare(dateKey(bn)) || byName(a, b);
+    }
     const d = sort === 'name' ? byName(a, b) : (a[sort] - b[sort]);
     return sign * d || byName(a, b);
   });
   const page = items.slice(offset, offset + limit);
-  const coverage = await pageCoverage(c.env, page, cos, ov);
   return c.json({
-    items: page.map((m) => ({ ...m, ...coverage(m) })),
+    items: page.map((m) => (q ? { ...m, matched_on: queryMatch(m, q) } : m)),
     total: items.length,
+    directory_total: all.length,
     limit, offset, sort, dir,
+    filters: { q, country: filters.country, fresh: filters.fresh || null, src: filters.src || null, sector: filters.sector },
+    matched_on: q ? { name: items.filter((m) => queryMatch(m, q) === 'name').length, sector: items.filter((m) => queryMatch(m, q) === 'sector').length } : null,
+    facets: marketFacets(all, filters, now),
+    summary: coverageSummary(items, miBySector, now),
+    read_at: new Date(now).toISOString(),
+    // D7710: the window the sector-level sources were read over.
+    sector_window: { start: windowStart(now), end: new Date(now).toISOString(), days: WINDOW_DAYS },
     companies_unmapped: unmapped,
     supplied_label: SUPPLIED_LABEL,
   });
@@ -707,6 +964,24 @@ function otherListings(text: string | null): Array<{ symbol: string; exchange: s
     .map(([symbol, exchange]) => ({ symbol, exchange: typeof exchange === 'string' ? exchange : null }));
 }
 
+/**
+ * D7172 (#7172, the ◇ of D7037): the tickers in the current search that are in
+ * both sources, across every page of the result, not only the page shown. The
+ * matched signal companies' symbols go in as one bound JSON array, and EDGAR's
+ * rows are held to the same search, so a ticker counts only when both of its
+ * rows are in this result. Nothing to count when EDGAR is left out or no signal
+ * company matched.
+ */
+export async function countInBoth(env: Env, edgarIn: boolean, q: string, symbols: string[]): Promise<number> {
+  if (!edgarIn || symbols.length === 0) return 0;
+  const r = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT ticker) AS n FROM research_public_companies
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+        AND ticker IN (SELECT value FROM json_each(?))`,
+  ).bind(q, q, q, JSON.stringify(symbols)).first<{ n: number }>();
+  return Number(r?.n ?? 0);
+}
+
 researchMarkets.get('/listed-companies', async (c) => {
   await requireAuth(c);
   const q = String(c.req.query('q') || '').trim().slice(0, 120);
@@ -772,8 +1047,12 @@ researchMarkets.get('/listed-companies', async (c) => {
   // bands), then EDGAR's rows, each in the chosen order.
   const signalPage = matched.slice(offset, offset + limit);
   let edgarPage: EdgarRow[];
+  let inBoth: number;
   try {
-    edgarPage = await place(Math.max(0, offset - matched.length), limit - signalPage.length);
+    [edgarPage, inBoth] = await Promise.all([
+      place(Math.max(0, offset - matched.length), limit - signalPage.length),
+      countInBoth(c.env, edgarIn, q, matched.map((r) => r.symbol)),
+    ]);
   } catch (e) {
     return unreadable(e);
   }
@@ -793,6 +1072,10 @@ researchMarkets.get('/listed-companies', async (c) => {
       })),
     ],
     total: matched.length + edgarTotal,
+    // D7172 (#7172): how many tickers in THIS result, across all its pages,
+    // have a row from each source. Each such ticker is two rows of `total`.
+    // 0 when a source filter, a sector or a country leaves either source out.
+    in_both: inBoth,
     // Both stores, unfiltered, one row per source: the overview's Public count.
     store_total: stores.total,
     limit, offset, sort: sortKey, source: source || null,

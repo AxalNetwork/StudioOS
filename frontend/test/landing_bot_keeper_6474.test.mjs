@@ -98,7 +98,7 @@ const BOT = 'axal-landing-bot[bot]';
 function pr(over = {}) {
   return {
     number: 101, state: 'open', draft: false, body: 'Closes #9', labels: [], mergeable: 'CONFLICTING', inMergeQueue: false,
-    headChangedAt: '2026-11-16T10:00:00Z', handedBackAt: null,
+    headChangedAt: '2026-11-16T10:00:00Z', handedBackAt: null, keeperTriedEvents: [], stickyBody: '',
     head: { ref: 'agent/x/9-a', sha: 'b'.repeat(40), repo: { full_name: 'AxalNetwork/StudioOS' } },
     base: { repo: { full_name: 'AxalNetwork/StudioOS' } },
     files: [{ path: 'frontend/src/pages/A.jsx' }],
@@ -112,6 +112,15 @@ const ctx = (over = {}) => ({
   ...over,
 });
 const botCommit = (i) => ({ sha: `${i}`.repeat(40).slice(0, 40), author: { login: BOT }, committer: { login: BOT }, commit: { message: 'Merge main\n\nLanding-Bot-Kind: keeper', committer: { date: '2026-11-16T11:00:00Z' } } });
+
+test('D6476-p5: the visible conflict label alone never stops the keeper; its own hand-back does', () => {
+  // The PR-list indicator (or the refresh's "for the keeper" label) on a PR the keeper never tried: planned.
+  assert.deepEqual(plan([pr({ labels: ['conflict'], handedBackAt: null })], ctx()).act.map((p) => p.number), [101]);
+  // The keeper's own record, newer than the head: waits for the session.
+  assert.deepEqual(plan([pr({ labels: ['conflict', 'bot:keeper-tried'], handedBackAt: '2026-11-16T11:00:00Z' })], ctx()).act, []);
+  // A push after the keeper's hand-back: planned again.
+  assert.deepEqual(plan([pr({ labels: ['bot:keeper-tried'], handedBackAt: '2026-11-16T09:00:00Z' })], ctx()).act.map((p) => p.number), [101]);
+});
 
 test('#6474: a conflicted, quiet, eligible PR is planned', () => {
   const r = plan([pr()], ctx());
@@ -129,7 +138,7 @@ test('#6474: queued, recently pushed, fork, bot:off, mode unset, open breaker an
     ['breaker open', [pr()], ctx({ breakers: { open: true, reasons: ['main is red'] } }), /breaker is open/],
     ['third attempt', [pr({ commits: [...pr().commits, botCommit(1), botCommit(2)] })], ctx(), /2 keeper attempts/],
     ['only behind', [pr({ mergeable: 'MERGEABLE' })], ctx(), /not conflicting/],
-    ['handed back, no push since', [pr({ labels: ['conflict'], handedBackAt: '2026-11-16T11:00:00Z' })], ctx(), /handed back/],
+    ['handed back, no push since', [pr({ labels: ['conflict', 'bot:keeper-tried'], handedBackAt: '2026-11-16T11:00:00Z' })], ctx(), /handed back/],
     ['diff unreadable', [pr({ files: null })], ctx(), /diff could not be read/],
   ];
   for (const [name, prs, c, reason] of cases) {

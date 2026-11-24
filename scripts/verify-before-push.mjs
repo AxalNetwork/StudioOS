@@ -24,15 +24,15 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, renameSync, readSync, fstatSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { constants, existsSync, openSync, closeSync, readFileSync, writeFileSync, readSync, fstatSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   planSteps, chooseSteps, affectedTests, envFailures, caseCollisions, preflightNotes,
   mergeResults, renderSummary, testsLine,
 } from './lib/verifyBeforePush.mjs';
-import { partsOf } from './test-drift-parts.mjs';
+import { privateDirectory, openPrivateOutput, regularTextFile, writePrivateFile } from './local-files.mjs';
+import { buildPlan as suitePlan, partsOf } from './test-drift-parts.mjs';
 import { testFiles, importGraph } from './select-tests.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -103,7 +103,7 @@ function buildPlan(argv) {
 }
 
 function tail(path, bytes = 64 * 1024) {
-  const fd = openSync(path, 'r');
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const size = fstatSync(fd).size;
     const start = Math.max(0, size - bytes);
@@ -115,8 +115,10 @@ function tail(path, bytes = 64 * 1024) {
 
 function runOne(step, logDir, timeoutMin) {
   const log = join(logDir, `${step.id}.log`);
+  // The log directory reaches `sh -c`, so it is a plain path or nothing: no quote, space or shell character.
+  if (!/^[\w./-]+$/.test(logDir)) throw new Error(`verify-before-push: refusing log directory ${JSON.stringify(logDir)}`);
   const cmd = step.cmd.replaceAll('<log-dir>', logDir);
-  const fd = openSync(log, 'w');
+  const fd = openPrivateOutput(log);
   writeFileSync(fd, `> ${cmd}\n\n`);
   const started = Date.now();
   return new Promise((done) => {
@@ -138,27 +140,32 @@ function runOne(step, logDir, timeoutMin) {
 /** The suite-plan step: write test-drift-parts' equal-weight plan into the log dir, never the repo root. */
 function writeSuitePlan(logDir) {
   const started = Date.now();
-  const target = join(ROOT, 'suite-plan.json');
-  const had = existsSync(target) ? readFileSync(target) : null;
-  const r = spawnSync(process.execPath, [join(ROOT, 'scripts/test-drift-parts.mjs'), '--plan', join(logDir, 'no-timings.json')], { cwd: ROOT, encoding: 'utf8' });
   const log = join(logDir, 'suite-plan.log');
-  writeFileSync(log, `${r.stdout || ''}${r.stderr || ''}`);
-  if (r.status === 0 && existsSync(target)) {
-    renameSync(target, join(logDir, 'suite-plan.json'));
-    if (had) writeFileSync(target, had);
+  try {
+    const { scripts } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    const plan = suitePlan(scripts, {}, ROOT);
+    writePrivateFile(join(logDir, 'suite-plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
+    writePrivateFile(log, `${JSON.stringify(plan.parts.map(part => part.name))}\n`);
+    return { id: 'suite-plan', status: 'pass', exit: 0, seconds: Math.round((Date.now() - started) / 1000), log, env: [], at: new Date().toISOString() };
+  } catch (error) {
+    writePrivateFile(log, `The suite plan could not be written: ${error.message}\n`);
+    return { id: 'suite-plan', status: 'fail', exit: 1, seconds: Math.round((Date.now() - started) / 1000), log, env: [], at: new Date().toISOString() };
   }
-  return { id: 'suite-plan', status: r.status === 0 ? 'pass' : 'fail', exit: r.status, seconds: Math.round((Date.now() - started) / 1000), log, env: [], at: new Date().toISOString() };
 }
 
-const readSummary = (logDir) => { try { return JSON.parse(readFileSync(join(logDir, 'summary.json'), 'utf8')); } catch { return { results: {}, order: [], skipped: [] }; } };
+const readSummary = (logDir) => {
+  const text = regularTextFile(join(logDir, 'summary.json'));
+  return text === null ? { results: {}, order: [], skipped: [] } : JSON.parse(text);
+};
 /** The plan's step ids that should have a result: its order without the skipped steps. */
 const planned = (s) => (s.order || []).filter((id) => !(s.skipped || []).includes(id));
 
 async function main(argv) {
   const cmd = argv[0];
   if (!['plan', 'run', 'summary'].includes(cmd)) { console.error(USAGE); return 2; }
-  const logDir = resolve(argOf(argv, 'log-dir') || join(tmpdir(), 'verify-before-push'));
+  const logDir = resolve(argOf(argv, 'log-dir') || git(['rev-parse', '--git-path', 'studioos-verify-before-push']).trim());
   if (cmd === 'summary') {
+    privateDirectory(logDir);
     const s = readSummary(logDir);
     const tree = treeId();
     for (const r of Object.values(s.results)) r.stale = r.tree !== tree;
@@ -179,12 +186,12 @@ async function main(argv) {
   if (timeoutOverride !== null && !(timeoutOverride > 0)) throw new Error('--timeout-min must be a positive number');
   const { chosen, unknown } = chooseSteps(plan.steps, { only: argOf(argv, 'only'), from: argOf(argv, 'from') });
   if (unknown.length) { console.error(`unknown step(s): ${unknown.join(', ')}. Steps: ${plan.steps.map((s) => s.id).join(', ')}`); return 2; }
-  mkdirSync(logDir, { recursive: true });
+  privateDirectory(logDir);
   const tree = treeId();
   const results = [];
   const save = () => {
     const prev = readSummary(logDir);
-    writeFileSync(join(logDir, 'summary.json'), `${JSON.stringify({ tree, order: plan.steps.map((s) => s.id), skipped: plan.steps.filter((s) => s.kind === 'skipped').map((s) => s.id), results: mergeResults(prev.results, results, tree) }, null, 2)}\n`);
+    writePrivateFile(join(logDir, 'summary.json'), `${JSON.stringify({ tree, order: plan.steps.map((s) => s.id), skipped: plan.steps.filter((s) => s.kind === 'skipped').map((s) => s.id), results: mergeResults(prev.results, results, tree) }, null, 2)}\n`);
   };
   for (const step of chosen) {
     if (step.kind === 'skipped') { results.push({ id: step.id, status: 'skipped', exit: null, seconds: 0, log: step.why, env: [] }); save(); continue; }

@@ -42,6 +42,7 @@ import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
 import { securityBackups, seedSecurity, SECURITY_ADMIN } from './_security_seed.ts';
 import { seedFundAdmin } from './_fund_admin_seed.ts';
+import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const DOCS = join(ROOT, 'docs');
@@ -209,8 +210,8 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
     res.end(readFileSync(file));
   } catch (e) {
-    // The trace goes to the runner's log, never into the reply.
-    console.error('[visual] request failed', e);
+    // Keep a diagnostic classification, without exception messages, paths or stack contents.
+    reportPrivateError('visual_request', e);
     res.writeHead(500, { 'content-type': 'text/plain' });
     res.end('The visual test server could not answer this request.');
   }

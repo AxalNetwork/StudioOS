@@ -217,7 +217,7 @@ test('an Advisor and an Explorer get DL22\'s words, and nothing is read', async 
 test('not on the deal is DL22a; a deal read that failed is DL20b, never "not found"', async () => {
   let v = await mounted('/deals/4', INVESTOR, handlerWith({ '/api/deals/4(\\?|$)': () => response({ detail: 'Forbidden' }, 403) }));
   try {
-    assert.ok(!v.has('deal-more'));
+    assert.ok(!v.has('deal-share'));
     assert.match(v.textOf('deal-no-permission-not_on_deal'), /You’re not on this deal\./);
     assert.ok(!v.requests.some((r) => /stage|notes|whats-new|commitments/.test(r)), 'nothing private is read');
   } finally { await v.close(); }
@@ -229,11 +229,13 @@ test('not on the deal is DL22a; a deal read that failed is DL20b, never "not fou
   } finally { await v.close(); }
 });
 
-test('Deal More copies the current tab, reports failure, and uses the supplied company profile', async () => {
+// D6164 part 3 (DE28, the owner's answer A): a Share menu with Copy link only; the company profile is its own link.
+test('Share copies the current tab, reports failure; the company profile is a link beside it', async () => {
   const tab = '/deals/4/terms?from=flow#valuation';
   const url = 'https://axal.example' + tab;
   const v = await mounted(tab, INVESTOR, handlerWith({
     '/api/deals/4$': () => response({ ...DEAL, company_profile_url: '/startups/harbor-ledger' }),
+    '/api/deals/4/summary$': () => response({ available: true }),
   }));
   const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   const written = [];
@@ -244,13 +246,15 @@ test('Deal More copies the current tab, reports failure, and uses the supplied c
   });
   window.location.href = url;
   try {
-    await v.click('deal-more');
-    assert.equal(v.hrefOf('deal-open-company-profile'), '/startups/harbor-ledger');
+    assert.equal(v.hrefOf('deal-open-company-profile'), '/startups/harbor-ledger', 'the profile is in the header, not in Share');
+    await v.click('deal-share');
+    assert.doesNotMatch(v.textOf('deal-share-menu'), /Open company profile/, 'the company profile stays outside Share');
+    assert.ok(v.has('deal-download-summary'), 'the mounted deal header passes its deal id to the summary read');
     await v.click('deal-copy-link');
     assert.deepEqual(written, [url]);
-    assert.match(v.text(), /Link copied\./);
+    assert.match(v.text(), /Link copied\. Only people this deal admits can open it\./);
     refused = true;
-    await v.click('deal-more');
+    await v.click('deal-share');
     await v.click('deal-copy-link');
     assert.match(v.text(), /Could not copy the link/);
   } finally {
@@ -260,18 +264,19 @@ test('Deal More copies the current tab, reports failure, and uses the supplied c
   }
 });
 
-test('Deal More offers only Copy link without a public profile and is hidden on Free', async () => {
+test('Share offers only Copy link; with no public profile there is no profile link; neither on Free', async () => {
   let v = await mounted('/deals/4', INVESTOR);
   try {
-    await v.click('deal-more');
-    assert.ok(v.has('deal-copy-link'));
     assert.ok(!v.has('deal-open-company-profile'));
+    await v.click('deal-share');
+    assert.ok(v.has('deal-copy-link'));
+    assert.match(v.textOf('deal-share-menu'), /^\s*Copy link\s*$/, 'Copy link is the menu\'s one item');
   } finally { await v.close(); }
   v = await mounted('/deals/4', INVESTOR, handlerWith({
     '/api/deals/4$': () => response({ ...DEAL, plan_limited: true }),
   }));
   try {
-    assert.ok(!v.has('deal-more'));
+    assert.ok(!v.has('deal-share'));
   } finally { await v.close(); }
 });
 
@@ -333,7 +338,7 @@ test('#6193 the activity\'s Deal, Documents and Diligence chips narrow on each r
     { type: 'commitment', kind: 'deal', label: 'An investor committed', at: '2026-10-18', mine: false },
     { type: 'created', label: 'Deal created', at: '2026-09-01', mine: false },
   ];
-  const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
+  const v = await mounted('/deals/4/activity', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
   try {
     await v.click('deal-activity-documents');
     assert.match(v.textOf('deal-activity'), /Document added: Cap table/);
@@ -348,7 +353,7 @@ test('#6193 the activity\'s Deal, Documents and Diligence chips narrow on each r
 
 test('the activity\'s Mine filter shows your own rows only', async () => {
   const rows = [{ type: 'commitment', label: 'An investor committed', at: '2026-10-18', mine: false }, { type: 'invitation', label: 'You were invited', at: '2026-09-22', mine: true }];
-  const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
+  const v = await mounted('/deals/4/activity', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
   try {
     assert.match(v.textOf('deal-activity'), /An investor committed[\s\S]*You were invited/);
     await v.click('deal-activity-mine');

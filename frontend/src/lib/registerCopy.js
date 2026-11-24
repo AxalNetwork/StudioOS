@@ -11,7 +11,12 @@ export const LANES = Object.freeze(['partner', 'investor', 'lp', 'founder', 'adv
 export const LANE_COPY = Object.freeze({
   partner: {
     title: 'Create your Partner account',
-    desc: "Get matched with deals before they go public. Creating an account is free — no password to remember, we'll email you a secure link. Your partner membership and profile are reviewed before deals open.",
+    desc: "Creating an account is free — no password to remember, we'll email you a secure link. Your partner membership and profile are reviewed before deals open.",
+  },
+  // #6983 (X1): the investor page's own lane. No claim about deals or evidence.
+  investor: {
+    title: 'Create your investor account',
+    desc: 'Creating an account is free. Your membership is reviewed before your workspace opens.',
   },
   lp: {
     title: 'Open your LP Account',
@@ -22,7 +27,7 @@ export const LANE_COPY = Object.freeze({
     desc: "Creating an account is free — no password to remember, we'll email you a secure link. Your membership and advisor profile are confirmed before you can subscribe.",
   },
   founder: {
-    title: 'Submit your pitch',
+    title: 'Create your founder account',
     // Founder-journey audit — this used to promise a fixed scoring turnaround measured in hours. Nothing enforces any
     // such SLA: a fresh signup holds in the exploring review queue until an admin sends the binding agreement, and
     // scoring is SELF-SERVE (the founder runs it from /scoring / the Lab) once the workspace opens. Promise what the
@@ -56,10 +61,63 @@ export const REGISTER_ACTIONS = Object.freeze({
 /** The lane → the role the Worker's register route takes; `lp` folds into investor, and an advisor sends none. */
 export const LANE_ROLE = Object.freeze({ partner: 'partner', investor: 'investor', lp: 'investor', founder: 'founder', advisor: undefined });
 
-/** The heading and the line under it: the chosen plan when one is ready, else the audience's own words. */
-export function registerHeading(lane, selection) {
+/**
+ * D6989 (#6989): /register with `product=spinout-lab`. Applying to the Lab starts with an account, so the heading says
+ * so, and the stages are the order the code allows: `POST /api/auth/register` creates the account (role `exploring`);
+ * confirming the email signs the member in; `POST /api/spinout-lab/apply` takes an explorer's application at once
+ * (`routes/spinout_lab.ts`: founder or exploring); the team reviews the membership and sends the agreement; once it is
+ * signed an admin gives the role that opens the workspace (`MEMBERSHIP_STEPS`). No timing is promised.
+ */
+export const SPINOUT_LAB_PRODUCT = 'spinout-lab';
+export const SPINOUT_LAB_SIGNUP = Object.freeze({
+  title: 'Apply to Spin-Out Lab: start by creating your account.',
+  context: 'Programme: Spin-Out Lab',
+  stages: Object.freeze([
+    'Create your account',
+    'Confirm your email',
+    'Complete your application',
+    'Axal VC reviews your membership and sends an agreement',
+    'Sign the agreement and your workspace opens',
+  ]),
+});
+
+/**
+ * The heading and the line under it: the chosen plan when one is ready, else the Lab's heading when the sign-up is
+ * for it, else the audience's own words. The line under it is always the lane's.
+ */
+export function registerHeading(lane, selection, product = null) {
   const own = lane && LANE_COPY[lane] ? LANE_COPY[lane] : null;
-  const title = selection?.state === 'ready' ? `Create your account to get ${selection.name}` : own?.title || 'Create Your Account';
+  const lab = product === SPINOUT_LAB_PRODUCT ? SPINOUT_LAB_SIGNUP.title : null;
+  const title = selection?.state === 'ready' ? `Create your account to get ${selection.name}` : lab || own?.title || 'Create Your Account';
   const desc = own?.desc || "Creating an account is free. Your membership is reviewed before your workspace opens. No password to remember — we'll email you a secure link.";
   return { title, desc };
+}
+
+/**
+ * #6984 (X2): how long a lane chosen on an earlier visit is kept. `gvpn:intent` is `{ lane, ts }`; an entry older than
+ * this, or one with no `ts` (written before the timestamp was read), is expired and not used.
+ */
+export const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** The lane this visit signs up under: the address's lane always wins; else a stored lane under 24 hours old; else none. */
+export function laneForVisit(search, saved, now = Date.now()) {
+  const fromUrl = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('lane');
+  if (fromUrl && LANES.includes(fromUrl)) return { lane: fromUrl, store: true };
+  const ts = saved && typeof saved === 'object' ? saved.ts : null;
+  const fresh = typeof ts === 'number' && Number.isFinite(ts) && ts <= now && now - ts < INTENT_TTL_MS;
+  return { lane: fresh && LANES.includes(saved.lane) ? saved.lane : null, store: false };
+}
+
+/** #6984 (X2): who the context line says is signing up, by lane. */
+export const LANE_SIGNUP_ROLE = Object.freeze({ founder: 'a founder', investor: 'an investor', lp: 'an LP', partner: 'an operating partner', advisor: 'an advisor' });
+
+/**
+ * The one context line above the form: the role, and the plan only when the catalogue read returned it (`state:
+ * 'ready'`); a plan that is not offered, or could not be read, is never named here. Null when there is nothing to say.
+ */
+export function registerContextLine(lane, selection) {
+  const role = lane && LANE_SIGNUP_ROLE[lane] ? `You are signing up as ${LANE_SIGNUP_ROLE[lane]}.` : '';
+  const plan = selection?.state === 'ready' && selection.name ? `Plan: ${selection.name}, ${selection.interval === 'yearly' ? 'yearly' : 'monthly'}.` : '';
+  const line = [role, plan].filter(Boolean).join(' ');
+  return line || null;
 }

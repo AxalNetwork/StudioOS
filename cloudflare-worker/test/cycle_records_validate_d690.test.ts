@@ -1,8 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -12,44 +9,15 @@ import { ownedRow } from '../src/services/records/owned.ts';
 import type { RecordContent, RecordRegistry } from '../src/services/records/types.ts';
 import { RECORD_SPECS } from '../src/services/records/index.ts';
 import { MODULES, QUOTE_WITHHELD } from '../src/services/cycleValidate.ts';
-import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
+import { openSchema } from './_schema_once.mjs';
 
-const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
 const KEY = ['fixture', 'key', 'for', 'd690', 'tests'].join('-');
 const P = 1, OTHER_P = 2;
 const roles: Record<number, string> = { 10: 'founder', 20: 'founder', 30: 'admin', 40: 'partner', 50: 'investor', 60: 'exploring', 70: 'advisor' };
 
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'activity_logs', 'pain_groups', 'hypotheses', 'mvp_features', 'roadmap_okrs',
-    'discovery_interviews', 'hypothesis_pain_links', 'competitor_analyses', 'competitor_candidates', 'competitor_signals',
-    'waitlist_signups', 'metric_targets', 'interview_pain_severities', 'pain_group_aliases', 'competitor_sources',
-    'validate_proposals']) {
-    db.exec(tableFromBaseline(BASE, t));
-  }
-  db.exec(migration('311_revenue_entries.sql'));
-  db.exec(migration('440_validate_cycle_stores.sql'));
-  db.exec(migration('438_interview_sessions.sql'));
-  applySessionTranslationColumns(db); // D857: migration 527's segment columns
-  db.exec(migration('447_assistant_interviews.sql'));
-  db.exec(migration('453_interview_processing.sql'));
-  db.exec(migration('531_meeting_bots.sql'));
-  db.exec(migration('459_cycle_activity_convention.sql'));
-  // D690 (#1692): Validate's record stores, and what the interview record reads.
-  db.exec(migration('460_validate_record_stores.sql'));
-  db.exec(migration('755_posthog_metrics.sql')); // D4585: Add evidence offers valued PostHog metrics
-  db.exec(migration('439_validate_proposals_structuring.sql'));
-  db.exec(migration('446_interview_structure_receipts.sql'));
-  // D757 (#1925): "What it fed" reads a proposal's interview (246's
-  // `target_ref`), and the ICP, Market and Demand records read the findings store.
-  db.exec(migration('246_fills_the_blanks_everywhere.sql'));
-  db.exec(migration('489_interview_findings.sql'));
-  db.exec(migration('228_research_company_directory.sql'));
-  db.exec(migration('249_project_metrics.sql'));
-  db.exec(migration('202611152333_6006_theme_problem_statement.sql')); // D6006: the theme's problem statement
+  const db = openSchema(); // D5503: current-schema isolated cached file copy.
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   for (const [id, role, founder] of [[10, 'founder', 1001], [20, 'founder', 1002], [30, 'admin', null],
     [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001], [70, 'advisor', null]] as const) {
@@ -390,7 +358,7 @@ const RECORDS: Record<string, { a: string; b: string; main: string[]; side: stri
   'problem-discovery': { a: '11', b: '22', main: ['Problem statement', 'Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
   // D757 (#1924) adds Summary after the placements.
   'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'From this conversation', 'Cost', 'Session'] },
-  'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card', 'From interviews'] },
+  'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Firmographics and disqualifiers', 'Persona card', 'From interviews'] },
   'market-intelligence': { a: 'candidate1', b: 'candidate22', main: ['Signals', 'Positioning'], side: ['Research › Companies', 'Signal filters', 'From interviews'] },
   'demand-signals': { a: 'signal-7', b: 'signal-22', main: ['Evidence', 'Feeds'], side: ['Who', 'From the interview'] },
   experiments: { a: '5', b: '22', main: ['Evidence', 'Experiments'], side: ['Pain themes', 'What would prove this wrong'] },
@@ -771,4 +739,24 @@ test('#4411: interview facts name both permissions and follow the latest session
   ]);
   db.exec('DELETE FROM interview_session_chunks WHERE session_id = 4; DELETE FROM interview_sessions WHERE id = 4');
   assert.equal((await facts()).find((f: any) => f.label === 'Recording consent').value, 'Not asked');
+});
+
+test('#6013: demand Edit carries Would pay, currency and period through the record and write', async () => {
+  const db = seeded();
+  const before = await real(db, 10, 'GET', rec('demand-signals', 'signal-7'));
+  assert.equal(before.status, 200);
+  const edit = before.body.actions.find((action: any) => action.key === 'edit').form;
+  assert.ok(edit.fields.find((field: any) => field.key === 'kind').options.some((choice: any) => choice.value === 'would_pay'));
+  assert.ok(edit.fields.some((field: any) => field.key === 'currency'));
+  assert.ok(edit.fields.some((field: any) => field.key === 'period'));
+  const saved = await real(db, 10, 'POST', rec('demand-signals', 'signal-7', '/actions/edit'), {
+    kind: 'would_pay', amount_cents: 1234, currency: 'eur', period: 'month',
+  });
+  assert.equal(saved.status, 200);
+  const row = db.prepare('SELECT kind, amount_cents, currency, period FROM demand_signals WHERE id = 7').get();
+  assert.deepEqual({ ...row }, { kind: 'would_pay', amount_cents: 1234, currency: 'eur', period: 'month' });
+  const after = await real(db, 10, 'GET', rec('demand-signals', 'signal-7'));
+  const fields = after.body.actions.find((action: any) => action.key === 'edit').form.fields;
+  assert.equal(fields.find((field: any) => field.key === 'currency').value, 'eur');
+  assert.equal(fields.find((field: any) => field.key === 'period').value, 'month');
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileBarChart, Plus, RefreshCw } from 'lucide-react';
 import { WorkerRail, Unreadable } from '../../ui';
@@ -11,6 +11,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase as caseLabel } from '../../lib/absence';
+import { fundReportDeliveryLabel, fundReportDeliveryTime } from '../../lib/fundReportDelivery';
 import { useManagedFund, FundPicker } from './managedFund';
 import FromMercury from './FromMercury';
 
@@ -89,18 +90,19 @@ export function ReportingArchive({ loading, error, fund, rows, filter, onRetry }
   } else if (!visible.length) {
     body = <div className="if4-empty"><div><strong>No period matches this filter.</strong></div></div>;
   } else {
-    body = <div className="if4-table-wrap"><table><thead><tr><th>Period</th><th>State</th><th>Issued</th><th>Contents</th></tr></thead><tbody>
+    body = <div className="if4-table-wrap"><table><thead><tr><th>Period</th><th>State</th><th>Issued</th><th>Delivered</th><th>Contents</th></tr></thead><tbody>
       {visible.map((row) => <tr key={row.id ?? periodOf(row)} data-testid="row-reporting-period">
         <td><Link className="if4-period-link" to={periodPath(fund.id, row)}>{periodOf(row)}</Link><small>{span(row)}</small></td>
         <td data-label="State"><span className={`if4-pill ${statusOf(row)}`}>{titleCase(statusOf(row))}</span></td>
         <td data-label="Issued">{date(row.issued_at) || 'Not issued'}</td>
+        <td data-label="Delivered">{fundReportDeliveryLabel(row)}{row.lps_notified_at && <small>{fundReportDeliveryTime(row)}</small>}</td>
         <td data-label="Contents"><ReportContents row={row} /></td></tr>)}
     </tbody></table></div>;
   }
   const subtitle = loading ? 'Loading the fund’s periods' : error || !fund ? 'No count is shown' : `${visible.length} of ${count} periods`;
   return <section className="i6-card if4-archive" data-testid="fund-reporting-archive"><header><div><h2>Reporting periods</h2><span>{subtitle}</span></div>
     {fund && !loading && !error && count > 0 && <NewPeriodLink fundId={fund.id} />}</header>{body}
-    <p className="i6-footnote">A draft is not shown as issued, and an issued period is not shown as delivered to each LP.</p></section>;
+    <p className="i6-footnote">A draft is not shown as issued. Delivered records in-app notices, not whether an LP opened the report.</p></section>;
 }
 
 export default function InvestorFundReporting() {
@@ -110,8 +112,10 @@ export default function InvestorFundReporting() {
   const navigate = useNavigate();
   const [state, setState] = useState({ loading: true, rows: [], error: null });
   const [filter, setFilter] = useState('all');
+  const loadVersion = useRef(0);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     if (managed.loading) { setState({ loading: true, rows: [], error: null }); return; }
     if (managed.error) { setState({ loading: false, rows: [], error: managed.error }); return; }
     if (!managed.fund?.id) { setState({ loading: false, rows: [], error: null }); return; }
@@ -120,12 +124,15 @@ export default function InvestorFundReporting() {
       const periods = await api.fundsReportPeriods(managed.fund.id);
       const rows = periods?.items || periods?.periods;
       if (!Array.isArray(rows)) throw new Error('The reporting periods came back in a shape this page cannot read.');
-      setState({ loading: false, rows, error: null });
+      if (loadVersion.current === version) setState({ loading: false, rows, error: null });
     } catch (error) {
-      setState({ loading: false, rows: [], error: error?.message || 'The reporting periods could not be read.' });
+      if (loadVersion.current === version) setState({ loading: false, rows: [], error: error?.message || 'The reporting periods could not be read.' });
     }
   }, [managed.loading, managed.error, managed.fund]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { loadVersion.current++; };
+  }, [load]);
   const refresh = () => (managed.error ? managed.reload() : load());
 
   const fund = managed.fund;
@@ -133,6 +140,7 @@ export default function InvestorFundReporting() {
   const counts = useMemo(() => periodCounts(state.rows), [state.rows]);
   const readable = !state.loading && !state.error && !!fund;
   const latest = readable ? state.rows[0] : null;
+  const deliveryKnown = readable && state.rows.some(row => row.delivery_status && row.delivery_status !== 'unreadable');
   // The handler is supplied only for a fund the member operates; without one the
   // action is absent and the archive card says why.
   const newPeriod = useMemo(() => (fund ? () => navigate(newPeriodPath(fund.id)) : null), [fund, navigate]);
@@ -147,12 +155,12 @@ export default function InvestorFundReporting() {
       filters={investorZoneFilters('funds/reporting', { value: filter, onChange: setFilter, counts: readable ? counts : {} })}
       actions={investorZoneActions('funds/reporting', {
         handlers: { newPeriod },
-        view: { scope: fund?.name, header: ['Period', 'State', 'Start', 'End', 'Issued'], rows: readable ? visible : [], cells: (r) => [periodOf(r), statusOf(r), date(r.period_start), date(r.period_end), date(r.issued_at)] },
+        view: { scope: fund?.name, header: ['Period', 'State', 'Start', 'End', 'Issued', 'Delivered'], rows: readable ? visible : [], cells: (r) => [periodOf(r), statusOf(r), date(r.period_start), date(r.period_end), date(r.issued_at), fundReportDeliveryLabel(r)] },
       })}
     />
-    <section className="if4-stats"><Stat label="Periods" value={readable ? counts.all : null} note={readable ? `${counts.issued} issued · ${counts.draft} draft` : 'Not read'} /><Stat label="Latest period" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : readable ? 'No period yet' : 'Not read'} /><Stat label="Delivery" value={null} note="Delivery to each LP is not tracked" /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>
+    <section className="if4-stats"><Stat label="Periods" value={readable ? counts.all : null} note={readable ? `${counts.issued} issued · ${counts.draft} draft` : 'Not read'} /><Stat label="Latest period" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : readable ? 'No period yet' : 'Not read'} /><Stat label="Delivery" value={deliveryKnown ? 'Recorded' : null} note={deliveryKnown ? 'In-app notice results' : 'Per-LP delivery unavailable'} /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>
     <ReportingArchive loading={managed.loading || state.loading} error={managed.error || state.error} fund={fund} rows={state.rows} filter={filter} onRetry={refresh} />
-    <section className="i6-card if4-boundary"><header><div><h2>Reporting boundary</h2><span>What you can do here</span></div></header><p>Start a period, or open one to edit its draft and issue it. Issuing cannot be undone: a change after that is a separate correcting period, and the original stays issued. An admin saves drafts here and issues from the reporting queue. Issuing records when a period was issued, not which LP received it, so this page makes no per-LP delivery claim.</p></section>
+    <section className="i6-card if4-boundary"><header><div><h2>Reporting boundary</h2><span>What you can do here</span></div></header><p>Start a period, or open one to edit its draft and issue it. Issuing cannot be undone: a change after that is a separate correcting period, and the original stays issued. An admin saves drafts here and issues from the reporting queue. Delivery records in-app notices for issued periods. It does not indicate that an LP opened the report.</p></section>
     {/* D840 (#2349): month-end cash from the GP's own Mercury, and its statement attached on Accept. */}
     <FromMercury section="reporting" fundId={managed.fund?.id ?? null} />
     <footer className="i6-footnote">Periods are drafted and issued in their editor; this list reads them.</footer>

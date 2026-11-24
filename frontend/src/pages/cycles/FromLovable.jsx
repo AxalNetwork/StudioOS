@@ -18,7 +18,7 @@ import { LOVABLE_WORDS as W, signupView, slotView } from './lovableAppLink.js';
  * address": the count, and for the venture's writers the address with Copy and
  * Turn off…. Making or turning off an address asks first, in place.
  */
-export default function FromLovable({ part, cycle, projectId, onRetry, api = lovableAppLinksApi }) {
+export default function FromLovable({ part, cycle, projectId, onRetry, action = null, api = lovableAppLinksApi }) {
   const [slots, setSlots] = useState(() => (part?.state === 'ok' && Array.isArray(part.slots) ? part.slots : []));
   useEffect(() => { setSlots(part?.state === 'ok' && Array.isArray(part.slots) ? part.slots : []); }, [part]);
   if (!part || typeof part !== 'object') return null;
@@ -29,7 +29,10 @@ export default function FromLovable({ part, cycle, projectId, onRetry, api = lov
       data-testid="cycle-part-lovable" aria-labelledby="from-lovable-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id="from-lovable-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{W.title}</h2>
-        <span className="text-[11px] text-axal-faint dark:text-gray-500">{W.connector}</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-[11px] text-axal-faint dark:text-gray-500">{W.connector}</span>
+          {action}
+        </div>
       </div>
       {part.state !== 'ok'
         ? (

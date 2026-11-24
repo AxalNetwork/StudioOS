@@ -97,7 +97,9 @@ test('4. the route mounts both on Prototype / MVP only, from Build\'s def; the w
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const above = moduleStatus === 'ready' && projectId && !narrativeAdmin \? fnOf\(def\.aboveRecords, slug\) : null;/);
   // D6122 (#6122): the ctx also carries the table's query, so Company's due strip can filter it.
-  assert.match(route, /: above \? above\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\) : null\}/);
+  // #6746: the module's own line is computed once (`aboveRecords`) and drawn on its own, or above the partner ranking.
+  assert.match(route, /const aboveRecords = above\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\);/);
+  assert.match(route, /<\/> : aboveRecords\}/);
   assert.match(route, /const phoneRowOf = phone \? fnOf\(def\.phoneRows, slug\) : null;/);
   assert.match(route, /\.\.\.\(phoneRowOf \? \{ phoneRow: phoneRowOf \} : \{\}\)/);
   assert.doesNotMatch(route, /MvpSummary|mvpTable/, 'CycleRoute.jsx is a frozen hub (D5615): the imports live in defs/build.jsx');
@@ -108,10 +110,17 @@ test('4. the route mounts both on Prototype / MVP only, from Build\'s def; the w
   const el = fnOf(build.aboveRecords, 'prototype-mvp')({ facts: { done: 1, total: 2, blocked: 0, target_date: null } }, { projectId: 7, reload() {} });
   assert.equal(el.type, MvpSummary);
   assert.deepEqual(el.props.facts, { done: 1, total: 2, blocked: 0, target_date: null });
-  for (const slug of ['solution-design', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems']) {
-    assert.equal(fnOf(build.aboveRecords, slug), null, slug);
+  // D6033 (#6033): Solution design draws its Risks list above its table; its phone rows stay the default.
+  const { default: SolutionDesignRisks } = await import('../src/pages/cycles/SolutionDesignRisks.jsx');
+  assert.equal(fnOf(build.aboveRecords, 'solution-design')({}, { projectId: 7, reload() {}, search: '' }).type, SolutionDesignRisks);
+  assert.equal(fnOf(build.phoneRows, 'solution-design'), null);
+  for (const slug of ['product-roadmap', 'founding-team', 'company-creation', 'operating-systems']) {
+    // D6036 (#6036): Product roadmap draws its own board above the list; none of the others has a line there.
+    if (slug !== 'product-roadmap') assert.equal(fnOf(build.aboveRecords, slug), null, slug);
     assert.equal(fnOf(build.phoneRows, slug), null, slug);
   }
+  const { default: RoadmapBoard } = await import('../src/pages/cycles/RoadmapBoard.jsx');
+  assert.equal(fnOf(build.aboveRecords, 'product-roadmap')({ facts: {} }, { query: {}, onQuery() {}, search: '' }).type, RoadmapBoard);
   assert.match(read('frontend/src/lib/api/cycleWrites.js'), /mvpTarget: \(projectId, date\) => request\(`\/cycles\/build\/project\/target\?\$\{q\(projectId\)\}`, \{ method: 'PATCH', body: JSON\.stringify\(\{ mvp_target_date: date \}\) \}\)/);
   assert.match(read('cloudflare-worker/src/routes/cycle_build.ts'), /app\.patch\('\/project\/target'/);
 });

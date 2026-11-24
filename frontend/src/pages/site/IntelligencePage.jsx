@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import SitePage from '../../components/site/SitePage';
 import { ButtonLink, EmptyNote } from '../../components/site/SiteBlocks';
 import { RESEARCH_CARDS } from '../../lib/siteIntelligence';
@@ -121,6 +122,11 @@ function Research() {
               <h3 className="ax-i-card-t">{r.t}</h3>
               <div className="ax-i-card-q">{r.q}</div>
               <p className="ax-i-card-d">{r.d}</p>
+              {r.to && (
+                <Link to={r.to} className="ax-i-card-go">
+                  {r.go} <span aria-hidden="true">→</span>
+                </Link>
+              )}
             </div>
           ))}
         </div>

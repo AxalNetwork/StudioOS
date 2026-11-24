@@ -30,3 +30,22 @@ test('reconciliation runs the trusted main revision only and keeps its token out
   assert.match(workflow, /SCAN_ALERT: \$\{\{ inputs\.alert \}\}/)
   assert.match(workflow, /run: node scripts\/scan-remediation\/run\.mjs/)
 })
+
+test('S21 reconciliation can update trackers but cannot write code, PRs or security alerts', () => {
+  const workflow = read('scan-remediation')
+  assert.deepEqual(workflow.match(/^      [\w-]+: (?:read|write)$/gm), [
+    '      contents: read',
+    '      issues: write',
+    '      pull-requests: read',
+    '      security-events: read',
+  ])
+  assert.deepEqual(workflow.match(/^          permission-[\w-]+: (?:read|write)$/gm), [
+    '          permission-contents: read',
+    '          permission-issues: write',
+    '          permission-pull-requests: read',
+    '          permission-security-events: read',
+    // D8074: the App credential also reads Dependabot and secret-scanning alerts; it writes neither.
+    '          permission-vulnerability-alerts: read',
+    '          permission-secret-scanning-alerts: read',
+  ])
+})

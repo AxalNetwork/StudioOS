@@ -43,6 +43,7 @@ import { shellRoleFor } from '../src/lib/shellRole.js';
 import { ACCENT } from '../src/workspaces/shellConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
 import { adminConsoleSource } from './_adminConsoles.mjs';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -106,11 +107,11 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
 });
 
 test('Accounts, Approvals, Programs, Community and Insights are guard([\'admin\']) without hqOnly, each old held address forwarding', () => {
-  for (const [path, page, old, redirect] of [
-    ['/admin/insights', 'AdminInsights', '/admin/held/insights', 'HeldInsightsRedirect'],
-    ['/admin/community', 'AdminCommunity', '/admin/held/community', 'HeldCommunityRedirect'],
-    ['/admin/approvals', 'AdminApprovals', '/admin/held/approvals', 'HeldApprovalsRedirect'],
-    ['/admin/programs', 'AdminProgramsCatalogue', '/admin/held/programs', 'HeldProgramsRedirect'],
+  for (const [path, page, old] of [
+    ['/admin/insights', 'AdminInsights', '/admin/held/insights'],
+    ['/admin/community', 'AdminCommunity', '/admin/held/community'],
+    ['/admin/approvals', 'AdminApprovals', '/admin/held/approvals'],
+    ['/admin/programs', 'AdminProgramsCatalogue', '/admin/held/programs'],
   ]) {
     const line = routeLine(path);
     assert.ok(line, `${path} is not registered`);
@@ -196,8 +197,7 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
 // S22's sixteen lanes became the canvas's twenty (APR2): the eleven the
 // glance counts, the nine new ones, and the Not-a-queue card. Each lane's
 // door is a literal Link in `LaneDoor`, keyed by the lane.
-const APPROVALS = 'frontend/src/pages/admin/approvals/AdminApprovals.jsx';
-const APPROVALS_CODE = codeOnly(read(APPROVALS));
+const APPROVALS_CODE = codeOnly(approvalsPageSource());
 
 /** `LaneDoor`'s cases as lane key → literal target. */
 function laneDoors() {

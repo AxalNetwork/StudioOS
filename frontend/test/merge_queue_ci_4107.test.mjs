@@ -22,7 +22,13 @@ const DIR = '.github/workflows';
 const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.
-const IN_QUEUE = Object.freeze(['ci.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+// D7899: Dependency Review also runs in the queue, comparing the queue's own
+// base and head; it reads only and is advisory until its required-check
+// activation, so its job is exempt from the skip-in-queue rule below.
+// D8068: Agent provenance reads the queued PR's own commits and is advisory
+// (continue-on-error) until the owner makes `provenance` a required check.
+const IN_QUEUE = Object.freeze(['agent-provenance.yml', 'ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'agent-provenance.yml': 'D8068', 'dependency-review.yml': 'D7899' });
 
 const code = (file) => readFileSync(`${DIR}/${file}`, 'utf8').split('\n').filter((l) => !/^\s*#/.test(l));
 const unquote = (v) => v.trim().replace(/^(['"])(.*)\1$/, '$2');
@@ -84,13 +90,16 @@ const SKIPS_IN_QUEUE = Object.freeze([
   // D7108 part 2: `plan` feeds the full-suite check but is skipped in the
   // queue, where each suite part plans for itself; the gate requires that skip.
   PLAN_IF,
+  // D7909: optional capacity submission is main-push only, independently of the hosted gate.
+  "${{ !cancelled() && github.event_name != 'merge_group' && github.event_name == 'push' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && needs.plan.outputs.capacity_submission != '' }}",
 ]);
 
 // Jobs that run in the queue although no required check needs them, each with
 // why. D5608: `test-deps` merges the suite parts' traces into one artifact per
 // commit; a push that `verified` skips has none, so the queue run must make it.
 // test_tracer_5608.test.mjs keeps it advisory: neither gate needs it.
-const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608' });
+// D5502: bounded read-only failure diagnostics also run after a queue failure.
+const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608', classify: 'D5502' });
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
@@ -133,6 +142,7 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
       if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
       if (f === 'ci.yml' && Object.hasOwn(QUEUE_ADVISORY, j.id)) continue;
+      if (Object.hasOwn(ADVISORY_QUEUE_WORKFLOWS, f)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
         `${f} › ${j.name} is not a required check and no required check needs it, so it is skipped in the queue (if: ${j.if})`,

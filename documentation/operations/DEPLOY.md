@@ -128,6 +128,21 @@ of that year.
 
 ---
 
+### 1.4 Credentials and environments (D8069, #8069)
+
+Every job that reads a cloud credential names the GitHub environment that holds it. `frontend/test/workflow_environments_8069.test.mjs` fails the build when one does not.
+
+| Environment | Who may enter | Jobs |
+| --- | --- | --- |
+| `production` | `main` only, the owner approves | the release (`cloudflare-worker-deploy.yml` deploy, schema-drift, branches), `d1-migrate.yml`, and the merge-control, meeting-bot and archive-observer deploys |
+| `production-ops` | `main` only, the owner approves | the D1 backup, the DR drill and its synthetic outside restore, file recovery (snapshot and synthetic proof), the probes, branch provisioning and the gateway jobs |
+| `preview` | `main` only, no reviewer | the pull-request preview's deploy and delete (`pr-preview-deploy.yml`) |
+| `agent-compute-preview` | `main` only, independent review | the disabled compute host |
+
+The release's admission and rollback contract above is unchanged. A pull-request run enters none of these environments, so it holds no deploy credential. Each deploy and ops workflow grants no permission at the top (`permissions: {}`). Each job declares what it uses. `id-token: write` appears only on a job that exchanges the OIDC token (Claude's federation, the capacity planner, and from #8064 an AWS or Azure login).
+
+No workflow reads a long-lived AWS or Azure key. Cloudflare has no OIDC federation, so its tokens are scoped per Worker and per environment (#8064). The preview jobs read `PR_PREVIEW_CLOUDFLARE_API_TOKEN`, not the generic name. Until the repository copy of `CLOUDFLARE_API_TOKEN` is deleted, an absent environment secret of that name would fall back to the production-capable repository token. The [credential runbook](PRODUCTION_CREDENTIALS.md) has the cutover steps and the owner gates.
+
 ## 2. Pre-flight
 
 Run these before deploying. Read **exit codes**, not output — several of these
@@ -279,6 +294,17 @@ npx wrangler rollback <DEPLOYMENT_ID> --config ../wrangler.toml --env production
 > select. A migration that drops or renames a column does not, and needs a
 > two-deploy sequence instead.
 
+Each release records whether this rollback would be safe before it writes
+anything (D7151). The step "Record the release rollback class" puts a class in
+the job summary and in `rollback-class.json` in the release evidence, with the
+version a rollback would return to: **`auto`** (no D1 migration, no Durable
+Object migration, no binding removed), **`auto-additive`** (every pending
+statement only adds a table, view, non-unique index or nullable/defaulted
+column, or touches only a table the same release creates) or **`manual`**
+(anything else, each reason with its file and line; anything it cannot read is
+manual). It is report-only: today the operator still decides, and a `manual`
+release needs the compatibility check above before any rollback.
+
 ---
 
 ## 4. If a migration fails
@@ -384,6 +410,61 @@ against *its own* secret, and the two are not necessarily the same value. Use
 a real production session, or prove secret parity first. Skipping this step has
 already produced one false "production auth is broken" report.
 
+### 5.2 Which build is live, and its provenance (D8073, #8073)
+
+Each production deploy leaves three things behind:
+
+- **The served version.** `GET /api/public/version` answers
+  `{ sha, version_id, built_at, missing }`. Every field comes from the
+  bundle's own bindings and nothing is read from D1:
+  - `sha` comes from `WORKER_DEPLOY_VERSION`, which the deploy already stamps
+    with `GITHUB_SHA`;
+  - `version_id` comes from the `[version_metadata]` binding
+    `CF_VERSION_METADATA`;
+  - `built_at` comes from `WORKER_BUILT_AT`.
+
+  A field the deploy did not stamp is `null`, and `missing` names it.
+  `scripts/check-spa-live.mjs` reads the route on every host. With
+  `SMOKE_EXPECT_SHA` set, the served `sha` must equal it. Unset, it must be a
+  commit sha at all. A host serving another build fails the smoke and names
+  both shas.
+- **The record.** `scripts/deploy/record-deployment.mjs` writes one row to D1
+  `deployments` through `POST /api/internal/deployments` and appends the same
+  line to the run summary. The row holds the sha, the run id, the Worker
+  version id, the attestation URL, `built_at`, `deployed_at` and `rollback_of`.
+  - The route takes `Authorization: Bearer <DEPLOY_RECORD_TOKEN>`, a Worker
+    secret whose GitHub copy is held only by the `production` environment.
+  - Unset, the route answers 503. With a wrong token it answers 401.
+  - A re-run of the same deploy answers the row already there. A re-post
+    that disagrees with that row answers 409.
+- **The attestation.** `actions/attest-build-provenance` signs `docs/` and the
+  Worker bundle. Its URL is what the record's `attestation_url` points at.
+
+**What is live today.** The route, the record, the table and the smoke
+assertion ship with #8073. The deploy workflow lines are #8069's: the
+attestation step, `WORKER_BUILT_AT`, the `[version_metadata]` binding, the
+record step and `SMOKE_EXPECT_SHA`. They are proposed there as a diff, and
+until they land:
+- `version_id` and `built_at` read `null`;
+- the smoke checks only that some sha is served;
+- the record is written by hand from a shell that holds the token, for
+  example after an operator dispatch:
+
+```bash
+DEPLOY_RECORD_TOKEN=... GITHUB_SHA=<sha> GITHUB_RUN_ID=<run id> \
+WRANGLER_DEPLOY_LOG=deploy.log ATTESTATION_URL=<url> \
+node scripts/deploy/record-deployment.mjs
+```
+
+It exits 1, and the summary carries no line, when the record was not
+written. The deploy itself is not undone. Rollback mechanics are out of scope
+here. `rollback_of` only names the recorded deploy that a rollback undid.
+
+**Rollback of this change.** Reverting the PR removes the route, the smoke
+assertion and the script. The `deployments` table stays, unread, because
+migrations are forward-only. Unsetting `DEPLOY_RECORD_TOKEN` alone stops new
+records: the route answers 503.
+
 ---
 
 ## 6. Provisioning a branch — `branch-provision.yml`
@@ -399,9 +480,9 @@ right it is missing rather than a generic error.
 
 | what | why |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` widened to **Workers KV:Edit, R2:Edit, Queues:Edit, Vectorize:Edit, Zone DNS:Edit** (it has Workers Scripts and D1 today) | the create steps, and the custom domain for `<code>.axal.vc` |
+| A dedicated subsidiary provisioning identity. Hold dispatch until it is wired and scoped as described in the [credential runbook](PRODUCTION_CREDENTIALS.md) | the create steps, and the custom domain for `<code>.axal.vc` |
 | `BRANCH_SECRET_BUNDLE` — newline-separated `NAME=VALUE` pairs | `SCORING_HMAC_SECRET`, `KEK_PII`, `KEK_R2`, `AXAL_ENCRYPTION_SECRET`, `TURNSTILE_SECRET_KEY`, the mail credentials. Without it the Worker deploys and answers **503 config_error** on every request — up, and refusing everything |
-| `HQ_RPC_SECRET` — one high-entropy value, **set once and never rotated per branch** (D120), in **two places**: as a repository secret, and by hand as a Worker secret on HQ (`wrangler secret put HQ_RPC_SECRET --config wrangler.toml --env production`) | the HQ→branch leg. The run puts only its SHA-256 on the new branch, as `HQ_RPC_SECRET_HASH`. Without it the branch deploys fine and HQ cannot open a support session on it — `authenticateHq` refuses rather than defaulting open, and the workflow warns rather than failing |
+| `HQ_RPC_SECRET` — one high-entropy value, **set once and never rotated per branch** (D120), in **two places**: as a `production-ops` environment secret, and by hand as a Worker secret on HQ (`wrangler secret put HQ_RPC_SECRET --config wrangler.toml --env production`) | the HQ→branch leg. The run puts only its SHA-256 on the new branch, as `HQ_RPC_SECRET_HASH`. Without it the branch deploys fine and HQ cannot open a support session on it — `authenticateHq` refuses rather than defaulting open, and the workflow warns rather than failing |
 | `GITHUB_ACCESS_TOKEN` with `actions: write` (task #192) | only for HQ's Deploy **button** to dispatch this. Running it by hand from the Actions tab needs nothing extra |
 
 **Why `HQ_RPC_SECRET` is generated by a person and not by the run.**

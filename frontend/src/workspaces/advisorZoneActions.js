@@ -38,9 +38,10 @@ import { makeZoneActions } from './zoneActionBuilder';
  * handler: the header's emerald primary scrolls to the Add form below and
  * focuses its Title (`ServicesZone`'s `focusAddForm`), and Ask works in that
  * form (D1329). `primary: true` marks the one row each zone's header fills:
- * New service, New piece, Block a date range and Download 1099 summary.
- * Opportunities, Engagements, Delivery, the five Cohorts zones, Profile, Proof
- * and Visibility have no live first step, so no primary.
+ * New service, New piece, Block a date range and Download 1099 summary, and
+ * since D4833-p4 Delivery's New work product. Opportunities, Engagements, the
+ * five Cohorts zones, Profile, Proof and Visibility have no live first step,
+ * so no primary.
  *
  * D4681 (#4681): Profile's `Preview as founder` and Proof's `Public preview`
  * said "no public profile page exists to preview". One does (`/advisors/:uid`,
@@ -130,7 +131,11 @@ export const ADVISOR_ZONE_ACTIONS = {
   // before opening an Email draft. The one case the send rule cannot prevent — an
   // engagement unlinked after a send — is reported as a count of rows the nudge
   // will NOT reach, never skipped quietly.
+  // #4833 part 4 (D4833-p4): PX-06's header primary, `New work product`
+  // (Practice v2, D4874). The page's `newWorkProduct` opens the v1 form; it
+  // records a draft and sends nothing.
   'practice/delivery': [
+    { label: 'New work product', kind: 'handler', handler: 'newWorkProduct', primary: true },
     { label: 'Bulk: nudge unopened', kind: 'handler', handler: 'nudgeUnopened' },
     { label: 'Export as client pack', kind: 'export' },
   ],
@@ -229,10 +234,14 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Attach to session', unbuilt: 'a grant can open a client’s sessions to you, but nothing records a brief against one' },
     { label: 'Export', kind: 'export' },
   ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); New market research is drawn and disabled:
+  // a research project opens for the founder licence only. They replace the
+  // unbuilt Re-run stale and Add source, and Export.
   'research/markets': [
-    { label: 'Re-run stale', unbuilt: 'sector counts are a supplied baseline; nothing re-runs one from here' },
-    { label: 'Add source', unbuilt: 'each sector names its source; nothing here configures one' },
-    { label: 'Export', kind: 'export' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'New market research', unbuilt: 'research projects open for the founder licence only; this licence has none to start' },
   ],
   'research/companies': [
     { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },

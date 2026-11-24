@@ -34,6 +34,7 @@ const SENTENCES = {
   nda_unconfirmed: 'Confirm that an NDA is signed outside Axal, and its date, before sharing figures.',
   empty: 'Nothing is shared beyond Private yet, so there is no pack to make. Share an item first.',
   unreadable: 'The evidence could not be read, so no pack was made. Nothing left Axal. Try again.',
+  status_unreadable: 'Part of the raise could not be read, so no status page was made. Nothing left Axal. Try again.',
   not_found: 'This link is not on Shared links for this venture.',
   already_stopped: 'This link was already stopped.',
   failed: 'Nothing was saved. Try again.',
@@ -54,17 +55,17 @@ const LIST_MAX = 100;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
-function founderOnly(ctx: RaiseEvidenceContext) { if (!ctx.founder) throw new EvidenceShareError('forbidden', 403); }
+export function founderOnly(ctx: RaiseEvidenceContext) { if (!ctx.founder) throw new EvidenceShareError('forbidden', 403); }
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 const validDay = (v: unknown): v is string => typeof v === 'string' && DAY.test(v) && !Number.isNaN(Date.parse(v + 'T00:00:00Z')) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v;
-const intIn = (v: unknown, [lo, hi]: readonly [number, number]) => Number.isSafeInteger(v) && Number(v) >= lo && Number(v) <= hi;
-const newUid = () => crypto.randomUUID().replaceAll('-', '');
+export const intIn = (v: unknown, [lo, hi]: readonly [number, number]) => Number.isSafeInteger(v) && Number(v) >= lo && Number(v) <= hi;
+export const newUid = () => crypto.randomUUID().replaceAll('-', '');
 
 function b64url(bytes: Uint8Array): string {
   let s = ''; for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-async function sha256Hex(text: string): Promise<string> {
+export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -83,7 +84,7 @@ async function claimNotes(env: Env, projectId: number, uids: string[]): Promise<
     .bind(projectId, JSON.stringify(uids)).all<{ uid: string; note: string }>();
   return new Map((rows.results || []).map(r => [r.uid, r.note]));
 }
-async function ventureName(env: Env, projectId: number): Promise<string | null> {
+export async function ventureName(env: Env, projectId: number): Promise<string | null> {
   const row = await env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(c.company_name), ''), NULLIF(TRIM(p.name), '')) AS name
       FROM projects p LEFT JOIN company_profiles c ON c.id = p.company_id WHERE p.id = ?`).bind(projectId).first<{ name: string | null }>();
   return row?.name ?? null;
@@ -176,7 +177,7 @@ export function linkState(row: Pick<LinkRow, 'revoked_at' | 'expires_at' | 'view
 
 type CopyRow = { uid: string; output: string; label: string; reader: Reader; nda_signed_on: string | null; item_count: number; created_at: string };
 /** RA-29: every link the founder made, newest first; expired, used-up and revoked rows stay, in grey on the page. */
-export async function listPackLinks(ctx: RaiseEvidenceContext) {
+export async function listPackLinks(ctx: RaiseEvidenceContext, statusHash?: () => Promise<string>) {
   founderOnly(ctx);
   const res = await ctx.env.DB.prepare(`SELECT uid,output,label,reader,nda_signed_on,item_uids_json,item_count,pack_hash,expires_at,view_limit,view_count,last_viewed_at,revoked_at,created_at
       FROM raise_evidence_share_links WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`).bind(ctx.projectId, LIST_MAX + 1).all<LinkRow>();
@@ -187,10 +188,13 @@ export async function listPackLinks(ctx: RaiseEvidenceContext) {
     const state = linkState(row);
     let changed: boolean | null = null;
     if (state === 'live') {
-      const key = row.output === 'readiness' ? 'readiness' : row.reader + '|' + (row.item_uids_json ?? '*');
+      const key = row.output === 'readiness' || row.output === 'status' ? row.output : row.reader + '|' + (row.item_uids_json ?? '*');
       if (!current.has(key)) {
         try {
-          current.set(key, row.output === 'readiness'
+          // D6897 part 4: a status page's current body is gathered by the route (services/raiseStatusPage.ts).
+          current.set(key, row.output === 'status'
+            ? (statusHash ? await statusHash() : null)
+            : row.output === 'readiness'
             ? (await readinessBody(ctx.env, ctx.projectId)).hash
             : (await packBody(ctx.env, ctx.projectId, row.reader, row.item_uids_json ? new Set(JSON.parse(row.item_uids_json)) : null)).hash);
         } catch { current.set(key, null); }
@@ -238,7 +242,7 @@ export const REFUSALS = {
 export type Refusal = keyof typeof REFUSALS;
 
 /** RA-28: the public read. One view is consumed only when the link is live; a refusal never says whose link it was. */
-export async function openPackLink(env: Env, token: string, output: 'pack' | 'readiness' = 'pack'): Promise<{ ok: true; pack: unknown; link: { made_at: string; expires_at: string } } | { ok: false; refusal: Refusal }> {
+export async function openPackLink(env: Env, token: string, output: 'pack' | 'readiness' | 'status' = 'pack'): Promise<{ ok: true; pack: unknown; link: { made_at: string; expires_at: string } } | { ok: false; refusal: Refusal }> {
   if (!TOKEN.test(token)) return { ok: false, refusal: 'not_found' };
   const hash = await tokenHash(token);
   const now = new Date().toISOString();
@@ -352,7 +356,7 @@ export async function createReadinessLink(ctx: RaiseEvidenceContext, data: Recor
  * link would freeze, records that a copy left (label, reader, how many items, hash, who, when) and returns the
  * content; the browser draws the A4 page and saves it. Nothing is sent, and no token is made.
  */
-async function recordCopy(ctx: RaiseEvidenceContext, row: { output: 'pack' | 'readiness'; label: string; reader: Reader; ndaOn: string | null;
+export async function recordCopy(ctx: RaiseEvidenceContext, row: { output: 'pack' | 'readiness' | 'status'; label: string; reader: Reader; ndaOn: string | null;
   itemCount: number; hash: string; madeAt: string; action: string; summary: string }) {
   const uid = newUid();
   try {

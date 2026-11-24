@@ -358,7 +358,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         {l.shareNote && SHARE_NOTES[l.shareNote] && <p className="text-gray-600 dark:text-gray-300" data-testid="recording-share-note">{SHARE_NOTES[l.shareNote]}</p>}
         {st?.wake === 'unsupported' && (l.paused || st?.phase === 'recording') && <p className="text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="recording-wake">This browser cannot keep the screen on. Keep it awake so the recording continues.</p>}
         {l.stopping && <ProcessingStages processing={st?.processing} stageAt={stageAt} onRetry={() => actions.retry?.()} />}
-        {st?.error && <p role="alert" className="font-semibold text-red-700 dark:text-red-300" data-testid="recording-error">{st.error}</p>}
+        {!l.refused && st?.error && <p role="alert" className="font-semibold text-red-700 dark:text-red-300" data-testid="recording-error">{st.error}</p>}
         {!l.share && !l.denied && !l.refused && !l.stopping && !l.offline && !l.opening && (
           liveOn && liveAvailable
             ? <p className="text-gray-700 dark:text-gray-300" data-testid="live-caption">{st?.cap?.caption || '…'}</p>
@@ -417,6 +417,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
               <button type="button" onClick={() => onOpen(`/validate/record/live?session=${encodeURIComponent(st.refused.sessionId)}`)} data-testid="button-refused-live"
                 className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Return to that recording</button>
             )}
+            {onOpen && st?.session?.id != null && st.refused.sessionId == null && <button type="button" onClick={() => onOpen(`/validate/session/${encodeURIComponent(st.session.id)}`)} data-testid="button-refused-session" className="rounded-md border border-gray-200 px-3 py-1.5 text-[12.5px] font-semibold hover:bg-gray-50 dark:border-[#2a2140] dark:hover:bg-[#1c1230]">Back to session</button>}
             {onExit && <button type="button" onClick={onExit} data-testid="button-refused-exit" className="rounded-md border border-gray-200 px-3 py-1.5 text-[12.5px] font-semibold hover:bg-gray-50 dark:border-[#2a2140] dark:hover:bg-[#1c1230]">Back</button>}
           </div>
         </div>

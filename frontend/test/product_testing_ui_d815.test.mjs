@@ -160,7 +160,9 @@ test('the partner zone lists its own read, makes a draft, and Submit moves it to
     assert.ok(!v.by('testing-submit-p2'), 'a sent-back programme is edited, not resubmitted as it stands');
     await v.click('testing-submit-p1');
     assert.deepEqual(api.calls.filter((c) => Array.isArray(c)), [['submit', 'p1']]);
-    assert.ok(v.textIn('testing-group-submitted').includes('Ledger beta'), 'now under Waiting for HQ');
+    // #4843 part 2 (D4843-p2): no status groups; the card's own lifecycle and next step say it.
+    assert.match(v.textIn('testing-next-p1'), /Waiting for HQ/, 'now waiting for HQ');
+    assert.equal(v.prop('testing-life-p1', 'aria-label'), 'Lifecycle: HQ review');
     assert.ok(!v.by('testing-submit-p1'));
     // New programme: the form refuses an empty name, then creates a draft.
     await v.click('testing-new-programme');
@@ -182,19 +184,21 @@ test('the partner zone lists its own read, makes a draft, and Submit moves it to
 });
 
 test('the partner zone: Unreadable with Try again, the empty state, and the phone width', async () => {
-  // Mutation checked: render a failed read as the empty state → "No testing programmes yet" shows on a failure.
+  // Mutation checked: render a failed read as the empty state → the empty state shows on a failure.
+  // #4843 part 2 (D4843-p2): OF-06b's empty state, "Validate an offer before launch".
   let fail = true;
   const api = { ...partnerApi([]), programmes: async () => { if (fail) throw new Error('D1 is down'); return { items: [] }; } };
   const v = await mount(h(TestingZone, { api }));
   try {
-    assert.ok(v.text().includes('This did not load'));
-    assert.ok(!v.text().includes('No testing programmes yet'));
+    // D4844: the shared #5129 state, Unavailable with the zone's own sentence.
+    assert.ok(v.text().includes('Unavailable'), 'a failed read is the Unavailable state');
+    assert.ok(!v.text().includes('Validate an offer before launch'));
     fail = false;
     await v.clickText('Try again');
-    assert.ok(v.text().includes('No testing programmes yet'), 'Try again reads again');
+    assert.ok(v.text().includes('Validate an offer before launch'), 'Try again reads again');
   } finally { await v.unmount(); }
   const empty = await mount(h(TestingZone, { api: partnerApi([]) }));
-  try { assert.ok(empty.text().includes('No testing programmes yet')); } finally { await empty.unmount(); }
+  try { assert.ok(empty.text().includes('Validate an offer before launch')); } finally { await empty.unmount(); }
   const phone = await mount(h(TestingZone, { api: partnerApi([prog()]) }), { phone: true });
   try {
     assert.ok(phone.by('testing-programme-p1') && phone.by('testing-submit-p1'), 'the list and its actions draw at 390px');

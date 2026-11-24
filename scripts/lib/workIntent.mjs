@@ -20,6 +20,7 @@
  *   proceed     none of these
  * Soft only: nothing here blocks, labels or merges.
  */
+import { pathToFileURL } from 'node:url';
 import { parseClaim } from './claims.mjs';
 import { canonicalSlot } from './notificationRouting.mjs';
 import { classify, escape } from './prOverlap.mjs';
@@ -28,7 +29,9 @@ import { criticalReason, DEPENDENCY_CLASSES } from './prRisk.mjs';
 export const ACTIONS = ['proceed', 'coordinate', 'wait', 'serialize'];
 export const STALE_BASE_HOURS = 72;
 export const MAX_CLAIM_HOPS = 7;
-export const STANDARD_SLOTS = 37;
+export const STANDARD_SLOTS = 39;
+/** The named admin slot (D8059): console configuration, never a build task. Its label is declared in labels.yml. */
+export const ADMIN_SLOT = 'chatgptpro';
 const SHA = /^[a-f0-9]{40}$/;
 const HOUR = 3600000;
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -48,9 +51,10 @@ export function exclusiveReason(path) {
   return null;
 }
 
-/** `S03`, `s39` or `slot:S03` → `S03`. Unknown is a slot past S37 with no `slot:SNN` label in the repository. */
+/** `S03`, `s39` or `slot:S03` → `S03`; the admin slot in any case → `chatgptpro`. Unknown is a slot past S39 with no `slot:SNN` label in the repository. */
 export function checkSlot(raw, knownSlots = null) {
   const text = typeof raw === 'string' ? raw.trim().replace(/^slot:/i, '') : '';
+  if (text.toLowerCase() === ADMIN_SLOT) return { ok: true, slot: ADMIN_SLOT };
   if (!/^s\d{2,3}$/i.test(text)) return { ok: false, reason: `slot "${String(raw ?? '').slice(0, 40)}" is not slot:SNN` };
   const slot = canonicalSlot(text);
   if (!slot) return { ok: false, reason: `slot "${text}" is not a slot` };
@@ -186,7 +190,10 @@ export function resolve(issue, regs) {
   return { winner, notes };
 }
 
-const LINK = n => new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\\s+of)\\s+#${n}\\b`, 'i');
+const LINKS = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\s+of)\s+#(\d+)\b/gi;
+const BRANCH_ISSUE = /^agent\/[\w.-]+\/(\d+)-/;
+/** Whether a PR body links issue `n` with a closing or `part of` keyword. */
+const LINK = n => ({ test: body => [...body.matchAll(LINKS)].some(m => m[1] === String(n)) });
 const pathsOfPr = pr => [...new Set((pr.files ?? []).flatMap(f => typeof f === 'string' ? [f] : [f?.filename, f?.previous_filename]).filter(Boolean))].sort();
 
 /** The open PRs an intent owns: the PR its holder's STATUS names, else every open PR whose body links the issue. */
@@ -198,7 +205,7 @@ export function linkPrs(issue, winner, prs, { scanPartial = false } = {}) {
       : `#${issue}: PR #${winner.pr} from STATUS is no longer open (merged, closed or gone); dropped`);
   }
   const re = LINK(issue);
-  return { prs: prs.filter(p => re.test(p.body ?? '') || new RegExp(`^agent/[\\w.-]+/${issue}-`).test(p.head?.ref ?? '')).map(p => p.number).sort((a, b) => a - b), notes };
+  return { prs: prs.filter(p => re.test(p.body ?? '') || BRANCH_ISSUE.exec(p.head?.ref ?? '')?.[1] === String(issue)).map(p => p.number).sort((a, b) => a - b), notes };
 }
 
 function riskOf(paths) {
@@ -379,4 +386,129 @@ export function workInFlightText(work) {
   const refused = work.refused.length ? '\n\nRefused:\n' + work.refused.map(r => `- ${escape(r)}`).join('\n') : '';
   const notes = work.notes.length ? '\n\nNotes:\n' + work.notes.map(n => `- ${escape(n)}`).join('\n') : '';
   return `${head}${body}${refused}${notes}\n\nSoft recommendations from the claims (D5617) and open PRs; #5618 leases are not read and nothing is blocked.`;
+}
+
+// ── Venture namespaces (D8078, #8078) ─────────────────────────────────────────────────────────────────────────────
+// Owner, 2026-11-21: venture code lives in folders `ventures/<slug>/` of this repository (Q1 A), and only the owner
+// creates a namespace, by adding it to the root `ventures.json` in a privileged PR (Q2 A).
+
+/** A venture slug: lowercase, starts with a letter, 2 to 40 characters of letters, digits and single hyphens. */
+export const VENTURE_SLUG = /^[a-z](?:[a-z0-9]|-(?=[a-z0-9])){1,39}$/;
+export const VENTURE_ROOT = 'ventures/';
+const VENTURE_LABELS_BEGIN = '# venture-labels:begin (generated from ventures.json, D8078; never edit by hand)';
+const VENTURE_LABELS_END = '# venture-labels:end';
+
+/**
+ * `ventures.json`, checked: { version: 1, ventures: [{ slug, name, company_id }] }, slugs unique, one venture per
+ * company. Returns { ok, ventures, problems }.
+ */
+export function validateVentures(doc) {
+  const problems = [];
+  if (!doc || typeof doc !== 'object' || doc.version !== 1 || !Array.isArray(doc.ventures)) {
+    return { ok: false, ventures: [], problems: ['ventures.json must be { "version": 1, "ventures": [...] }'] };
+  }
+  const slugs = new Set();
+  const companies = new Set();
+  doc.ventures.forEach((v, i) => {
+    const at = `ventures[${i}]`;
+    if (!v || typeof v !== 'object') { problems.push(`${at} is not an object`); return; }
+    const extra = Object.keys(v).filter(k => !['slug', 'name', 'company_id'].includes(k));
+    if (extra.length) problems.push(`${at} has unknown fields: ${extra.join(', ')}`);
+    if (typeof v.slug !== 'string' || !VENTURE_SLUG.test(v.slug)) problems.push(`${at}.slug is not a venture slug`);
+    else if (slugs.has(v.slug)) problems.push(`${at}.slug ${v.slug} is used twice`);
+    else slugs.add(v.slug);
+    if (typeof v.name !== 'string' || !v.name.trim() || v.name.length > 80 || /[\u0000-\u001f"]/.test(v.name)) problems.push(`${at}.name must be 1 to 80 characters with no quote`);
+    if (!Number.isSafeInteger(v.company_id) || v.company_id < 1) problems.push(`${at}.company_id is not a company id`);
+    else if (companies.has(v.company_id)) problems.push(`${at}.company_id ${v.company_id} already has a venture`);
+    else companies.add(v.company_id);
+  });
+  return { ok: problems.length === 0, ventures: problems.length ? [] : doc.ventures.map(v => ({ ...v })), problems };
+}
+
+/**
+ * A branch name, in either shape:
+ *   agent/<slot or agent>/<issue>-<slug>             platform work   → { kind: 'platform', owner, issue, slug }
+ *   agent/<slot or agent>/<venture>/<issue>-<slug>   venture work    → { kind: 'venture', owner, venture, issue, slug }
+ * Anything else is { kind: 'other' }. A venture segment that is not a slug is `other`, never platform.
+ */
+export function parseBranch(ref) {
+  const name = typeof ref === 'string' ? ref.replace(/^refs\/heads\//, '') : '';
+  const m = /^agent\/([\w.-]+)\/(?:([^/]+)\/)?([1-9]\d*)-([\w.-]+)$/.exec(name);
+  if (!m) return { kind: 'other' };
+  const [, owner, venture, issue, slug] = m;
+  if (venture === undefined) return { kind: 'platform', owner, issue: Number(issue), slug };
+  if (!VENTURE_SLUG.test(venture)) return { kind: 'other' };
+  return { kind: 'venture', owner, venture, issue: Number(issue), slug };
+}
+
+/** The venture a path belongs to (`ventures/<slug>/…` → slug), or null for a platform path. */
+export function ventureOfPath(path) {
+  if (typeof path !== 'string' || !path.startsWith(VENTURE_ROOT)) return null;
+  const seg = path.slice(VENTURE_ROOT.length).split('/')[0];
+  return seg || null;
+}
+
+/**
+ * The paths a branch may not change, for the ownership check (#8075): a venture branch changes only its own
+ * venture's folder; a platform branch changes no venture's folder. A venture the owner has not declared is refused.
+ * @returns [{ path, reason }]
+ */
+export function ventureBranchViolations(ref, paths, ventures) {
+  const b = parseBranch(ref);
+  const known = new Set((ventures || []).map(v => v.slug));
+  const out = [];
+  if (b.kind === 'venture' && !known.has(b.venture)) {
+    return (paths || []).map(path => ({ path, reason: `venture ${b.venture} is not in ventures.json` }));
+  }
+  for (const path of paths || []) {
+    const v = ventureOfPath(path);
+    if (b.kind === 'venture' && v !== b.venture) out.push({ path, reason: v ? `belongs to venture ${v}, not ${b.venture}` : `is outside ventures/${b.venture}/` });
+    else if (b.kind !== 'venture' && v) out.push({ path, reason: `belongs to venture ${v}: use a branch agent/<slot>/${v}/<issue>-<slug>` });
+  }
+  return out;
+}
+
+/** The `venture:<slug>` label entries for `.github/labels.yml`, in slug order, between their markers. */
+export function ventureLabelsBlock(ventures) {
+  const rows = [...(ventures || [])].sort((a, b) => (a.slug < b.slug ? -1 : 1)).flatMap(v => [
+    `- name: "venture:${v.slug}"`,
+    '  color: "0E8A16"',
+    `  description: "Work in the ${v.name} venture namespace, ventures/${v.slug}/ (D8078)"`,
+  ]);
+  return [VENTURE_LABELS_BEGIN, ...rows, VENTURE_LABELS_END].join('\n');
+}
+
+/** labels.yml with its venture block replaced. Throws when the markers are missing or out of order. */
+export function withVentureLabels(labelsYml, ventures) {
+  const text = String(labelsYml);
+  const a = text.indexOf(VENTURE_LABELS_BEGIN);
+  const b = text.indexOf(VENTURE_LABELS_END);
+  if (a < 0 || b < a || text.indexOf(VENTURE_LABELS_BEGIN, a + 1) >= 0) throw new Error('labels.yml has no single venture-labels block');
+  return text.slice(0, a) + ventureLabelsBlock(ventures) + text.slice(b + VENTURE_LABELS_END.length);
+}
+
+/**
+ * `node scripts/lib/workIntent.mjs --venture-labels [--check] [--root=<dir>]`: rewrite `.github/labels.yml`'s venture
+ * block from `ventures.json`, or with `--check` exit 1 when it is out of step. The owner runs it in the PR that adds a
+ * venture. `--root` (tests) reads both files under another directory instead of this repository.
+ */
+async function ventureLabelsCli(args) {
+  const { readFileSync, writeFileSync } = await import('node:fs');
+  const root = args.find(a => a.startsWith('--root='))?.slice('--root='.length);
+  const at = p => (root ? `${root}/${p}` : new URL(`../../${p}`, import.meta.url));
+  const v = validateVentures(JSON.parse(readFileSync(at('ventures.json'), 'utf8')));
+  if (!v.ok) { console.error(`ventures.json: ${v.problems.join('; ')}`); return 1; }
+  const now = readFileSync(at('.github/labels.yml'), 'utf8');
+  const next = withVentureLabels(now, v.ventures);
+  if (args.includes('--check')) {
+    if (now === next) return 0;
+    console.error('.github/labels.yml is out of step with ventures.json: run node scripts/lib/workIntent.mjs --venture-labels');
+    return 1;
+  }
+  if (now !== next) writeFileSync(at('.github/labels.yml'), next);
+  console.log(`venture labels: ${v.ventures.length} venture(s)`);
+  return 0;
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--venture-labels')) {
+  ventureLabelsCli(process.argv.slice(2)).then(code => { process.exitCode = code; });
 }

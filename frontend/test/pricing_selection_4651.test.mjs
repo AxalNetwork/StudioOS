@@ -156,7 +156,7 @@ test('RegisterPage is wired to the plan block, the lane copy and the advisor lan
   const page = readFileSync('frontend/src/pages/RegisterPage.jsx', 'utf8');
   assert.match(page, /planIntentFrom\(/);
   assert.match(page, /<RegistrationPlanBlock intent=\{planIntent\} lane=\{lane\} onSelection=\{setSelection\} \/>/);
-  assert.match(page, /registerHeading\(lane, planIntent \? selection : null\)/);
+  assert.match(page, /registerHeading\(lane, planIntent \? selection : null, productIntent\)/);
   assert.match(page, /clearPendingPricingNext\(\)/);
   assert.equal(LANE_ROLE.advisor, undefined);
   const worker = readFileSync('cloudflare-worker/src/routes/auth.ts', 'utf8');
@@ -189,11 +189,11 @@ test('an advisor is not asked for a pitch; each audience has its own entry copy'
     assert.equal(m.by('register-step-spinout'), undefined, 'the Spin-Out Lab is a founder step only');
     assert.match(text(m.by('register-plan-price')), /\$49 \/ month per licence · billed every month/);
   } finally { await m.close(); }
-  for (const [lane, want, never] of [['advisor', /Create your Advisor account/, /Submit your pitch/], ['investor', /Investor|Open your LP|Join the Partner/, /Advisor account/], ['founder', /Submit your pitch/, /Advisor account/]]) {
+  for (const [lane, want, never] of [['advisor', /Create your Advisor account/, /Submit your pitch/], ['investor', /Create your investor account/, /Advisor account|Open your LP/], ['founder', /Create your founder account/, /Advisor account|Submit your pitch/]]) {
     const v = await mountRegister(`?lane=${lane}`, { read: READ });
     try {
       const t = v.text();
-      if (lane !== 'investor') assert.match(t, want, lane);
+      assert.match(t, want, lane); // #6983 (X1): the investor lane has its own heading now
       assert.doesNotMatch(t, never, lane);
       assert.equal(v.by('register-plan'), undefined, 'no plan chosen, no selection drawn');
       assert.ok(v.by('register-steps'), 'the steps are still said');

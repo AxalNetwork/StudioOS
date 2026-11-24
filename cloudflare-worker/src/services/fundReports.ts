@@ -1,5 +1,6 @@
 /** D631: recorded fund facts and audited, immutable issued report periods. */
 import type { Env } from '../types';
+import { sendFundReportNotices, withFundReportDelivery } from './fundReportNotices';
 import { deleteReportWithoutStatement, reportHasStatement } from './mercury/investorFeeds';
 import { effectiveDisplayName } from './profileExpansion';
 import { fundFigures } from './fundReportBuild';
@@ -46,6 +47,12 @@ function dollars(value:unknown):number|null{
  const cents=typeof value==='number'?Math.round(value*100):NaN;
  if(!Number.isSafeInteger(cents)||cents<0)throw new Error('Fund money unreadable');return cents;
 }
+/** D6254: recorded fractional terms, never defaults guessed by the page. */
+function recordedRate(value:unknown):number|null{
+ if(value===null||value===undefined)return null;
+ if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>1)throw new Error('Fund terms unreadable');
+ return value;
+}
 export async function readFundPage(env:Env,fund:any,canManage:boolean){
  if(fund.fund_size_cents!==null&&fund.fund_size_cents!==undefined&&(!Number.isSafeInteger(fund.fund_size_cents)||fund.fund_size_cents<0))throw new Error('Fund size unreadable');
  const lps=await env.DB.prepare(`SELECT COUNT(*) AS lp_count,COUNT(commitment_amount) AS commitments_recorded,
@@ -66,15 +73,25 @@ export async function readFundPage(env:Env,fund:any,canManage:boolean){
   totals:{committed_cents:committed,invested_cents:invested,
    committed_reason:committed===null?'Not every LP has a recorded commitment.':null,
    invested_reason:invested===null?'No complete invested amount is recorded for attributed positions.':null},
+  terms:{management_fee:recordedRate(fund.management_fee),carried_interest:recordedRate(fund.carried_interest),
+   management_fee_reason:fund.management_fee==null?'The management fee has not been recorded.':null,
+   carried_interest_reason:fund.carried_interest==null?'Carried interest has not been recorded.':null},
+  documents:lpa?[{kind:'lpa',status:lpa.status??null,version:lpa.version??null,updated_at:lpa.updated_at??null}]:[],
+  documents_reason:'Other fund documents are not recorded in a fund document list. The attached LPA is shown when recorded.',
   lpa,can_manage:canManage,currency:'USD'};
 }
 export async function readFundPeriod(env:Env,fundId:number,periodId:number,canManage:boolean){
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
  if(!row||(!canManage&&row.status!=='issued'))throw new FundReportRefusal('not_found',404);
- let period:any=shapeFundPeriod(row);
- if(period?.corrects_period_id){const original=await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'").bind(fundId,period.corrects_period_id).first<any>();if(!original)throw new Error('Corrected period unreadable');period={...period,corrects_period:original.period};}
+ const shaped=shapeFundPeriod(row);
+ const withDelivery=canManage && shaped ? (await withFundReportDelivery(env,[shaped]))[0] : shaped;
+ const correctionId=withDelivery?.corrects_period_id;
+ const original=correctionId ? await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'")
+   .bind(fundId,correctionId).first<{period:string}>() : null;
+ if(correctionId&&!original)throw new Error('Corrected period unreadable');
+ const period=withDelivery&&original ? {...withDelivery,corrects_period:original.period} : withDelivery;
  // D6249: a draft reads as it did. An issued period adds what was frozen at issue, who issued it, and what corrects it.
- if(period.status!=='issued')return period;
+ if(period?.status!=='issued')return period;
  return {...period,...await issuedFigures(env,row),...await issuerName(env,row.issued_by),corrected_by_period_id:await correctedBy(env,fundId,row.id)};
 }
 const PACK_SCHEMA='lp_quarterly_report/1';
@@ -192,7 +209,9 @@ export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:a
  if(results.length!==2||results.some(r=>r.success!==true))throw new Error('Report transaction unreadable');
  if(Number(results[0].meta.changes)!==1)throw new FundReportRefusal('conflict',409);
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND period=?').bind(fundId,label).first<any>();
- if(!row)throw new Error('Saved report unreadable');return {created:!previous,period:shapeFundPeriod(row)};
+ if(!row)throw new Error('Saved report unreadable');
+ if(issue)await sendFundReportNotices(env,fundId,row.id);
+ return {created:!previous,period:shapeFundPeriod(row)};
 }
 
 

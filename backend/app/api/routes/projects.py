@@ -20,6 +20,7 @@ from backend.app.services.project_access import (
     member_project_ids,
 )
 from datetime import datetime, timedelta
+from backend.app.services.log_safe import log_safe
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -778,7 +779,7 @@ def delete_project(project_id: int, session: Session = Depends(get_session), adm
         raise
     except Exception as exc:
         session.rollback()
-        logger.exception("delete_project failed for id=%s: %s", project_id, exc)
+        logger.exception("delete_project failed for id=%s: %s", log_safe(project_id), log_safe(exc))
         raise HTTPException(status_code=500, detail=f"Failed to delete project: {exc}")
     return {"ok": True}
 

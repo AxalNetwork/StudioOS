@@ -14,6 +14,7 @@
  *   GET    /:scope/:id/rulebooks/:role         default, effective, versions, diff, floor
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
+ *   GET    /agents/:uid/budget                 D8071: its caps, use this period and runs halted for budget (the sponsor, read-only)
  *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842); `tool_reads` (part 5)
  *   GET/PUT /:scope/:id/allowlists              D4422: inherited model/tool restrictions, saved by the effective scope’s editors
  *   GET/PUT /:scope/:id/outside-assistant-tools D4424: inherited inbound Axal tool names, separate from outbound custom-server grants
@@ -53,6 +54,7 @@
 import { agentModels, planOk } from '../services/agents/modelOffers';
 import { effectiveAllowlistScope, readAllowlists, saveAllowlists, allowlistRefusal, allowlistTools, parseAllowlists } from '../services/agents/allowlists';
 import { maxTeamCap } from '../services/agents/aiPolicy';
+import { agentBudgetView, haltedRuns } from '../services/agentBudgets';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -61,6 +63,7 @@ import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
 import { FIRST_TEN_SLUGS, inputMatrix, preflight } from '../services/agents/skillInputs';
+import { selectedDocument, selectedFund } from '../services/agents/reads';
 import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
@@ -199,6 +202,7 @@ const SKILL_WORDS = {
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
+  capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 } as const;
 
 const validCap = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0 && (v as number) <= CAP_MAX_MICROUSD;
@@ -280,6 +284,20 @@ router.get('/agents/:uid/run/quote', async (c) => {
     if (!got.agent) return got.refusal;
     const q = await agentQuote(c.env, { agent: got.agent, module: c.req.query('module') ?? '', option: c.req.query('option') ?? '' });
     return q.ok ? c.json({ quote: q.quote }) : answer(c, q);
+  } catch (e) { return mapError(c, e); }
+});
+
+// D8071 (#8071): the sponsor's read-only view of the agent's budget. HQ sets the caps.
+router.get('/agents/:uid/budget', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await sponsored(c, user);
+    if (!got.agent) return got.refusal;
+    try {
+      return c.json({ budget: await agentBudgetView(c.env, got.agent.id), halted: await haltedRuns(c.env, got.agent.id, 20) });
+    } catch {
+      return say(c, 503, 'budget_unreadable', 'The budget could not be read.');
+    }
   } catch (e) { return mapError(c, e); }
 });
 
@@ -389,7 +407,18 @@ router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
       if (!p) return say(c, 404, 'project_not_in_company', 'The project is not this company\'s.');
       projectId = p.id;
     }
-    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } });
+    // D4667-p3: the one data-room document a run would work on (`data_room_file:<uid>`), as its record selects it.
+    const docAsked = c.req.query('document') || null;
+    const document = docAsked === null ? null : selectedDocument(docAsked);
+    if (docAsked !== null && !document) return say(c, 400, 'invalid_document', 'The document is a data room file reference such as data_room_file:<uid>.');
+    // D4667-p4: the one fund a run would read (`vc_fund:<id>`), for the last whole quarter ending on or before `to`.
+    const fundAsked = c.req.query('fund') || null;
+    const fundId = fundAsked === null ? null : selectedFund(fundAsked);
+    if (fundAsked !== null && fundId === null) return say(c, 400, 'invalid_fund', 'The fund is a fund reference such as vc_fund:<id>.');
+    const fund = fundId === null ? null : `vc_fund:${fundId}`;
+    // D4667-p2: through the keys the agent's rule book reads, as a run of it is checked; any other is `not_granted`.
+    const { rules } = await effectiveBook(c.env, s, a.role_key);
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to }, document, fund }, undefined, undefined, undefined, undefined, { granted: rules.reads });
     return c.json({ readiness: r });
   } catch (e) { return mapError(c, e); }
 });
@@ -748,9 +777,20 @@ router.post('/:scope/:id/agents', async (c) => {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     if (!s) return notFound(c);
+    return await addAgentAs(c, s, user, await readBody(c));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D7075 (#7075): the add path, every check in its order, with the caller as
+ * the sponsor. The route above and a recruit's approval (`agent_recruits.ts`)
+ * both come through here, so a recruit is added exactly as a person adds one.
+ * Answers the route's own Response: 201 `{ agent }` or the refusal.
+ */
+export async function addAgentAs(c: C, s: NonNullable<Awaited<ReturnType<typeof loadScope>>>, user: User, b: Record<string, any> | null): Promise<Response> {
+  {
     if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can add agents.');
     if (!planOk(user)) return say(c, 403, 'plan_required', 'Agents come with a paid Founder plan.');
-    const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send the role, the model and the monthly cap.');
     const role = typeof b.role_key === 'string' ? roleOf(b.role_key) : null;
     if (!role) return say(c, 400, 'invalid_role', 'Choose one of the roles.');
@@ -821,8 +861,8 @@ router.post('/:scope/:id/agents', async (c) => {
       await logSkillsChanged(c.env, a!.id, user.id, { added: skillsChecked.wanted.map((w) => ({ uid: w.s.uid, version: w.version })), repinned: [], removed: [] });
     }
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
-  } catch (e) { return mapError(c, e); }
-});
+  }
+}
 
 router.get('/:scope/:id/rulebooks/:role', async (c) => {
   try {

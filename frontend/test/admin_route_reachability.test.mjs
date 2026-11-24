@@ -283,6 +283,11 @@ const COMPOSED = new Map([
   // D1195 (#2382): Product testing's tabs draw the doors to one program (`/programs/:uid`).
   [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx', 'frontend/src/pages/admin/kyc/KycBusinesses.jsx']],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // D5020 (#5020): the Country pricing pages draw their tabs (catalogue, reviews, models) from the shell beside them.
+  ['frontend/src/pages/admin/licences/PricingCatalogue.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
+  ['frontend/src/pages/admin/licences/PricingCountry.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
+  ['frontend/src/pages/admin/licences/PricingModels.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
+  ['frontend/src/pages/admin/licences/PricingReviews.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
   // D1295 (#3391): the Content queue draws Pipeline from contentQueue/, which holds the door to one article.
   ['frontend/src/pages/admin/ArticlesQueuePage.jsx', ['frontend/src/pages/admin/contentQueue/Pipeline.jsx']],
   // D1213 (#2424): Contracts draws its desk from the file beside it, which holds the door to Closings.
@@ -331,7 +336,16 @@ const COMPOSED = new Map([
   // D4819 (#4819): the licence ledger's table holds the doors to one licence
   // (`/admin/licences/:uid`) and to its sections (`/admin/licences/:uid/:section`).
   // D5060 (#5060): its registry by licence family opens each user licence (`/admin/licences/registry/user/:uid`).
-  ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx', 'frontend/src/pages/admin/licences/RegistryLedger.jsx']],
+  ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx', 'frontend/src/pages/admin/licences/RegistryLedger.jsx', 'frontend/src/pages/admin/licences/LicenceDetail.jsx']],
+  // D5882 (#5882): Approvals draws its Inbox, Lanes, Decided, assignment and doors from the files beside it.
+  ['frontend/src/pages/admin/approvals/AdminApprovals.jsx', [
+    'frontend/src/pages/admin/approvals/approvalsUi.jsx',
+    'frontend/src/pages/admin/approvals/approvalDoors.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsAssign.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsInbox.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsLanes.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsDecided.jsx',
+  ]],
   // D1046 (#2894): the Approvals lane boards draw their tabs and the doors to
   // one item (`/admin/approvals/<board>/:item`) from the files beside them.
   ['frontend/src/pages/admin/approvals/LaneBoards.jsx', [

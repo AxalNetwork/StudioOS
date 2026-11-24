@@ -192,6 +192,15 @@ export function checkoutRefusal(err) {
 const REGISTER = (lane, plan = {}) => registerPathFor({ lane, ...plan });
 
 /**
+ * #6984 (X2): the closing "Get started" keeps the active tab's role: `?lane=` from the tab's family (`?for=`), so the
+ * investor tab opens `/register?lane=investor`. The Models tab names no role and opens bare `/register`.
+ */
+export function closingRegisterPath(tab) {
+  const family = PRICING_TABS.find((t) => t.key === tab)?.family || null;
+  return registerPathFor({ lane: family });
+}
+
+/**
  * A role tab's cards: `{ cards, saving }`, or `{ unreadable: true }` when the
  * read failed. `specs` are the canvas's cards for the tab, `billing` is
  * `monthly` | `yearly`, `held` the card id the member holds, `signedIn` whether
@@ -208,11 +217,14 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     if (plan && (month || year)) sold.push(plan);
     const offered = !!(spec.free || spec.custom || month || year);
     const current = held !== null && held === spec.id;
+    // D4653 part 3 (#4653, owner answer A): a card with `limits` shows those lines, and its AI allowance, above its button.
+    const limited = Array.isArray(spec.limits);
+    const isLimit = (line) => limited && spec.limits.includes(line);
     const card = {
       id: spec.id, name: spec.name, kick: spec.kick || '', tag: spec.tag, highlight: !!spec.highlight, current,
       allowanceComparison: planIntervalAllowance(plan),
       lead: i > 0 ? `Everything in ${specs[i - 1].name}, plus:` : '',
-      feats: spec.feats.slice(), offered, price: null, unit: '', note: '', yearlyMissing: false,
+      limits: spec.feats.filter(isLimit), feats: spec.feats.filter((line) => !isLimit(line)), offered, price: null, unit: '', note: '', yearlyMissing: false,
       button: { label: '', to: null, disabled: false },
       selection: spec.free ? { plan: spec.storage, interval: null } : null,
     };
@@ -233,11 +245,12 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
         if (yearly) { card.yearlyMissing = true; card.note = 'Yearly not offered yet'; }
       }
       card.unit = `/ month ${LICENCE_PRICE_UNIT}`;
-      if (shown.allowance_microusd > 0) card.feats.push(`${usd(Math.floor(shown.allowance_microusd / 10_000))} of AI tokens a month`);
+      if (shown.allowance_microusd > 0) (limited ? card.limits : card.feats).push(`${usd(Math.floor(shown.allowance_microusd / 10_000))} of AI tokens a month`);
     }
     if (current) card.button = { label: 'Current plan', to: null, disabled: true };
     else if (!offered) card.button = { label: 'Not offered yet', to: null, disabled: true };
-    else if (spec.custom) card.button = { label: spec.cta || 'Contact Axal VC', to: '/contact', disabled: false };
+    // #6984 (X2): the only custom card is Institutional, so its contact opens on the invest topic.
+    else if (spec.custom) card.button = { label: spec.cta || 'Contact Axal VC', to: '/contact?topic=invest', disabled: false };
     // #4651: a paid card carries its plan and interval to registration (`planIntent.js`); a free card keeps `?lane=` only.
     else if (!signedIn) card.button = { label: spec.cta || 'Get started', to: REGISTER(spec.lane, plan && !spec.free ? { tab, planKey: planKeyOfSpec(spec), interval: yearly && year ? 'yearly' : 'monthly', seen: (yearly && year ? year : month ?? year)?.unit_amount ?? null } : {}), disabled: false };
     else if (spec.free) card.button = { label: held ? 'Manage plan' : 'Get started', to: held ? '/account/billing' : REGISTER(spec.lane), disabled: false };

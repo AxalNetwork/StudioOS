@@ -17,14 +17,19 @@ import { interviewListOf } from '../../../lib/discoveryEvidence';
 import { useActiveRecording } from '../../../contexts/ActiveRecordingContext';
 import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
+import ValidateExperiments from '../ValidateExperiments';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
 import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
 import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
-import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection } from '../ValidateSections';
+import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection, ThemeRecordParts } from '../ValidateSections';
 import HypothesisRecord from '../HypothesisRecord';
+// D5998 (#5998): Validate's V2 overview (boards V1, V2, V13), mounted through `Overview` as Grow's and Build's are.
+// Imported statically: its lead (`ValidateLead`, `ValidateObjective`, `PmfChip`) is already in the route's bundle.
+import ValidateOverview from '../ValidateOverview';
+import { painThemesApi } from '../../../lib/api/painThemes.js';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
@@ -33,6 +38,8 @@ import WaitlistBar from '../ValidateWaitlistBar.jsx';
 import { PrepareQuestions } from '../InterviewGuide.jsx';
 import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
 import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
+import SegmentCompare from '../SegmentCompare.jsx';
+import { inCompare, withCompare } from '../segmentCompareModel.js';
 
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
@@ -150,6 +157,7 @@ export function RecordMount({ projectId, interviewId, setupKey, onClose, onStart
 
 const validate = {
   modules: MODULES.validate,
+  Overview: ValidateOverview,
   // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
   // click opens it over this page (`onOpen`); a new tab or a deep link follows
   // the href to the same place. The interview comes with it, or is made at Start.
@@ -167,6 +175,17 @@ const validate = {
       ];
     },
     'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
+    // D6007 (#6007, V21): Compare segments opens the module's compare mode (owner option A: no new route).
+    'ideal-customer-profile': (search) => ({ label: 'Compare segments', href: '/validate/ideal-customer-profile' + withCompare(projectSearch(search), []) }),
+  }),
+  // D6007 (#6007, V24): with `?compare=` the Ideal customer profile page is Compare segments: its body replaces
+  // the chart and table, and its line says so. Without it the module draws as before.
+  homes: toFnMap({
+    'ideal-customer-profile': (data, ctx) => (inCompare(ctx.searchParams) ? {
+      sub: 'Two to four segments side by side. Anything unwritten reads Not recorded.',
+      action: null,
+      body: () => <SegmentCompare projectId={ctx.projectId} records={data?.records} />,
+    } : null),
   }),
   add: toFnMap({
     // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.
@@ -234,6 +253,8 @@ const validate = {
       onExport={() => api.exportValidatePainMap(ctx.projectId)}
       // #1692's `attach` on the theme record, so the theme's activity logs it.
       onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
+      // #6006 (V17): the selection bar's one bulk write, to a theme or a new one.
+      onAssignMany={(body) => painThemesApi.assignMany(ctx.projectId, body).then(ctx.reload)}
       newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
     experiments: (data, ctx) => (
       <>
@@ -248,6 +269,7 @@ const validate = {
           onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
           // Only until #1656 registers New hypothesis as the table's Add (decision 20).
           onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
+        <ValidateExperiments part={data?.parts?.experiments} canWrite={data?.parts?.can_write} onRetry={ctx.reload} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1605 (#3731): PostHog experiments and surveys; the hypothesis and direction are the founder's. */}
         <ValidateExperimentsPosthog projectId={ctx.projectId}
@@ -261,6 +283,12 @@ const validate = {
   // what the read sends, with the session's working parts inside it.
   recordPage: toFnMap({
     'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
+    // #6006 (V19): the theme's sources, links, Used on slide and handoffs under the Worker's sections.
+    'problem-discovery': (read, ctx) => <div className="space-y-3">
+      <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+        onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+      <ThemeRecordParts parts={read?.parts} projectId={ctx.projectId} canWrite={Array.isArray(read?.actions) && read.actions.length > 0} />
+    </div>,
     // D1069 (#2939, VB2a): after a given Proceed or Pivot, "Plan the build" above the record.
     verdict: (read, ctx) => <VerdictRecordWithPlan read={read} render={(record) => (
       <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}

@@ -340,8 +340,12 @@ test('the list card and the trail card carry the artboard\'s own headings', () =
   assert.match(ART, /<span class="zt">Version trail<\/span>/);
   // #4833 (D4833): the v2 canvas replaced both cards — the list became the
   // work-product cards and the trail became the detail sheet's immutable
-  // version history (`DeliverableSheet.jsx`).
-  assert.match(P, /title="Work products"/);
+  // version history (`DeliverableSheet.jsx`). D4833-p4: the cards sit under
+  // the Practice v2 shell's own header, "Delivery" and PX-06's line, so the
+  // body draws no second "Work products" heading over them.
+  assert.ok(!/title="Work products"/.test(P), 'the body repeats the header the shell draws');
+  assert.match(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'),
+    /delivery: \{ sub: 'Work products sent to clients, with every version kept\.' \}/);
   assert.match(P, /<DeliverableSheet /);
   assert.match(read('frontend/src/pages/advisor/practice/DeliverableSheet.jsx'), /Version history · immutable/);
   assert.ok(!/title="Version trail"/.test(P), 'the trail card is the sheet now');

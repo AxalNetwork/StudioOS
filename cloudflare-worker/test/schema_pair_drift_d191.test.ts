@@ -1,3 +1,4 @@
+import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D191 — two definitions of one table must not drift apart silently.
  *
@@ -576,7 +577,7 @@ test('user_sessions.factor is declared once, beside the columns it is read with'
 // Wiring
 
 test('the guard runs in test:guards and is documented', () => {
-  assert.match(read('package.json'), /node --no-warnings scripts\/check-schema-pair-drift\.mjs/,
+  assert.match(guardChain, /node --no-warnings scripts\/check-schema-pair-drift\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
   const readme = read('scripts/README.md');
   const row = readme.split('\n').find((l) => l.includes('`check-schema-pair-drift.mjs`')) || '';

@@ -14,7 +14,7 @@ const rows = [...partner.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
 const labels = rows.map((row) => row.label);
 const targets = rows.map((row) => row.to);
 
-test('Partner sidebar is exactly the seven approved rows in order', () => {
+test('Partner sidebar is exactly the eight approved rows in order', () => {
   // Two corrections, both against what `sidebarConfig.js` has actually held on
   // this branch and on main, and neither of them a relaxation — the list is
   // still exact, still ordered, still checked against its destinations.
@@ -26,6 +26,9 @@ test('Partner sidebar is exactly the seven approved rows in order', () => {
   // role for as long as the config has existed. The same correction was made in
   // founder_shell, investor_shell and advisor_shell.
   //
+  // D6154 (#6154, owner answer A): partners are admitted to the Commit pages
+  // only, so the eighth row is a Commit-only 'Deals' on /deals/commit.
+  //
   // EVERY WORKSPACE ROW POINTS AT ITS BUCKET ROOT. Pipeline, Delivery, Offers
   // and Research used to point at legacy destinations — /needs,
   // /partner/operations/overview, /services, /signals — so the canvas overview
@@ -36,6 +39,7 @@ test('Partner sidebar is exactly the seven approved rows in order', () => {
   assert.deepEqual(labels, [
     'Studio',
     'Spin-Out Lab',
+    'Deals',
     'Pipeline',
     'Delivery',
     'Offers',
@@ -45,6 +49,7 @@ test('Partner sidebar is exactly the seven approved rows in order', () => {
   assert.deepEqual(targets, [
     '/studio',
     '/spinout-lab',
+    '/deals/commit',
     '/pipeline',
     '/delivery',
     '/offers',
@@ -178,7 +183,6 @@ test('D1424 (#3700): each Operating Partner zone header fills the primary D1424 
     'delivery/status-reports': ['New report'],
     'offers/catalog': ['New service'],
     'offers/perk-deals': ['New perk'],
-    'offers/proof': ['Ask for consent'],
   });
   for (const zone of ['delivery/board', 'delivery/deliverables', 'delivery/capacity', 'delivery/health']) {
     assert.ok(PARTNER_ZONE_ACTIONS[zone].every((r) => !r.primary), `${zone} has no live first step`);

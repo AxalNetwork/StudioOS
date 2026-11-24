@@ -31,6 +31,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { icDecisionScope } from '../services/tenancyScope';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { heldLicences } from '../services/accountLicences';
 import { isAdmin, isInvestor, isPartner, mapError, nowIso, newUid, jload } from './_t13t14t15_helpers';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -42,6 +43,8 @@ type DecisionRow = {
   created_by: number | null; decided_at: string | null;
   dd_case_id: number | null;
   created_at: string; updated_at: string;
+  // Migration 219: the firm the decision belongs to; null for an author with none.
+  company_id?: number | null;
 };
 
 export type VoteRow = {
@@ -56,6 +59,130 @@ export type ConditionRow = {
   // D6156: who answers for meeting it — a platform user, a named party, both or neither (null before the migration).
   owner_user_id: number | null; owner_label: string | null;
 };
+
+/** D6143: one member on a decision's voting roster (`ic_decision_voters`). */
+export type VoterRow = {
+  user_id: number; name: string | null; added_by: number; added_at: string;
+};
+
+/**
+ * D6143 — the roster's figures, from the roster and the votes already read.
+ * Pure, so the arithmetic is tested without a database.
+ *
+ * NO ROSTER IS NOT ZERO. A decision opened before D6143, or one whose author
+ * set none, has no list of who may vote, so every figure is null with the
+ * reason, never 0: a zero would say "nobody may vote", which is false.
+ *
+ * With a roster: `eligible` is its size; `voted` is the members who cast
+ * yes, no or abstain (an abstention is a vote cast); `recused` is the
+ * members who declared a conflict; `to_vote` is the members with no vote at
+ * all, and `not_voted` names them. `counted` is the tally's denominator:
+ * eligible less recused. A recusal leaves it; an abstention stays in it.
+ * `off_roster` counts votes from members not on the roster (cast before the
+ * roster was set), so no vote is silently dropped from the record.
+ */
+export function rosterSummary(voters: VoterRow[], votes: Array<Pick<VoteRow, 'user_id' | 'vote'>>): any {
+  if (!voters.length) {
+    return {
+      available: false,
+      eligible: null, voted: null, recused: null, to_vote: null, counted: null,
+      not_voted: null, off_roster: null, members: [],
+      reason: 'No voting roster is set for this decision, so who may vote is not recorded. '
+        + 'The person who opened it, or an Admin, picks the voters from the firm’s Investor licence holders.',
+    };
+  }
+  const voteOf = new Map<number, string>();
+  for (const v of votes) voteOf.set(Number(v.user_id), String(v.vote));
+  const onRoster = new Set(voters.map((m) => Number(m.user_id)));
+  let voted = 0;
+  let recused = 0;
+  const notVoted: Array<{ user_id: number; name: string | null }> = [];
+  for (const m of voters) {
+    const v = voteOf.get(Number(m.user_id));
+    if (v === 'recused') recused += 1;
+    else if (v) voted += 1;
+    else notVoted.push({ user_id: Number(m.user_id), name: m.name ?? null });
+  }
+  return {
+    available: true,
+    eligible: voters.length,
+    voted,
+    recused,
+    to_vote: notVoted.length,
+    counted: voters.length - recused,
+    not_voted: notVoted,
+    off_roster: votes.filter((v) => !onRoster.has(Number(v.user_id))).length,
+    members: voters.map((m) => ({
+      user_id: Number(m.user_id), name: m.name ?? null, added_by: m.added_by, added_at: m.added_at,
+      vote: voteOf.get(Number(m.user_id)) ?? null,
+    })),
+  };
+}
+
+/** D6143 — a decision's roster, oldest first. Reached only through a decision already loaded under the scope. */
+async function loadVoters(env: Env, decisionId: number): Promise<VoterRow[]> {
+  const rows = await env.DB.prepare(
+    `SELECT dv.user_id, u.name AS name, dv.added_by, dv.added_at
+       FROM ic_decision_voters dv LEFT JOIN users u ON u.id = dv.user_id
+      WHERE dv.ic_decision_id = ? ORDER BY dv.added_at ASC, dv.id ASC`
+  ).bind(decisionId).all<VoterRow>();
+  return (rows.results || []) as VoterRow[];
+}
+
+/**
+ * D6143 — who may be put on a roster: the owner's answer to Q4 of the #6153
+ * brief (D6153-p2) is that the author picks the voters, offered from the
+ * firm's Investor licence holders. So a voter is a member of the decision's
+ * firm (`user_company_links`, the membership `icDecisionScope` reads, so
+ * every voter can already see the decision) who holds the Investor licence.
+ * A decision with no firm has no such list.
+ */
+async function rosterCandidates(env: Env, companyId: number): Promise<Array<{ user_id: number; name: string | null }>> {
+  const rows = await env.DB.prepare(
+    `SELECT u.id, u.role, u.name FROM user_company_links ucl JOIN users u ON u.id = ucl.user_id
+      WHERE ucl.company_id = ? AND COALESCE(u.is_active, 1) = 1 ORDER BY u.name ASC, u.id ASC LIMIT 200`
+  ).bind(companyId).all<{ id: number; role: string; name: string | null }>();
+  const out: Array<{ user_id: number; name: string | null }> = [];
+  const seen = new Set<number>();
+  for (const u of (rows.results || []) as Array<{ id: number; role: string; name: string | null }>) {
+    if (seen.has(Number(u.id))) continue;
+    seen.add(Number(u.id));
+    if ((await heldLicences(env.DB, { id: Number(u.id), role: u.role })).includes('investor')) {
+      out.push({ user_id: Number(u.id), name: u.name ?? null });
+    }
+  }
+  return out;
+}
+
+type RosterCheck = { ok: true; ids: number[] } | { ok: false; status: 400 | 409; body: Record<string, unknown> };
+
+/** D6143 — the user ids a roster write sent, checked against the firm's Investor licence holders. */
+async function checkRoster(env: Env, companyId: number | null, raw: unknown): Promise<RosterCheck> {
+  const list = Array.isArray(raw) ? raw : null;
+  const ids = list ? [...new Set(list.map((x) => Number(x)))] : [];
+  if (!list || !ids.length || ids.length > 50 || ids.some((n) => !Number.isInteger(n) || n <= 0)) {
+    return { ok: false, status: 400, body: {
+      error: 'roster_invalid',
+      message: 'A voting roster names between one and fifty members.',
+    } };
+  }
+  if (companyId == null) {
+    return { ok: false, status: 409, body: {
+      error: 'roster_needs_firm',
+      message: 'This decision belongs to no firm, so there are no Investor licence holders to pick voters from.',
+    } };
+  }
+  const allowed = new Set((await rosterCandidates(env, companyId)).map((m) => m.user_id));
+  const refused = ids.filter((n) => !allowed.has(n));
+  if (refused.length) {
+    return { ok: false, status: 400, body: {
+      error: 'roster_voter_not_eligible',
+      message: 'Voters are picked from the firm’s Investor licence holders. Someone on this list is not one.',
+      user_ids: refused,
+    } };
+  }
+  return { ok: true, ids };
+}
 
 function canUseIc(user: User): boolean {
   return isAdmin(user) || isInvestor(user) || isPartner(user);
@@ -105,7 +232,7 @@ async function loadDecision(env: Env, user: User, uid: string): Promise<Decision
  */
 export async function scopedDecisions(
   env: Env, user: User, limit = 100,
-): Promise<Array<DecisionRow & { votes: VoteRow[]; conditions: ConditionRow[] }>> {
+): Promise<Array<DecisionRow & { votes: VoteRow[]; conditions: ConditionRow[]; voters: VoterRow[] }>> {
   const scope = icDecisionScope(user);
   const where = scope.sql;
   // `limit` is a clamped integer from this module's own callers, never from a
@@ -113,7 +240,7 @@ export async function scopedDecisions(
   const rows = await env.DB.prepare(
     `SELECT d.* FROM ic_decisions d WHERE ${where} ORDER BY d.updated_at DESC LIMIT ?`
   ).bind(...scope.binds, Math.max(1, Math.min(500, Math.trunc(limit)))).all<DecisionRow>();
-  const out: Array<DecisionRow & { votes: VoteRow[]; conditions: ConditionRow[] }> = [];
+  const out: Array<DecisionRow & { votes: VoteRow[]; conditions: ConditionRow[]; voters: VoterRow[] }> = [];
   for (const d of ((rows.results || []) as DecisionRow[])) {
     const votes = await env.DB.prepare(
       `SELECT v.vote, v.rationale, v.user_id, v.created_at, u.name AS user_name
@@ -126,7 +253,9 @@ export async function scopedDecisions(
       `SELECT uid, body, status, created_by, created_at, resolved_at, resolved_by, owner_user_id, owner_label
          FROM ic_conditions WHERE ic_decision_id = ? ORDER BY created_at ASC`
     ).bind(d.id).all<ConditionRow>();
-    out.push({ ...d, votes: (votes.results || []) as VoteRow[], conditions: (conditions.results || []) as ConditionRow[] });
+    // D6143: the roster rides the same read, for the same reason.
+    const voters = await loadVoters(env, d.id);
+    out.push({ ...d, votes: (votes.results || []) as VoteRow[], conditions: (conditions.results || []) as ConditionRow[], voters });
   }
   return out;
 }
@@ -219,6 +348,8 @@ async function dto(env: Env, d: DecisionRow, opts: { votes?: boolean } = {}): Pr
         WHERE cond.ic_decision_id = ? ORDER BY cond.created_at ASC`
     ).bind(d.id).all<any>();
     base.conditions = conditions.results || [];
+    // D6143: eligible, voted, recused, to vote and who has not voted.
+    base.roster = rosterSummary(await loadVoters(env, d.id), base.votes);
   }
   return base;
 }
@@ -315,13 +446,28 @@ r.post('/', async (c) => {
     // has not chosen one, and `icDecisionScope` then shows the row to them and
     // to whoever votes on it — never to a firm at large.
     const companyId = await activeCompanyFor(c, user);
+    // D6143 (Q4 A): the author may pick the voters when opening. Checked
+    // before anything is written, so a refused roster opens no decision.
+    let rosterIds: number[] = [];
+    if (body.voter_user_ids != null) {
+      const checked = await checkRoster(c.env, companyId, body.voter_user_ids);
+      if (!checked.ok) return c.json(checked.body, checked.status);
+      rosterIds = checked.ids;
+    }
     const uid = newUid();
     const ins = await c.env.DB.prepare(
       `INSERT INTO ic_decisions (uid, project_id, deal_id, dd_case_id, title, memo, terms_json, status, created_by, company_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`
     ).bind(uid, projectId, dealId, ddCaseId, title, memo, termsJson, user.id, companyId, nowIso(), nowIso()).run();
+    const newId = Number((ins as any).meta?.last_row_id);
+    if (rosterIds.length) {
+      const at = nowIso();
+      await c.env.DB.batch(rosterIds.map((voterId) => c.env.DB.prepare(
+        'INSERT OR IGNORE INTO ic_decision_voters (ic_decision_id, user_id, added_by, added_at) VALUES (?, ?, ?, ?)'
+      ).bind(newId, voterId, user.id, at)));
+    }
     const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?')
-      .bind((ins as any).meta?.last_row_id).first<DecisionRow>();
+      .bind(newId).first<DecisionRow>();
     return c.json(await dto(c.env, d!, { votes: true }), 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -484,6 +630,8 @@ r.get('/commit-room', async (c) => {
           open: (d.conditions || []).filter((cond) => cond.status === 'open').length,
           total: (d.conditions || []).length,
         },
+        // D6143: who may vote, from the decision's roster; null with a reason when it has none.
+        roster: rosterSummary(d.voters, cast),
       });
     }
 
@@ -531,7 +679,7 @@ r.get('/commit-room', async (c) => {
           meeting_title: meeting.title ?? null,
           starts_at: meeting.start_at ?? null,
           status: meeting.status ?? null,
-          note: 'An invitation to the meeting, not an entitlement to vote. No voting roster is stored.',
+          note: 'An invitation to the meeting, not an entitlement to vote. Who may vote is the decision’s own roster.',
         };
         // Minutes (migration 334): what the room concluded, written after it.
         // The organiser or an admin records them; everyone who can see the
@@ -731,6 +879,23 @@ r.post('/:uid/vote', async (c) => {
     // recusal with no conflict written down is an unattributed change to the
     // denominator, so the rationale is required for this one value.
     if (!['yes', 'no', 'abstain', 'recused'].includes(vote)) return c.json({ detail: 'vote must be yes|no|abstain|recused' }, 400);
+    // D6143: WHERE A ROSTER EXISTS, ONLY ITS MEMBERS VOTE OR RECUSE. A
+    // decision with no roster (every one opened before D6143) keeps the rule
+    // it had: anyone who may see it may vote.
+    const roster = await loadVoters(c.env, d.id);
+    if (roster.length && !roster.some((m) => Number(m.user_id) === Number(user.id))) {
+      return c.json({
+        error: 'not_on_roster',
+        message: 'This decision has a voting roster and you are not on it. The person who opened it, or an Admin, picks who votes.',
+      }, 403);
+    }
+    // D7920: scope/roster checks still run first. A decided record accepts no
+    // later vote or recusal, including a stale client replay.
+    const votingClosed = () => c.json({
+      error: 'voting_closed',
+      message: 'Voting is closed because this decision has been recorded. No later vote or recusal is recorded.',
+    }, 409);
+    if (d.status === 'decided') return votingClosed();
     const rationale = body.rationale ? String(body.rationale).slice(0, 2000) : null;
     if (vote === 'recused' && !rationale?.trim()) {
       return c.json({
@@ -750,7 +915,8 @@ r.post('/:uid/vote', async (c) => {
     // replay leaves it equal to the request. The guard IN the upsert
     // (`WHERE ic_votes.vote <> 'recused'`) covers a recusal that lands
     // between that read and this write: the recused row is never updated, and
-    // zero changed rows is the refusal (D1 reports `meta.changes`).
+    // no returned row is the refusal. RETURNING works even when a driver
+    // does not include a change count in its metadata.
     const prior = await c.env.DB.prepare('SELECT vote FROM ic_votes WHERE ic_decision_id = ? AND user_id = ?')
       .bind(d.id, user.id).first<{ vote: string }>();
     let refused = prior?.vote === 'recused';
@@ -768,11 +934,21 @@ r.post('/:uid/vote', async (c) => {
     if (!refused) {
       const write = await c.env.DB.prepare(
         `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
-         VALUES (?, ?, ?, ?, ?)
+         SELECT ?, ?, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM ic_decisions WHERE id = ? AND status <> 'decided')
          ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at
-          WHERE ic_votes.vote <> 'recused'`
-      ).bind(d.id, user.id, vote, rationale, nowIso()).run();
-      refused = (write as any)?.meta?.changes === 0;
+          WHERE ic_votes.vote <> 'recused'
+         RETURNING id`
+      ).bind(d.id, user.id, vote, rationale, nowIso(), d.id).first<{ id: number }>();
+      refused = !write;
+      // The initial read may predate a concurrent recording. The SQL above
+      // orders the vote against that recording in one atomic statement and
+      // gates inserts AND conflict updates. Refuse before touching the journal.
+      if (refused) {
+        const current = await c.env.DB.prepare('SELECT status FROM ic_decisions WHERE id = ?')
+          .bind(d.id).first<{ status: string }>();
+        if (current?.status === 'decided') return votingClosed();
+      }
     }
     if (refused) {
       return c.json({
@@ -782,7 +958,7 @@ r.post('/:uid/vote', async (c) => {
     }
     // First vote moves a draft into the voting stage.
     if (d.status === 'draft') {
-      await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=?").bind(nowIso(), d.id).run();
+      await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=? AND status='draft'").bind(nowIso(), d.id).run();
     }
     // Task #83 — auto-draft a PRIVATE decision-journal entry for the voter, so
     // every IC vote lands in the ledger (audit ⑧) without re-typing. It is a
@@ -884,6 +1060,80 @@ export function gradedStamp(
     && (next.thesis !== entry.thesis || next.decision !== entry.decision);
   return changed ? now : (entry.edited_after_outcome_at ?? null);
 }
+
+// ---------------------------------------------------------------------------
+// D6143 — the voting roster. Read by anyone who may see the decision; set by
+// its author or an Admin, the rule `PUT /:uid` already applies. Both reach
+// the decision only through `loadDecision`, so a decision outside the
+// caller's scope is the same 404 as one that does not exist.
+// ---------------------------------------------------------------------------
+
+// GET /api/ic/:uid/roster — the roster and its figures; the candidates (the
+// firm's Investor licence holders) only for whoever may set it.
+r.get('/:uid/roster', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const d = await loadDecision(c.env, user, c.req.param('uid'));
+    if (!d) return c.json({ detail: 'Not found' }, 404);
+    const votes = await c.env.DB.prepare('SELECT user_id, vote FROM ic_votes WHERE ic_decision_id = ?')
+      .bind(d.id).all<{ user_id: number; vote: string }>();
+    const mayEdit = d.created_by === user.id || isAdmin(user);
+    const companyId = d.company_id ?? null;
+    return c.json({
+      roster: rosterSummary(await loadVoters(c.env, d.id), (votes.results || []) as any[]),
+      may_edit: mayEdit,
+      candidates: mayEdit && companyId != null ? await rosterCandidates(c.env, Number(companyId)) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/ic/:uid/roster — replace the roster with `user_ids`.
+r.put('/:uid/roster', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const d = await loadDecision(c.env, user, c.req.param('uid'));
+    if (!d) return c.json({ detail: 'Not found' }, 404);
+    if (d.created_by !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const checked = await checkRoster(c.env, d.company_id ?? null, body?.user_ids);
+    if (!checked.ok) return c.json(checked.body, checked.status);
+    // A member who has voted or recused stays on the roster: removing them
+    // would leave a vote in the tally from someone the roster says may not vote.
+    const votes = await c.env.DB.prepare('SELECT user_id, vote FROM ic_votes WHERE ic_decision_id = ?')
+      .bind(d.id).all<{ user_id: number; vote: string }>();
+    const voteRows = (votes.results || []) as Array<{ user_id: number; vote: string }>;
+    const wanted = new Set(checked.ids);
+    const omitted = voteRows.map((v) => Number(v.user_id)).filter((n) => !wanted.has(n));
+    if (omitted.length) {
+      return c.json({
+        error: 'roster_omits_voter',
+        message: 'A member who has voted or recused stays on the roster. Keep everyone who has already voted.',
+        user_ids: omitted,
+      }, 409);
+    }
+    const current = await loadVoters(c.env, d.id);
+    const have = new Set(current.map((m) => Number(m.user_id)));
+    const at = nowIso();
+    const stmts = [
+      ...current.filter((m) => !wanted.has(Number(m.user_id))).map((m) => c.env.DB.prepare(
+        'DELETE FROM ic_decision_voters WHERE ic_decision_id = ? AND user_id = ?'
+      ).bind(d.id, m.user_id)),
+      ...checked.ids.filter((n) => !have.has(n)).map((n) => c.env.DB.prepare(
+        'INSERT OR IGNORE INTO ic_decision_voters (ic_decision_id, user_id, added_by, added_at) VALUES (?, ?, ?, ?)'
+      ).bind(d.id, n, user.id, at)),
+    ];
+    if (stmts.length) await c.env.DB.batch(stmts);
+    return c.json({
+      roster: rosterSummary(await loadVoters(c.env, d.id), voteRows),
+      may_edit: true,
+      candidates: await rosterCandidates(c.env, Number(d.company_id)),
+    });
+  } catch (e) { return mapError(c, e); }
+});
 
 // ---------------------------------------------------------------------------
 // Conditions (migration 334) — the record a later stage can block on.

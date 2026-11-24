@@ -150,7 +150,64 @@ async function companyOf(env: Env, projectId: number): Promise<number | null> {
   return r?.company_id ?? null;
 }
 
-export async function growFigures(x: Ctx): Promise<Figure[]> {
+/**
+ * D4864 (#4864, GR-12, GR-19): why a Grow figure holds no value, as a code the page reads instead of
+ * parsing the prose `reason`. `no_record`: the store was read and holds nothing for it. `not_connected`:
+ * nothing was typed AND the source that would write it (Stripe, for MRR and Customers) is not connected.
+ * `unavailable`: the read failed, which is not a claim that nothing is recorded. No Grow figure is
+ * team-only today, so none is `restricted`: a viewer who may not read the venture is refused the whole read.
+ */
+export type FigureReasonCode = 'no_record' | 'not_connected' | 'unavailable';
+export type GrowFigure = Figure & { reason_code: FigureReasonCode | null; freshness: 'current' | 'stale' | null };
+
+/** The figures a connected Stripe writes (`project_metrics` rows with `source = 'stripe'`). */
+const STRIPE_FIGURES = new Set(['mrr', 'customers']);
+
+/**
+ * D4864: a recorded figure is `stale` when its as-of month is before the last closed calendar month, so
+ * at least one whole month went unrecorded since it (in November, a figure as of 30 September). The
+ * rule is the calendar's, not a guessed threshold; a figure with no parseable as-of has no freshness.
+ */
+export function figureFreshness(asOf: string | null | undefined, now: number): 'current' | 'stale' | null {
+  if (typeof asOf !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])/.test(asOf)) return null;
+  const closed = prevMonth(new Date(now).toISOString().slice(0, 7));
+  return asOf.slice(0, 7) < closed ? 'stale' : 'current';
+}
+
+/** Whether the venture's founder has an active Stripe integration; `unknown` when that cannot be read. */
+export async function stripeConnection(env: Env, projectId: number): Promise<'connected' | 'not_connected' | 'unknown'> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT 1 AS ok FROM integrations i JOIN users u ON u.id = i.user_id JOIN projects p ON p.founder_id = u.founder_id
+        WHERE p.id = ? AND i.provider_key = 'stripe' AND i.status = 'active' LIMIT 1`,
+    ).bind(projectId).first();
+    return row ? 'connected' : 'not_connected';
+  } catch {
+    console.warn('[growCycle] stripe connection unreadable');
+    return 'unknown';
+  }
+}
+
+/** D4864: the code and freshness for each figure; Stripe's connection is read only when a Stripe figure is missing. */
+async function withReasonCodes(x: Ctx, figures: Figure[]): Promise<GrowFigure[]> {
+  const stripe = figures.some((f) => f.state === 'not_recorded' && STRIPE_FIGURES.has(f.key))
+    ? await stripeConnection(x.env, x.projectId) : 'unknown';
+  return figures.map((f): GrowFigure => {
+    if (f.state === 'unreadable') return { ...f, reason_code: 'unavailable', freshness: null };
+    if (f.state === 'not_recorded') {
+      if (STRIPE_FIGURES.has(f.key) && stripe === 'not_connected') {
+        return { ...f, reason_code: 'not_connected', freshness: null, reason: `Not recorded: Stripe is not connected and no ${f.label} figure was entered by hand` };
+      }
+      if (STRIPE_FIGURES.has(f.key) && stripe === 'connected') {
+        return { ...f, reason_code: 'no_record', freshness: null, reason: `Not recorded: Stripe is connected but has not recorded ${f.label} yet` };
+      }
+      return { ...f, reason_code: 'no_record', freshness: null };
+    }
+    return { ...f, reason_code: null, freshness: figureFreshness(f.as_of, x.now) };
+  });
+}
+
+export async function growFigures(x: Ctx): Promise<GrowFigure[]> {
   const settle = async (key: string, label: string, unit: string, f: () => Promise<Figure>): Promise<Figure> => {
     try { return await f(); } catch (e) {
       console.error('[growCycle] figure unreadable:', key, (e as Error).message);
@@ -158,7 +215,7 @@ export async function growFigures(x: Ctx): Promise<Figure[]> {
     }
   };
   const snaps = () => readSnapshots(x.env, x.projectId);
-  return Promise.all([
+  return withReasonCodes(x, await Promise.all([
     settle('mrr', 'MRR', 'usd_cents', async () => {
       const f = metricFigure(await snaps(), 'mrr', 'mrr', 'MRR', 'usd', x.now);
       return f;
@@ -185,7 +242,7 @@ export async function growFigures(x: Ctx): Promise<Figure[]> {
         delta_30d: rows.filter((p) => p.start_date && p.start_date > cutoff).length,
         spark, source: 'Team roster', as_of: iso(x.now) });
     }),
-  ]);
+  ]));
 }
 
 // ── Cards ───────────────────────────────────────────────────────────────────
@@ -366,6 +423,8 @@ export function planMonth(label: string): string | null {
 export async function teamCard(x: Ctx): Promise<CardBody> {
   const company = await companyOf(x.env, x.projectId);
   let actual: Array<number | null> = []; let plan: Array<number | null> = [];
+  let nextPlan: { period: string; target: number } | null = null;
+  let planReason: string | null = null;
   const months = monthsBack(x.now, 6);
   if (company != null) {
     const people = await x.env.DB.prepare(
@@ -375,26 +434,43 @@ export async function teamCard(x: Ctx): Promise<CardBody> {
     actual = months.map((m) => (ps.length ? ps.filter((p) => !p.start_date || p.start_date.slice(0, 7) <= m).length : null));
     const pl = await x.env.DB.prepare('SELECT period_label, target_headcount FROM company_headcount_plan WHERE company_id = ?')
       .bind(company).all<{ period_label: string; target_headcount: number }>();
-    const pm = new Map<string, number>();
-    for (const p of pl.results || []) { const m = planMonth(p.period_label); if (m) pm.set(m, p.target_headcount); }
+    const pm = new Map<string, number | null>();
+    for (const p of pl.results || []) {
+      const m = planMonth(p.period_label);
+      if (m) pm.set(m, pm.has(m) && pm.get(m) !== p.target_headcount ? null : p.target_headcount);
+    }
     plan = months.map((m) => pm.get(m) ?? null);
+    const upcoming = [...pm.keys()].filter((m) => m >= months[months.length - 1]).sort()[0];
+    if (upcoming) {
+      const target = pm.get(upcoming);
+      if (target != null) nextPlan = { period: upcoming, target };
+      else planReason = `Not recorded: conflicting hiring targets for ${upcoming}. Review the hiring plan.`;
+    }
   }
   const apps = await x.env.DB.prepare(
-    `SELECT a.stage FROM job_applications a JOIN job_postings p ON p.id = a.posting_id
-      WHERE p.project_id = ? AND p.status IN ('open', 'published')`,
+    `SELECT CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END AS stage
+       FROM job_applications a JOIN job_postings p ON p.id = a.posting_id
+      WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'open', 'published', 'rejected')`,
   ).bind(x.projectId).all<{ stage: string | null }>();
   const stages = new Map<string, number>();
-  for (const a of apps.results || []) { const s = a.stage || 'applied'; stages.set(s, (stages.get(s) ?? 0) + 1); }
+  for (const a of apps.results || []) {
+    const s = a.stage === 'submitted' ? 'applied' : a.stage;
+    if (s) stages.set(s, (stages.get(s) ?? 0) + 1);
+  }
   const funnel = ['applied', 'screen', 'interview', 'offer'].map((s) => ({ stage: s, count: stages.get(s) ?? 0 }));
   const recorded = actual.filter((v) => v != null).length;
-  const roles = company == null ? null : await x.env.DB.prepare("SELECT 1 FROM job_postings WHERE project_id = ? AND status IN ('open', 'published') LIMIT 1").bind(x.projectId).first();
+  const roles = await x.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM job_postings WHERE project_id = ? AND status IN ('open', 'published')"
+  ).bind(x.projectId).first<{ n: number }>();
   const newApplicants = stages.get('applied') ?? 0;
   return {
     state: company == null ? 'not_recorded' : seriesState(recorded), range: 'Last 6 months',
-    series: { months, headcount: actual, plan, roles_by_stage: funnel },
-    next: company != null && recorded === 0 && !roles ? { text: 'Open a role', href: `/grow/team-expansion/new?project=${x.projectId}` }
+    series: { months, headcount: actual, plan, roles_by_stage: funnel, talent: {
+      headcount: actual.at(-1) ?? null, plan: nextPlan, plan_reason: planReason, open_roles: roles?.n ?? null, offers: stages.get('offer') ?? 0,
+    } },
+    next: company != null && recorded === 0 && roles?.n === 0 ? { text: 'Open a role', href: `/grow/team-expansion/new?project=${x.projectId}` }
       : newApplicants ? { text: `Review the ${newApplicants} new applicant${newApplicants === 1 ? '' : 's'}.`, href: x.href('team-expansion') } : null,
-    reason: company == null ? 'Not recorded: this venture has no company roster yet' : recorded === 0 && !roles ? 'No open roles yet. Headcount against the plan appears here.' : recorded === 0 ? 'No one is on the team roster yet.' : null, source: 'Team roster and open roles', as_of: iso(x.now),
+    reason: company == null ? 'Not recorded: this venture has no company roster yet' : recorded === 0 && roles?.n === 0 ? 'No open roles yet. Headcount against the plan appears here.' : recorded === 0 ? 'No one is on the team roster yet.' : null, source: 'Team roster and open roles', as_of: iso(x.now),
   };
 }
 
@@ -460,9 +536,13 @@ export async function marketCard(x: Ctx): Promise<CardBody> {
 
 /** The checklist, each item done by the Lab's milestone or by hand. */
 export async function checklist(env: Env, projectId: number) {
-  const marks = await env.DB.prepare('SELECT item_key, done_at FROM durability_checklist WHERE project_id = ?')
-    .bind(projectId).all<{ item_key: string; done_at: string | null }>();
+  // D6789 (#6789): an item marked Not applicable carries who marked it and when; it is out of the score.
+  const marks = await env.DB.prepare(
+    `SELECT c.item_key, c.done_at, c.not_applicable_at, u.name AS not_applicable_by_name
+       FROM durability_checklist c LEFT JOIN users u ON u.id = c.not_applicable_by WHERE c.project_id = ?`,
+  ).bind(projectId).all<{ item_key: string; done_at: string | null; not_applicable_at: string | null; not_applicable_by_name: string | null }>();
   const mine = new Map((marks.results || []).map((m) => [m.item_key, m.done_at]));
+  const na = new Map((marks.results || []).filter((m) => m.not_applicable_at).map((m) => [m.item_key, { at: m.not_applicable_at, by: m.not_applicable_by_name ?? null }]));
   let lab = new Map<string, string | null>();
   try {
     // The Lab records milestones per founder account, not per venture, so
@@ -488,14 +568,19 @@ export async function checklist(env: Env, projectId: number) {
   // or once ticked by hand: it never lowers the score of a founder without one.
   let mercury = false;
   try { mercury = await founderHasMercury(env, projectId); } catch { /* no connections on this database */ }
-  return DURABILITY_ITEMS.filter((i) => !i.mercury || mercury || !!mine.get(i.key)).map((i) => {
+  return DURABILITY_ITEMS.filter((i) => !i.mercury || mercury || !!mine.get(i.key) || na.has(i.key)).map((i) => {
     const byLab = i.lab ? lab.has(i.lab) : false;
     const byHand = !!mine.get(i.key);
     const byMercury = i.mercury === 'runway' && runway != null && runway.months != null && runway.months >= MERCURY_RUNWAY_MONTHS;
+    // D6789: a Lab tick wins over a Not applicable mark (the Lab says the item applies); otherwise the mark
+    // takes the item out of the score, and it is neither done nor open.
+    const mark = byLab ? null : na.get(i.key) ?? null;
+    const isDone = !mark && (byLab || byHand || byMercury);
     // D6122 (GR-24): what ticks an item, so an open one can say so ("Ticks from the Spin-Out Lab", "Tick by hand").
-    return { key: i.key, label: i.label, ticks: i.lab ? 'lab' : i.mercury === 'runway' ? 'mercury' : 'hand', done: byLab || byHand || byMercury,
-      source: byLab ? 'Spin-Out Lab' : byHand ? 'manual' : byMercury ? `From Mercury, as of ${runway!.as_of}` : null,
-      done_at: byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : byMercury ? runway!.as_of : null };
+    return { key: i.key, label: i.label, ticks: i.lab ? 'lab' : i.mercury === 'runway' ? 'mercury' : 'hand', done: isDone,
+      source: !isDone ? null : byLab ? 'Spin-Out Lab' : byHand ? 'manual' : `From Mercury, as of ${runway!.as_of}`,
+      done_at: !isDone ? null : byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : runway!.as_of,
+      not_applicable: !!mark, not_applicable_at: mark?.at ?? null, not_applicable_by: mark?.by ?? null };
   });
 }
 
@@ -508,15 +593,17 @@ export async function durableCard(x: Ctx): Promise<CardBody> {
       WHERE e.project_id = ? AND e.due_date IS NOT NULL AND substr(e.due_date, 1, 10) BETWEEN ? AND ? ORDER BY e.due_date`,
   ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_date: string; completion_status: string; owner_name: string | null; owner_user_name: string | null }>();
   const list = await checklist(x.env, x.projectId);
-  const done = list.filter((i) => i.done).length;
+  // D6789: the score counts done out of the items that apply.
+  const applies = list.filter((i) => !i.not_applicable);
+  const done = applies.filter((i) => i.done).length;
   const events = (ev.results || []).map(({ due_date, owner_name, owner_user_name, ...event }) => ({ ...event, owner: ownerShown(owner_user_name, owner_name), due_at: due_date }));
   const anyEvent = await x.env.DB.prepare('SELECT 1 FROM compliance_events WHERE project_id = ? LIMIT 1').bind(x.projectId).first();
-  const firstOpen = list.find((i) => !i.done);
+  const firstOpen = applies.find((i) => !i.done);
   const ownerless = events.find((e) => !e.owner);
   return {
     state: events.length || done ? 'ok' : 'empty', range: 'Next 90 days',
     series: { calendar: events.map((e) => ({ title: e.title, due: e.due_at.slice(0, 10), owner: e.owner })),
-      checklist: { done, total: list.length, pct: Math.round((done / list.length) * 100) } },
+      checklist: { done, total: applies.length, not_applicable: list.length - applies.length, pct: applies.length ? Math.round((done / applies.length) * 100) : null } },
     next: !anyEvent && !done ? { text: 'Add obligation', href: `${x.href('durable-company-building')}&add=1` }
       : ownerless ? { text: `Give ${ownerless.title} an owner.`, href: x.href('durable-company-building') }
       : firstOpen ? { text: `${firstOpen.label}.`, href: x.href('durable-company-building') } : null,

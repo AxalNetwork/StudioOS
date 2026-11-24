@@ -333,7 +333,7 @@ export function toggleCard(cards, key) {
 }
 
 /** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
-export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
+export const THESIS_PATH = '/account/portfolio/settings?from=deal-flow#my-thesis';
 
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -537,11 +537,106 @@ export const passAnswersInvitation = (row) => row?.myInvitation === 'invited' ||
  * `unreadable`, never a count of 0; a way in that could not be read is named,
  * so a count from the rest reads as "at least".
  */
-export function attentionOf(read, unreadWords = () => []) {
+export function attentionOf(read, unreadWords = () => [], recorded) {
+  if (recorded?.kind === 'loading') return {kind:'loading',items:[],unread:[]};
+  if (recorded && (recorded.kind !== 'ok' || [recorded.data?.stale,recorded.data?.diligence].some(s=>s?.state==='unreadable'))) return {kind:'unreadable',items:[],unread:[]};
   if (!read || read.kind === 'loading') return { kind: 'loading', items: [], unread: [] };
   if (read.kind !== 'ok') return { kind: 'unreadable', items: [], unread: [] };
   const deals = new Set((read.data?.items || []).map((i) => String(i.deal_id)));
   const unread = unreadWords(read.data?.sources || {});
   const items = deals.size ? [{ key: 'new', count: deals.size, word: `${deals.size} new`, label: `${deals.size} ${deals.size === 1 ? 'deal' : 'deals'} new for you` }] : [];
+  if (recorded?.kind === 'ok') for (const [key,word] of [['stale','stale'],['diligence','waiting on diligence']]) {
+    const source=recorded.data?.[key];
+    if(source?.state==='recorded'&&source.count>0)items.push({key,count:source.count,word:`${source.count} ${word}`,label:`${source.count} ${word}`});
+  }
   return { kind: 'ok', items, unread };
+}
+
+// ---------------------------------------------------------------- Export CSV (D6150)
+
+/** A whole figure in its currency code ("1,500,000 USD"); never compact, never a guessed currency. */
+export function csvMoney(n, currency) {
+  if (n == null || !Number.isFinite(Number(n))) return null;
+  const text = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(Number(n));
+  return currency ? `${text} ${String(currency).toUpperCase()}` : `${text} (currency not recorded)`;
+}
+
+/** A score cell's word for the file: the band and confidence, or why there is none. `failed` is Unreadable, never "—". */
+function scoreWord(scores, key) {
+  const c = scopeCell(scores, key);
+  if (c.kind === 'scored') return c.confidence ? `${c.word}, ${c.confidence.toLowerCase()} confidence` : c.word;
+  return c.kind === 'failed' ? SCORE_WORDS.unreadable : c.word;
+}
+function scorecardWord(scores) {
+  if (scores.state !== 'ok') return scores.state === 'failed' ? SCORE_WORDS.unreadable : SCORE_WORDS[scores.state];
+  const n = SCOPE_KEYS.filter((k) => scopeCell(scores, k).kind === 'scored').length;
+  return n ? `${n} of ${SCOPE_KEYS.length} scopes scored` : SCORE_WORDS.not_scored;
+}
+function fitWord(fit) {
+  const c = fitCell(fit);
+  if (c.kind === 'scored') return c.confidence ? `${c.word}, ${c.confidence.toLowerCase()} confidence` : c.word;
+  if (c.kind === 'not_set') return 'Thesis not set';
+  if (c.kind === 'unavailable') return SCORE_WORDS.not_shared;
+  return c.word;
+}
+const outsideFlow = 'Not on your deals';
+
+/** One cell of one column, in the table's own words. Only what the table shows: never a note, a pass or a link. */
+function cellText(id, r) {
+  switch (id) {
+    case 'stage': return r.inFlow ? stageWord(r.stage) : outsideFlow;
+    case 'round': return r.round || 'Not recorded';
+    case 'ask': {
+      const m = csvMoney(r.ask, r.currency);
+      return m ? `${m}${r.instrument ? ` · ${r.instrument}` : ''}` : 'Ask not recorded';
+    }
+    case 'scorecard': return scorecardWord(r.scores);
+    case 'fit': return fitWord(r.fit);
+    case 'days': return daysWord(r.daysInStage) || (r.inFlow ? 'Not recorded' : outsideFlow);
+    case 'owner': return r.owner ? (r.owner.name || 'Owner not named') : (r.inFlow ? 'Unassigned' : outsideFlow);
+    case 'entered': {
+      if (!r.enteredVia) return r.inFlow ? 'Not recorded' : outsideFlow;
+      const day = typeof r.enteredAt === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.enteredAt) ? r.enteredAt.slice(0, 10) : null;
+      return day ? `${enteredWord(r.enteredVia)} · ${day}` : enteredWord(r.enteredVia);
+    }
+    default: return scoreWord(r.scores, id);
+  }
+}
+
+/** A cell a spreadsheet would run as a formula is written as text (as Compare's CSV does). */
+const inert = (s) => (/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
+
+/**
+ * Export CSV (D6150): every row as filtered and sorted, not one page, under the
+ * visible columns in the table's order (Venture and Sector, then My stage and
+ * the rest). Scores are bands with confidence, absence is a word, money carries
+ * its currency code. Returns `{ header, rows }` for `lib/csvExport.downloadCsv`.
+ */
+export function flowCsv(rows, columns) {
+  const cols = COLUMNS.filter((c) => columns.includes(c.id));
+  const header = ['Venture', 'Sector', ...cols.map((c) => c.label)];
+  const body = rows.map((r) => [r.name || 'Name not recorded', r.sector || 'Not recorded', ...cols.map((c) => cellText(c.id, r))].map((v) => inert(String(v))));
+  return { header, rows: body };
+}
+
+/**
+ * Whether Export CSV is offered now, and why not. A file is never written while
+ * the scores, or a visible fit, are still being read or could not be read, or
+ * while there is no row: a blank would read as "none".
+ */
+export function csvAvailability({ rows, columns, scores, fits }) {
+  const needsScores = columns.some((c) => c === 'scorecard' || SCOPE_KEYS.includes(c));
+  if (needsScores && !scores) return { ok: false, why: 'Scores are still being read.' };
+  if (needsScores && scores === 'failed') return { ok: false, why: 'Scores could not be read, so the file would be missing them. Try again first.' };
+  if (columns.includes('fit') && !fits) return { ok: false, why: 'Fit to your thesis is still being read.' };
+  if (columns.includes('fit') && fits === 'failed') return { ok: false, why: 'Fit to your thesis could not be read, so the file would be missing it. Try again first.' };
+  if (!rows.length) return { ok: false, why: 'No deal matches these filters.' };
+  return { ok: true, why: null };
+}
+
+const slug = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+/** `deal-flow-<view>-<day>.csv`: the saved view's name, else the scope's. `day` is the caller's `YYYY-MM-DD`. */
+export function flowCsvName({ viewName = null, scope = 'mine', day }) {
+  const name = slug(viewName) || (scope === 'all' ? 'all-deals' : 'my-deals');
+  return `deal-flow-${name}-${day}.csv`;
 }

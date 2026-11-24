@@ -12,6 +12,7 @@ import { useActiveProject } from '../lib/activeProject.js';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
 import { SidebarSubpagesContext, subpageRootsKey, visibleSubpageRoots } from '../lib/sidebarSubpages';
+import { ventureQuery } from '../pages/cycles/operatingSystemsModel.js';
 
 /**
  * SidebarNav — the left navigation, lifted out of App.jsx unchanged.
@@ -259,7 +260,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
               // and the sidebar is expanded, so the sidebar is that area's one page switcher on desktop.
               const rowIsCurrent = derivedRow !== null ? to === derivedRow : (manualActive ?? navLocation.pathname === to);
               const kids = !collapsed && !q && rowIsCurrent && Array.isArray(item.children) && item.children.length
-                ? <SubpageList items={item.children} pathname={navLocation.pathname} onNavigate={onNavigate} parent={label} />
+                ? <SubpageList items={item.children} pathname={navLocation.pathname} hash={navLocation.hash} search={navLocation.search} onNavigate={onNavigate} parent={label} />
                 : null;
               return (
                 <React.Fragment key={to}>
@@ -341,24 +342,38 @@ export function SidebarSubpagesProvider({ groups, open, collapsed, children }) {
   return <SidebarSubpagesContext.Provider value={roots}>{children}</SidebarSubpagesContext.Provider>;
 }
 
-export function subpageActive(child, pathname) {
+export function subpageActive(child, pathname, hash = '') {
   if (!child?.to) return false;
+  // D6029: a section entry (Build › Tools, `#tools`) lights on its own section only.
+  if (child.hash) return pathname === child.to && hash === child.hash;
   return pathname === child.to || (!child.end && pathname.startsWith(`${child.to}/`));
 }
 
+/** D6029: the one sub-page lit now. A lit section entry wins over the page that holds it (Tools over Operating systems). */
+export function activeSubpage(items, pathname, hash = '') {
+  const links = (items || []).filter((c) => c.to);
+  return links.find((c) => c.hash && subpageActive(c, pathname, hash)) || links.find((c) => !c.hash && subpageActive(c, pathname, hash)) || null;
+}
+
+/** D6029: a sub-page's link. A `keepVenture` entry carries the page's `?project_id=` (Tools keeps the venture), then its section. */
+export function subpageHref(child, search = '') {
+  return `${child.to}${child.keepVenture ? ventureQuery(search) : ''}${child.hash || ''}`;
+}
+
 /** D6029 (#6029, BD23) — a row's own pages, indented under it: links, and a heading where one is drawn ("Modules"). */
-export function SubpageList({ items, pathname, onNavigate, parent }) {
+export function SubpageList({ items, pathname, hash = '', search = '', onNavigate, parent }) {
+  const lit = activeSubpage(items, pathname, hash);
   return (
     <ul className="m-0 list-none border-l border-gray-200 py-1 pl-0 ml-8 dark:border-gray-700" aria-label={`${parent} pages`} data-testid="sidebar-subpages">
       {items.map((c) => (c.heading
         ? <li key={`h-${c.heading}`} className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{c.heading}</li>
         : (
-          <li key={c.to}>
-            <Link to={c.to} onClick={onNavigate} aria-current={subpageActive(c, pathname) ? 'page' : undefined}
-              className={`block truncate px-3 py-1.5 text-[13px] transition-colors ${subpageActive(c, pathname)
+          <li key={`${c.to}${c.hash || ''}`}>
+            <Link to={subpageHref(c, search)} onClick={onNavigate} aria-current={c === lit ? 'page' : undefined}
+              className={`block truncate px-3 py-1.5 text-[13px] transition-colors ${c === lit
                 ? 'font-semibold text-violet-700 dark:text-violet-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}
-              data-testid={`sidebar-subpage-${c.to}`}>
+              data-testid={`sidebar-subpage-${c.to}${c.hash || ''}`}>
               {c.label}
             </Link>
           </li>

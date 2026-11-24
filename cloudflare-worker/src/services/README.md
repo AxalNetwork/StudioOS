@@ -23,6 +23,16 @@ storage readers and guards must consume it rather than copy figures.
 
 `eventSyndication/` (D1490, #3904) lists an approved public event on outside channels: the eligibility rule, the channel registry (no adapter yet), the four triggers and the `event_syndication` job. See its README.
 
+`recordStore.ts` and `recordErasure.ts` (D6651, #6651) are the only code that
+writes or deletes an R2 object under a `record` prefix of the D6650 inventory. A
+record is written once (`putRecord` refuses an existing key), a replacement is a
+new key (the replaced object is kept), and the only delete is
+`eraseRecordObjects` with a stated reason, which writes one D6654
+`record_suppression_ledger` row per key (a key hash, never the key) before it
+deletes, and deletes nothing when that write fails (except a rollback); a failed write's rollback of the object it just stored goes through
+it as `unreferenced`. `scripts/check-record-writes.mjs`
+fails the build on any other put or delete of a record prefix.
+
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
 before its R2 write, and the 80/95/100% notices sent once the write lands. Its
 refusal is the one exception to "never a Response" here: it throws the 413
@@ -304,6 +314,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `tiktok/` | D5863 (#5863, part 2a of #2401): a founder's own TikTok in Grow. `client.ts` is the only caller of TikTok's Display API (the account's counts and the public videos, field by field); `grow.ts` links one account to one venture, lands the daily snapshot and the videos through the ledger, draws the "From TikTok" parts and purges a connection's figures on disconnect. Its README has the rules. |
 | `typeform/` | D5828 (#5828): Typeform's incremental response importer for one connection, venture and form. `api.ts` builds the two GET reads by validated region; `mappings.ts` holds what may be mapped and when an answer qualifies; `importer.ts` pages, dedupes through the `connector_fed_items` ledger, checkpoints after durable writes, reconciles provider deletions and keeps withdrawn items withdrawn. No respondent identity is read or stored. Its README has the rules. |
 | `facebook/` | D5859 (#5859, part 2a of #2399): a linked Facebook Page in Grow. `insights.ts` is the only reader of Page figures (followers, daily views, unique viewers and engagements), through the provider's bounded Graph call; `grow.ts` links one Page per venture and lands the figures through the ledger, never as a KPI. Its README has the rules. |
+| `marketObservations/` | D7709 (#7709): shared bounded observation writer, body-free run receipts and operator importer registry; distinct from dashboard quotes and the World Bank adapter. See its README. |
 
 ## Rules
 
@@ -566,6 +577,12 @@ withdrawal. Every outcome is a sentence on the session (`digest_status`,
 columns and pending `validate_proposals`, and every model call goes through
 `aiRouter.run`.
 
+D6713: `formationPacks.ts` reads pinned/current catalogue obligations, keeps
+unsourced deadlines unknown, and prepares idempotent project-step/company-event
+inserts for the registered-case transaction. Company-only coverage remains
+`reminders:false`. `entityObligations.ts` uses the catalogue in production;
+its legacy pure schedule helper remains a compatibility/parity fixture.
+
 D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,
 seeded events and new-venture action are preserved; TypeScript maps `due_date`
@@ -729,3 +746,5 @@ D1456 (#4014): interview processing persists its actual failed step and clears i
 D4811 (#4811): `templateSafety.ts` is the one predicate for a legal template's Restricted overlay (its slug in `COUNSEL_REVIEW_SLUGS`) and Incomplete overlay (a stub or a blank body). Every route that generates from, uses or publishes a template refuses through `templateUseRefusal` with 409 (`template_restricted`, or the existing `template_has_no_body`); reading, editing, previewing and withdrawing are never refused.
 
 `meta/` reads the shared Meta app credentials for WhatsApp and Facebook.
+
+D6703: `formationPrefill.ts` projects minimal intake fields and store provenance, normalizing country names/codes without guessing cities. `formationState.ts` also reads unpaid open v2 cases as `draft_case`, after incorporated and paid-order evidence.

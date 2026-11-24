@@ -14,25 +14,48 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { BUILD_SUBPAGES, SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { SidebarSubpagesContext, subpageRoots, subpageRootsKey, visibleSubpageRoots } from '../src/lib/sidebarSubpages.js';
-import { SubpageList, subpageActive } from '../src/ui/SidebarNav.jsx';
+import { SubpageList, activeSubpage, subpageActive, subpageHref } from '../src/ui/SidebarNav.jsx';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
-import { BUILD_MODULE_OUTCOMES, moduleSubtitle } from '../src/pages/cycles/cycleModel.js';
+import { BUILD_MODULE_OUTCOMES, moduleSubtitle, cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { MODULES } from '../src/pages/cycles/modules.js';
 
 const buildRow = () => SIDEBAR_GROUPS.founder.flatMap((g) => g.items).find((i) => i.to === '/build');
 const OLD = 'Records below; the tabs above move between modules.';
 
-test('the sidebar lists Overview, Plan, Progress, then the six modules under Build; Tools waits on #5078', () => {
+test('the sidebar lists Overview, Plan, Progress, Tools, then the six modules under Build', () => {
   assert.deepEqual(BUILD_SUBPAGES.map((c) => c.label ?? `# ${c.heading}`),
-    ['Overview', 'Plan', 'Progress', '# Modules', 'Solution design', 'Prototype / MVP', 'Product roadmap', 'Founding team', 'Company creation', 'Operating systems']);
-  assert.ok(!BUILD_SUBPAGES.some((c) => /tools/i.test(c.label || '')), 'no Tools entry until #5078');
+    ['Overview', 'Plan', 'Progress', 'Tools', '# Modules', 'Solution design', 'Prototype / MVP', 'Product roadmap', 'Founding team', 'Company creation', 'Operating systems']);
+  // One Tools entry, and it is D5078's section of Operating systems: no second tools page.
+  const tools = BUILD_SUBPAGES.filter((c) => /tools/i.test(c.label || ''));
+  assert.equal(tools.length, 1);
+  assert.deepEqual({ to: tools[0].to, hash: tools[0].hash }, { to: '/build/operating-systems', hash: '#tools' });
   const row = buildRow();
   assert.equal(row.children, BUILD_SUBPAGES);
   for (const p of ['/build/plan', '/build/plan/progress', '/build/solution-design', '/build/operating-systems', '/build/this-week']) assert.ok(row.match.includes(p), p);
   assert.ok(!row.match.includes('/build/team') && !row.match.includes('/build/brand'), 'Grow keeps its Build-prefixed addresses');
   // The module paths are the cycle's own modules, in its order.
   const build = MODULES.build.map((m) => `/build/${m.slug}`);
-  assert.deepEqual(BUILD_SUBPAGES.filter((c) => c.to && !['/build', '/build/plan', '/build/plan/progress'].includes(c.to)).map((c) => c.to), build);
+  assert.deepEqual(BUILD_SUBPAGES.filter((c) => c.to && !c.hash && !['/build', '/build/plan', '/build/plan/progress'].includes(c.to)).map((c) => c.to), build);
+  assert.equal(row.match.filter((p) => p === '/build/operating-systems').length, 1, 'Tools adds no second match');
+});
+
+test('Tools opens Operating systems › Tools with the venture kept, and lights on that section only', () => {
+  const by = Object.fromEntries(BUILD_SUBPAGES.filter((c) => c.to).map((c) => [c.label, c]));
+  assert.equal(subpageHref(by.Tools, '?project_id=7'), '/build/operating-systems?project_id=7#tools');
+  assert.equal(subpageHref(by.Tools, '?project=7&tab=x'), '/build/operating-systems?project_id=7#tools');
+  assert.equal(subpageHref(by.Tools, ''), '/build/operating-systems#tools');
+  assert.equal(subpageHref(by.Tools, '?project_id=abc'), '/build/operating-systems#tools', 'only a numeric venture is carried');
+  // The other entries keep their plain addresses.
+  assert.equal(subpageHref(by.Plan, '?project_id=7'), '/build/plan');
+  assert.equal(subpageHref(by['Operating systems'], '?project_id=7'), '/build/operating-systems');
+  assert.equal(activeSubpage(BUILD_SUBPAGES, '/build/operating-systems', '#tools'), by.Tools);
+  assert.equal(activeSubpage(BUILD_SUBPAGES, '/build/operating-systems', '#cadence'), by['Operating systems']);
+  assert.equal(activeSubpage(BUILD_SUBPAGES, '/build/operating-systems', ''), by['Operating systems']);
+  assert.equal(activeSubpage(BUILD_SUBPAGES, '/build/plan', '#tools'), by.Plan);
+  const html = renderToStaticMarkup(h(MemoryRouter, null, h(SubpageList, { items: BUILD_SUBPAGES, pathname: '/build/operating-systems', hash: '#tools', search: '?project_id=7', parent: 'Build' })));
+  assert.match(html, /<a aria-current="page"[^>]*href="\/build\/operating-systems\?project_id=7#tools"/);
+  assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+  assert.match(readFileSync('frontend/src/ui/SidebarNav.jsx', 'utf8'), /hash=\{navLocation\.hash\} search=\{navLocation\.search\}/);
 });
 
 test('which rows list their pages: only while the sidebar is open and expanded', () => {
@@ -91,4 +114,14 @@ test('each Build module\'s subtitle is its founder outcome (BD23); no Build modu
   assert.equal(moduleSubtitle('raise', 'pitch-deck', 'Your deck.'), `Your deck. ${OLD}`, 'other cycles keep theirs');
   // A tool page that owns the module (D5081 `owned`) keeps its own subtitle; every other module reads moduleSubtitle.
   assert.match(readFileSync('frontend/src/pages/cycles/CycleModulePage.jsx', 'utf8'), /sub=\{sub !== undefined \? sub : owned \? owned\.sub : moduleSubtitle\(meta\.key, slug, card\?\.caption\)\}/);
+});
+
+test('Plan and Progress remain in the phone picker with the venture query', () => {
+  const cards = MODULES.build.map((m) => ({ slug: m.slug, name: m.name }));
+  const tabs = cycleTabs('build', cards, 'progress', '?project_id=7');
+  assert.deepEqual(tabs.slice(0, 4).map((t) => [t.name, t.href]), [
+    ['Overview', '/build?project_id=7'], ['Plan', '/build/plan?project_id=7'],
+    ['Progress', '/build/plan/progress?project_id=7'], ['Tools', '/build/operating-systems?project_id=7#tools'],
+  ]);
+  assert.equal(tabs.find((t) => t.key === 'progress').active, true);
 });

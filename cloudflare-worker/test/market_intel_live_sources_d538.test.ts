@@ -60,6 +60,10 @@ function fixture() {
   `);
   db.exec(readFileSync(resolve(here, '../sql/migrations/030_market_intel.sql'), 'utf8'));
   db.exec(readFileSync(resolve(here, '../sql/migrations/379_market_intel_index_basis.sql'), 'utf8'));
+  // D7707 — what a row measures, and the run record.
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611191833_7707_market_intel_row_dates_runs.sql'), 'utf8'));
+  // D7708 — the window and mix an index point stores.
+  db.exec(readFileSync(resolve(here, '../sql/migrations/202611220337_7708_market_intel_index_window.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'admin', 'Ada', 'ada@axal.example')`).run(ADMIN);
   return db;
 }
@@ -126,7 +130,19 @@ const RESPONSES: Array<{ host: string; body: (url: URL) => string; type?: string
     host: 'sdmx.oecd.org',
     body: () => JSON.stringify({
       meta: { schema: 'https://raw.githubusercontent.com/sdmx-twg/sdmx-json/master/data-message/tools/schemas/2.0.0/sdmx-json-data-schema.json' },
-      data: { dataSets: [{ action: 'Information', observations: { '0:0:0:0:0:0:0': [2.7] } }] },
+      data: {
+        dataSets: [{ action: 'Information', observations: { '0:0:0:0:0:0:0': [2.7] } }],
+        // D7707 — the structure names the period each observation key points at.
+        structures: [{ dimensions: { observation: [
+          { id: 'REF_AREA', values: [{ id: 'OECD' }] },
+          { id: 'FREQ', values: [{ id: 'A' }] },
+          { id: 'MEASURE', values: [{ id: 'G' }] },
+          { id: 'UNIT_MEASURE', values: [{ id: 'PT_B1GQ' }] },
+          { id: 'PRICE_BASE', values: [{ id: '_Z' }] },
+          { id: 'TRANSFORMATION', values: [{ id: '_Z' }] },
+          { id: 'TIME_PERIOD', role: 'time', values: [{ id: '2023' }] },
+        ] } }],
+      },
     }),
   },
   {
@@ -135,6 +151,10 @@ const RESPONSES: Array<{ host: string; body: (url: URL) => string; type?: string
       version: '2.0', class: 'dataset', label: 'Gross domestic expenditure on R&D (GERD)',
       value: { '0': 2.2, '1': 2.24, '2': 2.4 },
       id: ['freq', 'unit', 'sectperf', 'geo', 'time'],
+      // D7707 — the time index each value key points at, and the update date.
+      size: [1, 1, 1, 1, 3],
+      updated: '2026-03-28T23:00:00+0100',
+      dimension: { time: { category: { index: { '2021': 0, '2022': 1, '2023': 2 } } } },
     }),
   },
 ];
@@ -434,8 +454,10 @@ test('sector-compass: live since the first live day, the window it covers, month
   const { status, body } = await getCompass(envFor(db));
   assert.equal(status, 200, JSON.stringify(body));
   assert.equal(body.period_status, 'month_to_date');
-  assert.match(body.history_note, /month to date/);
-  assert.match(body.delta_note, /previous month/);
+  // D7708 — the notes say a value is the score over its own 30-day window, not the calendar month.
+  assert.match(body.history_note, /30 days before its last refresh/);
+  assert.match(body.history_note, /not the calendar month/);
+  assert.match(body.delta_note, /previous month's value, each the score over its own 30-day window/);
   const f = body.freshness;
   assert.equal(f.live_since, new Date(Date.now() - 5 * DAY).toISOString().slice(0, 10));
   assert.equal(f.live_since_exact, true);

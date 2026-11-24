@@ -1,53 +1,63 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import {
-  Search, ChevronRight, X, AlertTriangle, Info,
-  Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
-  Network, LayoutDashboard, UserCircle, LifeBuoy, FileText, History,
-} from 'lucide-react';
+import { Search, ChevronRight, X, AlertTriangle, Info } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from './sections';
 import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import { useAuth } from '../../hooks/useAuthSync';
 import { request, api } from '../../lib/api';
+import { helpCenterApi } from '../../lib/api/helpCenter';
 import { overallStatus } from '../../lib/statusOverall';
 import { canUseCustomerChat } from '../../lib/customerChat';
 import CustomerChatWidget from '../../components/CustomerChatWidget';
 import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
-import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
-import { canOpenSurface, guidePlacement, helpAreas } from './guidePlacement';
+import { reportError } from '../../lib/log';
+import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine, guideBreadcrumbLd } from './helpCenter';
+import { injectJsonLd } from '../../lib/seo';
+import { guidePlacement, helpAreas } from './guidePlacement';
+import { helpGuideMeta } from './helpMeta';
+import { usePageMeta } from '../../lib/seo';
+import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
-import { usePhoneWidth } from '../../ui';
+import {
+  SEARCH_MISS_IDLE_MS, appliesToLine, areaChips, areasForTerms, broaderTerms, goToTarget, guideOutline,
+  guideTicketDraft, inArea, moveSelection, publicGuides, resultArea, resultLine, searchGuides, searchSuggestions, ticketTitleFromSearch,
+  TRACKER_WARNING, TRACKER_WARNING_ANCHOR, TRACKER_WARNING_LINK,
+} from './v2/helpV2';
+import HelpTicketSheet, { ADVISORY_URL, SECURITY_EMAIL } from './v2/HelpTicketSheet';
+import HelpDirectory from './v2/HelpDirectory';
+import { usePhoneWidth, StateChip } from '../../ui';
 import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 
 // ---------------------------------------------------------------------------
-// D599 (#1280) — the Help Center, built to its canvas.
+// D599 (#1280) — the Help Center, built to its canvas: `/help` is the home and
+// `/help/<area>/<guide>` is one guide on its own page. Every address that
+// reached a guide still does: `#<area>/<guide>` on `/help` opens that guide's
+// page (see `DocsLayout` below). D621 wires Popular and "Did this answer it?"
+// to D603's stores (`HelpSignals.jsx`); D626 groups the guides by task.
 //
-// `design/canvases/integrated/Help Center.dc.html` draws two screens for the
-// corpus: H1, a home page (a lavender search band, the areas as cards, the
-// member's open tickets, "Still stuck?"), and H2, one page per guide. Task #103
-// had composed a front door onto the old docs site instead: a gray rail listing
-// all 96 guides, every guide rendered in one long scroll under the home, and
-// the contact block at the very bottom of it. So the page did not look like the
-// canvas, and a member's tickets were a footer link away from anything.
-//
-// Now `/help` is H1 and `/help/<area>/<guide>` is H2. The corpus, its role
-// filtering and its search are unchanged; only the composition is new.
-//
-// Every address that reached a guide still does. `#<area>/<guide>` was the
-// guide's address for the whole life of the old page, and it is in sent
-// notifications, the advisor's tools and bookmarks, so a hash on `/help` now
-// opens that guide's page (see `DocsLayout` below).
-//
-// D621 (#1280 step 2) wires two canvas elements to D603's stores, in
-// `HelpSignals.jsx`: "Popular this week" on the home, and "Did this answer
-// it?" on each guide, with the answers shown to an admin on the home.
-// D626 (#1369, step 3) groups guides by task and records their surfaces and
-// descriptive audiences in guidePlacement.js. Guide addresses never change.
+// D6861 (#6861) — rebuilt to Help Center v2 (D4957; `design/incoming/Help
+// Center v2 Page.dc.html`, boards HC1 to HC16):
+//   HC1/HC2   search directly under the title; Popular and Your tickets two
+//             across; the areas with their real guide counts; Still stuck?
+//             with a status line that carries a glyph and words. Signed out:
+//             the six public guides, Account recovery first.
+//   HC3/HC4   "First 25 results" (the owner's option A, never a total the
+//             search did not count), area chips, arrow keys, Enter and Esc;
+//             nothing found offers broader terms that find something, the
+//             areas, and a ticket that carries the search. A search that
+//             found nothing is recorded with no member (D6861's store).
+//   HC5/HC6   the guide column with Go to as the one primary action, On this
+//             page with owner and review ("Verification pending" until a
+//             first verified date exists), and what next after a No.
+//   HC7       one sheet: an ordinary ticket or a security concern, on the
+//             same two endpoints as before (`v2/HelpTicketSheet.jsx`).
+//   HC8       every guide, with a role filter that dims (`v2/HelpDirectory.jsx`),
+//             at `/help?view=all`.
 // ---------------------------------------------------------------------------
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
@@ -55,49 +65,23 @@ import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 function highlight(text, q) {
   return splitForHighlight(text, q).map((part, i) =>
     part.match ? (
-      <mark key={i} className="bg-yellow-200 text-gray-900 rounded px-0.5 dark:text-gray-100">{part.text}</mark>
+      <mark key={i} className="rounded bg-yellow-200 px-0.5 text-gray-900 dark:bg-yellow-500/30 dark:text-gray-100">{part.text}</mark>
     ) : (
       <React.Fragment key={i}>{part.text}</React.Fragment>
     )
   );
 }
 
-// Resolve the lucide icon name strings used in section manifests.
-const ICONS = {
-  Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
-  Network, LayoutDashboard, UserCircle, LifeBuoy, FileText, History,
-};
-
-function SectionIcon({ name, ...rest }) {
-  const Icon = ICONS[name] || FileText;
-  return <Icon {...rest} />;
-}
-
-// The canvas gives each area a tinted icon tile. The tint carries no meaning
-// beyond telling neighbouring cards apart, so it is a lookup with a neutral
-// default: a new section file gets the gray tile until someone picks it one.
-const AREA_TINTS = {
-  violet: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
-  emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-  indigo: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
-  amber: 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
-  gray: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-};
-const AREA_TINT_BY_ID = {
-  'getting-started': 'violet',
-  'spin-out-lab': 'emerald',
-  build: 'indigo',
-  'validate-grow': 'amber',
-  capital: 'amber',
-  legal: 'emerald',
-  network: 'indigo',
-};
-const areaTint = (id) => AREA_TINTS[AREA_TINT_BY_ID[id] || 'gray'];
-
 // The canvas's label style: mono, small, uppercase, tracked — gray by default,
 // in the callout's own ink inside a callout.
 const LABEL_BASE = 'font-mono text-[10px] font-medium uppercase tracking-[0.11em]';
 const LABEL = `${LABEL_BASE} text-gray-500 dark:text-gray-400`;
+const CARD = 'rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900';
+const CHIP = 'inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 font-mono text-[10px] text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300';
+const KBD = 'inline-flex min-w-[20px] items-center justify-center rounded border border-gray-300 bg-white px-1 font-mono text-[10.5px] text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300';
+
+const PRIMARY_ACTION = 'inline-flex min-h-[40px] items-center rounded-[9px] border border-violet-600 bg-violet-600 px-4 text-[12.5px] font-bold text-white hover:bg-violet-700';
+const SECONDARY_ACTION = 'inline-flex min-h-[40px] items-center rounded-[9px] border border-gray-200 bg-white px-3.5 text-[12.5px] font-semibold text-gray-700 hover:border-violet-200 hover:text-violet-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:text-violet-300';
 
 // Fetched markdown lands inside a `<section>` under the guide's `<h1>`, so its
 // own headings have to start below that — a `# ` at the top of a file is the
@@ -125,141 +109,150 @@ function MarkdownBody({ url }) {
   }, [url]);
 
   if (state.status === 'loading') {
-    return <p className="text-sm text-gray-500 italic">Loading…</p>;
+    return <p className="text-sm italic text-gray-500 dark:text-gray-400">Loading…</p>;
   }
   if (state.status === 'error') {
     return (
-      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+      <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
         Could not load <code className="font-mono text-xs">{url}</code>: {state.text}
       </p>
     );
   }
   return (
-    <div className="prose prose-sm max-w-none text-[14.5px] text-gray-700 [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-gray-900 [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-gray-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:text-gray-900 [&_h4]:mt-4 [&_h4]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline dark:text-gray-300">
+    <div className="prose prose-sm max-w-none text-[14.5px] text-gray-700 [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-gray-900 [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-gray-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:text-gray-900 [&_h4]:mt-4 [&_h4]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline dark:text-gray-300 dark:[&_h2]:text-gray-100 dark:[&_h3]:text-gray-100 dark:[&_h4]:text-gray-100 dark:[&_code]:bg-gray-800">
       <ReactMarkdown components={MARKDOWN_HEADINGS}>{state.text}</ReactMarkdown>
     </div>
   );
 }
 
-// Suggested queries under the hero. These are shortcuts into the corpus, not
-// decoration, so the contract test runs each one through the real fuse index
-// and fails if it returns nothing: a chip that finds no guide is a dead end
-// dressed as a suggestion.
-const SUGGESTED_SEARCHES = ['capital call', 'cap table', 'data room'];
+// ---------------------------------------------------------------------------
+// HC1–HC4: the search, under the title.
+// ---------------------------------------------------------------------------
 
-function HelpHero({ query, setQuery, searchInputRef, guideCount, areaCount }) {
+/**
+ * The search field: a combobox over the result list. ArrowUp and ArrowDown
+ * move `aria-activedescendant`, Enter opens the selected guide, Esc clears.
+ * `/` focuses it from anywhere on Help (see `DocsLayout`).
+ */
+function HelpSearchBox({ query, setQuery, searchInputRef, label, placeholder, sub, activeId, onKeyDown, compact = false }) {
   return (
-    <header className="relative isolate overflow-hidden border-b border-violet-200 bg-violet-50 px-4 pb-8 pt-10 text-center md:px-8 dark:border-violet-900/60 dark:bg-violet-950">
-      <img src="/site/home-hero.webp" alt="" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_45%]" />
-      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-violet-50/90 via-white/80 to-violet-50/70 dark:from-gray-950/90 dark:via-gray-950/80 dark:to-violet-950/80" />
-      <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-balance text-gray-900 dark:text-gray-100">How can we help?</h1>
-      <p className="mt-2 text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-300">
-        {guideCount} guide{guideCount === 1 ? '' : 's'} across {areaCount} area{areaCount === 1 ? '' : 's'}, grouped by what you are doing.
-      </p>
-      <div className="mt-5">
-        <div className="flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 shadow-[0_2px_10px_rgba(124,58,237,0.08)] focus-within:ring-2 focus-within:ring-violet-500/40 dark:border-violet-900 dark:bg-gray-900">
-          <Search size={18} className="shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
-          <input
-            ref={searchInputRef}
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search guides…"
-            aria-label="Search the Help Center"
-            className="min-w-0 flex-1 bg-transparent text-[14.5px] text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-gray-100"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Clear search"
-              className="shrink-0 rounded p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-          <span className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Try</span>
-          {SUGGESTED_SEARCHES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setQuery(s)}
-              className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-950"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+    <div className="grid gap-1.5">
+      <label htmlFor="help-search" className="text-[12.5px] font-bold text-gray-800 dark:text-gray-200">{label}</label>
+      <div className="flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 shadow-[0_2px_10px_rgba(124,58,237,0.08)] focus-within:ring-2 focus-within:ring-violet-500/40 dark:border-violet-900 dark:bg-gray-900">
+        <Search size={18} className="shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
+        <input
+          id="help-search"
+          ref={searchInputRef}
+          type="search"
+          role="combobox"
+          aria-expanded={query.trim() ? 'true' : 'false'}
+          aria-controls="help-results"
+          aria-autocomplete="list"
+          aria-activedescendant={activeId || undefined}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={`min-w-0 flex-1 bg-transparent ${compact ? 'min-h-[44px]' : 'min-h-[50px]'} text-[15px] text-gray-900 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-400`}
+        />
+        {query ? (
+          <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+            <X size={15} />
+          </button>
+        ) : (
+          !compact && <span className={KBD} title="Press / to search">/</span>
+        )}
+      </div>
+      {sub && <small className="text-[12px] text-gray-500 dark:text-gray-400">{sub}</small>}
+    </div>
+  );
+}
+
+/** D7001 (#7001): the suggested searches under the box, each one a public guide's own topic. */
+function SearchSuggestions({ setQuery }) {
+  const list = searchSuggestions();
+  if (!list.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="help-search-suggestions">
+      <span className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Try</span>
+      {list.map((s) => (
+        <button key={s.query} type="button" onClick={() => setQuery(s.query)} data-testid="help-search-suggestion"
+          className="inline-flex min-h-[44px] items-center rounded-full border border-violet-200 bg-white px-3 text-[12.5px] font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-950">
+          {s.query}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function HelpHero({ user, publicCount, ...box }) {
+  return (
+    <header className="border-b border-violet-200 bg-violet-50 px-4 pb-7 pt-8 md:px-8 dark:border-violet-900/60 dark:bg-violet-950/40">
+      <div className="mx-auto max-w-3xl">
+        {!user && <span className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Help Center · public guides</span>}
+        <h1 className="mb-4 text-[28px] font-extrabold leading-tight tracking-tight text-balance text-gray-900 dark:text-gray-100">How can we help?</h1>
+        <HelpSearchBox
+          {...box}
+          label={user ? 'Search the Help Center' : 'Search the public guides'}
+          placeholder={user ? 'Search guides, e.g. “account recovery”' : `Search ${publicCount} public guides`}
+          sub={user
+            ? 'Searches the guides your account can read. Press / from anywhere on Help.'
+            : <>{publicCount} guides are public. <Link to="/login?next=%2Fhelp" className="font-bold text-violet-700 dark:text-violet-300">Sign in to search every guide</Link>.</>}
+        />
+        <SearchSuggestions setQuery={box.setQuery} />
       </div>
     </header>
   );
 }
 
-// "Browse by what you are doing" — one card per area, built from the
-// role-filtered manifest through D626's placement table. Descriptive audiences
-// never filter the guides. Counts come from each area's actual guide array.
+// "Browse by area" — one card per area, built from the role-filtered manifest
+// through D626's placement table. Descriptive audiences never filter the
+// guides. Counts come from each area's actual guide array. "All N" opens the
+// directory at that area.
 const PREVIEW_PER_AREA = 4;
 
 export function BrowseByTask({ sections }) {
-  const [expanded, setExpanded] = useState({});
   const areas = helpAreas(sections);
   const total = areas.reduce((n, area) => n + area.guides.length, 0);
   return (
-    <section aria-labelledby="help-browse">
+    <section aria-labelledby="help-browse" className="grid gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="help-browse" className={LABEL}>Browse by what you are doing</h2>
-        <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">
-          {areas.length} areas · {total} guides
+        <h2 id="help-browse" className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Browse by area</h2>
+        <span className="flex flex-wrap items-baseline gap-3">
+          <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{areas.length} areas · {total} guides</span>
+          <Link to="/help?view=all" className="text-[12.5px] font-bold text-violet-700 hover:underline dark:text-violet-300">All guides, with a role filter →</Link>
         </span>
       </div>
-      <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {areas.map((section) => {
           const count = section.guides.length;
-          const open = !!expanded[section.id];
-          const shown = open ? section.guides : section.guides.slice(0, PREVIEW_PER_AREA);
+          const shown = section.guides.slice(0, PREVIEW_PER_AREA);
           return (
-            <div
-              key={section.id}
-              className="rounded-2xl border border-gray-200 bg-white px-5 py-[18px] dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div className="flex items-center gap-3">
-                <span className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${areaTint(section.id)}`}>
-                  <SectionIcon name={section.icon} size={17} aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <h3 className="text-[14.5px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">{section.title}</h3>
-                  {section.badge && <span className={LABEL}>{section.badge}</span>}
-                  <div className="mt-1 font-mono text-[10px] text-gray-500 dark:text-gray-400">
-                    {count} guide{count === 1 ? '' : 's'}
-                  </div>
-                </div>
+            <section key={section.id} aria-labelledby={`area-card-${section.id}`} className={`${CARD} flex flex-col px-5 py-4`} data-testid="help-area-card">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 id={`area-card-${section.id}`} className="text-[14.5px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">{section.title}</h3>
+                <span className="shrink-0 font-mono text-[10.5px] text-gray-500 dark:text-gray-400">{count} guide{count === 1 ? '' : 's'}</span>
               </div>
-              <ul className="mt-3.5 grid gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+              {section.badge && section.id !== 'admin' && (
+                <span className={`${CHIP} mt-1.5 self-start`}>Applies to: {appliesToLine([section.badge.toLowerCase()]).replace('Applies to: ', '')}</span>
+              )}
+              <ul className="mt-3 grid gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
                 {shown.map((sub) => (
-                  <li key={sub.anchor}>
-                    <Link to={guideHref(sub.anchor)} className="group flex items-start gap-2.5">
-                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-violet-600" aria-hidden />
-                      <span className="text-[12.5px] font-semibold leading-snug text-gray-800 group-hover:text-violet-700 dark:text-gray-200 dark:group-hover:text-violet-300">
-                        {sub.title}
-                        <span className="mt-0.5 block font-mono text-[10px] font-normal text-gray-500 dark:text-gray-400">{sub.surfaceInfo?.label || 'No single screen'}</span>
-                      </span>
+                  <li key={sub.anchor} className="flex flex-wrap items-baseline justify-between gap-2">
+                    <Link to={guideHref(sub.anchor)} className="text-[12.5px] font-semibold leading-snug text-gray-800 hover:text-violet-700 dark:text-gray-200 dark:hover:text-violet-300">
+                      {sub.title}
                     </Link>
+                    {!section.badge && Array.isArray(sub.appliesTo) && sub.appliesTo.length > 0 && (
+                      <span className={CHIP}>{appliesToLine(sub.appliesTo).replace('Applies to: ', '')}</span>
+                    )}
                   </li>
                 ))}
               </ul>
-              {count > PREVIEW_PER_AREA && (
-                <button
-                  type="button"
-                  onClick={() => setExpanded((e) => ({ ...e, [section.id]: !open }))}
-                  aria-expanded={open}
-                  className="mt-3 text-xs font-bold text-violet-700 hover:underline dark:text-violet-300"
-                >
-                  {open ? 'Show fewer' : `All ${count} →`}
-                </button>
-              )}
-            </div>
+              <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{count > PREVIEW_PER_AREA ? `+${count - PREVIEW_PER_AREA} more` : 'All shown'}</span>
+                <Link to={`/help?view=all#area-${section.id}`} className="text-[12.5px] font-bold text-violet-700 hover:underline dark:text-violet-300">All {count} →</Link>
+              </div>
+            </section>
           );
         })}
       </div>
@@ -267,40 +260,212 @@ export function BrowseByTask({ sections }) {
   );
 }
 
-// The search results, in the column the browse grid leaves. Each result is
-// the guide's own page now, not an anchor further down this one.
-export function SearchResults({ results, query, sections }) {
+/**
+ * HC3 — the results: the live line, area chips counting the results shown,
+ * and the list the search field controls. Each result opens the guide's page.
+ */
+export function SearchResults({ search, query, chip = 'all', onChip = () => {}, active = -1, onHover = () => {}, keyboardHelp = true }) {
+  const chips = areaChips(search.results);
+  const shown = inArea(search.results, chip);
   return (
-    <section aria-live="polite">
-      <h2 className={LABEL}>
-        {results.length} result{results.length === 1 ? '' : 's'} for “{query}”
-      </h2>
-      {results.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-          No guide matches that. Try a broader term, or open a ticket below.
-        </p>
-      ) : (
-        <ul className="mt-3 grid gap-2">
-          {results.map((r) => (
-            <li key={r.anchor}>
-              <Link
-                to={guideHref(r.anchor)}
-                className="block rounded-xl border border-gray-200 bg-white px-4 py-3.5 transition-colors hover:border-violet-200 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-violet-900"
-              >
-                <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100">
-                  {highlight(r.subsectionTitle, query)}
-                </div>
-                <div className="mt-0.5 font-mono text-[10px] text-gray-500 dark:text-gray-400">{guideFor(r.anchor, sections)?.area || r.sectionTitle}</div>
-                <div className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-                  {highlight(snippet(r.text, query), query)}
-                </div>
-              </Link>
-            </li>
+    <section aria-labelledby="help-results-line" className="grid gap-3.5" data-testid="help-results">
+      <p id="help-results-line" role="status" aria-live="polite" className="font-mono text-[12px] font-semibold text-gray-700 dark:text-gray-300" data-testid="help-results-line">
+        {resultLine(search)}
+      </p>
+      {chips.length > 2 && (
+        <div role="radiogroup" aria-label="Filter results by area" className="flex flex-wrap gap-2">
+          {chips.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={chip === c.id}
+              onClick={() => onChip(c.id)}
+              className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold ${chip === c.id
+                ? 'border-violet-600 bg-violet-600 text-white'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-violet-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`}
+              data-testid="help-results-chip"
+            >
+              {c.label}<span className="font-mono text-[10.5px] opacity-80">{c.count}</span>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div>
+          <ul id="help-results" role="listbox" aria-label="Search results" className={`${CARD} m-0 list-none overflow-hidden p-0`}>
+            {shown.map((r, i) => {
+              const p = guidePlacement(r.anchor);
+              return (
+                <li
+                  key={r.anchor}
+                  id={`help-result-${i}`}
+                  role="option"
+                  aria-selected={i === active}
+                  onMouseEnter={() => onHover(i)}
+                  className={`border-b border-gray-100 last:border-b-0 dark:border-gray-800 ${i === active ? 'bg-violet-50 dark:bg-violet-950/40' : ''}`}
+                  data-testid="help-result"
+                >
+                  <Link to={guideHref(r.anchor)} className="grid gap-1 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
+                    <span className="min-w-0">
+                      <b className="block text-[14px] font-bold text-gray-900 dark:text-gray-100">{highlight(r.subsectionTitle, query)}</b>
+                      <span className="mt-0.5 block font-mono text-[10.5px] text-gray-500 dark:text-gray-400">{resultArea(r).title}</span>
+                      <span className="mt-1.5 block text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-300">{highlight(snippet(r.text, query), query)}</span>
+                    </span>
+                    <span className="flex flex-wrap items-start gap-2 sm:flex-col sm:items-end">
+                      <span className={CHIP}>{appliesToLine(p?.appliesTo)}</span>
+                      <ResultVerification anchor={r.anchor} />
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          {search.capped && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-b-xl border border-t-0 border-gray-200 bg-gray-50 px-4 py-2.5 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-300" data-testid="help-results-capped">
+              <span>Showing the first 25. More guides match “{query}”: add a word to narrow them.</span>
+            </div>
+          )}
+        </div>
+        {keyboardHelp && (
+          <aside className="hidden gap-3 lg:grid">
+            <section className={`${CARD} px-4 py-3.5`}>
+              <h2 className="text-[13px] font-extrabold text-gray-900 dark:text-gray-100">Keyboard</h2>
+              <ul className="mt-2 grid list-none gap-1.5 p-0 text-[12px] text-gray-600 dark:text-gray-300">
+                <li><span className={KBD}>↑</span> <span className={KBD}>↓</span> move the selection</li>
+                <li><span className={KBD}>Enter</span> open the selected guide</li>
+                <li><span className={KBD}>Esc</span> clear the search</li>
+              </ul>
+            </section>
+            <section className={`${CARD} px-4 py-3.5`}>
+              <h2 className="text-[13px] font-extrabold text-gray-900 dark:text-gray-100">Count</h2>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">The search stops at 25. It does not know how many more match, so it never shows a total.</p>
+            </section>
+          </aside>
+        )}
+      </div>
     </section>
   );
+}
+
+/**
+ * D7515: a result's verification, only where the ledger records one: the
+ * first verified date (or the last, labelled as such) and Stale when the
+ * agreed review window has passed. A guide with nothing recorded adds nothing
+ * to its row; its page says "Verification pending".
+ */
+export function ResultVerification({ anchor, verification }) {
+  const v = verification || guideVerificationFor(anchor);
+  if (v.state === 'pending') return null;
+  return (
+    <>
+      <span className={CHIP} data-testid="help-result-verified">{v.line}</span>
+      {v.stale.state === 'stale' && <StateChip kind="stale" lastGood={v.stale.since} data-testid="help-result-stale" />}
+    </>
+  );
+}
+
+/** HC4 — nothing found: broader terms that find something, the areas, and a ticket that carries the search. */
+export function NothingFound({ query, fuse, user, onQuery, onTicket, publicCount }) {
+  const terms = useMemo(() => broaderTerms(query, fuse), [query, fuse]);
+  const areas = useMemo(() => areasForTerms(terms, fuse), [terms, fuse]);
+  const title = ticketTitleFromSearch(query);
+  if (!user) {
+    return (
+      <section aria-labelledby="help-none" className={`${CARD} grid gap-3 px-5 py-4`} data-testid="help-none">
+        <p role="status" className="font-mono text-[12px] font-semibold text-gray-700 dark:text-gray-300">0 results</p>
+        <h2 id="help-none" className="text-[16px] font-extrabold text-gray-900 dark:text-gray-100">No public guide matches.</h2>
+        <p className="text-[13px] text-gray-600 dark:text-gray-300">Sign in to search every guide.</p>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/login?next=%2Fhelp" className={PRIMARY_ACTION}>Sign in</Link>
+          <button type="button" onClick={() => onQuery('')} className={SECONDARY_ACTION}>Browse the {publicCount} public guides</button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section aria-labelledby="help-none" className={`${CARD} grid gap-3 px-5 py-4`} data-testid="help-none">
+      <p role="status" className="font-mono text-[12px] font-semibold text-gray-700 dark:text-gray-300">0 results</p>
+      <h2 id="help-none" className="text-[16px] font-extrabold text-gray-900 dark:text-gray-100">No guide matches “{query}”.</h2>
+      <ul className="m-0 grid list-none gap-1.5 p-0 text-[13px] text-gray-700 dark:text-gray-300">
+        {terms.length > 0 && (
+          <li data-testid="help-none-terms">
+            • Try a broader term:{' '}
+            {terms.map((t, i) => (
+              <React.Fragment key={t}>
+                {i > 0 && ', '}
+                <button type="button" onClick={() => onQuery(t)} className="font-semibold text-violet-700 underline dark:text-violet-300">{t}</button>
+              </React.Fragment>
+            ))}
+            .
+          </li>
+        )}
+        <li>
+          • Browse an area:{' '}
+          {areas.map((a) => (
+            <React.Fragment key={a.id}>
+              <Link to={`/help?view=all#area-${a.id}`} className="font-semibold text-violet-700 underline dark:text-violet-300">{a.title}</Link>{' · '}
+            </React.Fragment>
+          ))}
+          <Link to="/help?view=all" className="font-semibold text-violet-700 underline dark:text-violet-300">All guides</Link>
+        </li>
+      </ul>
+      <div className="grid gap-1 rounded-xl border border-dashed border-violet-300 bg-violet-50/60 px-3.5 py-3 dark:border-violet-800 dark:bg-violet-950/30">
+        <span className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Open a ticket · carries your search</span>
+        <b className="text-[13px] text-gray-900 dark:text-gray-100">Title: {title}</b>
+        <span className="text-[12px] text-gray-600 dark:text-gray-300">You can edit the title and add a description before Submit.</span>
+      </div>
+      <div>
+        <button type="button" onClick={() => onTicket(title)} className={SECONDARY_ACTION} data-testid="help-none-ticket">Open a ticket</button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The search's state for one page: the results, the chip, the selection, and
+ * the field's keys. A search that found nothing is recorded, once per query,
+ * when the member stops typing (`SEARCH_MISS_IDLE_MS`); signed out, never.
+ */
+function useHelpSearch({ role, query, setQuery, user }) {
+  const navigate = useNavigate();
+  const fuse = useMemo(() => createDocsFuse(role), [role]);
+  const trimmedQuery = query.trim();
+  const search = useMemo(() => searchGuides(fuse, trimmedQuery), [fuse, trimmedQuery]);
+  const [chip, setChip] = useState('all');
+  const [active, setActive] = useState(-1);
+  useEffect(() => { setChip('all'); setActive(-1); }, [trimmedQuery]);
+  const shown = inArea(search.results, chip);
+
+  const recorded = useRef(new Set());
+  useEffect(() => {
+    if (!user || !trimmedQuery || search.results.length > 0 || trimmedQuery.length < 2) return undefined;
+    const key = trimmedQuery.toLowerCase();
+    if (recorded.current.has(key)) return undefined;
+    const t = setTimeout(() => {
+      recorded.current.add(key);
+      helpCenterApi.recordSearchMiss(trimmedQuery).catch((e) => reportError('HelpCenter:search-miss', e));
+    }, SEARCH_MISS_IDLE_MS);
+    return () => clearTimeout(t);
+  }, [user, trimmedQuery, search.results.length]);
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!shown.length) return;
+      e.preventDefault();
+      setActive((i) => moveSelection(e.key, i, shown.length));
+    } else if (e.key === 'Enter') {
+      const r = shown[active];
+      if (r) { e.preventDefault(); navigate(guideHref(r.anchor)); }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setQuery('');
+    }
+  };
+  return {
+    fuse, trimmedQuery, search, chip, setChip: (c) => { setChip(c); setActive(-1); }, active, setActive, onKeyDown,
+    activeId: active >= 0 && shown[active] ? `help-result-${active}` : null,
+  };
 }
 
 // H1's "Your tickets" card: the open tickets `GET /api/tickets` returns, at
@@ -331,18 +496,18 @@ function YourTicketsCard({ isAdmin }) {
   const title = isAdmin ? 'Open tickets across the platform' : 'Your tickets';
   const meta = state.status !== 'ok'
     ? (isAdmin ? 'open · every member' : 'open · latest activity first')
-    : `${state.open.length} open${isAdmin ? ' · every member' : ''} · latest activity first`;
+    : `${state.open.length} open${isAdmin ? ' · every member' : ''}`;
 
   return (
-    <section aria-labelledby="help-tickets" className="rounded-2xl border border-gray-200 bg-white px-5 py-[18px] dark:border-gray-800 dark:bg-gray-900">
+    <section aria-labelledby="help-tickets" className={`${CARD} flex flex-col px-5 py-[18px]`}>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="help-tickets" className={LABEL}>{title}</h2>
+        <h2 id="help-tickets" className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">{title}</h2>
         <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{meta}</span>
       </div>
 
       {state.status === 'loading' && (
         <div className="mt-3 grid gap-2" aria-busy="true" aria-label="Loading your tickets">
-          {[0, 1, 2].map((i) => <div key={i} className="h-5 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="h-5 animate-pulse rounded bg-gray-100 motion-reduce:animate-none dark:bg-gray-800" />)}
         </div>
       )}
 
@@ -350,12 +515,13 @@ function YourTicketsCard({ isAdmin }) {
         <div role="alert" className="mt-3 rounded-[11px] border border-red-200 bg-red-50 px-3 py-2.5 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           <span className="text-[12.5px]">{isAdmin ? 'The ticket queue could not be read.' : 'Your tickets could not be read.'}</span>{' '}
           <button type="button" onClick={() => setAttempt((n) => n + 1)} className="text-xs font-bold underline">Try again</button>
+          <span className="mt-1 block text-[11.5px]">Not “no open tickets”. Guides and search keep working.</span>
         </div>
       )}
 
       {state.status === 'ok' && state.open.length === 0 && (
         <p className="mt-3 text-[12.5px] text-gray-500 dark:text-gray-400">
-          {isAdmin ? 'No open tickets across the platform.' : 'No open tickets.'}
+          {isAdmin ? 'No open tickets across the platform.' : 'You have no open tickets.'}
         </p>
       )}
 
@@ -364,11 +530,12 @@ function YourTicketsCard({ isAdmin }) {
           {state.open.slice(0, CARD_ROWS).map((t) => {
             const st = statusChip(t.status);
             return (
-              <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 py-2.5 last:border-b-0 dark:border-gray-800">
+              <li key={t.id} className="grid gap-1 border-b border-gray-100 py-2.5 last:border-b-0 dark:border-gray-800">
                 <Link to={`/help/tickets/${t.id}`} className="min-w-0 text-[13px] font-bold tracking-tight text-gray-900 hover:text-violet-700 dark:text-gray-100 dark:hover:text-violet-300">
                   {t.title}
                 </Link>
-                <span className="flex flex-wrap items-center gap-1.5">
+                <span className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                  <span>#{t.id}</span>
                   {st && <span className={st.className}>{st.text}</span>}
                   <BountyBadge bounty={t.bounty} />
                   <ReviewBadge review={t.review} />
@@ -379,15 +546,10 @@ function YourTicketsCard({ isAdmin }) {
         </ul>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2.5 pt-3">
+        <Link to="/help/tickets?new=1" className={SECONDARY_ACTION}>Open a ticket</Link>
         <Link to="/help/tickets" className="text-[12.5px] font-bold text-violet-700 hover:underline dark:text-violet-300">
           {isAdmin ? 'All tickets →' : 'All your tickets →'}
-        </Link>
-        <Link
-          to="/help/tickets?new=1"
-          className="rounded-[9px] border border-gray-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-gray-700 hover:border-violet-200 hover:text-violet-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:text-violet-300"
-        >
-          Open a ticket
         </Link>
       </div>
     </section>
@@ -399,38 +561,26 @@ function YourTicketsCard({ isAdmin }) {
 // the same endpoint /status renders. The roll-up rule is shared with /status
 // (lib/statusOverall.js) so the two pages cannot disagree, and the line renders
 // nothing at all until the probe answers — an unreachable status endpoint must
-// not read as "all good".
+// not read as "all good". HC11: each state carries a word and a glyph, never
+// colour alone.
 const STATUS_LINE = {
-  operational: { text: 'All monitored services operational', dot: 'bg-emerald-500' },
-  degraded: { text: 'Some systems degraded', dot: 'bg-amber-500' },
-  down: { text: 'Active outage', dot: 'bg-red-500' },
+  operational: { text: 'All monitored services operational', dot: 'bg-emerald-600', glyph: '✓' },
+  degraded: { text: 'Some systems degraded', dot: 'bg-amber-500', glyph: '!' },
+  down: { text: 'Active outage', dot: 'bg-red-600', glyph: '✕' },
   // D332 — a failed probe says so, rather than vanishing: silence reads as
   // nothing to report, not as a failed read.
-  unknown: { text: 'Status could not be read', dot: 'bg-gray-400' },
+  unknown: { text: 'Status could not be read', dot: 'bg-gray-500', glyph: '?' },
 };
 
-const PRIMARY_ACTION = 'rounded-[9px] border border-violet-600 bg-violet-600 px-4 py-2 text-[12.5px] font-bold text-white hover:bg-violet-700';
-const SECONDARY_ACTION = 'rounded-[9px] border border-gray-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-gray-700 hover:border-violet-200 hover:text-violet-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:text-violet-300';
-
-function StillStuck({ user, onOpenChat }) {
-  const [overall, setOverall] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    request('/public/status')
-      .then((d) => { if (alive) setOverall(overallStatus(d?.services)); })
-      .catch(() => { if (alive) setOverall('unknown'); });
-    return () => { alive = false; };
-  }, []);
-
-  const line = STATUS_LINE[overall];
+function StillStuck({ user, onOpenChat, onSecurity }) {
+  const overall = useOverallStatus();
   // Offered only to viewers the worker would actually serve. The gate is
   // enforced server-side either way (402); this decides whether the channel is
   // shown at all, so nobody is invited into a paywall.
   const chatAvailable = canUseCustomerChat(user);
 
   return (
-    <section aria-labelledby="help-stuck" className="rounded-2xl border border-gray-200 bg-white px-5 py-5 dark:border-gray-800 dark:bg-gray-900">
+    <section aria-labelledby="help-stuck" className={`${CARD} px-5 py-5`}>
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div className="min-w-0">
           <h2 id="help-stuck" className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Still stuck?</h2>
@@ -442,23 +592,21 @@ function StillStuck({ user, onOpenChat }) {
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <Link to={user ? '/help/tickets?new=1' : '/login?next=%2Fhelp%2Ftickets%3Fnew%3D1'} className={PRIMARY_ACTION}>{user ? 'Open a ticket' : 'Sign in to open a ticket'}</Link>
-          <a href="https://github.com/AxalNetwork/StudioOS/security/advisories/new" target="_blank" rel="noopener noreferrer" className={SECONDARY_ACTION}>Private security report</a>
           {chatAvailable && (
             <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION}>Message the team</button>
           )}
+          {user
+            ? <button type="button" onClick={onSecurity} className={SECONDARY_ACTION} data-testid="help-stuck-security">Private security report</button>
+            : <a href={ADVISORY_URL} target="_blank" rel="noopener noreferrer" className={SECONDARY_ACTION}>Private security report ↗</a>}
           <span className="flex flex-col items-center gap-1">
             <Link to={user ? '/trust/me' : '/trust/disclosure'} className={SECONDARY_ACTION}>{user ? 'What we can see' : 'Disclosure guidance'}</Link>
-            <span className="font-mono text-[9.5px] text-gray-400">Trust Center</span>
+            <span className="font-mono text-[9.5px] text-gray-500 dark:text-gray-400">Trust Center</span>
           </span>
+          {!user && <a href={`mailto:${SECURITY_EMAIL}`} className="inline-flex min-h-[40px] items-center px-2 text-[12.5px] font-semibold text-violet-700 dark:text-violet-300">{SECURITY_EMAIL}</a>}
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3.5 dark:border-gray-800">
-        {line && (
-          <span className="inline-flex items-center gap-2 font-mono text-[11px] text-gray-600 dark:text-gray-300">
-            <span className={`h-[7px] w-[7px] rounded-full ${line.dot}`} aria-hidden />
-            {line.text}
-          </span>
-        )}
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3.5 dark:border-gray-800">
+        <StatusLine overall={overall} />
         <Link to="/status" className="text-xs font-bold text-violet-700 hover:underline dark:text-violet-300">
           Status page →
         </Link>
@@ -467,14 +615,40 @@ function StillStuck({ user, onOpenChat }) {
   );
 }
 
+export function StatusLine({ overall }) {
+  const line = STATUS_LINE[overall];
+  return (
+    <>
+      {line && (
+        <span role="status" className="inline-flex items-center gap-2 font-mono text-[11px] text-gray-600 dark:text-gray-300" data-testid="help-status-line">
+          <span className={`inline-flex h-[15px] w-[15px] items-center justify-center rounded-full text-[9px] font-bold text-white ${line.dot}`} aria-hidden>{line.glyph}</span>
+          {line.text}
+        </span>
+      )}
+    </>
+  );
+}
+
+function useOverallStatus() {
+  const [overall, setOverall] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    request('/public/status')
+      .then((d) => { if (alive) setOverall(overallStatus(d?.services)); })
+      .catch(() => { if (alive) setOverall('unknown'); });
+    return () => { alive = false; };
+  }, []);
+  return overall;
+}
+
 // ---------------------------------------------------------------------------
-// H2 — one guide on its own page.
+// HC5, HC6, HC9 — one guide on its own page.
 //
-// The canvas's article column (about 65 characters) and its "On this page"
-// rail, filled from what each guide records: the overview is the lede, the
-// how-to steps are the body, tips and pitfalls are the two callouts, and
-// `related` is the Related list. D626 records the surface and audience metadata,
-// with jumps gated like the router; the rail lists the task area's guides.
+// The canvas's guide column and its right column: the overview, the steps,
+// tips and pitfalls, related guides and "Did this answer it?" in the column;
+// a search, On this page, and the owner and review status beside it. Go to is
+// the one primary action, drawn only when the guide names a page this viewer
+// can open. Below 1024px On this page folds above the content (HC13C, HC14B).
 // ---------------------------------------------------------------------------
 
 function scrollToId(e, id) {
@@ -487,7 +661,7 @@ function scrollToId(e, id) {
 function GuideNotFound() {
   return (
     <div className="mx-auto max-w-xl px-6 py-24 text-center">
-      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-gray-100">Guide not found</h1>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-gray-100">No guide at this address.</h1>
       <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
         This guide does not exist, or it is not one your account can read.{' '}
         <Link to="/help" className="font-semibold text-violet-700 hover:underline dark:text-violet-300">Back to the Help Center</Link>
@@ -496,133 +670,242 @@ function GuideNotFound() {
   );
 }
 
-export function HelpArticle({ sections, area, guide, user }) {
+/**
+ * Owner and review, from `guideGovernance.js`: "Verification pending" until a
+ * verified date is recorded (#4641); then "First verified <date>" (D7515), or
+ * "Last verified <date>" saying the first is not recorded, and Stale with its
+ * age once the agreed review window has passed.
+ */
+export function OwnerReview({ anchor, verification: given }) {
+  const review = guideReviewFor(anchor);
+  const verification = given || guideVerificationFor(anchor);
+  const recorded = verification.state !== 'pending';
+  const assigned = review.owner !== 'Unassigned';
+  return (
+    <dl className="m-0 grid gap-2.5 rounded-xl border border-gray-200 px-3.5 py-3 dark:border-gray-700" data-testid="help-guide-owner">
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className={LABEL}>Owner</dt>
+        <dd className={`m-0 text-right text-[12.5px] ${assigned ? 'font-bold text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>{assigned ? review.owner : 'Unassigned'}</dd>
+      </div>
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className={LABEL}>Review</dt>
+        <dd className="m-0 inline-flex items-center gap-1.5 text-right text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="help-guide-verified">
+          <span aria-hidden className={`inline-block h-[11px] w-[11px] shrink-0 rounded-full ${recorded ? 'bg-emerald-600 dark:bg-emerald-400' : 'border border-dashed border-gray-500 dark:border-gray-400'}`} />
+          {verification.line}
+        </dd>
+      </div>
+      {verification.stale.state === 'stale' && (
+        <div className="flex justify-end">
+          <StateChip kind="stale" lastGood={verification.stale.since} data-testid="help-guide-stale" />
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function GuideSearch({ label }) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  return (
+    <form role="search" onSubmit={(e) => { e.preventDefault(); if (q.trim()) navigate(`/help?q=${encodeURIComponent(q.trim())}`); }} className="flex items-center gap-2 rounded-[10px] border border-gray-200 bg-white px-3 dark:border-gray-700 dark:bg-gray-900">
+      <Search size={14} aria-hidden className="text-gray-400" />
+      <label htmlFor="help-guide-search" className="sr-only">{label}</label>
+      <input id="help-guide-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={label} className="min-h-[40px] min-w-0 flex-1 bg-transparent text-[13px] text-gray-900 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-400" />
+    </form>
+  );
+}
+
+function OutlineNav({ outline }) {
+  return (
+    <nav aria-label="On this page" className="mt-2 grid gap-0.5">
+      {outline.map((o, i) => (
+        <a
+          key={o.id}
+          href={`#${o.id}`}
+          onClick={(e) => scrollToId(e, o.id)}
+          className={`border-l-2 py-1.5 pl-3 text-[12.5px] leading-snug ${
+            i === 0
+              ? 'border-violet-600 font-bold text-violet-700 dark:text-violet-300'
+              : 'border-gray-200 font-medium text-gray-600 hover:text-gray-900 dark:border-gray-700 dark:text-gray-300 dark:hover:text-gray-100'
+          }`}
+        >
+          {o.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+const H2 = 'text-[19px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100';
+
+export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenChat }) {
   const session = useViewMode();
   const section = sections.find((s) => s.id === area);
   const sub = section?.subsections.find((g) => g.id === guide);
   if (!section || !sub) return <GuideNotFound />;
 
+  const anchor = `${section.id}/${sub.id}`;
   const placement = guidePlacement(`${area}/${guide}`, user, session);
   const areaTitle = placement?.areaTitle || section.title;
-  const areaGuides = helpAreas(sections).find((item) => item.id === placement?.area)?.guides || [];
+  const go = goToTarget(placement, user, session);
+  const recovery = anchor === 'account/auth-recovery';
+  const beforeYouStart = Array.isArray(sub.beforeYouStart) ? sub.beforeYouStart : [];
   const howto = Array.isArray(sub.howto) ? sub.howto : [];
+  const recoveryRows = sub.recoveryRows || [];
   const tips = Array.isArray(sub.tips) ? sub.tips : [];
   const pitfalls = Array.isArray(sub.pitfalls) ? sub.pitfalls : [];
   // A related link is `#<area>/<guide>`; one the viewer cannot read (an admin
   // guide, for anyone else) is left out rather than offered as a dead end.
   const related = (Array.isArray(sub.related) ? sub.related : [])
     .map((r) => {
-      const anchor = String(r.href || '').replace(/^#/, '');
-      return guideFor(anchor, sections);
+      const target = String(r.href || '').replace(/^#/, '');
+      return guideFor(target, sections);
     })
     .filter(Boolean);
-  const outline = [
-    howto.length > 0 && { id: 'how-to', label: 'How to use it' },
-    tips.length > 0 && { id: 'tips', label: 'Tips' },
-    pitfalls.length > 0 && { id: 'pitfalls', label: 'Common pitfalls' },
-    related.length > 0 && { id: 'related', label: 'Related' },
-  ].filter(Boolean);
+  const outline = guideOutline(sub, { related: related.length, feedback: !!user, stuck: recovery && !user });
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)]">
-      <article className="min-w-0 flex-1 px-4 pb-14 pt-6 md:px-9">
+    <div className="mx-auto grid max-w-6xl gap-8 px-4 pb-14 pt-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <article className="min-w-0">
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.11em] text-gray-500 dark:text-gray-400">
           <Link to="/help" className="hover:text-violet-700 dark:hover:text-violet-300">Help</Link>
           <span aria-hidden className="text-gray-300 dark:text-gray-600">/</span>
-          <span>{areaTitle}</span>
+          <Link to={`/help?view=all#area-${placement?.area || section.id}`} className="hover:text-violet-700 dark:hover:text-violet-300">{areaTitle}</Link>
           <span aria-hidden className="text-gray-300 dark:text-gray-600">/</span>
           <span aria-current="page" className="text-gray-900 dark:text-gray-100">{sub.title}</span>
         </nav>
 
-        <div className="mt-7 max-w-[620px]">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.08em] text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300">
-              {areaTitle}
-            </span>
-            <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{readingMinutes(sub)} min read</span>
+        <header className="mt-6 max-w-[680px]">
+          {recovery && <span className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Can’t sign in?</span>}
+          <h1 className="mt-1 text-[30px] font-extrabold leading-[1.14] tracking-tight text-balance text-gray-900 dark:text-gray-100">{sub.title}</h1>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2.5 font-mono text-[11px] text-gray-500 dark:text-gray-400">
+            <span className={CHIP}>{appliesToLine(placement?.appliesTo)}</span>
+            <span>{readingMinutes(sub)} min read</span>
+            <span aria-hidden>·</span>
+            <span className="break-all">/help/{anchor}</span>
           </div>
-          <h1 className="mt-3.5 text-[30px] font-extrabold leading-[1.14] tracking-tight text-balance text-gray-900 dark:text-gray-100">{sub.title}</h1>
+          {go && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Link to={go.path} className={PRIMARY_ACTION.replace('min-h-[40px]', 'min-h-[44px]')} data-testid="help-guide-go">{go.label}</Link>
+              <span className="text-[12px] text-gray-500 dark:text-gray-400">Opens {go.path}</span>
+            </div>
+          )}
+          {go && anchor === TRACKER_WARNING_ANCHOR && (
+            <p role="note" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] leading-relaxed text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" data-testid="help-guide-tracker-warning">
+              {TRACKER_WARNING}{' '}
+              <Link to={TRACKER_WARNING_LINK.path} className="font-bold underline">{TRACKER_WARNING_LINK.label}</Link>
+            </p>
+          )}
+        </header>
+
+        <details className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-1 lg:hidden dark:border-gray-800 dark:bg-gray-900">
+          <summary className="flex min-h-[44px] cursor-pointer items-center justify-between text-[13px] font-semibold text-gray-800 dark:text-gray-200">
+            On this page · {outline.length} section{outline.length === 1 ? '' : 's'}
+          </summary>
+          <div className="pb-3"><OutlineNav outline={outline} /></div>
+        </details>
+
+        <div className="mt-6 grid max-w-[680px] gap-6">
           {sub.overview && (
-            <p className="mt-2.5 text-[15px] leading-relaxed text-gray-500 dark:text-gray-400">{sub.overview}</p>
+            <section id="overview" className="scroll-mt-6">
+              <h2 className={H2}>Overview</h2>
+              <p className="mt-2 text-[15px] leading-relaxed text-gray-700 dark:text-gray-300">{sub.overview}</p>
+            </section>
           )}
 
-          <div className="mt-5 flex gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/40">
-            <Info size={17} className="shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
-            <div><div className={LABEL}>Where this lives</div><p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{placement?.surfaceInfo?.label || 'No single screen'}</p></div>
-          </div>
-          <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-800">
-            <div className={LABEL}>Applies to</div>
-            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{placement?.appliesTo ? placement.appliesTo.map((role) => role[0].toUpperCase() + role.slice(1)).join(', ') : 'Every account'}</p>
-            {canOpenSurface(placement?.surfaceInfo, user, session) && <Link to={placement.surface} className="mt-3 inline-flex text-sm font-bold text-violet-700 dark:text-violet-300">Open the surface <ChevronRight size={15} /></Link>}
-          </div>
-          <div className="mt-6 grid gap-4">
-            {sub.markdownUrl && <MarkdownBody url={sub.markdownUrl} />}
+          {beforeYouStart.length > 0 && (
+            <section id="before-you-start" className="scroll-mt-6" data-testid="help-guide-before">
+              <h2 className={H2}>Before you start</h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-[14.5px] leading-relaxed text-gray-700 dark:text-gray-300">
+                {beforeYouStart.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
+            </section>
+          )}
 
-            {howto.length > 0 && (
-              <section id="how-to" className="scroll-mt-6">
-                <h2 className="text-[19px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">How to use it</h2>
-                <ol className="mt-3 list-decimal space-y-2 pl-5 text-[14.5px] leading-relaxed text-gray-700 dark:text-gray-300">
-                  {howto.map((step, i) => <li key={i}>{step}</li>)}
-                </ol>
-              </section>
-            )}
+          {sub.markdownUrl && <MarkdownBody url={sub.markdownUrl} />}
 
-            {tips.length > 0 && (
-              <aside id="tips" className="flex scroll-mt-6 items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-4 dark:border-violet-900 dark:bg-violet-950/30">
-                <Info size={17} className="mt-0.5 shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
-                <div className="min-w-0">
-                  <div className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Tips</div>
-                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
-                    {tips.map((tip, i) => <li key={i}>{tip}</li>)}
-                  </ul>
-                </div>
-              </aside>
-            )}
+          {howto.length > 0 && (
+            <section id="steps" className="scroll-mt-6">
+              <h2 className={H2}>Steps</h2>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-[14.5px] leading-relaxed text-gray-700 dark:text-gray-300">
+                {howto.map((step, i) => <li key={i}>{step}</li>)}
+              </ol>
+            </section>
+          )}
+          {recoveryRows.length > 0 && (
+            <table id="recovery" className="w-full scroll-mt-6 border-collapse text-left text-sm text-gray-700 dark:text-gray-300">
+              <caption className="pb-2 text-left text-lg font-bold text-gray-900 dark:text-gray-100">Connector status and next action</caption>
+              <thead>
+                <tr className="border-b border-gray-300 dark:border-gray-700">
+                  <th scope="col" className="py-2 pr-3">Status</th>
+                  <th scope="col" className="py-2">What to do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recoveryRows.map(({ status, action }) => (
+                  <tr key={status} className="border-b border-gray-200 align-top dark:border-gray-800">
+                    <th scope="row" className="py-2 pr-3 font-semibold">{status}</th>
+                    <td className="py-2">{action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
-            {pitfalls.length > 0 && (
-              <aside id="pitfalls" className="flex scroll-mt-6 items-start gap-3 rounded-xl border border-amber-300 bg-amber-50/60 px-4 py-4 dark:border-amber-800 dark:bg-amber-950/30">
-                <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-800 dark:text-amber-300" aria-hidden />
-                <div className="min-w-0">
-                  <div className={`${LABEL_BASE} text-amber-800 dark:text-amber-300`}>Common pitfalls</div>
-                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-amber-900 dark:text-amber-200">
-                    {pitfalls.map((p, i) => <li key={i}>{p}</li>)}
-                  </ul>
-                </div>
-              </aside>
-            )}
+          {tips.length > 0 && (
+            <aside id="tips" className="flex scroll-mt-6 items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-4 dark:border-violet-900 dark:bg-violet-950/30">
+              <Info size={17} className="mt-0.5 shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
+              <div className="min-w-0">
+                <h3 className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Tips</h3>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
+                  {tips.map((tip, i) => <li key={i}>{tip}</li>)}
+                </ul>
+              </div>
+            </aside>
+          )}
 
-            {sub.screenshot && (
-              <figure className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
-                <img src={sub.screenshot} alt={sub.title} className="block w-full" loading="lazy" />
-                {sub.screenshotCaption && (
-                  <figcaption className="bg-gray-50 px-3 py-2 font-mono text-[10.5px] text-gray-500 dark:bg-gray-900 dark:text-gray-400">{sub.screenshotCaption}</figcaption>
-                )}
-              </figure>
-            )}
-          </div>
+          {pitfalls.length > 0 && (
+            <aside id="pitfalls" className="flex scroll-mt-6 items-start gap-3 rounded-xl border border-amber-300 bg-amber-50/60 px-4 py-4 dark:border-amber-800 dark:bg-amber-950/30">
+              <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-800 dark:text-amber-300" aria-hidden />
+              <div className="min-w-0">
+                <h3 className={`${LABEL_BASE} text-amber-800 dark:text-amber-300`}>Pitfalls</h3>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-amber-900 dark:text-amber-200">
+                  {pitfalls.map((p, i) => <li key={i}>{p}</li>)}
+                </ul>
+              </div>
+            </aside>
+          )}
 
-          {user && <GuideFeedback anchor={`${section.id}/${sub.id}`} />}
+          {sub.screenshot && (
+            <figure className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+              <img src={sub.screenshot} alt={sub.title} className="block w-full" loading="lazy" />
+              {sub.screenshotCaption && (
+                <figcaption className="bg-gray-50 px-3 py-2 font-mono text-[10.5px] text-gray-500 dark:bg-gray-900 dark:text-gray-400">{sub.screenshotCaption}</figcaption>
+              )}
+            </figure>
+          )}
+
           {area === 'troubleshooting' && guide === 'contact-support' && (
-            <p className="mt-5 text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
               Security vulnerabilities should not be submitted as ordinary tickets.
-              Use the <a href="https://github.com/AxalNetwork/StudioOS/security/advisories/new" target="_blank" rel="noopener noreferrer" className="font-semibold text-violet-700 underline dark:text-violet-300">private GitHub Security Advisory</a>,
+              Use the <a href={ADVISORY_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-violet-700 underline dark:text-violet-300">private GitHub Security Advisory</a>,
               or the <Link to="/trust/disclosure" className="font-semibold text-violet-700 underline dark:text-violet-300">Trust Center disclosure guidance</Link>.
             </p>
           )}
 
           {related.length > 0 && (
-            <section id="related" className="mt-7 scroll-mt-6">
-              <h2 className={LABEL}>Related</h2>
-              <div className="mt-3 grid gap-2">
+            <section id="related" className="scroll-mt-6">
+              <h2 className={H2}>Related guides</h2>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {related.map((r) => (
                   <Link
                     key={r.anchor}
                     to={guideHref(r.anchor)}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3.5 transition-colors hover:border-violet-200 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-violet-900"
+                    className={`${CARD} flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:border-violet-200 dark:hover:border-violet-900`}
                   >
                     <div className="min-w-0">
                       <div className="text-[13px] font-bold leading-snug text-gray-900 dark:text-gray-100">{r.title}</div>
-                      <div className="mt-1 font-mono text-[10px] text-gray-500 dark:text-gray-400">{r.area}</div>
+                      <div className="mt-1 font-mono text-[10px] text-gray-500 dark:text-gray-400">{appliesToLine(guidePlacement(r.anchor)?.appliesTo)}</div>
                     </div>
                     <ChevronRight size={15} className="shrink-0 text-gray-400" aria-hidden />
                   </Link>
@@ -630,85 +913,114 @@ export function HelpArticle({ sections, area, guide, user }) {
               </div>
             </section>
           )}
+
+          {user && <GuideFeedback anchor={`${section.id}/${sub.id}`} next={{ related, chatAvailable: canUseCustomerChat(user), onOpenChat, onOpenTicket: (missing) => onOpenTicket({ anchor, title: sub.title, missing }) }} />}
+
+          {recovery && !user && (
+            <section id="still-stuck" aria-labelledby="help-recovery-stuck" className={`${CARD} scroll-mt-6 grid gap-3 px-5 py-4`}>
+              <h2 id="help-recovery-stuck" className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100">Still can’t get in?</h2>
+              <Link to={guideHref('troubleshooting/contact-support')} className="flex min-h-[44px] items-center justify-between gap-3 border-y border-gray-100 py-2 dark:border-gray-800">
+                <span>
+                  <b className="block text-[13px] text-gray-900 dark:text-gray-100">Contact support</b>
+                  <small className="text-[12px] text-gray-500 dark:text-gray-400">Which channel to use, and what never to send.</small>
+                </span>
+                <ChevronRight size={15} aria-hidden className="text-gray-400" />
+              </Link>
+              <div className="flex flex-wrap items-start gap-2">
+                <a href={ADVISORY_URL} target="_blank" rel="noopener noreferrer" className={SECONDARY_ACTION}>Private security report ↗</a>
+                <span className="flex flex-col items-center gap-1">
+                  <Link to="/trust/disclosure" className={SECONDARY_ACTION}>Disclosure guidance</Link>
+                  <span className="font-mono text-[9.5px] text-gray-500 dark:text-gray-400">Trust Center</span>
+                </span>
+                <a href={`mailto:${SECURITY_EMAIL}`} className="inline-flex min-h-[40px] items-center px-2 text-[12.5px] font-semibold text-violet-700 dark:text-violet-300">{SECURITY_EMAIL}</a>
+              </div>
+            </section>
+          )}
         </div>
       </article>
 
-      <aside className="hidden w-[250px] shrink-0 border-l border-gray-200 bg-white px-6 py-8 lg:block dark:border-gray-800 dark:bg-gray-900">
-        {outline.length > 0 && (
-          <>
-            <div className={LABEL}>On this page</div>
-            <nav aria-label="On this page" className="mt-3 grid gap-0.5">
-              {outline.map((o, i) => (
-                <a
-                  key={o.id}
-                  href={`#${o.id}`}
-                  onClick={(e) => scrollToId(e, o.id)}
-                  className={`border-l-2 py-1.5 pl-3 text-[12.5px] leading-snug ${
-                    i === 0
-                      ? 'border-violet-600 font-bold text-violet-700 dark:text-violet-300'
-                      : 'border-gray-200 font-medium text-gray-600 hover:text-gray-900 dark:border-gray-700 dark:text-gray-300 dark:hover:text-gray-100'
-                  }`}
-                >
-                  {o.label}
-                </a>
-              ))}
-            </nav>
-          </>
-        )}
-        <div className={outline.length > 0 ? 'mt-6 border-t border-gray-100 pt-5 dark:border-gray-800' : ''}>
-          <div className={LABEL}>In {areaTitle}</div>
-          <nav aria-label={`Guides in ${areaTitle}`} className="mt-3 grid gap-1">
-            {areaGuides.map((g) => (
-              <Link
-                key={g.anchor}
-                to={guideHref(g.anchor)}
-                aria-current={g.anchor === `${section.id}/${sub.id}` ? 'page' : undefined}
-                className={`text-[12.5px] leading-snug ${
-                  g.anchor === `${section.id}/${sub.id}`
-                    ? 'font-bold text-violet-700 dark:text-violet-300'
-                    : 'text-gray-600 hover:text-violet-700 dark:text-gray-300 dark:hover:text-violet-300'
-                }`}
-              >
-                {g.title}
-              </Link>
-            ))}
-          </nav>
+      <aside className="hidden lg:block" aria-label="About this guide">
+        <div className="sticky top-6 grid gap-5">
+          <GuideSearch label={user ? 'Search Help' : 'Search public guides'} />
+          {outline.length > 0 && (
+            <div>
+              <div className={LABEL}>On this page</div>
+              <OutlineNav outline={outline} />
+            </div>
+          )}
+          <OwnerReview anchor={anchor} />
         </div>
       </aside>
     </div>
   );
 }
 
-function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef, onOpenChat }) {
+// ---------------------------------------------------------------------------
+// HC1, HC2, HC12 — the home.
+// ---------------------------------------------------------------------------
+
+/** HC2 — the public guides, Account recovery first. */
+function PublicGuideList({ sections }) {
+  const guides = publicGuides(sections);
+  return (
+    <section aria-labelledby="help-public" className="grid gap-2.5">
+      <h2 id="help-public" className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Public guides</h2>
+      <ul className={`${CARD} m-0 list-none overflow-hidden p-0`}>
+        {guides.map((g, i) => (
+          <li key={g.anchor} className={`border-b border-gray-100 last:border-b-0 dark:border-gray-800 ${i === 0 ? 'bg-violet-50/60 dark:bg-violet-950/30' : ''}`} data-testid="help-public-guide">
+            <Link to={guideHref(g.anchor)} className="flex min-h-[56px] items-center justify-between gap-3 px-4 py-3">
+              <span className="min-w-0">
+                {i === 0 && <span className={`${LABEL_BASE} block text-violet-700 dark:text-violet-300`}>Can’t sign in?</span>}
+                <b className="block text-[14px] text-gray-900 dark:text-gray-100">{g.title}</b>
+                {g.overview && <small className="block text-[12.5px] text-gray-600 dark:text-gray-300">{g.overview}</small>}
+              </span>
+              <span className="flex shrink-0 items-center gap-2 font-mono text-[11.5px] text-gray-500 dark:text-gray-400">
+                {readingMinutes(g)} min read <ChevronRight size={14} aria-hidden />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef, onOpenChat, onTicket, onSecurity }) {
   // The search index is role-scoped, so a viewer never finds a guide the
   // browse grid would not show them.
-  const fuse = useMemo(() => createDocsFuse(role), [role]);
-  const trimmedQuery = query.trim();
-  const searchResults = useMemo(() => {
-    if (!trimmedQuery) return [];
-    return fuse.search(trimmedQuery, { limit: 25 }).map((r) => r.item);
-  }, [fuse, trimmedQuery]);
-  const guideCount = visibleSections.reduce((n, s) => n + s.subsections.length, 0);
+  const s = useHelpSearch({ role, query, setQuery, user });
+  const { trimmedQuery } = s;
+  const publicCount = useMemo(() => publicGuides(visibleSections).length, [visibleSections]);
 
   return (
     <>
       <HelpHero
+        user={user}
+        publicCount={publicCount}
         query={query}
         setQuery={setQuery}
         searchInputRef={searchInputRef}
-        guideCount={guideCount}
-        areaCount={helpAreas(visibleSections).length}
+        activeId={s.activeId}
+        onKeyDown={s.onKeyDown}
       />
-      <div className="mx-auto grid max-w-5xl gap-5 px-4 pb-10 pt-6 md:px-8">
-        {trimmedQuery ? (
-          <SearchResults results={searchResults} query={trimmedQuery} sections={visibleSections} />
-        ) : (
-          <BrowseByTask sections={visibleSections} />
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 pb-10 pt-6 md:px-8">
+        {trimmedQuery && s.search.results.length > 0 && (
+          <SearchResults search={s.search} query={trimmedQuery} chip={s.chip} onChip={s.setChip} active={s.active} onHover={s.setActive} />
         )}
-        {!trimmedQuery && user && <PopularGuides sections={visibleSections} />}
-        {user && <YourTicketsCard isAdmin={role === 'admin'} />}
+        {trimmedQuery && s.search.results.length === 0 && (
+          <NothingFound query={trimmedQuery} fuse={s.fuse} user={user} onQuery={setQuery} onTicket={(title) => onTicket({ kind: 'ticket', title })} publicCount={publicCount} />
+        )}
+        {!trimmedQuery && user && (
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
+            <section className={`${CARD} px-5 py-[18px]`}>
+              <PopularGuides sections={visibleSections} />
+            </section>
+            <YourTicketsCard isAdmin={role === 'admin'} />
+          </div>
+        )}
+        {!trimmedQuery && (user ? <BrowseByTask sections={visibleSections} /> : <PublicGuideList sections={visibleSections} />)}
         {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
-        <StillStuck user={user} onOpenChat={onOpenChat} />
+        <StillStuck user={user} onOpenChat={onOpenChat} onSecurity={onSecurity} />
       </div>
     </>
   );
@@ -765,9 +1077,9 @@ function AreaGuides({ area }) {
       <ul className="mt-2 grid gap-2">
         {area.guides.map((sub) => (
           <li key={sub.anchor}>
-            <Link to={guideHref(sub.anchor)} className="text-[13px] font-semibold text-gray-800 hover:text-violet-700 dark:text-gray-200 dark:hover:text-violet-300">
+            <Link to={guideHref(sub.anchor)} className="block min-h-[44px] py-1 text-[13px] font-semibold text-gray-800 hover:text-violet-700 dark:text-gray-200 dark:hover:text-violet-300">
               {sub.title}
-              <span className="block font-mono text-[10px] font-normal text-gray-500 dark:text-gray-400">{sub.surfaceInfo?.label || 'No single screen'}</span>
+              <span className="block font-mono text-[10px] font-normal text-gray-500 dark:text-gray-400">{appliesToLine(sub.appliesTo)}</span>
             </Link>
           </li>
         ))}
@@ -776,42 +1088,62 @@ function AreaGuides({ area }) {
   );
 }
 
-/** A9m — the bar and the three sections, then `children`: search, the open area, tickets and Still stuck. */
-export function HelpPhoneView({ popular, onRetry, areas, openArea, onArea, children = null }) {
+/**
+ * A9m — the bar and the three sections, then `children`: the open area,
+ * results, tickets and Still stuck. D6861 (HC13A): `search` is drawn
+ * directly under the bar's title, before the sections.
+ */
+export function HelpPhoneView({ popular, onRetry, areas, openArea, onArea, search = null, children = null }) {
   return (
-    <AccountPhonePage pageKey="help" bleed testid="help-phone" groups={helpPhoneGroups({ popular, onRetry, areas, openArea, onArea })}>
+    <AccountPhonePage
+      pageKey="help"
+      bleed
+      testid="help-phone"
+      groups={helpPhoneGroups({ popular, onRetry, areas, openArea, onArea })}
+      header={search ? (bar) => <>{bar}<div className="px-[22px] pt-3">{search}</div></> : null}
+    >
       {children}
     </AccountPhonePage>
   );
 }
 
-function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInputRef, onOpenChat }) {
+function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInputRef, onOpenChat, onTicket, onSecurity }) {
   const [popular, retry] = usePopularGuides(visibleSections, !!user);
   const [openArea, setOpenArea] = useState(null);
   const areas = useMemo(() => helpAreas(visibleSections), [visibleSections]);
-  const fuse = useMemo(() => createDocsFuse(role), [role]);
-  const trimmedQuery = query.trim();
-  const results = useMemo(() => (trimmedQuery ? fuse.search(trimmedQuery, { limit: 25 }).map((r) => r.item) : []), [fuse, trimmedQuery]);
+  const s = useHelpSearch({ role, query, setQuery, user });
+  const { trimmedQuery } = s;
+  const publicCount = useMemo(() => publicGuides(visibleSections).length, [visibleSections]);
   const area = areas.find((a) => a.id === openArea);
+  const box = (
+    <HelpSearchBox
+      compact
+      query={query}
+      setQuery={setQuery}
+      searchInputRef={searchInputRef}
+      activeId={s.activeId}
+      onKeyDown={s.onKeyDown}
+      label={user ? 'Search the Help Center' : 'Search the public guides'}
+      placeholder="Search guides"
+    />
+  );
   return (
-    <HelpPhoneView popular={popular} onRetry={retry} areas={areas} openArea={openArea} onArea={setOpenArea}>
-      <div>
-        <label htmlFor="help-phone-search" className="sr-only">Search the Help Center</label>
-        <input
-          id="help-phone-search"
-          ref={searchInputRef}
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search the guides"
-          className="w-full rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400"
-        />
-      </div>
-      {trimmedQuery && <SearchResults results={results} query={trimmedQuery} sections={visibleSections} />}
+    <HelpPhoneView popular={popular} onRetry={retry} areas={areas} openArea={openArea} onArea={setOpenArea} search={box}>
+      {trimmedQuery && s.search.results.length > 0 && (
+        <SearchResults search={s.search} query={trimmedQuery} chip={s.chip} onChip={s.setChip} active={s.active} onHover={s.setActive} keyboardHelp={false} />
+      )}
+      {trimmedQuery && s.search.results.length === 0 && (
+        <NothingFound query={trimmedQuery} fuse={s.fuse} user={user} onQuery={setQuery} onTicket={(title) => onTicket({ kind: 'ticket', title })} publicCount={publicCount} />
+      )}
       {!trimmedQuery && area && <AreaGuides area={area} />}
       {user && <YourTicketsCard isAdmin={role === 'admin'} />}
       {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
-      <StillStuck user={user} onOpenChat={onOpenChat} />
+      <StillStuck user={user} onOpenChat={onOpenChat} onSecurity={onSecurity} />
+      {user && (
+        <div className="sticky bottom-3 z-10 flex justify-end">
+          <button type="button" onClick={() => onTicket({ kind: 'ticket' })} className={`${PRIMARY_ACTION.replace('min-h-[40px]', 'min-h-[48px]')} shadow-lg`} data-testid="help-phone-need-help">Need help?</button>
+        </div>
+      )}
     </HelpPhoneView>
   );
 }
@@ -822,12 +1154,16 @@ export default function DocsLayout() {
   const searchInputRef = useRef(null);
   // `?q=` prefills the search. `/support?topic=<x>` redirects here as
   // `/help?q=<x>`: `ErrorState` builds that URL from the surface that just
-  // failed, which is a better opening query than an empty box. Read once, as
-  // the initial value, so typing is never fought.
-  const [query, setQuery] = useState(
-    () => new URLSearchParams(location.search).get('q') || '',
-  );
+  // failed, which is a better opening query than an empty box. Read when the
+  // address changes, so typing is never fought.
+  const urlQuery = new URLSearchParams(location.search).get('q') || '';
+  const directory = new URLSearchParams(location.search).get('view') === 'all';
+  const [query, setQuery] = useState(() => urlQuery);
+  useEffect(() => { setQuery(urlQuery); }, [urlQuery]);
   const [chatOpen, setChatOpen] = useState(false);
+  // HC7: the ticket sheet's draft, or null while it is closed.
+  const [sheet, setSheet] = useState(null);
+  const closeSheet = useCallback(() => setSheet(null), []);
   const { user, role } = useAuth() || {};
   const helpRole = user ? role : 'public';
   const phone = usePhoneWidth();
@@ -843,24 +1179,44 @@ export default function DocsLayout() {
   const isAdmin = role === 'admin';
   const route = parseGuidePath(location.pathname);
 
+  // D6996 (#6996): the head says which page this is, as its prerendered HTML does. A guide this viewer can read
+  // takes its own title and description (`helpMeta.js`); an address with no such guide names none and is noindex;
+  // the home and the directory take the registry's /help entry. No pageview beacon: this page never sent one.
+  const guideSection = route ? visibleSections.find((s) => s.id === route.area) : null;
+  const guideSub = guideSection?.subsections.find((s) => s.id === route.guide) || null;
+  const guideMeta = guideSub ? helpGuideMeta(guideSection, guideSub) : null;
+  usePageMeta({
+    path: guideMeta ? guideMeta.path : location.pathname,
+    title: guideMeta?.title,
+    description: guideMeta?.description,
+    robots: route && !guideMeta ? 'noindex' : undefined,
+    analytics: false,
+  });
+
   // `#<area>/<guide>` was every guide's address until each had its own page,
   // and it is in notifications already sent, the advisor's tools and people's
   // bookmarks. So a hash on the home opens that guide (`hashTarget` says where).
   useEffect(() => {
-    if (route) return;
+    if (route || directory) return;
     const target = hashTarget(decodeURIComponent(location.hash), visibleSections, { isAdmin, restricted: restrictedAnchors });
     if (target) navigate(target, { replace: true });
-  }, [route, location.hash, isAdmin, restrictedAnchors, visibleSections, navigate]);
+  }, [route, directory, location.hash, isAdmin, restrictedAnchors, visibleSections, navigate]);
+
+  // The directory opens at the area its link names (`#area-<id>`).
+  useEffect(() => {
+    if (!directory || !location.hash.startsWith('#area-')) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView?.({ block: 'start' });
+  }, [directory, location.hash]);
 
   // `/` focuses the search on the home — but only when the reader is not
   // already typing in another field.
   useEffect(() => {
-    if (route) return undefined;
+    if (route || directory) return undefined;
     const onKey = (e) => {
       if (e.key !== '/') return;
       const t = e.target;
       const tag = (t && t.tagName) || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
       e.preventDefault();
       const el = searchInputRef.current;
       if (el) {
@@ -870,7 +1226,14 @@ export default function DocsLayout() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [route]);
+  }, [route, directory]);
+
+  // D7004 (#7004): the guide's BreadcrumbList, the same trail its page draws; removed when the page leaves.
+  const crumbLd = useMemo(
+    () => (route ? guideBreadcrumbLd(visibleSections, route.area, route.guide) : null),
+    [route?.area, route?.guide, visibleSections],
+  );
+  useEffect(() => (crumbLd ? injectJsonLd('help-guide-breadcrumb', crumbLd) : undefined), [crumbLd]);
 
   // A guide opens at its top, not at the scroll position the last page left.
   useEffect(() => {
@@ -878,31 +1241,35 @@ export default function DocsLayout() {
     document.querySelector('[data-app-scroll]')?.scrollTo?.({ top: 0 });
   }, [route?.area, route?.guide]);
 
+  // HC6 → HC7: a ticket from a guide carries its link and the member's words.
+  const openGuideTicket = ({ anchor, title, missing }) => {
+    setSheet({ kind: 'ticket', from: { anchor, title }, ...guideTicketDraft({ anchor, title, missing }) });
+  };
+  const openSheet = (draft) => { if (user) setSheet({ from: null, ...draft }); };
+  const shared = {
+    visibleSections,
+    role: helpRole,
+    user,
+    query,
+    setQuery,
+    searchInputRef,
+    onOpenChat: () => setChatOpen(true),
+    onTicket: openSheet,
+    onSecurity: () => openSheet({ kind: 'security' }),
+  };
+
   return (
     <div className={`${route ? '-mx-4 -my-4 md:-mx-6 md:-my-6 ' : ''}min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950`}>
       {route ? (
-        <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} />
+        <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} onOpenTicket={openGuideTicket} onOpenChat={() => setChatOpen(true)} />
+      ) : directory ? (
+        <HelpDirectory sections={visibleSections} role={helpRole} />
       ) : phone ? (
-        <HelpPhoneHome
-          visibleSections={visibleSections}
-          role={helpRole}
-          user={user}
-          query={query}
-          setQuery={setQuery}
-          searchInputRef={searchInputRef}
-          onOpenChat={() => setChatOpen(true)}
-        />
+        <HelpPhoneHome {...shared} />
       ) : (
-        <HelpHome
-          visibleSections={visibleSections}
-          role={helpRole}
-          user={user}
-          query={query}
-          setQuery={setQuery}
-          searchInputRef={searchInputRef}
-          onOpenChat={() => setChatOpen(true)}
-        />
+        <HelpHome {...shared} />
       )}
+      {user && sheet && <HelpTicketSheet initial={sheet} onClose={closeSheet} />}
       {/* Task #103 — the chat panel renders null while closed and only polls
           while open, so an ineligible viewer (who never gets the button) pays
           nothing for it. */}

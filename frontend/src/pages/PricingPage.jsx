@@ -32,7 +32,7 @@ import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
-  PRICING_TABS, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
+  PRICING_TABS, closingRegisterPath, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
   storageGroup, modelUsage, priceOf, usd,
 } from '../lib/pricingModel';
 import {
@@ -40,6 +40,9 @@ import {
 } from '../lib/sitePricing';
 import './pricing.css';
 import { entitlementQuestions, investorCapacityGroup } from '../lib/pricingEntitlements';
+import {
+  AFTER_THE_RAISE, EXAMPLES_KICK, EXAMPLES_NOTE, EXAMPLES_TITLE, HOW_IT_CONNECTS, examplesFor, inPlanLine,
+} from '../lib/pricingExamples';
 
 /**
  * The display face for lines that are not headings (a card's name, a price):
@@ -110,7 +113,7 @@ function PlanCard({ card, onCheckout, onSelect }) {
   const D = useContext(Face);
   const cls = `axp-card${card.highlight ? ' is-hi' : ''}${card.current ? ' is-current' : ''}`;
   return (
-    <div className={cls} data-testid={`pricing-card-${card.id}`}>
+    <div className={cls} id={`pricing-card-${card.id}`} tabIndex={-1} data-testid={`pricing-card-${card.id}`}>
       {card.kick && <div className="axp-kick">{card.kick}</div>}
       <div className="axp-card-head">
         <span className={`axp-card-name${D}`}>{card.name}</span>
@@ -135,6 +138,11 @@ function PlanCard({ card, onCheckout, onSelect }) {
       ) : (
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
       )}
+      {card.limits.length > 0 && (
+        <ul className="axp-limits" aria-label={`${card.name} limits`} data-testid={`pricing-limits-${card.id}`}>
+          {card.limits.map((f) => <li key={f}><span className="axp-tick">{TICK}</span><span>{f}</span></li>)}
+        </ul>
+      )}
       {card.button.checkout && !card.button.disabled ? (
         <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => { onSelect(card); onCheckout(card); }} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
       ) : card.button.to && !card.button.disabled ? (
@@ -148,6 +156,83 @@ function PlanCard({ card, onCheckout, onSelect }) {
         {card.feats.map((f) => <li key={f}><span className="axp-tick">{TICK}</span><span>{f}</span></li>)}
       </ul>
     </div>
+  );
+}
+
+const OUT = <svg className="axp-ic" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>;
+
+/** One line of an example: a bold label with its text, or a quoted note and who said it. */
+function ExampleLine({ line }) {
+  if (line.quote) return <li><q>{line.quote}</q> <span className="axp-ex-who">{line.who}</span></li>;
+  return <li><b className="axp-ex-k">{line.label}</b> {line.text}</li>;
+}
+
+/** "See <plan>" (PR-E2 pin 8): scrolls to that plan's card and focuses it. It never opens checkout. */
+function seePlan(plan) {
+  const el = typeof document !== 'undefined' ? document.getElementById(`pricing-card-${plan}`) : null;
+  if (!el) return;
+  el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  el.focus?.({ preventScroll: true });
+}
+
+/**
+ * D5958 (#5958, canvas D5957 PR-E1 to PR-E8): "What a paid plan produces" on the Founder tab, between the AI band and
+ * Compare plans. Static copy (`lib/pricingExamples.js`), so it renders while the plan read is loading or unreadable.
+ * Every example is a labelled Demonstration with Source facts, Eadwyn's interpretation and Limitations apart.
+ */
+export function OutcomeExamples({ tab, held = null }) {
+  const D = useContext(Face);
+  const examples = examplesFor(tab);
+  if (!examples.length) return null;
+  return (
+    <section className="axp-sec axp-ex-sec" id="outcomes" aria-labelledby="axp-ex-h" data-testid="pricing-examples">
+      <div className="axp-kick">{EXAMPLES_KICK}</div>
+      <h2 id="axp-ex-h" className={`axp-h2${D}`}>{EXAMPLES_TITLE}</h2>
+      <p className="axp-small axp-ex-note">{EXAMPLES_NOTE}</p>
+      <div className="axp-ex-grid">
+        {examples.map((ex) => {
+          const mine = inPlanLine(ex, held);
+          return (
+            <article key={ex.id} className="axp-ex" aria-labelledby={`axp-ex-${ex.id}`} data-testid={`pricing-example-${ex.id}`}>
+              <div className="axp-ex-head">
+                <span className="axp-ex-demo" data-testid={`pricing-example-label-${ex.id}`}>{ex.label}</span>
+                <span className="axp-ex-plan">Plan · {ex.planName}</span>
+                {mine && <span className={`axp-ex-inplan${mine.yes ? ' is-yes' : ''}`} data-testid={`pricing-example-inplan-${ex.id}`}>{mine.yes ? TICK : OUT}{mine.text}</span>}
+              </div>
+              <h3 id={`axp-ex-${ex.id}`} className="axp-ex-t">{ex.title}</h3>
+              <p className="axp-ex-s">{ex.summary}</p>
+              <div className="axp-ex-box">
+                <h4 className="axp-ex-bh">Source facts</h4>
+                <ul>{ex.facts.map((l, i) => <ExampleLine key={i} line={l} />)}</ul>
+              </div>
+              <div className="axp-ex-box is-gen">
+                <h4 className="axp-ex-bh">Eadwyn’s interpretation <span className="axp-ex-gen"><i aria-hidden="true">E</i>Generated</span></h4>
+                <ul>{ex.generated.map((l, i) => <ExampleLine key={i} line={l} />)}</ul>
+              </div>
+              <div className="axp-ex-box is-lim">
+                <h4 className="axp-ex-bh">Limitations</h4>
+                <p>{ex.limitations}</p>
+              </div>
+              <div className="axp-ex-act">
+                <button type="button" className="axp-btn axp-btn-inline" onClick={() => seePlan(ex.plan)} data-testid={`pricing-example-see-${ex.id}`}>See {ex.planName}</button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="axp-ex-flow">
+        <h3 className="axp-ex-t">How it connects</h3>
+        <ol>
+          {HOW_IT_CONNECTS.map((f, i) => (
+            <li key={f.step}><span className="axp-ex-n" aria-hidden="true">{i + 1}</span><div><b>{f.step}</b><span>{f.where}</span></div></li>
+          ))}
+        </ol>
+      </div>
+      <div className="axp-ex-after">
+        <div><h3 className="axp-ex-t">{AFTER_THE_RAISE.title}</h3><p className="axp-small">{AFTER_THE_RAISE.line}</p></div>
+        <ul>{AFTER_THE_RAISE.items.map((g) => <li key={g}><span className="axp-tick">{TICK}</span><span>{g}</span></li>)}</ul>
+      </div>
+    </section>
   );
 }
 
@@ -179,6 +264,17 @@ function Compare({ tab, cards, storage = null, capacity = null }) {
       </span>
     );
   };
+  // D5958 (#5958, PR-C1 to PR-C6): on a phone each cell says what it means in words, not by glyph alone.
+  const phoneCell = (v, key, cn = 'axp-cell') => {
+    const c = compareCell(v);
+    return (
+      <span key={key} role="cell" className={`${cn} axp-cell-phone`}>
+        {c.tick && <><span className="axp-tick" aria-hidden="true">{TICK}</span>Included</>}
+        {c.dash && <><span className="axp-dash" aria-hidden="true">—</span>Not included</>}
+        {c.text}
+      </span>
+    );
+  };
   const cols = { gridTemplateColumns: `minmax(0,1.6fr) repeat(${cards.length},minmax(0,1fr))` };
   return (
     <section className="axp-sec axp-compare" aria-labelledby="axp-compare-h">
@@ -203,7 +299,7 @@ function Compare({ tab, cards, storage = null, capacity = null }) {
             <button key={c.id} type="button" role="tab" id={`pricing-plan-${c.id}`} aria-controls="pricing-plan-panel"
               aria-selected={i === at} tabIndex={i === at ? 0 : -1}
               onKeyDown={(event) => moveTab(event, cards.map((_, index) => index), at, setPick)}
-              className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
+              className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{i === at && <span className="axp-chip-tick">{TICK}</span>}{c.name}{c.current && <span className="axp-chip-own"> · Your plan</span>}</button>
           ))}
         </div>
         <div role="tabpanel" id="pricing-plan-panel" aria-labelledby={`pricing-plan-${cards[at]?.id}`} tabIndex={0}>
@@ -213,7 +309,7 @@ function Compare({ tab, cards, storage = null, capacity = null }) {
             <React.Fragment key={t}>
               <div role="row"><div role="cell" aria-colspan={2}><GroupHead t={t} meta={meta} /></div></div>
               {rows.map((r) => (
-                <div key={r[0]} className="axp-row axp-row-phone" role="row"><span className="axp-row-l" role="rowheader">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
+                <div key={r[0]} className="axp-row axp-row-phone" role="row"><span className="axp-row-l" role="rowheader">{r[0]}</span>{phoneCell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
               ))}
             </React.Fragment>
           ))}
@@ -647,6 +743,9 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
+      {/* D5958: static examples, so they show while the plans are loading or unreadable. */}
+      {roleTab && <OutcomeExamples tab={tab} held={heldCard(user, role, tab, planRead)} />}
+
       {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} capacity={investorCapacityGroup(tab, plans.body?.catalogue)} />}
 
       {!roleTab && user && <TokensBand read={me} onRetry={retryMe} storage={storage} autoReload={autoReload} packs={plans} user={user} onAdd={(uid) => setPackSheet({ pack: uid })} />}
@@ -669,7 +768,7 @@ export function PricingBody({ user = null }) {
               <div className="axp-closing-s">{CLOSING.line}</div>
             </div>
             <div className="axp-closing-a">
-              <Link to="/register" className="axp-btn axp-btn-white">Get started</Link>
+              <Link to={closingRegisterPath(tab)} className="axp-btn axp-btn-white" data-testid="pricing-closing-start">Get started</Link>
               <Link to="/contact" className="axp-btn axp-btn-ghost">Talk to us</Link>
             </div>
           </div>

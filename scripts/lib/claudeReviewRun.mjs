@@ -121,7 +121,9 @@ export async function runReview(deps) {
   const body = String(pr.body || deps.env.CLAUDE_REVIEW_PR_BODY || '');
   // Inspect only the PR's own Agent section, never dependency or regression prose.
   const agentSection = /^##[ \t]+Agent[ \t]*\r?\n([\s\S]*?)(?=^#{1,6}[ \t]|$(?![\s\S]))/im.exec(body)?.[1] || '';
-  const agentLine = agentSection.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/).find(line => line.trim())?.trim() || '';
+  let uncommented = agentSection;
+  for (let prev = null; prev !== uncommented;) { prev = uncommented; uncommented = uncommented.replace(/<!--[\s\S]*?-->/g, ''); }
+  const agentLine = uncommented.split(/\r?\n/).find(line => line.trim())?.trim() || '';
   let commitMarkers = [];
   try { commitMarkers = await deps.git.authorMarkers?.(pr.head.sha) || []; } catch { /* branch and Agent section remain available */ }
   const codexAuthored = /^codex\//i.test(pr.head?.ref || deps.env.CLAUDE_REVIEW_PR_HEAD || '') || /^(?:S\d+\s*[·:|—-]\s*)?Codex\b/i.test(agentLine) || /codex/i.test(pr.user?.login || deps.env.CLAUDE_REVIEW_PR_AUTHOR || '') || commitMarkers.some(marker => /\bcodex\b/i.test(String(marker)));

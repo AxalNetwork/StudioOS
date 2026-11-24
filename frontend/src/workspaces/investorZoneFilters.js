@@ -64,23 +64,15 @@ const NO_OFFER_ON_THIS_DESK =
 // `/network/organizations` (D6258). An organisation on this zone is the
 // counterpart's OWN company, which `GET /api/partnernet/relationships` has
 // returned as `other.company` since D572 part 3: the company the other person
-// links on their account, read at query time. Nothing is stored on the
-// relationship. That makes `All` a live chip, and leaves two labels that would
-// have to say what KIND of firm a company is to you, which nothing records.
+// links on their account, read at query time. Co-investors narrows to
+// companies with a co-investor contact.
 //
 // `Portfolio` would need the company tied to a deal you invested in; the
 // company is a name read off another person's account, and this page never
-// loads your deals. `Co-investors` is a live chip one zone up, where
-// `relationship_type = 'co_investor'` selects PEOPLE. Here it would have to
-// select firms, and a tie's type describes the person, not the company they
-// link, so calling a firm a co-investor because one person at it is would be a
-// guess printed as a fact.
+// loads your deals.
 const NO_PORTFOLIO_LINK =
   'a company here is the name the other person links on their own account, and nothing ties it to a deal you invested in; this page never loads your deals';
 const NO_PORTFOLIO_LINK_HOVER = 'Nothing ties these companies to your investments yet.';
-const NO_FIRM_KIND =
-  'a tie’s type describes the person, not the company they link, so a company cannot be called a co-investor because one person at it is';
-const NO_FIRM_KIND_HOVER = 'A tie’s type describes the person, not their company.';
 // The other two name records that are real and are kept somewhere this page
 // never opens: it loads the relationship book, the network summary and the
 // introductions desk, and nothing else. `limited_partners` is keyed on
@@ -315,7 +307,7 @@ export const INVESTOR_ZONE_FILTERS = {
   'network/organizations': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Portfolio', unbuilt: NO_PORTFOLIO_LINK, hover: NO_PORTFOLIO_LINK_HOVER },
-    { canvas: 'Co-investors', unbuilt: NO_FIRM_KIND, hover: NO_FIRM_KIND_HOVER },
+    { canvas: 'Co-investors', key: 'co_investors' },
     { canvas: 'LPs', unbuilt: KEPT_IN_ANOTHER_STORE },
     { canvas: 'Passed', unbuilt: KEPT_IN_ANOTHER_STORE },
   ],
@@ -351,31 +343,20 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Discarded', key: 'discarded' },
     { canvas: 'Show cleared', key: 'cleared' },
   ],
-  // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
-  // THE WORD SUGGESTS. Its own artboard code reads
-  // `PULLS.filter(p => p.state === 'Requested')` into a variable called
-  // `partial`, and its `Requested` row is `6 of 11 files · IP folder withheld`.
-  // It is a partly-staged room, which this page can see — `withheld_behind_nda`
-  // is on every row and the route already returns the count as `partial_count`.
-  // So the chip is live and wears the store's own word: keeping `Requested`
-  // would promise a request record, and the ops half of this same row spends a
-  // sentence explaining that none exists.
-  //
-  // `Granted` is the ALREADY-SCOPED kind of reason, like `Mine` on the pipeline
-  // board: the query selects only active grants, so `granted_count` is
-  // literally `items.length` and a chip would narrow nothing while looking like
-  // it might.
+  // D6269 (#6269): EACH CHIP SELECTS A REAL STATE, drawn to the Investor
+  // Research v2 Rooms canvas (IRV-02). `Partly staged` is a room with files
+  // behind an NDA (`withheld_behind_nda > 0`, the route's `partial_count`).
+  // `Requested` now means a request: your open requests (D6267's `requests`,
+  // `state = 'open'`), shown in the Requests block, and `Declined` the ones a
+  // founder declined, with their reason and date. `Granted` is no chip: every
+  // room listed is a live grant, so it is the Rooms granted tile's count.
+  // `Not staged` left with it: a company that never opened a room leaves no
+  // row to select. Both canvas labels stay on the old IR2 artboard.
   'research/diligence': [
     { canvas: 'All', key: 'all' },
-    {
-      canvas: 'Granted',
-      unbuilt: 'every room here is one you have been granted; the list loads active grants only, so this would select all of them',
-    },
-    { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
-    {
-      canvas: 'Not staged',
-      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find', hover: 'A company that never opened a room leaves no row here to find.',
-    },
+    { canvas: 'Partly staged', key: 'partial', label: 'Partly staged {n}' },
+    { canvas: 'Requested', key: 'requested', label: 'Requested {n}' },
+    { canvas: 'Declined', key: 'declined', label: 'Declined {n}' },
   ],
   // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
   // half says "a peer source is recorded per row, so there is no one set to

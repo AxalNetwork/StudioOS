@@ -7,15 +7,17 @@ on:
       - 'wrangler.merge-control.toml'
       - '.github/workflows/merge-control-deploy.yml'
   workflow_dispatch:
-permissions:
-  contents: read
+permissions: {}
 concurrency:
   group: merge-control-deploy
   cancel-in-progress: false
 jobs:
   deploy:
+    environment: production
     if: github.ref == 'refs/heads/main' && vars.MERGE_CONTROL_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

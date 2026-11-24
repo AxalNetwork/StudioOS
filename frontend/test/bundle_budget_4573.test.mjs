@@ -31,6 +31,8 @@ test('a lazy page costs only what the shell does not already hold', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bundle-4573-'));
   try {
     mkdirSync(join(dir, 'assets'));
+    // A fixture page in a temporary folder for the budget check.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'index.html'), '<script type="module" src="/assets/index-AAAAAAAA.js"></script><link rel="modulepreload" href="/assets/vendor-BBBBBBBB.js">');
     writeFileSync(join(dir, 'assets/index-AAAAAAAA.js'), 'import"./vendor-BBBBBBBB.js";const p=()=>import(`./Page-CCCCCCCC.js`);');
     writeFileSync(join(dir, 'assets/vendor-BBBBBBBB.js'), 'export const v=1;'.repeat(50));

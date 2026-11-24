@@ -69,6 +69,8 @@ import {
   actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
 } from '../services/capTableRegister';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -1502,7 +1504,9 @@ captable.post('/register/:projectId/snapshot', async (c) => {
   const name = `Cap table as of ${asOf}.pdf`;
   // D1170 — a filed snapshot is a data room file: it counts to the venture's owner (D1169 §1).
   const storage = await assertStorageRoom(c.env, { projectId }, bytes.byteLength, user);
-  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
+  // D6651: a filed snapshot is a record, written once under a fresh key.
+  const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
+  if (!stored.ok) return refuse(c, 409, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.' });
   try {
     await c.env.DB.batch([
       c.env.DB.prepare(
@@ -1516,7 +1520,9 @@ captable.post('/register/:projectId/snapshot', async (c) => {
       }),
     ]);
   } catch (e) {
-    await c.env.FILES.delete(key).catch(() => {});
+    // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
+    // the one record-erasure path as `unreferenced`; a cleanup failure never masks the refusal.
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => {});
     return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
   }
   await noteStorageLanded(c.env, storage);

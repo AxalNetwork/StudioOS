@@ -1,9 +1,10 @@
 /** D1151: deal-scoped, NDA-gated published team and shared venture records. */
 import { Hono, type Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getCurrentUser } from '../auth';
 import { userMayReadDeal } from './deals';
-import { hasActiveDealNda, ndaExempt } from '../services/dealAccess';
+import { hasActiveDealNda, isDealStaff, ndaExempt } from '../services/dealAccess';
+import { dealTeamEvidence } from '../services/raiseEvidence';
 import { effectiveFlags } from './public';
 import { effectiveVisibility } from '../services/userSettings';
 import { ARCHETYPES } from '../services/archetypeScoring';
@@ -32,7 +33,7 @@ function priorRoles(raw: string | null) {
   } catch { return null; }
 }
 
-async function team(env: Env, project: any) {
+async function team(env: Env, project: any, user: User) {
   let unreadableProfiles = false;
   const people = await block(async () => {
     const { results } = await env.DB.prepare(`SELECT u.id, u.uid, u.name, u.role, u.privacy_prefs,
@@ -40,7 +41,7 @@ async function team(env: Env, project: any) {
       CASE WHEN u.founder_id = ? THEN 'founder' ELSE m.role END AS team_role,
       CASE WHEN pub.published = 1 THEN snap.displayed_slug END AS archetype_slug
       FROM users u
-      LEFT JOIN project_members m ON m.user_id = u.id AND m.project_id = ? AND m.status = 'accepted' AND m.removed_at IS NULL
+      LEFT JOIN project_members m ON m.user_id = u.id AND m.project_id = ? AND m.status = 'accepted' AND m.removed_at IS NULL AND m.role <> 'advisor'
       LEFT JOIN user_settings s ON s.user_id = u.id
       LEFT JOIN user_profile_ext e ON e.user_id = u.id
       LEFT JOIN profile_archetype_publish pub ON pub.user_id = u.id
@@ -59,9 +60,7 @@ async function team(env: Env, project: any) {
       const roles = flags.background ? priorRoles(p.experience) : [];
       return [{ user_id: p.id, coverage_shared: !!flags.background, uid: p.uid, name: p.name, role: p.team_role,
         prior_roles: roles, ...(roles == null ? { prior_roles_state: 'unreadable', prior_roles_reason: 'Unreadable. Try again.' } : {}),
-        archetype: archetype ? { slug: archetype.slug, label: archetype.label } : null,
-        full_time_since: null, full_time_reason: 'Not recorded',
-        founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' }];
+        archetype: archetype ? { slug: archetype.slug, label: archetype.label } : null }];
     });
   });
   const rows = people.state === 'recorded' ? people.data as any[] : null;
@@ -94,9 +93,20 @@ async function team(env: Env, project: any) {
   });
   // Internal IDs are used only for aggregate scoping, never in a person's public projection.
   const published = rows?.map(({ user_id: _id, coverage_shared: _shared, ...person }) => person);
+  const advisors = await block(async () => {
+    const result = await env.DB.prepare(`SELECT COUNT(*) AS count FROM project_members m
+      JOIN users u ON u.id = m.user_id AND COALESCE(u.is_active, 1) = 1
+      WHERE m.project_id = ? AND m.role = 'advisor' AND m.status = 'accepted' AND m.removed_at IS NULL`)
+      .bind(project.id).first<{ count: number }>();
+    if (!result) throw new Error('Advisor count unavailable');
+    return { count: result.count, roles: result.count ? [{ role: 'Advisor', count: result.count }] : [], source: 'Accepted project memberships' };
+  });
+  const founderMarketFit = await block(() => dealTeamEvidence(env, project.id, user.id,
+    isDealStaff(user) || ndaExempt(user, project.founder_id)));
   return { people: published ? { state: 'recorded', data: published,
       ...(unreadableProfiles ? { publication_state: 'unreadable', publication_reason: 'Some profile publication preferences are unreadable. Try again.' } : {}) } : people, coverage,
-    values_band: { value: null, ...notRecorded('No recorded consent to share a team values band') } };
+    advisors, founder_market_fit: founderMarketFit.state === 'recorded' ? founderMarketFit.data : founderMarketFit,
+    values_band: { value: null, ...notRecorded('Every founder must have recorded consent to share a team values band. Consent is not recorded here yet.') } };
 }
 
 /**
@@ -206,7 +216,7 @@ function handler(section: 'team' | 'market' | 'traction') {
         return c.json({ masked: true, reason: 'no_pairwise_nda',
           project: { name: project.name, sector: project.sector, stage: project.stage, headline: project.headline } });
       }
-      const data = section === 'team' ? await team(c.env, project) : section === 'market' ? await market(c.env, project) : await traction(c.env, project, user);
+      const data = section === 'team' ? await team(c.env, project, user) : section === 'market' ? await market(c.env, project) : await traction(c.env, project, user);
       return c.json({ masked: false, ...data });
     } catch { return c.json({ error: 'unreadable', reason: 'Unreadable. Try again.' }, 503); }
   };

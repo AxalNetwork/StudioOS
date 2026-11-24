@@ -1,7 +1,7 @@
 /**
- * D1148 (#2421) — the deal page's tabs, each at its own address, and what a
- * tab says while nothing reads its blocks yet. Pure, so the tests read it
- * without a browser.
+ * D1148 (#2421) — the deal page's tabs, each at its own address. Pure, so
+ * the tests read it without a browser. D6168 (#6168): the tabs' WAITS are
+ * gone; every tab draws its own read.
  *
  * WHERE THE TABS LIVE. `/deals/:dealId` is Overview, and `/deals/:dealId/<tab>`
  * is every other tab (the canvas's `/deals/[id]/<tab>`). A tab word the
@@ -15,6 +15,13 @@
  * THE EIGHT TABS (D4815 part 4, #5903, board DE04). The views above are what
  * a role holds; the page draws them under `DEAL_TABS`, eight tabs in the
  * canvas's order, each view at its own address as before.
+ *
+ * D6164 PART 3 (#6164, the owner's answer A of 2026-11-19, D6163's canvas
+ * DE27 and the Scorecard placement). Team, Market and Traction are views
+ * under the Scorecard tab, each at its old address. An investor's firm notes
+ * are a "Firm notes" filter in Activity (`?show=notes`): the investor holds
+ * Activity, not a Notes view, and `/notes` forwards there with the filter on
+ * (`forwardOf`).
  *
  * WHAT IS READ TODAY. Overview, Documents, Commitment, Activity, Invitations
  * and Transfers draw today's reads. Team, Market and Traction read D1151's
@@ -34,13 +41,12 @@ export const TAB_DEFS = {
   documents: { label: 'Documents', path: 'documents' },
   terms: { label: 'Terms', path: 'terms' },
   commitment: { label: 'Commitment', path: 'commitment' },
-  notes: { label: 'Notes', path: 'notes' },
   activity: { label: 'Activity', path: 'activity' },
   invitations: { label: 'Invitations', path: 'invitations' },
   transfers: { label: 'Transfers', path: 'transfers' },
 };
 
-const INVESTOR = ['overview', 'scorecard', 'evidence', 'team', 'market', 'traction', 'diligence', 'documents', 'terms', 'commitment', 'notes'];
+const INVESTOR = ['overview', 'scorecard', 'evidence', 'team', 'market', 'traction', 'diligence', 'documents', 'terms', 'commitment', 'activity'];
 const FOUNDER = ['overview', 'documents', 'terms', 'commitment', 'activity'];
 const STAFF = ['overview', 'scorecard', 'evidence', 'team', 'market', 'traction', 'diligence', 'documents', 'terms', 'commitment', 'activity'];
 
@@ -75,17 +81,17 @@ export const SUB_PAGES = {
  */
 export const DEAL_TABS = [
   { id: 'overview', label: 'Overview', path: '', views: ['overview'] },
-  { id: 'scorecard', label: 'Scorecard', path: 'scorecard', views: ['scorecard'] },
-  { id: 'evidence', label: 'Evidence', path: 'evidence', views: ['evidence', 'team', 'market', 'traction'] },
+  { id: 'scorecard', label: 'Scorecard', path: 'scorecard', views: ['scorecard', 'team', 'market', 'traction'] },
+  { id: 'evidence', label: 'Evidence', path: 'evidence', views: ['evidence'] },
   { id: 'diligence', label: 'Diligence', path: 'diligence', views: ['diligence'] },
   { id: 'dataroom', label: 'Data room', path: 'data-room', views: ['documents'] },
   { id: 'terms', label: 'Terms', path: 'terms', views: ['terms'] },
   { id: 'investment', label: 'Investment', path: 'investment', views: ['commitment', 'invitations', 'transfers'], subPages: ['closing'] },
-  { id: 'activity', label: 'Activity', path: 'activity', views: ['notes', 'activity'] },
+  { id: 'activity', label: 'Activity', path: 'activity', views: ['activity'] },
 ];
 
 /** A view's label in its tab's second row, where the tab's own word would repeat. */
-const VIEW_LABEL = { evidence: 'Shared evidence' };
+const VIEW_LABEL = { scorecard: 'Eleven scopes' };
 
 /** The tabs a role draws: each of the eight that holds a view the role holds, with those views. */
 export function dealGroupsFor(role) {
@@ -128,6 +134,28 @@ export function tabOf(param, role) {
   return group?.views.find((v) => held.includes(v)) || 'overview';
 }
 
+/**
+ * D6164 part 3 (DE27): Activity's filter word for the firm's notes, in the
+ * address (`/deals/:id/activity?show=notes`), so a refresh keeps it.
+ */
+export const SHOW_NOTES = 'notes';
+
+/** An investor's firm notes: Activity with Firm notes on. */
+export function notesHref(dealId) {
+  return `${tabHref(dealId, 'activity')}?show=${SHOW_NOTES}`;
+}
+
+/**
+ * D6164 part 3: an address whose content moved, and where it now opens for
+ * this role; null when the address is still its own. `/notes` was an
+ * investor's Notes tab: it opens Activity with Firm notes on. For anyone
+ * else it is not theirs and `tabOf` opens Overview, as before.
+ */
+export function forwardOf(param, role, dealId) {
+  if (String(param ?? '') === 'notes' && role === 'investor') return notesHref(dealId);
+  return null;
+}
+
 /** A tab's address; the deal id is digits only. */
 export function tabHref(dealId, tab) {
   const id = /^[1-9]\d*$/.test(String(dealId)) ? String(dealId) : '';
@@ -137,8 +165,13 @@ export function tabHref(dealId, tab) {
 
 export const NOT_YET = 'Not read here yet';
 
-/** Why a tab draws no blocks today. Never a zero, never "none". */
-export const WAITS = {
-  scorecard: 'No per-deal score read exists yet. The scorecard is SCORING’s canvas (#2428), drawn here once its read lands. This is not a score of zero.',
-  evidence: 'No per-deal evidence read exists yet. The evidence block is the Raise evidence canvas (#2430), shown here as the founder shares each item.',
-};
+/**
+ * D6168 (#6168): one scope's drawer on the Scorecard tab, at its own address
+ * (`/deals/:id/scorecard?scope=team`). Team, Market and Traction link each of
+ * their scorecard rows here; Back from the drawer is the browser's own. A
+ * scope word that is not a key opens the tab with no drawer.
+ */
+export function scopeHref(dealId, scope) {
+  const base = tabHref(dealId, 'scorecard');
+  return /^[a-z][a-z_]{1,31}$/.test(String(scope ?? '')) ? `${base}?scope=${scope}` : base;
+}
