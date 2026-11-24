@@ -293,6 +293,37 @@ test('evidence: tagged prospects and customers are a value, none tagged is Not r
   assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners, m\.customers\)/, 'the record hands its customer counts to the evidence strip');
 });
 
+// D8251 (#8251). Mutation checked: a reader given the buttons (fails); the empty state dropped (fails); Unavailable shown as
+// none (fails); the source dropped from a card (fails); the current score dropped from a score card (fails).
+test('proposals: cards with their sources, buttons only for a writer, an empty state, Unavailable when the read failed', () => {
+  const proposals = [
+    { uid: 'p1', kind: 'score', payload: { part: 'partners', score: 6 }, sources: [{ label: 'Two resellers', url: 'https://example.test/r' }, { label: 'Interview notes' }] },
+    { uid: 'p2', kind: 'plan', payload: { steps: [{ text: 'Register the entity', due_on: '2027-02-01' }, { text: 'Open a bank account', due_on: null }] }, sources: [] },
+    { uid: 'p3', kind: 'comparison', payload: { text: 'Spain is cheaper to enter.' }, sources: [{ label: 'Budget v3' }] }];
+  const decl = [{ key: 'accept-proposal', label: 'Accept', kind: 'write', row_only: true }, { key: 'dismiss-proposal', label: 'Dismiss', kind: 'write', row_only: true }];
+  const writer = { ...RECORD({ proposals, proposals_state: 'ok' }) }; writer.actions = [...writer.actions, ...decl];
+  const html = ssr(h(MarketRecord, { record: writer, activity: [], ...handlers }));
+  const t = text(html);
+  assert.match(t, /Eadwyn proposes Nothing is written until a founder accepts/);
+  assert.match(t, /Score partners Proposed 6 \/ 10 · now Not recorded/);
+  assert.match(t, /Source: Two resellers ; Interview notes/);
+  assert.match(html, /<a href="https:\/\/example\.test\/r"[^>]*>Two resellers<\/a>/);
+  assert.match(t, /Drafted entry plan Register the entity due 1 Feb Open a bank account/);
+  assert.match(t, /Written comparison Spain is cheaper to enter\./);
+  assert.match(t, /Source not recorded/);
+  assert.equal((html.match(/data-testid="market-proposal-accept"/g) || []).length, 3);
+  assert.equal((html.match(/data-testid="market-proposal-dismiss"/g) || []).length, 3);
+  const scored = ssr(h(MarketRecord, { record: { ...writer, parts: { market: { ...writer.parts.market, scores: writer.parts.market.scores.map((x) => (x.key === 'partners' ? { ...x, score: 3, source: 'Old' } : x)) } } }, activity: [], ...handlers }));
+  assert.match(text(scored), /Proposed 6 \/ 10 · now 3 \/ 10/);
+  const reader = ssr(h(MarketRecord, { record: RECORD({ proposals, proposals_state: 'ok' }), activity: [], ...handlers }));
+  assert.match(text(reader), /Score partners/);
+  assert.doesNotMatch(reader, /market-proposal-accept|market-proposal-dismiss/);
+  assert.match(text(ssr(h(MarketRecord, { record: RECORD({ proposals: [], proposals_state: 'ok' }), activity: [], ...handlers }))), /Eadwyn has no open proposal for this market/);
+  const down = text(ssr(h(MarketRecord, { record: RECORD({ proposals: null, proposals_state: 'unreadable' }), activity: [], ...handlers })));
+  assert.match(down, /not a claim that there are none/);
+  assert.doesNotMatch(down, /no open proposal/);
+});
+
 // D8254 (#8254). Mutation checked: a failed read (null) shown as none linked (fails); the empty state dropped (fails);
 // the record not passing its partners to the evidence strip (fails); a linked partner not linking to its record (fails).
 test('partners: the record lists the linked partners, an empty state when none, Unavailable when the read failed', () => {

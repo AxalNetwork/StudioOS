@@ -112,8 +112,11 @@ test('D886 canonical audio reads the actual aiRouter settlement and final transc
     assert.ok(Number(charge!.amount)>0);
     const report=await readMeetingBotOperations(w.env,Date.now()+1000);
     assert.equal(report.state,'ok');if(report.state!=='ok') throw new Error('fixture_read');
-    assert.equal(report.today.audio_charged_microusd,charge!.amount);
-    assert.equal(report.today.recorded_minutes,1/60);
+    // This run is on the real clock (the router writes its own times), so it began two minutes ago:
+    // in the first two minutes of a UTC day it is yesterday's. The 7-day window holds it at any hour (#8315).
+    assert.equal(report.days7.runs,1);
+    assert.equal(report.days7.audio_charged_microusd,charge!.amount);
+    assert.equal(report.days7.recorded_minutes,1/60);
     assert.equal(JSON.stringify(report).includes('Synthetic transcript'),false);
   } finally {w.db.close();}
 });
