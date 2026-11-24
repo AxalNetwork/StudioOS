@@ -382,7 +382,9 @@ test('a renamed field keeps its id; a deleted or retyped mapped field is flagged
   assert.equal(r2.new_answers, 0, 'flagged mappings land nothing');
   assert.doesNotMatch(changed.state.calls[1], /fields=/);
   const s = await typeformFormStatus(env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM);
-  assert.deepEqual(s!.needs_remap.map((m) => [m.field_id, m.status]), [['fldKind', 'type_changed'], ['fldPain', 'field_deleted']]);
+  assert.deepEqual(s!.needs_remap, [{ field_id: 'fldKind', status: 'type_changed' }, { field_id: 'fldPain', status: 'field_deleted' }]);
+  // D5828 part 3: no field title reaches the client, even for the connection owner.
+  assert.ok(!JSON.stringify(s).includes('waitlist?') && !JSON.stringify(s).includes('hardest part'));
   // Remapping the retyped field to its new type makes it active again.
   assert.equal(await setTypeformMappings(env, 1, formFields(FORM_DEF({ kindType: 'dropdown', dropPain: true })), [{ field_id: 'fldKind', kind: 'waitlist', choices: ['chYes'] }], at(T0 + 2 * H)), true);
   assert.deepEqual((await typeformFormStatus(env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM))!.needs_remap, []);
