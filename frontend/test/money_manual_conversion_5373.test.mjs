@@ -44,7 +44,7 @@ const ALLOW = [
     "frontend/src/pages/raise/pitch/typedChartsModel.js": 1,
     "cloudflare-worker/src/services/analyticsReports.ts": 3,
     "cloudflare-worker/src/routes/admin_assessment.ts": 1,
-    "cloudflare-worker/src/routes/advisors_engagements.ts": 1,
+    "cloudflare-worker/src/services/advisorEngagements.ts": 1,
     "cloudflare-worker/src/routes/advisory.ts": 2,
     "cloudflare-worker/src/routes/monitoring.ts": 1,
     "cloudflare-worker/src/routes/positions.ts": 1,

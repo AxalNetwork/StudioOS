@@ -336,7 +336,7 @@ const COMPOSED = new Map([
   // D4819 (#4819): the licence ledger's table holds the doors to one licence
   // (`/admin/licences/:uid`) and to its sections (`/admin/licences/:uid/:section`).
   // D5060 (#5060): its registry by licence family opens each user licence (`/admin/licences/registry/user/:uid`).
-  ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx', 'frontend/src/pages/admin/licences/RegistryLedger.jsx']],
+  ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx', 'frontend/src/pages/admin/licences/RegistryLedger.jsx', 'frontend/src/pages/admin/licences/LicenceDetail.jsx']],
   // D5882 (#5882): Approvals draws its Inbox, Lanes, Decided, assignment and doors from the files beside it.
   ['frontend/src/pages/admin/approvals/AdminApprovals.jsx', [
     'frontend/src/pages/admin/approvals/approvalsUi.jsx',

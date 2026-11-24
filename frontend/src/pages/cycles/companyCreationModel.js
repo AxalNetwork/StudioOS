@@ -183,3 +183,53 @@ export function ipStep(facts) {
     ? { value: ip.value, source: ip.source, recorded: true }
     : { value: null, source: 'From the Lab’s IP record', recorded: false, reason: 'No Lab IP record: this venture did not come through the Lab, or its IP is not recorded.' };
 }
+
+/** Whole days from `today` (YYYY-MM-DD, UTC) to an ISO day, or null. */
+function daysFrom(iso, today) {
+  const d = typeof iso === 'string' ? /^\d{4}-\d{2}-\d{2}$/.exec(iso) : null;
+  const t = typeof today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
+  return d ? Math.round((Date.parse(`${iso}T00:00:00Z`) - Date.parse(`${t}T00:00:00Z`)) / 86400000) : null;
+}
+
+/**
+ * D8259 (#8259, BD28): the suggested filings block. `state`: 'loading' | 'unreadable' | 'no_pack' | 'ok' | 'none'
+ * ('none': every suggestion is added or hidden, so the block is not drawn). Each row says its due date and days left,
+ * or why there is no date, and how often it recurs.
+ */
+export function suggestionsView(facts, status = 'ready', today = null) {
+  if (status === 'loading') return { state: 'loading' };
+  const s = facts?.suggestions;
+  if (!s || typeof s !== 'object') return { state: 'none' };
+  if (s.state === 'unreadable') return { state: 'unreadable', reason: text(s.reason) || 'Suggested filings could not be read.' };
+  if (s.state === 'no_pack') {
+    const where = text(s.jurisdiction);
+    return { state: 'no_pack', title: where ? `Suggested for ${where}` : 'Suggested filings',
+      heading: where ? `No suggested filings for ${where} yet` : 'No suggested filings yet',
+      reason: text(s.reason) || 'Axal has filing packs for US Delaware LLCs and C-Corps only.' };
+  }
+  const rows = (Array.isArray(s.rows) ? s.rows : []).filter((r) => typeof r?.key === 'string' && text(r.title)).map((r) => {
+    const due = dateWords(r.due);
+    const left = due ? daysWords(daysFrom(r.due, today)) : null;
+    return { key: r.key, title: r.title.trim(), kind: r.kind || 'other', jurisdiction: r.jurisdiction === 'Federal' ? 'Federal' : null,
+      due: due ? r.due : null, line: [due ? `Due ${due}${left ? ` · ${left}` : ''}` : (text(r.due_reason) || 'No due date is recorded.'), text(r.cadence)].filter(Boolean).join(' · ') };
+  });
+  if (!rows.length) return { state: 'none' };
+  const label = text(s.pack_label) || 'filing';
+  return { state: 'ok', title: `Suggested for your ${label}`, line: `${rows.length} ${rows.length === 1 ? 'suggestion' : 'suggestions'} · from Axal’s ${label} pack`, rows };
+}
+
+/**
+ * "Add to my filings": the Add filing form's own address with `form=suggested` and the suggestion's values
+ * (`forms.js` `suggestedFilingValues` reads them), keeping the venture and the page to return to. Null without an Add.
+ */
+export function suggestionHref(addHref, row) {
+  if (typeof addHref !== 'string' || !addHref.startsWith('/') || !row) return null;
+  const [path, query = ''] = addHref.split('?');
+  const q = new URLSearchParams(query);
+  q.set('form', 'suggested');
+  q.set('title', row.title);
+  q.set('kind', row.kind);
+  if (row.jurisdiction) q.set('jurisdiction', row.jurisdiction);
+  if (row.due) q.set('due_date', row.due);
+  return `${path}?${q}`;
+}

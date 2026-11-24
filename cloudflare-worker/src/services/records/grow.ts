@@ -35,7 +35,7 @@ import {
 import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
-  TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
+  TERMS_KINDS, TOLD_VIA, addAgendaItem, decideMarketProposal, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
   markHeld, obligationKind, obligationState, openMinutes, removeAgendaItem, removeEntryStep, removeMarket, removeObligation, removePartner, removePartnerDeal, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
   updateAgendaItem, updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updatePartnerDeal, updateRole,
 } from '../growWriters';
@@ -980,6 +980,10 @@ async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof read
        JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
       WHERE u.project_id = ? AND a.kind = 'market' AND a.link_ref = CAST(? AS TEXT) ORDER BY r.id DESC LIMIT 20`,
   ).bind(rc.projectId, m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), name: x.name ?? null, message: x.message ?? null, created_at: x.created_at ?? null })));
+  // D8251 (#8251, GR-24): Eadwyn's open proposals on this market, newest first; a failed read is `proposals: null`.
+  const proposals = await read(async () => ((await rc.env.DB.prepare(
+    `SELECT uid, kind, payload, sources, created_at FROM market_proposals WHERE market_id = ? AND state = 'proposed' ORDER BY id DESC LIMIT 20`,
+  ).bind(m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), kind: String(x.kind), payload: JSON.parse(String(x.payload)), sources: JSON.parse(String(x.sources)), created_at: x.created_at ?? null })));
   // D8254 (#8254): the venture's partners linked to this market; a failed read is `partners: null`, never an empty list.
   const partners = await read(async () => ((await rc.env.DB.prepare(
     `SELECT p.uid, p.name, p.type, p.stage FROM growth_partner_markets l JOIN growth_partners p ON p.id = l.partner_id
@@ -998,6 +1002,7 @@ async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof read
     localisation_state: ticks ? 'ok' : 'unreadable',
     replies, replies_state: replies ? 'ok' : 'unreadable',
     indices: await countryIndexLines(rc.env, typeof m.geography_ref === 'string' ? m.geography_ref : null),
+    proposals, proposals_state: proposals ? 'ok' : 'unreadable',
     partners, partners_state: partners ? 'ok' : 'unreadable',
   };
 }
@@ -1095,6 +1100,13 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     confirm: { title: 'Remove this entry step?', body: 'It leaves the entry plan. Activity keeps a line that a step was removed.', cta: 'Remove' },
     references: stepRef,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
+  }, {
+    // D8251: Accept writes through Edit market (a score) or Add entry step (a plan); Dismiss writes nothing.
+    key: 'accept-proposal', label: 'Accept', kind: 'write', row_only: true,
+    execute: (c, _id, body) => refusing(async () => { await decideMarketProposal(c.env, c.projectId, userOf(c), id, field(body, 'proposal'), 'accept'); return { ok: true, record: { uid: id } }; }),
+  }, {
+    key: 'dismiss-proposal', label: 'Dismiss', kind: 'write', row_only: true,
+    execute: (c, _id, body) => refusing(async () => { await decideMarketProposal(c.env, c.projectId, userOf(c), id, field(body, 'proposal'), 'dismiss'); return { ok: true, record: { uid: id } }; }),
   }, {
     key: 'localisation-check', label: 'Tick a localisation check', kind: 'write', row_only: true,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),
