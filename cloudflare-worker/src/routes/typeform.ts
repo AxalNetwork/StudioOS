@@ -26,8 +26,8 @@
  * the sync row follows the binding (`services/typeform/selection.ts`), and
  * the grant and data center come from #5827's encrypted credentials
  * (`services/typeform/live.ts`). The answer carries the run's outcome, the
- * counts and the mapped fields that need remapping (their ids and titles, for
- * the connection owner only): never a token, a respondent or an answer.
+ * counts and the mapped fields that need remapping (their ids and status
+ * only, D5828 part 3): never a token, a title, a respondent or an answer.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';

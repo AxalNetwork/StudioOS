@@ -455,7 +455,8 @@ export async function setTypeformMappings(env: Env, syncId: number, fields: Form
 export interface TypeformFormStatus {
   state: string; active: boolean; last_synced_at: string | null; checkpoint: string | null; link: string | null;
   completed: number; partial: number; qualifying: number; withdrawn: number; provider_deleted: number;
-  needs_remap: Array<{ field_id: string; title: string | null; status: string }>;
+  /** D5828 part 3: ids and status only; a field's title never leaves the Worker. */
+  needs_remap: Array<{ field_id: string; status: string }>;
 }
 
 /**
@@ -480,13 +481,13 @@ export async function typeformFormStatus(env: Env, scope: Scope, formId: string)
     `SELECT COUNT(DISTINCT a.response_row_id) AS n FROM typeform_answers a JOIN typeform_responses r ON r.id = a.response_row_id
       WHERE r.sync_id = ? AND r.status = 'active' AND r.response_type = 'completed'`,
   ).bind(id).first<{ n: number }>();
-  const remap = (await env.DB.prepare("SELECT field_id, field_title, status FROM typeform_field_mappings WHERE sync_id = ? AND status <> 'active' ORDER BY id")
+  const remap = (await env.DB.prepare("SELECT field_id, status FROM typeform_field_mappings WHERE sync_id = ? AND status <> 'active' ORDER BY id")
     .bind(id).all<any>()).results || [];
   return {
     state: s.sync_state, active: s.status === 'active', last_synced_at: s.last_synced_at, checkpoint: s.checkpoint_submitted_at,
     link: responsesLink(validatedRegion(s.region), s.form_id),
     completed: Number(c?.completed ?? 0), partial: Number(c?.partial ?? 0), qualifying: Number(q?.n ?? 0),
     withdrawn: Number(c?.withdrawn ?? 0), provider_deleted: Number(c?.provider_deleted ?? 0),
-    needs_remap: remap.map((r: any) => ({ field_id: r.field_id, title: r.field_title, status: r.status })),
+    needs_remap: remap.map((r: any) => ({ field_id: r.field_id, status: r.status })),
   };
 }
