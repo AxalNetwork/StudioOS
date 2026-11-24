@@ -117,7 +117,9 @@ test('the published event uses exactly the editor’s social metadata for the sa
     capacity: 40, price_cents: 2500, seats: 20,
   };
   const match = { kind: 'event' as const, key: 'demo-day', path: '/events/demo-day' };
-  assert.deepEqual(await resolveCard(env, match), { ...eventSocialCard(draft), url: 'https://axal.vc/events/demo-day' });
+  // D7004: the record's JSON-LD rides beside the card; its own checks are in structured_data_7004.test.ts.
+  const { jsonLd: _ld, ...card } = (await resolveCard(env, match))!;
+  assert.deepEqual(card, { ...eventSocialCard(draft), url: 'https://axal.vc/events/demo-day' });
 });
 
 test('1. a published public event previews as itself; the shell\'s scripts are untouched', async () => {
@@ -133,7 +135,9 @@ test('1. a published public event previews as itself; the shell\'s scripts are u
   assert.match(meta(r.text, 'og:image')!, /^https:\/\/axal\.vc\/og\/(event|content)\.png/, 'the family card');
   assert.equal(meta(r.text, 'og:image:width'), '1200');
   for (const s of SCRIPTS) assert.ok(r.text.includes(s), s);
-  assert.equal(r.text.replace(/  <!-- BEGIN og:managed[\s\S]*?<!-- END og:managed -->/, ''), SHELL.replace(/  <!-- BEGIN og:managed[\s\S]*?<!-- END og:managed -->/, ''), 'only the managed block changed');
+  // D7004: the record's `ld:managed` block follows the card's; nothing else in the shell moves.
+  const managed = /  <!-- BEGIN og:managed[\s\S]*?<!-- END og:managed -->(?:\n  <!-- BEGIN ld:managed[\s\S]*?<!-- END ld:managed -->)?/;
+  assert.equal(r.text.replace(managed, ''), SHELL.replace(managed, ''), 'only the managed blocks changed');
   assert.equal(r.headers.get('x-robots-tag'), null, 'a record card is indexable');
 });
 
@@ -174,7 +178,7 @@ test('4. an article card leaves views and the daily count alone, and uses its co
   assert.equal(meta(r.text, 'og:image'), 'https://axal.vc/api/articles/cover/5');
   for (const t of ['og:image:width', 'og:image:height', 'og:image:type']) assert.equal(meta(r.text, t), null, `${t} is unknown for a record image`);
   assert.equal((db.prepare('SELECT views FROM articles WHERE id = 5').get() as any).views, 3);
-  assert.ok(!calls.some((s) => /UPDATE|INSERT/i.test(s)), 'a card writes nothing');
+  assert.ok(!calls.some((s) => /\b(?:UPDATE|INSERT)\b/i.test(s)), 'a card writes nothing'); // D7004: not `updated_at`
   const plain = await get(env, '/articles/plain');
   assert.match(meta(plain.text, 'og:image')!, /\/og\/articles\.png/, 'no cover: the family card');
   const draft = await get(env, '/articles/unpublished');

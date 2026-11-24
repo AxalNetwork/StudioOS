@@ -16,6 +16,8 @@ D1440 (#3915, Part A of #3705). This is one row per route group: who can open it
 - **Title source and image source:** where the preview's `og:title` and `og:image` come from.
 - **Prerendered:** the route has its own `docs/<path>/index.html`, written at build time by `scripts/prerender-og.mjs`. Every other path is served the SPA shell (`docs/index.html`), which carries the **home** card unless the Worker rewrites it.
 
+**Rules (D6996).** Every prerendered route that is not `noindex` has its own title and a canonical that is its own URL; only `/` carries the homepage canonical. The sitemap (`frontend/public/sitemap.xml`) lists only prerendered, self-canonical, indexable routes, and never a `noindex` one (D4582). `frontend/test/route_meta_6996.test.mjs` checks both on the real prerender.
+
 ## 1. Fixed public pages (prerendered, live today)
 
 The title and description are the registry entry's. The image is the entry's `key`, or else its section's key, or else `default`.
@@ -28,10 +30,13 @@ The title and description are the registry entry's. The image is the entry's `ke
 | `/for-founders`, `/for-investors`, `/for-service-partners`, `/for-advisors` | public | yes | `product-founders`, `-investors`, `-service-partners`, `-advisors` | registry, mirrored from `data/productPages.js` | own card each |
 | `/platform`, `/administrators`, `/intelligence` | public | yes | `product` (section) | registry | section card |
 | `/pricing` | public | yes | `pricing` | registry | own card |
-| `/pricing/investor` | public | yes | `pricing-investor` | registry | own card |
-| `/demo`, `/about`, `/team`, `/methodology`, `/contact`, `/newsletter`, `/changelog`, `/status`, `/register`, `/login` | public | yes | `company` (section) | registry | section card |
+| `/pricing/products` | public | yes | `company` (section) | registry, "Products and token packs" (D6996) | section card |
+| `/demo`, `/about`, `/team`, `/methodology`, `/contact`, `/newsletter`, `/changelog`, `/status`, `/register`, `/login` (`noindex, follow`, D4582) | public | yes | `company` (section) | registry | section card |
 | `/terms`, `/privacy`, `/privacy/interviews`, `/risk-disclosures` | public | yes | `terms`, `privacy`, `privacy-interviews`, `risk-disclosures` | registry | own card |
-| `/trust` and its five tabs (`/security`, `/data`, `/subprocessors`, `/documents`, `/disclosure`) | public | yes | `trust`, `trust-security` … `trust-disclosure` | registry | own card |
+| `/trust` and its five tabs (`/security`, `/data`, `/subprocessors`, `/documents`, `/disclosure`) | public | yes | `trust`, `trust-security` … `trust-disclosure` | registry, each tab its own, before and after JavaScript (D6996) | own card |
+| `/help` (prefix) | public | yes | `company` (section) | registry (D6996) | section card |
+| `/help/<area>/<guide>`, each guide in `PUBLIC_HELP_ANCHORS` | public | yes | `company` (section, through `/help`) | the guide index: its title plus " · Help Center", and its overview's opening sentences (`pages/docs/helpMeta.js`, D6996) | section card |
+| `/spinout-lab/brief` and each `/programs/<key>` page | public | yes | `spinout-lab` (through `/spinout-lab`) and `content` (through `/programs`) | the program's map entry `og` (D6966) | the matched entry's card |
 | `/articles`, `/jobs`, `/events`, `/authors` (the section pages) | public | yes | `articles`, `jobs`, `event`, `authors` | registry | section family card |
 | `/circles`, `/directory` (prefix), `/resources` | public | yes | `content` (section) | registry | section card |
 

@@ -1,0 +1,163 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Enterprise statistics by size class and NACE Rev. 2 activity (from 2021 onwards)",
+ "source": "ESTAT",
+ "updated": "2026-09-30T11:00:00+0200",
+ "value": {
+  "12": 0,
+  "11": 0,
+  "13": 0,
+  "14": 0,
+  "17": 0,
+  "15": 0,
+  "16": 0,
+  "19": 0,
+  "2": 0,
+  "0": 4,
+  "1": 0,
+  "3": 0,
+  "4": 0,
+  "7": 0,
+  "5": 0,
+  "6": 0,
+  "8": 1,
+  "9": 0,
+  "22": 0.0,
+  "21": 0.0,
+  "23": 0.0,
+  "24": 0.0,
+  "27": 0.0,
+  "25": 0.0,
+  "26": 0.0,
+  "29": 0.0
+ },
+ "status": {
+  "10": "|C",
+  "18": "|C",
+  "20": "|C",
+  "28": "|C"
+ },
+ "id": [
+  "freq",
+  "indic_sbs",
+  "nace_r2",
+  "size_emp",
+  "geo",
+  "time"
+ ],
+ "size": [
+  1,
+  3,
+  1,
+  2,
+  5,
+  1
+ ],
+ "dimension": {
+  "freq": {
+   "label": "Time frequency",
+   "category": {
+    "index": {
+     "A": 0
+    },
+    "label": {
+     "A": "Annual"
+    }
+   }
+  },
+  "indic_sbs": {
+   "label": "Economic indicator for structural business statistics",
+   "category": {
+    "index": {
+     "ENT_NR": 0,
+     "EMP_NR": 1,
+     "NETTUR_MEUR": 2
+    },
+    "label": {
+     "ENT_NR": "Enterprises - number",
+     "EMP_NR": "Persons employed - number",
+     "NETTUR_MEUR": "Net turnover - million euro"
+    }
+   }
+  },
+  "nace_r2": {
+   "label": "Statistical classification of economic activities in the European Community (NACE Rev. 2)",
+   "category": {
+    "index": {
+     "C12": 0
+    },
+    "label": {
+     "C12": "Manufacture of tobacco products"
+    }
+   }
+  },
+  "size_emp": {
+   "label": "Size classes in number of persons employed",
+   "category": {
+    "index": {
+     "50-249": 0,
+     "GE250": 1
+    },
+    "label": {
+     "50-249": "From 50 to 249 persons employed",
+     "GE250": "250 persons employed or more"
+    }
+   }
+  },
+  "geo": {
+   "label": "Geopolitical entity (reporting)",
+   "category": {
+    "index": {
+     "DK": 0,
+     "EE": 1,
+     "CY": 2,
+     "LU": 3,
+     "MT": 4
+    },
+    "label": {
+     "DK": "Denmark",
+     "EE": "Estonia",
+     "CY": "Cyprus",
+     "LU": "Luxembourg",
+     "MT": "Malta"
+    }
+   }
+  },
+  "time": {
+   "label": "Time",
+   "category": {
+    "index": {
+     "2022": 0
+    },
+    "label": {
+     "2022": "2022"
+    }
+   }
+  }
+ },
+ "extension": {
+  "lang": "EN",
+  "id": "SBS_SC_OVW",
+  "agencyId": "ESTAT",
+  "version": "1.0",
+  "datastructure": {
+   "id": "SBS_SC_OVW",
+   "agencyId": "ESTAT",
+   "version": "26.0"
+  },
+  "status": {
+   "label": {
+    "|C": "|confidential"
+   }
+  },
+  "positions-with-no-data": {
+   "freq": [],
+   "indic_sbs": [],
+   "nace_r2": [],
+   "size_emp": [],
+   "geo": [],
+   "time": []
+  }
+ }
+}
