@@ -19,7 +19,8 @@
  *   2. at most `SWEEP_MAX` (60) new runs, from a bounded keyset scan of
  *      genuinely ready work (D7074: one task per free lane of an agent, so
  *      an agent with sub-agents is offered as many as it has lanes free). A per-scope candidate cap means one busy scope
- *      cannot consume every inspection in a rotation. With AGENT_AUTONOMY
+ *      cannot consume every inspection in a rotation: 4 for a fixed team; for an elastic team under HQ's
+ *      ceiling, what admission would let it start, at most 30 (D7077 part 2). With AGENT_AUTONOMY
  *      `self_start` and the engine `on`, each candidate is offered through
  *      its scope's object. With `manual` (the default) this step admits
  *      nothing.
@@ -45,7 +46,7 @@
 import type { Env } from '../types';
 import type { AgentRow } from '../services/agents/teams';
 import { scopeOfRow } from './engine';
-import { capacityCeilings, lanesOffered } from './capacity';
+import { ELASTIC_RUNS_MAX, capacityCeilings, lanesOffered } from './capacity';
 import { autonomy, engineMode, haltedAll, type AgentRuntime } from './runtime';
 import { enqueueAgentRun, recordRepairMetrics, repairExhaustedRun } from './agentQueue';
 import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agents/duties';
@@ -55,17 +56,24 @@ import { resumeCapPauses } from '../services/agents/sponsor';
 import { pruneModelBuckets } from './modelBudget';
 
 /**
- * D7077 (#7077): the sweep's bounds stay named here and unchanged. Raising them waits on #5573's
- * benchmark (sizing) and #7074's elastic per-team ceiling (the per-scope bound), neither on main;
- * the follow-up is an edit of these constants only.
+ * D7077 (#7077): the sweep's bounds stay named here. Raising the global ones waits on #5573's
+ * benchmark (sizing). D7077 part 2: the per-scope bound follows an elastic team's ceiling
+ * (`DISCOVERY_ELASTIC_SCOPE_MAX` below); a fixed team keeps `DISCOVERY_PER_SCOPE_MAX`.
  */
 export const SWEEP_MAX = 60;
 /** Resends are repair traffic; they never spend the new-work admission budget. */
 export const RESEND_MAX = 20;
 /** Bound database and runtime work even when every candidate is refused at admission. */
 export const DISCOVERY_SCAN_MAX = 120;
-/** One saturated scope never crowds all other scopes out of a scan. */
+/** One saturated scope never crowds all other scopes out of a scan. A fixed team's bound, as before. */
 export const DISCOVERY_PER_SCOPE_MAX = 4;
+/**
+ * D7077 part 2 — an elastic team (D7074) is offered what admission would let it start: its parallel
+ * limit (`parallelLimit`: its own `elastic_max_runs`, else HQ's ceiling, never above HQ's) less the
+ * runs it has live. Never more than this, half of `SWEEP_MAX`, so one elastic team takes at most half
+ * a sweep's admissions and a quarter of its inspections, and every other scope is still reached.
+ */
+export const DISCOVERY_ELASTIC_SCOPE_MAX = SWEEP_MAX / 2;
 export const RESEND_AFTER_MIN = 5;
 const READY_CURSOR_KEY = 'agents:sweep:ready-cursor:v1';
 
@@ -104,16 +112,41 @@ async function saveReadyCursor(env: Env, agentId: number) {
  * one task for an agent with no live run, as before. This is discovery only:
  * `AgentRuntime.admit` repeats every authorization, halt, scope-cap, financial
  * and single-flight check.
+ *
+ * D7077 part 2: each scope's bound (`scope_bound`) is read in this one
+ * statement. A fixed team, and an elastic team while HQ offers no elastic
+ * ceiling (`elasticCeiling` null, every database until HQ sets one), keeps
+ * `DISCOVERY_PER_SCOPE_MAX`. An elastic team under a ceiling gets
+ * `parallelLimit` less its live runs, at most `DISCOVERY_ELASTIC_SCOPE_MAX`.
+ * `scope_live` is empty while no ceiling is offered, so the common path adds
+ * no work. The ceiling is read here, never copied into a team's row (D7074).
  */
-async function readyAfter(env: Env, afterAgentId: number, lanesCeiling: number): Promise<ReadyCandidate[]> {
+async function readyAfter(env: Env, afterAgentId: number, lanesCeiling: number, elasticCeiling: number | null): Promise<ReadyCandidate[]> {
   const rows = await env.DB.prepare(
-    `WITH agent_room AS (
+    `WITH bounds AS (
+       SELECT ? AS elastic_ceiling, ? AS elastic_runs_max, ? AS elastic_scope_max, ? AS fixed_scope_max
+     ), scope_live AS (
+       SELECT la.scope_kind, IFNULL(la.company_id, 0) AS company_key, IFNULL(la.project_id, 0) AS project_key, COUNT(*) AS n
+       FROM agent_task_runs lr
+       JOIN team_agents la ON la.id = lr.agent_id
+       WHERE (SELECT elastic_ceiling FROM bounds) IS NOT NULL AND lr.status IN ('admitted', 'running')
+       GROUP BY la.scope_kind, IFNULL(la.company_id, 0), IFNULL(la.project_id, 0)
+     ), agent_room AS (
        SELECT a.*,
          MIN(IFNULL(s.lanes_per_agent, 1), ?) AS lanes,
-         (SELECT COUNT(*) FROM agent_task_runs r WHERE r.agent_id = a.id AND r.status IN ('admitted', 'running')) AS live
+         (SELECT COUNT(*) FROM agent_task_runs r WHERE r.agent_id = a.id AND r.status IN ('admitted', 'running')) AS live,
+         CASE WHEN s.capacity_mode = 'elastic' AND b.elastic_ceiling IS NOT NULL
+           THEN MAX(0, MIN(b.elastic_scope_max,
+             MAX(1, MIN(IFNULL(CASE WHEN typeof(s.elastic_max_runs) = 'integer' AND s.elastic_max_runs BETWEEN 1 AND b.elastic_runs_max
+                                    THEN s.elastic_max_runs END, b.elastic_ceiling), b.elastic_ceiling))
+             - IFNULL(sl.n, 0)))
+           ELSE b.fixed_scope_max END AS scope_bound
        FROM team_agents a
+       CROSS JOIN bounds b
        LEFT JOIN agent_scope_settings s ON s.scope_kind = a.scope_kind
          AND IFNULL(s.company_id, 0) = IFNULL(a.company_id, 0) AND IFNULL(s.project_id, 0) = IFNULL(a.project_id, 0)
+       LEFT JOIN scope_live sl ON sl.scope_kind = a.scope_kind
+         AND sl.company_key = IFNULL(a.company_id, 0) AND sl.project_key = IFNULL(a.project_id, 0)
        WHERE a.status = 'active' AND a.id > ?
      ), task_ranked AS (
        SELECT a.*, t.id AS task_id, t.created_at AS task_created_at,
@@ -136,8 +169,9 @@ async function readyAfter(env: Env, afterAgentId: number, lanesCeiling: number):
        ) AS scope_rank
        FROM per_lane
      )
-     SELECT * FROM fairly_scoped WHERE scope_rank <= ? ORDER BY id, task_rank LIMIT ?`,
-  ).bind(Math.max(1, lanesCeiling), afterAgentId, DISCOVERY_PER_SCOPE_MAX, DISCOVERY_SCAN_MAX).all<ReadyCandidate>();
+     SELECT * FROM fairly_scoped WHERE scope_rank <= scope_bound ORDER BY id, task_rank LIMIT ?`,
+  ).bind(elasticCeiling, ELASTIC_RUNS_MAX, DISCOVERY_ELASTIC_SCOPE_MAX, DISCOVERY_PER_SCOPE_MAX,
+    Math.max(1, lanesCeiling), afterAgentId, DISCOVERY_SCAN_MAX).all<ReadyCandidate>();
   return rows.results ?? [];
 }
 
@@ -151,9 +185,11 @@ async function readyCandidates(env: Env): Promise<{ candidates: ReadyCandidate[]
   // D7074: sub-agent lanes exist only under HQ's two ceilings; without them every agent has one lane.
   const ceilings = await capacityCeilings(env);
   const lanes = lanesOffered(ceilings) ? Number(ceilings.lanes) : 1;
-  const later = await readyAfter(env, cursor, lanes);
+  // D7077 part 2: an elastic team's bound exists only under HQ's elastic ceiling; withdrawn, every team reads as fixed.
+  const elastic = ceilings.elastic_runs;
+  const later = await readyAfter(env, cursor, lanes, elastic);
   if (later.length || cursor === 0) return { candidates: later, wrapped: false };
-  return { candidates: await readyAfter(env, 0, lanes), wrapped: true };
+  return { candidates: await readyAfter(env, 0, lanes, elastic), wrapped: true };
 }
 
 async function recordSweepMetrics(env: Env, now: Date, out: { resent: number; admitted: number; cap_resumed: number }, stats: SweepStats) {
