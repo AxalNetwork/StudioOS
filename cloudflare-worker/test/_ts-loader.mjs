@@ -7,5 +7,7 @@
 // Used by cloudflare-worker/test/advisor.scenarios.test.ts via:
 //   node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs --test …
 import { register } from 'node:module';
+// D8467: a Worker test file may replay the migration chain twice at most; this counts and refuses the rest.
+import './_schema_budget.mjs';
 
 register(new URL('./_ts-loader-hook.mjs', import.meta.url));
