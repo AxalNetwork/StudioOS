@@ -6,6 +6,8 @@
  *                      that it is not offered or could not be read. Never a substitute plan, never a guessed price.
  *   RegistrationSteps  account creation, the profile step and checkout as three separate things, with when payment
  *                      begins; and, for a founder, the Spin-Out Lab application as a fourth, optional, separate one.
+ *   RegistrationContext #6984 (X2): one line above the form, the role this sign-up is for and the chosen plan, when
+ *                      the catalogue returned it.
  *   SignedInPlanNotice a signed-in visitor who follows a plan link here is told so and given a choice, instead of
  *                      being signed out in silence.
  *
@@ -16,6 +18,7 @@ import { Link } from 'react-router-dom';
 import { pricingReturnPath, specFor } from '../../lib/planIntent';
 import { selectionFor } from '../../lib/planSelection';
 import { publicPricingApi } from '../../lib/api/publicPricing';
+import { registerContextLine } from '../../lib/registerCopy';
 
 export const STEPS = (plan, lane) => [
   { key: 'account', title: 'Create your account', line: 'This is free. No payment is taken on this page.' },
@@ -25,6 +28,12 @@ export const STEPS = (plan, lane) => [
     : { key: 'checkout', title: 'Pick a plan when you want one', line: 'Plans are optional. Payment starts only when you confirm checkout.' },
   ...(lane === 'founder' ? [{ key: 'spinout', title: 'Optional: apply to the Spin-Out Lab', line: 'This is a separate application you make after you sign in. It is not part of any plan and not needed to create your account.' }] : []),
 ];
+
+export function RegistrationContext({ lane, selection }) {
+  const line = registerContextLine(lane, selection);
+  if (!line) return null;
+  return <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2" data-testid="register-context">{line}</p>;
+}
 
 export function PlanSelection({ selection, onRetry = null }) {
   if (!selection) return null;

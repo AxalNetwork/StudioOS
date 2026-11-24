@@ -197,7 +197,7 @@ test('D704 test 5 (the door): the Validate chapter lists the modules, and its li
   const route = readFileSync('frontend/src/pages/cycles/defs/validate.jsx', 'utf8'); // D5615: Validate's entry
   const at = route.indexOf('tools: toFnMap({');
   const tools = route.slice(at, route.indexOf('\n  }),', at));
-  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence', 'demand-signals']);
+  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence', 'demand-signals', 'ideal-customer-profile']); // D6007 adds the ICP tool
   assert.match(tools, /'demand-signals':.*\/build\/brand/);
 });
 

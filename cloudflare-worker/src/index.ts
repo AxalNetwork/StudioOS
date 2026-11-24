@@ -2375,6 +2375,16 @@ const studioos = {
           } catch (e) {
             taskFailed('rehearsal audio purge', e instanceof Error ? e.message : 'error');
           }
+          // D5585 part 7 (#5585): one bounded WorkGraph release drain. OFF unless WORK_GRAPH_RELEASE_DELIVERY is
+          // `preview`: then it returns null before any D1 read. The outbox's per-effect claim keeps an overlapping
+          // drain from delivering an effect twice. Not gated on `hqCadences`: each deployment's outbox is its own.
+          try {
+            const { scheduledReleaseDrain, drainSummaryLine } = await import('./services/workGraphReleaseAdmin');
+            const d = await scheduledReleaseDrain(env);
+            if (d && (d.deliveries || d.providerRequests)) cronSummary.push(drainSummaryLine(d));
+          } catch (e) {
+            taskFailed('work graph release drain', e instanceof Error ? e.message : 'error');
+          }
         }
         // D685 §5.6 — recordings a closed tab left behind: drafts never
         // started (24 h), silent recordings paused (10 min), uploads that never

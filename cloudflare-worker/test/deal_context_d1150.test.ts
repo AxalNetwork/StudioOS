@@ -26,7 +26,7 @@ function world() {
     INSERT INTO projects(id,name) VALUES(7,'Fixture'); INSERT INTO deals(id,project_id,status) VALUES(9,7,'active'),(10,7,'active');
     INSERT INTO company_profiles(id,uid,company_name) VALUES(11,'firm-a','Firm A'),(22,'firm-b','Firm B');
     INSERT INTO user_company_links(uid,user_id,company_id) VALUES('l1',1,11),('l2',2,11),('l3',3,22),('l4',4,11);
-    INSERT INTO deal_invitations(deal_id,investor_user_id,company_id) VALUES(9,1,11),(9,2,11),(9,3,22);`);
+    INSERT INTO deal_invitations(uid,deal_id,investor_user_id,company_id) VALUES('inv-a',9,1,11),('inv-b',9,2,11),('inv-c',9,3,22);`);
   const raw = d1Over(db);
   // D1 batch returns SELECT results too; the shared shim's runSync handles writes only.
   const DB = {...raw, prepare(sql: string) {

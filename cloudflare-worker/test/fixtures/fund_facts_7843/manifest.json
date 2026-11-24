@@ -1,0 +1,33 @@
+{
+  "name": "fixture-7843",
+  "imported_on": "2026-11-21",
+  "rows": [
+    { "key": "tw-name", "fund_uid": "tidewater-partners", "fact": "manager_name", "wording": "Tidewater Partners",
+      "source_name": "Quill Meadow Investor Notes", "source_url": "https://tidewater.example/about", "reported_on": "2026-10-02" },
+    { "key": "tw-stage", "fund_uid": "tidewater-partners", "fact": "investment_stage", "wording": "Pre-seed to Series A",
+      "source_name": "Quill Meadow Investor Notes", "source_url": "https://tidewater.example/approach", "reported_on": "2026-10-02" },
+    { "key": "tw-geo", "fund_uid": "tidewater-partners", "fact": "investment_geography", "wording": "Germany and France; the Nordics; Europe",
+      "source_name": "Quill Meadow Investor Notes", "source_url": "https://tidewater.example/approach", "reported_on": "2026-10-02" },
+    { "key": "tw-cheque", "fund_uid": "tidewater-partners", "fact": "initial_cheque", "wording": "EUR 250k - 1m",
+      "source_name": "Quill Meadow Investor Notes", "source_url": "https://tidewater.example/approach", "reported_on": "2026-10-02" },
+    { "key": "pc-cheque", "fund_uid": "pinecrest-old", "fact": "initial_cheque", "wording": "Typically USD 500k",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://pinecrest.example/faq", "reported_on": "2026-09-14" },
+    { "key": "mb-cheque", "fund_uid": "marrow-i", "fact": "initial_cheque", "wording": "From $100k",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://marrow.example/founders", "reported_on": "2026-08-30" },
+    { "key": "pc-cheque-sheet", "fund_uid": "pinecrest-ii", "fact": "initial_cheque", "wording": "250k", "heading": "Initial cheque (GBP)",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://pinecrest.example/sheet", "reported_on": "2026-09-14" },
+    { "key": "mb-capital", "fund_uid": "marrow-i", "fact": "stated_fund_capital", "wording": "€40m",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://marrow.example/fund-i", "reported_on": "2026-08-30" },
+    { "key": "mb-lead", "fund_uid": "marrow-i", "fact": "lead_preference", "wording": "Leads or co-leads seed rounds",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://marrow.example/founders", "reported_on": "2026-08-30" },
+    { "key": "mb-sector-1", "fund_uid": "marrow-i", "fact": "sector_focus", "wording": "Climate software",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://marrow.example/thesis", "reported_on": "2026-05-01" },
+    { "key": "mb-sector-2", "fund_uid": "marrow-i", "fact": "sector_focus", "wording": "Climate software and industrial automation",
+      "source_name": "Harbour Lantern Fund Index", "source_url": "https://marrow.example/thesis", "reported_on": "2026-09-01",
+      "replaces": "mb-sector-1" },
+    { "key": "gh-desc", "fund_uid": "ghost-fund", "fact": "description", "wording": "A fund the directory does not serve",
+      "source_name": "Quill Meadow Investor Notes", "source_url": "https://ghost.example/", "reported_on": "2026-10-02" },
+    { "key": "so-interests", "fund_uid": "marrow-i", "fact": "interests", "wording": "Grid storage",
+      "source_name": "Slate Orchard Fund Sheet", "source_url": "https://marrow.example/news", "reported_on": "2026-10-02" }
+  ]
+}

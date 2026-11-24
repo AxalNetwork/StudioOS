@@ -5,16 +5,19 @@ import { api } from '../../../lib/api';
 import {
   // D4842: no tile strip, no profile table and no "who we are not for" card.
   // OF-04 is the rank note and one rules table.
-  ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Field, NoPartnerProfile, isNoPartnerProfile,
-  inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
+  ZoneBody, StatedLimit, Unrecorded, Pill,
+  NoPartnerProfile, isNoPartnerProfile,
+  ghostButtonClass, moneyCents, dollarsToCents,
+  // D4844: the Offers type scale, field, actions and empty state.
+  OfferEmpty, OfferField, OfferHeading,
+  offerInputClass, offerButtonClass, offerGhostButtonClass, offerDangerButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import Sheet from '../../../ui/Sheet.jsx';
-import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote, zoneReadError } from './useGuardedWrite';
 import { fitView } from '../../../lib/fitRuleView.js';
 import { FIT_KINDS, FIT_STRENGTHS, fitRuleRow, fitSheetCopy } from './fitRules.js';
 
@@ -108,6 +111,8 @@ export function FitRuleSheet({ initial, onSubmit, onDelete, onClose, busy, note,
   // the control is not drawn where it would be rejected.
   const isProfile = kind === 'best_fit';
   const copy = fitSheetCopy(kind);
+  // D4844: a refused save that names one of this sheet's fields is said on that field.
+  const fieldErr = (field) => (note && !note.ok && note.scope === scope && note.field === field ? note.text : null);
 
   function submit() {
     const parsed = dollarsToCents(floor);
@@ -135,33 +140,33 @@ export function FitRuleSheet({ initial, onSubmit, onDelete, onClose, busy, note,
       footer={(
         <div className="flex flex-wrap items-center gap-2">
           {onDelete && (
-            <button type="button" className={`${ghostButtonClass} text-red-700 dark:text-red-300`} disabled={busy} onClick={onDelete}>
+            <button type="button" className={offerDangerButtonClass} disabled={busy} onClick={onDelete}>
               Delete rule
             </button>
           )}
           <div className="ml-auto flex gap-2">
-            <button type="button" className={`${ghostButtonClass} min-h-[44px] md:min-h-0`} onClick={onClose}>Cancel</button>
-            <button type="button" className={`${buttonClass} min-h-[44px] md:min-h-0`} disabled={busy} onClick={submit}>Save rule</button>
+            <button type="button" className={offerGhostButtonClass} onClick={onClose}>Cancel</button>
+            <button type="button" className={offerButtonClass} disabled={busy} aria-busy={busy || undefined} onClick={submit}>Save rule</button>
           </div>
         </div>
       )}
     >
       <div className="flex flex-col gap-4" data-testid="rule-editor">
+        {/* D4844: each field's error is its own, tied to it, beside its help text. */}
         {isFloor ? (
-          <Field label={copy.who} hint={floorError || 'Leads below this rank lower, with your reason.'}>
-            <input className={inputClass} value={floor} inputMode="decimal" placeholder="e.g. 25000"
-              aria-invalid={floorError ? 'true' : undefined}
-              onChange={(e) => setFloor(e.target.value)} />
-          </Field>
+          <OfferField label={copy.who} hint="Leads below this rank lower, with your reason." error={floorError || fieldErr('floor_cents')}>
+            <input className={offerInputClass} value={floor} inputMode="decimal" placeholder="e.g. 25000"
+              onChange={(e) => { setFloor(e.target.value); setFloorError(''); }} />
+          </OfferField>
         ) : (
-          <Field label={copy.who}>
-            <input className={inputClass} value={value} maxLength={200}
+          <OfferField label={copy.who} error={fieldErr('value')}>
+            <input className={offerInputClass} value={value} maxLength={200}
               onChange={(e) => setValue(e.target.value)} />
-          </Field>
+          </OfferField>
         )}
         {isProfile && (
           <fieldset>
-            <legend className="mb-1 text-[12px] font-semibold text-axal-ink dark:text-gray-100">How strong is this fit?</legend>
+            <legend className="mb-1 text-[13px] font-semibold text-axal-ink dark:text-gray-100">How strong is this fit?</legend>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Fit strength">
               {FIT_STRENGTHS.map(([v, l]) => (
                 <button
@@ -175,32 +180,32 @@ export function FitRuleSheet({ initial, onSubmit, onDelete, onClose, busy, note,
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[11.5px] text-axal-faint">
+            <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
               Weak intent means “not yet”, which is not a decline. Pipeline reads Best fit and Weak intent when it scores a lead; Qualified is a note you keep. Leave it unset if you have not judged it.
             </p>
           </fieldset>
         )}
         <hr className="border-axal-hairline dark:border-gray-700" />
-        <Field label={copy.says} hint={copy.saysHint}>
-          <textarea className={inputClass} rows={3} value={statement} maxLength={1000}
+        <OfferField label={copy.says} hint={copy.saysHint} error={fieldErr('statement')}>
+          <textarea className={offerInputClass} rows={3} value={statement} maxLength={1000}
             onChange={(e) => setStatement(e.target.value)} />
-        </Field>
-        <Field label="Can we point them somewhere else? (optional)" hint="A firm or person better suited, named in the reply.">
-          <input className={inputClass} value={referredTo} maxLength={300}
+        </OfferField>
+        <OfferField label="Can we point them somewhere else? (optional)" hint="A firm or person better suited, named in the reply." error={fieldErr('referred_to')}>
+          <input className={offerInputClass} value={referredTo} maxLength={300}
             onChange={(e) => setReferredTo(e.target.value)} />
-        </Field>
+        </OfferField>
         <button
-          type="button" className="w-fit text-[12.5px] font-semibold text-axal-muted underline dark:text-gray-300"
+          type="button" className="w-fit text-[13px] font-semibold text-gray-700 underline dark:text-gray-300"
           aria-expanded={advanced} onClick={() => setAdvanced((v) => !v)}
         >
           Advanced rule types {advanced ? '▴' : '▾'}
         </button>
         {advanced && (
-          <Field label="Rule type" hint={FIT_KINDS.find(([k]) => k === kind)?.[2]}>
-            <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
+          <OfferField label="Rule type" hint={FIT_KINDS.find(([k]) => k === kind)?.[2]} error={fieldErr('kind')}>
+            <select className={offerInputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
               {FIT_KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-          </Field>
+          </OfferField>
         )}
         <WriteNote note={scopedNote(note, scope)} busy={busy} />
       </div>
@@ -222,7 +227,7 @@ function FitRulesTable({ rows, onEdit }) {
   const action = ({ r, v }) => (
     <button
       type="button"
-      className={`${v.needsReply ? buttonClass : ghostButtonClass} min-h-[44px] md:min-h-0`}
+      className={v.needsReply ? offerButtonClass : offerGhostButtonClass}
       onClick={() => onEdit(r)}
     >
       {v.needsReply ? 'Add reply' : 'Edit'}
@@ -231,14 +236,14 @@ function FitRulesTable({ rows, onEdit }) {
   const ruleCell = (v) => (
     <>
       <b className="text-axal-ink dark:text-gray-100">{v.rule}</b>
-      {v.kind && <div className="text-[11.5px] text-axal-faint">{v.kind}</div>}
-      {!v.inUse && <div className="text-[11.5px] text-axal-faint">Not in use</div>}
+      {v.kind && <div className="text-[12px] text-gray-600 dark:text-gray-400">{v.kind}</div>}
+      {!v.inUse && <div className="text-[12px] text-gray-600 dark:text-gray-400"><span aria-hidden="true">‖ </span>Not in use</div>}
     </>
   );
   return (
     <div className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900" data-testid="fit-rules">
-      <table className="hidden w-full text-left text-[13.5px] md:table">
-        <thead className="text-[11px] uppercase tracking-[.08em] text-axal-faint">
+      <table className="hidden w-full text-left text-[14px] md:table">
+        <thead className="text-[12px] uppercase tracking-[.06em] text-gray-600 dark:text-gray-400">
           <tr className="border-b border-axal-hairline dark:border-gray-700">
             {['Rule', 'Who', 'Strength', 'What we say', 'Point them to'].map((h) => (
               <th key={h} scope="col" className="px-4 py-2.5 font-extrabold">{h}</th>
@@ -251,9 +256,9 @@ function FitRulesTable({ rows, onEdit }) {
             <tr key={r.id} className="border-b border-axal-hairline align-top last:border-b-0 dark:border-gray-800" data-testid="fit-rule-row">
               <td className="px-4 py-3">{ruleCell(v)}</td>
               <td className="px-4 py-3">{who(v)}</td>
-              <td className="px-4 py-3">{v.strength || <span className="text-axal-faint">—</span>}</td>
+              <td className="px-4 py-3">{v.strength || <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
               <td className="px-4 py-3 text-[13px]">{says(v)}</td>
-              <td className="px-4 py-3">{v.pointTo || <span className="text-axal-faint">—</span>}</td>
+              <td className="px-4 py-3">{v.pointTo || <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
               <td className="px-4 py-3 text-right">{action({ r, v })}</td>
             </tr>
           ))}
@@ -261,11 +266,11 @@ function FitRulesTable({ rows, onEdit }) {
       </table>
       <ul className="divide-y divide-axal-hairline md:hidden dark:divide-gray-800">
         {rows.map(({ r, v }) => (
-          <li key={r.id} className="flex flex-col gap-1.5 p-4 text-[13.5px]">
+          <li key={r.id} className="flex flex-col gap-1.5 p-4 text-[14px]">
             <div>{ruleCell(v)}</div>
-            <div>{who(v)}{v.strength && <span className="text-axal-faint"> · {v.strength}</span>}</div>
+            <div>{who(v)}{v.strength && <span className="text-gray-600 dark:text-gray-400"> · {v.strength}</span>}</div>
             <div className="text-[13px]">{says(v)}</div>
-            {v.pointTo && <div className="text-[12.5px] text-axal-muted dark:text-gray-300">Point them to {v.pointTo}</div>}
+            {v.pointTo && <div className="text-[13px] text-gray-600 dark:text-gray-300">Point them to {v.pointTo}</div>}
             <div>{action({ r, v })}</div>
           </li>
         ))}
@@ -365,7 +370,7 @@ export default function PartnerAudienceFitZone() {
       setState({ loading: false, error: '', data: r || {} });
       return true;
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'The fit rules did not load.', data: null });
+      setState({ loading: false, error: zoneReadError(e), data: null });
       return false;
     }
   }, []);
@@ -443,6 +448,7 @@ export default function PartnerAudienceFitZone() {
       )}
       <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
+        what="Your fit rules"
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={reload}
@@ -450,14 +456,15 @@ export default function PartnerAudienceFitZone() {
         isEmpty={unlinked || (items.length === 0)}
         empty={(
           /* OF-10: an empty state names the commercial outcome and offers one action. */
-          <NothingYet
+          <OfferEmpty
+            testId="fit-empty"
             title="Tell Pipeline who your firm is for"
             body={
               'Fit rules rank your leads and give a founder who isn’t a fit a reason '
               + 'and somewhere to go. Nothing is declined for you.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => openSheet({})}>
+              <button type="button" className={offerButtonClass} aria-haspopup="dialog" onClick={() => openSheet({})}>
                 Add your first fit rule
               </button>
             )}
@@ -465,11 +472,11 @@ export default function PartnerAudienceFitZone() {
         )}
       >
         <div className="space-y-6">
-          <ZoneHeading
+          <OfferHeading
             title="Audience fit"
             blurb="Who your firm is for, and what to say when someone isn’t."
             action={(
-              <button type="button" className={buttonClass} onClick={() => openSheet({})}>
+              <button type="button" className={offerButtonClass} aria-haspopup="dialog" onClick={() => openSheet({})}>
                 + Add fit rule
               </button>
             )}
@@ -483,8 +490,8 @@ export default function PartnerAudienceFitZone() {
             <div className="min-w-0 flex-1">
               Pipeline uses these rules to rank and explain your leads. They never reject a founder on their own.
               <details className="mt-1">
-                <summary className="cursor-pointer text-[12.5px] font-semibold text-cyan-800 dark:text-cyan-300">How rules affect ranking</summary>
-                <p className="mt-1 text-[12.5px]">
+                <summary className="cursor-pointer text-[13px] font-semibold text-cyan-800 dark:text-cyan-300">How rules affect ranking</summary>
+                <p className="mt-1 text-[13px]">
                   {d?.enforcement_note
                     || 'Pipeline reads your active rules to score leads and to leave a lead that matches a declined sector or an absent capability out of its ranking. Nothing is auto-declined: an excluded lead stays on Leads, and passing on it is still your click.'}
                 </p>
@@ -493,7 +500,7 @@ export default function PartnerAudienceFitZone() {
           </div>
 
           {items.length > 0 && visible.length === 0 && (
-            <p className="text-[12px] text-axal-muted">
+            <p className="text-[13px] text-gray-600 dark:text-gray-400">
               No profile is graded {SIGNAL_LABEL[view]?.toLowerCase() || view}.{' '}
               {items.length} rule{items.length === 1 ? '' : 's'} recorded in total,{' '}
               {profiles.length} of them profiles.
@@ -515,8 +522,8 @@ export default function PartnerAudienceFitZone() {
           />
 
           {(d?.unstated_count ?? 0) > 0 && (
-            <p className="text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
-              {d.unstated_count} rule{d.unstated_count === 1 ? '' : 's'} carr
+            <p className="text-[13px] leading-relaxed text-amber-800 dark:text-amber-300">
+              <span aria-hidden="true">! </span>{d.unstated_count} rule{d.unstated_count === 1 ? '' : 's'} carr
               {d.unstated_count === 1 ? 'ies' : 'y'} no sentence. A rule without one
               still describes the firm, but it cannot be quoted — so a pass citing
               it lands as the silence this zone exists to replace.

@@ -7,7 +7,8 @@
  *                     (`incorporations`) is `filed`
  *   in_formation      otherwise, an order is `paid`, `packet_processing` or
  *                     `packet_ready`; `formation_order_id` names the latest
- *   not_incorporated  otherwise, both reads answered and hold neither
+ *   draft_case        otherwise, an unpaid open v2 intake case exists
+ *   not_incorporated  otherwise, both reads answered and hold none of these
  *   unreadable        otherwise: a read failed, so "not incorporated" would be
  *                     a guess
  *
@@ -15,14 +16,14 @@
  * its own, even when the other read failed. Anything weaker needs both reads.
  * `pending_payment` and `failed` orders count for nothing.
  *
- * The readers below are batched: one statement per table for every row on the
- * page, never one per row. A failed read sets each row it touches to
+ * The readers below batch one identity and one order/case statement for every
+ * row on the page, never one per row. A failed read sets each row it touches to
  * `unreadable` and never fails the endpoint. The registration number is only
  * tested for presence in SQL; its value never leaves the database here.
  */
 import type { Env } from '../types';
 
-export type FormationState = 'incorporated' | 'in_formation' | 'not_incorporated' | 'unreadable';
+export type FormationState = 'incorporated' | 'in_formation' | 'draft_case' | 'not_incorporated' | 'unreadable';
 /** The two flat fields each row gains. `formation_order_id` is null unless `in_formation`. */
 export type Formation = { formation_state: FormationState; formation_order_id: number | null };
 /** One order, as the readers return them: latest first. */
@@ -44,7 +45,7 @@ export function formationState(identity: Read<boolean>, orders: Read<OrderFact[]
   const open = orders.value.find((o) => (IN_FLIGHT_STATUSES as readonly string[]).includes(o.status));
   return open
     ? { formation_state: 'in_formation', formation_order_id: Number(open.order_id) }
-    : { formation_state: 'not_incorporated', formation_order_id: null };
+    : { formation_state: orders.value.some(o => o.status === 'draft_case') ? 'draft_case' : 'not_incorporated', formation_order_id: null };
 }
 
 /** The companies whose legal record names them incorporated. Only ids come back. */
@@ -57,22 +58,37 @@ export const COMPANY_IDENTITY_SQL = `SELECT cp.id AS company_id FROM company_pro
  * else placed for a venture now in it (`account_companies.ts`'s attribution). Latest first, as its
  * `formation` block orders them.
  */
-export const COMPANY_ORDERS_SQL = `SELECT COALESCE(o.company_id, o.subject_company_id, p.company_id) AS company_id, o.id AS order_id, o.status
+export const COMPANY_ORDERS_SQL = `SELECT company_id, order_id, status FROM (
+  SELECT COALESCE(o.company_id, o.subject_company_id, p.company_id) AS company_id, o.id AS order_id, o.status,
+    COALESCE(o.paid_at, o.created_at) AS sort_at, o.id AS sort_id
   FROM incorporations o LEFT JOIN projects p ON p.id = o.project_id
   WHERE o.status IN ('paid', 'packet_processing', 'packet_ready', 'filed')
     AND COALESCE(o.company_id, o.subject_company_id, p.company_id) IN (SELECT value FROM json_each(?))
-  ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC`;
+  UNION ALL
+  SELECT COALESCE(c.company_id, p.company_id), NULL, 'draft_case', c.updated_at, c.id
+    FROM formation_cases c LEFT JOIN projects p ON p.id = c.project_id
+    WHERE c.track = 'v2' AND c.closed_at IS NULL
+      AND c.stage IN ('draft', 'options_shown', 'chosen', 'structure_review', 'details', 'quoted')
+      AND COALESCE(c.company_id, p.company_id) IN (SELECT value FROM json_each(?))
+  ) ORDER BY sort_at DESC, sort_id DESC`;
 
 /**
  * Orders that bear on a venture: its own, at any counted status, and a filed
  * order of the company it sits in. Latest first.
  */
-export const PROJECT_ORDERS_SQL = `SELECT o.project_id, COALESCE(o.company_id, o.subject_company_id, p.company_id) AS company_id, o.id AS order_id, o.status
+export const PROJECT_ORDERS_SQL = `SELECT project_id, company_id, order_id, status FROM (
+  SELECT o.project_id, COALESCE(o.company_id, o.subject_company_id, p.company_id) AS company_id, o.id AS order_id, o.status,
+    COALESCE(o.paid_at, o.created_at) AS sort_at, o.id AS sort_id
   FROM incorporations o LEFT JOIN projects p ON p.id = o.project_id
   WHERE o.status IN ('paid', 'packet_processing', 'packet_ready', 'filed')
     AND (o.project_id IN (SELECT value FROM json_each(?))
       OR (o.status = 'filed' AND COALESCE(o.company_id, o.subject_company_id, p.company_id) IN (SELECT value FROM json_each(?))))
-  ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC`;
+  UNION ALL
+  SELECT c.project_id, c.company_id, NULL, 'draft_case', c.updated_at, c.id FROM formation_cases c
+    WHERE c.track = 'v2' AND c.closed_at IS NULL
+      AND c.stage IN ('draft', 'options_shown', 'chosen', 'structure_review', 'details', 'quoted')
+      AND c.project_id IN (SELECT value FROM json_each(?))
+  ) ORDER BY sort_at DESC, sort_id DESC`;
 
 type Row = Record<string, any>;
 
@@ -97,7 +113,7 @@ export async function companyFormations(env: Env, companyIds: number[]): Promise
   const json = JSON.stringify(ids);
   const [identity, orders] = await Promise.all([
     read(env, 'The legal identity', COMPANY_IDENTITY_SQL, [json]),
-    read(env, 'The formation orders', COMPANY_ORDERS_SQL, [json]),
+    read(env, 'The formation orders', COMPANY_ORDERS_SQL, [json, json]),
   ]);
   const named = identity.ok ? new Set(identity.value.map((r) => Number(r.company_id))) : null;
   const byCompany = new Map<number, OrderFact[]>();
@@ -125,7 +141,7 @@ export async function projectFormations(env: Env, projects: { id: number; compan
     companyIds.length
       ? read(env, 'The legal identity', COMPANY_IDENTITY_SQL, [JSON.stringify(companyIds)])
       : Promise.resolve<Read<Row[]>>({ ok: true, value: [] }),
-    read(env, 'The formation orders', PROJECT_ORDERS_SQL, [JSON.stringify(ids), JSON.stringify(companyIds)]),
+    read(env, 'The formation orders', PROJECT_ORDERS_SQL, [JSON.stringify(ids), JSON.stringify(companyIds), JSON.stringify(ids)]),
   ]);
   const named = identity.ok ? new Set(identity.value.map((r) => Number(r.company_id))) : null;
   return (id: number) => {
