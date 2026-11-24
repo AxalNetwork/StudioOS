@@ -175,6 +175,18 @@ test('adding copies the bytes under the room\'s own key, under NDA and shared wi
   assert.deepEqual(read.json.papers.find((p: any) => p.kind === 'bylaws'), { kind: 'bylaws', label: 'Bylaws', state: 'Stored', document_uid: 'doc-bylaws', in_room: true, preselected: false });
 });
 
+test('a copy in Trash (D6073) does not count as in the room: the paper is preselected again and a new copy is added', async () => {
+  const h = await harness();
+  assert.equal((await h.call('POST', `/api/cycles/build/company-creation/data-room?project=${PROJECT}`, 1, { kinds: ['bylaws'] })).status, 201);
+  h.db.exec(`UPDATE data_room_files SET removed_at = '2026-11-20 09:00:00' WHERE source_ref = 'company_document:doc-bylaws'`);
+  const read = await h.call('GET', `/api/cycles/build/company-creation/data-room?project=${PROJECT}`);
+  assert.deepEqual(read.json.papers.find((p: any) => p.kind === 'bylaws'), { kind: 'bylaws', label: 'Bylaws', state: 'Stored', document_uid: 'doc-bylaws', in_room: false, preselected: true });
+  const again = await h.call('POST', `/api/cycles/build/company-creation/data-room?project=${PROJECT}`, 1, { kinds: ['bylaws'] });
+  assert.equal(again.status, 201);
+  assert.equal(again.json.added.length, 1);
+  assert.equal((h.db.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE removed_at IS NULL').get() as any).n, 1, 'one live copy, the trashed one untouched');
+});
+
 test('a member without the room\'s upload right reads the papers but cannot add them', async () => {
   const h = await harness();
   const read = await h.call('GET', `/api/cycles/build/company-creation/data-room?project=${PROJECT}`, 4);
