@@ -614,5 +614,147 @@
   "historical_publication_record": {
     "recorded_utc": "2026-11-21T14:11:15.962111+00:00",
     "publication": "none; #5719 hold"
+  },
+  "source_reconciliation": {
+    "recorded_utc": "2026-11-22T20:35:57.703435+00:00",
+    "head": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+    "tree": "45e1f3acb44fe6bb0a346df867430d34b70128d2",
+    "details": "qualification-progress.json:source_reconciliation",
+    "image_digest": null,
+    "native_gates": "NOT RUN",
+    "source_receipt_sha256": "ef974e010f12bbc03668bae13906559a671491a42de79ca2f2c4ebf8476ccb72",
+    "local_evidence": "Exact commands, tool versions, raw logs and exits retained in the private handoff; only hashes and sanitized summaries published.",
+    "available_checks": [
+      {
+        "name": "preflight",
+        "exit": 0,
+        "stdout_stderr_sha256": "f21378569f09571bdeb5f04debf5ad3e95268cda1ea79ee348cf1d2cb372fa4c"
+      },
+      {
+        "name": "missing-input-refusal",
+        "exit": 2,
+        "stdout_stderr_sha256": "3370dc53538536a001caed8e5fea312ada9cbc429396bb9d4ab10711a71a7894"
+      },
+      {
+        "name": "archive-inspection",
+        "exit": 0,
+        "stdout_stderr_sha256": "3cb89226bc33340c3da46d603806aa98a21aec245f9f469084c75ba8c449dac0"
+      },
+      {
+        "name": "probe-syntax",
+        "exit": 0,
+        "stdout_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "git-version",
+        "exit": 0,
+        "stdout_stderr_sha256": "b6d9afe6e5be5d40f0e18a09a0708100902e19a4d0e11fb5d3930d59785cb1aa"
+      },
+      {
+        "name": "python-version",
+        "exit": 0,
+        "stdout_stderr_sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632"
+      },
+      {
+        "name": "node-version",
+        "exit": 0,
+        "stdout_stderr_sha256": "2266957ed9a639bd7264d714bfa798a961510bf2e50695c668ab8fc0c3f4e906"
+      }
+    ],
+    "host": {
+      "os": "Darwin",
+      "arch": "arm64"
+    },
+    "tools": {
+      "docker": null,
+      "podman": null,
+      "buildctl": null,
+      "syft": null,
+      "trivy": null,
+      "cosign": null
+    },
+    "source_tests": [
+      {
+        "source": "7214b4c363c5f5bb589995557c1a80c1e8433a31",
+        "exit": 1,
+        "tests": 132,
+        "pass": 64,
+        "fail": 67,
+        "existing_skip": 1,
+        "observation": "Initial Mac run: canonical-path, platform and archive-tool prerequisites fail; retained privately."
+      },
+      {
+        "source": "241d0944b78dc61cda83b3a1e0952c2ad6114b51",
+        "exit": 1,
+        "tests": 135,
+        "pass": 103,
+        "fail": 31,
+        "existing_skip": 1,
+        "observation": "Canonical TMPDIR resolves path failures. 29 runtime_platform_mismatch failures, one BSD tar fixture-format failure and one failed parent remain. Linux/x64 is required; no platform check weakened."
+      },
+      {
+        "source": "241d0944b78dc61cda83b3a1e0952c2ad6114b51",
+        "exit": 1,
+        "tests": 108,
+        "pass": 101,
+        "fail": 6,
+        "existing_skip": 1,
+        "observation": "Narrow source selection still contains four Linux catalog subcases plus their parent and BSD tar prerequisite failure; retained, not claimed green."
+      },
+      {
+        "source": "8c11fb864c3466fec684ec6bb92409d33973b2ec",
+        "exit": 1,
+        "tests": 136,
+        "pass": 103,
+        "fail": 32,
+        "existing_skip": 1,
+        "observation": "Final unmodified selection on Darwin/arm64: Linux runtime/platform prerequisite failures, one parent failure and BSD tar fixture-format incompatibility. These are retained failures; native qualification is NOT RUN."
+      }
+    ],
+    "test_command_shape": [
+      "TMPDIR=<canonical-private-temp> AGENT_ENGINE=off node --import ./frontend/test/_deck-loader.mjs --test <selected unmodified source files>"
+    ],
+    "raw_log_hashes": {
+      "source-regressions.log": "cce5f6809bcb8cb795d75e630754187249c300c5d04a0ffdc2e842baa8496c29",
+      "source-241d-regressions.log": "177d0ddc9936bd85b71a2746f6f9adc647e52acb21e5a406b00270efffb71dee",
+      "portable-source-regressions.log": "55ea49630bfa4526b040ce489d7e765089468bd3eb110a1b3b86cbe95082d37c",
+      "available-checks.json": "14252801eb58f33a8fe5f5b92dfac58214d212db497ca6fd7795b344dc1cfd96",
+      "current-lock-engines.json": "8de61c21976f6a035c7d1fba5ff7108d246fc53c9e9ae6236f72a01d9d8a6e59",
+      "source-8c11-regressions.log": "1569ecb59d699176405fc67511c40ed69fe8a6b5aef17a48386dcea85d303800"
+    },
+    "manifest_check": {
+      "wrong_frozen_source_hash_exit": 2,
+      "restored_source_exit": 0,
+      "evidence_sha256": "350adcb615de763478e88a5e4b4123723a5ad378c645c14bdc9435ee713816dc"
+    },
+    "local_build": {
+      "exit": 1,
+      "reason": "Case-insensitive module resolution selects reasonGate.js/telegramBotHealth.js for differently cased JSX imports on Darwin; application sources and locks unchanged. Full build/guard success not claimed.",
+      "log_sha256": "8718227bb9f520f3c8e18fc692fa4f6506dad0d5f85d9f68528d0d972c7abbc0"
+    },
+    "full_guards": {
+      "exit": 1,
+      "passed": 55,
+      "total": 58,
+      "failures": [
+        {
+          "id": "check-docs-assets-closure",
+          "status": "failed",
+          "exit": 1
+        },
+        {
+          "id": "check-bundle-budget",
+          "status": "failed",
+          "exit": 1
+        },
+        {
+          "id": "check-frontend-builds",
+          "status": "failed",
+          "exit": 1
+        }
+      ],
+      "reason": "Missing built SPA after the case-insensitive frontend build failure, and the same frontend build incompatibility in its build guard. All guards ran; no skips or disabling.",
+      "evidence_sha256": "7947c75fb12ae3674147e2d9fd723d381200e581edb7bf324a36c91188c9fb19"
+    }
   }
 }

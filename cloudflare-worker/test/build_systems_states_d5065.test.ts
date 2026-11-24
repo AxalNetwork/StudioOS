@@ -337,8 +337,9 @@ const CHECKS: Check[] = [
     after: "const SYSTEM_STATE: Record<string, string> = { failing: 'Failing', connected: 'Connected', not_connected: 'Not connected' };",
     pattern: 'one state model' },
   { name: 'a tool with a stored connection is never "Not connected"', file: 'src/routes/cycle_build.ts',
-    before: '      state: SYSTEM_STATE_LABEL[systemStateOf(tool, tool.status)],',
-    after: "      state: tool.status === 'active' ? 'Connected' : tool.status === 'error' ? 'Failing' : 'Not connected',",
+    // D5078: the row's state is derived once (`toolState`) and drives its label and its action.
+    before: '    const toolState = systemStateOf(tool, tool.status);',
+    after: "    const toolState = tool.status === 'active' ? 'connected' : tool.status === 'error' ? 'failing' : 'not_connected';",
     pattern: 'not listed as never connected' },
   { name: 'the SPA has a tile for a disconnected system', file: '../frontend/src/pages/cycles/CycleCharts.jsx',
     before: "  disconnected: ['Reconnect required', 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300'],\n",

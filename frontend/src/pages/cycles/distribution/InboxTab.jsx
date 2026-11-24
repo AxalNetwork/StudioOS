@@ -1,8 +1,12 @@
 // D4494: Distribution's real reply threads; Accept edits the composer, only confirmed Send sends.
+// D6865 part 2 (#6891, GR-24, GR-29C): an inbound reply's Save as feedback opens the feedback sheet, and a saved reply carries its tag.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { growInboxApi } from '../../../lib/api/growInbox.js';
+import { cyclesWrite } from '../../../lib/api/cycles.js';
+import FeedbackSheet from '../FeedbackSheet.jsx';
+import { replyValues, selectedWithin } from '../feedbackTabModel.js';
 import { mailApi } from '../../../lib/api/mail.js';
 import { Card, LoadingSkeleton, ProposalBlock, StatusNote } from './DistributionParts.jsx';
 import { acceptedReply, bookingHref, bubbleDirection, channelLabel, INBOX_EMPTY, INBOX_EMPTY_NOTE, messageTime, REPLY_ACCEPT_NOTE, replySubject, sendConfirmedReply, threadName, unreadCount } from './inboxModel.js';
@@ -30,13 +34,29 @@ export function InboxNeedsYou({ reading, search = '' }) {
   return <Card className="inbox-needs"><span><b className="ds-eyebrow">Replies</b> · {count} reply {count === 1 ? 'thread waits' : 'threads wait'}{org?.name && unreadCount(org.count) != null ? ', ' + org.count + ' from ' + org.name : ''}.</span><Link to={'/grow/distribution/inbox' + search}>Open Replies</Link></Card>;
 }
 
-export function MessageBubble({ message, name }) {
+/**
+ * One message. D6865 part 2 (#6891, GR-24): an inbound reply already saved as
+ * feedback (`message.feedback`, or `savedUid` just now) carries "Saved as
+ * feedback" and Open item; an unsaved one offers Save as feedback (`onSave`,
+ * writers only), which takes the words selected in it, else the whole reply.
+ */
+export function MessageBubble({ message, name, onSave = null, savedUid = null, itemHref = null }) {
   const direction = bubbleDirection(message);
-  return <article className={'inbox-bubble is-' + direction} data-direction={direction}>
+  const box = useRef(null);
+  const saved = savedUid || message.feedback?.uid || null;
+  return <article ref={box} className={'inbox-bubble is-' + direction} data-direction={direction}>
     <p className="inbox-meta">{direction === 'outbound' ? 'You' : name || 'Not recorded'} · {channelLabel(message.channel)} · <time dateTime={message.at || undefined}>{messageTime(message.at)}</time></p>
     {message.subject && <p className="inbox-subject">{message.subject}</p>}
     <p className="inbox-message">{message.body ?? 'Message body: Not recorded.'}</p>
     {message.preview && <p className="inbox-meta">Mailbox preview</p>}
+    {direction === 'inbound' && saved ? <p className="m-0 mt-1 flex flex-wrap items-center gap-2 text-[12px]" data-testid="inbox-saved-feedback">
+      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">✓ Saved as feedback</span>
+      {itemHref ? <Link to={itemHref(saved)} className="font-semibold text-violet-700 underline dark:text-violet-300">Open item</Link> : null}
+    </p> : direction === 'inbound' && onSave && message.body ? <p className="m-0 mt-1 flex flex-wrap items-center gap-2 text-[12px]">
+      <button type="button" className="inline-flex min-h-11 items-center rounded-md border border-violet-200 bg-white px-3 font-semibold text-violet-800 hover:bg-violet-50 sm:min-h-8 dark:border-violet-800 dark:bg-gray-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
+        onMouseDown={(e) => e.preventDefault()} onClick={() => onSave(message, selectedWithin(box.current))} data-testid="inbox-save-feedback">Save as feedback</button>
+      <span className="text-gray-600 dark:text-gray-400">Saves the selected words, or the whole reply</span>
+    </p> : null}
   </article>;
 }
 
@@ -77,7 +97,9 @@ export function ReplyComposer({ projectId, detail, DraftIntent = null, proposal 
   </section>;
 }
 
-export default function InboxTab({ projectId, api = growInboxApi, mail = mailApi, DraftIntent = null, onUnreadChange }) {
+export default function InboxTab({ projectId, api = growInboxApi, mail = mailApi, feedback = cyclesWrite, DraftIntent = null, onUnreadChange }) {
+  // D6865 part 2 (#6891, GR-24): the reply being saved as feedback, the sheet's choices, and the replies saved just now.
+  const [saving, setSaving] = useState(null), [saveOptions, setSaveOptions] = useState(null), [savedNow, setSavedNow] = useState({});
   const [query, setQuery] = useState(''), [selection, setSelection] = useState(null), [list, setList] = useState(null), [detail, setDetail] = useState(null), [reload, setReload] = useState(0), [listVersion, setListVersion] = useState(0);
   const selected = selection?.projectId === projectId ? selection.uid : null;
   const countCallback = useRef(onUnreadChange); countCallback.current = onUnreadChange;
@@ -103,6 +125,13 @@ export default function InboxTab({ projectId, api = growInboxApi, mail = mailApi
   }, [projectId, selected, api, reload]);
   const current = list?.projectId === projectId ? list : { state: 'loading' };
   const thread = detail?.projectId === projectId && detail?.selected === selected ? detail : null;
+  const canSave = thread?.can_write === true && !!thread?.thread?.contact?.uid && typeof feedback?.grow?.feedbackFromReply === 'function';
+  const itemHref = (uid) => `/grow/product-improvement/${encodeURIComponent(uid)}?project_id=${encodeURIComponent(projectId)}`;
+  const openSave = (message, selection) => {
+    setSaving({ projectId, contactUid: thread.thread.contact.uid, message, initial: replyValues({ thread: thread.thread, message, selection, recipient: thread.recipient }) });
+    setSaveOptions(null);
+    feedback.formOptions('grow', projectId, 'product-improvement').then((o) => setSaveOptions(o || {})).catch(() => setSaveOptions('unreadable'));
+  };
   return <div className="distribution-inbox">
     <div className="inbox-connection-states" aria-label="Reply channels">{current.channels?.map((c) => <span key={c.channel}>{channelLabel(c.channel)} · {c.state === 'connected' ? 'Connected' : c.state === 'recorded' ? 'Recorded replies' : 'Not connected'}</span>)}</div>
     {current.state === 'unreadable' && <StatusNote tone="warn">Unreadable: some replies could not be read. Counts are not available. <button type="button" onClick={() => setReload((n) => n + 1)}>Try again</button></StatusNote>}
@@ -115,9 +144,17 @@ export default function InboxTab({ projectId, api = growInboxApi, mail = mailApi
       {!selected ? <p className="ds-not-recorded">Choose a thread to read its replies.</p> : !thread || thread.state === 'loading' ? <LoadingSkeleton label="thread" /> : !thread.thread ? <StatusNote tone="warn">Unreadable: this thread could not be read.</StatusNote> : <>
         <div className="inbox-thread-heading"><div><h2>{threadName(thread.thread)}</h2><p>One thread · every channel</p></div><Link className="inbox-secondary" to={bookingHref(thread.thread.contact.uid)}>Book a demo</Link></div>
         {thread.state === 'unreadable' && <StatusNote tone="warn">Unreadable: some messages could not be read.</StatusNote>}
-        <div className="inbox-messages">{thread.thread.messages?.map((message) => <MessageBubble key={message.key} message={message} name={thread.thread.contact.name} />)}</div>
+        {thread.feedback_state === 'unreadable' && <StatusNote tone="warn">Unreadable: which replies are saved as feedback could not be read. A reply saved before is not saved twice.</StatusNote>}
+        <div className="inbox-messages">{thread.thread.messages?.map((message) => <MessageBubble key={message.key} message={message} name={thread.thread.contact.name}
+          onSave={canSave ? openSave : null} savedUid={savedNow[thread.thread.contact.uid + ' ' + message.key] || null} itemHref={itemHref} />)}</div>
         <ReplyComposer key={projectId + ':' + selected} projectId={projectId} detail={thread} api={mail} DraftIntent={DraftIntent} onSent={() => setReload((n) => n + 1)} />
       </>}
     </Card></div>
+    {saving && saving.projectId === projectId && <FeedbackSheet key={saving.contactUid + ' ' + saving.message.key} title="Save as feedback"
+      from={`From ${thread?.thread?.contact?.name || 'this person'}’s reply · ${messageTime(saving.message.at)}`} initial={saving.initial}
+      origin="inbox_reply" replyKey={saving.message.key} options={saveOptions} itemHref={itemHref} testId="inbox-feedback-sheet"
+      onSave={(body) => feedback.grow.feedbackFromReply(projectId, saving.message.key, body)}
+      onSaved={(uid) => { if (uid) setSavedNow((m) => ({ ...m, [saving.contactUid + ' ' + saving.message.key]: uid })); }}
+      onClose={() => setSaving(null)} />}
   </div>;
 }

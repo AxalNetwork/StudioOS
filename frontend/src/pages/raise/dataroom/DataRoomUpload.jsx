@@ -10,6 +10,7 @@ import { storageRefusal } from '../../account/storagePageModel.js';
 import { GATES, MAX_UPLOAD_MB, QUEUE_WORDS, folderChoices, queueEntry, queueStorage, storageLine, uploadRefusal, uploadStorage } from './filesModel.js';
 import { roomCan } from './dataRoomModel.js';
 import { useVenture } from '../../cycles/VentureContext.jsx';
+import DataRoomFromGoogle from './DataRoomFromGoogle.jsx';
 
 /**
  * D1106 (#2986) — DR4, Upload: the sheet at `/raise/data-room/new`, in place of
@@ -28,6 +29,11 @@ import { useVenture } from '../../cycles/VentureContext.jsx';
  * queue. An unreadable or unrecorded figure says so and never blocks: the
  * Worker's refusal at upload (D1170/D1171, `StorageRefusal` under the file)
  * still stands behind it.
+ *
+ * D6075 (#6075) — DR30: From Google, for a member whose Google account is
+ * connected (`DataRoomFromGoogle`): Drive files copied once into the room,
+ * each "From Google Drive, as of <date>", behind the NDA and private until
+ * opened. It reads Google on its own and never blocks the upload.
  */
 
 const INPUT = 'min-h-[36px] w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -159,7 +165,7 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
           </p>
         ) : null}
         <p className={`m-0 text-[12px] ${MUTED}`} data-testid="dataroom-upload-storage">{read.status === 'ready' ? storageLine(read.room) : `Each file can be up to ${MAX_UPLOAD_MB} MB.`}</p>
-        <p className={`m-0 text-[12px] ${MUTED}`}>Files from Google Drive or Notion are not added here yet; that comes with the file sources (part 4).</p>
+        {read.status === 'ready' ? <DataRoomFromGoogle projectId={projectId} onCopied={() => { setStorageTick((t) => t + 1); onSaved(); }} /> : null}
 
         {queue.length ? (
           <section className="flex flex-col gap-1.5" data-testid="dataroom-upload-queue">

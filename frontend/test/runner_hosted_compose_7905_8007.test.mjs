@@ -33,6 +33,9 @@ function world(id) {
     readProvenance: async () => doc({ claims, run, job }),
     readBoundary: async () => doc({ kind: 'trusted-native-inspection', policyDigest: DIGEST, jobId: 909, instanceId: 'simulated-boundary',
       scope: 'dependency-install-and-tests', deniesRunnerAgent: true, deniesJobCredentials: true, deniesOidc: true, deniesAppCapabilities: true, deniesHostControl: true }),
+    // #8345: admission (before checkout) reads boundary READINESS only; no instance exists yet.
+    readBoundaryReadiness: async () => doc({ kind: 'trusted-native-readiness', policyDigest: DIGEST, jobId: 909,
+      scope: 'dependency-install-and-tests', deniesRunnerAgent: true, deniesJobCredentials: true, deniesOidc: true, deniesAppCapabilities: true, deniesHostControl: true }),
     readIncludedEligibility: async () => doc({ jobId: 909, runnerGroupId: 6, provider: 'github-hosted', billingLane: 'included-compute',
       reservation: 'active', overageAllowed: false, stopAtLimitVerified: true, validUntil: NOW + 60_000 }),
   };
@@ -94,8 +97,8 @@ test('compose: S09 catalog profiles satisfy S30 target checks, and the adapter v
 
 test('compose: missing boundary, self-hosted substitution and stale evidence refuse through the real S09 admission', async () => {
   const cases = [
-    ['no boundary reader', r => { delete r.readBoundary; }],
-    ['tests-only boundary', r => { const b = r.readBoundary; r.readBoundary = async a => ({ ...await b(a), scope: 'tests-only' }); }],
+    ['no boundary readiness reader', r => { delete r.readBoundaryReadiness; }],
+    ['tests-only boundary readiness', r => { const b = r.readBoundaryReadiness; r.readBoundaryReadiness = async a => ({ ...await b(a), scope: 'tests-only' }); }],
     ['self-hosted job', r => { const p = r.readProvenance; r.readProvenance = async a => { const d = await p(a); d.job.labels.push('self-hosted'); return d; }; }],
     ['stale provenance', r => { const p = r.readProvenance; r.readProvenance = async a => ({ ...await p(a), observedAt: NOW - 30_001 }); }],
     ['no check-run claim', r => { const p = r.readProvenance; r.readProvenance = async a => { const d = await p(a); delete d.claims.check_run_id; return d; }; }],

@@ -159,6 +159,8 @@ export interface Env {
   CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
   /** D8073: the bearer token the production deploy job records a deploy with. Unset, the record refuses. */
   DEPLOY_RECORD_TOKEN?: string;
+  /** D8080: the bearer token the deploy job syncs the agent registry with. Unset, the sync refuses. */
+  AGENT_REGISTRY_TOKEN?: string;
   // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
   // generates it per deployment, puts the plaintext here and writes its SHA-256
   // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on

@@ -17,6 +17,9 @@ function fixture() {
     readOrderedList: async () => state.ordered.map(number => ({ number, tier: 'T1', modelChanged: false, ...state.listOverrides.get(number) })),
     readMainHealth: async () => ({ mainRuns: [state.main], openAlertTitles: [], recentGroupRuns: state.groups }),
     readQueueState: async () => ({ freeQueueSlots: state.freeSlots }),
+    // #8076: an empty queue and no slot, so the admission holds never apply here (landing_concurrency_8076 covers them).
+    readQueueEntries: async () => [],
+    readOwningSlot: async () => '',
     readLandingDecision: async number => {
       const sha = state.sha.get(number) ?? head;
       return { mayQueue: state.gates.get(number) ?? true, pr: { number, head_sha: sha }, report: { headSha: sha, tier: 'T1' } };

@@ -43,7 +43,7 @@ export const BUILD_ASKS = Object.freeze({
     'Explain the nearest filing deadline',
     'Prepare the checklist wording for the next filing',
   ]),
-  // BD20's Systems and Cadence are one page until #5078 splits them: both tabs' asks, Systems first.
+  // BD20's Systems and Cadence share the module's one rail (D5078 split them into sections, not pages): both sections' asks, Systems first.
   'operating-systems': Object.freeze([
     'Which systems still need connecting?',
     'What breaks if a system stays disconnected?',
