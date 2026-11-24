@@ -26,6 +26,7 @@ import { runChannelJob } from '../src/services/channels/jobs.ts';
 
 import { withGuard } from './_guard_stub.mjs';
 import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
 export const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
 export const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
@@ -55,6 +56,7 @@ export const SECRET_VALUES = [SECRETS.TELEGRAM_CHANNEL_BOT_TOKEN, SECRETS.TELEGR
 
 export async function world(opts: { seed?: boolean; budget?: number } = {}) {
   const { DB, db } = aiBudgetFixture();
+  applySuppressionLedger(db); // D6654: the record-erasure path writes its ledger row.
   db.exec(`
     ALTER TABLE users ADD COLUMN founder_id INTEGER;
     ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;

@@ -12,8 +12,8 @@ import AuthShell, { AuthCard } from '../components/auth/AuthShell';
 import { registrationRef } from '../lib/referralRef';
 import { subscribe as subscribeConsent } from '../lib/cookieConsent';
 import { planIntentFrom } from '../lib/planIntent';
-import { LANES, LANE_ROLE, MEMBERSHIP_STEPS, REGISTER_ACTIONS, registerHeading } from '../lib/registerCopy';
-import { RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
+import { LANE_ROLE, MEMBERSHIP_STEPS, REGISTER_ACTIONS, SPINOUT_LAB_PRODUCT, SPINOUT_LAB_SIGNUP, laneForVisit, registerHeading } from '../lib/registerCopy';
+import { RegistrationContext, RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -85,18 +85,17 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const l = params.get('lane');
-    if (l && LANES.includes(l)) {
-      setLane(l);
-      try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: l, ts: Date.now() })); } catch {}
-    } else {
-      try {
-        const saved = safeReadJSON('gvpn:intent', null);
-        if (saved?.lane) setLane(saved.lane);
-      } catch {}
+    // #6984 (X2): the address's lane always wins and is stored with its time; a stored lane is used only when the
+    // address names none and it is under 24 hours old (`laneForVisit`), so an old click does not head a plain link.
+    let saved = null;
+    try { saved = safeReadJSON('gvpn:intent', null); } catch {}
+    const visit = laneForVisit(window.location.search, saved);
+    if (visit.lane) setLane(visit.lane);
+    if (visit.store) {
+      try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: visit.lane, ts: Date.now() })); } catch {}
     }
     const p = params.get('product');
-    if (p === 'spinout-lab') setProductIntent('spinout-lab');
+    if (p === SPINOUT_LAB_PRODUCT) setProductIntent(SPINOUT_LAB_PRODUCT);
     // Task #1 — persist the `?next=` return path across the email/OAuth
     // round-trip (open-redirect-safe: same-origin paths only).
     const nx = sanitizeNextPath(params.get('next'));
@@ -133,7 +132,8 @@ export default function RegisterPage() {
     track('register_form_start');
   };
 
-  const heading = registerHeading(lane, planIntent ? selection : null);
+  const heading = registerHeading(lane, planIntent ? selection : null, productIntent);
+  const forLab = productIntent === SPINOUT_LAB_PRODUCT;
   // #4579 (D4579): a kept destination in a named area (Grow) is said out loud, with the account it needs.
   const destination = destinationArea(nextPath);
 
@@ -340,10 +340,21 @@ export default function RegisterPage() {
           {step === 1 && (
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">{heading.title}</h2>
+              {/* #6984 (X2): the role and the plan this sign-up carries, one line; the plan only as the catalogue returned it. */}
+              <RegistrationContext lane={lane} selection={planIntent ? selection : null} />
+              {/* D6989 (#6989): the programme this sign-up is for, one line. */}
+              {forLab && <p className="text-sm font-semibold text-gray-800 mb-1" data-testid="register-programme">{SPINOUT_LAB_SIGNUP.context}</p>}
               {/* Task #10 — audit's exact subhead copy (fix 10). */}
               <p className="text-sm text-gray-600 mb-2">{heading.desc}</p>
               {/* #4578: the steps after this page, so "create an account" is not read as membership. */}
-              <p className="text-xs text-gray-500 mb-4" data-testid="register-membership-steps">{MEMBERSHIP_STEPS}</p>
+              {/* D6989: applying to the Lab, the same steps as labelled stages, in the order the code allows. */}
+              {forLab ? (
+                <ol className="text-xs text-gray-600 mb-4 list-decimal pl-5 space-y-0.5" aria-label="How applying works" data-testid="register-lab-stages">
+                  {SPINOUT_LAB_SIGNUP.stages.map((s) => <li key={s}>{s}</li>)}
+                </ol>
+              ) : (
+                <p className="text-xs text-gray-500 mb-4" data-testid="register-membership-steps">{MEMBERSHIP_STEPS}</p>
+              )}
               {destination && (
                 <p className="text-sm text-gray-700 mb-4" data-testid="register-destination">
                   {`Create an account to continue to ${destination.name}. ${destination.what} ${destination.who} Once your account is set up, you return there.`}
@@ -351,12 +362,6 @@ export default function RegisterPage() {
               )}
 
               <RegistrationPlanBlock intent={planIntent} lane={lane} onSelection={setSelection} />
-
-              {productIntent === 'spinout-lab' && (
-                <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800">
-                  You're applying for <b>Spin-Out Lab</b> — our 28-day cohort.
-                </div>
-              )}
 
               {refCode && (
                 <div className="bg-violet-50 border border-violet-300 rounded-lg px-3 py-2 mb-4 text-xs text-violet-700">

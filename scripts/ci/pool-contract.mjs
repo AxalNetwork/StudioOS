@@ -39,7 +39,7 @@ export const PR_EVENTS = ['pull_request', 'pull_request_target', 'merge_group'];
 export const UNTRUSTED_GROUPS = ['untrusted'];
 export const TRUSTED_GROUPS = ['trusted'];
 /** The environments that deploy. Other environments (production-ops, landing-bot…) are #8069's. */
-export const DEPLOY_ENVIRONMENTS = ['production', 'pr-preview', 'agent-compute-preview'];
+export const DEPLOY_ENVIRONMENTS = ['production', 'preview', 'agent-compute-preview']; // D8069: preview (was pr-preview)
 /** GitHub-hosted labels: `ubuntu-24.04`, `ubuntu-latest`, `windows-…`, `macos-…`. */
 const HOSTED = /^(ubuntu|windows|macos)-[A-Za-z0-9.-]+$/;
 
@@ -55,6 +55,10 @@ export const EXCEPTIONS = [
   {
     workflow: 'ci.yml', job: 'digest', allow: ['write:pull-requests'], expires: '2027-01-31', owner: '#8072',
     reason: 'D5502: posts the CI failure digest comment on the failing pull request; it runs only after a failure and reads no secret.',
+  },
+  {
+    workflow: 'landing-policy.yml', job: 'label', allow: ['write:pull-requests'], expires: '2027-01-31', owner: '#8067',
+    reason: 'D8067: sets or clears the pr:privileged label from the policy job\'s output; it checks out nothing, runs no repository code, reads no secret and skips forks.',
   },
   {
     workflow: 'codeql.yml', job: 'analyze', allow: ['write:security-events'], expires: '2027-01-31', owner: '#8072',

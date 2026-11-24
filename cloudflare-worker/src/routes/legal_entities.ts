@@ -27,9 +27,10 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import { catalogueForm } from '../services/formationCatalogue';
 import {
-  OBLIGATION_KINDS, OBLIGATION_CADENCES, US_PACKS, isoDate, daysUntil, nextDue, packObligations,
-  type ObligationCadence, type UsPack,
+  OBLIGATION_KINDS, OBLIGATION_CADENCES, isoDate, daysUntil, nextDue, cataloguePackObligations,
+  type ObligationCadence,
 } from '../services/entityObligations';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -375,8 +376,8 @@ app.post('/entities/:id/obligations', async (c) => {
   return c.json({ obligation: obligationOut(row, today()) }, 201);
 });
 
-// POST /api/legal/entities/:id/obligations/pack — seed a US pack (admin).
-// { pack: 'us_de_llc' | 'us_de_ccorp' }. Idempotent: an obligation already
+// POST /api/legal/entities/:id/obligations/pack — seed a catalogue pack (admin).
+// { pack: a catalogue form key }. Idempotent: an obligation already
 // on the calendar for its date is left alone. A rule dated from formation is
 // skipped, with its reason, when the entity records no formation date.
 app.post('/entities/:id/obligations/pack', async (c) => {
@@ -386,15 +387,16 @@ app.post('/entities/:id/obligations/pack', async (c) => {
   const entity = id ? await entityById(c.env, id) : null;
   if (!entity) return notFound(c);
   const b = await body(c);
-  const pack = typeof b.pack === 'string' && (US_PACKS as readonly string[]).includes(b.pack) ? b.pack as UsPack : null;
-  if (!pack) {
+  const pack = typeof b.pack === 'string' && /^[a-z0-9_]{1,64}$/.test(b.pack) ? b.pack : null;
+  const form = pack ? await catalogueForm(c.env, pack) : null;
+  if (!pack || !form) {
     return refuse(c, 400, {
       code: 'pack_unknown',
-      message: `The packs on file are ${US_PACKS.join(' and ')}. Another jurisdiction's pack is defined once at HQ, and that registry is not built yet.`,
+      message: 'Choose a form recorded in the current formation catalogue.',
     });
   }
   const on = today();
-  const { rows, skipped } = packObligations(pack, on, isoDate(String(entity.incorporation_date ?? '').slice(0, 10)));
+  const { rows, skipped } = await cataloguePackObligations(c.env, pack, on, isoDate(String(entity.incorporation_date ?? '').slice(0, 10)));
   const added: string[] = [];
   for (const r of rows) {
     const uid = crypto.randomUUID();

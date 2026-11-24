@@ -294,6 +294,21 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://www.typeform.com/developers/get-started/applications/' },
     verified_on: null,
   },
+  quickbooks: {
+    tagline: 'Read the QuickBooks Online profit and loss and balance sheet for this company.',
+    long_description: ['Sign in with Intuit and choose one QuickBooks company for this company. Axal VC reads its profit and loss and balance sheet for the periods you ask for, and keeps each version it reads.', 'Disconnecting revokes the grant at Intuit and removes the connection. The statements already read stay, with their versions.'],
+    tools: [],
+    never_does: ['StudioOS does not create, edit or delete a transaction, an invoice, a payment, a bill or a payroll record in QuickBooks, and reads no report but these two.'],
+    prompts: [],
+    prompts_reason: notRead('QuickBooks'),
+    made_by: AXAL,
+    service: { name: 'QuickBooks Online', href: 'https://quickbooks.intuit.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with Intuit', key_help_href: null },
+    endpoints: { sign_in: 'https://appcenter.intuit.com/connect/oauth2', api: 'https://quickbooks.api.intuit.com' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0' },
+    verified_on: null,
+  },
   lovable: {
     tagline: 'Works without signing in. Launch links and app links for your venture.',
     long_description: [

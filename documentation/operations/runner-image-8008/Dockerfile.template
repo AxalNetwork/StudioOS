@@ -1,0 +1,24 @@
+# D8008 review-only offline recipe. No build until verify-inputs.py --context passes.
+# rootfs.tar MUST have an approved immutable source, byte hash and complete package ledger.
+# FROM scratch avoids inherited Env/Volumes that violate verifiedContainer.
+FROM scratch
+ADD rootfs.tar /
+COPY node-v22.23.3-linux-x64.tar.gz /build-inputs/node.tar.gz
+COPY cpython-3.11.18+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz /build-inputs/python.tar.gz
+RUN printf '%s\n' \
+      '1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af  /build-inputs/node.tar.gz' \
+      '3288c54cea3db350052019b3f8b558dd8a3da8afa6fda573f5fd2bcb37635b4a  /build-inputs/python.tar.gz' \
+      | sha256sum -c - \
+    && mkdir -p /opt /usr/local/bin \
+    && tar -xzf /build-inputs/node.tar.gz -C /opt \
+    && tar -xzf /build-inputs/python.tar.gz -C /opt \
+    && ln -s /opt/node-v22.23.3-linux-x64/bin/node /usr/local/bin/node \
+    && ln -s /opt/node-v22.23.3-linux-x64/bin/npm /usr/local/bin/npm \
+    && ln -s /opt/node-v22.23.3-linux-x64/bin/npx /usr/local/bin/npx \
+    && ln -s /opt/python/bin/python3 /usr/local/bin/python3 \
+    && chown -R 0:0 /opt \
+    && chmod -R go-w /opt \
+    && rm -rf /build-inputs
+# Approved rootfs supplies passwd/group entries and non-writable /opt,/usr,/etc.
+USER 10001:10001
+# No ENV, VOLUME, entrypoint or writable caches. The reviewed supervisor supplies them.

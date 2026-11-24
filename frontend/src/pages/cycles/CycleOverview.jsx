@@ -79,20 +79,29 @@ export const CARD_CHART_LIMIT = 2;
  * both filled by the record through `slots` (`RecordHeader.jsx`); the module
  * tabs below are navigation only.
  */
-export function GrowSubsections({ search, active }) {
+/**
+ * #6090's subsection row. D6865 part 2 (#6891, GR-21): Customers' is Pipeline · Accounts · Feedback, with the
+ * Feedback count when the page has it (`counts`, by key); a tab with no page (`unbuilt`) is drawn, not linked.
+ */
+export function GrowSubsections({ search, active, counts = null }) {
   const tabs = growSubsections(search, active);
   if (!tabs.length) return null;
   return (
-    <nav aria-label={tabs[0].name + ' pages'} className="flex min-w-0 flex-wrap gap-2" data-testid="grow-subsections">
-      {tabs.map(tab => <Link key={tab.key} to={tab.href} aria-current={tab.active ? 'page' : undefined}
+    <nav aria-label={(tabs[0].group || tabs[0].name) + ' pages'} className="flex min-w-0 flex-wrap gap-2" data-testid="grow-subsections">
+      {tabs.map(tab => tab.unbuilt
+        ? <span key={tab.key} aria-disabled="true" title={tab.unbuilt} data-testid={`grow-subsection-${tab.key}`}
+          className="inline-flex min-h-[44px] cursor-not-allowed items-center rounded-lg border border-axal-hairline px-3 text-sm font-semibold text-axal-muted opacity-70 dark:border-gray-700 dark:text-gray-500">
+          {tab.name}<span className="sr-only"> · {tab.unbuilt}</span>
+        </span>
+        : <Link key={tab.key} to={tab.href} aria-current={tab.active ? 'page' : undefined}
         className={`inline-flex min-h-[44px] items-center rounded-lg border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 ${tab.active ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}>
-        {tab.name}
+        {tab.name}{counts && counts[tab.key] != null ? <span className="ml-1.5 font-mono text-[11px] opacity-75" data-testid={`grow-subsection-count-${tab.key}`}>{counts[tab.key]}</span> : null}
       </Link>)}
     </nav>
   );
 }
 
-export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
+export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null, tabCounts = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
   const sidebarLists = useSidebarListsSubpages(`/${meta.key}`);
@@ -163,7 +172,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           })}
         </select>
       </label>
-      {meta.key === 'grow' && !record && <GrowSubsections search={search} active={active} />}
+      {meta.key === 'grow' && !record && <GrowSubsections search={search} active={active} counts={tabCounts} />}
     </header>
   );
 }

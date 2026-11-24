@@ -16,6 +16,7 @@
  */
 import type { Env } from '../types';
 import { STANDARD_EVENTS } from '../routes/compliance';
+import { formationPack } from './formationPacks';
 
 export const OBLIGATION_KINDS = [
   'franchise_tax', 'registered_agent', 'annual_report', 'board_meeting', 'regulatory_filing', 'other',
@@ -71,6 +72,7 @@ export type PackSkip = { title: string; reason: string };
  * a registered-agent renewal a year from the day someone pressed a button is
  * a date nobody owes.
  */
+/** Legacy pure compatibility/parity helper; production uses cataloguePackObligations. */
 export function packObligations(pack: UsPack, today: string, formationDate: string | null): { rows: PackRow[]; skipped: PackSkip[] } {
   const rows: PackRow[] = [];
   const skipped: PackSkip[] = [];
@@ -102,6 +104,27 @@ export function packObligations(pack: UsPack, today: string, formationDate: stri
     rows.push({ kind, title: spec.title, cadence, due_date: due, pack_key: `${pack}:${spec.event_type}`, note: spec.description ?? null });
   }
   return { rows, skipped };
+}
+
+/** Production pack read: catalogue-backed, including an explicit reason for every undated item. */
+export async function cataloguePackObligations(env: Env, pack: string, today: string, formationDate: string | null): Promise<{ rows: PackRow[]; skipped: PackSkip[] }> {
+  const items = await formationPack(env, pack, { today, registeredOn: formationDate });
+  return {
+    rows: items.filter(item => item.due_date != null).map(item => ({
+      kind: item.kind as ObligationKind, title: item.title, cadence: item.recurrence as ObligationCadence,
+      due_date: (() => {
+        let due = item.due_date!;
+        for (let i = 0; due < today && i < 200; i++) {
+          const next = nextDue(due, item.recurrence as ObligationCadence);
+          if (!next) break;
+          due = next;
+        }
+        return due;
+      })(), pack_key: `${pack}:${item.key.startsWith('compliance_event_') && pack.startsWith('us_') ? item.kind : item.key}`, note: item.description,
+    })),
+    skipped: items.filter(item => item.due_date == null).map(item => ({ title: item.title,
+      reason: item.rule == null ? 'no source-backed deadline is recorded in the catalogue' : 'the required formation date or a valid deadline rule is not recorded' })),
+  };
 }
 
 export type NextObligation = { kind: string; due_date: string; days_left: number };

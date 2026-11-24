@@ -42,6 +42,8 @@ function fixture() {
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(sql('migrations/202611092035_research_projects.sql'));
   db.exec(sql(MIGRATION));
+  // D7817: the attachment table and the additive citation and finding columns.
+  db.exec(sql('migrations/202611211307_7817_research_project_attachments.sql'));
   db.exec("INSERT INTO users (id,email,name,role) VALUES (701,'owner@example.test','Owner','founder'),(702,'other@example.test','Other','founder')");
   db.exec(`INSERT INTO research_documents (id,uid,owner_user_id,title,r2_key,index_state,created_at) VALUES
     (1,'doc-indexed',701,'EU Data Act','r/1','indexed','2026-11-01 10:00:00'),
@@ -169,6 +171,8 @@ test('a source fact stands on a passage the project holds; a conclusion may stan
   assert.deepEqual(read.items[1].citations[0], {
     n: 1, document_uid: 'doc-indexed', title: 'EU Data Act', passage: 'This Regulation shall apply from 12 September 2025.', page: 4,
     answer_uid: 'ans-cited', availability: 'available', in_evidence: true, index_state: 'indexed', in_ask: true, source_year: null,
+    // D7817, additive: a document citation names no attached source.
+    kind: 'document', state: 'available', attachment_uid: null, source_key: null, url: null, retrieved_at: null,
   });
   assert.deepEqual(receipts(f).filter((a) => a.includes('finding')), ['research_project_finding_added', 'research_project_finding_added']);
   assert.doesNotMatch(JSON.stringify(rows(f, 'SELECT details FROM activity_logs')), /Data Act applies/, 'the receipt carries no finding text');
@@ -282,4 +286,12 @@ test('readText and resolveCitations refuse what is not text or not the projectâ€
   assert.deepEqual(resolveCitations('nope', answers, evidence), { error: 'invalid_citations' });
   assert.deepEqual(resolveCitations([{ answer_uid: 'a1', n: '1' }], answers, evidence), { error: 'citation_not_in_project' });
   assert.deepEqual(resolveCitations(undefined, answers, evidence), { citations: [] });
+  // D7817: an attached source is cited only when the project holds its copy and the copy recorded it as fetched.
+  const copy = { sources: [{ key: 's1', url: 'https://a.example', title: 'A', fetched: true, retrieved_at: '2026-11-10' }, { key: 's2', url: 'https://b.example', title: 'B', fetched: false, retrieved_at: null }] } as any;
+  const attached = new Map([['att', { id: 5, uid: 'att', copy }]]);
+  assert.deepEqual(resolveCitations([{ attachment_uid: 'att', source_key: 's1' }], answers, evidence), { error: 'citation_not_in_project' });
+  // Mutation checked: drop the fetched check in citableSource â†’ this resolves.
+  assert.deepEqual(resolveCitations([{ attachment_uid: 'att', source_key: 's2' }], answers, evidence, attached), { error: 'citation_not_in_project' });
+  assert.deepEqual(resolveCitations([{ attachment_uid: 'att', source_key: 's1' }], answers, evidence, attached).citations?.map((c) => [c.title, c.passage, c.attachment_id, c.source_key, c.source_url, c.retrieved_at]),
+    [['A', null, 5, 's1', 'https://a.example', '2026-11-10']]);
 });

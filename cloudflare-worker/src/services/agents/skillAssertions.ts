@@ -40,7 +40,8 @@
  *                  and a list or a table in the output
  *   evidence       the records the output must cite, as `[read.key]` or
  *                  `[source: read.key.path]`; a citation of anything the
- *                  case's records do not hold fails
+ *                  case's records do not hold fails. D7700 (judge version 5)
+ *                  also accepts exact stable passage refs in the selected reader document
  *   refusal        ask for a missing input, decline an unsupported conclusion,
  *                  say Not recorded, or (`none`) do not refuse
  *   claims         required and forbidden claims, each a subject and an
@@ -51,7 +52,7 @@
  *                  subset of JSON Schema
  */
 
-export const JUDGE_VERSION = 4;
+export const JUDGE_VERSION = 5;
 /**
  * The optional assertion keys of a case's `expect`, in the order `judge()`
  * evaluates them. `skillCatalogue.ts` counts them as evaluated, and the HQ case
@@ -113,7 +114,7 @@ export function missingDataMiss(field: string, parts: readonly string[]): string
   const named = parts.filter((p) => f.test(p));
   const says = named.filter((p) => p.includes(NOT_RECORDED_MARK));
   if (!says.length) return `It did not say ${field} is not recorded.`;
-  const invented = named.find((p) => !p.includes(NOT_RECORDED_MARK) && FIGURE.test(p) && !CONDITIONAL.test(p));
+  const invented = named.find((p) => !p.includes(NOT_RECORDED_MARK) && FIGURE.test(p.replace(/\[data_room_passage:[a-f0-9]{32}:[0-9]+\]/g, '')) && !CONDITIONAL.test(p));
   if (invented) return `It said ${field} is not recorded and also gave it a value.`;
   return null;
 }
@@ -299,9 +300,27 @@ export function structureMiss(a: StructureAssertion, output: string): string | n
 export const CITES_MAX = 20;
 export type EvidenceAssertion = { cite: string[] };
 const PATH = /^[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)+$/i;
+// D7700 (#7700): resolve a stable passage only inside the selected reader document.
+const PASSAGE = /^data_room_passage:([a-f0-9]{32}):(\d{1,4})$/i;
+const citationRef = (value: string) => PATH.test(value) || PASSAGE.test(value);
+// A malformed tag in this explicit namespace is still a citation to reject.
+const citationLike = (value: string) => citationRef(value) || value.toLowerCase().startsWith('data_room_passage:');
+
 
 /** Whether `path` names something the records hold: the longest read key that prefixes it, then keys and indexes. */
 export function resolves(path: string, records: Record<string, unknown>): boolean {
+  const passage = PASSAGE.exec(path);
+  if (passage) {
+    const block = obj(records['data_room.index']), document = obj(block?.document);
+    if (block?.document_status !== 'read' || document?.file_uid !== passage[1].toLowerCase()
+      || document?.ref !== `data_room_file:${passage[1].toLowerCase()}` || !Array.isArray(document?.passages)) return false;
+    return document.passages.some((raw) => {
+      const p = obj(raw);
+      return typeof p?.ref === 'string' && p.ref.toLowerCase() === path.toLowerCase()
+        && p.seq === Number(passage[2]) && typeof p.text === 'string' && p.text.length > 0;
+    });
+  }
+
   const seg = path.toLowerCase().split('.');
   const keyOf = (o: object, k: string) => Object.keys(o).find((x) => x.toLowerCase() === k);
   for (let k = seg.length; k >= 1; k -= 1) {
@@ -328,19 +347,19 @@ export function citations(p: string): string[] {
     const inner = m[1] ?? m[2];
     const prefixed = m[2] != null || /^\s*sources?\s*:/.test(inner);
     const pieces = inner.replace(/^\s*sources?\s*:/, '').split(',').map((x) => x.trim()).filter(Boolean);
-    if (prefixed || (pieces.length && pieces.every((x) => PATH.test(x)))) out.push(...pieces);
+    if (prefixed || (pieces.length && pieces.every((x) => citationLike(x)))) out.push(...pieces);
   }
   return out;
 }
 
 export function checkEvidence(raw: unknown, records: Record<string, unknown>): Checked<EvidenceAssertion> {
-  const msg = `Give evidence as { cite: [1 to ${CITES_MAX} record paths, such as "mercury.balances" or "grow.records.kpis.0"] }.`;
+  const msg = `Give evidence as { cite: [1 to ${CITES_MAX} record paths or selected data_room_passage references, such as "mercury.balances" or "grow.records.kpis.0"] }.`;
   const b = obj(raw);
   if (!b || !onlyKeys(b, ['cite']) || !Array.isArray(b.cite) || !b.cite.length || b.cite.length > CITES_MAX) return wrong(msg);
   const cite: string[] = [];
   for (const c of b.cite) {
     const t = typeof c === 'string' ? c.trim() : '';
-    if (!t || t.length > 200 || !PATH.test(t)) return wrong(msg);
+    if (!t || t.length > 200 || !citationRef(t)) return wrong(msg);
     if (!resolves(t, records)) return wrong(`The case asks for a citation of ${t}, which its records do not hold.`);
     if (cite.some((x) => x.toLowerCase() === t.toLowerCase())) return wrong(`The case asks for ${t} twice.`);
     cite.push(t);
@@ -351,7 +370,7 @@ export function checkEvidence(raw: unknown, records: Record<string, unknown>): C
 /** Why the output's citations miss, or null. */
 export function evidenceMiss(a: EvidenceAssertion, parts: readonly string[], records: Record<string, unknown> | null): string | null {
   if (!records) return 'The case has no records to check its citations against.';
-  for (const p of parts) for (const c of citations(p)) if (!PATH.test(c) || !resolves(c, records)) return `It cited [${c}], which the case's records do not hold.`;
+  for (const p of parts) for (const c of citations(p)) if (!citationRef(c) || !resolves(c, records)) return `It cited [${c}], which the case's records do not hold.`;
   for (const want of a.cite ?? []) {
     const w = want.toLowerCase();
     if (!parts.some((p) => !CONDITIONAL.test(p) && citations(p).some((c) => c === w || c.startsWith(`${w}.`)))) return `It did not cite [${want}].`;

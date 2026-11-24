@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { licenceFeeInvoicesApi } from '../../lib/api/licenceFeeInvoices';
+import { licencePricingApi } from '../../lib/api/licencePricing.js';
 import { Pill } from '../../ui';
 import { useConsequenceSheet } from './LicenceConsequenceSheet';
 import LicenceOutcomeCard, { useLicenceWrite } from './LicenceOutcomeCard';
-import { FEE_CHANGE_NOTE, feeLine, invoiceStatus, money, paidLine, parseAmount, voidLine } from './licenceFeeInvoicesModel';
+import { FEE_CHANGE_NOTE, feeLine, invoiceStatus, money, paidLine, parseAmount, splitInvoices, voidLine } from './licenceFeeInvoicesModel';
 import { TryAgain } from './licences/LicenceOverview';
-import { toMajorString } from '../../lib/money.js';
+import LicenceInitialInvoice, { PaymentForm } from './LicenceInitialInvoice';
 
 /**
  * D802 (#2238) — HQ's "Annual fee invoices" on a licence: one invoice per
@@ -19,10 +20,22 @@ import { toMajorString } from '../../lib/money.js';
  * a reason before it sends. A void invoice shows the reason it was voided. The
  * foot says what Void records and that an issued invoice keeps its fee. A
  * failed read says so with Try again; it is never "no invoices".
+ *
+ * D5956 (#5956), boards L41 to L45 — the one-off initial invoice (D5954) is its own card above the annual list, which
+ * no longer lists it. The card reads the pricing decision apart (`GET /:uid/pricing`), so the two load and fail apart.
  */
 // `today` (a UTC day) is the Worker's own clock for Overdue (D5036); a test passes it.
-export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesApi, today = new Date().toISOString().slice(0, 10) }) {
+export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesApi, pricingApi = licencePricingApi, today = new Date().toISOString().slice(0, 10) }) {
   const [read, setRead] = useState({ status: 'loading', data: null, message: '' });
+  const [pricing, setPricing] = useState({ status: 'loading', data: null });
+  const loadPricing = useCallback(() => {
+    setPricing((p) => (p.status === 'ready' ? p : { status: 'loading', data: null }));
+    return Promise.resolve().then(() => pricingApi.get(licence.uid)).then(
+      (data) => setPricing({ status: 'ready', data }),
+      () => setPricing({ status: 'unreadable', data: null }),
+    );
+  }, [pricingApi, licence.uid]);
+  useEffect(() => { loadPricing(); }, [loadPricing]);
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState(null);
   const load = useCallback(() => {
@@ -39,6 +52,11 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   const issue = async () => {
     const out = await ask('issueInvoice', licence, { target: { amount: money(read.data?.annual_fee_cents, read.data?.currency) } });
     if (out) await write.run('issueInvoice', () => api.issue(licence.uid));
+  };
+  // D5956: the review sheet (L42) names the two lines and the total as the card drew them; the Worker's refusal is shown as given.
+  const issueInitial = async (card) => {
+    const out = await ask('issueInitialInvoice', licence, { target: { lines: card.lines, total: card.total, nrSurcharge: card.nrSurcharge } });
+    if (out) await write.run('issueInitialInvoice', () => api.issueInitial(licence.uid));
   };
   const voidOne = async (inv) => {
     const out = await ask('voidInvoice', licence, { target: inv });
@@ -60,20 +78,36 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
     finally { setBusy(false); }
   };
 
-  if (read.status === 'loading') return <p className="text-sm text-gray-600" data-testid="fee-invoices-loading">Reading the invoices…</p>;
+  const download = (inv) => act(async () => {
+    const { blob, filename } = await api.pdfBlob(licence.uid, inv.uid);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'PDF downloaded.');
+  const record = (inv, cents, note) => act(() => api.recordPayment(licence.uid, inv.uid, cents, note, inv.revision), 'Payment recorded.');
+  const initialCard = (
+    <LicenceInitialInvoice licence={licence} invoicesRead={read} pricingRead={pricing} today={today} busy={busy || write.busy}
+      onIssue={issueInitial} onVoid={voidOne} onRecord={record} onPdf={download}
+      onRetry={() => { load(); loadPricing(); }} />
+  );
+  if (read.status === 'loading') return <div>{initialCard}<p className="text-sm text-gray-600" data-testid="fee-invoices-loading">Reading the invoices…</p></div>;
   if (read.status !== 'ready') {
     return (
-      <p className="text-sm text-red-700" role="alert" data-testid="fee-invoices-unreadable">
-        The invoices could not be read, so whether any is issued or owed is unknown — not none. {read.message}{' '}
-        <TryAgain what="the invoices" onClick={() => { setRead({ status: 'loading', data: null, message: '' }); load(); }} />
-      </p>
+      <div>
+        {initialCard}
+        <p className="text-sm text-red-700" role="alert" data-testid="fee-invoices-unreadable">
+          The invoices could not be read, so whether any is issued or owed is unknown — not none. {read.message}{' '}
+          <TryAgain what="the invoices" onClick={() => { setRead({ status: 'loading', data: null, message: '' }); load(); }} />
+        </p>
+      </div>
     );
   }
   const fee = feeLine(read.data);
-  const invoices = Array.isArray(read.data.invoices) ? read.data.invoices : [];
+  const invoices = splitInvoices(read.data.invoices).annual;
   return (
     <div data-testid="fee-invoices">
       {sheet}
+      {initialCard}
       <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Annual licence-fee invoices</h3>
       {fee && <p className={`mt-1 text-[12.5px] ${fee.ok ? 'text-gray-600 dark:text-gray-400' : 'text-amber-800'}`} data-testid="fee-invoices-fee">{fee.text}</p>}
       <div className="mt-3">
@@ -89,7 +123,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
           className={`mt-2 text-[12.5px] ${outcome.tone === 'error' ? 'text-red-700' : 'text-emerald-700'}`}>{outcome.text}</p>
       )}
       {invoices.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-600" data-testid="fee-invoices-empty">No invoice has been issued on this licence yet.</p>
+        <p className="mt-3 text-sm text-gray-600" data-testid="fee-invoices-empty">No annual invoice has been issued on this licence yet.</p>
       ) : (
         <table className="mt-3 w-full text-left text-[12.5px]" data-testid="fee-invoices-table">
           <thead>
@@ -99,7 +133,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
             </tr>
           </thead>
           <tbody>
-            {invoices.map((inv) => <InvoiceRow key={inv.uid} inv={inv} licence={licence} api={api} busy={busy || write.busy} act={act} today={today} onVoid={voidOne} />)}
+            {invoices.map((inv) => <InvoiceRow key={inv.uid} inv={inv} busy={busy || write.busy} today={today} onVoid={voidOne} onPdf={download} onRecord={record} />)}
           </tbody>
         </table>
       )}
@@ -108,18 +142,9 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   );
 }
 
-function InvoiceRow({ inv, licence, api, busy, act, today, onVoid }) {
+function InvoiceRow({ inv, busy, today, onVoid, onPdf, onRecord }) {
   const status = invoiceStatus(inv, today);
   const [mode, setMode] = useState(null);
-  const [amount, setAmount] = useState(inv.paid_cents > 0 ? toMajorString(inv.paid_cents, inv.currency) ?? '' : '');
-  const [note, setNote] = useState('');
-  const cents = parseAmount(amount, inv.currency);
-  const download = () => act(async () => {
-    const { blob, filename } = await api.pdfBlob(licence.uid, inv.uid);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, 'PDF downloaded.');
   return (
     <>
       <tr className="border-t border-gray-100 dark:border-gray-800" data-testid={`fee-invoice-${inv.uid}`}>
@@ -130,23 +155,14 @@ function InvoiceRow({ inv, licence, api, busy, act, today, onVoid }) {
         <td className="py-1.5 pr-3">{paidLine(inv)}</td>
         <td className="py-1.5 pr-3"><Pill tone={status.tone}>{status.word}</Pill>{status.overdue && <div className="text-[11px] text-red-700 dark:text-red-300" data-testid="fee-invoice-overdue">{status.days} {status.days === 1 ? 'day' : 'days'} past due</div>}{inv.status === 'void' && <div className="text-[11px] text-gray-600 dark:text-gray-400" data-testid="fee-invoice-void-reason">{voidLine(inv)}</div>}</td>
         <td className="py-1.5">
-          {inv.pdf_url && <button type="button" className="mr-2 underline" disabled={busy} onClick={download} data-testid="fee-invoice-pdf">PDF</button>}
+          {inv.pdf_url && <button type="button" className="mr-2 underline" disabled={busy} onClick={() => onPdf(inv)} data-testid="fee-invoice-pdf">PDF</button>}
           {inv.status !== 'void' && <button type="button" className="mr-2 underline" onClick={() => setMode(mode === 'pay' ? null : 'pay')} data-testid="fee-invoice-record">Record payment</button>}
           {inv.status !== 'void' && inv.paid_cents === 0 && <button type="button" className="underline text-red-700" disabled={busy} onClick={() => onVoid(inv)} data-testid="fee-invoice-void">Void…</button>}
         </td>
       </tr>
       {mode === 'pay' && (
         <tr><td colSpan={7} className="pb-2">
-          <form className="flex flex-wrap items-center gap-2" data-testid="fee-invoice-pay-form"
-            onSubmit={(e) => { e.preventDefault(); if (cents !== null) act(() => api.recordPayment(licence.uid, inv.uid, cents, note.trim(), inv.revision), 'Payment recorded.'); }}>
-            <label className="text-[12px]">Total received ({inv.currency})
-              <input className="ml-2 w-32 rounded border px-2 py-1 font-mono" inputMode="decimal" value={amount}
-                onChange={(e) => setAmount(e.target.value)} data-testid="fee-invoice-paid" aria-invalid={cents === null ? 'true' : undefined} />
-            </label>
-            <input className="w-56 rounded border px-2 py-1" placeholder="Bank reference (optional)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="fee-invoice-note" />
-            <button type="submit" className="rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={busy || cents === null} data-testid="fee-invoice-save">Save</button>
-            {cents === null && <span className="text-[12px] text-red-700" data-testid="fee-invoice-paid-error">Enter the total received, with at most two decimals.</span>}
-          </form>
+          <PaymentForm inv={inv} busy={busy} cents={(t) => parseAmount(t, inv.currency)} onSave={(paid, note) => onRecord(inv, paid, note)} />
         </td></tr>
       )}
     </>

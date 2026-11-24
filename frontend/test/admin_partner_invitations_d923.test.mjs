@@ -46,6 +46,7 @@ import {
   RESENT_NOT_RENEWED, RESENT_NOT_SENT_LINK, RESENT_ONBOARDING, RESENT_PLAIN, RESENT_RENEWED, listQuery, lookupChecks, noServerMatch, resendResult,
 } from '../src/pages/admin/partners/invitationsModel.js';
 import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -633,7 +634,7 @@ test('every wiring place D923 §1 names follows the page', () => {
   assert.doesNotMatch(sidebar, /'\/admin\/partners'/, 'Approvals no longer lights the page: exactly one row does');
   const placement = read('frontend/src/lib/adminPlacement.js');
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
-  assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
+  assert.match(approvalsPageSource(), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /'Partner invitations': '\/admin\/partner-invitations',/);
   // D4820: Community's door is a Manage Community row, "Open →" named "Open Partner invitations".
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\} aria-label=\{openLabel\('Partner invitations'\)\}>Open →<\/Link>/);

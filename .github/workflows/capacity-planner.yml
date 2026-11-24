@@ -1,10 +1,18 @@
-# D7973: uncalled, default-off planner preparation. Routing/cutover remains #7909.
-name: Inactive capacity planner
+# D7909: pinned opt-in pilot submission; ordinary CI never waits for this job.
+name: Capacity pilot planner
 on:
   workflow_call:
     inputs:
       submission:
         description: Exact original-run submission, checked by trusted code and the authority
+        type: string
+        required: true
+      executor_sha:
+        description: Reviewed main executor revision; authority verifies this independently
+        type: string
+        required: true
+      child_workflow_sha:
+        description: Separately approved direct main workflow revision
         type: string
         required: true
 permissions:
@@ -13,7 +21,7 @@ jobs:
   submit:
     if: >-
       github.repository == 'AxalNetwork/StudioOS' &&
-      (github.event_name == 'push' || github.event_name == 'merge_group') &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       vars.CI_CAPACITY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -26,8 +34,10 @@ jobs:
       CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
       CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
       CAPACITY_SUBMISSION: ${{ inputs.submission }}
+      CAPACITY_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+      CAPACITY_CHILD_WORKFLOW_SHA: ${{ inputs.child_workflow_sha }}
       CAPACITY_SOURCE_ROOT: ${{ github.workspace }}/candidate
-      CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
+      # #8148: runner context belongs to step env, never job env.
     steps:
       - name: Resolve this pinned reusable workflow revision from GitHub OIDC
         id: trusted
@@ -74,7 +84,7 @@ jobs:
         id: metadata
         env:
           CAPACITY_MODE: metadata
-          CAPACITY_EXECUTOR_SHA: ${{ steps.trusted.outputs.sha }}
+          CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
         run: node control/scripts/ci/capacity-planner.mjs
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: github.event_name == 'push'
@@ -85,5 +95,5 @@ jobs:
           path: ${{ runner.temp }}/capacity-plan
       - name: Submit once without waiting for external execution
         env:
-          CAPACITY_EXECUTOR_SHA: ${{ steps.trusted.outputs.sha }}
+          CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
         run: node control/scripts/ci/capacity-planner.mjs

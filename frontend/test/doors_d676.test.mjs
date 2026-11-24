@@ -216,11 +216,13 @@ test('the primary CTA is the lane link; every other CTA is a routed page', () =>
       assert.ok(routeBlock(to.split('?')[0]), `${k}: ${to} is not a route`);
       assert.ok(html.includes(`href="${attr(to)}"`), `${k}: links ${to}`);
     }
-    // #6983 (X1): a plan priced by agreement asks for contact instead; every other plan is the lane link.
+    // #6983 (X1): a plan priced by agreement asks for contact instead; every other plan opens the lane.
+    // #6984 (X2): a paid plan adds its plan and interval to it (register_intent_6984 pins those).
     const custom = (door.plans || []).filter((p) => p.custom).map((p) => attr(p.custom.to));
     for (const m of html.matchAll(/class="ax-door-plan[ "][\s\S]*?href="([^"]+)"/g)) {
       if (custom.includes(m[1])) continue;
-      assert.equal(m[1], attr(LANE[k]), `${k}: a plan's CTA is the lane link`);
+      const u = new URL(m[1].replace(/&amp;/g, '&'), 'https://x.test');
+      assert.equal(`${u.pathname}?lane=${u.searchParams.get('lane')}`, LANE[k], `${k}: a plan's CTA opens the lane`);
     }
   }
 });
