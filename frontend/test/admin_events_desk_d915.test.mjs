@@ -37,6 +37,7 @@ import {
 } from '../src/pages/admin/events/eventsDeskModel.js';
 import { SCOPE_LABEL as INSIGHTS_SCOPE_LABEL } from '../src/pages/admin/insights/insightsModel.js';
 import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -360,7 +361,7 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   assert.match(page, /<Link to="\/events\/new" className=\{actionGhost\} data-testid="events-new">New event<\/Link>/, 'New event, not "New studio event" (O-STU)');
   assert.doesNotMatch(page, /to="\/admin\/held\/community"/, 'the crumb links Community itself, not its redirect');
   // The Community doors keep /admin/events; Approvals' Events lane opens the Review tab (D1038).
-  assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /to="\/admin\/events\/review"/);
+  assert.match(approvalsPageSource(), /to="\/admin\/events\/review"/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /to="\/admin\/events"/);
 });
 

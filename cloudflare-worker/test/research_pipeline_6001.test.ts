@@ -35,7 +35,7 @@ function fixture() {
     'discovery_interviews', 'hypothesis_pain_links', 'competitor_analyses', 'competitor_candidates', 'competitor_signals',
     'waitlist_signups', 'metric_targets', 'interview_pain_severities', 'pain_group_aliases', 'competitor_sources',
     'validate_proposals']) db.exec(tableFromBaseline(BASE, t));
-  for (const m of ['311_revenue_entries.sql', '440_validate_cycle_stores.sql', '438_interview_sessions.sql']) db.exec(migration(m));
+  for (const m of ['311_revenue_entries.sql', '440_validate_cycle_stores.sql', '202611220319_6007_segment_primary_profile.sql', '438_interview_sessions.sql']) db.exec(migration(m));
   applySessionTranslationColumns(db);
   for (const m of ['447_assistant_interviews.sql', '453_interview_processing.sql', '531_meeting_bots.sql', '459_cycle_activity_convention.sql',
     '460_validate_record_stores.sql', '755_posthog_metrics.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',

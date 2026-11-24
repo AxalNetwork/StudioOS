@@ -15,6 +15,7 @@ import { PHONE_TABS, RATES, headerRow, sectionTab, tabOf } from '../cycles/recor
 import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
 import FormLightbox from '../cycles/FormLightbox';
 import { InterviewEvidenceFields, PainSeverity } from './validatePieces';
+import InterviewSaveFeedback from './InterviewSaveFeedback';
 import InterviewRecording from '../../workspaces/founder/InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
 import { useSessionPlayer } from './sessionPlayer.js';
@@ -162,7 +163,7 @@ function Frame({ section, testid, extra = null, children }) {
  * read fresh from the venture's interviews and found by id; an id that is not
  * there draws no control.
  */
-function InterviewTools({ projectId, interviewId, api, onChanged }) {
+function InterviewTools({ projectId, interviewId, api, onChanged, marks = [] }) {
   const location = useLocation();
   const [fillsOn] = useAssistMode('Validate');
   const [row, setRow] = useState(undefined);
@@ -189,6 +190,8 @@ function InterviewTools({ projectId, interviewId, api, onChanged }) {
                   onSave={(patch) => api.updateInterviewEvidence(row.id, patch).then(changed)} />
                 {pains.length > 0 && <PainSeverity interviewId={row.id} pains={pains} onChanged={changed} />}
                 <InterviewRecording interview={row} fillsOn={fillsOn} onChanged={changed} />
+                {/* D6865 part 2 (#6891, GR-25): a passage or a session mark, saved to Grow › Feedback with origin Interview. */}
+                <InterviewSaveFeedback projectId={projectId} interview={row} marks={marks} />
               </>
             )}
       </div>
@@ -439,7 +442,7 @@ export default function InterviewRecord({
   })}</> : null;
   // "Open the session" sits in ⋯ when a session is chosen (IV-D1).
   const extra = session ? [{ key: 'open-session', label: 'Open the session', href: `/validate/session/${encodeURIComponent(session.id)}` }] : [];
-  const tools = parts.tools ? <InterviewTools key="tools" projectId={projectId} interviewId={id} api={api} onChanged={reload} /> : null;
+  const tools = parts.tools ? <InterviewTools key="tools" projectId={projectId} interviewId={id} api={api} onChanged={reload} marks={detail?.marks} /> : null;
   const activityCard = <RecordActivity key="activity" rows={activity ?? read?.activity} total={read?.activity_total} cycleName={cycleName} moduleName={moduleName} onShowAll={onShowAll} />;
 
   if (phone) {

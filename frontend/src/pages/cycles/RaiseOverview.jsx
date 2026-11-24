@@ -13,8 +13,8 @@
  * and Related company setup. Every value is one of #5129's states (RA-08); the
  * page-level states are RA-09's.
  *
- * Below 1024px the page is the phone root (`PhoneCycleRoot.jsx`, D703),
- * unchanged: RA-11 is a later build. RA-10 (the Eadwyn rail) is #5130's and
+ * Below 1024px the page is the phone root (`PhoneCycleRoot.jsx`, D703), whose
+ * Raise branch is RA-11 (`RaisePhoneRoot.jsx`, D6047). RA-10 (the Eadwyn rail) is #5130's and
  * RA-12 (navigation) is #5081's, already in `CycleHeader`.
  *
  * A staff read (`read_only`, D1191) draws the amber Read only bar, no primary
@@ -103,7 +103,7 @@ export function RaiseOverviewBody({ raw, search = '', readOnly = false, onRetry,
   return (
     <>
       <RaiseJourney view={journey} />
-      <RaiseReadinessSummary view={readiness} search={s} onRetry={onRetryCard ? () => onRetryCard('fundraising-readiness') : onRetry} />
+      <RaiseReadinessSummary view={readiness} search={s} readOnly={readOnly} onRetry={onRetryCard ? () => onRetryCard('fundraising-readiness') : onRetry} />
       <RaiseNextActions view={nextActionsView(raw, s)} readOnly={readOnly} onRetry={onRetry} />
       <RaiseMaterials split={split} rows={split.table.map((c) => statusRow(c, s))} activity={raw?.investor_activity} search={s} readOnly={readOnly} onRetryCard={onRetryCard} />
       <RaiseInvestorActivity view={activity} openHref={moduleHref('capital-relationships', s)} addHref={capRelAddHref(s)} readOnly={readOnly} />

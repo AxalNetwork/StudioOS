@@ -83,7 +83,7 @@ test('a plan the catalogue does not sell is "Not offered yet"; a custom plan nev
   assert.equal(byId(inv, 'professional').price, '$149', 'the catalogue\'s $149, not the canvas\'s $150');
   const inst = byId(inv, 'institutional');
   assert.equal(inst.price, 'Custom');
-  assert.equal(inst.button.to, '/contact');
+  assert.equal(inst.button.to, '/contact?topic=invest'); // #6984 (X2): the invest topic
   // Advisor Pro and Operating Partner Pro are not in the catalogue yet.
   assert.equal(byId(cardsOf('advisor', {}), 'pro').button.label, 'Not offered yet');
   const op = byId(cardsOf('operating-partner', {}), 'pro');

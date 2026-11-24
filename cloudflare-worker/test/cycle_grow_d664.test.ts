@@ -146,6 +146,7 @@ async function fixture() {
   db.exec(file('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(file('462'));
   db.exec(file('202611161128_6865')); // D6865: the feedback's contact link and origin
+  db.exec(file('202611220349_6891')); // D6865 part 2 (#6891): the feedback's reply link, which POST /feedback writes
   db.exec(file('202611041912'));
   db.exec(file('507'));
   db.exec(file('580'));

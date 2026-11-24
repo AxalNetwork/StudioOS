@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, articles, eventsPublic, circlesPublic, jobsPublic } from './api';
+import { reportError } from './log';
 
 /**
  * The public Network section's live reads and figures (D679, #1553): the
@@ -7,9 +8,14 @@ import { api, articles, eventsPublic, circlesPublic, jobsPublic } from './api';
  *
  * Nothing here is content. Every list is a read the section's own pages
  * already make, and every figure is a count `GET /api/public/stats` returns.
- * A figure the endpoint does not return, or returns as zero, is not drawn;
- * a list that is empty or fails to load is an empty list, and the page says so
- * in one sentence.
+ * A figure the endpoint does not return, or returns as zero, is not drawn.
+ *
+ * D6992 (#6992): a read that FAILS is not an empty list. Each live read is in
+ * one of four states — `loading`, `loaded` (rows), `empty` (the read answered
+ * with none) and `unavailable` (the read failed) — and a page draws the empty
+ * sentence only for `empty`. `unavailable` draws "Unavailable. We could not
+ * load this list." with Try again (`ui/Honesty.jsx`). Before #6992 the hook
+ * caught a failure into `[]`, so a failed read said "No open roles right now."
  */
 
 export const words = (s) => String(s || '').replace(/_/g, ' ');
@@ -38,30 +44,114 @@ export function dirFigures(stats) {
     .filter((f) => f.value != null);
 }
 
-/** The counts `/api/public/stats` returns, or null while loading or on failure. */
-export function useSiteStats() {
-  const [stats, setStats] = useState(null);
+/** The four states of a live read (D6992). */
+export const READ_STATES = Object.freeze(['loading', 'loaded', 'empty', 'unavailable']);
+
+const LOADING = Object.freeze({ state: 'loading', items: null });
+
+/** A list's state once its read has answered: `loaded` with rows, `empty` with none. */
+export function listState(list) {
+  return Array.isArray(list) && list.length > 0 ? 'loaded' : 'empty';
+}
+
+/**
+ * Any list value as a read: `{ state, items, retry? }`. A read passes through;
+ * null or undefined is still loading; an array is its rows (`loaded` or
+ * `empty`). Anything else is not a list the page can draw, so it is
+ * `unavailable`, never an empty list.
+ */
+export function listRead(value) {
+  if (value == null) return LOADING;
+  if (Array.isArray(value)) return { state: listState(value), items: value };
+  if (typeof value === 'object' && READ_STATES.includes(value.state)) return value;
+  return { state: 'unavailable', items: null };
+}
+
+/**
+ * The stats as a read: `{ state, stats, retry? }`, state `loading`, `loaded`
+ * or `unavailable`. A bare stats object (what `useSiteStats` returns) is
+ * `loaded`; null is still loading.
+ */
+export function statsRead(value) {
+  if (value == null) return { state: 'loading', stats: null };
+  if (typeof value === 'object' && READ_STATES.includes(value.state) && 'stats' in value) return value;
+  return typeof value === 'object' ? { state: 'loaded', stats: value } : { state: 'unavailable', stats: null };
+}
+
+/**
+ * The counts `/api/public/stats` returns, as a read (D6992): `loading`, then
+ * `loaded` with the counts, or `unavailable` with `stats: null` when the read
+ * fails, answers non-2xx or answers something that is not an object. A failure
+ * is reported (`reportError`), not swallowed, and `retry` reads again. No
+ * state carries a zero: a failed read has no figures, not figures of 0.
+ */
+export function useSiteStatsRead() {
+  const [read, setRead] = useState({ state: 'loading', stats: null });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const ctrl = new AbortController();
     fetch('/api/public/stats', { signal: ctrl.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setStats(data && typeof data === 'object' ? data : null))
-      .catch(() => {});
+      .then((res) => {
+        if (!res.ok) throw new Error(`public stats answered ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('public stats answered no object');
+        setRead({ state: 'loaded', stats: data });
+      })
+      .catch((e) => {
+        if (ctrl.signal.aborted) return;
+        reportError('site-resources:stats', e);
+        setRead({ state: 'unavailable', stats: null });
+      });
     return () => ctrl.abort();
+  }, [attempt]);
+  const retry = useCallback(() => {
+    setRead({ state: 'loading', stats: null });
+    setAttempt((a) => a + 1);
   }, []);
-  return stats;
+  return { ...read, retry };
 }
 
-/** A live list: null while it loads, then its rows, or [] when the read fails. */
+/**
+ * The counts alone, or null while loading or when the read failed — the shape
+ * `PublicDirectoryPage` reads. Null draws no figure there (`dirFigures(null)`
+ * is `[]`), so a failure never prints a 0; the failure itself is reported by
+ * `useSiteStatsRead`.
+ */
+export function useSiteStats() {
+  return useSiteStatsRead().stats;
+}
+
+/**
+ * A live list as a read (D6992): `{ state, items, retry }`. `loading` first,
+ * then `loaded` with its rows, `empty` when the read answered none, or
+ * `unavailable` (items null) when it failed or answered something that is not
+ * a list. A failure is reported, and `retry` reads again.
+ */
 export function useLiveList(load) {
-  const [items, setItems] = useState(null);
+  const [read, setRead] = useState(LOADING);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
-    load().then((list) => { if (alive) setItems(Array.isArray(list) ? list : []); })
-      .catch(() => { if (alive) setItems([]); });
+    Promise.resolve()
+      .then(load)
+      .then((list) => {
+        if (!Array.isArray(list)) throw new Error('the read answered no list');
+        if (alive) setRead({ state: listState(list), items: list });
+      })
+      .catch((e) => {
+        if (!alive) return;
+        reportError('site-resources:list', e);
+        setRead({ state: 'unavailable', items: null });
+      });
     return () => { alive = false; };
-  }, [load]);
-  return items;
+  }, [load, attempt]);
+  const retry = useCallback(() => {
+    setRead(LOADING);
+    setAttempt((a) => a + 1);
+  }, []);
+  return { ...read, retry };
 }
 
 /** How many rows each hub block shows (the canvas's `hub` slices). */

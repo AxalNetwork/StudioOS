@@ -23,4 +23,7 @@ export const cycleValidateApi = {
   addMarketSource: (projectId, data) => request(`/cycles/validate/market-sources?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),
   removeMarketSource: (projectId, sourceId) => request(`/cycles/validate/market-sources/${sourceId}?${q(projectId)}`, { method: 'DELETE' }),
   setEvidenceStrength: (projectId, linkId, strength) => request(`/cycles/validate/evidence-links/${linkId}/strength?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ strength }) }),
+  // D6007 (#6007, V24): two to four segments side by side, in the order given; and the venture's one primary ICP.
+  compareSegments: (projectId, ids) => request(`/cycles/validate/segments/compare?${q(projectId)}&ids=${ids.map((id) => encodeURIComponent(id)).join(',')}`),
+  setPrimarySegment: (projectId, segmentId, primary) => request(`/cycles/validate/segments/${encodeURIComponent(segmentId)}/primary?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ primary }) }),
 };
