@@ -186,3 +186,15 @@ test('automatic and explicit PMF recomputation records the signed-in operator du
   assert.equal(write.body.pmf.computed_by,3);assert.equal(count(db,'venture_scorecards'),2);
  }finally{db.close();}
 });
+
+test('D6017: PMF experiment outcomes count completed observations only, including legacy result text',async()=>{
+ const {db,env}=fixture();try{
+  db.exec("INSERT INTO hypotheses(id,project_id,code,claim) VALUES(1,1,'H1','Synthetic claim')");
+  for(const [id,status,result] of [[1,'planned','Legacy draft'],[2,'running','Partial notes'],[3,'done',' '],[4,'done','Two paid']] as const){
+   db.prepare('INSERT INTO hypothesis_experiments(id,uid,project_id,hypothesis_id,title,status,result) VALUES(?,?,1,1,?,?,?)').run(id,'exp-'+id,'Synthetic test',status,result);
+   db.prepare("INSERT INTO hypothesis_evidence_links(uid,project_id,hypothesis_id,kind,ref_id,direction) VALUES(?,1,1,'experiment',?,'supports')").run('link-'+id,String(id));
+  }
+  const got=await collectPmfInputs(env,1,TODAY);const input=got.inputs.find(i=>i.key==='experiment_outcomes');
+  assert.equal(input?.recorded,true);assert.deepEqual(input?.raw,{n:1,of:1});assert.equal(input?.source?.rows,1);
+ }finally{db.close();}
+});

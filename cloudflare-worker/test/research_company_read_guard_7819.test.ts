@@ -20,9 +20,14 @@ export const PENDING_READERS = [
   'services/competitorDirectoryLink.ts',
   'services/records/validate.ts',
   'services/researchCompanyDirectory.ts',
+  // D7810 (#7810): the publisher inventory groups every stored row, held and withdrawn ones included, by design.
+  'services/researchCompanyPublishers.ts',
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
-export const MAINTENANCE_WRITERS: string[] = [];
+export const MAINTENANCE_WRITERS: string[] = [
+  // D7825 (#7825): the admin domain review sets or clears website_verified_at on the reviewed company only.
+  'cloudflare-worker/src/services/researchRecordIdentity.ts',
+];
 const OWN = 'cloudflare-worker/src/services/researchCompanyRead.ts';
 export function withoutComments(source: string, path = 'file.ts') {
   return transformSync(source, {

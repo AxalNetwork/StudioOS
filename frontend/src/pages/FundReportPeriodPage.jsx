@@ -14,6 +14,7 @@ import { readableFund, readablePeriod, useFundReport } from '../hooks/useFundRep
 import { FundReadState, Recorded } from './FundPage';
 import { fundDraftsApi } from '../lib/api/fundDrafts.js';
 import FundDraftBand from './FundDraftBand';
+import ZoneDraft from '../workspaces/ZoneDraft';
 import './fundPage.css';
 
 export default function FundReportPeriodPage({ role = 'investor', reading: supplied }) {
@@ -50,6 +51,23 @@ export function reportEntryError(section, entry) {
   }
   if (!validEntryDate(entry.d)) return 'Enter a valid date.';
   return entry.e.trim() ? null : 'Enter text.';
+}
+
+/** D6242 (#6242): the sentences the letter's draft shows in place of running or of Accept. */
+export const LETTER_SAVE_FIRST = 'Save the draft first: the letter is drafted from the saved period’s dates and Key developments.';
+export const LETTER_FULL = 'The letter already has 50 paragraphs. Remove one before adding the draft.';
+export const LETTER_NOTHING = 'This period records no capital movement between its dates and no saved Key development, so there is nothing to draft the letter from.';
+
+/**
+ * D6242: the Letter section with an accepted draft added after what is there, one paragraph per blank-line block,
+ * never past the editor's 50 paragraphs (the overflow joins the last one) or its 10,000 characters a paragraph.
+ */
+export function fillLetter(letter, text) {
+  const room = 50 - letter.length;
+  const paragraphs = String(text || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (room <= 0 || !paragraphs.length) return letter;
+  const kept = paragraphs.length > room ? [...paragraphs.slice(0, room - 1), paragraphs.slice(room - 1).join('\n\n')] : paragraphs;
+  return [...letter, ...kept.map((p) => p.slice(0, 10000))];
 }
 
 export function PeriodEditor({ data, onSaved, onDeleted }) {
@@ -96,6 +114,11 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
     setForm(previous => ({ ...previous, narrative: { ...previous.narrative, letter: [text, ...previous.narrative.letter] } }));
     return null;
   };
+  // D6242: the whole letter's draft reads the SAVED dates and Key developments, so unsaved ones wait for Save draft.
+  // Its Accept fills the unsaved Letter section; only Save draft writes the period.
+  const letterDraftBlocked = !form.id || (dirty && (['period_start', 'period_end'].some(key => form[key] !== (data.period[key] ?? ''))
+    || JSON.stringify(form.narrative.developments) !== JSON.stringify(data.period.narrative.developments))) ? LETTER_SAVE_FIRST : null;
+  const acceptLetter = (item) => setForm(previous => ({ ...previous, narrative: { ...previous.narrative, letter: fillLetter(previous.narrative.letter, item?.body) } }));
   const hasInvalidEntries = Object.entries(form.narrative).some(([section, entries]) => entries.some(entry => reportEntryError(section, entry)));
   const validate = () => {
     setValidated(true);
@@ -148,6 +171,23 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
       writes="Accept writes into the draft. Issuing stays a human click."
       blocked={!form.id ? 'Save the draft first: the opening is drafted from the saved period’s dates.' : dirty && ['period_start', 'period_end'].some(key => form[key] !== (data.period[key] ?? '')) ? 'Save the new dates first: the opening is drafted from the saved period’s dates.' : null}
       onRun={() => fundDraftsApi.letter(data.fund.id, form.id)} onAccept={acceptOpening} />}
+    {editable && <article className="fd-card" data-testid="letter-zone-draft"><ZoneDraft
+      surface="funds/reporting"
+      scopeKey={`${data.fund.id}:${form.id || 'new'}`}
+      railOption="draft:quarterly-letter"
+      scoped
+      stateWords
+      accent="indigo"
+      label="Proposal · the quarterly letter"
+      run="Draft the letter"
+      accept="Accept into the letter"
+      empty="The Letter section, drafted from this period’s recorded capital movements and its saved Key developments. Accept adds it to the editor below; nothing is saved until you press Save draft."
+      nothingToDraft={LETTER_NOTHING}
+      blocked={letterDraftBlocked}
+      acceptBlocked={form.narrative.letter.length >= 50 ? LETTER_FULL : null}
+      onAccepted={acceptLetter}
+      foot="Nothing is saved or issued until you press Save draft or Issue."
+    /></article>}
     {Object.keys(SECTIONS).map(section => <article className="fd-card" key={section}>
       <h2>{SECTIONS[section]}</h2>
       {!form.narrative[section].length && <Recorded value={null} reason={`No ${section === 'letter' || section === 'outlook' ? 'paragraphs' : 'entries'} have been recorded in this section.`} />}

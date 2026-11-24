@@ -267,7 +267,7 @@ test('the Tools rule: a non-member reads the counts, never a domain; a venture w
 test('one failed read costs one block: Hosting Unreadable on its own; GitHub’s Code system unchanged', async () => {
   const { db, env } = fixture(); vercel(db);
   const before = await tools(env);
-  assert.deepEqual(Object.keys(before).sort(), ['code', 'cols', 'hosting', 'note', 'reason', 'rows', 'state', 'syncs', 'total']);
+  assert.deepEqual(Object.keys(before).sort(), ['code', 'cols', 'hosting', 'not_connected', 'note', 'reason', 'rows', 'state', 'syncs', 'total']);
   assert.equal(before.code.state, 'empty', 'no GitHub connection: the Code system reads as before');
   db.exec('DROP TABLE vercel_health_events');
   const t = await tools(env);

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { DataState, StateChip } from '../../ui';
 import { CycleCard } from './CycleOverview';
-import { attentionWords, chartSummary, coverageWords, gainLabel, lastRead, nextStepItems, pitchView, staleReadiness, unassessedWords } from './raiseOverviewModel';
+import { attentionWords, chartSummary, coverageWords, gainLabel, lastRead, listWords, nextStepItems, pitchView, staleReadiness, unassessedWords } from './raiseOverviewModel';
 
 export { gainLabel, lastRead, nextStepItems };
 
@@ -80,27 +80,36 @@ export function RaiseReadinessSummary({ view, search = '', onRetry, readOnly = f
   );
 }
 
-/** RA-04: at most three next actions, before the score breakdown, each with its reason, a neutral impact label and one action. */
+/**
+ * RA-02, RA-04: at most three next actions, before the score breakdown, in the board's order (D8256): the
+ * follow-ups due, an open objection, then readiness steps. Each has its reason and one action; a readiness
+ * step has its neutral impact label, the others name the record they come from. A part that could not be
+ * read is said, never drawn as nothing due.
+ */
 export function RaiseNextActions({ view, readOnly = false, onRetry }) {
   if (!view) return null;
   const n = view.state === 'ready' ? view.items.length : 0;
+  const readinessOnly = n > 0 && view.items.every((it) => it.kind === 'readiness');
+  const unread = view.state === 'ready' && Array.isArray(view.unread) ? view.unread : [];
   return (
     <section className="flex flex-col gap-2.5" aria-labelledby="raise-next-title" data-testid="raise-next-actions" data-state={view.state}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="raise-next-title" className={H2}>{n ? `${n} ${n === 1 ? 'action' : 'actions'} to improve readiness` : 'Next actions'}</h2>
+        <h2 id="raise-next-title" className={H2}>{n ? `${n} ${n === 1 ? 'action' : 'actions'}${readinessOnly ? ' to improve readiness' : ' to take next'}` : 'Next actions'}</h2>
         <span className={SUB}>At most three, most useful first</span>
       </div>
       {view.state === 'unavailable'
         ? <DataState state="unavailable" size="block" what="Next actions" onRetry={onRetry} data-testid="raise-next-unavailable" />
-        : !n ? <p className={`m-0 ${SUB}`} data-testid="raise-next-none">No readiness step is open right now.</p>
+        : !n ? <p className={`m-0 ${SUB}`} data-testid="raise-next-none">{unread.length ? 'Nothing else to list from what could be read.' : 'No readiness step is open right now.'}</p>
           : (
             <ol className="m-0 grid list-none grid-cols-1 gap-3 p-0 lg:grid-cols-3">
               {view.items.map((it, i) => (
-                <li key={it.key} className={`${CARD} ${i === 0 ? 'border-axal-lavender-edge dark:border-violet-800' : ''}`} data-testid={`raise-next-${it.key}`}>
+                <li key={it.key} className={`${CARD} ${i === 0 ? 'border-axal-lavender-edge dark:border-violet-800' : ''}`} data-testid={`raise-next-${it.key}`} data-kind={it.kind}>
                   <span className="font-mono text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">{i + 1} of {n}</span>
                   <h3 className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{it.title}</h3>
                   <p className="m-0 text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300"><span className="sr-only">Why: </span>{it.reason}</p>
-                  {it.impact
+                  {it.kind && it.kind !== 'readiness'
+                    ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="raise-next-source">{it.source}</span>
+                    : it.impact
                     ? <span className="self-start rounded-full border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200" title="How much the readiness assessment would change" data-testid="raise-next-impact">{it.impact}</span>
                     : <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="raise-next-impact-unrecorded">Readiness impact · Not recorded</span>}
                   {!readOnly && it.href
@@ -110,6 +119,13 @@ export function RaiseNextActions({ view, readOnly = false, onRetry }) {
               ))}
             </ol>
           )}
+      {unread.length ? (
+        <p role="status" className={`m-0 flex flex-wrap items-center gap-2 ${SUB}`} data-testid="raise-next-unread">
+          <StateChip kind="unavailable" />
+          {`${listWords(unread)} could not be read, so ${unread.length === 1 ? 'it is' : 'they are'} not listed. This is not a claim that nothing is due.`}
+          {onRetry ? <button type="button" onClick={onRetry} className={LINK} aria-label="Try reading next actions again">Try again</button> : null}
+        </p>
+      ) : null}
       {readOnly && view.state === 'ready' && n ? <p className={`m-0 ${SUB}`}>Read only. The founder takes these steps.</p> : null}
     </section>
   );

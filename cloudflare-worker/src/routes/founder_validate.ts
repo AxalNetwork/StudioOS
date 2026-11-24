@@ -604,7 +604,7 @@ founderValidate.get('/evidence/:projectId/export.csv', async (c) => {
     items = await required('evidence', linkedEvidenceFor({ env: c.env, projectId }));
     citations = await required('decisions', decisionCitations(c.env, projectId));
     experiments = await required('experiments', c.env.DB.prepare(
-      `SELECT hypothesis_id, title, method, target, status, result FROM hypothesis_experiments
+      `SELECT hypothesis_id, title, method, target, CASE WHEN stopped_at IS NOT NULL THEN 'stopped' ELSE status END AS status, result FROM hypothesis_experiments
         WHERE project_id = ? ORDER BY hypothesis_id, id LIMIT 5000`,
     ).bind(projectId).all<ExportExperiment>());
   } catch (e) {

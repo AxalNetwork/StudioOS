@@ -47,6 +47,12 @@ function dollars(value:unknown):number|null{
  const cents=typeof value==='number'?Math.round(value*100):NaN;
  if(!Number.isSafeInteger(cents)||cents<0)throw new Error('Fund money unreadable');return cents;
 }
+/** D6254: recorded fractional terms, never defaults guessed by the page. */
+function recordedRate(value:unknown):number|null{
+ if(value===null||value===undefined)return null;
+ if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>1)throw new Error('Fund terms unreadable');
+ return value;
+}
 export async function readFundPage(env:Env,fund:any,canManage:boolean){
  if(fund.fund_size_cents!==null&&fund.fund_size_cents!==undefined&&(!Number.isSafeInteger(fund.fund_size_cents)||fund.fund_size_cents<0))throw new Error('Fund size unreadable');
  const lps=await env.DB.prepare(`SELECT COUNT(*) AS lp_count,COUNT(commitment_amount) AS commitments_recorded,
@@ -67,6 +73,11 @@ export async function readFundPage(env:Env,fund:any,canManage:boolean){
   totals:{committed_cents:committed,invested_cents:invested,
    committed_reason:committed===null?'Not every LP has a recorded commitment.':null,
    invested_reason:invested===null?'No complete invested amount is recorded for attributed positions.':null},
+  terms:{management_fee:recordedRate(fund.management_fee),carried_interest:recordedRate(fund.carried_interest),
+   management_fee_reason:fund.management_fee==null?'The management fee has not been recorded.':null,
+   carried_interest_reason:fund.carried_interest==null?'Carried interest has not been recorded.':null},
+  documents:lpa?[{kind:'lpa',status:lpa.status??null,version:lpa.version??null,updated_at:lpa.updated_at??null}]:[],
+  documents_reason:'Other fund documents are not recorded in a fund document list. The attached LPA is shown when recorded.',
   lpa,can_manage:canManage,currency:'USD'};
 }
 export async function readFundPeriod(env:Env,fundId:number,periodId:number,canManage:boolean){

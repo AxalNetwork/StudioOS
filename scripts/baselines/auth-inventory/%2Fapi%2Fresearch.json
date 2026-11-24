@@ -108,6 +108,20 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/observations/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_observations_7716.test.ts",
+    "note": "D7716: an observation is a sourced public statistic (provider, source URL, usage note), not a member's record; every signed-in user may read any one, and a request with no sign-in is refused with 401 (tested on all four routes)."
+  },
+  "GET /api/research/record-identity/:kind/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_record_identity_7825.test.ts",
+    "note": "Directory records, not owned ones: a company answers by the Companies rule (D7178) decided before the read, so an account outside it gets one 403 for an existing and a missing record, then D7819's served rows (withdrawn/excluded answer their state only); a fund answers by the fund catalogue's rule (signed in) and SERVED_FUNDS through getFund. A match key, a reviewer and a note are never returned."
+  },
   "GET /api/research/sectors/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

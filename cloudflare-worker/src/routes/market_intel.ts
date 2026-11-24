@@ -11,8 +11,8 @@ type MIUser = User & Partial<TierUser> & Partial<InvestorUser>;
 import { ensureMarketIntelSchema } from '../services/market_intel/schema';
 import { listSources, isLive } from '../services/market_intel/registry';
 import { SECTORS, recomputeIndexes, COMPASS_KV_KEY } from '../services/market_intel/aggregator';
-import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
-import { periodKey, WINDOW_DAYS } from '../services/market_intel/scoring';
+import { liveIndexSql, liveRowSql, retrievedAtSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
+import { periodKey, WINDOW_DAYS, WINDOW_NOT_RECORDED } from '../services/market_intel/scoring';
 import { readEdgeCache, writeEdgeCache, readKv, writeKv } from '../services/market_intel/cache';
 // Side-effect import — every connector calls registerSource() at module
 // top-level so listSources() returns the full set after this barrel.
@@ -119,6 +119,9 @@ interface IndexRow {
   computed_at: string;
   /** D538 — change against the previous month's live value; null when there is none. */
   delta_pct?: number | null;
+  /** D7708 — the window the point covers; null on a point written before D7708. */
+  window_start?: string | null;
+  window_end?: string | null;
 }
 interface CitationRow {
   source_key: string; sector: string; metric_key: string;
@@ -132,7 +135,7 @@ interface CitationRow {
  */
 async function readCurrentIndexes(env: Env, period: string): Promise<IndexRow[]> {
   const read = async () => (await env.DB.prepare(
-    `SELECT sector, geo, period_key, dimension, value, delta_pct, source_count, computed_at
+    `SELECT sector, geo, period_key, dimension, value, delta_pct, source_count, computed_at, window_start, window_end
        FROM market_intel_indexes WHERE period_key = ? AND geo = 'global' AND ${liveIndexSql()}`
   ).bind(period).all<IndexRow>()).results || [];
   const rows = await read();
@@ -154,9 +157,9 @@ function indexValue(r: IndexRow | undefined): { value: number | null; source_cou
 
 /** What the composite read says about its own history (D538). */
 export const INDEX_HISTORY_NOTE =
-  'One index value per sector, dimension and month. The current month is month to date: each refresh overwrites it.';
+  'One index value per sector, dimension and month. Each value is the score over the 30 days before its last refresh (window_start to window_end), not the calendar month; the current month\'s value is overwritten by each refresh.';
 export const DELTA_NOTE =
-  "delta_pct compares a figure with the previous month's live value; it is null when there is none.";
+  "delta_pct compares a figure with the previous month's value, each the score over its own 30-day window; it is null when there is none.";
 const DAY_MS = 86_400_000;
 
 /**
@@ -167,7 +170,7 @@ export const LIVE_STALE_AFTER_DAYS = 2;
 
 /**
  * D538 step 4 — how fresh the composite is: the first day of live data inside
- * the scoring window, how many distinct days of the window carry a live
+ * the scoring window (D7708: by retrieval date, D7707's `retrieved_at` or `ts`), how many distinct days of the window carry a live
  * observation, whether that coverage is full and still current, when the
  * first full-window index is due, and how many monthly points the index has.
  * Coverage is counted from observation days, never from elapsed time since
@@ -178,9 +181,11 @@ export async function readCompassFreshness(env: Env, now = new Date()) {
   const cutoff = new Date(now.getTime() - WINDOW_DAYS * DAY_MS).toISOString();
   let live: Record<string, unknown>;
   try {
+    // retrievedAtSql() is a fixed literal (COALESCE(retrieved_at, ts)), never built from a request.
     const obs = await env.DB.prepare(
-      `SELECT MIN(ts) AS first_ts, MAX(ts) AS last_ts, COUNT(DISTINCT substr(ts, 1, 10)) AS days
-         FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()}`
+      `SELECT MIN(${retrievedAtSql()}) AS first_ts, MAX(${retrievedAtSql()}) AS last_ts,
+              COUNT(DISTINCT substr(${retrievedAtSql()}, 1, 10)) AS days
+         FROM market_intel_rows WHERE ${retrievedAtSql()} >= ? AND ${liveRowSql()}`
     ).bind(cutoff).first<{ first_ts: string | null; last_ts: string | null; days: number | null }>();
     const firstTs = obs?.first_ts ?? null;
     const lastTs = obs?.last_ts ?? null;
@@ -286,6 +291,10 @@ marketIntel.get('/sector-compass', async (c) => {
     delta_note: DELTA_NOTE,
     freshness: await readCompassFreshness(c.env),
     computed_at: rows[0]?.computed_at ?? null,
+    // D7708 — the window the points cover; one recompute writes them all. A point written before D7708 has none.
+    window_start: rows[0]?.window_start ?? null,
+    window_end: rows[0]?.window_end ?? null,
+    ...(rows[0] && !(rows[0].window_start && rows[0].window_end) ? { window_reason: WINDOW_NOT_RECORDED } : {}),
     recorded_sectors: sectors.filter((x) => x.composite != null).length,
     sectors,
     lens: tierLabel,
