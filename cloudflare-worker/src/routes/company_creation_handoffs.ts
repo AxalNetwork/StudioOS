@@ -41,7 +41,6 @@ import { putRecord } from '../services/recordStore';
 import { eraseRecordObjects } from '../services/recordErasure';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { roomCan } from '../services/dataRoomCapabilities';
-import { liveFiles } from '../services/dataRoomTrash';
 import { roomProject } from './data_room';
 import { KIND_LABELS, SLOT_KINDS, pointerOf } from './company_documents';
 import cycleBuild, { company, context } from './cycle_build';
@@ -103,9 +102,10 @@ async function papers(env: Env, companyId: number, projectId: number): Promise<{
       WHERE d.company_id = ? AND d.project_id IS NULL AND d.doc_type IN (?, ?, ?, ?)
       ORDER BY d.created_at DESC, d.id DESC`,
   ).bind(companyId, ...SLOT_KINDS).all<{ uid: string; doc_type: string; title: string; content: string | null }>()).results ?? [];
-  // D6073: a copy in Trash does not count as in the room, so the paper can be copied again.
+  // D6073: a copy in Trash does not count as in the room, so the paper can be copied again. A literal clause, not
+  // liveFiles(): no interpolation in the query text, and the Trash column has been on main since 2026-11-15.
   const inRoom = new Set(((await env.DB.prepare(
-    `SELECT source_ref FROM data_room_files WHERE project_id = ? AND source_ref LIKE 'company_document:%'${await liveFiles(env.DB)}`,
+    `SELECT source_ref FROM data_room_files WHERE project_id = ? AND source_ref LIKE 'company_document:%' AND removed_at IS NULL`,
   ).bind(projectId).all<{ source_ref: string }>()).results ?? []).map(x => x.source_ref.slice('company_document:'.length)));
   const pointers = new Map<string, { r2_key: string; content_type: string; title: string }>();
   const list = SLOT_KINDS.map((kind): Paper => {
