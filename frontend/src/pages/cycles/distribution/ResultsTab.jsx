@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { growResultsApi } from '../../../lib/api/growResults.js';
+import SearchConsoleResults from './SearchConsoleResults.jsx';
 import { Card, LoadingSkeleton, SourceChip, StatusNote } from './DistributionParts.jsx';
 import { DistributionReadError } from './DistributionStates.jsx';
 import { useDistributionLayout } from './useDistributionLayout.js';
@@ -130,5 +131,5 @@ export default function ResultsTab({ projectId }) {
     {applied.from && <button type="button" className={CONTROL} onClick={clear}>Lifetime</button>}
     {invalid && <p role="alert" className="w-full text-sm text-[color:var(--ds-neg)] dark:text-red-300">{invalid}</p>}
   </form>;
-  return <ResultsView state={state} onRetry={retry} windowControls={controls} />;
+  return <div className="min-w-0 space-y-4"><ResultsView state={state} onRetry={retry} windowControls={controls} /><SearchConsoleResults projectId={projectId} /></div>;
 }
