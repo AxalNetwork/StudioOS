@@ -177,7 +177,7 @@ test('4. one failed read makes only the parts that need it Unavailable; today\'s
   let b = await overview(db, FOUNDER, 'FROM activity_logs');
   assert.deepEqual(b.changes, { state: 'unavailable', reason: 'The recent changes could not be read.' });
   for (const k of ['evidence', 'attention', 'hypotheses']) assert.equal(b[k].state, 'ok', k);
-  b = await overview(db, FOUNDER, 'SELECT e.id, e.hypothesis_id, e.title, e.status, e.result');
+  b = await overview(db, FOUNDER, 'SELECT e.id, e.hypothesis_id, e.title,');
   for (const k of ['evidence', 'attention', 'hypotheses']) assert.equal(b[k].state, 'unavailable', k);
   assert.equal(b.changes.state, 'ok');
   b = await overview(db, FOUNDER, 'SELECT status FROM demand_signals');
