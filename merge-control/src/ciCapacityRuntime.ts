@@ -3,7 +3,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { CiCapacity, SqlCapacityStore, CAPACITY_RETENTION_MS } from './ciCapacity.ts';
 import { authenticateCapacity, capacityBearer, capacityBody, capacityPlatformFetch } from './ciCapacityAuth.ts';
 import { capacityGithubClient, capacityInventoryClient, GithubCapacityPorts } from './ciCapacityGithub.ts';
-import type { CapacityConfig, CapacityExecutionResultReader } from './ciCapacityGithub.ts';
+import type { CapacityApi, CapacityConfig, CapacityExecutionResultReader } from './ciCapacityGithub.ts';
 import { CapacityOutbox } from './ciCapacityOutbox.ts';
 import { CapacityTransport, capacityIdentityLane } from './ciCapacityTransport.ts';
 import { publicationSettled, publicationConsumer } from './ciCapacityRetention.ts';
@@ -44,6 +44,7 @@ export class SqlCapacityBudgetStore implements CapacityBudgetStore {
 export class CapacityControl extends DurableObject<CapacityEnv> {
   /** Inactive trusted-code port. No environment flag, request field or candidate artifact can supply it. */
   protected executionResultReader?: CapacityExecutionResultReader;
+  private lastExpirySweep: number | undefined;
   private serial: Promise<unknown> = Promise.resolve();
   private store: SqlCapacityStore;
   private keys: CapacityIssuerKeys;
@@ -78,8 +79,9 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   private policy(config:Settings){return {version:1 as const,maxExternalWorkerShards:config.maxExternalWorkerShards,
     maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,
     maxActiveRequests:config.publication==='pilot'?1:8,budgets:{...CI_CAPACITY_BUDGETS}};}
-  private async components() {
-    const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch);
+  private async components(sharedApi?: CapacityApi) {
+    const config=this.settings();
+    const api=sharedApi??await capacityGithubClient(this.env,capacityPlatformFetch);
     const inventoryApi=this.env.CAPACITY_INVENTORY_TOKEN?capacityInventoryClient(this.env,capacityPlatformFetch):undefined;
     const ports=new GithubCapacityPorts(api,config,Date.now,this.executionResultReader??(async(receipt,job)=>this.results.read(receipt,job,Date.now())),inventoryApi,config.publication==='pilot');
     const parent=ports.parent.bind(ports),dispatch=ports.dispatch.bind(ports);
@@ -153,20 +155,35 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     await this.ctx.storage.setAlarm(Date.now()+15000);
     const garbage=this.results.prune();
     // Pending negative authority fences both full and compact expiry before replay reaches it.
-    this.store.prune(Date.now()-CAPACITY_RETENTION_MS);
+    const now=Date.now();
+    if(this.lastExpirySweep===undefined||now<this.lastExpirySweep||now-this.lastExpirySweep>=60_000){
+      this.store.prune(now-CAPACITY_RETENTION_MS);
+      this.lastExpirySweep=now;
+    }
     if(this.store.count()===0&&this.store.compactCount()===0){
       const publications=pruneCapacityHistory(this.ctx.storage,'publications');
       for(const row of this.corrections.page()){
         if(!this.results.pendingFailure(row.request_id))this.corrections.remove(row.seq);
         this.corrections.advance(row.seq);
       }
-      if(!garbage&&!publications&&!this.corrections.pending())await this.ctx.storage.deleteAlarm();return;
+      if(!garbage&&!publications&&!this.corrections.pending())await this.ctx.storage.deleteAlarm();
+      else await this.ctx.storage.setAlarm(Date.now()+60_000);
+      return;
     }
-    const {capacity,config}=await this.components();
-    const outbox=new CapacityOutbox(this.ctx.storage,await capacityGithubClient(this.env,capacityPlatformFetch),config);
+    // Keep one acquisition (including a rejected one) and one API budget per alarm.
+    let client: Promise<CapacityApi> | undefined;
+    const api: CapacityApi = async (method, path, body) => {
+      client ??= capacityGithubClient(this.env, capacityPlatformFetch);
+      return (await client)(method, path, body);
+    };
+    const {capacity,config}=await this.components(api);
+    const outbox=new CapacityOutbox(this.ctx.storage,api,config);
     const failures=await this.results.replayFailures((receipt,jobId)=>capacity.recordExecutionFailure(receipt,jobId));
     const next=await capacity.tick();
     const publication=await outbox.publish(this.store,id=>capacity.status(id),config.publication);
     if(next===null&&!publication&&!failures&&!garbage)await this.ctx.storage.deleteAlarm();
+    else if(next===null&&!failures&&outbox.historyDelayMs>0){
+      await this.ctx.storage.setAlarm(Date.now()+outbox.historyDelayMs);
+    }
   });}
 }

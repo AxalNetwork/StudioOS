@@ -1,5 +1,5 @@
 /** D7909: durable failure-correction notifications; scheduling hints never supply result or publication authority. */
-import type { CapacityCompactFailedStore } from './ciCapacityCompact.ts';
+import type { CapacityCompactFailedStore, CompactView } from './ciCapacityCompact.ts';
 type Storage = Pick<DurableObjectStorage,'sql'>;
 export class SqlCapacityCorrections {
   private storage:Storage;
@@ -27,10 +27,10 @@ export class SqlCapacityCorrections {
   finishLegacy():void{if(this.get('legacy-complete')==='scanned'&&!this.pending())this.completeLegacy();}
   completeLegacy():void{this.set('legacy-complete','yes');}
   /** At most one indexed page. Corrected failed records stay in this read and are filtered by the publisher. */
-  discover(store:Partial<CapacityCompactFailedStore>,consider:(id:string)=>void):boolean{
+  discover(store:Partial<CapacityCompactFailedStore>,consider:(record:CompactView)=>void):boolean{
     if(typeof store.compactFailedPage!=='function')return false;
     const rows=store.compactFailedPage(this.get('failed-after')??'',100);
-    for(const row of rows)consider(row.submission.requestId);
+    for(const row of rows)consider(row);
     this.set('failed-after',rows.length===100?rows.at(-1)!.submission.requestId:'');
     if(rows.length<100&&!this.legacyReady())this.set('legacy-complete','scanned');
     return rows.length===100;
