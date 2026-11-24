@@ -104,8 +104,10 @@ async function call(w: W, who: number, method: string, path: string, body?: unkn
 }
 const discover = (w: W, who: number, body: unknown) => call(w, who, 'POST', '/skills/discover', body);
 
+// D4538-p8 (#5968): not "Cash runway snapshot", whose slug is one of #4667's first ten and so meets the real readers'
+// input gate (so is "Board meeting brief"); that path is covered by skill_discovery_evidence_5968.test.ts.
 const skill = (over: Record<string, unknown> = {}) => ({
-  scope: 'hq', name: 'Cash runway snapshot', purpose: 'Report months of runway from recorded balances and burn.',
+  scope: 'hq', name: 'Runway months brief', purpose: 'Report months of runway from recorded balances and burn.',
   steps: ['Read the recorded cash balances', 'Divide by the monthly burn to report runway in months'],
   tools: [], output_kind: 'brief', roles: ['cfo'], tags: [{ slug: 'fp_and_a', level: 'proficient' }], ...over,
 });
@@ -127,8 +129,8 @@ async function library(w: W) {
     roles: ['cfo', 'investor_relations'], tags: [{ slug: 'investor_relations', level: 'working' }],
   }));
   const boardA = await published(w, skill({
-    name: 'Board meeting brief', purpose: 'Prepare the board meeting brief from recorded metrics.',
-    steps: ['Read the recorded metrics', 'Write the board meeting brief'], tags: [{ slug: 'investor_reporting', level: 'working' }],
+    name: 'Board meeting summary', purpose: 'Prepare the board meeting summary from recorded metrics.',
+    steps: ['Read the recorded metrics', 'Write the board meeting summary'], tags: [{ slug: 'investor_reporting', level: 'working' }],
   }));
   const boardB = await published(w, skill({
     name: 'Board meeting pack', purpose: 'Prepare the board meeting pack from recorded metrics.',
@@ -160,7 +162,9 @@ test('5967: a manager gets the service\'s answer for the agent, and nothing is w
   assert.equal(r.body.outcome, 'recommend');
   assert.equal(r.body.candidates[0].skill_uid, lib.runway);
   assert.equal(r.body.candidates[0].version, 1);
-  assert.deepEqual(r.body.candidates[0].evaluation, { available: false, reason: 'Release evidence is not read by discovery yet (#4533).' });
+  // D4538-p8: this fixture has no agent_skill_version_evals table, so the quality read is said to be unreadable, never zero.
+  assert.deepEqual(r.body.candidates[0].evaluation, { available: false, reason: 'The quality evidence could not be read.' });
+  assert.deepEqual(r.body.candidates[0].inputs.available, false, 'a skill outside the first ten has its inputs Not recorded');
   assert.equal(r.body.stages.length, 5);
   assert.equal(snapshot(w), before, 'the route wrote something');
   assert.deepEqual(w.db.prepare('SELECT * FROM agent_skill_links ORDER BY id').all(), linksBefore, 'agent_skill_links changed');

@@ -1,5 +1,8 @@
 /** D7973: restart-safe check publication intents; pilot authority is never full-suite authority. */
 import type { CapacityStore } from './ciCapacity.ts';
+import type { CapacityCompactStore, CapacityCompactFailedStore } from './ciCapacityCompact.ts';
+import { pruneCapacityHistory, retainedCapacity } from './ciCapacityHistory.ts';
+import { SqlCapacityCorrections } from './ciCapacityCorrections.ts';
 import { GithubCapacityPorts } from './ciCapacityGithub.ts';
 import type { CapacityApi, CapacityConfig } from './ciCapacityGithub.ts';
 import type { Aggregate } from './lib/ciCapacityPolicy.ts';
@@ -10,30 +13,102 @@ type Intent = { requestId: string; mode: 'pilot'|'full-suite'; checkId: number|n
 /** GitHub has no check-run idempotency key. Retry only a bounded, repeatedly observed absence. */
 export const PUBLICATION_CREATE_LIMIT = 2;
 export class CapacityOutbox {
-  private storage: DurableObjectStorage;private api: CapacityApi;private config: CapacityConfig & {appId:number};
+  // Leave the prearmed 15-second recovery alarm in place until a complete turn proves it can slow down.
+  historyDelayMs = 0;
+  private storage: DurableObjectStorage;private api: CapacityApi;private config: CapacityConfig & {appId:number};private corrections:SqlCapacityCorrections;
   constructor(storage: DurableObjectStorage, api: CapacityApi, config: CapacityConfig & { appId: number }) {
-    this.storage=storage;this.api=api;this.config=config;
+    this.storage=storage;this.api=api;this.config=config;this.corrections=new SqlCapacityCorrections(storage);
     storage.sql.exec('CREATE TABLE IF NOT EXISTS capacity_publications (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
     storage.sql.exec('CREATE TABLE IF NOT EXISTS capacity_publication_cursor (mode TEXT PRIMARY KEY, last TEXT NOT NULL)');
   }
   async publish(store: CapacityStore, status: (id: string)=>Aggregate|null, mode: Intent['mode']): Promise<boolean> {
     let pending=false;
-    this.storage.sql.exec('DELETE FROM capacity_publications WHERE substr(id, 1, 36) NOT IN (SELECT id FROM ci_capacity_requests)');
-    const records=store.list();
-    const intents=new Map(this.storage.sql.exec<{id:string;state:string}>('SELECT id,state FROM capacity_publications').toArray().map(row=>[row.id,JSON.parse(row.state) as Intent]));
-    const priority=records.filter(r=>{const sent=intents.get(`${r.submission.requestId}:${mode}`)?.sent;return r.completedAt===null||!sent||JSON.parse(sent).status==='pending';});
-    const candidates=priority.length?priority:records;
-    const cursor=this.storage.sql.exec<{last:string}>('SELECT last FROM capacity_publication_cursor WHERE mode = ?',mode).toArray()[0]?.last??'';
-    const after=candidates.filter(r=>r.submission.requestId>cursor);
-    const rotated=priority.length?[...after,...candidates.filter(r=>r.submission.requestId<=cursor)]:(after.length?after:candidates);
-    // At most four publications per alarm. A durable cursor prevents retained history or a failed intent monopolizing the API budget.
-    for(const request of rotated.slice(0,4)) {
-      this.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor (mode,last) VALUES (?,?)',mode,request.submission.requestId);
+    const garbage=pruneCapacityHistory(this.storage,'publications');
+    const records=store.list(), compactStore=store as CapacityStore & Partial<CapacityCompactStore & CapacityCompactFailedStore>;
+    const read=(id:string)=>this.storage.sql.exec<{state:string}>('SELECT state FROM capacity_publications WHERE id=?',id).toArray()[0];
+    const sentFailure=(id:string)=>{try{
+      const row=read(`${id}:${mode}`),intent=row?JSON.parse(row.state) as Intent:null;
+      return intent?.requestId===id&&intent.mode===mode&&intent.phase==='known'
+        &&Number.isSafeInteger(intent.checkId)&&intent.checkId!>0&&JSON.parse(intent.sent??'null')?.status==='failure';
+    }catch{return false;}};
+    // Full requests are already bounded to 1000. Their stored negative flags cover observations outside the journal.
+    for(const record of records){
+      if(record.shards.some(shard=>shard.attempts.some(attempt=>attempt.verifiedTestFailure||attempt.phase==='failed'))
+        &&!sentFailure(record.submission.requestId)){
+        const row=read(`${record.submission.requestId}:${mode}`);
+        try{if(row&&JSON.parse(JSON.parse(row.state).sent??'null')?.status)this.corrections.enqueue(record.submission.requestId);}catch{pending=true;}
+      }
+    }
+    const backfill=this.corrections.discover(compactStore, record=>{
+      const id=record.submission.requestId;
+      if(record.publicationMode===mode&&record.failed&&!sentFailure(id))this.corrections.enqueue(id);
+    });
+    const priority=records.filter(r=>{try{const row=read(`${r.submission.requestId}:${mode}`);const intent=row?JSON.parse(row.state) as Intent:null;
+      return r.completedAt===null||!intent?.sent||JSON.parse(intent.sent).status==='pending';}catch{return true;}});
+    const priorityIds=new Set(priority.map(r=>r.submission.requestId));
+    const history=records.filter(r=>!priorityIds.has(r.submission.requestId));
+    const cursor=(name:string)=>this.storage.sql.exec<{last:string}>('SELECT last FROM capacity_publication_cursor WHERE mode=?',name).toArray()[0]?.last??'';
+    const advance=(name:string,last:string)=>this.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)',name,last);
+    const rotate=(rows:typeof records,key:string)=>{const last=cursor(key);return [...rows.filter(r=>r.submission.requestId>last),...rows.filter(r=>r.submission.requestId<=last)];};
+    const hot=rotate(priority,`${mode}:priority`), settled=rotate(history,`${mode}:history`);
+    const compactKey=`${mode}:compact`;
+    let compact=compactStore.compactPage?.(cursor(compactKey),100)??[];
+    if(!compact.length&&cursor(compactKey))compact=compactStore.compactPage?.('',100)??[];
+    const eligible=compact.filter(r=>r.publicationMode===mode&&!records.some(full=>full.submission.requestId===r.submission.requestId));
+    type Selected={record:Pick<(typeof records)[number],'submission'>;lane:string;compact:boolean;dueSeq?:number};
+    const due:Selected[]=[];
+    for(const row of this.corrections.page()){
+      const full=records.find(r=>r.submission.requestId===row.request_id), compact=compactStore.compact?.(row.request_id);
+      if(!full&&!compact){
+        if(!retainedCapacity(this.storage,row.request_id))this.corrections.remove(row.seq);
+        else pending=true;
+        this.corrections.advance(row.seq);continue;
+      }
+      if((full&&compact)||(compact&&compact.publicationMode!==mode)){pending=true;this.corrections.advance(row.seq);continue;}
+      if(!full){try{
+        const raw=read(`${row.request_id}:${mode}`),intent=raw?JSON.parse(raw.state) as Intent:null;
+        if(!intent||intent.requestId!==row.request_id||intent.mode!==mode||intent.phase!=='known'
+          ||!Number.isSafeInteger(intent.checkId)||intent.checkId!<=0)throw new Error('correction_intent_unavailable');
+      }catch{pending=true;this.corrections.advance(row.seq);continue;}}
+      if(sentFailure(row.request_id)){this.corrections.remove(row.seq);this.corrections.advance(row.seq);continue;}
+      due.push({record:full??compact!,compact:!full,lane:'correction',dueSeq:row.seq});
+      if(due.length===4)break;
+    }
+    const dueIds=new Set(due.map(item=>item.record.submission.requestId));
+    const hotReady=hot.filter(r=>!dueIds.has(r.submission.requestId));
+    const settledReady=settled.filter(r=>!dueIds.has(r.submission.requestId));
+    const compactReady=eligible.filter(r=>!dueIds.has(r.submission.requestId));
+    const selected:Selected[]=[];
+    const add=(record:Selected['record']|undefined,lane:string,isCompact=false)=>{if(record)selected.push({record,lane,compact:isCompact});};
+    // The first correction precedes unchanged history; every nonempty ordinary lane still gets one place.
+    const first=due.shift();if(first)selected.push(first);
+    add(hotReady.shift(),`${mode}:priority`);add(settledReady.shift(),`${mode}:history`);
+    for(const record of compactReady.splice(0,first?1:2))add(record,compactKey,true);
+    while(selected.length<4&&(due.length||hotReady.length||settledReady.length||compactReady.length)){
+      if(due.length)selected.push(due.shift()!);
+      else if(hotReady.length)add(hotReady.shift(),`${mode}:priority`);
+      else if(settledReady.length)add(settledReady.shift(),`${mode}:history`);
+      else add(compactReady.shift(),compactKey,true);
+    }
+    // A page of other modes/conflicts must not trap this cursor; none is reinterpreted or published.
+    if(!eligible.length&&compact.length)advance(compactKey,compact.at(-1)!.submission.requestId);
+    for(const item of selected){
+      const request=item.record;
+      if(item.dueSeq!==undefined)this.corrections.advance(item.dueSeq);
+      else advance(item.lane,request.submission.requestId);
+      // Duplicate authority is unresolved. Preserve both sides and every existing intent; publish neither.
+      if(!item.compact&&compactStore.compact?.(request.submission.requestId)){pending=true;continue;}
       const id=`${request.submission.requestId}:${mode}`, name=mode==='pilot'?PILOT_CHECK:FULL_CHECK;
-      const old=this.storage.sql.exec<{state:string}>('SELECT state FROM capacity_publications WHERE id = ?',id).toArray()[0];
-      const intent: Intent=old?JSON.parse(old.state):{requestId:request.submission.requestId,mode,checkId:null,phase:'new',sent:null,failed:false};
+      const old=read(id);let intent:Intent;
+      try{
+        if(item.compact&&!old){pending=true;continue;}
+        intent=old?JSON.parse(old.state):{requestId:request.submission.requestId,mode,checkId:null,phase:'new',sent:null,failed:false};
+        if(intent.requestId!==request.submission.requestId||intent.mode!==mode)throw new Error('publication_identity_conflict');
+        if(item.compact&&(intent.phase!=='known'||!Number.isSafeInteger(intent.checkId)||intent.checkId!<=0))throw new Error('correction_intent_unavailable');
+      }catch{pending=true;continue;}
       const save=()=>this.storage.sql.exec('INSERT OR REPLACE INTO capacity_publications (id,state) VALUES (?,?)',id,JSON.stringify(intent));
       const result=status(request.submission.requestId);if(!result)continue;
+      if(item.dueSeq!==undefined&&result.status!=='failure'){pending=true;continue;}
       // An old, superseded attempt may update its existing check, but may never create a newer check on that SHA.
       if(store.newerParent(request.submission.parentRunId,request.submission.parentAttempt)&&intent.checkId===null)continue;
       let aggregate=result;
@@ -64,7 +139,7 @@ export class CapacityOutbox {
       if(aggregate.status==='failure'&&!intent.failed){intent.failed=true;save();}
       if(intent.failed)aggregate={status:'failure',reason:'verified_failure'};
       const fingerprint=JSON.stringify(aggregate);
-      if(intent.sent===fingerprint)continue;
+      if(intent.sent===fingerprint){if(aggregate.status==='failure')this.corrections.clear(request.submission.requestId);continue;}
       pending=true;
       try {
         if(intent.phase==='creating'){
@@ -93,8 +168,13 @@ export class CapacityOutbox {
           output:{title:aggregate.reason,summary:`${mode==='pilot'?'Six Worker shards only; not full-suite authority.':'Full expected suite and prerequisites.'} Request ${request.submission.requestId}; original run ${request.submission.parentRunId}, attempt ${request.submission.parentAttempt}.`},
         });
         intent.sent=fingerprint;save();
+        if(aggregate.status==='failure')this.corrections.clear(request.submission.requestId);
       }catch { /* Durable intent remains for the next alarm; never publish guessed success. */ }
     }
-    return pending||rotated.length>4;
+    this.corrections.finishLegacy();
+    // Keep bounded reconciliation/expiry alive while either representation still owes monitoring.
+    const urgent = pending || priority.length>0 || this.corrections.pending() || !this.corrections.legacyReady();
+    this.historyDelayMs = urgent ? 0 : compact.length===100 ? 30_000 : 60_000;
+    return pending||garbage||backfill||this.corrections.pending()||records.length>0||compact.length>0;
   }
 }

@@ -81,7 +81,7 @@ test('counts distinguish no study, recorded zero, statuses and contradictory evi
     assert.equal(r.body.counts[status], 1); assert.equal(r.body.counts.open_with_contradicting_evidence, 0);
   }
   assert.equal(q.answer, 'Secret answer');
-  let open = await create(f); open = await add(f, open, 'finding-support', 'contradicts'); open = await add(f, open, 'finding-contradict', 'contradicts');
+  let open = await create(f); open = await add(f, open, 'finding-support', 'contradicts'); await add(f, open, 'finding-contradict', 'contradicts');
   assert.deepEqual((await call(f, 'GET')).body.counts, { total: 2, answered: 0, open: 1, set_aside: 1, open_with_contradicting_evidence: 1, links_with_removed_finding: 0 });
   const logs = JSON.stringify(f.db.prepare("SELECT details FROM activity_logs WHERE action LIKE 'research_study_%'").all());
   for (const secret of ['Secret question', 'Secret answer', 'secret link note', 'secret support']) assert.equal(logs.includes(secret), false);

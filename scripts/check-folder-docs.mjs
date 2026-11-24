@@ -111,6 +111,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
   ['cloudflare-worker/src/services/posthog', 'PostHog, read-only (D1385): the MCP reads, the tracked metrics and each section\'s sync (D1605–D1609), and Distribution\'s visits (D6107)'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
+  ['cloudflare-worker/src/services/typeform', 'Typeform, read-only: the response importer (D5828), the binding it follows and the live grant (D5828 part 2), and founder review (D5829)'],
   ['cloudflare-worker/src/services/wellbeing', 'Wellbeing: expert matching, slots, bookings, reflection periods (D7118) and recommendations (D7119)'],
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],

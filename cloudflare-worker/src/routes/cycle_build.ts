@@ -34,6 +34,8 @@ import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
+import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
+import { suggestedFilings } from '../services/suggestedFilings';
 import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -969,6 +971,46 @@ async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; s
   return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? { pct: null, source: null } : { pct: Number(pool), source: 'model' };
 }
 
+/** D6037 (#6037): existing founding stores, with failures isolated per part. */
+async function foundingFacts(env: Env, p: Project, founders: any[], pool: {pct:number|null;source:string|null}) {
+  const read = async (sql:string) => { try { return rows(await env.DB.prepare(sql).bind(p.id).all<any>()); } catch { return null; } };
+  const [filings, agreements, contributions, holders, hiring] = await Promise.all([
+    read("SELECT * FROM formation_steps WHERE project_id=? AND kind='83b' ORDER BY id DESC"),
+    read("SELECT d.*, party.user_id AS party_user_id FROM documents d JOIN cofounder_agreement_parties party ON party.document_id=d.id WHERE d.project_id=? AND d.template_name='cofounder_agreement' ORDER BY d.created_at DESC,d.id DESC"),
+    read('SELECT * FROM founder_contributions WHERE project_id=? ORDER BY on_date DESC,id DESC'),
+    read('SELECT id,name,ownership_pct FROM cap_table_holders WHERE project_id=?'),
+    read('SELECT id,title,team,target_start,status FROM job_postings WHERE project_id=? ORDER BY id DESC'),
+  ]);
+  // Recorded pool percentages include granted options; legacy holder percentages
+  // do not identify that overlap. Do not subtract both as disjoint shares.
+  const known = holders!=null && holders.every(h=>h.ownership_pct!=null) && pool.pct!=null && pool.source !== 'record';
+  const remainder = known ? Math.round((100-holders!.reduce((n,h)=>n+Number(h.ownership_pct),0)-pool.pct!)*100)/100 : null;
+  const valid = remainder != null && remainder >= 0 && remainder <= 100;
+  return { option_pool_pct:pool.pct, option_pool_source:pool.source,
+    unallocated_pct:valid?remainder:null,
+    unallocated_reason:valid?null:pool.source==='record'?'Recorded pool includes granted options; its overlap with holder percentages is not recorded.':known?'Holder and pool percentages exceed 100%.':holders==null?'Holder percentages unavailable.':'Every holder percentage and the option pool must be recorded.',
+    other_holders:holders?.filter(h=>!founders.some(f=>f.id===h.id)).map(h=>({name:h.name,equity:h.ownership_pct}))??null,
+    signatures:null, agreement_reason:'The latest document status is recorded; individual party signatures are not stored. A signed-of-total count is not recorded.',
+    hiring: hiring==null?{state:'unreadable',rows:null}:{state:'ok',rows:hiring},
+    contributions: contributions==null?{state:'unreadable',rows:null}:{state:'ok',rows:contributions.filter(c=>founders.some(h=>h.id===c.holder_id)).map(c=>({...c,founder:founders.find(h=>h.id===c.holder_id)?.name}))},
+    founders:founders.map(h=>{
+      const filing=filings?.find(f=>f.for_holder_id===h.id);
+      const agreement=h.user_id==null?null:agreements?.find(d=>d.party_user_id===h.user_id);
+      const start=typeof h.start_date==='string'?dateOnly(h.start_date.slice(0,10)):null;
+      const cliff=start&&h.cliff_months!=null?longDate(addMonths(start,Number(h.cliff_months))):null;
+      const fully=start&&h.total_months!=null?longDate(addMonths(start,Number(h.total_months))):null;
+      return {id:Number(h.id),name:h.name,role:h.founder_role,equity:h.ownership_pct,
+        vesting:vestingText(h.start_date,h.cliff_months,h.total_months),start:h.start_date??null,cliff,fully,
+        vested_pct:h.shares&&h.vested_shares!=null?Math.max(0,Math.min(100,Math.round(100*Number(h.vested_shares)/Number(h.shares)))):null,
+        agreement:agreements==null?'Unavailable':!agreement?'Not recorded':agreement.status==='signed'?'Signed':'Awaiting',
+        agreement_date:agreement?(agreement.status==='signed'?agreement.signed_at??null:agreement.created_at??null):null,
+        filing:{text:filings==null?'Unavailable':!filing?'No 83(b) filing recorded':filing.state==='done'?'Filed':filing.due_date?`Due ${filing.due_date}`:'No due date recorded',
+          href:filing?`/build/company-creation/step-${filing.id}?project=${p.id}`:`/build/company-creation?project=${p.id}`},
+      };
+    }),
+  };
+}
+
 async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
@@ -976,7 +1018,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   // every founder (a segment and a vesting bar each), so every founder is read;
   // investors and option holders are not, nor is their agreement.
   const founderRows = rows(await env.DB.prepare(
-    `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares,
+    `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares, h.user_id,
             v.start_date, v.cliff_months, v.total_months, v.vested_shares,
             (SELECT d.status FROM documents d
               JOIN cofounder_agreement_parties party ON party.document_id = d.id
@@ -987,6 +1029,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
        LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
       WHERE h.project_id = ? AND h.founder_role IS NOT NULL ORDER BY h.id`,
   ).bind(p.id).all<any>());
+  const pageFacts = opts.pageFacts ? await foundingFacts(env,p,founderRows,await optionPool(env,p)) : null;
   const equityKnown = founderRows.length && founderRows.every(h => h.ownership_pct != null);
   const series: ChartSpec[] = [];
   if (equityKnown) series.push({ kind: 'stack', rows: [{ label: 'Equity', parts: founderRows.map(h => number(h.ownership_pct)) }], tones: founderRows.map((_, i) => ['v1', 'v2', 'v3', 'grey'][i % 4]), legend: founderRows.map((h, i) => ({ label: h.name, tone: ['v1', 'v2', 'v3', 'grey'][i % 4] })) });
@@ -999,16 +1042,16 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     founder: h.name, role: h.founder_role, equity: h.ownership_pct == null ? null : percent(number(h.ownership_pct)),
     vesting: vestingText(h.start_date, h.cliff_months, h.total_months),
     agreement: h.agreement_status == null ? null : h.agreement_status === 'signed' ? 'Signed' : 'Awaiting',
+    filing: pageFacts?.founders.find(f=>f.id===Number(h.id))?.filing ?? null,
   }, { role: h.founder_role ?? null, equity: h.ownership_pct == null ? null : number(h.ownership_pct) },
   { role: h.founder_role ?? null, ownership_pct: h.ownership_pct ?? null }));
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
   return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: `/raise/cap-table?project=${p.id}` } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
-    cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
+    cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement'], ['filing','83(b)']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
     // #4603 part 2b: the option pool is a module-page fact (the overview and the phone read the card only), so the overview does not read the cap table.
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(opts.pageFacts ? await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source })) : {}),
-      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.', ...(pageFacts ?? {}) },
     ...(opts.parts ? { parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
       founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } } : {}) };
 }
@@ -1049,7 +1092,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+export async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -1120,8 +1163,17 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
       filings: combined.length, next_filing_due: nextFilingDue,
       // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
-      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
-        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
+      next_filing: nextFiling ? { id: nextFiling.id, title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null,
+      // #6038 (D6038, BD25, BD26, BD29): the module page's company-first blocks, each read and failing on its own.
+      // The overview reads none of them (#4603's budget), so its card is the module page's card, unchanged.
+      ...(opts.pageFacts ? {
+        entity: await entitySummary(env, p, order ?? null, steps),
+        elections: await electionRows(env, p, viewer, steps),
+        papers: await companyPapers(env, p, viewer),
+        // #8259 (D8259, BD28): the pack's filings not yet added or dismissed, failing on its own.
+        suggestions: await suggestedFilings(env, p, order ?? null, steps),
+      } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1371,7 +1423,7 @@ async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, 
   }
 }
 
-async function context(c: any): Promise<Project | Response> {
+export async function context(c: any): Promise<Project | Response> {
   const user = await requireAuth(c);
   const raw = c.req.query('project');
   if (!raw || !/^\d+$/.test(raw) || Number(raw) < 1) return c.json({ detail: 'Valid project is required' }, 400);
@@ -1859,6 +1911,82 @@ async function patchRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   ]);
   return c.json({ ok: true, id });
 }
+
+/**
+ * D6033 (#6033, BD25): Solution design's risks as a list, 25 a page, read on its own.
+ * The module read keeps its counts only (#4603 part 2, 2026-11-07), so this read
+ * adds no statement to it. It has the module read's gate (`context`), lists the
+ * risks tied to no feature too (an accepted Build Plan risk writes none,
+ * buildPlanAccept.ts), and gives a writer the owners and features Add offers.
+ */
+export const RISKS_PER_PAGE = 25;
+const RISK_STATES = ['open', 'mitigating', 'closed'] as const;
+const RISK_ROW_FROM = `FROM venture_risks r
+       LEFT JOIN users u ON u.id = r.owner_user_id
+       LEFT JOIN mvp_features f ON f.id = r.feature_id AND f.project_id = r.project_id
+      WHERE r.project_id = ?
+        AND (? = '' OR r.state = ?)
+        AND (? = '' OR (? = 'tied' AND r.feature_id IS NOT NULL) OR (? = 'untied' AND r.feature_id IS NULL))`;
+const RISK_TOTAL_SQL = 'SELECT COUNT(*) AS n ' + RISK_ROW_FROM;
+const RISK_PAGE_SQL = `SELECT r.id, r.title, r.severity, r.state, r.mitigation, r.owner_user_id, u.name AS owner, f.id AS feature_id, f.title AS feature,
+        EXISTS (SELECT 1 FROM build_plan_items i WHERE i.project_id = r.project_id AND i.landed_table = 'venture_risks' AND i.landed_id = CAST(r.id AS TEXT)) AS from_plan
+       ` + RISK_ROW_FROM + `
+      ORDER BY CASE r.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, CASE r.state WHEN 'closed' THEN 1 ELSE 0 END, r.id
+      LIMIT ? OFFSET ?`;
+app.get('/risks', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const viewer = await requireAuth(c);
+  const state = c.req.query('state') ?? '';
+  const feature = c.req.query('feature') ?? '';
+  const rawPage = c.req.query('page') ?? '1';
+  if (state && !(RISK_STATES as readonly string[]).includes(state)) return c.json({ error: 'invalid_state', detail: 'State is open, mitigating or closed' }, 400);
+  if (feature && !['tied', 'untied'].includes(feature)) return c.json({ error: 'invalid_feature', detail: 'Feature is tied or untied' }, 400);
+  if (!/^[1-9]\d{0,5}$/.test(rawPage)) return c.json({ error: 'invalid_page', detail: 'Page is a whole number from 1' }, 400);
+  const page = Number(rawPage);
+  const filter = [state, state, feature, feature, feature];
+  const writes = canWrite(project, viewer);
+  // Five reads, each on its own; none is in the module read (D6033).
+  const [counts, total, found, owners, features] = await Promise.all([
+    c.env.DB.prepare(`SELECT COUNT(*) AS all_n,
+        COALESCE(SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END), 0) AS open_n,
+        COALESCE(SUM(CASE WHEN state = 'mitigating' THEN 1 ELSE 0 END), 0) AS mitigating_n,
+        COALESCE(SUM(CASE WHEN state = 'closed' THEN 1 ELSE 0 END), 0) AS closed_n,
+        COALESCE(SUM(CASE WHEN feature_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS tied_n,
+        COALESCE(SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END), 0) AS high_n,
+        COALESCE(SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END), 0) AS medium_n,
+        COALESCE(SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END), 0) AS low_n
+       FROM venture_risks WHERE project_id = ?`).bind(project.id).first<Record<string, unknown>>(),
+    c.env.DB.prepare(RISK_TOTAL_SQL).bind(project.id, ...filter).first<{ n: number }>(),
+    c.env.DB.prepare(RISK_PAGE_SQL).bind(project.id, ...filter, RISKS_PER_PAGE, (page - 1) * RISKS_PER_PAGE).all<any>(),
+    // A writer's Add offers the company's members and the venture's features; a reader is sent neither.
+    c.env.DB.prepare('SELECT u.id, u.name FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? AND ? = 1 ORDER BY lower(u.name), u.id')
+      .bind(project.company_id ?? -1, writes ? 1 : 0).all<any>(),
+    c.env.DB.prepare('SELECT id, title FROM mvp_features WHERE project_id = ? AND ? = 1 ORDER BY lower(title), id LIMIT 500').bind(project.id, writes ? 1 : 0).all<any>(),
+  ]);
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const k = (counts ?? {}) as Record<string, unknown>;
+  const matched = n(total?.n);
+  return c.json({
+    rows: ((found.results ?? []) as any[]).map(r => ({
+      id: Number(r.id), title: r.title, severity: r.severity, state: r.state,
+      mitigation: typeof r.mitigation === 'string' && r.mitigation.trim() ? r.mitigation.trim() : null,
+      owner: r.owner_user_id == null ? null : { you: Number(r.owner_user_id) === Number(viewer.id), name: r.owner ?? null },
+      feature: r.feature_id == null ? null : { id: Number(r.feature_id), title: r.feature },
+      from_plan: n(r.from_plan) === 1,
+    })),
+    total: matched, page, per_page: RISKS_PER_PAGE, pages: Math.max(1, Math.ceil(matched / RISKS_PER_PAGE)),
+    counts: {
+      all: n(k.all_n), open: n(k.open_n), mitigating: n(k.mitigating_n), closed: n(k.closed_n),
+      tied: n(k.tied_n), untied: n(k.all_n) - n(k.tied_n),
+      high: n(k.high_n), medium: n(k.medium_n), low: n(k.low_n),
+    },
+    can_write: writes,
+    ...(writes ? { choices: {
+      owners: ((owners.results ?? []) as any[]).map(u => ({ value: String(u.id), label: u.name ?? 'Unnamed member' })),
+      features: ((features.results ?? []) as any[]).map(f => ({ value: String(f.id), label: f.title })),
+    } } : {}),
+  });
+});
 
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision

@@ -122,7 +122,8 @@ test('a recusal renders as itself, declaration beside it, out of the tally', () 
     'the vote words table no longer matches the column’s vocabulary',
   );
   // The tally excludes the recusal and says so beside it.
-  assert.match(Z, /recused \(out of the tally\)/, 'the tally text must name the exclusion');
+  // D6144: the close-vote dialog restates the tally and says where the recusal sits.
+  assert.match(Z, /beside the tally and never in it/, 'the tally text must name the exclusion');
   // The worker counts it from the record rather than stating a gap.
   const room = handler("r.get('/commit-room'");
   assert.match(room, /recusal: \{\s*available: true/, 'the route stopped reporting the recusal count');
@@ -284,12 +285,13 @@ test('the strip is DE07’s five tiles, and eligible voters are never counted fr
   const drawn = [...stripSrc.matchAll(/label="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(drawn, labels, 'the strip drifted from DE07');
   assert.match(stripSrc, /String\(open\)/, 'the Open conditions tile must count the open ones');
-  // AND THE ROSTER IS NOT A VOTING ENTITLEMENT. DE07 draws "6 eligible";
-  // no voting roster is stored, so eligible voters read Not recorded, and
-  // `ic_meeting_attendees` (an invitation list) is never counted as voters.
+  // AND THE MEETING IS NOT A VOTING ENTITLEMENT. DE07 draws "6 eligible";
+  // since D6143 the count is the decision's own roster (`rosterLine`), Not
+  // recorded when none is set, and `ic_meeting_attendees` (an invitation
+  // list) is never counted as voters (D6144).
   assert.match(board, /6 eligible/, 'the board changed its eligible count');
-  assert.match(Z, /<dt>Eligible voters<\/dt><dd><NotRecorded \/><\/dd>/,
-    'eligible voters must read Not recorded: no voting roster is stored');
+  assert.match(Z, /<dt>Eligible voters<\/dt><dd[^>]*>\{roster\.unreadable \? <Unavailable \/> : roster\.eligible === null \? <NotRecorded \/> : roster\.eligible\}<\/dd>/,
+    'eligible voters must come from the roster, Not recorded without one');
   assert.equal((Z.match(/Eligible voters/g) || []).length, 1, 'eligible voters are drawn somewhere else too');
   assert.match(Z, /invited, not entitled to vote/);
   const room = handler("r.get('/commit-room'");

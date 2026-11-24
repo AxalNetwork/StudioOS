@@ -8,6 +8,8 @@
  *   stage, primary_action   RA-03's rule, chosen on the Worker (D6045); the page never picks the step
  *   cards[]                 the seven module cards (D663); the Pitch card carries `pitch_state` (RA-05)
  *   next_steps              readiness steps with their reason and gain (D1610)
+ *   follow_ups_due          prospects with a next step due this week (D8256)
+ *   open_objections         objections no narrative section answers yet, with who raised them (D8256)
  *   connectors              the connected sources and when each was last read (D1610)
  *   investor_activity       pipeline, deck-view and call-response counts, each with its own read meta (D6045)
  *
@@ -121,16 +123,27 @@ export function journeyView(raw, search = '') {
 
 // ---------- Readiness (RA-04 summary, RA-07 detailed) ---------------------
 
-/** RA-16 (D6049): Product-market fit is supporting evidence, shown on Fundraising readiness, never an area here. */
-const PMF = /^product[- ]market fit$/i;
+/** RA-16 (D6049): Product-market fit is supporting evidence, shown on Fundraising readiness, never an area here. Matched by key (D8257). */
+const PMF_KEY = 'pmf';
+
+/**
+ * D8257 (#8257): an area's status as the Worker states it (`readinessAreaStatus`, RA-23's rule, the one
+ * Fundraising readiness draws). A bar from a read that carries none falls back to its score alone.
+ */
+export const AREA_STATUSES = ['ready', 'attention', 'missing', 'stale', 'unavailable', 'not_recorded'];
+/** The statuses that need attention, as Fundraising readiness counts them. Not recorded is coverage, not a gap. */
+export const NEEDS_ATTENTION = new Set(['missing', 'attention', 'stale', 'unavailable']);
+const statusOf = (i, score) => (AREA_STATUSES.includes(i.status) ? i.status : score == null ? 'not_recorded' : 'ready');
+const isDay = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /**
  * The readiness areas from the Fundraising readiness card's bar chart (`readinessCard`, D663): each area's
- * newest score out of 10, or null when nothing assessed it. Product-market fit is left out (RA-16).
+ * key, newest score out of 10 (null when nothing scored it), status and the day it was last scored
+ * (D8257). Product-market fit is left out by its key (RA-16); no rule here matches an area by its label.
  *   { state: 'loading' }                       no read yet
  *   { state: 'unavailable', reason }           the card could not be read
  *   { state: 'none', next }                    no area is scored yet (an empty card)
- *   { state: 'ready', areas, assessed, total, unassessed, next }
+ *   { state: 'ready', areas, assessed, total, unassessed, attention, stale, next }
  */
 export function readinessView(raw) {
   if (!raw) return { state: 'loading' };
@@ -143,11 +156,37 @@ export function readinessView(raw) {
   const hbar = card.state === 'ok' && Array.isArray(card.series) ? card.series.find((s) => s?.kind === 'hbar' && Array.isArray(s.items)) : null;
   if (!hbar) return { state: 'none', next };
   const areas = hbar.items
-    .filter((i) => i && typeof i.label === 'string' && !PMF.test(i.label.trim()))
-    .map((i) => ({ label: i.label, score: isNum(i.value) ? i.value : null }));
+    .filter((i) => i && typeof i.label === 'string' && i.key !== PMF_KEY)
+    .map((i) => {
+      const score = isNum(i.value) ? i.value : null;
+      return { key: typeof i.key === 'string' && i.key ? i.key : null, label: i.label, score, status: statusOf(i, score), assessedAt: isDay(i.assessed_at) ? i.assessed_at : null };
+    });
   if (!areas.length) return { state: 'none', next };
-  const assessed = areas.filter((a) => a.score != null);
-  return { state: 'ready', areas, assessed: assessed.length, total: areas.length, unassessed: areas.filter((a) => a.score == null).map((a) => a.label), next };
+  const assessed = areas.filter((a) => a.status !== 'not_recorded');
+  return {
+    state: 'ready', areas, assessed: assessed.length, total: areas.length,
+    unassessed: areas.filter((a) => a.status === 'not_recorded').map((a) => a.label),
+    attention: areas.filter((a) => NEEDS_ATTENTION.has(a.status)).length,
+    stale: areas.filter((a) => a.status === 'stale'),
+    next,
+  };
+}
+
+/** RA-01: "3 need attention", "1 needs attention", or "None needs attention" (D8257, as Fundraising readiness counts). */
+export const attentionWords = (v) => (v.attention ? `${v.attention} ${v.attention === 1 ? 'needs' : 'need'} attention` : 'None needs attention');
+
+/**
+ * RA-09 Stale (D8257): the areas whose evidence changed since they were scored, and the oldest of
+ * their scoring days. Null when none is stale.
+ */
+export function staleReadiness(v) {
+  if (v?.state !== 'ready' || !v.stale?.length) return null;
+  const days = v.stale.map((a) => a.assessedAt).filter(Boolean).sort();
+  return {
+    names: v.stale.map((a) => a.label),
+    since: days[0] || null,
+    sentence: `${listWords(v.stale.map((a) => a.label))} ${v.stale.length === 1 ? 'was' : 'were'} assessed before ${v.stale.length === 1 ? 'its' : 'their'} evidence changed. Re-assess to update.`,
+  };
 }
 
 /** "6 of 8 areas assessed". */
@@ -177,30 +216,102 @@ export const detailedOpenByDefault = (raw) => !(raw?.stage?.state === 'ok' && ra
 
 // ---------- Next actions (RA-04) ------------------------------------------
 
+/** A day as "21 Nov"; the stored day itself when it is not one. */
+const shortDay = (d) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
+  return m ? `${Number(m[3])} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]}` : String(d || '');
+};
+const partOk = (p) => p && p.state === 'ok' && Array.isArray(p.items);
+
 /**
- * At most three readiness steps, biggest known gain first and Team never (`nextStepItems`), each with its
- * reason and its one action. The impact is a neutral label; a gain the read does not know is Not recorded,
- * never "+0". `{ state: 'unavailable' }` when the steps could not be read; null when the read has none.
+ * D8256 (RA-02): the follow-ups due as one action: who, how many are overdue, and the earliest day.
+ * A staff read carries no names, so it says how many. Null with none due.
+ */
+export function followUpAction(part, search = '') {
+  if (!partOk(part)) return null;
+  const items = part.items.filter((f) => f && typeof f.due_on === 'string');
+  if (!items.length) return null;
+  const n = items.length;
+  const names = items.map((f) => f.investor).filter((x) => typeof x === 'string' && x);
+  const overdue = items.filter((f) => f.overdue === true).length;
+  const who = names.length === n ? listWords(names.length > 3 ? [...names.slice(0, 3), plural(n - 3, 'other', 'others')] : names) : plural(n, 'investor', 'investors');
+  const earliest = items.map((f) => f.due_on).sort()[0];
+  return {
+    key: 'follow-ups',
+    kind: 'follow_up',
+    title: n === 1 && names.length === 1 ? `Follow up with ${names[0]}` : `Follow up with ${plural(n, 'investor', 'investors')}`,
+    reason: `${who} ${n === 1 ? 'has a next step' : 'have a next step'} due this week${overdue ? `; ${overdue} ${overdue === 1 ? 'is' : 'are'} overdue` : ''}.`,
+    source: `From Capital relationships · earliest due ${shortDay(earliest)}${part.capped ? ' · more not listed' : ''}`,
+    impact: null,
+    cta: 'Open Outreach',
+    label: `Open Outreach for ${plural(n, 'follow-up', 'follow-ups')} due`,
+    href: nextHref(part.href, search),
+  };
+}
+
+/** D8256 (RA-02): the most heard objection no narrative section answers, with who raised it. Null with none open. */
+export function objectionAction(part, search = '') {
+  if (!partOk(part)) return null;
+  const o = part.items.find((x) => x && typeof x.text === 'string' && x.text && typeof x.key === 'string');
+  if (!o) return null;
+  const by = Array.isArray(o.investors) && o.investors.length ? `Raised by ${listWords(o.investors.length > 3 ? [...o.investors.slice(0, 3), plural(o.investors.length - 3, 'other', 'others')] : o.investors)}` : null;
+  const n = isNum(o.prospects) ? o.prospects : null;
+  const more = part.items.length - 1;
+  return {
+    key: `objection-${o.key}`,
+    kind: 'objection',
+    title: 'Answer an open objection',
+    reason: `“${o.text}” was raised by ${n == null ? 'investors' : plural(n, 'investor', 'investors')} and has no answer in the narrative.`,
+    source: [`From investor feedback${by ? ` · ${by}` : ''}`, more > 0 ? `${plural(more, 'more objection', 'more objections')} open` : null].filter(Boolean).join(' · '),
+    impact: null,
+    cta: 'Answer objection',
+    label: `Answer the objection “${o.text}”`,
+    href: nextHref(o.href, search),
+  };
+}
+
+/** D8256: the board's order (RA-02): follow-ups due, then an open objection, then readiness steps. */
+export const NEXT_ACTIONS_MAX = 3;
+
+/**
+ * RA-02, RA-04: at most three next actions in the board's order: the follow-ups due (one action), the most
+ * heard open objection, then readiness steps, biggest known gain first and Team never (`nextStepItems`).
+ * Each names its reason and its source record and has one action. A readiness step's impact is a neutral
+ * label; a gain the read does not know is Not recorded, never "+0".
+ *   { state: 'unavailable' }                     nothing could be read (every part unreadable or absent)
+ *   { state: 'ready', items, unread }            `unread` names the parts that could not be read, so a
+ *                                                missing follow-up is never read as "none due"
+ *   null                                         the read carries no next actions at all
  */
 export function nextActionsView(raw, search = '') {
   const part = raw?.next_steps;
-  if (part == null) return null;
-  if (part.state === 'unreadable') return { state: 'unavailable' };
+  const fu = raw?.follow_ups_due;
+  const ob = raw?.open_objections;
+  if (part == null && fu == null && ob == null) return null;
+  const unread = [];
+  if (fu?.state === 'unreadable') unread.push('Follow-ups due');
+  if (ob?.state === 'unreadable') unread.push('Open objections');
+  if (part?.state === 'unreadable') unread.push('Readiness steps');
+  const read = [part, fu, ob].filter((x) => x != null && x.state !== 'unreadable');
+  if (!read.length) return { state: 'unavailable' };
   const names = new Map(cardsOf(raw).map((c) => [c.slug, c.name || c.slug]));
-  const items = nextStepItems(part).map((i) => {
+  const steps = part && part.state !== 'unreadable' ? nextStepItems(part).map((i) => {
     const module = names.get(i.module_slug) || i.label;
     const gain = gainLabel(i.gain_points);
     return {
       key: i.item_key,
+      kind: 'readiness',
       title: i.label,
       reason: i.text || 'Not recorded',
+      source: null,
       impact: gain ? `Readiness impact ${gain}` : null,
       cta: `Open ${module}`,
       label: `Open ${module} for ${i.label}`,
       href: nextHref(i.href, search),
     };
-  });
-  return { state: 'ready', items };
+  }) : [];
+  const items = [followUpAction(fu, search), objectionAction(ob, search), ...steps].filter(Boolean).slice(0, NEXT_ACTIONS_MAX);
+  return { state: 'ready', items, unread };
 }
 
 // ---------- Materials (RA-01 table, RA-02 cards, RA-05 Pitch) --------------

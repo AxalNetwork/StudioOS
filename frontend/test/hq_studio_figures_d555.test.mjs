@@ -23,6 +23,7 @@ import { AdminStudioOverview, HqAccounts, HqApprovals, HqInsights } from '../src
 import { StudioNeedsDecisionView } from '../src/pages/admin/StudioNeedsDecision.jsx';
 import { laneView, LANES as APPROVAL_LANES } from '../src/pages/admin/approvals/approvalsModel.js';
 import { Figure, laneOf } from '../src/pages/admin/heldFigures.jsx';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -80,7 +81,7 @@ test('the view models: accounts counts, lanes worst first with consoles, insight
     ACTIVE_BEFORE_LOG, 'a week before the log began is blank, not zero');
   assert.equal(hqInsightsView({ ...PAYLOAD.insights, active_accounts: { available: false, reason: 'gone' } }).active.kind, 'unreadable');
   // Every console the overview links is one Approvals links (D1038: /admin/approvals).
-  const held = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const held = approvalsPageSource();
   for (const to of [...Object.values(LANE_CONSOLES), ...Object.values(NO_QUEUE_CONSOLES)]) {
     assert.ok(held.includes(`to="${to}"`), `${to} is not a lane console on Approvals`);
   }
@@ -199,7 +200,7 @@ test('the held pages read the glance and no longer say "none counted here"', () 
     assert.match(src, /useHeldGlance\(\)/, `${f} does not read the glance`);
     assert.doesNotMatch(src, /none counted here/, `${f} still says none counted here`);
   }
-  assert.doesNotMatch(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /Links to its console/);
+  assert.doesNotMatch(approvalsPageSource(), /Links to its console/);
   const acc = read('frontend/src/pages/admin/HeldAccounts.jsx');
   for (const id of ['held-accounts-users-count', 'held-accounts-exploring-count', 'held-accounts-trash-count']) assert.ok(acc.includes(id), id);
   assert.doesNotMatch(read('frontend/src/pages/admin/programs/programsModel.js'), /none counted here/);

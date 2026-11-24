@@ -121,7 +121,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -149,7 +152,10 @@ jobs:
         with:
           persist-credentials: false
           ref: refs/heads/main
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -177,7 +183,10 @@ jobs:
         with:
           persist-credentials: false
           ref: refs/heads/main
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -315,6 +324,7 @@ jobs:
           sparse-checkout: |
             scripts
             package.json
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -351,7 +361,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'

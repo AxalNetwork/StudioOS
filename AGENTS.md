@@ -220,6 +220,37 @@ without being merged.
   required from 2026-11-11 00:00 UTC). Never take "the next free number" for
   either.
 
+### Identity trailers
+
+Every commit an agent writes ends with one trailer block that names its slot,
+its task, its run and its session (D8068). The block is the message's last
+paragraph, every line in it is `Key: value`, and each of these four keys
+appears exactly once, spelt as shown:
+
+| Trailer | Value | Example |
+|---|---|---|
+| `Agent-Slot` | `S` and two digits, `S01` to `S99` | `S21` |
+| `Agent-Task` | `#` and the issue number | `#6476` |
+| `Agent-Run` | the CI run id, or `manual` | `manual` |
+| `Agent-Session` | the session's `https://` URL | `https://claude.ai/code/session_01Example` |
+
+```text
+Agent-Slot: S21
+Agent-Task: #6476
+Agent-Run: manual
+Agent-Session: https://claude.ai/code/session_01Example
+Co-Authored-By: Example Agent <agent@example.invalid>
+```
+
+Other trailers, such as `Co-Authored-By`, may share the block. A commit
+dated before `2026-12-01T00:00:00Z` may give `Claude-Session` in place of
+`Agent-Session`. All commits of one pull request name one slot and one task,
+and on `agent/<agent>/<issue>-<slug>` the task is that issue. A merge commit
+needs no trailers only when it adds nothing of its own. The `provenance`
+check (`agent-provenance.yml`) applies this to every `agent/**` pull request.
+Check your own branch with
+`node scripts/ci/agent-provenance.mjs --base origin/main --head HEAD`.
+
 ### File ownership
 
 An issue names the files it owns. Never edit files that another open issue or

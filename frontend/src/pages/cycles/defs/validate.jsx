@@ -26,6 +26,9 @@ import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePo
 import NotionInterviewImport from '../NotionInterviewImport';
 import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection, ThemeRecordParts } from '../ValidateSections';
 import HypothesisRecord from '../HypothesisRecord';
+// D5998 (#5998): Validate's V2 overview (boards V1, V2, V13), mounted through `Overview` as Grow's and Build's are.
+// Imported statically: its lead (`ValidateLead`, `ValidateObjective`, `PmfChip`) is already in the route's bundle.
+import ValidateOverview from '../ValidateOverview';
 import { painThemesApi } from '../../../lib/api/painThemes.js';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
@@ -35,6 +38,8 @@ import WaitlistBar from '../ValidateWaitlistBar.jsx';
 import { PrepareQuestions } from '../InterviewGuide.jsx';
 import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
 import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
+import SegmentCompare from '../SegmentCompare.jsx';
+import { inCompare, withCompare } from '../segmentCompareModel.js';
 
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
@@ -152,6 +157,7 @@ export function RecordMount({ projectId, interviewId, setupKey, onClose, onStart
 
 const validate = {
   modules: MODULES.validate,
+  Overview: ValidateOverview,
   // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
   // click opens it over this page (`onOpen`); a new tab or a deep link follows
   // the href to the same place. The interview comes with it, or is made at Start.
@@ -169,6 +175,17 @@ const validate = {
       ];
     },
     'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
+    // D6007 (#6007, V21): Compare segments opens the module's compare mode (owner option A: no new route).
+    'ideal-customer-profile': (search) => ({ label: 'Compare segments', href: '/validate/ideal-customer-profile' + withCompare(projectSearch(search), []) }),
+  }),
+  // D6007 (#6007, V24): with `?compare=` the Ideal customer profile page is Compare segments: its body replaces
+  // the chart and table, and its line says so. Without it the module draws as before.
+  homes: toFnMap({
+    'ideal-customer-profile': (data, ctx) => (inCompare(ctx.searchParams) ? {
+      sub: 'Two to four segments side by side. Anything unwritten reads Not recorded.',
+      action: null,
+      body: () => <SegmentCompare projectId={ctx.projectId} records={data?.records} />,
+    } : null),
   }),
   add: toFnMap({
     // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.

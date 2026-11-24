@@ -217,18 +217,28 @@ test('S32 E1: a pause that outlives the budget, or an abort during or before the
 test('S32 E1 whole phase: a hung write, fsync or pause cannot hold the export past its deadline, and nothing publishes later', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const hang = () => { let release; const p = new Promise(resolve => { release = resolve; }); return { p, release: () => release() }; };
+  // #8489: the deadline expires when the test says so, at the hang, never after 200 ms of wall time. A real
+  // timer made each case depend on the mkdirs, the pause and the copy finishing first, which a busy runner
+  // does not promise. Timers the exporter arms are held here; `expire` runs the ones still armed.
+  const clock = () => {
+    const armed = new Map(); let next = 0;
+    return { timers: { setTimeout: fn => { armed.set(++next, fn); return next; }, clearTimeout: id => { armed.delete(id); } },
+      expire: () => { const due = [...armed.values()]; armed.clear(); for (const fn of due) fn(); } };
+  };
+  let deadline = clock();
   const setup = options => {
+    deadline = clock();
     const root = mkdtempSync(join(tmpdir(), 'phase-7905-')); t.after(() => rmSync(root, { recursive: true, force: true }));
     const tarFile = join(root, 'archive.tar'); writeFileSync(tarFile, valid());
     const stagingRoot = join(root, 'trace-export');
-    const exporter = createTraceExporter({ stagingRoot, engine: () => '', spawnCopy: () => spawn('/bin/cat', [tarFile], { stdio: ['ignore', 'pipe', 'ignore'] }), ...options });
+    const exporter = createTraceExporter({ stagingRoot, engine: () => '', timers: deadline.timers, spawnCopy: () => spawn('/bin/cat', [tarFile], { stdio: ['ignore', 'pipe', 'ignore'] }), ...options });
     return { ready: join(stagingRoot, '202-1-1', 'ready'), go: extra => exporter({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 200, ...extra }) };
   };
   const settle = () => new Promise(resolve => setTimeout(resolve, 50));
   // A write that never returns: the export fails at the deadline; releasing it afterwards publishes nothing.
   const { writeExclusive } = await import('../../scripts/ci/runners/trace-exporter.mjs');
   let gate = hang();
-  let f = setup({ write: async (...args) => { await gate.p; return writeExclusive(...args); } });
+  let f = setup({ write: async (...args) => { deadline.expire(); await gate.p; return writeExclusive(...args); } });
   const started = performance.now();
   assert.deepEqual(await f.go(), { state: 'failed', phase: 'seal', reason: 'export_budget_exhausted' });
   assert.ok(performance.now() - started < 2000, 'returned at the deadline, not when the write finished');
@@ -236,7 +246,7 @@ test('S32 E1 whole phase: a hung write, fsync or pause cannot hold the export pa
   assert.equal(existsSync(f.ready), false, 'a late write never leads to a ready offer');
   // A directory fsync that never returns.
   gate = hang();
-  f = setup({ sync: async () => { await gate.p; } });
+  f = setup({ sync: async () => { deadline.expire(); await gate.p; } });
   assert.deepEqual(await f.go(), { state: 'failed', phase: 'seal', reason: 'export_budget_exhausted' });
   gate.release(); await settle();
   assert.equal(existsSync(f.ready), false);
@@ -248,12 +258,12 @@ test('S32 E1 whole phase: a hung write, fsync or pause cannot hold the export pa
   assert.equal(existsSync(f.ready), false);
   // A pause that hangs: the engine call is given the export budget, and the phase stops at the deadline anyway.
   const seen = [];
-  f = setup({ engine: (args, options) => { seen.push(options); return new Promise(() => {}); } });
+  f = setup({ engine: (args, options) => { seen.push(options); deadline.expire(); return new Promise(() => {}); } });
   assert.deepEqual(await f.go(), { state: 'failed', phase: 'quiesce', reason: 'export_budget_exhausted' });
   assert.ok(seen[0].timeout > 0 && seen[0].timeout <= 200, JSON.stringify(seen));
   // A stop that lands after the rename says the offer is published but not yet durable.
   let syncs = 0; gate = hang();
-  f = setup({ sync: async () => { if (++syncs === 3) await gate.p; } });
+  f = setup({ sync: async () => { if (++syncs === 3) { deadline.expire(); await gate.p; } } });
   assert.deepEqual(await f.go(), { state: 'failed', phase: 'publish', reason: 'export_budget_exhausted', offer: 'published_unsynced' });
   assert.equal(existsSync(f.ready), true);
   gate.release();

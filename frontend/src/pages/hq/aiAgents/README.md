@@ -19,6 +19,8 @@ the owner's canvas (`design/incoming/HQ AI Agents Page.dc.html`, boards SA0–SA
 | `Operations.jsx` | D4522: live Super Admin Overview, Runs, Spend, Audit and the policy (it draws `PolicyControls.jsx`), with reason-gated pause/resume and retryable reads. Independent of team-agent rollout. |
 | `CohortCard.jsx` | D4423: Super Admin cohort membership, add by founder email and remove; no feature switch changes. |
 | `provenanceModel.js` | #5346 (D4575): one run's provenance (`GET /runs/:uid/provenance`) as labelled rows for the run detail's Provenance panel in `Operations.jsx`; an unavailable field is "Not recorded" with its reason, never 0. |
+| `registryModel.js` | D8080 part 2: the Registry (SA20 to SA24, D4137-p4) as pure rules: the read's three outcomes, the five stage groups and "Stage not recorded", the five drift marks, the counts line, the filters kept in the address and the CSV (null stays empty, a formula cell is quoted). Tested by `frontend/test/hq_ai_agents_registry_8080.test.mjs`. |
+| `Registry.jsx` | D8080 part 2: Roster › Personas \| Registry at `/hq/ai-agents/roster/registry[/:name]`, read-only, over `GET /api/admin/ai-agents/registry`: the stage tables (cards and a sheet on a phone), an entry's manifest, drift and how to change it, and the Loading, Not recorded, Unavailable and Refused states. |
 
 | `Operations.jsx` | D4522: live Super Admin Overview, Runs, Spend, Audit and policy reads, with reason-gated pause/resume and retryable reads. Independent of team-agent rollout. |
 

@@ -14,6 +14,7 @@
  * (`lifecycleActionsFor`), and each opens the one consequence sheet
  * (`LicenceConsequenceSheet.jsx`) before it writes.
  */
+import { Link } from 'react-router-dom';
 import React, { useCallback, useEffect, useState } from 'react';
 import LicenceTermsSchedule from '../LicenceTermsSchedule';
 import LicenceRequestsPanel from '../LicenceRequestsPanel';
@@ -429,6 +430,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === 4 && <TermsWorkspace licence={d} onSaved={refresh} onOpenTab={(key) => onTab?.(key)} />}
         {/* D5017 — the country-pricing recommendation, under the core terms it can change. */}
         {step === 4 && <CountryPricing licence={d} onSaved={refresh} />}
+        {step === 4 && <Link className="inline-flex min-h-[44px] items-center rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" to={`/admin/licences/${encodeURIComponent(d.uid)}/packages/offers`}>Review Axal VC package offers</Link>}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
         {/* D5051 (L33): the package and program agreements, package readiness and legal Needs HQ, after the master. */}
         {step === 5 && <LicenceAgreements licence={d} />}
