@@ -47,7 +47,8 @@ async function mount(element, { seed } = {}) {
     testIds: () => nodes().map((n) => propsOf(n)['data-testid']).filter(Boolean),
     buttons: () => nodes().filter((n) => n.tagName === 'BUTTON').map((n) => textOf(n).trim()),
     // Every link to the signed-in application (the hero, the Apply section and the closing apply band).
-    applyLinks: () => nodes().filter((n) => n.tagName === 'A' && propsOf(n).href === '/spinout-lab/apply').map((n) => textOf(n).trim()),
+    // D6989: an apply link may carry the chosen starting point (`?track=`).
+    applyLinks: () => nodes().filter((n) => n.tagName === 'A' && /^\/spinout-lab\/apply(?:\?track=(?:form|fit|line))?$/.test(propsOf(n).href || '')).map((n) => textOf(n).trim()),
     async unmount() { await act(async () => root.unmount()); console.error = quiet; restore(); },
   };
 }

@@ -165,7 +165,8 @@ test('populated: the summary, NAV at every quarter-end read from the Worker, the
     assert.match(m.text('perf-methodology'), /never 0%/);
     assert.match(m.text('perf-methodology'), /Gross of fees and carry/);
     assert.equal(m.attr('link-portfolio-methodology', 'href'), '#portfolio-methodology');
-    assert.match(m.text('perf-cohort-2025'), /2025.*2.*\$5,750,000.*\$9,700,000.*1\.69×/);
+    // This book's positions read carries no distributions (a Worker before D6206): Not recorded, never $0.
+    assert.match(m.text('perf-cohort-2025'), /2025.*2.*\$5,750,000.*Not recorded.*\$9,700,000.*Not recorded.*Not recorded/);
     assert.match(m.text('perf-cohort-2026'), /\$1,250,000.*1 at cost/);
     assert.ok(m.hrefs().includes('/portfolio/waterfall'), 'Exit Waterfall stays a door from Performance');
     assert.ok(m.hrefs().includes('/portfolio/positions'));

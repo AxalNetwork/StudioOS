@@ -6,6 +6,8 @@
  *   GET    /api/typeform/forms/:id/fields?project= one form's field identities, for the picker
  *   PUT    /api/typeform/form                     { project, form_id | null } bind, change or unbind
  *   POST   /api/typeform/form/check               { project } re-verify the binding's access now
+ *   GET    /api/typeform/sync?project=            the bound form's import status (D5828 part 2)
+ *   POST   /api/typeform/sync                     { project, backfill? } run one import of the bound form now
  *
  * One form per venture, chosen explicitly, through one member's own `typeform`
  * connection switched on for the venture's company. A binding another member's
@@ -15,6 +17,17 @@
  * a deleted form each answer with their own code, and none reads as an empty
  * account. The browser receives the capability, the status and the form's id
  * and fields: never a token. Logs name outcomes, never a form's contents.
+ *
+ * SYNC (D5828 part 2, `decisions/D5828-p2.md`). Dark until the owner sets
+ * `TYPEFORM_APP_APPROVED=1` (D5827). Only the member whose own connection
+ * holds the venture's binding, with write access to the venture and the
+ * connection switched on for its company, may read the status or run an
+ * import; a support session never. The run imports the binding's form only:
+ * the sync row follows the binding (`services/typeform/selection.ts`), and
+ * the grant and data center come from #5827's encrypted credentials
+ * (`services/typeform/live.ts`). The answer carries the run's outcome, the
+ * counts and the mapped fields that need remapping (their ids and status
+ * only, D5828 part 3): never a token, a title, a respondent or an answer.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -29,6 +42,9 @@ import { TYPEFORM_KEY, typeformSession } from '../integrations/providers/typefor
 import {
   TypeformError, getTypeformForm, isFormId, listTypeformForms, type TypeformField,
 } from '../integrations/typeformOAuth';
+import { requestTypeformBackfill, syncTypeformForm, typeformFormStatus } from '../services/typeform/importer';
+import { followTypeformBinding, selectedTypeformSync } from '../services/typeform/selection';
+import { typeformImportDeps } from '../services/typeform/live';
 
 type C = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
@@ -53,6 +69,9 @@ export const TYPEFORM_REFUSALS: Record<string, string> = {
   typeform_busy: 'Typeform is refreshing this connection. Try again in a moment.',
   rate_limited: 'Typeform asked us to wait. Try again in a minute.',
   typeform_unreadable: 'Typeform could not be read. Nothing changed; try again.',
+  typeform_unavailable: 'Typeform is not available yet.',
+  binding_lost: 'Axal lost access to this form. Check the form again before importing.',
+  sync_request_invalid: 'Send backfill as true or false.',
 };
 
 class Refused extends Error {
@@ -194,6 +213,7 @@ r.put('/form', handle(async (c, user) => {
   if (b.form_id === null) {
     const del = await c.env.DB.prepare('DELETE FROM typeform_form_bindings WHERE project_id = ? AND integration_id = ?').bind(venture.id, mine).run();
     if (Number(del.meta?.changes ?? 0) > 0) await logBinding(c.env, Number(user.id), 'typeform_form_unbound', venture.id);
+    await followBinding(c.env, venture.id);
     return c.json({ ok: true, binding: null });
   }
   if (!isFormId(b.form_id)) throw new Refused(400, 'form_malformed');
@@ -210,6 +230,7 @@ r.put('/form', handle(async (c, user) => {
   ).bind(crypto.randomUUID(), mine, venture.id, form.id, JSON.stringify(form.fields), user.id).run();
   if (Number(write.meta?.changes ?? 0) === 0) throw new Refused(409, 'venture_served');
   await logBinding(c.env, Number(user.id), existing ? 'typeform_form_changed' : 'typeform_form_bound', venture.id);
+  await followBinding(c.env, venture.id);
   const bound = await bindingOf(c.env, venture.id);
   return c.json({ ok: true, binding: bound ? publicBinding(bound, true) : null });
 }));
@@ -248,6 +269,60 @@ r.post('/form/check', handle(async (c, user) => {
   }
   const now = await bindingOf(c.env, venture.id);
   return c.json({ ok: true, binding: now ? publicBinding(now, true) : null });
+}));
+
+// ---------------------------------------------------------------------------
+// D5828 part 2 — the import trigger and its status
+// ---------------------------------------------------------------------------
+
+/**
+ * The import's sync rows follow the binding just written. The binding is
+ * already committed; a failure here is caught up by the next import, which
+ * follows the binding again, and the importer never runs an unselected form.
+ */
+async function followBinding(env: Env, projectId: number) {
+  try { await followTypeformBinding(env, projectId); } catch (e) {
+    console.warn('[typeform] sync follow failed', { outcome: (e as Error)?.name ?? 'error' });
+  }
+}
+
+/** The sync gate: the flag, then the binding owner's own checks (`writerConnection`), then the binding is theirs. */
+async function syncOwner(c: C, user: User, raw: unknown) {
+  if (c.env.TYPEFORM_APP_APPROVED !== '1') throw new Refused(503, 'typeform_unavailable');
+  const { venture, row, mine } = await writerConnection(c, user, raw);
+  const binding = await bindingOf(c.env, venture.id);
+  if (!binding) throw new Refused(409, 'not_bound');
+  if (binding.integration_id !== mine) throw new Refused(403, 'not_your_binding');
+  return { venture, row, mine, binding };
+}
+
+const bindingState = (b: Binding) => ({ form_id: b.form_id, access_state: b.access_state, lost_reason: b.lost_reason, checked_at: b.checked_at });
+
+r.get('/sync', handle(async (c, user) => {
+  const { venture, mine, binding } = await syncOwner(c, user, c.req.query('project'));
+  // Read only: a binding no import has followed yet has no status, never a zero.
+  const selected = await selectedTypeformSync(c.env, venture.id);
+  const status = selected ? await typeformFormStatus(c.env, { integrationId: mine, projectId: venture.id }, selected.formId) : null;
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ok: true, project_id: venture.id, binding: bindingState(binding), status });
+}));
+
+r.post('/sync', handle(async (c, user) => {
+  const b = await body(c);
+  if (b.backfill !== undefined && typeof b.backfill !== 'boolean') throw new Refused(400, 'sync_request_invalid');
+  const { venture, row, mine, binding } = await syncOwner(c, user, b.project);
+  if (binding.access_state !== 'ok') throw new Refused(409, 'binding_lost');
+  const selected = await followTypeformBinding(c.env, venture.id);
+  if (!selected || selected.integrationId !== mine) throw new Refused(409, 'not_bound');
+  const scope = { integrationId: mine, projectId: venture.id };
+  if (b.backfill === true && await requestTypeformBackfill(c.env, scope, selected.formId, new Date().toISOString())) {
+    await logBinding(c.env, Number(user.id), 'typeform_backfill_requested', venture.id);
+  }
+  const result = await syncTypeformForm(c.env, typeformImportDeps(c.env, row), { ...scope, formId: selected.formId });
+  if (result.outcome !== 'ok' && result.outcome !== 'partly') console.warn('[typeform] import stopped', { outcome: result.outcome });
+  const status = await typeformFormStatus(c.env, scope, selected.formId);
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ok: true, project_id: venture.id, outcome: result.outcome, result, status });
 }));
 
 export const mount: RouteMount = { path: '/api/typeform', router: r };

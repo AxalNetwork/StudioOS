@@ -211,11 +211,22 @@ export function indexLines(name, read) {
 }
 
 /**
+ * D8254: the venture's partners linked to this market. None linked is Not recorded, a failed read (null) is
+ * Unavailable, and neither is a count of 0.
+ */
+export function partnerLine(name, partners) {
+  const label = `Partners linked to ${name}`;
+  if (partners === null) return { state: 'unavailable', label, reason: 'The linked partners could not be read.' };
+  if (Array.isArray(partners) && partners.length) return { state: 'value', label: `${label}: ${partners.length}`, asOf: null };
+  return { state: 'not_recorded', label, reason: Array.isArray(partners) ? 'No partner is linked to this market yet.' : 'Not sent with this record.' };
+}
+
+/**
  * GR-22's evidence strip, one list per part, from `GET /api/research/geographies/:code`. A line the
  * store does not hold (per-country demand, customers by country, partners covering the country, the
  * WGI and FATF indices) reads Not recorded with its reason, never a count.
  */
-export function evidenceFor(geo, indices = null) {
+export function evidenceFor(geo, partners = undefined, indices = null) {
   const name = str(geo?.item?.name) || 'this country';
   const signals = Array.isArray(geo?.signals) ? geo.signals : [];
   const asOf = geo?.as_of || {};
@@ -236,7 +247,7 @@ export function evidenceFor(geo, indices = null) {
     ],
     partners: [
       v(`Companies in ${name}: ${num(geo?.company_count) ? geo.company_count : 0}`, asOf.companies),
-      nr(`Partners covering ${name}`, 'Partners are not linked to a market yet.'),
+      partnerLine(name, partners),
     ],
     cost: [
       v(`Funds headquartered in ${name}: ${num(geo?.fund_count) ? geo.fund_count : 0}`, asOf.funds),

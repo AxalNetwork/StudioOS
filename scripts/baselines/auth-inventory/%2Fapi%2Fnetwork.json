@@ -1,0 +1,30 @@
+{
+  "DELETE /api/network/directory/entries/:uid/overlay": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/network_directory_apis_7674.test.ts",
+    "note": "The overlay row is keyed by owner_user_id = the caller in every statement, so a member reads, writes and deletes only their own note; another member reads null, and a support session is refused 403."
+  },
+  "GET /api/network/directory/entries/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/network_directory_apis_7674.test.ts",
+    "note": "Any signed-in member reads a directory entry only while it is published and not withdrawn; staged, suppressed, archived and withdrawn entries answer 404, and the projection carries no account link, private source cell or review item."
+  },
+  "GET /api/network/directory/entries/:uid/overlay": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/network_directory_apis_7674.test.ts",
+    "note": "The overlay row is keyed by owner_user_id = the caller in every statement, so a member reads, writes and deletes only their own note; another member reads null, and a support session is refused 403."
+  },
+  "PUT /api/network/directory/entries/:uid/overlay": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/network_directory_apis_7674.test.ts",
+    "note": "The overlay row is keyed by owner_user_id = the caller in every statement, so a member reads, writes and deletes only their own note; another member reads null, and a support session is refused 403."
+  }
+}

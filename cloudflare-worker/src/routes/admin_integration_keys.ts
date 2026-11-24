@@ -94,6 +94,7 @@ import { redirectUri as tiktokCallback } from '../integrations/providers/tiktok'
 import { redirectUri as xCallback } from '../integrations/providers/x';
 import { redirectUri as searchConsoleCallback } from '../integrations/providers/google_search_console';
 import { redirectUri as typeformCallback } from '../integrations/providers/typeform';
+import { redirectUri as quickbooksCallback } from '../integrations/providers/quickbooks';
 import { redirectUri as docusignCallback } from '../integrations/providers/docusign';
 import { redirectUri as stripeCallback } from '../integrations/providers/stripe';
 import { redirectUri as salesforceCallback } from '../integrations/providers/salesforce';
@@ -158,6 +159,7 @@ const CALLBACK_URL: Record<ManagedProviderKey, ((env: Env) => string) | null> = 
   x: xCallback,
   google_search_console: searchConsoleCallback,
   typeform: typeformCallback,
+  quickbooks: quickbooksCallback,
   github: githubCallback,
   vercel: vercelCallback,
   crunchbase: null,

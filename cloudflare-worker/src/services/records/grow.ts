@@ -349,6 +349,13 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
   statuses: opts(FEEDBACK_STATUS, LABEL),
   themes: await feedbackThemes(rc.env, rc.projectId),
   roadmap_items: await roadmapItems(rc.env, rc.projectId),
+  // D6865 part 2 (#6891, GR-21B, GR-24, GR-25): the Add feedback and Save as feedback sheets' "Customer record"
+  // chooser, from the venture's own contacts (newest first, at most 200), as Edit's is. A writer's read (`cycle_records.ts`).
+  contacts: ((await rc.env.DB.prepare(
+    'SELECT uid, name, email, organization, audience, status FROM contacts WHERE project_id = ? ORDER BY COALESCE(last_activity_at, created_at) DESC, id DESC LIMIT 200',
+  ).bind(rc.projectId).all<{ uid: string; name: string | null; email: string; organization: string | null; audience: string; status: string | null }>()).results || [])
+    .map((p) => ({ value: String(p.uid), label: [p.name || p.email, p.organization, capital(p.audience)].filter(Boolean).join(' · '),
+      name: p.name ?? null, email: p.email ?? null, organization: p.organization ?? null, audience: p.audience, status: p.status ?? null })),
 }));
 
 // ── Distribution — id: the channel's uid ────────────────────────────────────
@@ -803,7 +810,10 @@ function typedRevenueCents(v: unknown): number {
   return parsed.minor;
 }
 
-const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email'] as const;
+const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email', 'markets'] as const;
+
+/** A read that may fail without failing the record: null when it did. */
+const softRead = async <T>(run: () => Promise<T>): Promise<T | null> => { try { return await run(); } catch { return null; } };
 
 const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS['partner-network'], async (rc, id) => {
   const g = await rc.env.DB.prepare(
@@ -864,9 +874,15 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
   }, { side: true, ...writersOnly }),
   // Introductions are not linked to partners (decision 10).
   section('introductions', 'Introductions', async () => ({ rows: [notRecorded('From Network', 'Introductions are not linked to partners')] }), { side: true }),
-], async (_rc, id, record): Promise<RecordAction[]> => {
+], async (rc, id, record): Promise<RecordAction[]> => {
   const { g } = loadedOf(record);
   const actions: RecordAction[] = [];
+  // D8254: the venture's markets, and the ones this partner is linked to now. A failed read leaves the field out, never empty.
+  const marketChoices = await softRead(async () => {
+    const all = (await rc.env.DB.prepare('SELECT id, uid, name FROM markets WHERE project_id = ? ORDER BY name COLLATE NOCASE LIMIT 200').bind(rc.projectId).all<Any>()).results || [];
+    const linked = new Set(((await rc.env.DB.prepare('SELECT market_id FROM growth_partner_markets WHERE partner_id = ?').bind(g.id).all<Any>()).results || []).map((x) => Number(x.market_id)));
+    return { options: all.map((m) => ({ value: String(m.uid), label: String(m.name) })), value: all.filter((m) => linked.has(Number(m.id))).map((m) => String(m.uid)) };
+  });
   if (g.stage !== 'paused' && g.stage !== 'ended') {
     actions.push({ key: 'pause', label: 'Pause', kind: 'write', confirm: { title: `Pause ${g.name}?`, cta: 'Pause' },
       execute: (c) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, { stage: 'paused' }) })) });
@@ -919,6 +935,7 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'renewal_on', label: 'Renewal', kind: 'T', input: 'date', value: g.renewal_on ?? '' },
       { key: 'contact_name', label: 'Contact', kind: 'T', value: g.contact_name ?? '' },
       { key: 'contact_email', label: 'Contact email', kind: 'T', input: 'email', value: g.contact_email ?? '' },
+      ...(marketChoices && marketChoices.options.length ? [{ key: 'markets', label: 'Markets this partner works', kind: 'CK' as const, value: marketChoices.value, options: marketChoices.options }] : []),
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, pick(body, PARTNER_EDIT)) })),
   }, remove(`Remove ${g.name}?`, 'For a partner added by mistake: it leaves the partner list, its card and its counts. A partner with revenue or deals stays; end it instead.',
@@ -963,6 +980,11 @@ async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof read
        JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
       WHERE u.project_id = ? AND a.kind = 'market' AND a.link_ref = CAST(? AS TEXT) ORDER BY r.id DESC LIMIT 20`,
   ).bind(rc.projectId, m.id).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), name: x.name ?? null, message: x.message ?? null, created_at: x.created_at ?? null })));
+  // D8254 (#8254): the venture's partners linked to this market; a failed read is `partners: null`, never an empty list.
+  const partners = await read(async () => ((await rc.env.DB.prepare(
+    `SELECT p.uid, p.name, p.type, p.stage FROM growth_partner_markets l JOIN growth_partners p ON p.id = l.partner_id
+      WHERE l.market_id = ? AND p.project_id = ? ORDER BY p.name COLLATE NOCASE LIMIT 50`,
+  ).bind(m.id, rc.projectId).all<Any>()).results || []).map((x) => ({ uid: String(x.uid), name: String(x.name), type: x.type ?? null, stage: x.stage ?? null })));
   return {
     state: m.state, decision: m.decision ?? null, decided_on: m.decided_on ?? null,
     scores: MARKET_PARTS.map(([k, l]) => ({ key: k, part: l, score: m[`${k}_score`] ?? null, source: m[`${k}_source`] ?? null })),
@@ -976,6 +998,7 @@ async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof read
     localisation_state: ticks ? 'ok' : 'unreadable',
     replies, replies_state: replies ? 'ok' : 'unreadable',
     indices: await countryIndexLines(rc.env, typeof m.geography_ref === 'string' ? m.geography_ref : null),
+    partners, partners_state: partners ? 'ok' : 'unreadable',
   };
 }
 

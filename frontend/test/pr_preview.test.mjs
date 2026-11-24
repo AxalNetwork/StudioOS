@@ -139,12 +139,13 @@ test('the trusted deploy runs main\'s file after the PR preview run, deploys the
   assert.match(deploy, /pull-requests: write/, 'the sticky comment needs pull-requests: write');
 });
 
-test('only the deploy and delete jobs hold the preview token, and only through the pr-preview environment (D7146)', () => {
-  // Mutation checked: `environment: pr-preview` removed from delete; the token added to resolve.
+test('only the deploy and delete jobs hold the preview token, and only through the preview environment (D7146, D8069)', () => {
+  // Mutation checked: `environment: preview` removed from delete; the token added to resolve.
+  // D8069: the environment is `preview` (#8063's contract); the old `pr-preview` was never created.
   const wf = code(at(DEPLOY));
   for (const id of ['deploy', 'delete']) {
     const job = jobOf(wf, id);
-    assert.match(job, /\n {4}environment:(?: pr-preview\n|\n {6}name: pr-preview\n)/, `${id} must name the pr-preview environment, restricted to main`);
+    assert.match(job, /\n {4}environment:(?: preview\n|\n {6}name: preview\n)/, `${id} must name the preview environment, restricted to main`);
     assert.match(job, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.PR_PREVIEW_CLOUDFLARE_API_TOKEN \}\}/, `${id} uses the dedicated preview token`);
     assert.match(job, /needs: resolve/);
   }
