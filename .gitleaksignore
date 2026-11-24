@@ -330,6 +330,11 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # literal; 62a7171032 assembles it at run time, so the squashed commit holds
 # no literal; this entry covers the PR's own history only.
 4d6854891ea6194cea00a2d89559e6f863ebc6db:cloudflare-worker/test/error_privacy_7256.test.ts:generic-api-key:18
+# ccc09e1c70 (#7810) first wrote the publishers test's JWT secret as a
+# key-shaped literal; the next commit uses the suite's standard test secret,
+# so the squashed commit holds no finding; this entry covers the PR's own
+# history only.
+ccc09e1c70105242b457a98dac385fd9e5d349f8:cloudflare-worker/test/research_company_publishers_7810.test.ts:generic-api-key:14
 # #7926: ic_voting_closed_7920's first commit used a fixture secret gitleaks reads as
 # generic-api-key; the next commit switches to the standard test value. This covers that
 # PR commit only.
@@ -343,3 +348,10 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # The same string, quoted in the comment above as first written (commit d3fc770); the
 # next commit rewords the comment, so no later commit carries it. Scoped to that line.
 d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
+# D7745 (#7745): the research import rehearsal test's first commit passed two
+# invented run labels for a local SQLite rehearsal as literal run identifiers;
+# generic-api-key read them as secrets. They were never credentials. The next
+# commit (bbe86480e1) names them as constants, so no later commit carries the
+# literals. Scoped to the two findings, as D334's entry is; approved by the owner.
+5986f9c4ac832d71781de38d0956dac8439ccf12:cloudflare-worker/test/research_source_imports_rehearsal_7745.test.ts:generic-api-key:139
+5986f9c4ac832d71781de38d0956dac8439ccf12:cloudflare-worker/test/research_source_imports_rehearsal_7745.test.ts:generic-api-key:164

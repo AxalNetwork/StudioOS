@@ -33,3 +33,18 @@
 .dark .fd-card small, .dark .fd-card dt { color: #adb0c2; }
 .dark .fd-card dl > div, .dark .fd-entry { border-color: #383b4d; }
 @media (max-width: 640px) { .fd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fd-two { grid-template-columns: minmax(0, 1fr); } .fd-number { font-size: 17px; } .fd-actions a { flex: 1 1 calc(50% - 10px); text-align: center; } }
+/* D6254: the fund-level band, independently read sections and phone-safe metadata. */
+.fd-performance-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.fd-card .fd-performance-grid > div { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
+.fd-card .fd-performance-grid dd { font-family: var(--font-mono); font-size: 17px; }
+.fd-source { font-size: 12px; color: #686b7b; line-height: 1.5; }
+.dark .fd-source { color: #adb0c2; }
+.fd-inline-link { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 600; text-decoration: underline; }
+.fd-inline-link:focus-visible { outline: 2px solid #7c3aed; outline-offset: 3px; }
+.fd-next { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; border-color: #ddd0fb; }
+.dark .fd-next { border-color: #4c3a8a; }
+.fd-surface button { min-height: 44px; }
+@media (max-width: 640px) { .fd-performance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fd-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.fd-three > div, .fd-reader-grid > div { min-width: 0; }
+@media (max-width: 1000px) { .fd-three { grid-template-columns: minmax(0, 1fr); } }

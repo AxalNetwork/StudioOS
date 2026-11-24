@@ -16,7 +16,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import pipeline from '../src/routes/pipeline.ts';
 import realtime from '../src/routes/realtime.ts';
@@ -24,8 +24,6 @@ import { pipelineCapabilities, readablePipelineScope } from '../src/services/pip
 import { socketDelivery, newAudienceCache } from '../src/services/pipelineRoomAudience.ts';
 
 const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 // ── who's who ────────────────────────────────────────────────────────────────
@@ -43,7 +41,7 @@ const OTHER = 901;           // founder profile 702 (MULTI's own)
 const STRANGER = 902;        // founder profile 703: nobody here reads it but the admin
 
 function freshDb() {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   const f = db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)');
   for (const [id, name] of [[700, 'Owner profile'], [701, 'Collider profile'], [702, 'Multi profile'], [703, 'Stranger profile']] as const) {

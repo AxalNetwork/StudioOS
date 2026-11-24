@@ -269,7 +269,7 @@ async function assertBodies(m) {
   const founder = f('founding-team').toBody({ name: 'Ana', email: 'ana@example.test', role: 'CEO', equity_pct: '40', vesting: '4y_1y_cliff', vesting_start: '2026-03-12' });
   for (const k of keys(founder)) assert.ok(routeKeys('post', '/founders').has(k), `POST /founders reads ${k}`);
   const item = f('product-roadmap').toBody({ title: 'Approval rules', column: 'now', kpi_key: 'mrr', owner_user_id: '12', target_date: '2026-12-01', waits_on_id: '3' });
-  assert.deepEqual(item, { title: 'Approval rules', column: 'now', kpi_key: 'mrr', feedback_theme: null, owner_user_id: 12, target_date: '2026-12-01', waits_on_id: 3 });
+  assert.deepEqual(item, { title: 'Approval rules', column: 'now', kpi_key: 'mrr', feedback_theme: null, owner_user_id: 12, target_date: '2026-12-01', waits_on_id: 3, feature_id: null });
   for (const k of keys(item)) assert.ok(TABLE.roadmap.includes(k), `#1695's POST /roadmap takes ${k}`);
   for (const k of keys(f('company-creation').toBody({ kind: '83b', for_holder_id: 'h-4' }))) assert.ok(TABLE.formationSteps.includes(k), `#1695's formation step takes ${k}`);
   assert.equal(f('company-creation').toBody({ kind: '83b', for_holder_id: 'h-4' }).for_holder_id, 'h-4');

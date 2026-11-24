@@ -457,10 +457,10 @@ test('the Tools history on Operating systems: one row per connection with its Op
   assert.equal((out.match(/data-testid="tools-row-/g) || []).length, 2);
   assert.match(out, />Not recorded</, 'an owner the viewer may not see is not named, and says so');
   assert.match(out, /data-testid="tools-note"[^>]*>Google Calendar and Microsoft 365 are personal connections/);
-  assert.match(out, />2 tools</);
+  assert.match(out, />2 tools connected</); // D5078: the count says these are the connected ones
   const none = renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: { cols: tools.cols, rows: [], total: null, state: 'not_recorded', reason: 'This project has no company scope for connectors.' } })));
   assert.match(none, /data-testid="tools-not-recorded"[^>]*>This project has no company scope for connectors\./);
-  assert.doesNotMatch(none, /tools<\/span>/, 'no count without a company');
+  assert.doesNotMatch(none, /tools connected/, 'no count without a company');
   assert.equal(renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: null }))), '', 'no part, nothing drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   // D1311: Build's parts live in buildParts.jsx, one line per connector; read through its export (#5507).

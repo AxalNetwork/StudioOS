@@ -14,6 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, matchRoutes } from 'react-router-dom';
 import { readRoutesSource } from './_routesSource.mjs';
@@ -25,7 +26,7 @@ import MarketsHome, { ComparePanel } from '../src/pages/cycles/MarketsHome.jsx';
 import MarketRecord from '../src/pages/cycles/MarketRecord.jsx';
 import { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import {
-  compareSummary, diffWords, evidenceFor, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
+  compareSummary, diffWords, evidenceFor, partnerLine, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
 } from '../src/pages/cycles/marketsModel.js';
 
 const h = React.createElement;
@@ -308,4 +309,29 @@ test('proposals: cards with their sources, buttons only for a writer, an empty s
   const down = text(ssr(h(MarketRecord, { record: RECORD({ proposals: null, proposals_state: 'unreadable' }), activity: [], ...handlers })));
   assert.match(down, /not a claim that there are none/);
   assert.doesNotMatch(down, /no open proposal/);
+});
+
+// D8254 (#8254). Mutation checked: a failed read (null) shown as none linked (fails); the empty state dropped (fails);
+// the record not passing its partners to the evidence strip (fails); a linked partner not linking to its record (fails).
+test('partners: the record lists the linked partners, an empty state when none, Unavailable when the read failed', () => {
+  const linked = [{ uid: 'pta', name: 'Harbour Resellers', type: 'reseller', stage: 'signed' }, { uid: 'ptb', name: 'Anchor Agency', type: 'co_marketing', stage: 'talking' }];
+  const t = text(ssr(h(MarketRecord, { record: RECORD({ partners: linked, partners_state: 'ok' }), activity: [], ...handlers })));
+  const phone = text(ssr(h(RecordPhoneProvider, { phone: true }, h(MarketRecord, { record: RECORD({ partners: linked, partners_state: 'ok' }), activity: [], ...handlers }))));
+  assert.match(phone, /Partners 2 linked/);
+  assert.match(t, /Harbour Resellers reseller · signed/);
+  assert.match(t, /Anchor Agency co marketing · talking/);
+  const html = ssr(h(MarketRecord, { record: RECORD({ partners: linked, partners_state: 'ok' }), activity: [], ...handlers }), '/grow/market-expansion/mka?project_id=7');
+  assert.match(html, /href="\/grow\/partner-network\/pta\?project_id=7"/);
+  const none = text(ssr(h(MarketRecord, { record: RECORD({ partners: [], partners_state: 'ok' }), activity: [], ...handlers })));
+  assert.match(none, /No partner is linked to this market yet/);
+  assert.match(none, /Link one in Partnerships/);
+  const down = text(ssr(h(MarketRecord, { record: RECORD({ partners: null, partners_state: 'unreadable' }), activity: [], ...handlers })));
+  assert.match(down, /Linked partners/);
+  assert.match(down, /not a claim that none is linked/);
+  assert.doesNotMatch(down, /No partner is linked/);
+  assert.deepEqual(partnerLine('Portugal', linked), { state: 'value', label: 'Partners linked to Portugal: 2', asOf: null });
+  assert.equal(partnerLine('Portugal', []).state, 'not_recorded');
+  assert.equal(partnerLine('Portugal', null).state, 'unavailable');
+  assert.equal(partnerLine('Portugal', undefined).state, 'not_recorded');
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners\)/, 'the record hands its partners to the evidence strip');
 });

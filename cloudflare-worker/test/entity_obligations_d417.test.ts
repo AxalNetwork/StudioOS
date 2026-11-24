@@ -29,6 +29,7 @@ import { SignJWT } from 'jose';
 import legalEntities from '../src/routes/legal_entities.ts';
 import { readFundsRegistry } from '../src/rpc/branchOps.ts';
 import { nextDue, packObligations, isoDate, daysUntil } from '../src/services/entityObligations.ts';
+import { STANDARD_EVENTS } from '../src/routes/compliance.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 
@@ -87,6 +88,26 @@ function freshDb() {
   db.exec(read('cloudflare-worker/sql/migrations/312_fund_call_ledger.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/314_fabric_entities.sql'));
   db.exec(MIGRATION);
+  // D6713: the production pack door now reads the versioned catalogue. These
+  // are synthetic source-backed copies of the same legacy rules, not legal evidence.
+  db.exec(read('cloudflare-worker/sql/migrations/202611151923_6689_formation_catalogue.sql'));
+  const packMigration = read('cloudflare-worker/sql/migrations/202611220402_6713_pack_item_keys.sql');
+  db.exec(packMigration.slice(packMigration.indexOf('ALTER TABLE formation_pack_items')));
+  db.exec(`INSERT INTO formation_catalogue_versions (id,version,status) VALUES (6713,6713,'draft');
+    INSERT INTO formation_jurisdictions (id,version_id,country) VALUES (6713,6713,'US');
+    INSERT INTO formation_sources (id,kind,title,url) VALUES (6713,'other','Synthetic test rule source','https://example.test/rules');`);
+  let formId = 6713;
+  for (const key of ['us_de_llc', 'us_de_ccorp']) {
+    db.prepare('INSERT INTO formation_entity_forms (id,version_id,jurisdiction_id,form_key,label) VALUES (?,6713,6713,?,?)').run(formId, key, key);
+    for (const spec of STANDARD_EVENTS[key]) db.prepare(`INSERT INTO formation_pack_items
+      (version_id,form_id,item_key,phase,kind,acting_party,title,obligation_phase,source_id,checked_on,due_rule_json,event_kind,recurrence)
+      VALUES (6713,?,?,'after_filing','step','founder',?,'ongoing',6713,'2026-01-01',?,?,?)`)
+      .run(formId, spec.event_type, spec.title, JSON.stringify(spec), spec.event_type, spec.recurrence);
+    formId++;
+  }
+  db.exec(`UPDATE formation_catalogue_versions SET status='published',published_by=1,published_at='2026-01-01T00:00:00Z' WHERE id=6713;
+    UPDATE formation_catalogue_versions SET is_current=1 WHERE id=6713;`);
+
   const u = db.prepare('INSERT INTO users (id, email, role, name) VALUES (?,?,?,?)');
   u.run(ADMIN, 'ada@axal.example', 'admin', 'Ada Admin');
   u.run(PARTNER, 'pia@axal.example', 'partner', 'Pia Partner');
@@ -257,9 +278,9 @@ test('D417: an undated obligation is open once; once filed, the same event can b
 
 test('D417: seeding a pack refuses an unknown one, skips what needs a formation date, and is idempotent', async () => {
   const db = freshDb();
-  const unknown = await call(db, ADMIN, 'POST', '/entities/2/obligations/pack', { pack: 'uk_ltd' });
+  const unknown = await call(db, ADMIN, 'POST', '/entities/2/obligations/pack', { pack: 'unknown_form' });
   assert.equal(unknown.status, 400);
-  assert.equal(unknown.body.error, 'pack_unknown', 'a non-US pack is F9\'s, not a second ruleset here');
+  assert.equal(unknown.body.error, 'pack_unknown', 'an unknown catalogue form is refused');
 
   const first = await call(db, ADMIN, 'POST', '/entities/2/obligations/pack', { pack: 'us_de_llc' });
   assert.equal(first.status, 200, first.text);

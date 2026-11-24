@@ -98,7 +98,7 @@ const BOT = 'axal-landing-bot[bot]';
 function pr(over = {}) {
   return {
     number: 101, state: 'open', draft: false, body: 'Closes #9', labels: [], mergeable: 'CONFLICTING', inMergeQueue: false,
-    headChangedAt: '2026-11-16T10:00:00Z', handedBackAt: null,
+    headChangedAt: '2026-11-16T10:00:00Z', handedBackAt: null, keeperTriedEvents: [], stickyBody: '',
     head: { ref: 'agent/x/9-a', sha: 'b'.repeat(40), repo: { full_name: 'AxalNetwork/StudioOS' } },
     base: { repo: { full_name: 'AxalNetwork/StudioOS' } },
     files: [{ path: 'frontend/src/pages/A.jsx' }],

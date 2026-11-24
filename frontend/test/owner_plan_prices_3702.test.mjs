@@ -37,7 +37,7 @@ test('the mirrored targets draw each profile price ladder; custom/free plans off
     const { cards } = planCards({ plans }, PLAN_CARDS[family], { signedIn: true });
     assert.deepEqual(cards.map(c => c.price), expected, family);
     for (const c of cards.filter(c => c.price === 'Custom')) {
-      assert.equal(c.button.label, 'Contact Axal VC'); assert.equal(c.button.to, '/contact'); assert.ok(!c.button.checkout);
+      assert.equal(c.button.label, 'Contact Axal VC'); assert.equal(c.button.to, '/contact?topic=invest'); assert.ok(!c.button.checkout); // #6984 (X2): the invest topic
     }
   }
   assert.equal(PLAN_CARDS.admin, undefined);

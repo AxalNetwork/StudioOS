@@ -8,6 +8,8 @@
  *   stage, primary_action   RA-03's rule, chosen on the Worker (D6045); the page never picks the step
  *   cards[]                 the seven module cards (D663); the Pitch card carries `pitch_state` (RA-05)
  *   next_steps              readiness steps with their reason and gain (D1610)
+ *   follow_ups_due          prospects with a next step due this week (D8256)
+ *   open_objections         objections no narrative section answers yet, with who raised them (D8256)
  *   connectors              the connected sources and when each was last read (D1610)
  *   investor_activity       pipeline, deck-view and call-response counts, each with its own read meta (D6045)
  *
@@ -177,30 +179,102 @@ export const detailedOpenByDefault = (raw) => !(raw?.stage?.state === 'ok' && ra
 
 // ---------- Next actions (RA-04) ------------------------------------------
 
+/** A day as "21 Nov"; the stored day itself when it is not one. */
+const shortDay = (d) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
+  return m ? `${Number(m[3])} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]}` : String(d || '');
+};
+const partOk = (p) => p && p.state === 'ok' && Array.isArray(p.items);
+
 /**
- * At most three readiness steps, biggest known gain first and Team never (`nextStepItems`), each with its
- * reason and its one action. The impact is a neutral label; a gain the read does not know is Not recorded,
- * never "+0". `{ state: 'unavailable' }` when the steps could not be read; null when the read has none.
+ * D8256 (RA-02): the follow-ups due as one action: who, how many are overdue, and the earliest day.
+ * A staff read carries no names, so it says how many. Null with none due.
+ */
+export function followUpAction(part, search = '') {
+  if (!partOk(part)) return null;
+  const items = part.items.filter((f) => f && typeof f.due_on === 'string');
+  if (!items.length) return null;
+  const n = items.length;
+  const names = items.map((f) => f.investor).filter((x) => typeof x === 'string' && x);
+  const overdue = items.filter((f) => f.overdue === true).length;
+  const who = names.length === n ? listWords(names.length > 3 ? [...names.slice(0, 3), plural(n - 3, 'other', 'others')] : names) : plural(n, 'investor', 'investors');
+  const earliest = items.map((f) => f.due_on).sort()[0];
+  return {
+    key: 'follow-ups',
+    kind: 'follow_up',
+    title: n === 1 && names.length === 1 ? `Follow up with ${names[0]}` : `Follow up with ${plural(n, 'investor', 'investors')}`,
+    reason: `${who} ${n === 1 ? 'has a next step' : 'have a next step'} due this week${overdue ? `; ${overdue} ${overdue === 1 ? 'is' : 'are'} overdue` : ''}.`,
+    source: `From Capital relationships · earliest due ${shortDay(earliest)}${part.capped ? ' · more not listed' : ''}`,
+    impact: null,
+    cta: 'Open Outreach',
+    label: `Open Outreach for ${plural(n, 'follow-up', 'follow-ups')} due`,
+    href: nextHref(part.href, search),
+  };
+}
+
+/** D8256 (RA-02): the most heard objection no narrative section answers, with who raised it. Null with none open. */
+export function objectionAction(part, search = '') {
+  if (!partOk(part)) return null;
+  const o = part.items.find((x) => x && typeof x.text === 'string' && x.text && typeof x.key === 'string');
+  if (!o) return null;
+  const by = Array.isArray(o.investors) && o.investors.length ? `Raised by ${listWords(o.investors.length > 3 ? [...o.investors.slice(0, 3), plural(o.investors.length - 3, 'other', 'others')] : o.investors)}` : null;
+  const n = isNum(o.prospects) ? o.prospects : null;
+  const more = part.items.length - 1;
+  return {
+    key: `objection-${o.key}`,
+    kind: 'objection',
+    title: 'Answer an open objection',
+    reason: `“${o.text}” was raised by ${n == null ? 'investors' : plural(n, 'investor', 'investors')} and has no answer in the narrative.`,
+    source: [`From investor feedback${by ? ` · ${by}` : ''}`, more > 0 ? `${plural(more, 'more objection', 'more objections')} open` : null].filter(Boolean).join(' · '),
+    impact: null,
+    cta: 'Answer objection',
+    label: `Answer the objection “${o.text}”`,
+    href: nextHref(o.href, search),
+  };
+}
+
+/** D8256: the board's order (RA-02): follow-ups due, then an open objection, then readiness steps. */
+export const NEXT_ACTIONS_MAX = 3;
+
+/**
+ * RA-02, RA-04: at most three next actions in the board's order: the follow-ups due (one action), the most
+ * heard open objection, then readiness steps, biggest known gain first and Team never (`nextStepItems`).
+ * Each names its reason and its source record and has one action. A readiness step's impact is a neutral
+ * label; a gain the read does not know is Not recorded, never "+0".
+ *   { state: 'unavailable' }                     nothing could be read (every part unreadable or absent)
+ *   { state: 'ready', items, unread }            `unread` names the parts that could not be read, so a
+ *                                                missing follow-up is never read as "none due"
+ *   null                                         the read carries no next actions at all
  */
 export function nextActionsView(raw, search = '') {
   const part = raw?.next_steps;
-  if (part == null) return null;
-  if (part.state === 'unreadable') return { state: 'unavailable' };
+  const fu = raw?.follow_ups_due;
+  const ob = raw?.open_objections;
+  if (part == null && fu == null && ob == null) return null;
+  const unread = [];
+  if (fu?.state === 'unreadable') unread.push('Follow-ups due');
+  if (ob?.state === 'unreadable') unread.push('Open objections');
+  if (part?.state === 'unreadable') unread.push('Readiness steps');
+  const read = [part, fu, ob].filter((x) => x != null && x.state !== 'unreadable');
+  if (!read.length) return { state: 'unavailable' };
   const names = new Map(cardsOf(raw).map((c) => [c.slug, c.name || c.slug]));
-  const items = nextStepItems(part).map((i) => {
+  const steps = part && part.state !== 'unreadable' ? nextStepItems(part).map((i) => {
     const module = names.get(i.module_slug) || i.label;
     const gain = gainLabel(i.gain_points);
     return {
       key: i.item_key,
+      kind: 'readiness',
       title: i.label,
       reason: i.text || 'Not recorded',
+      source: null,
       impact: gain ? `Readiness impact ${gain}` : null,
       cta: `Open ${module}`,
       label: `Open ${module} for ${i.label}`,
       href: nextHref(i.href, search),
     };
-  });
-  return { state: 'ready', items };
+  }) : [];
+  const items = [followUpAction(fu, search), objectionAction(ob, search), ...steps].filter(Boolean).slice(0, NEXT_ACTIONS_MAX);
+  return { state: 'ready', items, unread };
 }
 
 // ---------- Materials (RA-01 table, RA-02 cards, RA-05 Pitch) --------------

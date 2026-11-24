@@ -1947,14 +1947,17 @@ const buildItem = {
   title: 'Add item',
   sub: 'A roadmap item moves a KPI or answers a feedback theme.',
   foot: 'Issues from a connected GitHub repository land here too.',
-  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
-  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' },
+    // D6036 (#6036): the feature the item ships, from Solution design; Nothing keeps it unlinked.
+    { kind: 'CH', name: 'feature_id', k: 'Feature', opts: [NOTHING], def: 0, optionsFrom: 'features' }],
+  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id), feature_id: idOrNull(v.feature_id) }),
   // D6097: a feedback record's Add to roadmap (`/build/product-roadmap/new?feedback_theme=Speed`) opens it with that theme chosen.
   fromQuery: (q) => feedbackThemeOf(q.get('feedback_theme')),
   // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
   loadOptions: buildOptions('product-roadmap', (read) => ({
     kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
     waits_on_id: { options: [NOTHING, ...readChips(read, 'waits_on_id')], def: 0 }, owner_user_id: ownersOf(read),
+    feature_id: { options: [NOTHING, ...readChips(read, 'feature_id')], def: 0 },
   })),
   submit: (w, projectId, v) => w.build.roadmapItem(projectId, buildItem.toBody(v)),
 };
