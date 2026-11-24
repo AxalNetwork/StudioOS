@@ -1,18 +1,20 @@
 /**
- * HQ package term lifecycle reads (D5025, #5025 part 1): each accepted package
- * term's state, and the read-only review of a renewal, upgrade, downgrade or
- * change with an optional actual-day proration quote. Super Admin only; writes
- * nothing.
+ * HQ package term lifecycle (D5025, #5025): each accepted package term's
+ * state, the read-only review of a renewal, upgrade, downgrade or change
+ * (part 1), and scheduling that change for the next term, listing and
+ * cancelling schedules (part 2, D5025-p2). Super Admin only; writes are
+ * audited and use the Super Admin write bar.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import adminLicences from './admin_licences';
 import type { RouteMount } from '../util/routeRegistry';
 import { byUid } from '../services/licenceLedgerCore';
 import { getPackageOffer, PackageOfferError } from '../services/packageOffers';
 import { licenceOffers, reviewChange, standaloneGranted, termState, today } from '../services/packageLifecycle';
+import { cancelPackageChange, listPackageChanges, schedulePackageChange } from '../services/packageChanges';
 
 const r = new Hono<{ Bindings: Env }>();
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -60,6 +62,38 @@ r.get('/:uid/package-offers/:offer/change-review', async (c) => {
     }
     c.header('Cache-Control', 'no-store');
     return c.json(review);
+  } catch (e) { return answer(c, e); }
+});
+
+const bodyOf = async (c: any) => {
+  const b = await c.req.json().catch(() => null);
+  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new PackageOfferError(400, 'invalid_body', 'Send a JSON object.');
+  return b;
+};
+
+r.get('/:uid/package-changes', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const uid = c.req.param('uid');
+    if (!await byUid(c.env, uid)) throw new PackageOfferError(404, 'not_found', 'No licence has that id.');
+    const day = today();
+    c.header('Cache-Control', 'no-store');
+    return c.json({ as_of: day, items: await listPackageChanges(c.env, uid, day) });
+  } catch (e) { return answer(c, e); }
+});
+
+r.post('/:uid/package-offers/:offer/schedule-change', async (c) => {
+  try {
+    const actor = await requireSuperAdminWriteBar(c);
+    const result = await schedulePackageChange(c.env, c.req.param('uid'), c.req.param('offer'), await bodyOf(c), actor, today());
+    return c.json(result, result.replayed ? 200 : 201);
+  } catch (e) { return answer(c, e); }
+});
+
+r.post('/:uid/package-changes/:change/cancel', async (c) => {
+  try {
+    const actor = await requireSuperAdminWriteBar(c);
+    return c.json(await cancelPackageChange(c.env, c.req.param('uid'), c.req.param('change'), await bodyOf(c), actor, today()));
   } catch (e) { return answer(c, e); }
 });
 

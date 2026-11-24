@@ -52,6 +52,7 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  db.exec(sqlOf('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP columns the segment readers select.
   applyAcceptRetryKeys(db); // D5352
   // D690 decision 9: an interview's state reads its latest session. 447's
   // `validate_proposals` column is left out: the tests that read proposals

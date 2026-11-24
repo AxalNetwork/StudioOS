@@ -25,9 +25,10 @@
  * PRORATION. `prorate` is actual-day, integer cents (BigInt), inclusive of
  * both term ends: the unused share of the old annual fee is a credit and the
  * same share of the new fee a debit, each floored, with the trace frozen in the
- * answer. It is a quote. Whether a change is next-term only or immediate with
- * proration, and which billing record would carry an adjustment, are the
- * owner's decisions (#5025): `financial_rule` reads `not_decided` until then.
+ * answer. It is only a quote: the owner decided (#5025) that a change takes
+ * effect at the next term only, with no proration and no notice period, so
+ * `financial_rule` reads `next_term_no_proration` and `proration_applies` is
+ * false. Part 2 (`packageChanges.ts`) schedules such a change.
  */
 import type { Env } from '../types';
 import type { PackageOffer } from './packageOffers';
@@ -37,9 +38,11 @@ export type TermState = typeof TERM_STATES[number];
 export const CHANGE_KINDS = Object.freeze(['renewal', 'upgrade', 'downgrade', 'change'] as const);
 export type ChangeKind = typeof CHANGE_KINDS[number];
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** The owner's rule (#5025): next term only, no proration, no notice. */
+export const FINANCIAL_RULE = 'next_term_no_proration' as const;
 
 export const today = () => new Date().toISOString().slice(0, 10);
-const programKeys = (o: Pick<PackageOffer, 'composition_json'>): string[] => {
+export const programKeys = (o: Pick<PackageOffer, 'composition_json'>): string[] => {
   try {
     const list = JSON.parse(o.composition_json);
     return Array.isArray(list) ? [...new Set(list.map((p: any) => String(p?.program_key)).filter(Boolean))].sort() : [];
@@ -83,6 +86,8 @@ export function changeKind(oldKeys: string[], newKeys: string[], samePackage: bo
 }
 
 const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
+/** The day after `d` (YYYY-MM-DD, UTC). */
+export const nextDay = (d: string) => new Date(dayMs(d) + 86_400_000).toISOString().slice(0, 10);
 const daysInclusive = (from: string, to: string) => Math.floor((dayMs(to) - dayMs(from)) / 86_400_000) + 1;
 
 export interface Proration {
@@ -147,7 +152,7 @@ export function reviewChange(input: {
   const oldIdx = indexPpm(term), newIdx = indexPpm(proposal);
   const old = term.accepted_annual_fee_cents as number;
   const next = proposal.accepted_annual_fee_cents ?? proposal.recommended_annual_fee_cents;
-  const nextTermStart = (() => { const d = new Date(dayMs(term.ends_on) + 86_400_000); return d.toISOString().slice(0, 10); })();
+  const nextTermStart = nextDay(term.ends_on);
   const effective = input.effectiveOn ?? null;
   return {
     current_term: { uid: term.uid, package_key: term.package_key, package_version: term.package_version, package_name: term.package_name,
@@ -179,7 +184,8 @@ export function reviewChange(input: {
     },
     ending_dependents: kind === 'downgrade' || kind === 'change'
       ? { status: 'not_recorded', reason: NO_DEPENDENTS_STORE } : null,
-    financial_rule: 'not_decided',
+    financial_rule: FINANCIAL_RULE,
+    proration_applies: false,
     proration_quote: effective
       ? prorate({ termStartsOn: term.starts_on, termEndsOn: term.ends_on, effectiveOn: effective,
         oldAnnualFeeCents: old, newAnnualFeeCents: next, currency: term.currency, newCurrency: proposal.currency })

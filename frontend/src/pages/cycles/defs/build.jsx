@@ -81,7 +81,7 @@ const build = {
     'company-creation': (data, ctx) => ({
       sub: 'Know what company exists, what is still to file and by when, and which papers are on record.',
       action: null,
-      body: Object.assign((p) => <CompanyCreationHome {...p} data={data} projectId={ctx.projectId} />, { drawsTools: true }),
+      body: Object.assign((p) => <CompanyCreationHome {...p} data={data} projectId={ctx.projectId} reload={ctx.reload} />, { drawsTools: true }),
     }),
   }),
   add: toFnMap({}),
