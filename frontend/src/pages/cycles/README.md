@@ -116,6 +116,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `BuildStates.jsx` | D4846 part 2: `BuildStateTag` (one chip per state; the platform three through D5129's `StateChip`), `phoneStateRow` and `BuildPartialNotice` (D5129's `PartialBanner`, Retry for the failed cards only). |
 | `ResearchPipeline.jsx` | D6001 (#6001): Customer research's recruiting controls, a writer's only: Add a lead beside Record a session, each row's Move stage (the interview record's `set-stage`), and the Waitlist leads panel (Invite, Follow up, the promoted sign-up's interview) the card's waitlist link lands on; a failed waitlist read says so |
 | `VerdictHome.jsx` | D6018: V10/V11 evidence snapshot, recorded decision and decision history, shared by phone. |
+| `FoundingTeamHome.jsx` | D6037: BD31/BD35 founding record, holder filings, equity, agreements and hiring. |
 | `ValidateExperiments.jsx` | D6017: V9 venture-wide experiment cards on desktop and phone. |
 
 ## Rules

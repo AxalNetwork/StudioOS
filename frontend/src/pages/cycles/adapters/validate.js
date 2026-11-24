@@ -478,13 +478,15 @@ export const RECORDS = {
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },
   'ideal-customer-profile': {
-    keys: ['segment', 'interviews', 'strong_fit', 'evidence', 'updated'],
-    row: (r, i) => ({ id: seg(r.id) ?? `segment-${i}`, recordId: workerId(r.id), cells: {
+    // D6007 (#6007, V21): Primary ICP, last. A segment that is not the primary reads a dash, never Not recorded.
+    keys: ['segment', 'interviews', 'strong_fit', 'evidence', 'updated', 'primary'],
+    row: (r, i) => ({ id: seg(r.id) ?? `segment-${i}`, recordId: workerId(r.id), primary: r.primary === true, cells: {
       segment: r.segment ?? null,
       interviews: num(r.interviews) ? r.interviews : null,
       strong_fit: num(r.strong_fit) ? r.strong_fit : null,
       evidence: pill(EVIDENCE, r.evidence),
       updated: typeof r.updated === 'string' ? r.updated.slice(0, 10) : null,
+      primary: r.primary === true ? { text: '★ Primary', tone: 'v2' } : '—',
     } }),
     filters: [{ key: 'evidence', label: 'Evidence', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'not_recorded', label: 'Not recorded' }] }],
     sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],

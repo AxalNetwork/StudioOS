@@ -13,11 +13,14 @@ import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { TIER_PLANS } from '../components/PaywallModal';
 import { openCheckout, planKeyOfTier } from '../components/checkout/checkoutEntry';
 import './perksDesk.css';
+import { offerInputClass, offerButtonClass, offerGhostButtonClass, OfferHeading } from './partner/kit';
+import { zoneReadError } from './partner/offers/useGuardedWrite';
+import { SectionState } from './advisor/expertise/sectionStates';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
 import ZoneDraft from '../workspaces/ZoneDraft';
-import { Eyebrow, Instrument } from '../workspaces/canvasKit';
+import { Instrument } from '../workspaces/canvasKit';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
 import { perkState, matchesPerkChip, perkListingBook, perkListingName, PERK_REVIEW_LABEL, PERK_STATE_LABEL } from '../lib/perkListings.js';
@@ -749,9 +752,9 @@ const REVIEW_NOTE = {
 function PerkTile({ label, value, note }) {
   return (
     <div className="rounded-[10px] border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
+      <p className="text-[12px] font-extrabold uppercase tracking-[.09em] text-gray-600 dark:text-gray-300">{label}</p>
       <div className="mt-1.5 font-mono text-[16px] font-extrabold tracking-tight tabular-nums text-gray-900 dark:text-gray-100">{value}</div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+      <div className="mt-1 text-[12px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
     </div>
   );
 }
@@ -825,16 +828,16 @@ function ExtendModal({ rows, busy, onSave, onClose, note }) {
   );
 }
 
-const INPUT = 'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900';
+const INPUT = offerInputClass;
 /** The canvas's six categories, plus the Worker's own default for anything else. */
 const PERK_CATEGORIES = ['Cloud', 'Legal', 'Banking', 'Recruiting', 'GTM', 'Tools', 'Other'];
 
 function PerkField({ label, hint, children }) {
   return (
     <label className="block">
-      <span className="text-[11.5px] font-semibold text-gray-700 dark:text-gray-300">{label}</span>
+      <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{label}</span>
       <span className="mt-1 block">{children}</span>
-      {hint && <span className="mt-1 block text-[10.5px] leading-snug text-gray-500">{hint}</span>}
+      {hint && <span className="mt-1 block text-[12px] leading-snug text-gray-600 dark:text-gray-400">{hint}</span>}
     </label>
   );
 }
@@ -881,7 +884,7 @@ function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
       .catch((e) => {
         if (generation !== request.current) return;
         reportError('perk_performance_failed', e);
-        setReadErr(e?.message || 'Could not read this listing.');
+        setReadErr(zoneReadError(e));
       });
   }, [uid]);
   useEffect(() => {
@@ -934,20 +937,20 @@ function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
     <section data-testid="perk-performance" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="max-w-xl">
-          <div className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Listing performance</div>
-          <div className="mt-0.5 text-[11.5px] text-gray-600 dark:text-gray-400">
+          <OfferHeading title="Listing performance" />
+          <div className="mt-0.5 text-[12px] text-gray-600 dark:text-gray-400">
             Redemption rate is the number to watch — claims are cheap, redemptions are the distribution.
           </div>
         </div>
-        <select className={`${INPUT} w-auto max-w-xs`} value={uid} onChange={(e) => setUid(e.target.value)} aria-label="Listing">
+        <label className="text-[12px] text-gray-600 dark:text-gray-400">Listing<select id="perk-performance-listing" className={`${INPUT} w-auto max-w-xs`} value={uid} onChange={(e) => setUid(e.target.value)} aria-label="Listing">
           {rows.map((p) => <option key={p.uid} value={p.uid}>{p.offer} · {String(p.status).replace('_', ' ')}</option>)}
-        </select>
+        </select></label>
       </div>
 
-      {readErr && <Unreadable what="This listing’s performance" claim="It is not a sign nobody claimed it." onRetry={() => load()} />}
-      {!s && !readErr && <p className="text-sm text-gray-500"><Loader2 size={13} className="inline animate-spin" /> Reading…</p>}
+      {readErr && <SectionState what="This listing’s performance" error={readErr} onRetry={() => load()} />}
+      {!s && !readErr && <p className="text-sm text-gray-600 dark:text-gray-400"><Loader2 size={13} className="inline animate-spin" /> Reading…</p>}
 
-      {s && (
+      {s && !readErr && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="perk-performance-strip">
             <PerkTile label="Claims" value={n0(s.claims)} note={s.claim_cap == null ? 'uncapped' : `of a ${s.claim_cap} cap`} />
@@ -979,14 +982,14 @@ function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
                       <div className="flex items-baseline justify-between gap-2 text-[12px]">
                         <span className="font-semibold text-gray-800 dark:text-gray-200">{f.k}</span>
                         <span className="flex items-center gap-2">
-                          {conv !== null && <Pill tone={conv >= 60 ? 'ok' : conv >= 20 ? 'warn' : 'neutral'}>{conv}% of prior step</Pill>}
+                          {conv !== null && <Pill className="text-[12px]" tone={conv >= 60 ? 'ok' : conv >= 20 ? 'warn' : 'neutral'}>{conv}% of prior step</Pill>}
                           <span className="font-mono font-extrabold">{f.n === null ? <Unrecorded reason={f.why} /> : n0(f.n)}</span>
                         </span>
                       </div>
                       <div className="mt-1 h-2 rounded-[5px] bg-gray-100 dark:bg-gray-800">
-                        {f.n !== null && <div className="h-full rounded-[5px] bg-violet-600" style={{ width: `${(Number(f.n) / top) * 100}%`, opacity: 1 - i * 0.14 }} />}
+                        {f.n !== null && <div className="h-full rounded-[5px] bg-amber-700" style={{ width: `${(Number(f.n) / top) * 100}%`, opacity: 1 - i * 0.14 }} />}
                       </div>
-                      <div className="mt-0.5 text-[10.5px] text-gray-500">{f.n === null ? f.why : f.note}</div>
+                      <div className="mt-0.5 text-[12px] text-gray-600 dark:text-gray-400">{f.n === null ? f.why : f.note}</div>
                     </div>
                   );
                 })}
@@ -1001,55 +1004,55 @@ function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
                 </div>
                 {s.claim_cap != null && (
                   <div className="mt-2 h-2 rounded-full bg-gray-100 dark:bg-gray-800">
-                    <div className={`h-full rounded-full ${s.claims / s.claim_cap > 0.85 ? 'bg-amber-600' : 'bg-violet-600'}`} style={{ width: `${Math.min(100, (s.claims / s.claim_cap) * 100)}%` }} />
+                    <div className={`h-full rounded-full ${s.claims / s.claim_cap > 0.85 ? 'bg-amber-600' : 'bg-amber-700'}`} style={{ width: `${Math.min(100, (s.claims / s.claim_cap) * 100)}%` }} />
                   </div>
                 )}
-                <p className="mt-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
+                <p className="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
                   {s.claim_cap == null
                     ? 'No cap is set, so claims are not limited.'
                     : `At ${s.claim_cap} claims stop: the listing stays up, marked full, rather than letting claims run past what you agreed to honour. ${n0(s.remaining)} left.`}
                 </p>
                 {s.claim_cap != null && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <input type="number" min={s.claim_cap + 1} className={`${INPUT} w-28 font-mono`} placeholder={String(s.claim_cap + 1)}
-                      value={cap} onChange={(e) => setCap(e.target.value)} aria-label="New cap" />
+                    <PerkField label="New cap"><input type="number" min={s.claim_cap + 1} className={`${INPUT} w-28 font-mono`} placeholder={String(s.claim_cap + 1)}
+                      value={cap} onChange={(e) => setCap(e.target.value)} aria-label="New cap" /></PerkField>
                     <button type="button" disabled={busy || !(Number(cap) > s.claim_cap)} onClick={() => raiseCap(Number(cap))}
-                      className="rounded-md border border-violet-300 px-3 py-1.5 text-xs font-bold text-violet-700 disabled:opacity-50 dark:text-violet-300">
+                      className={offerGhostButtonClass}>
                       Raise the cap
                     </button>
                   </div>
                 )}
-                <p className="mt-1.5 text-[10.5px] text-gray-500">Raising the cap keeps a live listing live. Any other edit sends it back to review.</p>
+                <p className="mt-1.5 text-[12px] text-gray-600 dark:text-gray-400">Raising the cap keeps a live listing live. Any other edit sends it back to review.</p>
               </Card>
 
               <Card data-testid="perk-claims">
                 <div className="flex items-baseline justify-between">
                   <SectionLabel>Founders reached</SectionLabel>
-                  <span className="text-[11px] text-gray-500">{n0(s.founders_reached)} founder{Number(s.founders_reached) === 1 ? '' : 's'}</span>
+                  <span className="text-[12px] text-gray-600 dark:text-gray-400">{n0(s.founders_reached)} founder{Number(s.founders_reached) === 1 ? '' : 's'}</span>
                 </div>
-                <p className="mt-1 text-[10.5px] leading-relaxed text-gray-500">
+                <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
                   <Unrecorded reason={s.absent?.founders_list}>Who they are is not shown</Unrecorded> — {s.absent?.founders_list}
                 </p>
-                <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (code.trim()) redeem({ code: code.trim() }); }}>
-                  <input className={`${INPUT} font-mono`} placeholder="Code a founder gave you" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Redemption code" />
-                  <button type="submit" disabled={busy || !code.trim()} className="flex-none rounded-md bg-violet-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">Mark redeemed</button>
+                <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); if (code.trim()) redeem({ code: code.trim() }); }}>
+                  <PerkField label="Redemption code"><input className={`${INPUT} font-mono`} placeholder="Code a founder gave you" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Redemption code" /></PerkField>
+                  <button type="submit" disabled={busy || !code.trim()} className={offerGhostButtonClass}>Mark redeemed</button>
                 </form>
                 {note && <p className={`mt-2 text-[12px] ${note.ok ? 'text-emerald-700' : 'text-red-600'}`} role="status">{note.text}</p>}
                 <div className="mt-2 max-h-72 overflow-y-auto">
                   {(claims?.items || []).length === 0 ? (
                     <p className="py-2 text-[12px] text-gray-600">No claims on this listing yet.</p>
                   ) : claims.items.map((c) => (
-                    <div key={c.uid} className="flex items-center gap-2 border-b border-gray-100 py-2 text-[11.5px] last:border-0 dark:border-gray-800">
+                    <div key={c.uid} className="flex items-center gap-2 border-b border-gray-100 py-2 text-[12px] last:border-0 dark:border-gray-800">
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-mono text-gray-800 dark:text-gray-200">{c.uid}</div>
-                        <div className="text-[10.5px] text-gray-500">
+                        <div className="text-[12px] text-gray-600 dark:text-gray-400">
                           claimed {String(c.created_at).slice(0, 10)}
                           {c.state === 'redeemed' ? ` · redeemed ${String(c.redeemed_at).slice(0, 10)}` : c.expires_at ? ` · expires ${String(c.expires_at).slice(0, 10)}` : ''}
                         </div>
                       </div>
-                      <Pill tone={c.state === 'redeemed' ? 'ok' : c.state === 'issued' ? 'warn' : 'neutral'}>{c.state === 'issued' ? 'Claimed' : c.state === 'redeemed' ? 'Redeemed' : c.state}</Pill>
+                      <Pill className="text-[12px]" tone={c.state === 'redeemed' ? 'ok' : c.state === 'issued' ? 'warn' : 'neutral'}>{c.state === 'issued' ? 'Claimed' : c.state === 'redeemed' ? 'Redeemed' : c.state}</Pill>
                       {c.state === 'issued' && (
-                        <button type="button" disabled={busy} onClick={() => redeem({ claim_uid: c.uid })} className="flex-none text-[11px] font-bold text-violet-700 underline disabled:opacity-50 dark:text-violet-300">
+                        <button type="button" disabled={busy} onClick={() => redeem({ claim_uid: c.uid })} className={offerGhostButtonClass}>
                           Mark redeemed
                         </button>
                       )}
@@ -1057,7 +1060,7 @@ function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
                   ))}
                 </div>
                 <OfferPages label="Claims" result={claims} busy={busy} onPage={load} />
-                <p className="mt-2 text-[10.5px] leading-relaxed text-gray-500">
+                <p className="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
                   <Unrecorded reason={s.absent?.bd_console}>No BD console</Unrecorded> — {s.absent?.bd_console}
                 </p>
               </Card>
@@ -1116,7 +1119,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
       .catch((e) => {
         if (generation !== listingRequest.current) return;
         reportError('perk_submissions_failed', e);
-        setLoadErr(e?.message || 'Could not load your listings.');
+        setLoadErr(zoneReadError(e));
       });
   }, []);
   useEffect(load, [load]);
@@ -1326,16 +1329,16 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
         />
       )}
 
-      {loadErr && <Unreadable what="Your listings" claim="This is not a sign you have none." onRetry={load} />}
+      {loadErr && <SectionState what="Your listings" error={loadErr} onRetry={load} />}
 
-      {listingPage && (listingPage.has_more || listingPage.page > 1) && <p className="text-sm text-gray-500">Listing figures and filters apply to this page.</p>}
+      {listingPage && (listingPage.has_more || listingPage.page > 1) && <p className="text-sm text-gray-600 dark:text-gray-400">Listing figures and filters apply to this page.</p>}
       <OfferPages label="Listings" result={listingPage} busy={busy} onPage={load} />
-      {rows.length > 0 && <ListingPerformance rows={rows} onChanged={load} />}
+      {!loadErr && rows.length > 0 && <ListingPerformance rows={rows} onChanged={load} />}
 
       <section data-testid="perk-submit" className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div>
-          <div className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Submit a perk</div>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          <OfferHeading title="Submit a perk" />
+          <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
             Every submission is reviewed before founders see it. Editing a live listing sends it
             back for review — the terms founders were shown are the terms that were approved. Raising
             its claim cap is the one edit that does not.
@@ -1362,7 +1365,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
           <FillFormBar fill={fill} />
           <div className="block">
             <FillLabel fill={fill} name="blurb" label="One line founders see on the card" value={form.blurb}>
-              <label htmlFor="perk-blurb" className="text-[11.5px] font-semibold text-gray-700 dark:text-gray-300">One line founders see on the card</label>
+              <label htmlFor="perk-blurb" className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">One line founders see on the card</label>
             </FillLabel>
             <span className="mt-1 block"><input id="perk-blurb" className={INPUT} maxLength={500} value={form.blurb} onChange={set('blurb')} /></span>
           </div>
@@ -1370,27 +1373,27 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
             <textarea className={INPUT} rows={3} value={form.detail} onChange={set('detail')} />
           </PerkField>
           <div className="grid gap-3 sm:grid-cols-2">
-            <PerkField label="What it costs a founder">
+            <fieldset><legend className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">What it costs a founder</legend>
               <div className="flex gap-2">
-                <select className={INPUT} value={form.kind} onChange={set('kind')}>
+                <PerkField label="Payment type"><select className={INPUT} value={form.kind} onChange={set('kind')}>
                   <option value="credits">Perk credits</option>
                   <option value="tier">Included in a plan</option>
                   <option value="money">Paid engagement</option>
-                </select>
+                </select></PerkField>
                 {form.kind === 'credits' && (
-                  <input type="number" min="0" className={`${INPUT} w-28`} placeholder="Credits" value={form.credits} onChange={set('credits')} />
+                  <PerkField label="Perk credits"><input type="number" min="0" className={`${INPUT} w-28`} placeholder="Credits" value={form.credits} onChange={set('credits')} /></PerkField>
                 )}
                 {form.kind === 'tier' && (
-                  <select className={`${INPUT} w-28`} value={form.required_tier} onChange={set('required_tier')}>
+                  <PerkField label="Required plan"><select className={`${INPUT} w-28`} value={form.required_tier} onChange={set('required_tier')}>
                     <option value="growth">Growth</option>
                     <option value="studio">Studio</option>
-                  </select>
+                  </select></PerkField>
                 )}
                 {form.kind === 'money' && (
-                  <input type="number" min="0" step="0.01" className={`${INPUT} w-28`} placeholder="Price $" value={form.price_cents} onChange={set('price_cents')} />
+                  <PerkField label="Price in dollars"><input type="number" min="0" step="0.01" className={`${INPUT} w-28`} placeholder="Price $" value={form.price_cents} onChange={set('price_cents')} /></PerkField>
                 )}
               </div>
-            </PerkField>
+            </fieldset>
             <PerkField label="How founders redeem it" hint="Code and Link are self-serve. Introduction means the founder gets in touch with you, carrying a claim reference.">
               <select className={INPUT} value={form.fulfilment} onChange={set('fulfilment')}>
                 <option value="code">Code</option>
@@ -1424,19 +1427,19 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
               row says `Not recorded` rather than inventing either. The duration
               above fills the date; it stays editable. */}
           <div className="flex flex-wrap gap-2">
-            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-col gap-1 text-[12px] text-gray-600 dark:text-gray-400">
               Ends (optional)
-              <input type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
+              <input type="date" className={INPUT}
                 value={form.ends_at} onChange={set('ends_at')} />
             </label>
-            <label className="flex flex-1 flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-1 flex-col gap-1 text-[12px] text-gray-600 dark:text-gray-400">
               What it grants beyond the offer, and for how long (optional)
-              <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
+              <input className={INPUT}
                 placeholder="e.g. Priority queue access, 90 days" maxLength={300}
                 value={form.grant_scope} onChange={set('grant_scope')} />
             </label>
           </div>
-          <p className="text-[11px] leading-relaxed text-gray-500">
+          <p className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
             An end date is the offer’s own. A founder’s claim expires with it, on the date the offer
             carried when they claimed. When the offer ends, whatever it granted ends with it, and the
             lifecycle table above says what and on what day.
@@ -1444,7 +1447,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
           {err && <p className="text-sm text-red-600" role="alert">{err}</p>}
           {submitted && <p className="text-sm text-emerald-700" role="status">{submitted} is in review.</p>}
           <button type="submit" disabled={busy || !ready}
-            className="inline-flex w-full items-center justify-center gap-1 rounded-[11px] bg-violet-600 px-4 py-3 text-[13px] font-bold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:disabled:bg-gray-800">
+            className={`${offerButtonClass} w-full`}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             {ready ? 'Submit for review' : 'Fill the offer, value and detail'}
           </button>
@@ -1455,9 +1458,9 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
           <div>
             <div className="flex items-baseline justify-between">
               <SectionLabel>How founders will see it</SectionLabel>
-              <span className="text-[10.5px] text-gray-500">live preview</span>
+              <span className="text-[12px] text-gray-600 dark:text-gray-400">live preview</span>
             </div>
-            <div className="mt-2">
+            <div className="mt-2 [&_div]:text-[12px] [&_span]:text-[12px]">
               <PerkCard
                 preview
                 p={{
@@ -1478,14 +1481,14 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
           </div>
           <Card>
             <SectionLabel>What review looks at</SectionLabel>
-            <p className="mt-1.5 text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+            <p className="mt-1.5 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
               {absent.review_criteria ? <Unrecorded reason={absent.review_criteria} /> : null}
               {absent.review_criteria ? ` — ${absent.review_criteria}` : null}
             </p>
           </Card>
           <Card padding="none">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800"><SectionLabel>Your submissions</SectionLabel></div>
-            {items === null && !loadErr ? <p className="px-4 py-3 text-sm text-gray-500">Loading…</p>
+            {loadErr ? null : items === null ? <p className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">Loading…</p>
               : rows.length === 0 ? <p className="px-4 py-3 text-sm text-gray-600">Nothing submitted yet.</p>
               : visible.length === 0 ? (
                 // Which view found nothing, rather than a blank list under a
@@ -1501,11 +1504,11 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{perkListingName(p)}</div>
-                          <div className="mt-0.5 text-[11px] text-gray-500">
+                          <div className="mt-0.5 text-[12px] text-gray-600 dark:text-gray-400">
                             {p.category} · submitted {String(p.created_at || '').slice(0, 10)} · {p.claim_cap == null ? 'uncapped' : `cap ${p.claim_cap}`}
                           </div>
                         </div>
-                        <Pill tone={STATUS_PILL[p.status]}>{PERK_REVIEW_LABEL[p.status] || String(p.status).replace('_', ' ')}</Pill>
+                        <Pill className="text-[12px]" tone={STATUS_PILL[p.status]}>{PERK_REVIEW_LABEL[p.status] || String(p.status).replace('_', ' ')}</Pill>
                       </div>
                       {p.status === 'rejected' && p.review_note && (
                         <p className="mt-2 rounded bg-red-50 p-2 text-xs text-red-700">{p.review_note}</p>

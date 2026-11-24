@@ -18,14 +18,17 @@
  * from `companyCreationModel.js`, so desktop and phone say the same. Every
  * colour has its `dark:` pair (BD31), and no state is carried by colour alone.
  */
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PhoneRows, Unreadable } from '../../ui';
+import { cyclesWrite } from '../../lib/api/cycles';
 import { RecordsTable } from './CycleModulePage.jsx';
 import { safeHref, isPlainClick } from './cycleModel';
 import { incorporateFirst, listStage, progressiveFor } from './progressiveList.js';
 import {
-  documentsView, dominantView, electionView, filingRows, ipStep, sourcesIn, summaryView, ventureQuery,
+  documentsView, dominantView, electionView, filingRows, ipStep, sourcesIn, suggestionHref, suggestionsView, summaryView, ventureQuery,
 } from './companyCreationModel.js';
+import { FilingsExport, PapersToDataRoom } from './CompanyCreationHandoffs.jsx';
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100';
@@ -136,6 +139,55 @@ export function Dominant({ view, add }) {
       <p className={`m-0 ${MUTED}`}>{view.sub}</p>
       {safeHref(view.href) && <Link to={view.href} className={`${PRIMARY} self-start`} data-testid="company-next-action">{view.action}</Link>}
     </section>
+  );
+}
+
+/**
+ * D8259 (#8259, BD28 A and B): the filings Axal's pack suggests for this company, each with "Add to my filings"
+ * (the Add filing form, opened with the suggestion's values) and "Not now", which hides it for this venture.
+ * Without an Add (a read-only viewer) the list is shown and nothing can be changed. BD28 B: no pack, no list.
+ */
+export function Suggested({ view, add, projectId, onChanged, onRetry }) {
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+  if (view.state === 'loading' || view.state === 'none') return null;
+  if (view.state === 'unreadable') return <Block title="Suggested filings" testid="company-suggested"><Unreadable what="Suggested filings" claim={view.reason} onRetry={onRetry} /></Block>;
+  if (view.state === 'no_pack') {
+    return (
+      <Block title={view.title} testid="company-suggested">
+        <div data-testid="company-suggested-none"><p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{view.heading}</p><p className={`m-0 ${MUTED}`}>{view.reason}</p></div>
+      </Block>
+    );
+  }
+  const addHref = safeHref(add?.href);
+  const dismiss = async (key) => {
+    setBusy(key); setError('');
+    try { await cyclesWrite.build.dismissSuggestedFiling(projectId, key); onChanged?.(); }
+    catch (e) { setError(e?.message || 'That suggestion could not be hidden. Try again.'); }
+    finally { setBusy(null); }
+  };
+  return (
+    <Block title={view.title} line={view.line} testid="company-suggested">
+      <ul className="m-0 flex list-none flex-col p-0" aria-label="Suggested filings">
+        {view.rows.map((r) => {
+          const href = addHref ? suggestionHref(addHref, r) : null;
+          return (
+            <li key={r.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground py-2.5 text-[12.5px] last:border-b-0 dark:border-gray-800" data-testid="company-suggestion" data-key={r.key}>
+              <span className="min-w-0"><span className="font-semibold text-axal-ink dark:text-gray-100">{r.title}</span><small className="block text-[11px] text-axal-muted dark:text-gray-400">{r.line}</small></span>
+              {href && (
+                <span className="flex flex-wrap items-center gap-2">
+                  <Link to={href} state={add.state} className="inline-flex min-h-[44px] sm:min-h-[36px] items-center rounded-[9px] border border-axal-lavender-edge px-3 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950/40" data-testid="company-suggestion-add">Add to my filings</Link>
+                  <button type="button" disabled={busy != null} onClick={() => dismiss(r.key)} aria-label={`Not now: ${r.title}`}
+                    className="inline-flex min-h-[44px] sm:min-h-[36px] items-center rounded-[9px] px-3 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-100" data-testid="company-suggestion-dismiss">{busy === r.key ? 'Hiding…' : 'Not now'}</button>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="m-0 text-[12px] text-red-700 dark:text-red-300" role="alert" data-testid="company-suggestion-error">{error}</p>}
+      <p className={`m-0 ${MUTED}`}>Adding one creates a Build filing you own, with its due date. Nothing is filed. “Not now” hides the suggestion for this venture.</p>
+    </Block>
   );
 }
 
@@ -295,6 +347,7 @@ export default function CompanyCreationHome({ data, projectId, ...p }) {
       <Summary view={summaryView(facts, status)} phone={phone} onRetry={retry} />
       {!phone && !loading && !zero && <Dominant view={dominantView(facts, rowHref)} add={add} />}
       <Elections view={electionView(facts, status)} rowHref={rowHref} phone={phone} onRetry={retry} search={p.search} />
+      <Suggested view={suggestionsView(facts, status)} add={add} projectId={projectId} onChanged={p.reload || retry} onRetry={retry} />
       {/* D703 / BD30: on a phone the filings are the module page's own phone rows (a tap opens Edit as a page);
           loading, unreadable and the empty stages stay with the table, which says each. */}
       {phone && p.phoneRows && (p.recordsStatus || 'ready') === 'ready' && (p.phoneRows.rows || []).length > 0
@@ -317,11 +370,17 @@ export default function CompanyCreationHome({ data, projectId, ...p }) {
           rowHref={p.rowHref}
         />
         )}
+      {/* D8260 (BD25): the company's filings and proofs as CSV, for its members. */}
+      {!loading && !zero && docs.state === 'ok' && <FilingsExport projectId={projectId} />}
       <WhereChanged records={records} projectId={projectId} />
       {!zero && <Supporting add={add} tools={p.tools} />}
       {zero && <Supporting add={null} tools={p.tools} />}
       <div className={`grid gap-4 ${phone ? 'grid-cols-1' : 'lg:grid-cols-2'}`}>
-        <Documents view={docs} rowHref={rowHref} onRetry={retry} />
+        <div className="flex min-w-0 flex-col gap-2">
+          <Documents view={docs} rowHref={rowHref} onRetry={retry} />
+          {/* D8260 (BD25): the stored papers, preselected for the venture's data room; members only. */}
+          {docs.state === 'ok' && <PapersToDataRoom projectId={projectId} />}
+        </div>
         <AfterFormation ip={ipStep(facts)} search={p.search} />
       </div>
       <Handoff projectId={projectId} search={p.search} />
