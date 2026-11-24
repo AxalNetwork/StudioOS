@@ -28,6 +28,7 @@ import { incorporateFirst, listStage, progressiveFor } from './progressiveList.j
 import {
   documentsView, dominantView, electionView, filingRows, ipStep, sourcesIn, suggestionHref, suggestionsView, summaryView, ventureQuery,
 } from './companyCreationModel.js';
+import { FilingsExport, PapersToDataRoom } from './CompanyCreationHandoffs.jsx';
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100';
@@ -369,11 +370,17 @@ export default function CompanyCreationHome({ data, projectId, ...p }) {
           rowHref={p.rowHref}
         />
         )}
+      {/* D8260 (BD25): the company's filings and proofs as CSV, for its members. */}
+      {!loading && !zero && docs.state === 'ok' && <FilingsExport projectId={projectId} />}
       <WhereChanged records={records} projectId={projectId} />
       {!zero && <Supporting add={add} tools={p.tools} />}
       {zero && <Supporting add={null} tools={p.tools} />}
       <div className={`grid gap-4 ${phone ? 'grid-cols-1' : 'lg:grid-cols-2'}`}>
-        <Documents view={docs} rowHref={rowHref} onRetry={retry} />
+        <div className="flex min-w-0 flex-col gap-2">
+          <Documents view={docs} rowHref={rowHref} onRetry={retry} />
+          {/* D8260 (BD25): the stored papers, preselected for the venture's data room; members only. */}
+          {docs.state === 'ok' && <PapersToDataRoom projectId={projectId} />}
+        </div>
         <AfterFormation ip={ipStep(facts)} search={p.search} />
       </div>
       <Handoff projectId={projectId} search={p.search} />
