@@ -10,6 +10,7 @@ its data, passes it in, and does only what these functions allow.
 | File | What it holds |
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
+| `concurrency.mjs` | Queue admission holds (#8076, D8076), pure: at most `PRIVILEGED_IN_QUEUE` `pr:privileged` PRs and `PER_SLOT_IN_QUEUE` PRs per slot in the merge queue, the one-line reason for a hold, and the shared-state workflows' concurrency groups. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
 | `conflict-indicator.mjs` | The PR-list conflict indicator (#6476, D6476-p5): labels a confirmed conflict `conflict` and clears it only on a fresh `mergeable: true` for the current head and main. Labels only. |
 | `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
@@ -64,6 +65,22 @@ Configure the GitHub Actions environment `landing-bot` to accept deployments fro
 | `LANDING_BOT_QUEUE_FAIL_BREAKER` | Maximum unsuccessful share of the last 20 completed CI merge-group runs. A value of `0.20` stops admission at four unsuccessful runs. |
 
 Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_ENABLED`.
+
+**Concurrency holds (#8076, D8076).** Before it plans an entry, and again before each write, the feeder reads the
+queue's entries and each candidate's slot. The slot is the `slot:S…` label on the issue the PR body names. It then
+holds back a candidate when either is true:
+- a `pr:privileged` PR is already queued (`PRIVILEGED_IN_QUEUE`, 1);
+- the candidate's slot already has `PER_SLOT_IN_QUEUE` (3) PRs queued, counting the entries this sweep made.
+
+A PR that names no issue with a slot is not counted per slot. If the queue or a slot cannot be read, the candidate
+is held, never admitted. Each hold adds one line to the run summary, for example "Held from the merge queue: slot
+S07 already has 3 PRs queued (#1, #2, #3), and the most is 3." A hold ends on its own once an entry leaves the queue.
+The owner may change either constant in `rules.mjs` on #8076. GitHub's own queue limits are #8060's.
+
+**Shared-state workflows.** Each workflow in `concurrency.mjs`'s `SHARED_STATE_GROUPS` declares its own
+`concurrency` group with `cancel-in-progress: false`, so two runs that write the same state never interleave. The
+list covers labels sync, the conflict indicator, the keeper, the feeder, and the deploy's retention ledger.
+`landing_concurrency_8076.test.mjs` fails if one loses its group.
 
 The workflow uploads the exact selected PR numbers and SHAs before requesting the write token, rechecks each candidate, and requests normal queue entry with GitHub's expected-head guard. An uncertain response stops the sweep. Check the PR timeline before taking any action on that entry.
 

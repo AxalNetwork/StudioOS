@@ -21,7 +21,8 @@ import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
 import {
   SEARCH_MISS_IDLE_MS, appliesToLine, areaChips, areasForTerms, broaderTerms, goToTarget, guideOutline,
-  guideTicketDraft, inArea, moveSelection, publicGuides, resultArea, resultLine, searchGuides, ticketTitleFromSearch,
+  guideTicketDraft, inArea, moveSelection, publicGuides, resultArea, resultLine, searchGuides, searchSuggestions, ticketTitleFromSearch,
+  TRACKER_WARNING, TRACKER_WARNING_ANCHOR, TRACKER_WARNING_LINK,
 } from './v2/helpV2';
 import HelpTicketSheet, { ADVISORY_URL, SECURITY_EMAIL } from './v2/HelpTicketSheet';
 import HelpDirectory from './v2/HelpDirectory';
@@ -164,6 +165,23 @@ function HelpSearchBox({ query, setQuery, searchInputRef, label, placeholder, su
   );
 }
 
+/** D7001 (#7001): the suggested searches under the box, each one a public guide's own topic. */
+function SearchSuggestions({ setQuery }) {
+  const list = searchSuggestions();
+  if (!list.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="help-search-suggestions">
+      <span className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Try</span>
+      {list.map((s) => (
+        <button key={s.query} type="button" onClick={() => setQuery(s.query)} data-testid="help-search-suggestion"
+          className="inline-flex min-h-[44px] items-center rounded-full border border-violet-200 bg-white px-3 text-[12.5px] font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-950">
+          {s.query}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function HelpHero({ user, publicCount, ...box }) {
   return (
     <header className="border-b border-violet-200 bg-violet-50 px-4 pb-7 pt-8 md:px-8 dark:border-violet-900/60 dark:bg-violet-950/40">
@@ -173,11 +191,12 @@ function HelpHero({ user, publicCount, ...box }) {
         <HelpSearchBox
           {...box}
           label={user ? 'Search the Help Center' : 'Search the public guides'}
-          placeholder={user ? 'Search guides, e.g. “invite an investor”' : `Search ${publicCount} public guides`}
+          placeholder={user ? 'Search guides, e.g. “account recovery”' : `Search ${publicCount} public guides`}
           sub={user
             ? 'Searches the guides your account can read. Press / from anywhere on Help.'
             : <>{publicCount} guides are public. <Link to="/login?next=%2Fhelp" className="font-bold text-violet-700 dark:text-violet-300">Sign in to search every guide</Link>.</>}
         />
+        <SearchSuggestions setQuery={box.setQuery} />
       </div>
     </header>
   );
@@ -767,6 +786,12 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
               <Link to={go.path} className={PRIMARY_ACTION.replace('min-h-[40px]', 'min-h-[44px]')} data-testid="help-guide-go">{go.label}</Link>
               <span className="text-[12px] text-gray-500 dark:text-gray-400">Opens {go.path}</span>
             </div>
+          )}
+          {go && anchor === TRACKER_WARNING_ANCHOR && (
+            <p role="note" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] leading-relaxed text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" data-testid="help-guide-tracker-warning">
+              {TRACKER_WARNING}{' '}
+              <Link to={TRACKER_WARNING_LINK.path} className="font-bold underline">{TRACKER_WARNING_LINK.label}</Link>
+            </p>
           )}
         </header>
 
