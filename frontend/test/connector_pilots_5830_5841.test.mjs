@@ -153,3 +153,19 @@ test('a busy import notice survives the following status reread and cannot be mi
  const m=await mounted(TypeformJourney,surveyApi({sync:async()=>({outcome:'busy'})}));
  try{await m.click('Import responses');await m.flush();await m.flush();assert.match(m.text(),/Import outcome: busy/);assert.match(m.text(),/Completed submissions3/);}finally{await m.unmount();}
 });
+
+test('switching venture while a question rule is saving never sends the later hypothesis-link write',async()=>{
+ let release,change;const links=[];const api=surveyApi({targets:async()=>({hypotheses:[{id:6,code:'H1',claim:'Synthetic need'}],experiments:[]}),setMappings:()=>new Promise(r=>release=r),evidenceMapping:async(...args)=>{links.push(args);return{};}});
+ function Host(){const [project,set]=useState(41);change=set;return h(TypeformJourney,{projectId:project,api});}
+ const m=await mountContracts(h(Host),'/validate/customer-research?project_id=41');
+ try{await m.flush();await m.flush();await m.click('Map question');await m.flush();await m.fill('Hypothesis','6');await m.click('Save mapping');await act(async()=>change(42));await act(async()=>release({items:[{id:12,field_id:'q1'}]}));await m.flush();assert.deepEqual(links,[]);assert.doesNotMatch(m.text(),/Redacted preview/);
+ }finally{await m.unmount();}
+});
+
+test('a failed hypothesis link retains an explicit link-only retry without repeating a destructive mapping replacement',async()=>{
+ let rules=0;const links=[];const api=surveyApi({targets:async()=>({hypotheses:[{id:6,code:'H1',claim:'Synthetic need'}],experiments:[]}),setMappings:async()=>{rules++;return{items:[{id:12,field_id:'q1'}]};},evidenceMapping:async(...args)=>{links.push(args);if(links.length===1)throw Error('temporary');return{};}});
+ const m=await mounted(TypeformJourney,api);try{await m.click('Map question');await m.flush();await m.fill('Hypothesis','6');await m.click('Save mapping');await m.flush();assert.match(m.text(),/Retry hypothesis link sends only the retained target/);assert.equal(rules,1);
+ const input=m.nodes().find(n=>n.tagName==='BUTTON'&&m.props(n).children==='Import responses');assert.equal(m.props(input).disabled,true);
+ await m.click('Retry hypothesis link');await m.flush();assert.equal(rules,1);assert.equal(links.length,2);assert.deepEqual(links[1],links[0]);assert.doesNotMatch(m.text(),/hypothesis link is unfinished/);
+ }finally{await m.unmount();}
+});

@@ -13,7 +13,7 @@ export function mappingInput(field, draft) {
 }
 export function typeformFailure(e) {
   const code = e?.data?.error;
-  if (code === 'mapping_target_pending') return 'The question rule was saved, but its hypothesis link was not confirmed. Read the mapping and retry before importing or preparing reviews.';
+  if (code === 'mapping_target_pending') return 'The question rule was saved, but its hypothesis link was not confirmed. A changed rule may already have retracted affected evidence. Retry hypothesis link below without saving the rule again.';
   if (code === 'typeform_unavailable') return 'Typeform is unavailable until its app is approved.';
   if (['sign_in_again', 'not_connected', 'binding_lost'].includes(code)) return 'Reconnect Typeform and check the form’s access before importing.';
   if (code === 'not_your_binding') return 'Only the member whose Typeform serves this venture can import or review it.';
