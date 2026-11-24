@@ -35,6 +35,7 @@ import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
 import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
+import { suggestedFilings } from '../services/suggestedFilings';
 import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1050,7 +1051,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+export async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -1129,6 +1130,8 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
         entity: await entitySummary(env, p, order ?? null, steps),
         elections: await electionRows(env, p, viewer, steps),
         papers: await companyPapers(env, p, viewer),
+        // #8259 (D8259, BD28): the pack's filings not yet added or dismissed, failing on its own.
+        suggestions: await suggestedFilings(env, p, order ?? null, steps),
       } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
@@ -1379,7 +1382,7 @@ async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, 
   }
 }
 
-async function context(c: any): Promise<Project | Response> {
+export async function context(c: any): Promise<Project | Response> {
   const user = await requireAuth(c);
   const raw = c.req.query('project');
   if (!raw || !/^\d+$/.test(raw) || Number(raw) < 1) return c.json({ detail: 'Valid project is required' }, 400);

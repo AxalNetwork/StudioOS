@@ -283,6 +283,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
 
 | `revenue_metrics_5952.test.mjs` | D5952: quarterly ledger metric states, currency/period joins, per-licence receipts and AI, automatic promo report and coverage metadata; rendered components over synthetic envelopes. |
+| `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
