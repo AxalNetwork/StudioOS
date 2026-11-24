@@ -96,9 +96,9 @@ function fixture(t: { after(fn: () => void): void; mock: { timers: { enable(o: o
       createAttempts: 1, lastCreateAt: START, ...patch }));
   };
   /** A compact record placed directly, for tests that are about the table and not the handoff. */
-  const place = async (n: number, completedAt: number) => {
+  const place = async (n: number, completedAt: number, mode: CompactMode = 'pilot') => {
     const r = await request(n, 'success', completedAt); r.deadline = Math.max(r.deadline, completedAt + 1);
-    const record = compactProject(r, 'pilot', false)!;
+    const record = compactProject(r, mode, false)!;
     storage.sql.exec('INSERT INTO ci_capacity_compact (id, completed_at, failed, failure, state) VALUES (?, ?, 0, NULL, ?)', uuid(n), completedAt, compactEncode(record));
     return record;
   };
@@ -303,6 +303,61 @@ test('8376 reconciliation counts stalled evidence and adopts only an exact indep
   assert.equal(first.counts.cleanup_unknown,1);assert.equal(first.counts.intent_unresolved+second.counts.intent_unresolved,36);
   const changed=new CapacityReconciliation(f.storage,run.store,f.results,{...config,publication:'full-suite'});
   assert.ok(changed.inspect(uuid(3)).issues.includes('mode_conflict'));
+});
+
+async function adoptionFixture(t: Parameters<typeof fixture>[0], attempts = 2, mode: CompactMode = 'pilot') {
+  const f = fixture(t);
+  const record = await f.place(2, START, mode);
+  const { requestId, parentRunId, parentAttempt, sourceSha } = record.submission;
+  const key = requestId + ':pilot';
+  f.sent(2, 'failure', { phase: 'creating', checkId: null, sent: null, createAttempts: attempts });
+  const review = new CapacityReconciliation(f.storage, f.store, f.results, { ...config, publication: 'pilot' });
+  const parentApi = network().api;
+  const api = async (method: string, path: string) => {
+    assert.equal(method, 'GET');
+    if (path === `/repos/${repository}/actions/runs/${parentRunId}/attempts/${parentAttempt}`) {
+      return parentApi(method, path);
+    }
+    assert.ok(path.startsWith(`/repos/${repository}/commits/${sourceSha}/check-runs?`));
+    return { total_count: 1, check_runs: [{
+      id: 910, head_sha: sourceSha, external_id: key, name: 'ci-capacity/worker-pilot', app: { id: config.appId },
+    }] };
+  };
+  const intent = f.db.prepare('SELECT state FROM capacity_publications WHERE id=?');
+  async function expectRefusal(checkId = 910) {
+    const before = intent.get(key)!.state;
+    const { fingerprint } = review.inspect(requestId);
+    assert.equal(await review.adopt(requestId, fingerprint, checkId, api), false);
+    assert.equal(intent.get(key)!.state, before, 'refusal must preserve the entire stored intent');
+  }
+  return { f, expectRefusal };
+}
+
+test('8376 refuses owner check 999 when the sole verified match is check 910', async t => {
+  const { expectRefusal } = await adoptionFixture(t);
+  await expectRefusal(999);
+});
+
+test('8376 refuses adoption while a second create attempt is available', async t => {
+  const { expectRefusal } = await adoptionFixture(t, 1);
+  await expectRefusal();
+});
+
+test('8376 refuses pilot adoption for a record compacted under full-suite publication', async t => {
+  const { expectRefusal } = await adoptionFixture(t, 2, 'full-suite');
+  await expectRefusal();
+});
+
+test('8376 refuses adoption when full and compact records both own the request', async t => {
+  const { f, expectRefusal } = await adoptionFixture(t);
+  await f.settled(2, 'success', START);
+  await expectRefusal();
+});
+
+test('8376 refuses adoption when the result journal cannot be read', async t => {
+  const { f, expectRefusal } = await adoptionFixture(t);
+  f.state.breakOn = 'SELECT id,state FROM capacity_result_failures';
+  await expectRefusal();
 });
 
 test('8376 owner reconciliation authenticates both entry points and requires the explicit drain switch',async t=>{
