@@ -14,11 +14,18 @@
  *                                               D6124: a writer's CSV of the table's filtered rows, on four
  *                                               modules (services/growExport.ts); `records.exportable` says so
  *
+ *   GET  /modules/:slug/export?project=&q=&filter=&sort=
+ *     D6103 (#6103): Product improvement's Feedback or Revenue and traction's
+ *     KPIs (monthly history) as CSV, for a writer; `services/growExport.ts`.
+ *     The module read's `records.can_export` says whether this viewer may.
+ *
  * WRITES (whoever `canAccessProject` lets write: the owner, a co-founder, a
  * partner, an admin; an advisor reads only). The writers are
  * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
  * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
+ *                                  D6865 part 2 (#6891): POST takes `reply_key` with origin `inbox_reply`, the Inbox
+ *                                  reply it is saved from (GR-24); a reply saved twice is a 409 naming the item
  *   PATCH /feedback/themes         { project, from, to, merge? }  D6098 (#6098): rename one theme, or merge it
  *                                  into another (`merge: true`; without it a merge is a 409 with the counts),
  *                                  with the roadmap items that answer it; the read's `parts.themes` (writers only)
@@ -109,9 +116,9 @@ import {
 } from '../services/growCycle';
 import { growChanges } from '../services/growChanges';
 import { ensureProjectMetricsSchema } from './progress';
-import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
+import { KpiRefused, enterKpi, kpiMonths, kpiRows, type KpiRow } from '../services/growKpis';
 import {
-  CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
+  CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
   logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setChecklistNotApplicable, setPartnerRevenue, updateChannel,
   updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme, updatePartner, updateRole,
@@ -123,8 +130,8 @@ import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { growAttention, unreadableGrowAttention } from '../services/growAttention';
 import { hasRecords } from '../services/records';
-import { growExportCsv, isGrowExportSlug } from '../services/growExport';
-import { csvResponse } from '../services/csv';
+import { GROW_EXPORT_ROW_CAP, exportCapSentence, feedbackCsv, growExportCsv, hasGrowExport, isGrowExportSlug, kpiCsv, kpiLineCount } from '../services/growExport';
+import { csvResponse, stamp } from '../services/csv';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { publishPart } from '../services/publishSources';
 import {
@@ -367,16 +374,29 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
   }
   if (slug === 'market-expansion') {
     const rows = await marketRows(env, projectId);
-    const replies = await marketReplies(env, projectId);
+    const replies = await marketRepliesRead(env, projectId);
     const extra = new Map(((await env.DB.prepare('SELECT uid, geography_ref, size_cents, size_currency, size_source FROM markets WHERE project_id = ?')
       .bind(projectId).all<Row>()).results || []).map((m) => [String(m.uid), m]));
+    // D6120 (#6120, GR-21, GR-23): what the list, its next step and Compare read beside the scores. Each read
+    // fails on its own: a failed one leaves its fields null (Not recorded on the page), never a zero.
+    const plan = await marketPlanCounts(env, projectId, today(x));
+    const countries = await marketCountries(env, projectId);
+    const counts = Object.fromEntries(MARKET_STATES.map((s) => [s, rows.filter((m) => m.state === s).length]));
     return { cols: ['Market', 'State', 'Readiness', 'Weakest part', 'Decision'],
       rows: rows.map((m) => {
         const rd = readiness(m); const more = extra.get(m.uid) ?? {};
+        const p = plan ? plan.get(m.uid) ?? EMPTY_PLAN : null;
+        const country = countries?.get(m.uid) ?? null;
         return { id: m.uid, ...m, geography_ref: more.geography_ref ?? null, size_cents: more.size_cents ?? null, size_currency: more.size_currency ?? null,
           size_source: more.size_source ?? null, readiness: rd.score,
-          readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest, replies: replies.get(m.uid) ?? [] };
+          readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest,
+          replies: replies ? replies.get(m.uid) ?? [] : null,
+          country_name: country?.name ?? null, country_region: country?.region ?? null,
+          steps_total: p?.steps_total ?? null, steps_open: p?.steps_open ?? null, steps_overdue: p?.steps_overdue ?? null,
+          localisation_done: p?.localisation_done ?? null, localisation_open: p ? p.localisation_open : null };
       }),
+      // D6120: the state chips count every market, whatever the filter; a read that failed says so.
+      parts: { state_counts: counts, can_write: writer, replies_state: replies ? 'ok' : 'unreadable', plan_state: plan ? 'ok' : 'unreadable' },
       filters: [{ key: 'state', label: 'State', options: fixed(MARKET_STATES) }],
       sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }] };
   }
@@ -477,6 +497,11 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
  * whose ask links to a market, by that market — linked by this read, never copied.
  */
 export async function marketReplies(env: Env, projectId: number): Promise<Map<string, Row[]>> {
+  return (await marketRepliesRead(env, projectId)) ?? new Map();
+}
+
+/** D6120 (#6120, GR-26): the same read, null when it failed, so the page says Unavailable rather than "no replies". */
+export async function marketRepliesRead(env: Env, projectId: number): Promise<Map<string, Row[]> | null> {
   const out = new Map<string, Row[]>();
   try {
     const q = await env.DB.prepare(
@@ -487,8 +512,53 @@ export async function marketReplies(env: Env, projectId: number): Promise<Map<st
         WHERE u.project_id = ? AND a.kind = 'market' ORDER BY r.id DESC`,
     ).bind(projectId).all<Row>();
     for (const x of q.results || []) out.set(String(x.market_uid), [...(out.get(String(x.market_uid)) ?? []), x]);
-  } catch { /* no update stores on this database */ }
+  } catch (e) {
+    console.warn('[cycle_grow] market replies unreadable', (e as Error).message);
+    return null;
+  }
   return out;
+}
+
+type MarketPlan = { steps_total: number; steps_open: number; steps_overdue: number; localisation_done: number; localisation_open: string[] };
+const EMPTY_PLAN: MarketPlan = { steps_total: 0, steps_open: 0, steps_overdue: 0, localisation_done: 0, localisation_open: [...LOCALISATION_KEYS] };
+
+/**
+ * D6120 (#6120, GR-21, GR-23): each market's entry steps (all, open, overdue: due before `day` and not done) and
+ * its localisation checks (done, and the keys still open in their fixed order). Null when either store fails.
+ */
+export async function marketPlanCounts(env: Env, projectId: number, day: string): Promise<Map<string, MarketPlan> | null> {
+  try {
+    const steps = await env.DB.prepare(
+      `SELECT m.uid, COUNT(s.id) AS total, SUM(CASE WHEN s.id IS NOT NULL AND s.done_at IS NULL THEN 1 ELSE 0 END) AS open,
+              SUM(CASE WHEN s.done_at IS NULL AND s.due_on IS NOT NULL AND substr(s.due_on, 1, 10) < ? THEN 1 ELSE 0 END) AS overdue
+         FROM markets m LEFT JOIN market_entry_steps s ON s.market_id = m.id WHERE m.project_id = ? GROUP BY m.id`,
+    ).bind(day, projectId).all<{ uid: string; total: number; open: number | null; overdue: number | null }>();
+    const checks = await env.DB.prepare(
+      `SELECT m.uid, l.key FROM market_localisation l JOIN markets m ON m.id = l.market_id WHERE m.project_id = ? AND l.done_at IS NOT NULL`,
+    ).bind(projectId).all<{ uid: string; key: string }>();
+    const done = new Map<string, Set<string>>();
+    for (const c of checks.results || []) done.set(c.uid, (done.get(c.uid) ?? new Set()).add(c.key));
+    const out = new Map<string, MarketPlan>();
+    for (const s of steps.results || []) {
+      const ticked = done.get(s.uid) ?? new Set<string>();
+      out.set(s.uid, { steps_total: Number(s.total) || 0, steps_open: Number(s.open) || 0, steps_overdue: Number(s.overdue) || 0,
+        localisation_done: LOCALISATION_KEYS.filter((k) => ticked.has(k)).length, localisation_open: LOCALISATION_KEYS.filter((k) => !ticked.has(k)) });
+    }
+    return out;
+  } catch (e) {
+    console.warn('[cycle_grow] market plan counts unreadable', (e as Error).message);
+    return null;
+  }
+}
+
+/** D6120 (GR-21): the attached Research › Geographies country's name and region, by market; null when unreadable. */
+async function marketCountries(env: Env, projectId: number): Promise<Map<string, { name: string; region: string | null }> | null> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT m.uid, c.name, c.region FROM markets m JOIN research_countries c ON c.code = m.geography_ref WHERE m.project_id = ?`,
+    ).bind(projectId).all<{ uid: string; name: string; region: string | null }>();
+    return new Map((q.results || []).map((r) => [r.uid, { name: r.name, region: r.region ?? null }]));
+  } catch { return null; }
 }
 
 /**
@@ -539,13 +609,14 @@ r.get('/modules/:slug', async (c) => {
     const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
     // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
-    const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
+    const parts = { ...(recs.parts ?? {}), ...(meta.slug === 'durable-company-building' ? { can_write: writer } : {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
       ...(await tiktokPart(c, user, pid, meta.slug)),
       ...(await facebookPart(c, user, pid, meta.slug)),
       publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     // D6124: `exportable` tells the page to draw Export; the export route checks the same two things itself.
+    // D6103 adds Feedback and the KPIs to the modules with one (`hasGrowExport`).
     return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow'),
-      ...(writer && isGrowExportSlug(meta.slug) ? { exportable: true } : {}) }, ...(Object.keys(parts).length ? { parts } : {}) });
+      ...(writer && hasGrowExport(meta.slug) ? { exportable: true } : {}) }, ...(Object.keys(parts).length ? { parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
 
@@ -553,23 +624,46 @@ r.get('/modules/:slug', async (c) => {
 // The table's rows as a CSV, every row its search, filters and sort select
 // (no page). A writer on the venture only: a reader is refused before anything
 // is read. A failed read is a refusal, never a file with a header and no rows.
+// D6103 (#6103): Feedback, or the KPIs with their monthly history. The
+// customer's name is the writer's column; no email is ever exported. Past
+// GROW_EXPORT_ROW_CAP rows it refuses (422) rather than cut the file short.
+// Each of these two is logged as `grow.<module>` with its row count before
+// the file is returned: no log row, no file.
 r.get('/modules/:slug/export', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), true);
     const slug = c.req.param('slug');
     const meta = GROW_MODULES.find((m) => m.slug === slug);
-    if (!meta || !isGrowExportSlug(meta.slug)) return c.json({ detail: 'This Grow module has no export' }, 404);
+    if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
+    if (!hasGrowExport(meta.slug)) return c.json({ detail: `${meta.name} has no export` }, 404);
     const x = ctxFor(c.env, pid);
     let recs: RecordSet;
     try { recs = await recordsFor(x, meta.slug, user, true); } catch (e) {
-      console.error('[cycle_grow] export unreadable:', meta.slug, (e as Error).message);
+      console.error('[cycle_grow] export unreadable:', meta.slug, (e as Error).name);
       return c.json({ detail: `Unreadable: ${meta.source} could not be read, so nothing was exported` }, 503);
     }
     const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
-    const rows = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
-    const asOf = today(x);
-    return csvResponse(growExportCsv(meta.slug, rows, meta.source, asOf), `${meta.slug}-${pid}-${asOf}.csv`, { 'X-Export-Rows': String(rows.length) });
+    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
+    if (isGrowExportSlug(meta.slug)) {
+      const asOf = today(x);
+      return csvResponse(growExportCsv(meta.slug, shaped, meta.source, asOf), `${meta.slug}-${pid}-${asOf}.csv`, { 'X-Export-Rows': String(shaped.length) });
+    }
+    // D6103: `project(..., true)` above admits a writer only, so the From column is always the writer's.
+    let body: string; let rows: number; let what: string;
+    if (meta.slug === 'product-improvement') {
+      if (shaped.length > GROW_EXPORT_ROW_CAP) throw new Refused(422, exportCapSentence(shaped.length, 'feedback rows'));
+      body = feedbackCsv(shaped, true, (v) => LABEL[String(v)] ?? v); rows = shaped.length; what = 'Feedback';
+    } else {
+      const kpis = [];
+      for (const row of shaped as KpiRow[]) kpis.push({ row, months: await kpiMonths(c.env, pid, row) });
+      rows = kpiLineCount(kpis);
+      if (rows > GROW_EXPORT_ROW_CAP) throw new Refused(422, exportCapSentence(rows, 'KPI months'));
+      body = kpiCsv(kpis); what = 'KPIs';
+    }
+    await logGrowWrite(c.env, pid, user.id, { module: meta.slug, entityId: null, action: `grow_${meta.slug === 'product-improvement' ? 'feedback' : 'kpis'}_exported`,
+      summary: `${what} exported as CSV: ${rows} row${rows === 1 ? '' : 's'}` });
+    return csvResponse(body, `${meta.slug === 'product-improvement' ? 'feedback' : 'kpis'}-${pid}-${stamp()}.csv`, { 'Cache-Control': 'no-store', 'X-Export-Rows': String(rows) });
   } catch (e) { return fail(c, e); }
 });
 

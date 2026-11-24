@@ -332,3 +332,13 @@ test('batch share: a version that moved is that row\'s refusal; the others are s
  assert.equal(w.db.prepare('SELECT visibility FROM raise_evidence_items WHERE uid=?').get(b.uid)?.visibility,'summary','the stale row kept what the newer write set');
  }finally{w.db.close();}
 });
+
+test('D6017: Raise candidates exclude planned/running result text and Done without a result',async()=>{
+ const w=world();try{
+  for(const [id,status,result] of [[1,'planned','Legacy draft'],[2,'running','Partial notes'],[3,'done',' '],[4,'done','Two paid']] as const)
+   seed(w,'hypothesis_experiments',{id,uid:'experiment-'+id,project_id:1,result,status,updated_at:'2026-10-26'});
+  seed(w,'hypothesis_experiments',{id:5,uid:'foreign-exp',project_id:2,result:'Private observation',status:'done',updated_at:'2026-10-26'});
+  const got=await collectEvidenceSources(w.env,1,1,'2026-10-26T12:00:00Z',['experiment-result']);
+  assert.equal(got.candidates.length,1);assert.equal(got.candidates[0].source_ref,'4');assert.equal(got.blocks.find(b=>b.dataset==='experiments')?.count,1);
+ }finally{w.db.close();}
+});

@@ -287,7 +287,7 @@ export const DEMAND_KINDS = ['loi', 'pre_sale', 'waitlist', 'need_to_have', 'wou
 export const DEMAND_STATUSES = ['confirmed', 'counted', 'to_confirm'] as const;
 /** D1092: `google_forms` is a Form response the founder's mapping qualified; it arrives `to_confirm`.
  *  D1605: `posthog` is an answer to a survey question the founder marked, accepted from a proposal; it arrives `to_confirm`. */
-export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms', 'posthog'] as const;
+export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms', 'posthog', 'typeform'] as const;
 
 export type DemandSignalInput = {
   projectId: number;
@@ -305,6 +305,8 @@ export type DemandSignalInput = {
   note?: unknown;
   /** D5352: internal accept retry key; never taken from an HTTP body. */
   sourceProposalId?: number | null;
+  /** D5829: internal source identity; never copied from a request body. */
+  sourceTypeformKey?: string;
 };
 
 export async function writeDemandSignal(env: Env, input: DemandSignalInput): Promise<{ id: number }> {
@@ -358,14 +360,26 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
     ).bind(input.projectId, sourceProposalId).first<{ id: number }>();
     if (existing) return { id: Number(existing.id) };
   }
-  const row = await env.DB.prepare(
-    `INSERT INTO demand_signals
+  const typeformKey = sourceKind === 'typeform' ? input.sourceTypeformKey ?? null : null;
+  if (typeformKey) {
+    const existing = await env.DB.prepare('SELECT id FROM demand_signals WHERE project_id = ? AND source_typeform_key = ?')
+      .bind(input.projectId, typeformKey).first<{ id: number }>();
+    if (existing) return { id: Number(existing.id) };
+  }
+  const values = [input.projectId, kind, trimOrNull(input.who, 200), amount, currency, period, date, status, sourceKind,
+    interviewId, sessionId, trimOrNull(input.note, 1000), input.userId, sourceProposalId];
+  const row = typeformKey
+    ? await env.DB.prepare(
+      `INSERT INTO demand_signals
+       (project_id, kind, who, amount_cents, currency, period, signal_date, status, source_kind, interview_id, session_id, note, created_by, source_proposal_id, source_typeform_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(project_id, source_typeform_key) DO UPDATE SET source_typeform_key = excluded.source_typeform_key RETURNING id`,
+    ).bind(...values, typeformKey).first<{ id: number }>()
+    : await env.DB.prepare(
+      `INSERT INTO demand_signals
        (project_id, kind, who, amount_cents, currency, period, signal_date, status, source_kind, interview_id, session_id, note, created_by, source_proposal_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-  ).bind(
-    input.projectId, kind, trimOrNull(input.who, 200), amount, currency, period, date, status, sourceKind,
-    interviewId, sessionId, trimOrNull(input.note, 1000), input.userId, sourceProposalId,
-  ).first<{ id: number }>();
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(...values).first<{ id: number }>();
   if (!row) throw new WriterError(500, 'The signal was not written');
   await recordActor(env, input.userId, input.projectId, 'demand-signals', `signal-${row.id}`, 'demand_signal_written', `Signal ${kind} ${status}`);
   return { id: Number(row.id) };
@@ -1519,10 +1533,10 @@ export const EVIDENCE_KINDS = ['interview', 'signal', 'metric', 'experiment'] as
  * experiment, each checked to be this venture's. Adding it again updates its
  * direction and strength. A link logs a row on each side that has a record.
  */
-export async function addEvidence(
+export async function evidenceStatements(
   env: Env,
   input: { projectId: number; userId: number | null; hypothesisId: number; kind: unknown; ref_id: unknown; direction?: unknown; strength?: unknown },
-): Promise<{ link: string }> {
+) {
   const h = await env.DB.prepare('SELECT id, code FROM hypotheses WHERE id = ? AND project_id = ?')
     .bind(input.hypothesisId, input.projectId).first<{ id: number; code: string }>();
   if (!h) throw new WriterError(404, 'Hypothesis not found on this project');
@@ -1570,7 +1584,11 @@ export async function addEvidence(
       entityId: other.id, action: 'evidence_linked', summary: `Linked to ${h.code}`,
     }));
   }
-  const results = await env.DB.batch(stmts);
+  return stmts;
+}
+
+export async function addEvidence(env: Env, input: Parameters<typeof evidenceStatements>[1]): Promise<{ link: string }> {
+  const results = await env.DB.batch(await evidenceStatements(env, input));
   const id = Number((results[0] as { results?: Array<{ id: number }> })?.results?.[0]?.id);
   return { link: `evidence-${id}` };
 }
@@ -1651,7 +1669,7 @@ export async function setLinkStrength(
   ]);
 }
 
-export const EXPERIMENT_STATUSES = ['planned', 'running', 'done'] as const;
+export const EXPERIMENT_STATUSES = ['planned', 'running', 'done', 'stopped'] as const;
 
 /**
  * Add an experiment to a claim.
@@ -1708,17 +1726,26 @@ export async function addExperiment(
 /** Move an experiment of this claim to planned, running or done, with its result. */
 export async function setExperimentStatus(
   env: Env,
-  input: { projectId: number; userId: number | null; hypothesisId: number; experiment_id: unknown; status: unknown; result?: unknown },
+  input: { projectId: number; userId: number | null; hypothesisId: number; experiment_id: unknown; status: unknown; result?: unknown; result_direction?: unknown },
 ): Promise<void> {
   const status = String(input.status ?? '');
   if (!(EXPERIMENT_STATUSES as readonly string[]).includes(status)) throw new WriterError(400, `status must be one of ${EXPERIMENT_STATUSES.join(', ')}`);
   const eid = intId(input.experiment_id);
   const ex = eid == null ? null : await env.DB.prepare(
-    'SELECT e.id, e.result, h.code FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id WHERE e.id = ? AND e.hypothesis_id = ? AND e.project_id = ? AND h.project_id = ?',
-  ).bind(eid, input.hypothesisId, input.projectId, input.projectId).first<{ id: number; result: string | null; code: string }>();
+    'SELECT e.*, h.code FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id WHERE e.id = ? AND e.hypothesis_id = ? AND e.project_id = ? AND h.project_id = ?',
+  ).bind(eid, input.hypothesisId, input.projectId, input.projectId).first<{ id: number; result: string | null; code: string; result_direction?: string | null; result_recorded_at?: string | null; stopped_at?: string | null }>();
   if (!ex) throw new WriterError(404, 'Experiment not found on this hypothesis');
-  await env.DB.prepare("UPDATE hypothesis_experiments SET status = ?, result = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
-    .bind(status, input.result === undefined ? ex.result : trimOrNull(input.result, 1000), ex.id, input.projectId).run();
+  const result = input.result === undefined ? ex.result : trimOrNull(input.result, 1000);
+  const direction = input.result_direction === undefined ? (status === 'done' ? ex.result_direction ?? null : null) : trimOrNull(input.result_direction, 30);
+  if (direction != null && !['supports', 'contradicts', 'inconclusive'].includes(direction)) throw new WriterError(400, 'Choose a valid result direction');
+  if (direction && (status !== 'done' || !result)) throw new WriterError(400, 'A result direction needs a completed experiment with an observed result');
+  await env.DB.prepare(`UPDATE hypothesis_experiments SET status = ?, result = ?, result_direction = ?,
+    stopped_at = CASE WHEN ? = 'stopped' THEN COALESCE(stopped_at, datetime('now')) ELSE NULL END,
+    result_recorded_at = CASE WHEN ? = 'done' AND ? IS NOT NULL THEN
+      CASE WHEN result IS ? THEN COALESCE(result_recorded_at, datetime('now')) ELSE datetime('now') END ELSE NULL END,
+    updated_at = datetime('now') WHERE id = ? AND project_id = ?`)
+    .bind(status === 'stopped' ? 'planned' : status, result, status === 'done' ? direction : null,
+      status, status, result, result, ex.id, input.projectId).run();
   await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'experiment_status_set', `${ex.code} experiment ${status}`);
 }
 

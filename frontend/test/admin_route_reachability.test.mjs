@@ -337,6 +337,15 @@ const COMPOSED = new Map([
   // (`/admin/licences/:uid`) and to its sections (`/admin/licences/:uid/:section`).
   // D5060 (#5060): its registry by licence family opens each user licence (`/admin/licences/registry/user/:uid`).
   ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx', 'frontend/src/pages/admin/licences/RegistryLedger.jsx']],
+  // D5882 (#5882): Approvals draws its Inbox, Lanes, Decided, assignment and doors from the files beside it.
+  ['frontend/src/pages/admin/approvals/AdminApprovals.jsx', [
+    'frontend/src/pages/admin/approvals/approvalsUi.jsx',
+    'frontend/src/pages/admin/approvals/approvalDoors.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsAssign.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsInbox.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsLanes.jsx',
+    'frontend/src/pages/admin/approvals/ApprovalsDecided.jsx',
+  ]],
   // D1046 (#2894): the Approvals lane boards draw their tabs and the doors to
   // one item (`/admin/approvals/<board>/:item`) from the files beside them.
   ['frontend/src/pages/admin/approvals/LaneBoards.jsx', [

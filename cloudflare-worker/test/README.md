@@ -1,5 +1,7 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
+
 `research_global_funds_7326.test.ts` replays the worldwide manager import over
 the real fund migrations and through directory reads: preserves historical
 rows, reports, saved references, UID redirects and source reviews; suppresses
@@ -136,6 +138,7 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
 | `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
+`workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart, concurrency and settlement identity (D5570 part 2).
 `_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
 
 ## Conventions
@@ -378,16 +381,35 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `research_global_funds_7585.test.ts` | D7585: historical preservation, original verification dates, independent source citation, competing manager identities, country filters and in-memory guard mutations for the next worldwide import. |
+| `research_companies_registers_d7316.test.mjs` | D7316 part 2: native registry identity/status and retained-hold admission; record/file hash tampering; shared-domain/name conflicts; immutable evidence and exact SQL ownership; real-schema insert-only replay, unknown metrics, and source-ledger overwrite refusal. |
+| `grow_export_6103.test.ts` | D6103: Grow's Feedback and KPI CSV exports: writers only (and `records.can_export`), the table's search/filter/sort, names for writers and never an email, monthly KPI history in cents with currency, empty never 0, formula cells neutralised, the 5,000-row cap refused with a sentence, each export logged. |
 | `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
 | `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
 
+| `research_recording_7587.test.mjs` | D7587: real Workers requests prove an abandoned bootstrap cannot strand the next request, with per-binding readiness. |
+| `research_email_7587.test.ts` | D7587: elevated HQ interview mail context, ordinary-admin and branch refusal, transcript exclusion and no invented address. |
 | File | What it covers |
 |---|---|
 
 | `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
 | `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
+| `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
+| `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
 
+`research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+`research_company_read_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+`positions_unavailable_6201.test.ts` (D6201) checks each failed Portfolio distributions, KPI definition and submission read against real SQLite without successful empty-set fallbacks.
 `research_project_subject_notes_7818.test.ts` verifies the D7818 contract against synthetic inputs and the canonical migrated schema.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
+| `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
+| `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+| `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
+
+`research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.

@@ -365,7 +365,9 @@ const market = {
 
 const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Compliance'], ['risk', 'Risk'], ['culture', 'Culture']]);
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
-const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
+const REMIND_PRESETS = [30, 14, 7, 1, 0];
+const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
+const remindField = { note: 'At most three reminders.', kind: 'CK', name: 'remind', k: 'Remind', opts: REMIND_PRESETS.map(n=>({value:String(n),label:reminderLabel(n),checked:n===14||n===1})) };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
 // D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
 const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
@@ -1129,8 +1131,6 @@ const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
 /** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
 const KEEP_TYPED_OWNER = '__typed';
 // #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
-const REMIND_PRESETS = [30, 14, 7, 1, 0];
-const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
 const editObligation = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-obligation',
@@ -1947,14 +1947,17 @@ const buildItem = {
   title: 'Add item',
   sub: 'A roadmap item moves a KPI or answers a feedback theme.',
   foot: 'Issues from a connected GitHub repository land here too.',
-  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
-  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' },
+    // D6036 (#6036): the feature the item ships, from Solution design; Nothing keeps it unlinked.
+    { kind: 'CH', name: 'feature_id', k: 'Feature', opts: [NOTHING], def: 0, optionsFrom: 'features' }],
+  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id), feature_id: idOrNull(v.feature_id) }),
   // D6097: a feedback record's Add to roadmap (`/build/product-roadmap/new?feedback_theme=Speed`) opens it with that theme chosen.
   fromQuery: (q) => feedbackThemeOf(q.get('feedback_theme')),
   // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
   loadOptions: buildOptions('product-roadmap', (read) => ({
     kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
     waits_on_id: { options: [NOTHING, ...readChips(read, 'waits_on_id')], def: 0 }, owner_user_id: ownersOf(read),
+    feature_id: { options: [NOTHING, ...readChips(read, 'feature_id')], def: 0 },
   })),
   submit: (w, projectId, v) => w.build.roadmapItem(projectId, buildItem.toBody(v)),
 };

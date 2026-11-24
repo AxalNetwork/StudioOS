@@ -25,7 +25,13 @@ import { FixedPanel, resolveKey } from '../src/pages/programs/ProgramKeyPage.jsx
 import CONTENT, { COURSE, ILLUSTRATION, SIGN_IN_HREF } from '../src/pages/programs/content/learning.js';
 
 const h = React.createElement;
-const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+
+test('D7962: rendered text preserves literal entities and ordinary characters', () => {
+  const words = `Literal &quot; &#39; &#x27; &amp; &amp;quot; with "quotes", 'apostrophes' & text`;
+  const html = renderToStaticMarkup(h('p', null, h('strong', null, 'Start'), ' ', words, ' ', h('em', null, 'End')));
+  assert.equal(text(html), `Start ${words} End`);
+});
 const P = programFor('learning');
 const page = () => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/programs/learning'] },
   h(ProgramPresentation, { program: P, content: CONTENT, panel: h(FixedPanel, { program: P, panel: CONTENT.panel }) })));

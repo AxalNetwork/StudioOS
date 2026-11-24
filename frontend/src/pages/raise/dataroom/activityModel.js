@@ -30,6 +30,9 @@ export const ACTIONS = [
   { id: 'open_room', label: 'Opened the room' },
   { id: 'download', label: 'Link issued' },
   { id: 'blocked', label: 'Blocked by the NDA' },
+  // D6913 part 2 (RS-17, D6869): an investor's own Library, in the page's own words.
+  { id: 'library_add', label: 'Added to their Library' },
+  { id: 'library_remove', label: 'Removed from their Library' },
 ];
 
 export const LINK_NOTE = 'A link issued means a one-time download link was made. Whether it was followed is not recorded.';
@@ -125,6 +128,8 @@ export function eventWords(row) {
   if (row?.action === 'open_room') return 'Opened the room';
   if (row?.action === 'download') return `Link issued for ${file}`;
   if (row?.action === 'blocked') return `Blocked: NDA needed for ${file}`;
+  if (row?.action === 'library_add') return `Added ${file} to their Library`;
+  if (row?.action === 'library_remove') return `Removed ${file} from their Library`;
   return NOT_RECORDED;
 }
 

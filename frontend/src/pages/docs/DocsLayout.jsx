@@ -15,13 +15,17 @@ import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
 import { reportError } from '../../lib/log';
-import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
+import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine, guideBreadcrumbLd } from './helpCenter';
+import { injectJsonLd } from '../../lib/seo';
 import { guidePlacement, helpAreas } from './guidePlacement';
+import { helpGuideMeta } from './helpMeta';
+import { usePageMeta } from '../../lib/seo';
 import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
 import {
   SEARCH_MISS_IDLE_MS, appliesToLine, areaChips, areasForTerms, broaderTerms, goToTarget, guideOutline,
-  guideTicketDraft, inArea, moveSelection, publicGuides, resultArea, resultLine, searchGuides, ticketTitleFromSearch,
+  guideTicketDraft, inArea, moveSelection, publicGuides, resultArea, resultLine, searchGuides, searchSuggestions, ticketTitleFromSearch,
+  TRACKER_WARNING, TRACKER_WARNING_ANCHOR, TRACKER_WARNING_LINK,
 } from './v2/helpV2';
 import HelpTicketSheet, { ADVISORY_URL, SECURITY_EMAIL } from './v2/HelpTicketSheet';
 import HelpDirectory from './v2/HelpDirectory';
@@ -164,6 +168,23 @@ function HelpSearchBox({ query, setQuery, searchInputRef, label, placeholder, su
   );
 }
 
+/** D7001 (#7001): the suggested searches under the box, each one a public guide's own topic. */
+function SearchSuggestions({ setQuery }) {
+  const list = searchSuggestions();
+  if (!list.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="help-search-suggestions">
+      <span className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Try</span>
+      {list.map((s) => (
+        <button key={s.query} type="button" onClick={() => setQuery(s.query)} data-testid="help-search-suggestion"
+          className="inline-flex min-h-[44px] items-center rounded-full border border-violet-200 bg-white px-3 text-[12.5px] font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-950">
+          {s.query}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function HelpHero({ user, publicCount, ...box }) {
   return (
     <header className="border-b border-violet-200 bg-violet-50 px-4 pb-7 pt-8 md:px-8 dark:border-violet-900/60 dark:bg-violet-950/40">
@@ -173,11 +194,12 @@ function HelpHero({ user, publicCount, ...box }) {
         <HelpSearchBox
           {...box}
           label={user ? 'Search the Help Center' : 'Search the public guides'}
-          placeholder={user ? 'Search guides, e.g. “invite an investor”' : `Search ${publicCount} public guides`}
+          placeholder={user ? 'Search guides, e.g. “account recovery”' : `Search ${publicCount} public guides`}
           sub={user
             ? 'Searches the guides your account can read. Press / from anywhere on Help.'
             : <>{publicCount} guides are public. <Link to="/login?next=%2Fhelp" className="font-bold text-violet-700 dark:text-violet-300">Sign in to search every guide</Link>.</>}
         />
+        <SearchSuggestions setQuery={box.setQuery} />
       </div>
     </header>
   );
@@ -729,6 +751,7 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
   const recovery = anchor === 'account/auth-recovery';
   const beforeYouStart = Array.isArray(sub.beforeYouStart) ? sub.beforeYouStart : [];
   const howto = Array.isArray(sub.howto) ? sub.howto : [];
+  const recoveryRows = sub.recoveryRows || [];
   const tips = Array.isArray(sub.tips) ? sub.tips : [];
   const pitfalls = Array.isArray(sub.pitfalls) ? sub.pitfalls : [];
   // A related link is `#<area>/<guide>`; one the viewer cannot read (an admin
@@ -767,6 +790,12 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
               <span className="text-[12px] text-gray-500 dark:text-gray-400">Opens {go.path}</span>
             </div>
           )}
+          {go && anchor === TRACKER_WARNING_ANCHOR && (
+            <p role="note" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] leading-relaxed text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" data-testid="help-guide-tracker-warning">
+              {TRACKER_WARNING}{' '}
+              <Link to={TRACKER_WARNING_LINK.path} className="font-bold underline">{TRACKER_WARNING_LINK.label}</Link>
+            </p>
+          )}
         </header>
 
         <details className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-1 lg:hidden dark:border-gray-800 dark:bg-gray-900">
@@ -802,6 +831,25 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
                 {howto.map((step, i) => <li key={i}>{step}</li>)}
               </ol>
             </section>
+          )}
+          {recoveryRows.length > 0 && (
+            <table id="recovery" className="w-full scroll-mt-6 border-collapse text-left text-sm text-gray-700 dark:text-gray-300">
+              <caption className="pb-2 text-left text-lg font-bold text-gray-900 dark:text-gray-100">Connector status and next action</caption>
+              <thead>
+                <tr className="border-b border-gray-300 dark:border-gray-700">
+                  <th scope="col" className="py-2 pr-3">Status</th>
+                  <th scope="col" className="py-2">What to do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recoveryRows.map(({ status, action }) => (
+                  <tr key={status} className="border-b border-gray-200 align-top dark:border-gray-800">
+                    <th scope="row" className="py-2 pr-3 font-semibold">{status}</th>
+                    <td className="py-2">{action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
 
           {tips.length > 0 && (
@@ -1131,6 +1179,20 @@ export default function DocsLayout() {
   const isAdmin = role === 'admin';
   const route = parseGuidePath(location.pathname);
 
+  // D6996 (#6996): the head says which page this is, as its prerendered HTML does. A guide this viewer can read
+  // takes its own title and description (`helpMeta.js`); an address with no such guide names none and is noindex;
+  // the home and the directory take the registry's /help entry. No pageview beacon: this page never sent one.
+  const guideSection = route ? visibleSections.find((s) => s.id === route.area) : null;
+  const guideSub = guideSection?.subsections.find((s) => s.id === route.guide) || null;
+  const guideMeta = guideSub ? helpGuideMeta(guideSection, guideSub) : null;
+  usePageMeta({
+    path: guideMeta ? guideMeta.path : location.pathname,
+    title: guideMeta?.title,
+    description: guideMeta?.description,
+    robots: route && !guideMeta ? 'noindex' : undefined,
+    analytics: false,
+  });
+
   // `#<area>/<guide>` was every guide's address until each had its own page,
   // and it is in notifications already sent, the advisor's tools and people's
   // bookmarks. So a hash on the home opens that guide (`hashTarget` says where).
@@ -1165,6 +1227,13 @@ export default function DocsLayout() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [route, directory]);
+
+  // D7004 (#7004): the guide's BreadcrumbList, the same trail its page draws; removed when the page leaves.
+  const crumbLd = useMemo(
+    () => (route ? guideBreadcrumbLd(visibleSections, route.area, route.guide) : null),
+    [route?.area, route?.guide, visibleSections],
+  );
+  useEffect(() => (crumbLd ? injectJsonLd('help-guide-breadcrumb', crumbLd) : undefined), [crumbLd]);
 
   // A guide opens at its top, not at the scroll position the last page left.
   useEffect(() => {
