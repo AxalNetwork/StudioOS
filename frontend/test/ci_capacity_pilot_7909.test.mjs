@@ -308,7 +308,7 @@ const BASE_JOB_DIGESTS={
   "frontend":'e2884e1ba35220b8',
   "worker":'338f2e46f9af2c9f',
   "verified":'671cbb73f43df103',
-  "suite":'27bb0fe24483da04',
+  "suite":'c7c40cb382c001d6',
   "test-deps":'584ab84cbc836df0',
   "fast":'066a8e32945222c9',
   "landing":'bea23ba6bac95c0c',
