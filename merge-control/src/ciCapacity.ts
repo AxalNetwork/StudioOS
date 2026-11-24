@@ -9,6 +9,7 @@ import type {
   Aggregate, CapacityInventory, CapacityPolicy, CapacityRequest, ChildObservation, CiAttempt,
   CiProvenance, CiSubmission, ExecutionReceipt, PrerequisiteResult,
 } from './lib/ciCapacityPolicy.ts';
+import type { CapacityCompactFailedStore } from './ciCapacityCompact.ts';
 
 export const CAPACITY_REQUEST_LIMIT = 1000;
 export const CAPACITY_RETENTION_MS = 7 * 24 * 60 * 60_000;
@@ -33,7 +34,7 @@ const leaseEnd = (request: CapacityRequest) => Math.max(request.deadline,
   ...request.shards.flatMap(shard => shard.attempts.flatMap(a => [a.startDeadline, a.executionDeadline, a.cancelDeadline ?? 0])));
 
 /** Bounded full receipts, indexed work and compact permanent identity fences. */
-export class SqlCapacityStore implements CapacityStore, CapacityCompactStore {
+export class SqlCapacityStore implements CapacityStore, CapacityCompactStore, CapacityCompactFailedStore {
   private readonly storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
   private readonly evictable: CapacityEvictionGuard | null;
   private readonly compacts: CapacityCompactTable;
@@ -160,6 +161,7 @@ export class SqlCapacityStore implements CapacityStore, CapacityCompactStore {
   compactCount(): number { return this.compacts.count(); }
   compact(id: string): CompactView | null { return this.compacts.get(id); }
   compactPage(after: string, limit: number): CompactView[] { return this.compacts.page(after, limit); }
+  compactFailedPage(after: string, limit: number): CompactView[] { return this.compacts.failedPage(after, limit); }
   compactFailure(receipt: ExecutionReceipt, jobId: number): boolean {
     return this.storage.transactionSync(() => this.compacts.fail(receipt, jobId));
   }
