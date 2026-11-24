@@ -136,7 +136,7 @@ function network(){
   throw Error('fixture unserved '+path);
  };return {calls,state,api};
 }
-async function outcome(f:ReturnType<typeof fixture>,receipt:ExecutionReceipt,result:typeof good|typeof bad,jobId=77,capacity=f.capacity(),beforeJob:()=>void=()=>{}){
+async function outcome(f:ReturnType<typeof fixture>,receipt:ExecutionReceipt,result:typeof good|typeof bad,jobId=77,capacity=f.capacity(),beforeJob:()=>void=()=>{},wake:()=>Promise<void>=async()=>{}){
  const check=String(jobId+1000);const enc=(x:unknown)=>Buffer.from(JSON.stringify(x)).toString('base64url');
  const claims={iss:'https://token.actions.githubusercontent.com',aud:'capacity',sub:`repo:${repository}:ref:refs/heads/main`,repository,repository_id:'7',run_id:String(receipt.childRunId),run_attempt:'1',event_name:'workflow_dispatch',ref:'refs/heads/main',sha:receipt.childWorkflowSha??receipt.executorSha,workflow_sha:receipt.childWorkflowSha??receipt.executorSha,workflow_ref:`${repository}/.github/workflows/runner-executor.yml@refs/heads/main`,runner_environment:'github-hosted',check_run_id:check,exp:Math.floor(f.state.now/1000)+300,iat:Math.floor(f.state.now/1000),nbf:Math.floor(f.state.now/1000)-1};
  const payload=enc({alg:'RS256',kid:jwk.kid})+'.'+enc(claims),token=payload+'.'+sign('RSA-SHA256',Buffer.from(payload),keys.privateKey).toString('base64url');
@@ -145,7 +145,7 @@ async function outcome(f:ReturnType<typeof fixture>,receipt:ExecutionReceipt,res
   id:receipt.childRunId,event:'workflow_dispatch',path:'.github/workflows/runner-executor.yml',head_sha:claims.sha,head_branch:'main',run_attempt:1,
   display_title:`Worker executor | ${receipt.requestId} | ${receipt.logicalShard} | generation ${receipt.generation}`,repository:{id:7,full_name:repository},head_repository:{id:7,full_name:repository},
  }:{total_count:1,jobs:[{id:jobId,name:'Admitted Worker shard',run_id:receipt.childRunId,run_attempt:1,head_sha:claims.sha,check_run_url:`https://api.github.com/repos/${repository}/check-runs/${check}`}]};},config,()=>f.state.now);
- return new CapacityTransport(capacity,config,async()=>false,async()=>{}).outcome({receipt,result},identity,ports,f.results);
+ return new CapacityTransport(capacity,config,async()=>false,wake).outcome({receipt,result},identity,ports,f.results);
 }
 
 test('D7909 compact handoff preserves intents and result/job associations beyond 1000 passing requests',async t=>{
@@ -433,7 +433,7 @@ test('D7909 actual alarm continues when only compact history remains and does no
   if(url.includes('/app/installations/'))return Response.json({token:'fixture-installation-token'});
   return Response.json(await net.api(init.method,new URL(url).pathname+new URL(url).search,init.body?JSON.parse(init.body):undefined));
  });
- await run.control.alarm();assert.equal(run.deleted(),0);assert.equal(run.alarms.length,1);
+ await run.control.alarm();assert.equal(run.deleted(),0);assert.deepEqual(run.alarms,[f.state.now+15_000,f.state.now+60_000]);
  assert.equal(net.calls.some(c=>c.path.endsWith('/dispatches')),false);assert.notEqual(run.store.compact(uuid(2)),null);
 });
 
@@ -593,4 +593,93 @@ test('D7909 R1 cold legacy backfill is paged and enablement waits for completed 
  net.state.patchDown=false;await new CapacityOutbox(f.storage,net.api,config).publish(f.store,id=>f.capacity().status(id),'pilot');
  assert.equal(queue.legacyReady(),true);assert.equal(await enabled(),true);
  assert.ok(net.calls.some(c=>c.method==='PATCH'&&c.path.endsWith('/100202')&&c.body.conclusion==='failure'));
+});
+
+test('8375 settled history slows down, avoids idle token minting, and still observes a changed parent',async t=>{
+  const f=fixture(t);
+  await f.settled(2,'failure',START);f.sent(2,'failure');
+  let tokens=0, parentCancelled=false;
+  const net=network();
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const url=new URL(String(input));
+    if(url.pathname.includes('/app/installations/')){tokens++;return Response.json({token:'fixture'});}
+    const data=await net.api(init.method,url.pathname+url.search,init.body?JSON.parse(init.body):undefined);
+    return Response.json(parentCancelled&&data.workflow_id?{...data,conclusion:'cancelled'}:data);
+  });
+  let run=runtime(f);
+  for(let i=0;i<3;i++){
+    await run.control.alarm();
+    assert.equal(run.alarms.at(-1),f.state.now+60_000);
+    f.advance(60_000);
+    if(i===0)run=runtime(f);
+  }
+  assert.equal(tokens,0);assert.equal(net.calls.length,0);
+  await f.place(3,START);f.sent(3,'success');
+  await run.control.alarm();
+  assert.equal(tokens,1);assert.equal(run.alarms.at(-1),f.state.now+60_000);
+  parentCancelled=true;net.state.patchDown=true;f.advance(60_000);
+  await run.control.alarm();
+  assert.equal(tokens,2);
+  assert.equal(net.calls.at(-1)?.body.conclusion,'cancelled');
+  assert.equal(run.alarms.at(-1),f.state.now+15_000);
+  net.state.patchDown=false;f.advance(15_000);
+  await run.control.alarm();
+  assert.equal(JSON.parse(JSON.parse(f.db.prepare('SELECT state FROM capacity_publications WHERE id=?').get(uuid(3)+':pilot')!.state as string).sent).status,'cancelled');
+});
+
+test('8375 empty alarm disarms; expiry runs immediately on restart or rollback, once a minute otherwise',async t=>{
+  const f=fixture(t), run=runtime(f);
+  const prune=t.mock.method(run.store,'prune');
+  await run.control.alarm();
+  assert.equal(run.deleted(),1);
+  await f.settled(2,'failure',START);f.sent(2,'failure');
+  f.advance(15_000);await run.control.alarm();assert.equal(prune.mock.callCount(),1);
+  f.state.now=START-1;t.mock.timers.setTime(f.state.now);
+  await run.control.alarm();assert.equal(prune.mock.callCount(),2);
+  const restarted=runtime(f),again=t.mock.method(restarted.store,'prune');
+  await restarted.control.alarm();assert.equal(again.mock.callCount(),1);
+});
+
+test('8375 authenticated late negative wakes idle history before journaling and reaches its check after restart',async t=>{
+  const f=fixture(t),r=await f.place(3,START),net=network();
+  f.sent(3,'success');
+  const run=runtime(f);
+  let tokens=0;
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const url=new URL(String(input));
+    if(url.pathname.includes('/app/installations/')){tokens++;return Response.json({token:'fixture'});}
+    return Response.json(await net.api(init.method,url.pathname+url.search,init.body?JSON.parse(init.body):undefined));
+  });
+  await run.control.alarm();
+  assert.equal(run.alarms.at(-1),f.state.now+60_000);
+  const wake=async()=>{assert.equal(f.results.pendingFailure(uuid(3)),false);run.alarms.push(f.state.now+1000);};
+  await outcome(f,compactReceipt(r,'worker-1-of-6',1)!,bad,77,f.capacity(),()=>{},wake);
+  assert.equal(run.alarms.at(-1),f.state.now+1000);
+  f.advance(1000);await runtime(f).control.alarm();
+  assert.equal(net.calls.at(-1)?.method,'PATCH');
+  assert.equal(net.calls.at(-1)?.body.conclusion,'failure');assert.equal(tokens,2);
+});
+
+test('8375 an active coordinator and history publisher share one token, including on acquisition failure',async t=>{
+  const f=fixture(t), net=network(), run=runtime(f,true);
+  await f.place(3,START);f.sent(3,'success');
+  const pending=await f.request(2,'success',START);
+  pending.completedAt=null;pending.shards[0].attempts[0].phase='running';f.store.save(pending);
+  let tokens=0,reject=true;
+  t.mock.method(globalThis,'fetch',async(input:any,init:any)=>{
+    const url=new URL(String(input));
+    if(url.pathname.includes('/app/installations/')){
+      tokens++;
+      if(reject)throw Error('fixture issuance unavailable');
+      return Response.json({token:'fixture'});
+    }
+    return Response.json(await net.api(init.method,url.pathname+url.search,init.body?JSON.parse(init.body):undefined));
+  });
+  await run.control.alarm();assert.equal(tokens,1);assert.equal(net.calls.length,0);
+  assert.equal(run.alarms.at(-1),f.state.now+15_000);
+  reject=false;f.advance(15_000);await run.control.alarm();
+  assert.equal(tokens,2);
+  assert.ok(net.calls.some(c=>c.path.includes('/runs/102')));
+  assert.ok(net.calls.some(c=>c.path.includes('/runs/103')));
+  assert.equal(run.alarms.at(-1),f.state.now+15_000);
 });
