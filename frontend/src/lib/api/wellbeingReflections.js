@@ -11,7 +11,7 @@ import { request } from '../api.js';
  *                                 409 reflection_changed { current_revision }; 503 reflection_protection_unavailable
  *                                 and reflection_not_saved keep nothing, so the caller keeps the draft.
  * remove(uid), removeEarlier(uid) -> { deleted: true }
- * exportUrl                    -> the JSON file of every own reflection and earlier check-in
+ * exportUrl, exportFile()      -> the JSON file of every own reflection and earlier check-in
  * A reflection is { uid, cadence, period_start, period_end, timezone, scores, text, topics, readable, revision, created_at, updated_at }.
  * A failed read is a 503 refusal (reflections_unreadable), never an empty list.
  */
@@ -27,4 +27,6 @@ export const wellbeingReflectionsApi = {
   remove: (uid) => request(`/wellbeing/reflections/${q(uid)}`, { method: 'DELETE' }),
   removeEarlier: (uid) => request(`/wellbeing/reflections/earlier/${q(uid)}`, { method: 'DELETE' }),
   exportUrl: '/api/wellbeing/reflections/export',
+  // D7118 part 2: the same file, read with the member's credentials so the page can save it.
+  exportFile: () => request('/wellbeing/reflections/export'),
 };

@@ -18,8 +18,6 @@
  */
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import kyc from '../src/routes/kyc.ts';
@@ -27,11 +25,8 @@ import { expireDueArtifacts } from '../src/services/trust.ts';
 import { median, noticeFor, parseQueueQuery, waitBand } from '../src/services/kycCase.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
-const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const ADMIN = 1;
@@ -54,7 +49,7 @@ const SEEDS: Seed[] = [
 ];
 
 function freshDb() {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   db.prepare("INSERT INTO users (id, role, name, email, is_active, kyc_status) VALUES (?, 'admin', 'Ada Admin', 'ada@hq.example', 1, 'not_started')").run(ADMIN);
   db.prepare("INSERT INTO users (id, role, name, email, is_active, kyc_status) VALUES (?, 'admin', 'Ozzie Other', 'ozzie@hq.example', 1, 'not_started')").run(OTHER_ADMIN);

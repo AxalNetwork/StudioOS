@@ -47,8 +47,8 @@ for (const f of FILES) await import(pathToFileURL(f).href);
 
 // D1096 adds Vercel's read-only Integration.
 // D5839 adds Search Console and D5827 adds Typeform, each ready only behind the owner's approval flag, as TikTok is.
-const TEN = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'google_search_console', 'hubspot', 'salesforce', 'slack', 'stripe', 'tiktok', 'typeform', 'vercel', 'x', 'zoom'];
-const MANAGED = TEN.filter((k) => !['zoom', 'tiktok', 'facebook', 'google_search_console', 'typeform'].includes(k));
+const TEN = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'google_search_console', 'hubspot', 'quickbooks', 'salesforce', 'slack', 'stripe', 'tiktok', 'typeform', 'vercel', 'x', 'zoom'];
+const MANAGED = TEN.filter((k) => !['zoom', 'tiktok', 'facebook', 'google_search_console', 'typeform', 'quickbooks'].includes(k));
 const NAMES: Record<string, string> = { github: 'GitHub', slack: 'Slack', zoom: 'Zoom' };
 const FOUNDER = 1, ADMIN = 2, STUDIO = 3;
 

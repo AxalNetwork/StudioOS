@@ -1,9 +1,8 @@
 import { useLocation } from 'react-router-dom';
 import { isMyEventsPath } from '../../pages/events/myEventsModel';
-import React, { useEffect, useState } from 'react';
-import { api } from '../../lib/api.js';
+import React from 'react';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
-import { CheckInStatus } from '../../components/FounderWellbeingMenu.jsx';
+import { TodayStatusLine } from '../../components/FounderWellbeingMenu.jsx';
 import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 import { resolveHeldLicences } from '../../lib/activeRole.js';
 
@@ -44,13 +43,6 @@ export function initialsOf(user) {
 export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
   const { company } = useActiveCompany();
   const eventsCurrent = isMyEventsPath(useLocation().pathname);
-  const [check, setCheck] = useState({ status: 'loading', submittedToday: false });
-  useEffect(() => {
-    let alive = true;
-    api.wellbeingDaily(1).then(data => { if (alive) setCheck({ status: 'ready', submittedToday: !!data?.submitted_today }); })
-      .catch(() => { if (alive) setCheck({ status: 'unreadable', submittedToday: false }); });
-    return () => { alive = false; };
-  }, []);
   const initials = initialsOf(user);
   return <PhoneSheet label="Account" onClose={onClose} opener={opener}>
     <div className="flex min-h-[72px] items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-3">
@@ -63,8 +55,8 @@ export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
       </div>
     </div>
     {accountRowsFor(user).map(([title, to]) => <SheetRow key={to} title={title} right={to === '/my/events' && eventsCurrent ? 'Current' : undefined} to={to} onClose={onClose} />)}
-    <SheetRow title="Founder Wellbeing" to="/wellbeing" onClose={onClose}
-      description={check.status === 'unreadable' ? 'Unreadable' : <CheckInStatus {...check} />} />
+    {/* D7118 part 2 (WLM-02P): renamed Wellness; one tap opens Today. A failed read says "Couldn't load your check-in". */}
+    <SheetRow title="Wellness" to="/wellbeing?period=today" onClose={onClose} description={<TodayStatusLine />} />
     <SheetRow title="Refer & Earn" to="/referrals" onClose={onClose} />
     <div className="mt-2 border-t border-gray-200 dark:border-gray-800">
       <SheetRow title="Log Out" danger onClick={() => { onClose(); onLogout?.(); }} />

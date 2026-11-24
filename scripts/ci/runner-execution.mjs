@@ -5,7 +5,7 @@ import { appendFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSyn
 import { dirname, join, resolve } from 'node:path';
 import { availableParallelism, totalmem } from 'node:os';
 import { EXECUTION_BUDGETS } from './runner-admission.mjs';
-import { FINISH_RESERVE_MS, REMOVAL_RESERVE_MS } from './runners/job-container.mjs';
+import { FINISH_RESERVE_MS, JobContainer, REMOVAL_RESERVE_MS } from './runners/job-container.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { buildPlan, validatePlan } from '../test-drift-parts.mjs';
@@ -236,7 +236,10 @@ const createCleanup=(job)=>{
  * recheck, the test and the export; removal is never cancellable.
  */
 export async function runInContainer({job,executionIsolation,admit,recheck=null,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null,stepDeadline=null}){
- need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function'&&store,'container_profile_mismatch');
+ // #8345: hosted and github-8 run only inside a trusted JobContainer serving that same profile; linux-x64 is unchanged.
+ const profileId=current?.profile?.id;
+ need((profileId==='linux-x64'||(['hosted','github-8'].includes(profileId)&&job instanceof JobContainer&&job.profileId===profileId))
+  &&typeof executionIsolation==='function'&&typeof admit==='function'&&store,'container_profile_mismatch');
  const identity=current.identity;
  // The earlier of the receipt and the step wrapper bounds work, export and removal alike.
  const bound=Number.isSafeInteger(stepDeadline)?Math.min(identity.executionDeadline,stepDeadline):identity.executionDeadline;

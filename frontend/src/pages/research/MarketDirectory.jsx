@@ -6,7 +6,7 @@ import { api } from '../../lib/api';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import {
   FRESH_OPTIONS, MARKET_SORTS, MARKET_VIEWS, PAGE_SIZE, SRC_OPTIONS, STALE_DAYS,
-  countryName, filterChips, isFiltered, marketListParams, patchMarketQuery, readMarketQuery,
+  basisLabel, countryName, datedByBasis, filterChips, isFiltered, marketListParams, patchMarketQuery, readMarketQuery,
   sectorHref, thesisFrom, thesisMatch, thesisMatchCount, writeMarketQuery,
 } from './marketDirectoryQuery.js';
 import { THESIS_EDIT } from './marketDirectoryExport.js';
@@ -60,15 +60,6 @@ function NotRecorded({ reason }) {
 
 // ---- One market's facts --------------------------------------------------------
 
-/** The kind the newest source came from: sector-level, names this market, or both on the same date. */
-export function newestKind(m) {
-  const k = m?.sources_by_kind;
-  const a = k?.market_intel?.newest?.value; const b = k?.signal_evidence?.newest?.value;
-  if (!a && !b) return null;
-  if (a && b) return utc(a) === utc(b) ? 'both kinds' : (utc(a) > utc(b) ? 'sector-level' : 'names this market');
-  return a ? 'sector-level' : 'names this market';
-}
-
 function MarketName({ m, view }) {
   return (
     <span className="block min-w-0">
@@ -91,14 +82,23 @@ function Countries({ m, full = false }) {
   );
 }
 
+/** D7710: evidence that names the market leads; the inherited sector-level count sits beside it. */
+export function sourcesLine(m) {
+  const sec = m?.sources_by_kind?.market_intel?.count ?? 0;
+  const named = m?.source_count?.status === 'recorded' ? m.source_count.value : 0;
+  return {
+    head: named ? fmt(named) : 'None named',
+    named,
+    sub: `${named ? `${named === 1 ? 'names' : 'name'} this market · ` : ''}${fmt(sec)} sector-level, inherited`,
+  };
+}
+
 function Sources({ m }) {
-  if (m.source_count?.status !== 'recorded') return <NotRecorded reason="No live source yet" />;
-  const sec = m.sources_by_kind?.market_intel?.count ?? 0;
-  const named = m.sources_by_kind?.signal_evidence?.count ?? 0;
+  const line = sourcesLine(m);
   return (
     <span className="block">
-      <span className="block font-mono text-[12.5px] text-axal-ink dark:text-gray-100">{fmt(m.source_count.value)}</span>
-      <span className="block text-[11px] text-axal-muted dark:text-gray-400">{sec} sector-level · {named} {named === 1 ? 'names' : 'name'} it</span>
+      <span className={`block text-[12.5px] text-axal-ink dark:text-gray-100 ${line.named ? 'font-mono' : 'font-semibold'}`}>{line.head}</span>
+      <span className="block text-[11px] text-axal-muted dark:text-gray-400">{line.sub}</span>
     </span>
   );
 }
@@ -106,15 +106,15 @@ function Sources({ m }) {
 function Latest({ m, readAt }) {
   const n = m.newest_source_at;
   if (n?.status !== 'recorded') {
-    return <NotRecorded reason={m.source_count?.status === 'recorded' ? 'No source row records a date' : 'No source to date'} />;
+    return <NotRecorded reason={m.source_count?.status === 'recorded' ? 'No named source records a date' : 'None named'} />;
   }
   const age = ageAt(n.value, readAt);
-  const kind = newestKind(m);
+  const basis = basisLabel(m.newest_source_basis);
   return (
     <span className="block">
       <span className="block text-[12.5px] text-axal-ink dark:text-gray-100">{day(n.value)}</span>
       <span className="block text-[11px] text-axal-muted dark:text-gray-400">
-        {age == null ? 'Age not recorded' : `${age} ${age === 1 ? 'day' : 'days'} ago`}{kind ? ` · ${kind}` : ''}
+        {age == null ? 'Age not recorded' : `${age} ${age === 1 ? 'day' : 'days'} ago`}{basis ? ` · ${basis}` : ' · basis not recorded'}
       </span>
       {age != null && age > STALE_DAYS ? <StateChip kind="stale" age={`${age} days`} className="mt-1" /> : null}
     </span>
@@ -145,7 +145,8 @@ export function MarketDetails({ m, view, asOf }) {
   const named = listed.filter((s) => s.kind === 'signal_evidence');
   const secN = m.sources_by_kind?.market_intel?.count ?? sector.length;
   const namedN = m.sources_by_kind?.signal_evidence?.count ?? named.length;
-  const total = m.source_count?.status === 'recorded' ? m.source_count.value : 0;
+  // D7710: the distinct total counts a source in both sets once.
+  const total = m.distinct_source_count?.status === 'recorded' ? m.distinct_source_count.value : 0;
   const [copied, setCopied] = useState(false);
   const copy = () => {
     try {
@@ -158,7 +159,7 @@ export function MarketDetails({ m, view, asOf }) {
       {rows.map((s) => (
         <li key={`${s.kind}:${s.key}`} className="flex justify-between gap-3 text-[12px]">
           <span className="truncate text-axal-ink dark:text-gray-100">{s.key}</span>
-          <span className="shrink-0 font-mono text-axal-muted dark:text-gray-400">{s.newest ? day(s.newest) : 'Date not recorded'}</span>
+          <span className="shrink-0 font-mono text-axal-muted dark:text-gray-400">{datedByBasis(s.newest, s.basis, day)}</span>
         </li>
       ))}
     </ul>
@@ -185,17 +186,17 @@ export function MarketDetails({ m, view, asOf }) {
         <p className="text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint">Sources · {total ? `${fmt(total)} distinct` : 'none'}</p>
         {total ? (
           <>
-            <p className="mt-1 font-semibold text-axal-ink dark:text-gray-100">Sector-level {secN}</p>
-            {sector.length ? list(sector) : null}
-            <p className="mt-2 font-semibold text-axal-ink dark:text-gray-100">Names this market {namedN}</p>
+            <p className="mt-1 font-semibold text-axal-ink dark:text-gray-100">{namedN ? `Names this market ${namedN}` : 'Names this market · none named'}</p>
             {named.length ? list(named) : null}
+            <p className="mt-2 font-semibold text-axal-ink dark:text-gray-100">Sector-level, inherited {secN}</p>
+            {sector.length ? list(sector) : null}
             <p className="mt-2 text-[11.5px] text-axal-muted dark:text-gray-400">
-              {m.mi_sector ? `Sector-level sources describe the whole tracked sector ${m.mi_sector} and are shared by its markets. ` : ''}
-              Evidence that names a market comes from active signals tagged with it.
+              {m.mi_sector ? `Sector-level sources describe the whole tracked sector ${m.mi_sector}, are shared by its markets and are read over the index's last 30 days. ` : ''}
+              Evidence that names a market comes from active signals tagged with it, dated by the date its source reports.
               {total > listed.length ? ' Sources are listed up to 20; the count includes all of them.' : ''}
             </p>
           </>
-        ) : <p className="mt-1"><NotRecorded reason={m.source_count?.reason} /></p>}
+        ) : <p className="mt-1"><NotRecorded reason={m.distinct_source_count?.reason || m.source_count?.reason} /></p>}
       </div>
       <div>
         <p className="text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint">Taxonomy company count</p>
@@ -272,7 +273,7 @@ function TableView({ items, view, onPatch, readAt, thesis, asOf }) {
               Taxonomy company count<span className="block font-medium normal-case tracking-normal">not market size</span>
             </th>
             <th className="py-2 pr-3">Countries represented</th>
-            <th className="py-2 pr-3">Distinct sources</th>
+            <th className="py-2 pr-3">Sources naming it</th>
             <th className="py-2 pr-3" aria-sort={sortKey === 'newest_source' ? 'descending' : 'none'}>Latest source</th>
             {thesis ? <th className="py-2">Your thesis</th> : null}
           </tr>
@@ -304,7 +305,7 @@ function CardsView({ items, view, onPatch, readAt, thesis, asOf }) {
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
               <div><dt className="text-[10.5px] font-semibold text-axal-faint">Taxonomy count · not market size</dt><dd className="font-mono text-axal-ink dark:text-gray-100">{fmt(m.supplied_count)}</dd></div>
               <div><dt className="text-[10.5px] font-semibold text-axal-faint">Countries</dt><dd><Countries m={m} /></dd></div>
-              <div><dt className="text-[10.5px] font-semibold text-axal-faint">Distinct sources</dt><dd><Sources m={m} /></dd></div>
+              <div><dt className="text-[10.5px] font-semibold text-axal-faint">Sources</dt><dd><Sources m={m} /></dd></div>
               <div><dt className="text-[10.5px] font-semibold text-axal-faint">Latest source</dt><dd><Latest m={m} readAt={readAt} /></dd></div>
             </dl>
             {open ? <div id={DETAIL_ID(m.slug)} className="mt-3"><MarketDetails m={m} view={view} asOf={asOf} /></div> : null}
@@ -346,9 +347,9 @@ export function AnalysisView({ summary, readAt, asOf }) {
             <Bar label="Last 30 days" n={f['30'] || 0} of={n} />
             <Bar label="31 to 90 days" n={f['90'] || 0} of={n} />
             <Bar label={`Older than ${stale} days · Stale`} n={f.older || 0} of={n} />
-            <Bar label="No source recorded" n={f.none || 0} of={n} notRecorded />
+            <Bar label="None named" n={f.none || 0} of={n} notRecorded />
           </ul>
-          <p className="mt-1 text-[11px] text-axal-muted dark:text-gray-400">{fmt(n - (f.none || 0))} markets have at least one dated source.</p>
+          <p className="mt-1 text-[11px] text-axal-muted dark:text-gray-400">{fmt(n - (f.none || 0))} markets have dated evidence that names them, by the date its source reports. Inherited sector sources set no band.</p>
         </section>
         <section className="rounded-xl border border-axal-hairline p-3 dark:border-gray-800">
           <h3 className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Countries represented</h3>
@@ -386,7 +387,7 @@ export function AnalysisView({ summary, readAt, asOf }) {
                   <td className="py-2 pr-3 text-right font-mono">{fmt(s.markets)}</td>
                   <td className="py-2 pr-3">{s.sector_sources ? fmt(s.sector_sources) : <NotRecorded reason="No live source yet" />}</td>
                   <td className="py-2 pr-3">{s.newest_sector_source?.status === 'recorded'
-                    ? <>{day(s.newest_sector_source.value)}{age != null && age > stale ? <StateChip kind="stale" age={`${age} days`} className="ml-2" /> : null}</>
+                    ? <>{datedByBasis(s.newest_sector_source.value, s.newest_sector_basis, day)}{s.newest_sector_basis !== 'period_measured' && age != null && age > stale ? <StateChip kind="stale" age={`${age} days`} className="ml-2" /> : null}</>
                     : <NotRecorded reason={s.newest_sector_source?.reason} />}</td>
                   <td className="py-2 text-right font-mono">{fmt(s.named_markets)}</td>
                 </tr>

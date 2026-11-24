@@ -103,8 +103,10 @@ test('the three Research headings draw their sub-lines and Diligence shows its g
   const read = (rel) => readFileSync(join(src, rel), 'utf8');
   const heading = (text) => text.slice(text.indexOf('<ZoneHeading'), text.indexOf('/>', text.indexOf('<ZoneHeading')) + 2);
   const diligence = heading(read('pages/research/DiligenceZone.jsx'));
-  assert.match(diligence, /blurb="The rooms founders have opened to you, and how much of each they actually staged\."/);
-  assert.match(diligence, /action=\{data \? <Pill tone=\{data\.granted_count \? 'ok' : 'neutral'\}>\{`\$\{data\.granted_count\} rooms granted`\}<\/Pill> : null\}/);
+  // D6269 (#6269): the heading is the v2 Rooms canvas's (IRV-02), and the grant count is its Rooms granted tile.
+  assert.match(diligence, /title="Rooms opened to you"/);
+  assert.match(diligence, /blurb="Data rooms founders opened to you, live now\. Every row is a live grant; only the founder can open or widen one\."/);
+  assert.match(read('pages/research/DiligenceZone.jsx'), /<Tile eye="Rooms granted" sub="rooms, live grants as of now" testid="tile-granted"><Figure>\{t\.granted\}<\/Figure><\/Tile>/);
   const bench = heading(read('pages/research/BenchmarkingZone.jsx'));
   assert.match(bench, /blurb="What you are measuring, what the peer set says, and how many it was measured over\."/);
   assert.match(heading(read('pages/research/ClientPrepZone.jsx')), /blurb="One client\. Founder-sourced rows are read-only\."/);

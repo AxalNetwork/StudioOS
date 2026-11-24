@@ -135,22 +135,47 @@ export function CloseTheLoop({ rows, onMark, initialPicked = [] }) {
   );
 }
 
-export default function FeedbackLoop({ counts, themes, projectId, api, reload }) {
-  const ranked = rankThemes(themes);
-  const [theme, setTheme] = useState(null);
+/**
+ * D6865 part 2 (#6891): one theme's weight and Close the loop, read for the theme
+ * chosen. The Feedback tab (`FeedbackTab.jsx`) draws it under the selected
+ * theme's items; `FeedbackLoop` below draws it beside its own theme list.
+ */
+export function ThemeWeightPanel({ theme, projectId, api, reload }) {
   const [weight, setWeight] = useState({ state: 'idle' });
   const [tick, setTick] = useState(0);
-  const current = theme ?? ranked[0]?.theme ?? null;
-
   useEffect(() => {
-    if (!current || !api?.feedbackWeight || !projectId) return undefined;
+    if (!theme || !api?.feedbackWeight || !projectId) return undefined;
     let alive = true;
     setWeight({ state: 'loading' });
-    api.feedbackWeight(projectId, current)
+    api.feedbackWeight(projectId, theme)
       .then((w) => { if (alive) setWeight({ state: 'ok', w }); })
       .catch(() => { if (alive) setWeight({ state: 'unreadable' }); });
     return () => { alive = false; };
-  }, [current, projectId, api, tick]);
+  }, [theme, projectId, api, tick]);
+  return (
+    <div className={CARD} data-testid="feedback-weight-panel">
+      {weight.state === 'loading' || weight.state === 'idle' ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`}>Reading this theme…</p> : null}
+      {weight.state === 'unreadable' ? (
+        <div role="alert" data-testid="feedback-weight-unreadable">
+          <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100">Unreadable: this theme’s weight could not be read. This is not a claim that nobody asked.</p>
+          <button type="button" className={`${BTN} mt-2`} onClick={() => setTick((n) => n + 1)}>Try again</button>
+        </div>
+      ) : null}
+      {weight.state === 'ok' ? (
+        <div className="flex flex-col gap-4">
+          <WeightCard w={weight.w} />
+          <CloseTheLoop key={`${theme}-${tick}`} rows={weight.w.loop}
+            onMark={api?.feedbackTold ? (uids, via) => api.feedbackTold(projectId, uids, via).then((out) => { setTick((n) => n + 1); reload?.(); return out; }) : undefined} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function FeedbackLoop({ counts, themes, projectId, api, reload }) {
+  const ranked = rankThemes(themes);
+  const [theme, setTheme] = useState(null);
+  const current = theme ?? ranked[0]?.theme ?? null;
 
   return (
     <section className="flex flex-col gap-3" aria-label="Feedback" data-testid="feedback-loop">
@@ -171,22 +196,7 @@ export default function FeedbackLoop({ counts, themes, projectId, api, reload })
               ))}
             </ul>
           </nav>
-          <div className={CARD}>
-            {weight.state === 'loading' || weight.state === 'idle' ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`}>Reading this theme…</p> : null}
-            {weight.state === 'unreadable' ? (
-              <div role="alert" data-testid="feedback-weight-unreadable">
-                <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100">Unreadable: this theme’s weight could not be read. This is not a claim that nobody asked.</p>
-                <button type="button" className={`${BTN} mt-2`} onClick={() => setTick((n) => n + 1)}>Try again</button>
-              </div>
-            ) : null}
-            {weight.state === 'ok' ? (
-              <div className="flex flex-col gap-4">
-                <WeightCard w={weight.w} />
-                <CloseTheLoop key={`${current}-${tick}`} rows={weight.w.loop}
-                  onMark={api?.feedbackTold ? (uids, via) => api.feedbackTold(projectId, uids, via).then((out) => { setTick((n) => n + 1); reload?.(); return out; }) : undefined} />
-              </div>
-            ) : null}
-          </div>
+          <ThemeWeightPanel theme={current} projectId={projectId} api={api} reload={reload} />
         </div>
       ) : null}
     </section>

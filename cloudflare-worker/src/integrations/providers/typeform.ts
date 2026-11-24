@@ -44,7 +44,14 @@ async function approvedApp(env: Env) {
 /** Typeform writes scopes space-separated; a token answer without `scope` reports none. */
 const scopesOf = (scope: string | null) => (scope ?? '').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
 
-export interface TypeformSession { region: TypeformRegion; accessToken: string }
+/**
+ * `region` is where this connection's requests go. `recordedRegion` is the
+ * data center actually stored with the grant (`us` or `eu`), or null when
+ * the credentials carry none: the response importer (D5828 part 2) reads
+ * only this one and never falls back to US.
+ */
+export interface TypeformSession { region: TypeformRegion; recordedRegion: TypeformRegion | null; accessToken: string }
+const recorded = (value: unknown): TypeformRegion | null => (value === 'us' || value === 'eu' ? value : null);
 
 /**
  * A current access token for this connection and its region. Typeform rotates
@@ -63,14 +70,14 @@ export async function typeformSession(env: Env, row: Pick<IntegrationRow, 'id' |
   };
   const fresh = (cr: Record<string, unknown>) => typeof cr.expires_at === 'number' && cr.expires_at > Date.now() + 60_000;
   const first = await read();
-  if (fresh(first)) return { region: regionOf(first.region), accessToken: String(first.access_token) };
+  if (fresh(first)) return { region: regionOf(first.region), recordedRegion: recorded(first.region), accessToken: String(first.access_token) };
   const lease = await acquireRefreshLease(env, TYPEFORM_KEY, row.uid);
   if (!lease.acquired) throw new TypeformError('typeform_refresh_busy');
   try {
     const credentials = await read();
     const region = regionOf(credentials.region);
     // Another caller refreshed while this one waited for the lease.
-    if (fresh(credentials)) return { region, accessToken: String(credentials.access_token) };
+    if (fresh(credentials)) return { region, recordedRegion: recorded(credentials.region), accessToken: String(credentials.access_token) };
     if (!credentials.refresh_token) throw new TypeformError('typeform_grant_revoked');
     const tokens = await refreshTypeformToken(region, await appCredentials(env), String(credentials.refresh_token));
     const granted = scopesOf(tokens.scope);
@@ -84,7 +91,7 @@ export async function typeformSession(env: Env, row: Pick<IntegrationRow, 'id' |
       expires_at: Date.now() + tokens.expires_in * 1000,
     });
     await env.DB.prepare('UPDATE integrations SET credentials_enc = ? WHERE id = ?').bind(next, row.id).run();
-    return { region, accessToken: tokens.access_token };
+    return { region, recordedRegion: recorded(credentials.region), accessToken: tokens.access_token };
   } finally {
     await lease.release();
   }

@@ -23,7 +23,9 @@ async function main(stage, env) {
   const planFile = join(env.RUNNER_TEMP, 'landing-feed-plan.json');
   const day = new Date().toISOString().slice(0, 10);
   const limit = count(env.LANDING_BOT_DAILY_FEEDS);
-  const options = {repo, event, env, reader, dispatchPr};
+  // #8076 (D8076): a held candidate is said in one line in the run summary.
+  const onHold = h => appendFileSync(env.GITHUB_STEP_SUMMARY, `PR #${h.number} — ${h.line}\n`);
+  const options = {repo, event, env, reader, dispatchPr, onHold};
   const ledger = async (slots = 0) => readDailyReservations({
     get: reader.get, runId, attempt, day, expectedSlots: slots, now: Date.now,
   });

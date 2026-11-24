@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { DataState, StateChip } from '../../ui';
 import { CycleCard } from './CycleOverview';
-import { chartSummary, coverageWords, gainLabel, lastRead, nextStepItems, pitchView, unassessedWords } from './raiseOverviewModel';
+import { attentionWords, chartSummary, coverageWords, gainLabel, lastRead, listWords, nextStepItems, pitchView, staleReadiness, unassessedWords } from './raiseOverviewModel';
 
 export { gainLabel, lastRead, nextStepItems };
 
@@ -41,9 +41,14 @@ export function RaiseValue({ state, value, reason = null, testId }) {
   return <span className="flex flex-col items-start gap-0.5" data-testid={testId} data-value-state={kind}><StateChip kind={kind} />{reason ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{reason}</span> : null}</span>;
 }
 
-/** RA-01, RA-04: the readiness summary, coverage first, the unassessed areas named; never a score of 0 for an unassessed area. */
-export function RaiseReadinessSummary({ view, search = '', onRetry }) {
+/**
+ * RA-01, RA-04: the readiness summary, coverage first, then how many areas need attention (D8257), the
+ * unassessed areas named; never a score of 0 for an unassessed area. RA-09 Stale: an area whose evidence
+ * changed since it was scored is named, with Re-assess for a viewer who may act.
+ */
+export function RaiseReadinessSummary({ view, search = '', onRetry, readOnly = false }) {
   const review = `/raise/fundraising-readiness${search && search.startsWith('?') ? search : ''}`;
+  const stale = staleReadiness(view);
   let body;
   if (view.state === 'unavailable') body = <DataState state="unavailable" size="block" what="Fundraising readiness" reason={view.reason} onRetry={onRetry} data-testid="raise-readiness-unavailable" />;
   else if (view.state === 'none') {
@@ -52,7 +57,15 @@ export function RaiseReadinessSummary({ view, search = '', onRetry }) {
     body = (
       <div className="flex flex-col gap-1">
         <p className="m-0 text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100" data-testid="raise-readiness-coverage">{coverageWords(view)}</p>
+        <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-200" data-testid="raise-readiness-attention" data-count={view.attention}>{attentionWords(view)}</p>
         <p className={`m-0 ${SUB}`}>{unassessedWords(view)}</p>
+        {stale ? (
+          <div className="mt-1 flex flex-col items-start gap-1.5" data-testid="raise-readiness-stale">
+            <StateChip kind="stale" lastGood={stale.since} />
+            <p className={`m-0 ${SUB}`}>{stale.sentence}</p>
+            {!readOnly ? <Link to={review} className={LINK} aria-label={`Re-assess ${stale.names.join(', ')}`}>Re-assess</Link> : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -67,27 +80,36 @@ export function RaiseReadinessSummary({ view, search = '', onRetry }) {
   );
 }
 
-/** RA-04: at most three next actions, before the score breakdown, each with its reason, a neutral impact label and one action. */
+/**
+ * RA-02, RA-04: at most three next actions, before the score breakdown, in the board's order (D8256): the
+ * follow-ups due, an open objection, then readiness steps. Each has its reason and one action; a readiness
+ * step has its neutral impact label, the others name the record they come from. A part that could not be
+ * read is said, never drawn as nothing due.
+ */
 export function RaiseNextActions({ view, readOnly = false, onRetry }) {
   if (!view) return null;
   const n = view.state === 'ready' ? view.items.length : 0;
+  const readinessOnly = n > 0 && view.items.every((it) => it.kind === 'readiness');
+  const unread = view.state === 'ready' && Array.isArray(view.unread) ? view.unread : [];
   return (
     <section className="flex flex-col gap-2.5" aria-labelledby="raise-next-title" data-testid="raise-next-actions" data-state={view.state}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="raise-next-title" className={H2}>{n ? `${n} ${n === 1 ? 'action' : 'actions'} to improve readiness` : 'Next actions'}</h2>
+        <h2 id="raise-next-title" className={H2}>{n ? `${n} ${n === 1 ? 'action' : 'actions'}${readinessOnly ? ' to improve readiness' : ' to take next'}` : 'Next actions'}</h2>
         <span className={SUB}>At most three, most useful first</span>
       </div>
       {view.state === 'unavailable'
         ? <DataState state="unavailable" size="block" what="Next actions" onRetry={onRetry} data-testid="raise-next-unavailable" />
-        : !n ? <p className={`m-0 ${SUB}`} data-testid="raise-next-none">No readiness step is open right now.</p>
+        : !n ? <p className={`m-0 ${SUB}`} data-testid="raise-next-none">{unread.length ? 'Nothing else to list from what could be read.' : 'No readiness step is open right now.'}</p>
           : (
             <ol className="m-0 grid list-none grid-cols-1 gap-3 p-0 lg:grid-cols-3">
               {view.items.map((it, i) => (
-                <li key={it.key} className={`${CARD} ${i === 0 ? 'border-axal-lavender-edge dark:border-violet-800' : ''}`} data-testid={`raise-next-${it.key}`}>
+                <li key={it.key} className={`${CARD} ${i === 0 ? 'border-axal-lavender-edge dark:border-violet-800' : ''}`} data-testid={`raise-next-${it.key}`} data-kind={it.kind}>
                   <span className="font-mono text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">{i + 1} of {n}</span>
                   <h3 className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{it.title}</h3>
                   <p className="m-0 text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300"><span className="sr-only">Why: </span>{it.reason}</p>
-                  {it.impact
+                  {it.kind && it.kind !== 'readiness'
+                    ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="raise-next-source">{it.source}</span>
+                    : it.impact
                     ? <span className="self-start rounded-full border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200" title="How much the readiness assessment would change" data-testid="raise-next-impact">{it.impact}</span>
                     : <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="raise-next-impact-unrecorded">Readiness impact · Not recorded</span>}
                   {!readOnly && it.href
@@ -97,6 +119,13 @@ export function RaiseNextActions({ view, readOnly = false, onRetry }) {
               ))}
             </ol>
           )}
+      {unread.length ? (
+        <p role="status" className={`m-0 flex flex-wrap items-center gap-2 ${SUB}`} data-testid="raise-next-unread">
+          <StateChip kind="unavailable" />
+          {`${listWords(unread)} could not be read, so ${unread.length === 1 ? 'it is' : 'they are'} not listed. This is not a claim that nothing is due.`}
+          {onRetry ? <button type="button" onClick={onRetry} className={LINK} aria-label="Try reading next actions again">Try again</button> : null}
+        </p>
+      ) : null}
       {readOnly && view.state === 'ready' && n ? <p className={`m-0 ${SUB}`}>Read only. The founder takes these steps.</p> : null}
     </section>
   );
@@ -309,13 +338,13 @@ export function RaiseDetailedReadiness({ view, defaultOpen = true, defaultMode =
         {mode === 'bars' ? (
           <div role="img" aria-labelledby={titleId} aria-describedby={sumId} className="flex flex-col gap-1.5" data-testid="raise-detailed-bars">
             {view.areas.map((a) => (
-              <div key={a.label} className="grid grid-cols-[10rem_minmax(0,1fr)_3.5rem_auto] items-center gap-3 text-[12.5px]" aria-hidden="true">
+              <div key={a.key || a.label} className="grid grid-cols-[10rem_minmax(0,1fr)_3.5rem_auto] items-center gap-3 text-[12.5px]" aria-hidden="true">
                 <span className="text-axal-ink dark:text-gray-100">{a.label}</span>
                 <span className={`h-2.5 overflow-hidden rounded-full ${a.score == null ? 'bg-[repeating-linear-gradient(45deg,#ececf1_0_4px,transparent_4px_8px)] dark:bg-[repeating-linear-gradient(45deg,#374151_0_4px,transparent_4px_8px)]' : 'bg-axal-ground dark:bg-gray-800'}`} data-bar-state={a.score == null ? 'not_recorded' : 'value'}>
                   {a.score != null ? <i className="block h-full rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${Math.max(0, Math.min(10, a.score)) * 10}%` }} /> : null}
                 </span>
                 <b className="font-mono text-axal-ink dark:text-gray-100">{a.score == null ? '' : `${a.score} / 10`}</b>
-                <span>{a.score == null ? <StateChip kind="not_recorded" /> : null}</span>
+                <span>{a.score == null ? <StateChip kind="not_recorded" /> : a.status === 'stale' ? <StateChip kind="stale" lastGood={a.assessedAt} /> : null}</span>
               </div>
             ))}
           </div>
@@ -324,9 +353,9 @@ export function RaiseDetailedReadiness({ view, defaultOpen = true, defaultMode =
             <thead><tr className="text-[10.5px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400"><th scope="col" className="py-1.5 font-extrabold">Area</th><th scope="col" className="py-1.5 font-extrabold">Score out of 10</th></tr></thead>
             <tbody>
               {view.areas.map((a) => (
-                <tr key={a.label} className="border-t border-axal-hairline dark:border-gray-800">
+                <tr key={a.key || a.label} className="border-t border-axal-hairline dark:border-gray-800">
                   <th scope="row" className="py-2 font-semibold text-axal-ink dark:text-gray-100">{a.label}</th>
-                  <td className="py-2 font-mono text-axal-ink dark:text-gray-100">{a.score == null ? <StateChip kind="not_recorded" /> : a.score}</td>
+                  <td className="py-2 font-mono text-axal-ink dark:text-gray-100">{a.score == null ? <StateChip kind="not_recorded" /> : <>{a.score}{a.status === 'stale' ? <> <StateChip kind="stale" lastGood={a.assessedAt} /></> : null}</>}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,15 +1,15 @@
 # `pages/investor/deals` — the Deals bucket, one file per artboard
 
 **Three artboards are built, and ID1 is retired.** ID2–ID4 each have their
-file below. ID1 Pipeline (`PipelineZone.jsx`) was retired by D1243 (#3256):
+file below. ID1 Pipeline (its zone file is deleted) was retired by D1243 (#3256):
 Deal flow's table at `/deals?view=table` does its job, and `/deals/pipeline`
 forwards there with its query kept (`../dealflow/DealsPipelineRedirect.jsx`).
 The bucket root `/deals` is My Deal Flow (`../dealflow/DealFlow.jsx`, D4815),
-drawn by `workspaces/investor/InvestorDealsRoutes.jsx`. The deal rooms are at
+drawn by `frontend/src/workspaces/investor/InvestorDealsRoutes.jsx`. The deal rooms are at
 `/deals/rooms` and Compare at `/deals/compare`.
 
-`pages/investor/InvestorDealsWorkspace.jsx` (the invitation queue) is no longer
-part of this bucket. It renders only from `pages/investor/InvestorWorkspacePage.jsx`,
+`frontend/src/pages/investor/InvestorDealsWorkspace.jsx` (the invitation queue) is no longer
+part of this bucket. It renders only from `frontend/src/pages/investor/InvestorWorkspacePage.jsx`,
 on `/pipeline`, for a session browsing as an investor that holds neither the
 Investor nor the Operating Partner licence (an investor licence goes to Deal
 flow). Its Pass is the one control that answers an invitation `passed` (#6152).
@@ -25,10 +25,12 @@ band underneath.
 | `ScreeningZone.jsx` | ID2 · Deals · Screening, redrawn to Deals v2 board DE06 (D4815, #5909) | `/deals/screening` | DECISION TABLE. The deals you can read, each with its venture scorecard strip (`POST /api/venture-scores/batch`), thesis fit and your decision (Move to diligence, Pass with a reason, through your deal flow); the pass taxonomy is a secondary view behind a disclosure. No Lab score, tier or flag, and no memo |
 | `screeningModel.js` | — | — | The decision table's pure rules: the four summary figures, the Confidence cell and Your decision. Read by `ScreeningZone.jsx` and its test |
 | `CommitZone.jsx` | ID3 · Deals · Commit, redrawn to Deals v2 DE07 and DE07b as the Investment committee page (D4815 part 7, #5910) | `/deals/commit` | LEDGER |
+| `CommitPhone.jsx` | Deals v2 board DE27 · the Investment committee on a phone (D6151 part 3, #6151) | `/deals/commit`, below 768px | COLUMN. The decision on the card as one column: the tally with Recused beside it, a card per vote, the conditions linking to Closing, the minutes, and Vote pinned to the foot of the screen, which opens a sheet that requires the reason and sends `POST /api/ic/:uid/vote`. Also the refused state on both widths |
 | `ClosingZone.jsx` | ID4 · Deals · Closing, redrawn to DX8 board DE08 A (D4815 part 8) | `/deals/closing` | COLLECTION. A deal-first list under a five-figure strip |
 | `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
 | `ClosingWorkspace.jsx` | DX17 to DX26 · the closing workspace (D6866, #6866) | `/deals/closing?deal=<id>` | WORKSPACE. One deal's Checklist, Paper, Conditions, Transfer and Audit tabs, rendered by `ClosingZone.jsx` when `?deal=` is set; the checklist item side sheet; the before-close rules. Every read is a route main serves, scoped at the route |
 | `closingWorkspaceModel.js` | (DX17 to DX26) | — | The workspace's pure rules: status words and glyphs, Overdue, condition order, the transfer hold, the Audit merge, the close rules and the side sheet's patch. Read by `ClosingWorkspace.jsx` and its test |
+| `commit/` | DE19 to DE23 of Deals v2 addendum B (D6142), built by D6144 (#6144) | `/deals/commit` | The Commit zone's own vote: `VoteDialogs.jsx` (Your vote, Cast or change my vote, Recuse yourself) and `commitVoteModel.js` (what the reader may do, the vote body, the roster line, a refusal in the Worker's words). Read by `CommitZone.jsx` |
 
 ## The rule for adding to this folder
 
@@ -38,7 +40,7 @@ config lists (`screening`, `commit`, `closing`) is in that registry, so a zone
 route always renders its own file; there is no fall-through (#6152).
 
 **The chip and ops rows are declared, not written here.**
-`workspaces/investorZoneFilters.js` and `workspaces/investorZoneActions.js`
+`frontend/src/workspaces/investorZoneFilters.js` and `frontend/src/workspaces/investorZoneActions.js`
 carry them, and a label with no store behind it is marked `unbuilt` with its
 reason — the builder drops the control rather than drawing one that does
 nothing. Add the label there, not to the page.
@@ -93,7 +95,7 @@ stated in `StatedLimit` rather than drawn.
 
 ## One scoped read, and only one
 
-`ic_decisions` is tenant data. `routes/ic.ts` exports `scopedDecisions`, and
+`ic_decisions` is tenant data. `cloudflare-worker/src/routes/ic.ts` exports `scopedDecisions`, and
 both readers — the `/api/ic/commit-room` route and the `deals/commit` AI
 gather — go through it. A second `SELECT ... FROM ic_decisions` written
 anywhere else is how the hole migration 219 closed gets reopened, and an AI
