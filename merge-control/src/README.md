@@ -21,3 +21,4 @@
 | `ciCapacityOutbox.ts` | D7973: durable publication intents and distinct pilot/full-suite authority. |
 | `ciCapacityRuntime.ts` | D7973: unbound inactive capacity object, independent switches and alarm recovery. |
 | `ciCapacityHistory.ts` | D7909-p8: bounded cursored collection retains full, compact and pending-negative dependent evidence. |
+| `ciCapacityReconciliation.ts` | Owner inspection of outstanding publication evidence and compare-and-set adoption of an independently observed check (#8376). |
