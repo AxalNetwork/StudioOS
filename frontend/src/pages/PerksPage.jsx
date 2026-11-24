@@ -1259,6 +1259,8 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
       {items && items.length > 0 && (
         <Instrument
           testid="perk-lifecycle"
+          // #4845: a phone reads each perk as a labelled record, not a 640px grid scrolled sideways.
+          stack
           title="Perk lifecycle"
           meta="Expiry is an event with a consequence, not a filter"
           cols="1.6fr .9fr 1.1fr .9fr 1.9fr"

@@ -291,7 +291,7 @@ async function copyFile(env: Env, a: { integrationId: number; projectId: number;
   } catch (e) {
     // D6651: the copy this request just stored is named by no row: it leaves through the one
     // record-erasure path as `unreferenced`; a cleanup failure never masks the original error.
-    if (!named) await eraseRecordObjects(env.FILES, key, 'unreferenced').catch(() => {});
+    if (!named) await eraseRecordObjects(env.FILES, key, 'unreferenced', { db: env.DB }).catch(() => {});
     throw e;
   }
   await noteStorageLanded(env, storage);
@@ -418,7 +418,7 @@ export async function deleteRaiseGoogleCopy(env: Env, a: { integrationId: number
     env.DB.prepare('DELETE FROM data_room_files WHERE id = ? AND project_id = ?').bind(row.id, a.projectId),
   ]);
   // D6651: the member deleting the copy goes through the one record-erasure path.
-  if (env.FILES) await eraseRecordObjects(env.FILES, row.r2_key, 'owner_removed').catch(() => {});
+  if (env.FILES) await eraseRecordObjects(env.FILES, row.r2_key, 'owner_removed', { db: env.DB }).catch(() => {});
   await log(env, a.user, a.projectId, 'data-room', row.id, 'google_copy_deleted', 'Copy from Google Drive deleted; a sync leaves it deleted');
   return true;
 }

@@ -1,7 +1,7 @@
 /**
  * Raise's entry in CycleRoute.jsx's cycle table (D661, #1474; split out by
- * D5615, #5615): its modules, Build your deck and the round-call lightbox
- * (D686), each module's parts, its tools and the four AI bands (D424).
+ * D5615, #5615): its modules, its Overview (D6046), Build your deck and the
+ * round-call lightbox (D686), each module's parts, its tools and the four AI bands (D424).
  */
 import RoundCallSheet from '../../founder/RoundCallSheet';
 import MercuryRaiseFeed from '../MercuryRaiseFeed';
@@ -29,6 +29,8 @@ export { useCapRelHome } from '../../raise/caprel/capRelHomeRead.js';
 // D5081 part 3 (#5081, RA-20): the Cap table record read, which CycleRoute holds for the header's action and Overview.
 export { useCapTableHome } from '../../raise/captable/capTableHomeRead.js';
 
+// D6046 (#6046, Raise V2 RA-01 to RA-09, RA-13): Raise Overview V2, behind its own lazy boundary, as Build's and Grow's are.
+const RaiseOverview = lazyStep(() => import('../RaiseOverview'));
 // D4574 (#4574, H5): Raise's step behind its own lazy boundary.
 const NarrativeOwnedHome = lazyStep(() => import('../../raise/narrative/NarrativeOwnedHome'), 'default');
 
@@ -52,6 +54,10 @@ const raise = {
   // Keep the round-call lightbox route; the primary action opens Pitch Studio.
   path: 'call',
   Mount: RaiseMount,
+  // D6046 (RA-01 to RA-03): the Overview draws its own page, whose primary action is the Worker's `primary_action`
+  // (Prepare to raise, Build pitch, Share with investor or Add investor), never this one.
+  Overview: RaiseOverview,
+  // A module page with no action of its own (`actions` below, `homes`) keeps this one until #5081's per-tool actions cover it.
   action: (q) => ({ label: 'Build your deck', href: `/raise/pitch${q}` }),
   // D5081 (#5081, RA-14): a module's own primary in place of Build your deck. On Use of funds' tabs it is
   // Set raise & allocation, opening Allocation; on Home CycleRoute opens Edit split in place (`homeAction`).
@@ -122,6 +128,7 @@ const raise = {
   }),
   add: toFnMap({}),
   // D6897 part 4 (#6897, RA-31): the Overview header's Share outside Axal, the Raise status page; founders only.
+  // D6046: Raise's own Overview (`RaiseOverview.jsx`) draws the same button by the same rule, beside its Ask.
   overviewMore: ({ projectId, role }) => (role === 'founder' ? <ShareStatusButton projectId={projectId} /> : null),
   // D6049 (#6049, Raise v2 RA-16): a module that owns its page. `(data, ctx)` → `{ sub, body, Bands, action }`: the
   // header's coverage and freshness line, the page drawn in place of the generic chart and records table

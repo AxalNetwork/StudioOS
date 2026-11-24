@@ -62,7 +62,7 @@ test('replit.md: the admin docs section is imported, and the text says to keep i
   assert.doesNotMatch(doc, /is not imported by `sections\/index\.js`/);
   assert.match(doc, /`sections\/admin\.js` is imported by `sections\/index\.js` and sits last in `SECTIONS`/);
   const index = read('frontend/src/pages/docs/sections/index.js');
-  assert.match(index, /^import admin from '\.\/admin';$/m);
+  assert.match(index, /^import admin from '\.\/admin\.js';$/m);
   assert.match(index, /\n {2}admin,\n\];/);
 });
 

@@ -16,7 +16,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
-import { DARK, PHONE_HOLDERS, PHONE_ROOT } from '../src/pages/raise/captable/capTableModel.js';
+import { BASIS_CHECK, DARK, PHONE_HOLDERS, PHONE_ROOT } from '../src/pages/raise/captable/capTableModel.js';
 import { holderCards, whoOwns } from '../src/pages/raise/captable/overviewModel.js';
 import { compareRows, exitTable, swipeCards } from '../src/pages/raise/captable/scenariosModel.js';
 
@@ -302,6 +302,70 @@ test('CT23a at desktop width: the table, the side column with its bars, and no p
     assert.ok(!v.by('captable-record'));
     assert.ok(v.by('cycle-action'));
   } finally { await v.close(); }
+});
+
+// ─────────────────────────────────────────────────────────── D5075: RA-26 B
+
+// D5075 (#5075, Raise v2 RA-26 B): a long-named note with large figures, beside the record's SAFE.
+const LONG_NOTE = iss({
+  uid: 'i10', kind: 'note', holder: { holder_id: null, name: 'Example Very Long Investor Name Holdings International Opportunities Fund IV LP' },
+  amount_cents: 98765432109876, terms: { cap_cents: 987654321098765, discount_bps: 2000, interest_bps: 800, maturity_on: '2028-03-31', basis: 'pre_money', mfn: true },
+  issued_on: '2026-09-15', source: 'signed', document_ref: 'legal_documents:7',
+});
+
+test('RA-26 B at phone width: Recorded ownership as cards with View table; the holders\' table one press away', async () => {
+  const v = await mounted('/raise/cap-table?project_id=3');
+  try {
+    assert.equal(v.count('captable-who-owns'), 0, 'cards first, no table');
+    const toggle = v.by('captable-holder-view-table');
+    assert.equal(v.text(toggle), 'View table');
+    assert.equal(v.props(toggle)['aria-expanded'], false);
+    assert.equal(v.props(toggle)['aria-controls'], 'captable-who-owns-table-box');
+    assert.ok(v.underPhoneRoot(toggle), 'a 44px target');
+    await v.press(toggle);
+    assert.equal(v.text(v.by('captable-holder-view-table')), 'Hide table');
+    assert.equal(v.props(v.by('captable-holder-view-table'))['aria-expanded'], true);
+    const table = v.by('captable-who-owns');
+    assert.ok(table, 'the table, with its source and last change');
+    assert.equal(v.count('captable-holder-card'), 6, 'the cards stay above it');
+    assert.equal(v.count('captable-basis'), 1, 'the switch is not drawn twice');
+    assert.match(v.text(table), /Source/);
+    assert.match(v.text(table), /Last change/);
+    await v.press(v.by('captable-holder-view-table'));
+    assert.equal(v.count('captable-who-owns'), 0);
+  } finally { await v.close(); }
+  const d = await mounted('/raise/cap-table?project_id=3', { phone: false });
+  try { assert.equal(d.count('captable-holder-view-table'), 0, 'a desktop draws the table itself'); } finally { await d.close(); }
+});
+
+test('RA-26 B at phone width: each instrument on record is a card, every column kept, a long name and large figures wrapping; View table opens the table', async () => {
+  RECORD.instruments.rows.push(LONG_NOTE);
+  try {
+    const v = await mounted('/raise/cap-table/instruments?project_id=3');
+    try {
+      assert.equal(v.count('captable-inst-table'), 0, 'no table first on a phone');
+      const cards = v.all('captable-inst-card');
+      assert.equal(cards.length, 2);
+      const long = cards.find((c) => /Holdings International/.test(v.text(c)));
+      assert.equal(v.text(long), 'Convertible note Example Very Long Investor Name Holdings International Opportunities Fund IV LP Outstanding Amount $987,654,321,098.76 Cap $9,876,543,210,987.65 Discount 20% MFN Yes Basis Pre-money ! Check ' + BASIS_CHECK + ' Interest · maturity 8% · matures 31 Mar 2028 Signed 15 Sep 2026 Document Signed legal document Source Signed On record');
+      assert.match(v.cls(v.all('captable-inst-card-open').find((n) => /Holdings/.test(v.text(n)))), /overflow-wrap:anywhere/, 'a long name wraps instead of widening the page');
+      const safe = cards.find((c) => /Northwind/.test(v.text(c)));
+      assert.doesNotMatch(v.text(safe), /Interest · maturity/, 'a SAFE has no interest line');
+      assert.equal(v.props(v.all('captable-inst-card-open').find((n) => /Northwind/.test(v.text(n)))).href, '/raise/cap-table/instrument/i9?project_id=3', 'a card opens its instrument sheet');
+      const toggle = v.by('captable-inst-view-table');
+      assert.equal(v.text(toggle), 'View table');
+      assert.ok(v.underPhoneRoot(toggle));
+      await v.press(toggle);
+      assert.ok(v.by('captable-inst-table'), 'View table opens the table');
+      assert.equal(v.count('captable-inst-row'), 2);
+      assert.equal(v.props(v.by('captable-inst-view-table'))['aria-expanded'], true);
+    } finally { await v.close(); }
+    const d = await mounted('/raise/cap-table/instruments?project_id=3', { phone: false });
+    try {
+      assert.ok(d.by('captable-inst-table'), 'a desktop keeps the table');
+      assert.equal(d.count('captable-inst-card') + d.count('captable-inst-view-table'), 0);
+    } finally { await d.close(); }
+  } finally { RECORD.instruments.rows.pop(); }
 });
 
 // ─────────────────────────────────────────────────────────── CT23b: a holder

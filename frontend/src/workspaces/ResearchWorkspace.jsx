@@ -13,6 +13,8 @@ import { boardFor } from './boards';
 import { api } from '../lib/api';
 import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
 import { RestoredStatus } from '../pages/research/CompaniesAccess.jsx';
+import { EXPORT_HEADER as DILIGENCE_EXPORT_HEADER, exportCells as diligenceExportCells } from '../pages/research/diligenceZoneRead.js';
+import { stageWord } from '../pages/research/RoomDeals';
 
 export function benchmarkingExportView(rows) {
   return {
@@ -346,9 +348,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
             zoneActions={(rows) => zoneActionsFor(role, 'research/diligence', { view: {
             scope: null,
             zone: 'diligence',
-            header: ['Company', 'Open to you', 'In the room', 'Behind an NDA', 'You last opened'],
+            // D6269: every column the row shows (`diligenceZoneRead.js`).
+            header: DILIGENCE_EXPORT_HEADER,
             rows,
-            cells: (r) => [r.project_name, r.file_open, r.file_total, r.withheld_behind_nda, r.last_opened_at],
+            cells: (r) => diligenceExportCells(r, stageWord),
           } })} />
         </Suspense>
       );

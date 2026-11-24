@@ -122,7 +122,7 @@ on the Validate board's claims. What remains:
 | Licence accent | Indigo `#4f46e5`, not founder violet | yes — `ACCENT.investor`, `WorkerRail role="investor"` |
 | Seam | Cyan chips on founder-sourced objects | yes — `--inv-seam`, seam badges on workspace headers |
 | Transaction seam | Seven cross-boundary objects; three seam chip kinds | partial — copy on overviews; not all objects wired |
-| Institutional Fund row | Locked, never hidden; upgrade surface on select | yes — `requiredInvestorTier: 'institutional'`, `LockedFundNotice`, inert preview on landing |
+| Institutional Fund row | Locked, never hidden; upgrade surface on select | yes — `requiredInvestorTier: 'institutional'`; one `FundLocked` surface on /funds and every zone, with what the add-on includes and Talk to Axal (D6233) |
 | Worker AI rail | Same rail on every page; dark tokens specified once in I1 | yes — shared `WorkerRail`; dark via `workerRail.css` + page `.dark` blocks |
 | Proposal band | Accept / Edit first / Discard; cost before, receipt after | partial — UI pattern on canvases; not all zones generate proposals |
 | Model picker / per-run cost | Named per page in detail canvases | **not shipped** — no investor `ASSIST_SURFACES` keys |

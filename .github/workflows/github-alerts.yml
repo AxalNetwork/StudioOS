@@ -31,7 +31,7 @@ on:
       check:
         description: 'Which check to run now'
         type: choice
-        options: [main-red, queue, queue-stalled, future-clock, workflow-failures, file-backup]
+        options: [main-red, queue, queue-stalled, queue-deadline, future-clock, workflow-failures, file-backup]
         default: queue
       attempts:
         description: 'Verified completion hint batch: JSON array of up to 20 [run_id, attempt] pairs'
@@ -121,7 +121,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -149,7 +152,10 @@ jobs:
         with:
           persist-credentials: false
           ref: refs/heads/main
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -177,7 +183,10 @@ jobs:
         with:
           persist-credentials: false
           ref: refs/heads/main
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -315,6 +324,7 @@ jobs:
           sparse-checkout: |
             scripts
             package.json
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -351,7 +361,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -370,3 +383,37 @@ jobs:
           FILE_RECOVERY_ENABLED: ${{ vars.FILE_RECOVERY_ENABLED }}
           FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_SECOND_COPY_ENABLED }}
           FILE_RECOVERY_HEARTBEAT_FILE: ${{ runner.temp }}/file-recovery-heartbeat.json
+
+  queue-deadline:
+    name: Merge queue deadline warning
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '2-57/5 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.check == 'queue-deadline'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-queue-deadline
+      queue: max
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: refs/heads/main
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs queue-deadline
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QUEUE_DEADLINE_WARN_SHARE: ${{ vars.QUEUE_DEADLINE_WARN_SHARE }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}

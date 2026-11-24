@@ -17,19 +17,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { unbindAdmin, UNBIND_REASON_MIN } from '../src/rpc/branchOps.ts';
 import { sha256Hex } from '../src/rpc/secret.ts';
 import { requireAuth } from '../src/auth.ts';
 
-const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const HQ_SECRET = 'synthetic-hq-rpc-secret-not-a-credential';
@@ -40,7 +35,7 @@ const FOUNDER = 14;     // an ordinary account
 const REASON = 'Licence breach found in the Q3 review, ticket 7731';
 
 function freshDb() {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(PRINCIPAL, 'admin', 'Paul Principal', 'paul@fr.example');

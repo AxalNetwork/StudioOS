@@ -647,11 +647,11 @@ r.post('/reports/:uid/documents', async (c) => {
        SELECT ?, ?, ?, ?, ?, 'application/pdf', ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM portfolio_updates WHERE id = ? AND sent_at IS NULL)`,
     ).bind(docUid, row.id, row.project_id, key, filename, bytes.length, digest, label, user.id, row.id).run();
   } catch (e) {
-    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => null);
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => null);
     throw e;
   }
   if (!(await c.env.DB.prepare('SELECT 1 FROM report_documents WHERE uid = ?').bind(docUid).first())) {
-    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => null);
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => null);
     throw new Refusal(409, 'report_sent', 'This report was sent. Correct it as a new revision to change its statements.');
   }
   return c.json({ ok: true, document: { uid: docUid, filename, label, size_bytes: bytes.length } }, 201);

@@ -182,6 +182,39 @@ function gpScopeStatement(scope: PositionScope) {
   };
 }
 
+/**
+ * D6206 (#6206): each company's recorded distributions under a position scope,
+ * cut at `asOf` when one is given. The rows and the rule are `/analytics`'s
+ * own (same scope predicate; a positive amount with a YYYY-MM-DD date, on or
+ * before the cut), so the list's distributed figures add up to that read's
+ * `distributed`. Only what `portfolio_distributions` stores is read.
+ *
+ * A failed read (thrown, unsuccessful or malformed, D6201) is reported as
+ * unavailable, never as an empty set: nothing distributed and a read that did
+ * not answer are different facts.
+ */
+async function distributedByProject(env: Env, scope: PositionScope, asOf: string | null):
+  Promise<{ available: true; by: Map<number, number>; total: number } | { available: false; reason: string }> {
+  const reply = await env.DB.prepare(
+    `SELECT project_id, amount, distribution_date
+       FROM portfolio_distributions
+      WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0
+             OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)`,
+  ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => null);
+  if (!hasQueryResults(reply)) return { available: false, reason: 'Portfolio distributions could not be read.' };
+  const by = new Map<number, number>();
+  let total = 0;
+  for (const d of reply.results) {
+    const amount = Number(d.amount) || 0;
+    const date = isoDate(d.distribution_date);
+    if (!(amount > 0) || !date || (asOf && date > asOf)) continue;
+    const pid = Number(d.project_id);
+    by.set(pid, (by.get(pid) || 0) + amount);
+    total += amount;
+  }
+  return { available: true, by, total };
+}
+
 // GET /api/positions — portfolio ownership summary (one row per project)
 r.get('/', async (c) => {
   try {
@@ -240,6 +273,7 @@ r.get('/', async (c) => {
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
     const marks = await scopedLatestMarks(c.env, scope, listAsOf);
+    const distributed = await distributedByProject(c.env, scope, listAsOf);
 
     const items = (rows.results || []).map((row: any) => {
       const pid = Number(row.project_id);
@@ -281,8 +315,15 @@ r.get('/', async (c) => {
         mark_basis: carried.fmv == null ? null : mark?.basis ?? null,
         /** Which fund's mark answered, or null for a firm-level one (D4644 §3). */
         mark_fund_id: carried.fmv == null ? null : mark?.fund_id ?? null,
+        /**
+         * D6206: Σ this company's recorded distributions on or before `as_of`.
+         * A measured 0 when none is recorded; null only when the distributions
+         * read failed (`distributions.available` is then false).
+         */
+        distributed: distributed.available ? Math.round((distributed.by.get(pid) || 0) * 100) / 100 : null,
       };
     });
+    const listedIds = new Set(items.map((i: any) => i.project_id));
     // D1057: the read says which companies it lists. An investor sees the ones they hold a confirmed
     // commitment in (finding 8); an admin, every recorded position. D4636 part 3: a GP of record
     // is also told which funds' positions were added.
@@ -292,6 +333,21 @@ r.get('/', async (c) => {
       fund_scope: gpScopeStatement(scope),
       /** D6226: the Worker's UTC date, so the page ages a mark without the browser clock. */
       today: todayIso(),
+      /**
+       * D6206: whether the per-company `distributed` figures were read. When
+       * they were, `total` is the scope's whole distributed figure (the one
+       * `/analytics` sums for the same date) and `unlisted` the part of it
+       * recorded against a company with no listed position, so the rows
+       * reconcile to the book. When they were not, only the distributions
+       * fields are unavailable; the rest of the read still answers.
+       */
+      distributions: distributed.available
+        ? {
+            available: true,
+            total: Math.round(distributed.total * 100) / 100,
+            unlisted: Math.round([...distributed.by].reduce((s, [pid, v]) => (listedIds.has(pid) ? s : s + v), 0) * 100) / 100,
+          }
+        : { available: false, reason: distributed.reason },
     });
   } catch (e) { return mapError(c, e); }
 });

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { capTableScenariosApi } from '../../../lib/api/capTableScenarios';
-import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import { Unreadable, actionGhost, actionPrimary, usePhoneWidth } from '../../../ui';
 import { Tag } from './CapTableTag';
 import { BASIS_CHECK, scenarioCard, symbolOf, tabSearch } from './capTableModel';
 import {
@@ -133,6 +133,81 @@ function RecordTable({ rows, all, search }) {
   );
 }
 
+/**
+ * D5075 (#5075, RA-26 B): on a phone each instrument on record is a card, every
+ * column of the table kept as a labelled line in the table's order, the holder
+ * first and the source last. The table stays one press away behind View table.
+ */
+function RecordCards({ rows, search }) {
+  return (
+    <ul className="m-0 flex list-none flex-col p-0" aria-label="Instruments on record" data-testid="captable-inst-cards">
+      {rows.map((r) => (
+        <li key={r.uid} className="flex min-w-0 flex-col gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-700" data-testid="captable-inst-card">
+          <span className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+            <span className="flex min-w-0 flex-col">
+              <span className={EYEBROW}>{r.type}</span>
+              <Link className={`${LINK} inline-flex items-center break-words text-[13.5px] [overflow-wrap:anywhere]`} to={instrumentHref(r.uid, tabSearch(search))} data-testid="captable-inst-card-open">{r.holder}</Link>
+            </span>
+            <span className={`${PILL} ${r.status === 'converted' ? NEUTRAL : VIOLET}`}>{r.statusWord}</span>
+          </span>
+          <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-2" data-testid="captable-inst-card-terms">
+            {[['Amount', r.amount, true], ['Cap', r.cap, true], ['Discount', r.discount, true], ['MFN', r.mfn, false]].map(([k, v, mono]) => (
+              <div key={k} className="flex min-w-0 flex-col">
+                <dt className={EYEBROW}>{k}</dt>
+                <dd className={`m-0 break-words text-[12.5px] [overflow-wrap:anywhere] ${mono ? MONO : ''} ${INK}`}>{v}</dd>
+              </div>
+            ))}
+            <div className="col-span-2 flex min-w-0 flex-col">
+              <dt className={EYEBROW}>Basis</dt>
+              <dd className={`m-0 text-[12.5px] ${INK}`}>{r.basis}</dd>
+              {r.check ? <dd className="m-0 mt-1 flex flex-col gap-1"><span className={`${PILL} ${AMBER}`} data-testid="captable-inst-card-check">! Check</span><span className={`text-[11px] ${MUTED}`}>{BASIS_CHECK}</span></dd> : null}
+            </div>
+            {r.interest != null ? (
+              <div className="col-span-2 flex min-w-0 flex-col">
+                <dt className={EYEBROW}>Interest · maturity</dt>
+                <dd className={`m-0 text-[12.5px] ${MONO} ${INK}`}>{r.interest}</dd>
+              </div>
+            ) : null}
+            <div className="flex min-w-0 flex-col">
+              <dt className={EYEBROW}>Signed</dt>
+              <dd className={`m-0 text-[12.5px] ${MONO} ${INK}`}>{r.signed}</dd>
+            </div>
+            <div className="flex min-w-0 flex-col">
+              <dt className={EYEBROW}>Document</dt>
+              <dd className="m-0 break-words text-[12.5px] [overflow-wrap:anywhere]">{r.document ? <span className="text-axal-violet dark:text-violet-400">{r.document}</span> : <span className={`${PILL} ${AMBER}`} data-testid="captable-inst-card-nodoc">! No document</span>}</dd>
+            </div>
+          </dl>
+          <span className="flex flex-wrap items-center gap-1.5"><span className={`text-[11px] ${MUTED}`}>Source</span><span className={`${PILL} ${NEUTRAL}`} data-testid="captable-inst-card-source">{r.source}</span><Tag kind="record" /></span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** D5075 (RA-26 B): the detailed table behind an explicit press on a phone; it may scroll sideways inside its own box. */
+function ViewTable({ open, onToggle, controls, testId }) {
+  return (
+    <div className="px-4 py-3">
+      <button type="button" className={`${actionGhost} w-full`} aria-expanded={open} aria-controls={controls} onClick={onToggle} data-testid={testId}>
+        {open ? 'Hide table' : 'View table'}
+      </button>
+    </div>
+  );
+}
+
+/** The record on a phone: cards first, the table behind View table (RA-26 B). The empty and filtered sentences stay the table's. */
+function PhoneRecord({ rows, all, search }) {
+  const [table, setTable] = useState(false);
+  if (all.length === 0 || rows.length === 0) return <RecordTable rows={rows} all={all} search={search} />;
+  return (
+    <>
+      <RecordCards rows={rows} search={search} />
+      <ViewTable open={table} onToggle={() => setTable((t) => !t)} controls="captable-inst-table-box" testId="captable-inst-view-table" />
+      {table ? <div id="captable-inst-table-box" className="border-t border-axal-hairline dark:border-gray-700"><RecordTable rows={rows} all={all} search={search} /></div> : null}
+    </>
+  );
+}
+
 /** "Convert at": a next-round price, or a scenario's first round. Modelled; nothing is saved. */
 function ConvertAt({ projectId, today, compare, instruments, onResult }) {
   // D5373: the typed figures are in the venture's currency; the hint carries a "$" only for USD.
@@ -192,13 +267,41 @@ function ConvertAt({ projectId, today, compare, instruments, onResult }) {
   );
 }
 
+/** D5075 (RA-26 B): the Modelled conversion on a phone, one instrument a card; an instrument that does not convert says why. */
+function ConvertedCards({ rows }) {
+  return (
+    <ul className="m-0 flex list-none flex-col p-0" aria-label="Modelled conversion, by instrument" data-testid="captable-converted-cards">
+      {rows.map((r) => (
+        <li key={r.uid} className="flex min-w-0 flex-col gap-1.5 border-b border-axal-ground py-2.5 first:pt-0 last:border-b-0 dark:border-gray-700" data-testid="captable-converted-card">
+          <span className={`break-words text-[13px] font-bold [overflow-wrap:anywhere] ${INK}`}>{r.holder}</span>
+          {r.converted ? (
+            <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              <div className="col-span-2 flex min-w-0 flex-col"><dt className={EYEBROW}>Conversion price</dt><dd className={`m-0 ${MONO} text-[12.5px] font-bold ${INK}`}>{r.price}</dd><dd className={`m-0 text-[11.5px] ${MUTED}`}>{r.binding}</dd></div>
+              <div className="flex min-w-0 flex-col"><dt className={EYEBROW}>Shares</dt><dd className={`m-0 break-words ${MONO} text-[12.5px] [overflow-wrap:anywhere] ${INK}`}>{r.sharesWord}</dd></div>
+              <div className="flex min-w-0 flex-col"><dt className={EYEBROW}>% after the round</dt><dd className={`m-0 ${MONO} text-[12.5px] ${INK}`}>{r.pctAfter}</dd></div>
+            </dl>
+          ) : <span className={`text-[12.5px] ${MUTED}`} data-testid="captable-converted-card-skip">{r.reason}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Converted({ view }) {
+  const phone = usePhoneWidth();
+  const [table, setTable] = useState(false);
   return (
     <>
       <Block title={view.title} tag={<Tag kind="modelled" />} testId="captable-converted">
         <div className="flex flex-col gap-2">
           {view.notice ? <p role="alert" className={`m-0 ${RED}`} data-testid="captable-over-100">{view.notice}</p> : null}
-          <div className="overflow-x-auto">
+          {phone ? (
+            <>
+              <ConvertedCards rows={view.rows} />
+              <button type="button" className={`${actionGhost} w-full`} aria-expanded={table} aria-controls="captable-converted-table-box" onClick={() => setTable((t) => !t)} data-testid="captable-converted-view-table">{table ? 'Hide table' : 'View table'}</button>
+            </>
+          ) : null}
+          {!phone || table ? <div className="overflow-x-auto" id="captable-converted-table-box">
             <table className="w-full border-collapse" data-testid="captable-converted-table">
               <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Conversion price', 'Shares', '% after the round'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
               <tbody>
@@ -216,7 +319,7 @@ function Converted({ view }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div> : null}
           {view.warnings.map((w) => <p key={w} className={`m-0 text-[11.5px] ${MUTED}`}>{w}</p>)}
         </div>
       </Block>
@@ -225,9 +328,9 @@ function Converted({ view }) {
           <p className={`m-0 text-[12.5px] ${INK}`}>{view.lead}</p>
           <div role="img" aria-label={view.summary ? `As-converted shares at ${view.roundPrice} a share: ${view.summary}.` : view.lead} className="flex flex-col gap-1.5">
             {view.bars.map((b) => (
-              <div key={b.uid} className="grid grid-cols-[minmax(0,240px)_minmax(0,1fr)_120px] items-center gap-2.5 text-[12.5px]" title={b.tip || undefined} data-testid={b.hairline ? 'captable-bar-cannot' : 'captable-bar'}>
+              <div key={b.uid} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1 text-[12.5px] md:grid-cols-[minmax(0,240px)_minmax(0,1fr)_120px]" title={b.tip || undefined} data-testid={b.hairline ? 'captable-bar-cannot' : 'captable-bar'}>
                 <span className={`truncate ${INK}`}>{b.label}</span>
-                <span className={`relative h-3 rounded ${b.hairline ? 'border-t border-dashed border-axal-muted dark:border-gray-500' : 'bg-axal-ground dark:bg-gray-800'}`}>
+                <span className={`relative col-span-2 row-start-2 h-3 rounded md:col-span-1 md:row-start-auto ${b.hairline ? 'border-t border-dashed border-axal-muted dark:border-gray-500' : 'bg-axal-ground dark:bg-gray-800'}`}>
                   {b.hairline ? null : <span className="absolute inset-y-0 left-0 rounded bg-axal-violet dark:bg-violet-400" style={{ width: b.width }} />}
                 </span>
                 <span className={`${MONO} ${b.hairline ? `text-[11.5px] ${MUTED}` : INK}`}>{b.value}</span>
@@ -312,6 +415,7 @@ function InstrumentDrawer({ projectId, uid, record, today, onClose }) {
 
 export default function InstrumentsTab({ projectId, reload, retry, search = '', openUid = null }) {
   const navigate = useNavigate();
+  const phone = usePhoneWidth();
   const record = useRead(readRecord, projectId, reload);
   const today = useRead(readToday, projectId, reload);
   const compare = useRead(readCompare, projectId, reload);
@@ -331,7 +435,7 @@ export default function InstrumentsTab({ projectId, reload, retry, search = '', 
         <State read={record} what="Your instruments" claim="This is not a claim that none are recorded." onRetry={retry} testId="captable-inst">
           <Toolbar value={filters} onChange={setFilters} />
           {promised && !view ? <p role="alert" className={`m-4 ${RED}`} data-testid="captable-over-100">{promised}</p> : null}
-          <RecordTable rows={rows} all={all} search={search} />
+          {phone ? <PhoneRecord rows={rows} all={all} search={search} /> : <RecordTable rows={rows} all={all} search={search} />}
         </State>
       </section>
       {record.status === 'ready' && all.some((i) => i.status === 'outstanding') ? (
