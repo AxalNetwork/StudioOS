@@ -17,7 +17,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import Sheet from '../../../ui/Sheet.jsx';
-import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote, zoneReadError } from './useGuardedWrite';
 import { fitView } from '../../../lib/fitRuleView.js';
 import { FIT_KINDS, FIT_STRENGTHS, fitRuleRow, fitSheetCopy } from './fitRules.js';
 
@@ -256,9 +256,9 @@ function FitRulesTable({ rows, onEdit }) {
             <tr key={r.id} className="border-b border-axal-hairline align-top last:border-b-0 dark:border-gray-800" data-testid="fit-rule-row">
               <td className="px-4 py-3">{ruleCell(v)}</td>
               <td className="px-4 py-3">{who(v)}</td>
-              <td className="px-4 py-3">{v.strength || <span className="text-axal-faint">—</span>}</td>
+              <td className="px-4 py-3">{v.strength || <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
               <td className="px-4 py-3 text-[13px]">{says(v)}</td>
-              <td className="px-4 py-3">{v.pointTo || <span className="text-axal-faint">—</span>}</td>
+              <td className="px-4 py-3">{v.pointTo || <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
               <td className="px-4 py-3 text-right">{action({ r, v })}</td>
             </tr>
           ))}
@@ -268,7 +268,7 @@ function FitRulesTable({ rows, onEdit }) {
         {rows.map(({ r, v }) => (
           <li key={r.id} className="flex flex-col gap-1.5 p-4 text-[14px]">
             <div>{ruleCell(v)}</div>
-            <div>{who(v)}{v.strength && <span className="text-axal-faint"> · {v.strength}</span>}</div>
+            <div>{who(v)}{v.strength && <span className="text-gray-600 dark:text-gray-400"> · {v.strength}</span>}</div>
             <div className="text-[13px]">{says(v)}</div>
             {v.pointTo && <div className="text-[13px] text-gray-600 dark:text-gray-300">Point them to {v.pointTo}</div>}
             <div>{action({ r, v })}</div>
@@ -370,7 +370,7 @@ export default function PartnerAudienceFitZone() {
       setState({ loading: false, error: '', data: r || {} });
       return true;
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'The fit rules did not load.', data: null });
+      setState({ loading: false, error: zoneReadError(e), data: null });
       return false;
     }
   }, []);

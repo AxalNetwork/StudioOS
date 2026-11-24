@@ -23,12 +23,24 @@
  *
  * AN ARCHIVED PROJECT IS READ-ONLY (409 `project_archived`), as in part 1.
  * Every write leaves an audit receipt without the finding's text.
+ *
+ * D7817 (#7817): AN ATTACHED ANALYSIS IS ALSO WHAT THE PROJECT HOLDS. A
+ * citation `{ attachment_uid, source_key }` names a source of a frozen copy
+ * the project keeps (`research_project_attachments.ts`), and only one the copy
+ * records as fetched; it is stored with the source's link, title and retrieval
+ * date, and no passage (none is recorded for an analysis source yet), so a
+ * source fact still cannot stand on it. A generated finding of an attached
+ * copy is taken over only as an interpretation, its words kept as
+ * `proposed_text` exactly as an Ask interpretation keeps them. A detach keeps
+ * the finding and its frozen citation (read as `attachment_removed`) and never
+ * changes `updated_at`. The read's citation fields for this are additive.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { markCited } from '../services/researchCitations';
+import { citableSource, projectAttachmentCopies, type AttachedCopy } from '../services/researchProjectAttachments';
 import type { RouteMount } from '../util/routeRegistry';
 import { checkProjectOwner } from './research_projects';
 
@@ -46,7 +58,11 @@ const ANSWERABLE_STATES = ['indexed', 'partial'];
 interface AnswerRow { id: number; uid: string; question: string; answer: string | null; reason: string; citations: string; created_at: string }
 interface StoredCite { n?: unknown; title?: unknown; document_uid?: unknown; passage?: unknown; page?: unknown; [key: string]: unknown }
 interface DocRow { id: number; uid: string; title: string; index_state: string; source_year: number | null }
-interface CitationIn { document_id: number | null; document_uid: string | null; title: string; passage: string | null; page: number | null; answer_id: number | null }
+interface CitationIn {
+  document_id: number | null; document_uid: string | null; title: string; passage: string | null; page: number | null; answer_id: number | null;
+  // D7817: a source of an attached copy, frozen as the copy recorded it.
+  attachment_id?: number | null; source_key?: string | null; source_url?: string | null; retrieved_at?: string | null;
+}
 
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
 const numberOf = (c: StoredCite, i: number) => (Number.isInteger(c?.n) && (c.n as number) > 0 ? (c.n as number) : i + 1);
@@ -112,12 +128,15 @@ export function readText(value: unknown): { value?: string; error?: string } {
  * The citations a member sent, resolved against what the project holds.
  * `{ answer_uid, n }` names a passage one of the project's answers recorded;
  * `{ document_uid }` names a document in the project's evidence. Either way
- * the document must be in the evidence. Duplicates collapse to one.
+ * the document must be in the evidence. `{ attachment_uid, source_key }`
+ * (D7817) names a fetched source of a copy attached to the project.
+ * Duplicates collapse to one.
  */
 export function resolveCitations(
   input: unknown,
   answers: AnswerRow[],
   evidence: Map<string, DocRow>,
+  attachments: Map<string, AttachedCopy> = new Map(),
 ): { citations?: CitationIn[]; error?: string } {
   if (input === undefined || input === null) return { citations: [] };
   if (!Array.isArray(input)) return { error: 'invalid_citations' };
@@ -127,9 +146,14 @@ export function resolveCitations(
   const seen = new Set<string>();
   for (const raw of input) {
     if (!raw || typeof raw !== 'object') return { error: 'invalid_citations' };
-    const { answer_uid: answerUid, n, document_uid: documentUid } = raw as Record<string, unknown>;
+    const { answer_uid: answerUid, n, document_uid: documentUid, attachment_uid: attachmentUid, source_key: sourceKey } = raw as Record<string, unknown>;
     let cite: CitationIn;
-    if (typeof answerUid === 'string' && answerUid) {
+    if (typeof attachmentUid === 'string' && attachmentUid) {
+      const attached = attachments.get(attachmentUid);
+      const source = attached ? citableSource(attached.copy, sourceKey) : null;
+      if (!attached || !source) return { error: 'citation_not_in_project' };
+      cite = attachmentCitation(attached, source);
+    } else if (typeof answerUid === 'string' && answerUid) {
       const answer = byUid.get(answerUid);
       if (!answer || !Number.isInteger(n)) return { error: 'citation_not_in_project' };
       const list = storedCites(answer.citations);
@@ -151,10 +175,24 @@ export function resolveCitations(
     } else {
       return { error: 'invalid_citations' };
     }
-    const key = `${cite.document_uid}|${cite.answer_id ?? ''}|${cite.passage ?? ''}`;
+    const key = `${cite.document_uid}|${cite.answer_id ?? ''}|${cite.passage ?? ''}|${cite.attachment_id ?? ''}|${cite.source_key ?? ''}`;
     if (!seen.has(key)) { seen.add(key); out.push(cite); }
   }
   return { citations: out };
+}
+
+/** A fetched source of an attached copy, as a frozen citation: link, title and retrieval date, no passage. */
+function attachmentCitation(attached: AttachedCopy, source: NonNullable<ReturnType<typeof citableSource>>): CitationIn {
+  return {
+    document_id: null, document_uid: null, title: source.title || source.url, passage: null, page: null, answer_id: null,
+    attachment_id: attached.id, source_key: source.key, source_url: source.url, retrieved_at: source.retrieved_at,
+  };
+}
+
+/** The project's attachments, read only when a citation names one. */
+async function attachmentsFor(env: Env, projectId: number, userId: number, input: unknown) {
+  const names = Array.isArray(input) && input.some((x) => x && typeof x === 'object' && typeof (x as Record<string, unknown>).attachment_uid === 'string');
+  return names ? projectAttachmentCopies(env, projectId, userId) : new Map<string, AttachedCopy>();
 }
 
 /** The sources an Ask answer cites, as citations to keep with an interpretation. */
@@ -180,20 +218,30 @@ async function writeCitations(env: Env, findingId: number, citations: CitationIn
   for (const c of citations) {
     n += 1;
     await env.DB.prepare(
-      `INSERT INTO research_project_finding_citations (finding_id, n, document_id, document_uid, title, passage, page, answer_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(findingId, n, c.document_id, c.document_uid, c.title, c.passage, c.page, c.answer_id).run();
+      `INSERT INTO research_project_finding_citations (finding_id, n, document_id, document_uid, title, passage, page, answer_id,
+              attachment_id, source_key, source_url, retrieved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(findingId, n, c.document_id, c.document_uid, c.title, c.passage, c.page, c.answer_id,
+      c.attachment_id ?? null, c.source_key ?? null, c.source_url ?? null, c.retrieved_at ?? null).run();
   }
 }
 
 /** One citation as the page reads it: the frozen passage and the source's state now. */
 function citationDto(
-  c: { n: number; document_uid: string | null; title: string; passage: string | null; page: number | null; available?: number | null; answer_uid?: string | null },
+  c: {
+    n: number; document_uid: string | null; title: string; passage: string | null; page: number | null; available?: number | null; answer_uid?: string | null;
+    source_key?: string | null; source_url?: string | null; retrieved_at?: string | null; attachment_uid?: string | null;
+  },
   owned: Map<string, DocRow>,
   evidence: Map<string, DocRow>,
 ) {
   const doc = c.document_uid ? owned.get(c.document_uid) : undefined;
   const live = c.available === undefined ? Boolean(doc) : Boolean(c.available) && Boolean(doc);
+  // D7817: a source of an attached copy. Its state is the attachment's: it is
+  // never "not recorded", because the copy recorded it.
+  const fromAttachment = Boolean(c.source_key);
+  const state = fromAttachment ? (c.attachment_uid ? 'attached' : 'attachment_removed')
+    : !c.document_uid ? 'not_recorded' : live ? 'available' : 'removed';
   return {
     n: c.n,
     document_uid: c.document_uid,
@@ -203,11 +251,18 @@ function citationDto(
     answer_uid: c.answer_uid ?? null,
     // `removed`: the document is gone, so only the recorded passage remains.
     // `not_recorded`: an old Ask citation that never named its document.
-    availability: !c.document_uid ? 'not_recorded' : live ? 'available' : 'removed',
+    availability: state,
     in_evidence: Boolean(c.document_uid && evidence.has(c.document_uid)),
     index_state: live && doc ? doc.index_state : null,
     in_ask: live && doc ? ANSWERABLE_STATES.includes(doc.index_state) : null,
     source_year: live && doc ? doc.source_year ?? null : null,
+    // D7817, additive: what the citation names, and an attached source's frozen link and date.
+    kind: fromAttachment ? 'analysis_source' : 'document',
+    state,
+    attachment_uid: fromAttachment ? c.attachment_uid ?? null : null,
+    source_key: fromAttachment ? c.source_key ?? null : null,
+    url: fromAttachment ? c.source_url ?? null : null,
+    retrieved_at: fromAttachment ? c.retrieved_at ?? null : null,
   };
 }
 
@@ -220,25 +275,31 @@ findings.get('/:uid/findings', async (c) => {
   const project = await checkProjectOwner(c.env, c.req.param('uid'), user.id);
   if (!project) return c.json({ detail: 'not_found' }, 404);
   const rows = await c.env.DB.prepare(
-    `SELECT f.id, f.uid, f.kind, f.text, f.proposed_text, f.state, f.decided_at, f.created_at, f.updated_at, a.uid AS answer_uid
+    `SELECT f.id, f.uid, f.kind, f.text, f.proposed_text, f.state, f.decided_at, f.created_at, f.updated_at, a.uid AS answer_uid,
+            att.uid AS attachment_uid, f.attachment_finding_n
        FROM research_project_findings f
        LEFT JOIN research_ask_answers a ON a.id = f.answer_id AND a.owner_user_id = ?
+       LEFT JOIN research_project_attachments att ON att.id = f.attachment_id AND att.owner_user_id = ?
       WHERE f.project_id = ? AND f.owner_user_id = ?
       ORDER BY f.id DESC LIMIT 500`
-  ).bind(user.id, project.id, user.id).all<{
+  ).bind(user.id, user.id, project.id, user.id).all<{
     id: number; uid: string; kind: string; text: string; proposed_text: string | null; state: string | null;
     decided_at: string; created_at: string; updated_at: string; answer_uid: string | null;
+    attachment_uid: string | null; attachment_finding_n: number | null;
   }>();
   const cites = await c.env.DB.prepare(
     `SELECT fc.finding_id, fc.n, fc.document_uid, fc.title, fc.passage, fc.page,
-            (fc.document_id IS NOT NULL) AS available, a.uid AS answer_uid
+            (fc.document_id IS NOT NULL) AS available, a.uid AS answer_uid,
+            fc.source_key, fc.source_url, fc.retrieved_at, att.uid AS attachment_uid
        FROM research_project_finding_citations fc
        JOIN research_project_findings f ON f.id = fc.finding_id
        LEFT JOIN research_ask_answers a ON a.id = fc.answer_id AND a.owner_user_id = ?
+       LEFT JOIN research_project_attachments att ON att.id = fc.attachment_id AND att.owner_user_id = ?
       WHERE f.project_id = ? AND f.owner_user_id = ?
       ORDER BY fc.finding_id, fc.n`
-  ).bind(user.id, project.id, user.id).all<{
+  ).bind(user.id, user.id, project.id, user.id).all<{
     finding_id: number; n: number; document_uid: string | null; title: string; passage: string | null; page: number | null; available: number; answer_uid: string | null;
+    source_key: string | null; source_url: string | null; retrieved_at: string | null; attachment_uid: string | null;
   }>();
   const answers = await projectAnswers(c.env, project.id, user.id);
   const evidence = await projectEvidence(c.env, project.id, user.id);
@@ -260,6 +321,9 @@ findings.get('/:uid/findings', async (c) => {
     uid: r.uid, kind: r.kind, text: r.text, proposed_text: r.proposed_text, state: r.state,
     answer_uid: r.answer_uid, decided_at: r.decided_at, created_at: r.created_at, updated_at: r.updated_at,
     citations: byFinding.get(r.id) || [],
+    // D7817, additive: the attached copy a taken-over generated finding came from, and which one.
+    attachment_uid: r.attachment_uid ?? null,
+    attachment_finding_n: r.attachment_finding_n ?? null,
   }));
   const proposals = open.map((a) => ({
     answer_uid: a.uid, question: a.question, text: a.answer, created_at: a.created_at,
@@ -305,7 +369,7 @@ findings.post('/:uid/findings', async (c) => {
   if (text.error) return c.json({ detail: text.error }, 400);
   const answers = await projectAnswers(c.env, project.id, user.id);
   const evidence = await projectEvidence(c.env, project.id, user.id);
-  const resolved = resolveCitations(body.citations, answers, evidence);
+  const resolved = resolveCitations(body.citations, answers, evidence, await attachmentsFor(c.env, project.id, user.id, body.citations));
   if (resolved.error) return c.json({ detail: resolved.error }, 400);
   const citations = resolved.citations || [];
   // A source fact stands on a recorded passage; a conclusion may stand alone.
@@ -341,7 +405,8 @@ findings.patch('/:uid/findings/:findingUid', async (c) => {
   if (text.error) return c.json({ detail: text.error }, 400);
   let citations: CitationIn[] | undefined;
   if (body.citations !== undefined) {
-    const resolved = resolveCitations(body.citations, await projectAnswers(c.env, project.id, user.id), await projectEvidence(c.env, project.id, user.id));
+    const resolved = resolveCitations(body.citations, await projectAnswers(c.env, project.id, user.id), await projectEvidence(c.env, project.id, user.id),
+      await attachmentsFor(c.env, project.id, user.id, body.citations));
     if (resolved.error) return c.json({ detail: resolved.error }, 400);
     citations = resolved.citations;
   }
@@ -415,6 +480,62 @@ findings.post('/:uid/interpretations/:answerUid', async (c) => {
   }
   await touch(c.env, project.id);
   await logAdminAction(c.env, user.id, user.email, 'research_project_interpretation_decided', { project_uid: project.uid, finding_uid: uid, answer_uid: answer.uid, decision: state });
+  return c.json({ item: { uid, kind: 'interpretation', state } });
+});
+
+// ---------------------------------------------------------------------------
+// D7817: a generated finding of an attached copy, taken over as an interpretation
+// ---------------------------------------------------------------------------
+
+findings.post('/:uid/interpretations/attachments/:attachmentUid/:n', async (c) => {
+  const user = await requireAuth(c);
+  const project = await checkProjectOwner(c.env, c.req.param('uid'), user.id);
+  if (!project) return c.json({ detail: 'not_found' }, 404);
+  if (user.support_session) return c.json({ detail: 'support_read_only' }, 403);
+  if (project.status === 'archived') return c.json({ detail: 'project_archived' }, 409);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') return c.json({ detail: 'invalid_body' }, 400);
+  const decision = body.decision === 'accept' || body.decision === 'edit' || body.decision === 'discard' ? body.decision as keyof typeof DECISIONS : null;
+  if (!decision) return c.json({ detail: 'invalid_decision' }, 400);
+  const attached = (await projectAttachmentCopies(c.env, project.id, user.id)).get(c.req.param('attachmentUid'));
+  const n = Number(c.req.param('n'));
+  const generated = attached?.copy && Number.isInteger(n) ? (attached.copy.findings || []).find((g) => g.n === n) : undefined;
+  if (!attached || !generated) return c.json({ detail: 'not_found' }, 404);
+  if (typeof generated.text !== 'string' || !generated.text.trim()) return c.json({ detail: 'nothing_to_interpret' }, 409);
+  // The generated words are the proposal, kept beside any edit, as for an Ask answer.
+  const proposed = generated.text.trim();
+  let text = proposed;
+  if (decision === 'edit') {
+    const typed = readText(body.text);
+    if (typed.error) return c.json({ detail: typed.error }, 400);
+    if (typed.value === proposed) return c.json({ detail: 'text_unchanged' }, 400);
+    text = typed.value!;
+  }
+  const state = DECISIONS[decision];
+  const existing = await c.env.DB.prepare(
+    "SELECT id, uid FROM research_project_findings WHERE project_id = ? AND attachment_id = ? AND attachment_finding_n = ? AND kind = 'interpretation' AND owner_user_id = ?"
+  ).bind(project.id, attached.id, n, user.id).first<{ id: number; uid: string }>();
+  let uid: string;
+  if (existing) {
+    uid = existing.uid;
+    await c.env.DB.prepare(
+      "UPDATE research_project_findings SET text = ?, state = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND owner_user_id = ?"
+    ).bind(text, state, user.id, existing.id, user.id).run();
+  } else {
+    uid = newUid();
+    const made = await c.env.DB.prepare(
+      `INSERT INTO research_project_findings (uid, project_id, owner_user_id, kind, text, proposed_text, attachment_id, attachment_finding_n, state, decided_by, created_by)
+       VALUES (?, ?, ?, 'interpretation', ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+    ).bind(uid, project.id, user.id, text, proposed, attached.id, n, state, user.id, user.id).first<{ id: number }>();
+    // The fetched sources the generated finding names travel with it, frozen.
+    const sources = [...new Set(generated.source_keys || [])]
+      .map((key) => citableSource(attached.copy, key))
+      .filter((s): s is NonNullable<typeof s> => Boolean(s))
+      .slice(0, CITATION_LIMIT);
+    await writeCitations(c.env, made!.id, sources.map((s) => attachmentCitation(attached, s)));
+  }
+  await touch(c.env, project.id);
+  await logAdminAction(c.env, user.id, user.email, 'research_project_interpretation_decided', { project_uid: project.uid, finding_uid: uid, attachment_uid: attached.uid, finding_n: n, decision: state });
   return c.json({ item: { uid, kind: 'interpretation', state } });
 });
 

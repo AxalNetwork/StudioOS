@@ -339,7 +339,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     `SELECT x.id, x.updated_at, MIN(CASE WHEN e.direction = 'supports' THEN 1 ELSE 0 END) AS supports
        FROM hypothesis_experiments x
        JOIN hypothesis_evidence_links e ON e.project_id = x.project_id AND e.kind = 'experiment' AND e.ref_id = CAST(x.id AS TEXT)
-      WHERE x.project_id = ? AND x.status = 'done'
+      WHERE x.project_id = ? AND x.status = 'done' AND trim(COALESCE(x.result, '')) != ''
       GROUP BY x.id, x.updated_at`,
   ).bind(projectId).all<{ id: number; updated_at: string | null; supports: number }>());
   const expAll = expRead === DOWN ? [] : expRead.results || [];

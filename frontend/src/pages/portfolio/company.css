@@ -60,3 +60,6 @@
   .pf-rights-actions .pf-btn{flex:1 1 auto;justify-content:center}
   .pf-co-fin .pf-table tbody th{white-space:normal}
 }
+
+/* D6908: the live round and the caller's own offer in the Pro rata row. */
+.pf-rights-round { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; margin-bottom: 6px; }

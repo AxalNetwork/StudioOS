@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { CiCapacity, SqlCapacityStore, CAPACITY_RETENTION_MS } from '../src/ciCapacity.ts';
 import type { CapacityPorts } from '../src/ciCapacity.ts';
 import {
-  CI_CAPACITY_BUDGETS, activeAttempt, aggregateCapacity, receiptMatches, selectPools, submissionMatches, validateCapacityPolicy,
+  CI_CAPACITY_BUDGETS, CapacityDispatchRefused, activeAttempt, aggregateCapacity, receiptMatches, selectPools, submissionMatches, validateCapacityPolicy,
 } from '../src/lib/ciCapacityPolicy.ts';
 import type {
   CapacityInventory, CapacityPolicy, ChildObservation, CiAttempt,
@@ -43,7 +43,7 @@ function fixture(t: { after(fn: () => void): void }, patch: Partial<CapacityPoli
   } as unknown as Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
   const store = new SqlCapacityStore(storage);
   const state = { now: 1_000_000, live: true, trusted: true, inventoryDown: false, parentDown: false,
-    dispatchDown: false, cancelDown: false, nextId: 100, discovered: null as number | null,
+    dispatchDown: false, cancelDown: false, nextId: 100, discovered: null as Awaited<ReturnType<CapacityPorts['discover']>>,
     prerequisites: null as PrerequisiteResult[] | null };
   const dispatched: CiAttempt[] = [], cancelled: ExecutionReceipt[] = [], observed: number[] = [];
   const outcomes = new Map<number, ChildObservation>();
@@ -76,7 +76,7 @@ function fixture(t: { after(fn: () => void): void }, patch: Partial<CapacityPoli
     receipt: structuredClone(a) as ExecutionReceipt,
     workflowPath: '.github/workflows/runner-executor.yml', workflowAttempt: 1, jobId: a.childRunId! + 1000,
     runnerProfile: a.profile, status: 'completed', conclusion: 'success', jobConclusion: 'success',
-    testStep: 'success', startedAt: get(a.requestId).acceptedAt + 1, ...patch,
+    testStep: 'success', startedAt: get(a.requestId).acceptedAt, completedAt: state.now, cleanupConfirmed: true, ...patch,
   });
   return { db, storage, store, state, ports, dispatched, cancelled, observed, outcomes, create, get, attempt, observation };
 }
@@ -580,4 +580,162 @@ test('D7907 a verified test failure on github-8 is a real failure, never an infr
   await c.tick();
   assert.equal(f.attempt('worker-1-of-6').phase, 'failed'); assert.equal(f.attempt('worker-1-of-6').generation, 1);
   assert.equal(c.status(s.requestId)?.status, 'failure');
+});
+
+test('D8009 hosted lease fits the existing 45 minute job and late pickup cannot extend it', async t => {
+  const f = fixture(t, { maxExternalWorkerShards: 0 }), c = f.create();
+  await c.submit(input()); await c.tick();
+  const a = f.attempt('worker-1-of-6'), original = structuredClone(a);
+  assert.equal(a.executionDeadline - f.get().acceptedAt, 45 * 60_000);
+  assert.equal(a.executionDeadline - a.startDeadline, 35 * 60_000);
+  f.state.now = a.startDeadline;
+  f.outcomes.set(a.childRunId!, f.observation(a, { status: 'in_progress', conclusion: null, jobConclusion: null, startedAt: a.startDeadline }));
+  await c.tick();
+  assert.equal(f.attempt(a.logicalShard).executionDeadline, original.executionDeadline);
+  assert.equal((await c.receipt(input().requestId, a.logicalShard, a.childRunId!, 1))?.executionDeadline, original.executionDeadline);
+});
+
+test('D8009 late success needs verified whole-job completion within the immutable lease', async t => {
+  for (const finish of ['in-time', 'missing', 'expired', 'future', 'future-early', 'before-start'] as const) {
+    const f = fixture(t, { maxExternalWorkerShards: 0 }), c = f.create();
+    await c.submit(input()); await c.tick(); const a = f.attempt('worker-1-of-6');
+    f.state.now = finish === 'future-early' ? f.get().acceptedAt : a.executionDeadline + 1;
+    const completedAt = finish === 'in-time' ? a.executionDeadline - 1 : finish === 'expired' ? a.executionDeadline
+      : finish.startsWith('future') ? f.state.now + 1 : finish === 'before-start' ? f.get().acceptedAt : null;
+    f.outcomes.set(a.childRunId!, f.observation(a, { completedAt, startedAt: finish === 'before-start' ? f.get().acceptedAt + 1 : f.get().acceptedAt }));
+    await c.tick();
+    assert.equal(f.attempt(a.logicalShard).phase === 'passed', finish === 'in-time', finish);
+    assert.equal(f.attempt(a.logicalShard).executionDeadline, a.executionDeadline);
+  }
+});
+
+test('D8009 verified completion timestamps cannot revive fenced or older generations', async t => {
+  const f = fixture(t), c = f.create(); await c.submit(input()); await c.tick();
+  const a = f.attempt('worker-1-of-6');
+  f.state.now = a.startDeadline; await c.tick();
+  f.outcomes.set(a.childRunId!, f.observation(a, { completedAt: a.startDeadline - 1 }));
+  await c.tick();
+  assert.equal(f.attempt(a.logicalShard).generation, 2);
+  assert.equal(f.attempt(a.logicalShard).profile, 'hosted');
+  await c.tick();
+  assert.notEqual(f.attempt(a.logicalShard).phase, 'passed');
+  assert.equal(f.get().shards[0].attempts[0].reason, 'completed_after_fence');
+});
+
+test('D8009 sticky test failure holds included reservation until independent cleanup confirmation across restart', async t => {
+  const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create(), s = input();
+  f.state.inventoryDown = true; await c.submit(s); await c.tick();
+  const a = f.attempt('worker-1-of-6'), sibling = f.attempt('worker-2-of-6');
+  f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'failure', cleanupConfirmed: false, executionOutcome: 'cleanup_failure' }));
+  await c.reconcileChild(s.requestId, a.childRunId!);
+  assert.equal(c.status(s.requestId)?.status, 'failure');
+  assert.equal(f.attempt(a.logicalShard).verifiedTestFailure, true);
+  assert.equal(await c.receipt(s.requestId, sibling.logicalShard, sibling.childRunId!, 1), null);
+  const restarted = f.create();
+  const second = { ...s, parentRunId: 13, requestId: '00000000-0000-4000-8000-000000000002' };
+  await restarted.submit(second);
+  assert.equal(f.get(second.requestId).shards.every(sh => activeAttempt(sh).profile === 'hosted'), true);
+  f.outcomes.set(a.childRunId!, f.observation(a, { testStep: 'success', cleanupConfirmed: true }));
+  await restarted.tick();
+  assert.equal(f.attempt(a.logicalShard).phase, 'failed');
+  assert.equal(f.attempt(a.logicalShard).generation, 1);
+  assert.equal(restarted.status(s.requestId)?.status, 'failure');
+  const third = { ...s, parentRunId: 14, requestId: '00000000-0000-4000-8000-000000000003' };
+  await restarted.submit(third);
+  assert.equal(activeAttempt(f.get(third.requestId).shards[0]).profile, 'github-8');
+});
+
+test('D8009 wrapper timeout and cleanup uncertainty never create fallback or success', async t => {
+  for (const executionOutcome of ['timed_out', 'cleanup_failure'] as const) for (const testStep of ['unknown', 'not_run', 'success'] as const) {
+    const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create(); f.state.inventoryDown = true;
+    await c.submit(input()); await c.tick(); const a = f.attempt('worker-1-of-6');
+    f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'failure', jobConclusion: 'failure', testStep, cleanupConfirmed: false, executionOutcome }));
+    await c.tick(); await f.create().tick();
+    assert.equal(f.attempt(a.logicalShard).generation, 1);
+    assert.notEqual(c.status(input().requestId)?.status, 'success');
+    assert.notEqual(f.attempt(a.logicalShard).phase, 'failed');
+    assert.equal(await c.receipt(input().requestId, a.logicalShard, a.childRunId!, 1), null);
+  }
+});
+
+test('D8009 fallback waits for confirmed cancellation and fits the latest full budget boundary exactly', async t => {
+  for (const offset of [0, 1]) {
+    const f = fixture(t), c = f.create(); await c.submit(input()); await c.tick();
+    const a = f.attempt('worker-1-of-6');
+    f.state.now = a.startDeadline; await c.tick();
+    const latest = f.get().deadline - CI_CAPACITY_BUDGETS.hostedStartMs - CI_CAPACITY_BUDGETS.hostedExecutionMs - CI_CAPACITY_BUDGETS.controlMarginMs;
+    f.state.now = latest + offset;
+    await c.tick();
+    assert.equal(f.attempt(a.logicalShard).generation, 1, 'absence is not termination');
+    f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'cancelled', jobConclusion: 'cancelled', testStep: 'not_run', startedAt: null }));
+    await c.tick();
+    assert.equal(f.attempt(a.logicalShard).generation, offset === 0 ? 2 : 1);
+    assert.equal(f.dispatched.filter(d => d.logicalShard === a.logicalShard).length, offset === 0 ? 2 : 1);
+    if (offset === 0) {
+      const fallback = f.attempt(a.logicalShard);
+      assert.equal(fallback.executionDeadline - latest, 45 * 60_000);
+      assert.equal(fallback.sourceSha, a.sourceSha); assert.equal(fallback.planDigest, a.planDigest);
+    }
+  }
+});
+
+test('D7909 pilot admits one request globally until every owned execution is independently ended',async t=>{
+ const f=fixture(t,{maxActiveRequests:1,maxIncludedWorkerShards:0}),c=f.create(),s=input();
+ await c.submit(s);await c.tick();
+ const second={...s,parentRunId:13,requestId:'00000000-0000-4000-8000-000000000002'};
+ await assert.rejects(c.submit(second),/active_bound/);
+ const attempts=f.get().shards.map(activeAttempt),failed=attempts[0];
+ f.outcomes.set(failed.childRunId!,f.observation(failed,{testStep:'failure',conclusion:'failure',jobConclusion:'failure',cleanupConfirmed:false}));
+ await c.tick();
+ assert.equal(c.status(s.requestId)?.status,'failure');
+ await assert.rejects(f.create().submit(second),/active_bound/);
+ for(const a of attempts)f.outcomes.set(a.childRunId!,f.observation(a,{testStep:a===failed?'failure':'not_run',conclusion:a===failed?'failure':'cancelled',jobConclusion:a===failed?'failure':'cancelled',cleanupConfirmed:true}));
+ await c.tick();
+ assert.equal((await f.create().submit(second)).accepted,true);
+ for(const maxActiveRequests of [0,9])assert.throws(()=>validateCapacityPolicy({...policy(),maxActiveRequests}),/policy_refused/);
+});
+
+test('D7909 discovered moving-main child is quarantined, persisted before cancellation and never admitted',async t=>{
+ const f=fixture(t),c=f.create(),s=input();f.state.dispatchDown=true;
+ await c.submit(s);await c.tick();f.state.dispatchDown=false;
+ const unexpected='d'.repeat(40);f.state.discovered={childRunId:999,rejectedWorkflowSha:unexpected};
+ const cancel=f.ports.cancel;f.ports.cancel=async(receipt,sha)=>{
+  assert.equal(sha,unexpected);assert.equal(f.attempt(receipt.logicalShard).rejectedWorkflowSha,unexpected);
+  assert.equal('rejectedWorkflowSha' in receipt,false);await cancel(receipt);
+ };
+ await c.tick();
+ const a=f.attempt('worker-1-of-6');assert.equal(a.childRunId,999);assert.equal(a.reason,'unreviewed_child_revision');
+ assert.equal(f.cancelled.length,1);assert.equal(await c.receipt(s.requestId,a.logicalShard,999,1),null);
+ await f.create().tick();assert.equal(f.attempt(a.logicalShard).generation,1);
+ assert.equal(f.dispatched.filter(row=>row.logicalShard===a.logicalShard).length,1);
+});
+
+test('D7909 definitive unsent dispatch ends safely while ambiguous send never redispatches',async t=>{
+ for(const definitive of [true,false]){
+  const f=fixture(t,{maxExternalWorkerShards:0,maxIncludedWorkerShards:0}),c=f.create();let calls=0;
+  f.ports.dispatch=async()=>{calls++;throw definitive?new CapacityDispatchRefused('preflight'):Error('ambiguous send');};
+  await c.submit(input());await c.tick();
+  assert.equal(calls,definitive?1:6);assert.equal(f.attempt('worker-1-of-6').phase,definitive?'failed':'dispatch_unknown');
+  if(definitive)assert.equal(f.get().shards.slice(1).every(s=>activeAttempt(s).childRunId===null),true);
+  await f.create().tick();assert.equal(calls,definitive?1:6);
+ }
+});
+
+test('D7909 quarantined revision supplies no test truth; independent no-test cleanup can end it',async t=>{
+ const f=fixture(t),c=f.create();f.state.dispatchDown=true;await c.submit(input());await c.tick();
+ f.state.dispatchDown=false;f.state.discovered={childRunId:999,rejectedWorkflowSha:'d'.repeat(40)};await c.tick();
+ const a=f.attempt('worker-1-of-6');
+ f.outcomes.set(999,f.observation(a,{testStep:'failure',conclusion:'failure',jobConclusion:'failure',cleanupConfirmed:true}));
+ assert.equal(await c.reconcileChild(input().requestId,999),false);assert.notEqual(c.status(input().requestId)?.status,'failure');
+ f.outcomes.set(999,f.observation(a,{testStep:'not_run',conclusion:'cancelled',jobConclusion:'cancelled',cleanupConfirmed:true,startedAt:null}));
+ assert.equal(await c.reconcileChild(input().requestId,999),true);assert.equal(f.attempt(a.logicalShard).phase,'cancelled');
+ assert.equal(f.attempt(a.logicalShard).verifiedTestFailure,undefined);
+});
+
+test('D7909 Linux receipts reserve result delivery inside the existing 26-minute Run wrapper',async t=>{
+ const f=fixture(t),c=f.create();await c.submit(input());await c.tick();const a=f.attempt('worker-2-of-6'),accepted=f.get().acceptedAt;
+ assert.equal(a.profile,'linux-x64');assert.equal(a.executionDeadline,accepted+26*60_000-20_000);
+ assert.ok(a.executionDeadline-a.startDeadline<=CI_CAPACITY_BUDGETS.externalExecutionMs);
+ f.state.now=accepted+1_589_999;f.outcomes.set(a.childRunId!,f.observation(a,{startedAt:accepted+1,completedAt:f.state.now,cleanupConfirmed:true,exportComplete:true,executionOutcome:'completed'}));
+ await c.tick();assert.notEqual(f.attempt(a.logicalShard).phase,'passed');assert.notEqual(c.status(input().requestId)?.status,'success');
 });

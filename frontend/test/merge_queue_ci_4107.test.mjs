@@ -25,8 +25,10 @@ const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // D7899: Dependency Review also runs in the queue, comparing the queue's own
 // base and head; it reads only and is advisory until its required-check
 // activation, so its job is exempt from the skip-in-queue rule below.
-const IN_QUEUE = Object.freeze(['ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml']);
-const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'dependency-review.yml': 'D7899' });
+// D8068: Agent provenance reads the queued PR's own commits and is advisory
+// (continue-on-error) until the owner makes `provenance` a required check.
+const IN_QUEUE = Object.freeze(['agent-provenance.yml', 'ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'agent-provenance.yml': 'D8068', 'dependency-review.yml': 'D7899' });
 
 const code = (file) => readFileSync(`${DIR}/${file}`, 'utf8').split('\n').filter((l) => !/^\s*#/.test(l));
 const unquote = (v) => v.trim().replace(/^(['"])(.*)\1$/, '$2');
@@ -88,6 +90,8 @@ const SKIPS_IN_QUEUE = Object.freeze([
   // D7108 part 2: `plan` feeds the full-suite check but is skipped in the
   // queue, where each suite part plans for itself; the gate requires that skip.
   PLAN_IF,
+  // D7909: optional capacity submission is main-push only, independently of the hosted gate.
+  "${{ !cancelled() && github.event_name != 'merge_group' && github.event_name == 'push' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && needs.plan.outputs.capacity_submission != '' }}",
 ]);
 
 // Jobs that run in the queue although no required check needs them, each with

@@ -22,7 +22,7 @@ import {
   // thrown yet; the first caller that omits it would blank the page. Found by
   // ESLint's `no-undef`, which is the whole reason that step exists.
   LAB_APPLY_HREF,
-  LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
+  LAB_CONTACT_HREF, labApplyHref,
   parseSqliteUtc, fmtRaised, useCohortRecord,
   useCohortDirectory, useShippedFeed, useCohortPlaces, placesLabel, LAB_WEEKS,
 } from "../lib/spinoutLab";
@@ -329,7 +329,7 @@ export function Dashboard({ state, investorView = false, canApply = true }) {
       <LabIntro
         surface="app"
         cohort={cohort}
-        applyHref={LAB_APPLY_HREF_SIGNED_IN}
+        applyHref={labApplyHref(track, { signedIn: true })}
         canApply={canApply}
         track={track}
         onTrack={setTrack}

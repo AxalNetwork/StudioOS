@@ -6,10 +6,10 @@
  *                                                     titles and choice ids
  *   responses.list   GET /forms/{form_id}/responses   one page of responses
  *
- * The origin is chosen by the connection's validated region (#5827 owns the
- * validation and the grant; until it lands, the region is read from
- * `integrations.config_json.region` and anything but `us` or `eu` refuses the
- * read rather than guessing a data center). The token is passed in; this file
+ * The origin is chosen by the connection's validated region: the data center
+ * #5827 records inside the encrypted grant, handed over by
+ * `ImportDeps.session` (D5828 part 2). Anything but `us` or `eu` refuses the
+ * read rather than guessing a data center. The token is passed in; this file
  * never stores or logs it.
  *
  * WHAT IS READ FROM A RESPONSE: its id, its paging token, whether it is

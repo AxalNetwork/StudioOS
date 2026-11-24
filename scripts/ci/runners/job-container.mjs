@@ -1,5 +1,6 @@
 /** D7905: trusted-host Linux candidate container boundary; no enrollment or image acquisition. */
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { receiptIdentity } from '../runner-admission.mjs';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, readlinkSync } from 'node:fs';
@@ -84,8 +85,10 @@ export const aclStage=async({source,plan},run=setfacl,{until=Infinity,signal}={}
 /** Probe run as the candidate identity inside the container: the bound inputs are actually readable. */
 const READABLE="const fs=require('fs');fs.accessSync('/input-plan.json',fs.constants.R_OK);fs.accessSync('/input',fs.constants.R_OK|fs.constants.X_OK);fs.accessSync('/input/package.json',fs.constants.R_OK);process.stdout.write('readable')";
 const safePath=path=>{need(typeof path==='string'&&/^\/[A-Za-z0-9_./-]+$/.test(path)&&!path.split('/').includes('..')&&path!=='/','unsafe_container_input');return realpathSync(path);};
-const ownerOf=r=>{
- need(r?.version===1&&r.repository==='AxalNetwork/StudioOS'&&r.profile==='linux-x64'&&/^[a-f0-9]{40}$/.test(r.sourceSha??'')&&['push','merge_group'].includes(r.event)&&ID(r.childRunId)&&r.childAttempt===1&&ID(r.generation)
+/** #8345: the container-backed profiles. A JobContainer serves exactly one of them, linux-x64 unless told otherwise. */
+export const CONTAINER_PROFILES=Object.freeze(['linux-x64','hosted','github-8']);
+const ownerOf=(r,profileId='linux-x64')=>{
+ need(r?.version===1&&r.repository==='AxalNetwork/StudioOS'&&r.profile===profileId&&/^[a-f0-9]{40}$/.test(r.sourceSha??'')&&['push','merge_group'].includes(r.event)&&ID(r.childRunId)&&r.childAttempt===1&&ID(r.generation)
    &&/^[a-f0-9-]{36}$/.test(r.requestId??'')&&/^worker-[1-6]-of-6$/.test(r.logicalShard??''),'invalid_isolation_receipt');
  return `${r.childRunId}-${r.childAttempt}-${r.generation}`;
 };
@@ -111,6 +114,10 @@ export function readContainerPolicy(path) {
  return Object.freeze(policy);
 }
 const same=isDeepStrictEqual;
+/** #8345: a stable digest of the reviewed policy, independent of key order; the identity a boundary reader reports. */
+const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'
+ ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+export const containerPolicyDigest=policy=>'sha256:'+createHash('sha256').update(JSON.stringify(canonical(policy))).digest('hex');
 /** Inspect actual engine state on the trusted host; caller/operator booleans never prove a boundary. */
 export function verifiedContainer(info,{owner,source,plan,image,pidNamespace,mountNamespace,deadlineSeconds}) {
  const h=info?.HostConfig,c=info?.Config;
@@ -142,8 +149,10 @@ const exactIntentMatch=(row,intent)=>Boolean(CONTAINER.test(row?.Id??'')&&row.Na
 export const validIntent=i=>i?.version===1&&OWNER.test(i.owner??'')&&DIGEST.test(i.image??'')&&ID(i.deadlineSeconds);
 /** Each object owns at most one exact container ID. Never accept a candidate container ID or shell command. */
 export class JobContainer {
- constructor(policy,{engine=dockerEngine,spawnEngine=dockerSpawn,stage=aclStage,namespace=(pid,kind)=>readlinkSync(`/proc/${pid}/ns/${kind}`)!==readlinkSync(`/proc/self/ns/${kind}`)}={}) {
+ constructor(policy,{engine=dockerEngine,spawnEngine=dockerSpawn,stage=aclStage,namespace=(pid,kind)=>readlinkSync(`/proc/${pid}/ns/${kind}`)!==readlinkSync(`/proc/self/ns/${kind}`),profileId='linux-x64'}={}) {
   need(policy?.version===1&&DIGEST.test(policy.image??'')&&policy.nodeVersion==='22.23.3'&&policy.pythonVersion==='3.11.18','unreviewed_container_runtime');
+  need(CONTAINER_PROFILES.includes(profileId),'unsupported_container_profile');
+  this.profileId=profileId;
   this.policy=Object.freeze({...policy});this.engine=engine;this.spawnEngine=spawnEngine;this.stage=stage;this.namespace=namespace;this.owned=null;
   /** Optional earlier bound set by the supervisor (the Run step wrapper); never later than the receipt. */
   this.workDeadline=null;this.createAttempted=false;
@@ -162,7 +171,7 @@ export class JobContainer {
  exportUntil(receipt) { return this.bound(receipt)-REMOVAL_RESERVE_MS; }
  async call(args,{until,signal}={}) { return await this.engine(args,{timeout:callBudget(until),signal}); }
  async create(receipt,{source,plan},{signal}={}) {
-  need(this.owned===null&&!this.createAttempted,'container_already_owned');const owner=ownerOf(receipt);
+  need(this.owned===null&&!this.createAttempted,'container_already_owned');const owner=ownerOf(receipt,this.profileId);
   const deadline=receipt.executionDeadline;
   need(Number.isSafeInteger(deadline)&&deadline-Date.now()>FINISH_RESERVE_MS&&deadline-Date.now()<=1590000,'invalid_container_deadline');
   need(this.workUntil(receipt)-Date.now()>0,'insufficient_execution_budget');
@@ -214,8 +223,8 @@ export class JobContainer {
  }
  async verifyIsolation({receipt,profile,signal}={}) {
   try {
-   if(profile&&profile.id!=='linux-x64')return false;
-   const owner=ownerOf(receipt);if(!this.owned||owner!==this.owned.owner||!same(receiptIdentity(receipt),this.owned.receipt))return false;
+   if(profile&&profile.id!==this.profileId)return false;
+   const owner=ownerOf(receipt,this.profileId);if(!this.owned||owner!==this.owned.owner||!same(receiptIdentity(receipt),this.owned.receipt))return false;
    const until=this.workUntil(receipt),call=args=>this.call(args,{until,signal});
    const rows=JSON.parse(await call(['inspect',this.owned.id]));
    if(!Array.isArray(rows)||rows.length!==1||rows[0].Id!==this.owned.id)return false;
@@ -284,7 +293,29 @@ export class JobContainer {
   });
  }
  /** The verified boundary instance this job owns; the supervisor requires it unchanged across phase rechecks. */
- boundaryIdentity() { return this.owned?{kind:'linux-container',instanceId:this.owned.id,owner:this.owned.owner}:null; }
+ boundaryIdentity() { return this.owned?{kind:'linux-container',instanceId:this.owned.id,owner:this.owned.owner,policyDigest:containerPolicyDigest(this.policy)}:null; }
+ /**
+  * #8345: read-only boundary facts for a hosted `readBoundary` (S39 adds the job and receipt binding). Nothing is
+  * created, started, stopped or removed. The denials are derived from the inspection verifyIsolation has just
+  * passed, never from flags: only the two read-only input mounts (no runner, work or engine-socket path), exactly
+  * ENV plus the deadline (no credential, token or ACTIONS_* variable), uid 10001 with cap-drop ALL, no devices.
+  * deniesHostControl stays false: the bridge network still reaches the host's metadata and platform endpoints, and
+  * no verified egress rule exists. So the hosted verifier refuses this document until that capability is proven.
+  */
+ async inspectBoundary({receipt,signal}={}) {
+  if(!(await this.verifyIsolation({receipt,signal})))return null;
+  return {kind:'trusted-native-inspection',policyDigest:containerPolicyDigest(this.policy),instanceId:this.owned.id,scope:'dependency-install-and-tests',
+   deniesRunnerAgent:true,deniesJobCredentials:true,deniesOidc:true,deniesAppCapabilities:true,deniesHostControl:false,observedAt:Date.now()};
+ }
+ /**
+  * #8345: read-only readiness before checkout, when no instance exists: the reviewed policy is loaded and the engine
+  * answers one bounded call. It never names an instance. deniesHostControl is false for the reason above.
+  */
+ async inspectReadiness({signal}={}) {
+  try { await this.engine(['version','--format','{{.Server.Version}}'],{timeout:ENGINE_CALL_MS,signal}); } catch { return null; }
+  return {kind:'trusted-native-readiness',policyDigest:containerPolicyDigest(this.policy),scope:'dependency-install-and-tests',
+   deniesRunnerAgent:true,deniesJobCredentials:true,deniesOidc:true,deniesAppCapabilities:true,deniesHostControl:false,observedAt:Date.now()};
+ }
  /** After removal: the exact recorded ID is gone. Unreadable engine state is never treated as removed. */
  async verifyRemoved(record,{until=Infinity}={}) { return JobContainer.isRemoved(record,{engine:this.engine,until}); }
  static async isRemoved(record,{engine=dockerEngine,until=Infinity}={}) {
@@ -298,7 +329,7 @@ export class JobContainer {
   */
  async cleanup(receipt,{until}={}) {
   if(this.owned===null)return;
-  need(ownerOf(receipt)===this.owned.owner&&same(receiptIdentity(receipt),this.owned.receipt),'container_cleanup_owner_mismatch');
+  need(ownerOf(receipt,this.profileId)===this.owned.owner&&same(receiptIdentity(receipt),this.owned.receipt),'container_cleanup_owner_mismatch');
   until??=this.bound(receipt);
   const rows=JSON.parse(await this.call(['inspect',this.owned.id],{until}));
   need(rows.length===1&&rows[0].Id===this.owned.id&&rows[0].Config?.Labels?.[LABEL]===this.owned.owner,'container_cleanup_identity_mismatch');
@@ -351,7 +382,7 @@ export class JobContainer {
 export function containerIsolationAdapter(job) {
  need(job instanceof JobContainer,'isolation_supervisor_required');
  return async ({receipt,context,profile,signal}={})=>{
-  if(context?.repository!=='AxalNetwork/StudioOS'||profile?.id!=='linux-x64'
+  if(context?.repository!=='AxalNetwork/StudioOS'||profile?.id!==job.profileId
     ||String(context.childRunId)!==String(receipt?.childRunId)||String(context.childAttempt)!==String(receipt?.childAttempt))return false;
   return job.verifyIsolation({receipt,profile,signal});
  };
