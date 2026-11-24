@@ -11,6 +11,7 @@ import { pruneCapacityHistory } from './ciCapacityHistory.ts';
 import { CI_CAPACITY_BUDGETS, validateCapacityPolicy } from './lib/ciCapacityPolicy.ts';
 import { CapacityIssuerKeys, CapacityRequestBudget } from './lib/ciCapacityAuthPolicy.ts';
 import type { CapacityBudgetStore, CapacityBudgetWindow } from './lib/ciCapacityAuthPolicy.ts';
+import { CapacityReconciliation } from './ciCapacityReconciliation.ts';
 import { ownerAuthorized } from './webhook.ts';
 import type { Env } from './types.ts';
 import { SqlCapacityResults } from './lib/ciCapacityResults.ts';
@@ -99,6 +100,28 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
           // Recovery alarm precedes revocation. Once revoked, no receipt lookup or dispatch can pass.
           await this.ctx.storage.setAlarm(Date.now()+1000);await this.ctx.storage.put('capacity-kill',body.kill);
           return Response.json({kill:body.kill,enabled:await this.enabled()});
+        });
+      }
+      if((path==='/capacity/publications'&&request.method==='GET')||(path==='/capacity/reconcile'&&request.method==='POST')){
+        if(!ownerAuthorized(request,this.env.CAPACITY_OWNER_TOKEN))return new Response('unauthorized',{status:401});
+        const url=new URL(request.url);
+        const input=request.method==='POST'?JSON.parse(new TextDecoder().decode(await capacityBody(request.body,1024))):null;
+        return await this.ordered(async()=>{
+          const config=this.settings();
+          const review=new CapacityReconciliation(this.ctx.storage,this.store,this.results,config);
+          if(request.method==='GET'){
+            const id=url.searchParams.get('requestId');
+            return Response.json(id===null?review.counts(url.searchParams.get('after')??''):review.inspect(id));
+          }
+          if(!input||input.mode!==config.publication||typeof input.requestId!=='string'||typeof input.fingerprint!=='string'
+            ||!Number.isSafeInteger(input.checkId)||input.checkId<=0)return new Response('invalid reconciliation',{status:400});
+          if(await this.ctx.storage.get<boolean>('capacity-kill')!==true)return new Response('drain required',{status:409});
+          if(String(config.appId)!==this.env.GITHUB_APP_ID)return new Response('publication App mismatch',{status:409});
+          const api=await capacityGithubClient(this.env,capacityPlatformFetch);
+          await this.ctx.storage.setAlarm(Date.now()+1000);
+          const adopted=await review.adopt(input.requestId,input.fingerprint,input.checkId,api);
+          if(adopted)console.info(JSON.stringify({component:'ci-capacity',event:'check-adopted',requestId:input.requestId,mode:input.mode,checkId:input.checkId,fingerprint:input.fingerprint}));
+          return Response.json({adopted},{status:adopted?200:409});
         });
       }
       if(path==='/capacity/status'&&request.method==='GET'){
