@@ -716,7 +716,7 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
       || await env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(fileId).run().then(() => true, () => false);
     // D6651: the statement this request just stored under a fresh key, once no row names it, leaves
     // through the one record-erasure path as `unreferenced`; a row that could not be removed keeps it.
-    if (unnamed) await eraseRecordObjects(env.FILES, key, 'unreferenced').catch(() => {});
+    if (unnamed) await eraseRecordObjects(env.FILES, key, 'unreferenced', { db: env.DB }).catch(() => {});
     throw e;
   }
   await noteStorageLanded(env, storage);

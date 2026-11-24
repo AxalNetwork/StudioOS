@@ -181,7 +181,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   assert.equal(ventureRef('?project=7')?.id, 7, "the read's own `?project=` links pick the venture too");
   assert.equal(ventureRef('?project_id=7')?.id, 7);
   // Check each consumer rather than a total changed by every new component (D4485, D4487).
-  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'def\\.Overview', 'ValidateLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
     const start = route.search(new RegExp(`<${component}\\b`));
     const end = route.indexOf('search={q}', start);
     const attributes = route.slice(start, end);
@@ -273,7 +273,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   const route = cycleRouteText();
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
-  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
+  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)(?:\.filter\(\(_, i\) => !forms\[i\]\.addressOnly\))?\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
   assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);

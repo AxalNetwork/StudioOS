@@ -15,8 +15,10 @@
  *   role_mismatch          the version does not list the agent's role
  *   tool_not_approved      a tool of the version is not in the agent's grants, named `{ key, label }`
  *   output_mismatch        `output_kind` was asked for, and the skill produces another
- *   input_unavailable      SEAM: only when the caller passes `seams.inputs` (#4667); never guessed here
- *   not_runnable           SEAM: only when the caller passes `seams.runnable` (#4534); never guessed here
+ *   input_unavailable      #4667's preflight says a required input cannot be read for this scope (`inputs`), or the
+ *                          `seams.inputs` seam says so; never guessed here
+ *   not_runnable           the run path refuses this agent (`runnable`, #4534: `agent_paused`, `outside_assistant`),
+ *                          or `seams.runnable` says so
  * A skill that fails is never a candidate. `blocked` lists the task-relevant ones with their code, except
  * `not_found`, which would disclose the skill.
  *
@@ -26,10 +28,27 @@
  *   2. task relevance: BM25 (k1 1.2, b 0.75) of the task's terms against the version's name (x3), purpose (x2),
  *      steps (x1) and tag slug words (x1), IDF over the skills the caller may read; terms are lower-cased, stop
  *      words dropped, lightly stemmed (`terms`). Lexical, in the Worker: nothing leaves it (D4538-p4.md);
- *   3. output compatibility: an asked-for kind is already a gate; a task that says "draft" or "write" prefers a
- *      draft (OUTPUT_BOOST). Inputs are not checked: stage 3 says so.
- * Stages 4 (quality) and 5 (operational) have no source: every candidate's `evaluation` and `operational` read
- * `{ available: false, reason }`. Use count is never an input.
+ *   3. input and output compatibility: an asked-for kind is already a gate; a task that says "draft" or "write"
+ *      prefers a draft (OUTPUT_BOOST). Inputs are a gate where #4667 reports them, and "not recorded" elsewhere;
+ *   4. quality evidence (D4538-p8, #5968): the facts `skillDiscoveryEvidence.ts` reads for the skill's published
+ *      version (`quality`): its release manifest (D4533) and the current version's golden-case results in
+ *      `agent_skill_version_evals`, with their freshness. `evaluationOf` names the exact version, suite, models and
+ *      evaluator it used. Only complete, fresh results on the current evaluator move the score: at the bar
+ *      x(1 + QUALITY_BOOST), below it x(1 - QUALITY_PENALTY). Stale, incomplete or absent evidence moves nothing and
+ *      says why; it is never read as zero;
+ *   5. operational evidence (D4538-p8): #4536's served measures for the executed version, counted over this
+ *      company's agents only (`operations`). `operationalOf` reports them; only the failure rate moves the score,
+ *      down, and only over OPS_MIN_ENDED ended runs. A measure #4536 does not serve, or one with too few runs, is
+ *      `{ available: false, reason }` and moves nothing.
+ * A skill fact absent (`quality`, `operations`, `inputs`, `runnable` undefined) is "not recorded": the block says so
+ * and the score is not touched. Use count, and the number of completed runs, never raise a rank.
+ *
+ * INPUTS AND RUNNABILITY (D4538-p8). `inputs` is #4667's `preflight` for the skill and the agent's scope, as the
+ * route read it; `inputGapsOf` turns it into the gate: a required input the scope cannot supply (no reader, not in
+ * the rule book, withheld, unreadable, the wrong shape; nothing recorded when the read named the agent's venture)
+ * is `input_unavailable`. An input a run supplies when it starts (a selected document or fund, a person's evidence,
+ * a venture a company agent's run names) is reported as deferred, never assumed available. `runnable` is what the run
+ * path (`agentRun`) refuses before any skill text for this agent: `not_runnable` with its code.
  *
  * OUTCOMES. `no_suitable_skill` when the task asks for an act no skill does (sending, booking, paying: `ACTS`) or
  * when no eligible skill reaches MIN_COVERAGE of the task's terms; `ambiguous` (every candidate `low`, with a
@@ -58,6 +77,59 @@ export type DiscoverySkill = {
   roles: readonly string[]; tools: readonly string[]; output_kind: string; taxonomy: readonly Pick<Tag, 'slug'>[];
   /** Adoption, carried for display by a caller. Never a ranking input. */
   use_count?: number | null;
+  /** The skill's slug: #4667's input matrix names skills by it, as the run path does. */
+  slug?: string | null;
+  /** #4667's preflight for this skill and the agent's scope; absent when no binding is reported ("not recorded"). */
+  inputs?: InputFacts | null;
+  /** What the run path refuses for this agent (#4534); absent when not checked. */
+  runnable?: RunFacts | null;
+  /** Stage 4's facts for the published version (D4533); absent when not read, `Unavailable` when they could not be. */
+  quality?: QualityFacts | Unavailable | null;
+  /** Stage 5's facts: #4536's served measures for this company's runs; absent when not read. */
+  operations?: OperationalFacts | Unavailable | null;
+};
+
+/** One input as `preflight` reports it: statuses and reasons only, never a record's figures. */
+export type InputLine = { field: string; read: string; required: boolean; status: string; reason?: string; source?: string };
+/**
+ * #4667's `preflight` (`skillInputs.ts`) for one skill and the agent's scope, read with the agent's rule book as the
+ * binding. `venture`: the read named the agent's own venture (a project agent); a company agent's run names one when
+ * it starts, so what such a read found missing is deferred, not refused.
+ */
+export type InputFacts = {
+  state: 'ready' | 'conditional' | 'not_ready'; inputs: readonly InputLine[]; limits: readonly string[]; venture: boolean;
+  paths?: { default_context: string; scheduled: string } | null;
+};
+/** The run path's refusals a published, granted skill still meets for this agent (`agentRun`, #4534). */
+export type RunCode = 'agent_paused' | 'outside_assistant';
+export type RunFacts = { ok: true } | { ok: false; code: RunCode };
+
+export type ResultCounts = { pass: number; fail: number; not_run: number };
+/**
+ * The published version's quality evidence, as read (`skillDiscoveryEvidence.ts`). `release` is the version's D4533
+ * manifest, null when it has none (released before D4533). `results` are the latest row per case key and model on
+ * this version in `agent_skill_version_evals`, over the cases the version runs and its required models.
+ */
+export type QualityFacts = {
+  version: number;
+  release: {
+    evidence_hash: string; suite_revision: string; cases: number; evaluator_version: number;
+    models: readonly string[]; models_source: string; pass: number; total: number; approved_at: string | null;
+  } | null;
+  /** What the skill's release evidence would be bound to now, to tell a stale manifest. */
+  now: { suite_revision: string | null; evaluator_version: number; models: readonly string[] };
+  suite: { cases: number; models: readonly string[]; models_source: 'version_evidence' | 'declared' | 'default' };
+  results: {
+    units: number; recorded: number; counts: ResultCounts; by_model: Readonly<Record<string, ResultCounts>>;
+    evaluator_versions: readonly number[]; on_current_evaluator: number; case_text_not_recorded: number;
+    newest_run_at: string | null; oldest_run_at: string | null; hours_since_oldest: number | null;
+  };
+};
+/** #4536's served measures for the executed version, over this company's agents' runs in the window. */
+export type OperationalFacts = {
+  version: number; window: { since: string; until: string; days: number };
+  outcomes: { completed: number; refused: number; failed: number; retryable: number; version_not_recorded: number; attributed_since: string | null };
+  model_latency_ms: { p50: number; p95: number; runs_measured: number } | Unavailable;
 };
 
 export type DiscoveryRequest = { task: string; output_kind?: OutputKind | null; taxonomy_focus?: readonly string[]; limit?: number };
@@ -73,18 +145,56 @@ export type DiscoverySeams = {
   runnable?: (s: DiscoverySkill) => boolean;
 };
 
-export type Refusal = { code: DiscoveryCode; tool?: { key: string; label: string } };
+export type Refusal = { code: DiscoveryCode; tool?: { key: string; label: string }; inputs?: InputLine[]; run?: RunCode };
 export type Unavailable = { available: false; reason: string };
-export type Reason = { signal: 'task' | 'role' | 'taxonomy' | 'output'; text: string };
+export type Reason = { signal: 'task' | 'role' | 'taxonomy' | 'output' | 'quality' | 'operational'; text: string };
+/** How a stage's evidence moved the score: a factor of 1 is no move, and says why. */
+export type RankEffect = { effect: 'raised' | 'lowered' | 'none'; factor: number; reason: string };
+export type EvaluationBlock = {
+  available: true; version: number;
+  suite: { cases: number; models: string[]; models_source: string };
+  results: {
+    units: number; recorded: number; missing: number; pass: number; fail: number; not_run: number; meets_bar: boolean | null;
+    by_model: Record<string, ResultCounts>; evaluator_versions: number[]; current_evaluator_version: number; on_current_evaluator: boolean;
+    case_text_not_recorded: number; newest_run_at: string | null; oldest_run_at: string | null;
+  } | Unavailable;
+  release: {
+    available: true; evidence_hash: string; suite_revision: string; cases: number; evaluator_version: number;
+    models: string[]; models_source: string; pass: number; total: number; approved_at: string | null; stale: boolean; stale_reasons: string[];
+  } | Unavailable;
+  freshness: 'fresh' | 'stale' | 'incomplete' | 'not_recorded'; stale_reasons: string[];
+  rank: RankEffect;
+};
+export type OperationalBlock = {
+  available: true; version: number; window: { since: string; until: string; days: number }; scope: 'company_runs';
+  outcomes: {
+    completed: number; refused: number; failed: number; retryable: number; ended: number; version_not_recorded: number; attributed_since: string | null;
+    rates: { success: number | Unavailable; refusal: number | Unavailable; failure: number | Unavailable };
+  };
+  model_latency_ms: { p50: number; p95: number; runs_measured: number } | Unavailable;
+  cost_per_completed_run: Unavailable; run_latency: Unavailable; workflows: Unavailable;
+  rank: RankEffect;
+};
+export type InputsBlock = {
+  available: true; state: 'ready' | 'conditional'; inputs: InputLine[]; limits: string[];
+  deferred: Array<{ field: string; read: string; why: string }>;
+} | Unavailable;
 export type Candidate = {
   skill_uid: string; name: string; version: number; reasons: Reason[];
   fit: { role: true; taxonomy: string[] }; missing: never[];
-  evaluation: Unavailable; operational: Unavailable;
+  inputs: InputsBlock;
+  evaluation: EvaluationBlock | Unavailable; operational: OperationalBlock | Unavailable;
   confidence: 'high' | 'medium' | 'low'; uncertainty: string | null;
   /** Stage 2's numbers, so a reader can inspect the order: BM25 after the stage 1 and 3 boosts, and coverage. */
   score: number; coverage: number;
 };
-export type BlockedSkill = { skill_uid: string; name: string; code: Exclude<DiscoveryCode, 'not_found'>; tool?: { key: string; label: string } };
+export type BlockedSkill = {
+  skill_uid: string; name: string; code: Exclude<DiscoveryCode, 'not_found'>; tool?: { key: string; label: string };
+  /** `input_unavailable`: the required inputs the scope cannot supply, and why. */
+  inputs?: InputLine[];
+  /** `not_runnable`: the run path's code. */
+  run?: RunCode;
+};
 export type Stage = { stage: 1 | 2 | 3 | 4 | 5; name: string; used: string | null; available: boolean; reason: string | null };
 export type Discovery = {
   outcome: 'recommend' | 'ambiguous' | 'no_suitable_skill';
@@ -112,8 +222,147 @@ const FIELD_WEIGHT = { name: 3, purpose: 2, steps: 1, tags: 1 } as const;
 const K1 = 1.2;
 const B = 0.75;
 
-export const EVALUATION_UNAVAILABLE: Unavailable = { available: false, reason: 'Release evidence is not read by discovery yet (#4533).' };
-export const OPERATIONAL_UNAVAILABLE: Unavailable = { available: false, reason: 'Runs are not measured yet (#4536).' };
+/** Stage 4: results this old, or older, are stale (a quarter). */
+export const QUALITY_FRESH_DAYS = 90;
+export const QUALITY_BOOST = 0.1;
+export const QUALITY_PENALTY = 0.25;
+/** Stage 5: the failure rate moves the score only over at least this many ended runs, and only down. */
+export const OPS_MIN_ENDED = 10;
+export const OPS_PENALTY = 0.5;
+
+export const EVALUATION_UNAVAILABLE: Unavailable = { available: false, reason: 'Not recorded: no quality evidence was read for this skill.' };
+export const OPERATIONAL_UNAVAILABLE: Unavailable = { available: false, reason: 'Not recorded: no run measures were read for this skill.' };
+export const INPUTS_NOT_RECORDED: Unavailable = { available: false, reason: 'Not recorded: no input binding is reported for this skill (#4667 covers the first ten skills).' };
+/** #4536 serves these on the HQ library read only, or not at all; discovery names them and never ranks on them. */
+export const COST_NOT_READ: Unavailable = { available: false, reason: 'Not read by discovery: cost per completed run is served on the HQ library read (D4536-p4), and discovery does not rank on cost.' };
+export const RUN_LATENCY_UNAVAILABLE: Unavailable = { available: false, reason: 'No run records when the whole run started and ended; model_latency_ms is the model call only (D4536-p4).' };
+export const WORKFLOWS_UNAVAILABLE: Unavailable = { available: false, reason: 'Waits on a workflow\'s stable identity (#4535).' };
+
+/** Required-input statuses that say the scope cannot supply the input at all (#4667's HARD, less "nothing recorded"). */
+const SCOPE_UNAVAILABLE = new Set(['unavailable_reader', 'not_granted', 'withheld', 'unreadable']);
+const NOTHING_RECORDED = new Set(['missing', 'empty']);
+/** A run supplies these when it starts: the document or fund it selects, and a person's evidence. */
+const RUN_SUPPLIED = new Set(['not_selected', 'manual']);
+
+/**
+ * Which required inputs the scope cannot supply (`unmet`: the gate), and which a run supplies when it starts
+ * (`deferred`: reported, never assumed available). Pure over `preflight`'s statuses.
+ */
+export function inputGapsOf(f: InputFacts): { unmet: InputLine[]; deferred: Array<{ field: string; read: string; why: string }> } {
+  const unmet: InputLine[] = [];
+  const deferred: Array<{ field: string; read: string; why: string }> = [];
+  for (const i of f.inputs) {
+    if (!i.required) continue;
+    if (SCOPE_UNAVAILABLE.has(i.status) || i.reason === 'wrong_shape') { unmet.push(i); continue; }
+    if (!NOTHING_RECORDED.has(i.status)) continue;
+    if ((i.reason && RUN_SUPPLIED.has(i.reason)) || i.source === 'manual') {
+      deferred.push({ field: i.field, read: i.read, why: i.read.startsWith('manual:') ? 'A person supplies it when the run starts.' : 'The run selects it when it starts.' });
+    } else if (!f.venture) {
+      deferred.push({ field: i.field, read: i.read, why: 'Read for the venture a run names; this agent works for the whole company.' });
+    } else unmet.push(i);
+  }
+  return { unmet, deferred };
+}
+
+const line = (i: InputLine): InputLine => ({
+  field: i.field, read: i.read, required: i.required, status: i.status, ...(i.reason ? { reason: i.reason } : {}), ...(i.source ? { source: i.source } : {}),
+});
+
+function inputsBlockOf(f: InputFacts | null | undefined): InputsBlock {
+  if (!f) return INPUTS_NOT_RECORDED;
+  const { deferred } = inputGapsOf(f);
+  const lacking = f.inputs.some((i) => i.status !== 'available');
+  return { available: true, state: lacking || deferred.length ? 'conditional' : 'ready', inputs: f.inputs.map(line), limits: [...f.limits], deferred };
+}
+
+const NONE = (reason: string): RankEffect => ({ effect: 'none', factor: 1, reason });
+const isUnavailable = (v: unknown): v is Unavailable => !!v && typeof v === 'object' && (v as { available?: unknown }).available === false;
+
+/**
+ * Stage 4: the evaluation block for `version`, and how it moves the score. Only the current version's own results,
+ * complete on every required case and model, on the current evaluator and newer than QUALITY_FRESH_DAYS, move it.
+ * The release manifest is reported with its staleness and never moves it: every manifest met the bar to publish.
+ */
+export function evaluationOf(q: QualityFacts | Unavailable | null | undefined, version: number): EvaluationBlock | Unavailable {
+  if (!q) return EVALUATION_UNAVAILABLE;
+  if (isUnavailable(q)) return q;
+  if (q.version !== version) return { available: false, reason: `The evidence read is for v${q.version}, not the published v${version}.` };
+  const r = q.results;
+  const release: EvaluationBlock['release'] = q.release
+    ? (() => {
+      const why: string[] = [];
+      if (q.release.evaluator_version !== q.now.evaluator_version) why.push(`released on evaluator v${q.release.evaluator_version}; the current evaluator is v${q.now.evaluator_version}`);
+      if (q.now.suite_revision != null && q.release.suite_revision !== q.now.suite_revision) why.push('the golden cases changed after this version was released');
+      if (JSON.stringify([...q.release.models].sort()) !== JSON.stringify([...q.now.models].sort())) why.push('the required models changed after this version was released');
+      return {
+        available: true as const, evidence_hash: q.release.evidence_hash, suite_revision: q.release.suite_revision, cases: q.release.cases,
+        evaluator_version: q.release.evaluator_version, models: [...q.release.models], models_source: q.release.models_source,
+        pass: q.release.pass, total: q.release.total, approved_at: q.release.approved_at, stale: why.length > 0, stale_reasons: why,
+      };
+    })()
+    : { available: false, reason: `v${version} has no release manifest: it was published before D4533 recorded one.` };
+  if (!r.recorded) {
+    if (!q.release) return { available: false, reason: `No golden-case result is recorded on v${version}, and it has no release manifest.` };
+    return {
+      available: true, version, suite: { cases: q.suite.cases, models: [...q.suite.models], models_source: q.suite.models_source },
+      results: { available: false, reason: `No golden-case result is recorded on v${version} since it was published.` },
+      release, freshness: 'not_recorded', stale_reasons: [],
+      rank: NONE('No result on this version to rank on; the release manifest met the bar to publish and does not separate skills.'),
+    };
+  }
+  const missing = r.units - r.recorded;
+  const onCurrent = r.on_current_evaluator === r.recorded;
+  const why: string[] = [];
+  if (!onCurrent) why.push(`${r.recorded - r.on_current_evaluator} of ${r.recorded} results were judged by an earlier evaluator (or one not recorded); the current one is v${q.now.evaluator_version}`);
+  if (r.hours_since_oldest == null) why.push('when a result was run is not recorded');
+  else if (r.hours_since_oldest > QUALITY_FRESH_DAYS * 24) why.push(`the oldest result is ${Math.floor(r.hours_since_oldest / 24)} days old; results older than ${QUALITY_FRESH_DAYS} days are stale`);
+  const freshness: EvaluationBlock['freshness'] = why.length ? 'stale' : missing > 0 ? 'incomplete' : 'fresh';
+  const total = r.counts.pass + r.counts.fail + r.counts.not_run;
+  // 9 of 10 over every required unit, as the publish bar counts it: a unit with no result is never a pass.
+  const meets = missing > 0 ? null : r.units > 0 && r.counts.pass * 10 >= r.units * 9;
+  let rank: RankEffect;
+  if (freshness === 'stale') rank = NONE(`Stale evidence does not move the score: ${why.join('; ')}.`);
+  else if (freshness === 'incomplete') rank = NONE(`${missing} of ${r.units} required runs have no result on v${version}, so the bar is not judged.`);
+  else if (meets) rank = { effect: 'raised', factor: 1 + QUALITY_BOOST, reason: `Passes ${r.counts.pass} of ${r.units} golden-case runs on v${version}, at the 9 of 10 bar, on fresh results.` };
+  else rank = { effect: 'lowered', factor: 1 - QUALITY_PENALTY, reason: `Passes ${r.counts.pass} of ${r.units} golden-case runs on v${version}, below the 9 of 10 bar, on fresh results.` };
+  return {
+    available: true, version, suite: { cases: q.suite.cases, models: [...q.suite.models], models_source: q.suite.models_source },
+    results: {
+      units: r.units, recorded: r.recorded, missing, pass: r.counts.pass, fail: r.counts.fail, not_run: r.counts.not_run, meets_bar: total ? meets : null,
+      by_model: Object.fromEntries(Object.entries(r.by_model).map(([m, c]) => [m, { ...c }])), evaluator_versions: [...r.evaluator_versions],
+      current_evaluator_version: q.now.evaluator_version, on_current_evaluator: onCurrent, case_text_not_recorded: r.case_text_not_recorded,
+      newest_run_at: r.newest_run_at, oldest_run_at: r.oldest_run_at,
+    },
+    release, freshness, stale_reasons: why, rank,
+  };
+}
+
+const rateOf = (n: number, d: number): number | Unavailable => d > 0 ? Math.round((n / d) * 10_000) / 10_000
+  : { available: false, reason: 'No attributed run of this version ended in the window.' };
+
+/**
+ * Stage 5: #4536's served measures for `version`, and how they move the score. Only the failure rate moves it, only
+ * down, and only over OPS_MIN_ENDED ended runs. How many runs completed is reported, and never raises a rank.
+ */
+export function operationalOf(o: OperationalFacts | Unavailable | null | undefined, version: number): OperationalBlock | Unavailable {
+  if (!o) return OPERATIONAL_UNAVAILABLE;
+  if (isUnavailable(o)) return o;
+  if (o.version !== version) return { available: false, reason: `The runs read are for v${o.version}, not the published v${version}.` };
+  const t = o.outcomes;
+  const ended = t.completed + t.refused + t.failed;
+  const failure = rateOf(t.failed, ended);
+  let rank: RankEffect;
+  if (ended < OPS_MIN_ENDED) rank = NONE(`${ended} attributed run${ended === 1 ? '' : 's'} of v${version} ended in the window; the failure rate moves the score from ${OPS_MIN_ENDED}.`);
+  else if (typeof failure === 'number' && failure > 0) {
+    rank = { effect: 'lowered', factor: Math.round((1 - OPS_PENALTY * failure) * 10_000) / 10_000, reason: `${t.failed} of ${ended} runs of v${version} by this company's agents failed after reaching the model in the last ${o.window.days} days.` };
+  } else rank = NONE(`No run of v${version} by this company's agents failed in the last ${o.window.days} days; a clean record does not raise the score.`);
+  return {
+    available: true, version, window: { ...o.window }, scope: 'company_runs',
+    outcomes: { ...t, ended, rates: { success: rateOf(t.completed, ended), refusal: rateOf(t.refused, ended), failure } },
+    model_latency_ms: isUnavailable(o.model_latency_ms) ? o.model_latency_ms : { ...o.model_latency_ms },
+    cost_per_completed_run: COST_NOT_READ, run_latency: RUN_LATENCY_UNAVAILABLE, workflows: WORKFLOWS_UNAVAILABLE, rank,
+  };
+}
 
 const STOP = new Set((
   'a an and are as at be been being but by can could do does did for from get give go had has have help how i if in into is it '
@@ -166,7 +415,12 @@ export function gateOf(s: DiscoverySkill, agent: DiscoveryAgent, outputKind?: st
   const missing = missingTools(s.tools, agent.tools.map((tool) => ({ integration_uid: '', tool })));
   if (missing.length) return { code: 'tool_not_approved', tool: { key: missing[0], label: toolLabel(missing[0]) } };
   if (outputKind && s.output_kind !== outputKind) return { code: 'output_mismatch' };
+  if (s.inputs) {
+    const { unmet } = inputGapsOf(s.inputs);
+    if (unmet.length) return { code: 'input_unavailable', inputs: unmet.map(line) };
+  }
   if (seams.inputs && !seams.inputs(s)) return { code: 'input_unavailable' };
+  if (s.runnable && !s.runnable.ok) return { code: 'not_runnable', run: s.runnable.code };
   if (seams.runnable && !seams.runnable(s)) return { code: 'not_runnable' };
   return null;
 }
@@ -201,7 +455,10 @@ function docOf(s: DiscoverySkill): Doc {
   return { tf, length };
 }
 
-type Scored = { s: DiscoverySkill; score: number; coverage: number; matched: string[]; focus: string[]; areas: string[]; draftPreferred: boolean };
+type Scored = {
+  s: DiscoverySkill; score: number; coverage: number; matched: string[]; focus: string[]; areas: string[]; draftPreferred: boolean;
+  evaluation: EvaluationBlock | Unavailable; operational: OperationalBlock | Unavailable;
+};
 
 const sentence = (text: string) => text.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase());
 
@@ -242,7 +499,12 @@ export function discoverSkills(request: DiscoveryRequest, agent: DiscoveryAgent,
     const areas = s.taxonomy.map((g) => g.slug).filter((g) => !focusSet.has(g) && tagWords(g).some((w) => queryTerms.includes(w)));
     const draftPreferred = draftAsked && s.output_kind === 'draft';
     const boost = (1 + FOCUS_BOOST * focus.length) * (1 + AREA_BOOST * Math.min(1, areas.length)) * (1 + (draftPreferred ? OUTPUT_BOOST : 0));
-    return { s, score: bm25 * boost, coverage: mass > 0 ? hit / mass : 0, matched, focus, areas, draftPreferred };
+    // Stages 4 and 5: a factor of 1 unless the evidence is there, complete and fresh. Never a use count.
+    const version = Number(s.version);
+    const evaluation = evaluationOf(s.quality, version);
+    const operational = operationalOf(s.operations, version);
+    const evidence = (evaluation.available ? evaluation.rank.factor : 1) * (operational.available ? operational.rank.factor : 1);
+    return { s, score: bm25 * boost * evidence, coverage: mass > 0 ? hit / mass : 0, matched, focus, areas, draftPreferred, evaluation, operational };
   };
   const order = (a: Scored, b: Scored) => b.score - a.score || a.s.name.localeCompare(b.s.name) || a.s.uid.localeCompare(b.s.uid);
 
@@ -254,6 +516,7 @@ export function discoverSkills(request: DiscoveryRequest, agent: DiscoveryAgent,
     .map((x) => ({ x, sc: score(x.s) })).filter(({ sc }) => sc.score > 0 && sc.coverage >= MIN_COVERAGE).sort((a, b) => order(a.sc, b.sc)).slice(0, limit)
     .map(({ x }) => ({
       skill_uid: x.s.uid, name: x.s.name, code: x.why!.code as BlockedSkill['code'], ...(x.why!.tool ? { tool: x.why!.tool } : {}),
+      ...(x.why!.inputs ? { inputs: x.why!.inputs } : {}), ...(x.why!.run ? { run: x.why!.run } : {}),
     }));
 
   const vague = queryTerms.length <= 1;
@@ -269,6 +532,8 @@ export function discoverSkills(request: DiscoveryRequest, agent: DiscoveryAgent,
     if (x.areas.length) reasons.push({ signal: 'taxonomy', text: `Tagged ${x.areas.join(', ')}, an area the task names.` });
     if (outputKind) reasons.push({ signal: 'output', text: `Produces a ${outputKind}, as asked.` });
     else if (x.draftPreferred) reasons.push({ signal: 'output', text: 'Produces a draft, which the task asks for.' });
+    if (x.evaluation.available && x.evaluation.rank.effect !== 'none') reasons.push({ signal: 'quality', text: x.evaluation.rank.reason });
+    if (x.operational.available && x.operational.rank.effect !== 'none') reasons.push({ signal: 'operational', text: x.operational.rank.reason });
     let confidence: Candidate['confidence'] = 'medium';
     let uncertainty: string | null = null;
     if (outcome === 'no_suitable_skill') {
@@ -287,7 +552,7 @@ export function discoverSkills(request: DiscoveryRequest, agent: DiscoveryAgent,
     return {
       skill_uid: x.s.uid, name: x.s.name, version: x.s.version as number, reasons,
       fit: { role: true, taxonomy: [...x.focus, ...x.areas] }, missing: [],
-      evaluation: EVALUATION_UNAVAILABLE, operational: OPERATIONAL_UNAVAILABLE,
+      inputs: inputsBlockOf(x.s.inputs), evaluation: x.evaluation, operational: x.operational,
       confidence, uncertainty, score: Math.round(x.score * 1000) / 1000, coverage: Math.round(x.coverage * 1000) / 1000,
     };
   });
@@ -299,22 +564,39 @@ export function discoverSkills(request: DiscoveryRequest, agent: DiscoveryAgent,
       const b = blocked[0];
       abstain = b.code === 'tool_not_approved'
         ? `No skill this agent can run fits the task. ${b.name} fits, but needs ${b.tool!.label}, which this agent is not granted.`
-        : `No skill this agent can run fits the task. ${b.name} fits, but is blocked for it (${b.code}).`;
+        : b.code === 'input_unavailable' && b.inputs?.length
+          ? `No skill this agent can run fits the task. ${b.name} fits, but its inputs cannot be read for this agent: ${b.inputs.map((i) => `${i.field} (${i.reason === 'wrong_shape' ? 'wrong_shape' : i.status})`).join('; ')}.`
+          : `No skill this agent can run fits the task. ${b.name} fits, but is blocked for it (${b.code}${b.run ? `: ${b.run}` : ''}).`;
     } else abstain = 'No skill in the catalogue fits the task well enough to offer.';
   }
   const clarify = outcome === 'ambiguous'
     ? `Which do you mean: ${kept[0].s.name} (${sentence(kept[0].s.purpose)}), or ${kept[1].s.name} (${sentence(kept[1].s.purpose)})?`
     : null;
 
+  const checked = visible.filter((x) => x.s.inputs).length;
+  const evaluated = candidates.filter((c) => c.evaluation.available).length;
+  const measured = candidates.filter((c) => c.operational.available).length;
   const stages: Stage[] = [
     { stage: 1, name: 'role and taxonomy fit', used: `role ${agent.role}; taxonomy_focus ${focusSet.size ? [...focusSet].join(', ') : 'none'}; tag slug words in the task`, available: true, reason: null },
     { stage: 2, name: 'task relevance', used: 'BM25 over the published version\'s name, purpose, steps and tags, in the Worker', available: true, reason: null },
     {
-      stage: 3, name: 'input and output compatibility', used: outputKind ? `output_kind ${outputKind} (a gate)` : draftAsked ? 'a draft, which the task asks for' : null,
-      available: true, reason: seams.inputs ? null : 'Inputs are not checked: what the scope records is not read by discovery yet (#4667).',
+      stage: 3, name: 'input and output compatibility',
+      used: [outputKind ? `output_kind ${outputKind} (a gate)` : draftAsked ? 'a draft, which the task asks for' : null,
+        checked ? `#4667's preflight for ${checked} skill${checked === 1 ? '' : 's'} on this agent's scope (a gate)` : null].filter(Boolean).join('; ') || null,
+      available: true,
+      reason: checked || seams.inputs ? (checked ? 'Skills outside #4667\'s first ten have no input binding reported: their inputs are Not recorded, never assumed available.' : null)
+        : 'Inputs are not checked: no input binding is reported for any skill read (#4667).',
     },
-    { stage: 4, name: 'quality evidence', used: null, available: false, reason: EVALUATION_UNAVAILABLE.reason },
-    { stage: 5, name: 'operational evidence', used: null, available: false, reason: OPERATIONAL_UNAVAILABLE.reason },
+    {
+      stage: 4, name: 'quality evidence',
+      used: evaluated ? `the published version's release manifest (D4533) and its golden-case results, fresh within ${QUALITY_FRESH_DAYS} days, for ${evaluated} candidate${evaluated === 1 ? '' : 's'}` : null,
+      available: evaluated > 0, reason: evaluated ? null : candidates.length ? 'No candidate has quality evidence recorded; nothing is scored on it.' : 'There is no candidate to read quality evidence for.',
+    },
+    {
+      stage: 5, name: 'operational evidence',
+      used: measured ? `#4536's attributed outcomes and model-call latency for the executed version, over this company's agents' runs, for ${measured} candidate${measured === 1 ? '' : 's'}` : null,
+      available: measured > 0, reason: measured ? null : candidates.length ? 'No candidate has run measures recorded; nothing is scored on them.' : 'There is no candidate to read run measures for.',
+    },
   ];
 
   return { outcome, candidates, blocked, clarify, abstain_reason: abstain, stages };

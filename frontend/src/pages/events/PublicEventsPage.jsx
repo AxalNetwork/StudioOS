@@ -3,9 +3,12 @@
  * `design/canvases/integrated/Axal VC Website.dc.html`, PROGRAMS & EVENTS).
  *
  * Two live reads and nothing typed:
- *   - the Programs row is the Spin-Out Lab's open cohort, from the Lab's own
- *     cohort rule and cohort record. The canvas's other two cards (an advisor
- *     intake and Fund I onboarding) have no source, so they are not drawn;
+ *   - the Programs row is the Spin-Out Lab's open cohort, from the cohort
+ *     record (`useCohortRecord`), drawn by the one `LabProgramCard` the
+ *     Resources hub also draws (D6992). With no open cohort the row says so in
+ *     its own line, apart from the events' empty line. The canvas's other two
+ *     cards (an advisor intake and Fund I onboarding) have no source, so they
+ *     are not drawn;
  *   - the events are the public feed, with its filters, its archive, its paging
  *     and its calendar file, exactly as before this rebuild.
  */
@@ -20,9 +23,8 @@ import { reportError } from '../../lib/log';
 import { FORMATS } from '../../data/network';
 import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
 import { formatEventPrice } from '../../lib/money';
-import { studioLicenceEnquiryPath } from '../../lib/siteFirm';
-import { COHORT_WEEKS, openCohortCopy, useCohortPlaces } from '../../lib/spinoutLab';
-import { numberWord } from '../../lib/numberWords';
+import { useCohortRecord } from '../../lib/spinoutLab';
+import { LabProgramSlot } from '../../components/site/LabProgramCard';
 import { EVENTS_COPY, eventDateParts, eventTypeTone } from '../../lib/siteNetwork2';
 import '../site/network2.css';
 
@@ -30,9 +32,6 @@ const EVENT_TYPES = EVENT_TYPE_FILTERS;
 const TYPE_LABEL = Object.fromEntries(EVENT_TYPES.filter((t) => t.id).map((t) => [t.id, t.label]));
 const FORMAT_LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));
 const WHEN_OPTIONS = [{ value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }];
-
-/** The Lab's sprint length, computed from the cohort timing the Worker runs. */
-const COHORT_DAYS = COHORT_WEEKS * 7;
 
 // One server page. The feed used to be requested with the API's default
 // LIMIT 20 and no offset handling at all, so a 21st public event simply did
@@ -81,39 +80,12 @@ function eventFormat(ev) {
 }
 
 /**
- * The Spin-Out Lab card. Its cohort number and start date come from the Lab's
- * cohort rule (`openCohortCopy`), its length from `COHORT_WEEKS`, and its
- * places from the cohort record (`useCohortPlaces`). A fact that is not read is
- * not drawn.
+ * D6992: the events' own empty line, apart from the programmes' line. With no
+ * filter set it says nothing is scheduled; with one, that nothing matches.
  */
-export function LabProgramCard() {
-  const cohort = openCohortCopy();
-  const places = useCohortPlaces();
-  const facts = [];
-  if (cohort?.startLabel) facts.push({ k: 'Starts', v: cohort.startLabel });
-  facts.push({ k: 'Duration', v: `${COHORT_DAYS} days` });
-  if (places.status === 'ok' && places.places > 0) facts.push({ k: 'Places', v: String(places.places) });
-  return (
-    <article className="ax-card ax-n2-program">
-      <span className="ax-chip ax-n2-chip-green">Applications open</span>
-      <h3 className="ax-n2-program-t">{cohort ? `Spin-Out Lab · Cohort ${cohort.cohortNum}` : 'Spin-Out Lab · Next cohort'}</h3>
-      <p className="ax-n2-program-d">
-        {/* #6990: what the programme is, never what it promises. */}
-        A {numberWord(COHORT_WEEKS)}-week programme for founders testing an idea or a new product. By application.
-      </p>
-      <dl className="ax-n2-facts">
-        {facts.map((f) => (
-          <div key={f.k}><dt>{f.k}</dt><dd className="ax-mono">{f.v}</dd></div>
-        ))}
-      </dl>
-      <Link to="/spinout-lab/apply" className="ax-btn ax-btn-primary ax-n2-program-cta">
-        {cohort ? `Apply to Cohort ${cohort.cohortNum}` : 'Apply to the next cohort'}
-      </Link>
-      <Link to={studioLicenceEnquiryPath('spinout-lab')} className="ax-n2-textlink">
-        Ask about running the Lab at your studio
-      </Link>
-    </article>
-  );
+export function eventsEmptyLine({ isPast, filtered }) {
+  if (filtered) return isPast ? 'No past events match your filters.' : 'No upcoming events match your filters.';
+  return isPast ? 'No past events are listed.' : 'No upcoming events are scheduled right now.';
 }
 
 /** One event row: the tile, the title and its type, the summary, the time, the way in. */
@@ -154,6 +126,7 @@ export function EventRow({ ev, isPast }) {
 
 // ---- Events (live feed) ---------------------------------------------------
 export default function PublicEventsPage() {
+  const cohort = useCohortRecord();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -237,9 +210,7 @@ export default function PublicEventsPage() {
             <h2 id="ax-n2-programs" className="ax-n2-k">Programs</h2>
             <Link to="/programs" className="ax-link ax-n2-all" data-testid="events-all-programs">See all programs →</Link>
           </div>
-          <div className="ax-grid-3">
-            <LabProgramCard />
-          </div>
+          <LabProgramSlot read={cohort} lineClass="ax-empty" wrap={(card) => <div className="ax-grid-3">{card}</div>} />
         </section>
 
         <section aria-labelledby="ax-n2-events">
@@ -297,9 +268,7 @@ export default function PublicEventsPage() {
             <p role="alert" className="ax-n2-alert">{error}</p>
           ) : visibleEvents.length === 0 ? (
             <div>
-              <EmptyNote>
-                {isPast ? 'No past events match your filters.' : 'No upcoming events match your filters.'}
-              </EmptyNote>
+              <EmptyNote>{eventsEmptyLine({ isPast, filtered: Boolean(hasEventFilters) })}</EmptyNote>
               {hasEventFilters && (
                 <button
                   type="button"

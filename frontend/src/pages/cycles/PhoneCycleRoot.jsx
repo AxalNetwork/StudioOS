@@ -9,6 +9,8 @@ import { EadwynButton, PhoneRows, Unreadable } from '../../ui';
 import BuildPhoneNav from './BuildPhoneNav';
 import { DOOR_LINE, planHref } from './buildPlanModel';
 import CycleMeter from './CycleMeter';
+import RaisePhoneRoot from './RaisePhoneRoot';
+import { isRaiseV2Read, raisePhoneRows } from './raisePhoneModel';
 import { CYCLE_NAMES, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, rootMeter, thenText } from './validatePhone';
 
 /**
@@ -26,6 +28,13 @@ import { CYCLE_NAMES, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, rootMeter, then
  *
  * `CycleRoute` draws it below 1024px on a cycle's root, in place of the
  * overview and `AlsoIn` (#1665's PR 1b); the desktop page draws neither.
+ *
+ * D6047 (#6047, RA-11): Raise has its own branch. A Raise read that carries
+ * D6045's `stage` or `primary_action` (every one on main) is drawn by
+ * `RaisePhoneRoot.jsx`: the Worker's primary action, the journey, next steps
+ * above the score, the connected-sources line and this module status list.
+ * The loading, refused and unreadable states stay shared, and Validate, Build
+ * and Grow are drawn as before.
  */
 
 /** A plain tap on the cycle's own action route opens it through `openAction`, as the desktop button does. */
@@ -33,7 +42,8 @@ const plainTap = (e) => !e.defaultPrevented && (e.button ?? 0) === 0 && !e.metaK
 
 // D6028 (#6028, BD2): `after` is drawn between the focus and the index (Build's Needs attention), and
 // `planLine` replaces the plan row's line with the plan's own counts.
-export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '', after = null, planLine = null }) {
+// D5998 (#5998, V2): `before` is drawn above the focus (Validate's "Trying to learn").
+export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '', before = null, after = null, planLine = null }) {
   const name = CYCLE_NAMES[cycle] || cycle;
   const overview = `${name} · Overview`;
   // D4602 (#4602, BD2): Build's tabs sit above every state, so the plan is reachable while the overview loads or fails.
@@ -74,7 +84,10 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   const then = thenText(focus?.then);
   const actionHref = ROOT_ACTION_PATHS[cycle] ? `/${cycle}/${ROOT_ACTION_PATHS[cycle]}` : null;
   const opensAction = !!(openAction && actionHref && focus?.href && focus.href.split(/[?#]/)[0] === actionHref);
-  const rows = phoneIndex(raw, search, cycle);
+  // D6047: Raise's RA-11 root, for a read with D6045's fields.
+  const raiseV2 = cycle === 'raise' && isRaiseV2Read(raw);
+  const indexRows = phoneIndex(raw, search, cycle);
+  const rows = raiseV2 ? raisePhoneRows(raw, indexRows, search) : indexRows;
   const capTable = cycle === 'raise' && Array.isArray(raw.cards) ? raw.cards.find((card) => card?.slug === 'cap-table') : null;
   const capTableView = cardView(capTable);
   const also = alsoInFor('founder', name);
@@ -87,7 +100,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
     label: `Everything else in ${name}`,
     testid: 'phone-index',
     // With no focus the page's Eadwyn button sits beside the index label (D703.md records it).
-    action: focus ? undefined : <EadwynButton label={overview} />,
+    action: focus || raiseV2 ? undefined : <EadwynButton label={overview} />,
     rows: [...planRow, ...rows.map((r) => {
       const entry = { key: r.key, title: r.title, testid: `phone-index-${r.key}` };
       if (r.key === 'cap-table' && capTableView.state === 'locked') {
@@ -106,9 +119,12 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
     });
   }
 
+  if (raiseV2) return <RaisePhoneRoot raw={raw} search={search} groups={groups} nav={nav} openAction={openAction} actionHref={actionHref} onRetry={onRetry} />;
+
   return (
     <div data-testid="phone-root" data-cycle={cycle}>
       {nav}
+      {before}
       {focus && (
         <section data-testid="phone-focus" aria-labelledby="phone-focus-title">
           <div className="flex min-h-[40px] items-center justify-between gap-2">

@@ -1,5 +1,7 @@
 # frontend/test — what the frontend guarantees
 
+`ci_capacity_auth_composition_8011.test.mjs` exercises the inactive capacity runtime's signed authentication, SQLite admission and trusted reader continuation through the Node platform adapter. `ci_capacity_transport.test.mjs` retains the real Linux profile/executor composition and its success, failure, revocation and incomplete-result cases. Neither suite is live provider or deployed Workers-runtime evidence.
+
 ```
 node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'
 ```
@@ -56,6 +58,8 @@ also exercises a `project_id` deep link.
 | `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
 
 | `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
+
+| `deal_summary_menu_7771.test.mjs` | #7771: labelled Share menu availability on desktop/phone, PDF filename and blob, Worker refusals and abort on unmount. |
 
 ## Conventions
 
@@ -249,6 +253,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
 | `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
 
+| `research_errors_7587.test.mjs` | D7587: recording Start recovery, microphone release, preserved queued audio and explicit session navigation. |
 `release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
 ## Observable readiness (D5504)
 
@@ -256,6 +261,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
 Prefer scoped business clocks and explicit observable outcomes to a fixed count
 of event-loop turns. The migration inventory and first changed-test command are
@@ -264,6 +270,8 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
+`company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
+`portfolio_unavailable_6201.test.mjs` (D6201) keeps explicit route failure reasons on financial figures and reporting, and excludes failed reads from chase rows.
 `icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
 
@@ -273,3 +281,9 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
+
+| `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
+| `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
+| `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
+
+`hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.

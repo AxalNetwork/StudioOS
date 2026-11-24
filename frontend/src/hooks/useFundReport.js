@@ -6,6 +6,14 @@ export const emptyNarrative = () => ({ letter: [], developments: [], outlook: []
 export function readableFund(value) {
   const money = (n) => n === null || (Number.isSafeInteger(n) && n >= 0);
   const strings = (record, keys) => record && !Array.isArray(record) && keys.every(k => record[k] === null || typeof record[k] === 'string');
+  const recordedRate = n => n === null || (typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1);
+  const terms = record => record && !Array.isArray(record) && ['management_fee', 'carried_interest'].every(k => {
+    const reason = record[`${k}_reason`];
+    return recordedRate(record[k]) && (reason === null || typeof reason === 'string');
+  });
+  const documents = list => Array.isArray(list) && list.every(d => d?.kind === 'lpa'
+    && ['status', 'updated_at'].every(k => d[k] === null || typeof d[k] === 'string')
+    && (d.version === null || typeof d.version === 'string' || Number.isSafeInteger(d.version)));
   return value?.currency === 'USD' && typeof value.can_manage === 'boolean'
     && Number.isSafeInteger(value.fund?.id) && value.fund.id > 0
     && typeof value.fund.name === 'string' && value.fund.name.trim()
@@ -14,7 +22,11 @@ export function readableFund(value) {
     && strings(value.fund.gp, ['name', 'title', 'entity', 'email'])
     && strings(value.fund.providers, ['fund_admin', 'auditor', 'legal_counsel', 'custodian', 'valuation_policy']) && Array.isArray(value.periods)
     && value.periods.every(p => Number.isSafeInteger(p?.id) && p.id > 0 && typeof p.period === 'string' && ['draft', 'issued'].includes(p.status) && (value.can_manage || p.status === 'issued'))
-    && (value.lpa === null || (typeof value.lpa === 'object' && !Array.isArray(value.lpa)));
+    && (value.lpa === null || (typeof value.lpa === 'object' && !Array.isArray(value.lpa)))
+    // D6254: older frozen page fixtures can omit the extension; a present extension must be readable.
+    && (value.terms === undefined || terms(value.terms))
+    && (value.documents === undefined || documents(value.documents))
+    && (value.documents_reason === undefined || typeof value.documents_reason === 'string');
 }
 export function readablePeriod(value) {
   const n = value?.narrative;

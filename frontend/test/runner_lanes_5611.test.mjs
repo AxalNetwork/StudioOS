@@ -3,11 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { secretJobs } from '../../scripts/lib/runnerBenchmark.mjs';
 const read = file => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
 const benchmark = read('.github/workflows/runner-benchmark.yml');
 const ci = read('.github/workflows/ci.yml');
+const { parse } = createRequire(import.meta.url)('yaml');
 const stepsOf = (source, job) => {
   const lines = source.split('\n'), start = lines.indexOf(`  ${job}:`);
   assert.ok(start >= 0);
@@ -33,7 +35,21 @@ test('benchmark runs only on explicit branches, without secrets or elevated toke
 test('benchmark suite steps match merged CI, with the same per-part timeout and dynamic part derivation', () => {
   assert.equal(stepsOf(benchmark, 'benchmark'), stepsOf(ci, 'suite'));
   const planner = stepsOf(benchmark, 'plan');
-  assert.ok(planner.startsWith(stepsOf(ci, 'plan')));
+  const ciPlan = parse(ci).jobs.plan.steps;
+  const pilot = ciPlan.filter(step => step.id === 'capacity');
+  assert.equal(pilot.length, 1);
+  assert.equal(pilot[0].run, 'node scripts/ci/capacity-submission.mjs');
+  assert.match(pilot[0].if, /github\.event_name == 'push'/);
+  assert.match(pilot[0].if, /vars\.CI_CAPACITY_ENABLED == 'true'/);
+  assert.equal(pilot[0]['continue-on-error'], true);
+  // The benchmark keeps the ordinary plan. The opt-in metadata step and the
+  // upload's output identifier do not change how that plan is built or uploaded.
+  const shared = ciPlan.filter(step => step.id !== 'capacity').map(step => {
+    const value = { ...step };
+    if (value.uses?.startsWith('actions/upload-artifact@') && value.id === 'plan_artifact') delete value.id;
+    return value;
+  });
+  assert.deepEqual(parse(benchmark).jobs.plan.steps.slice(0, shared.length), shared);
   assert.match(planner, /id: matrix/);
   assert.match(benchmark, /matrix: \$\{\{ steps\.matrix\.outputs\.matrix \}\}/);
   assert.match(benchmark, /partsOf\(JSON.parse\(readFileSync\('package.json'/);

@@ -84,3 +84,4 @@ through `frontend/test/_licencePage.mjs`, so moving code between these files
 does not break them.
 
 - `AgreementReplacement.jsx` — D6562: L09 comparison and five-field readiness, L10 frozen text/hash preview, and the send-readiness predicate. ContractStep integration awaits #5920's ownership handoff.
+- `LicencePackageOffers.jsx`, `packageOfferModel.js` — D5026: L31/L32 immutable offer review, explicit HQ decisions and retained exact-operation retries; the existing offer client and server write bar remain authoritative.

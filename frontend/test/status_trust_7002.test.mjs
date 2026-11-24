@@ -37,7 +37,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { LAST_UPDATE_NOT_RECORDED, NO_INCIDENT_RECORDED, statusSummary, summaryLines, stampWords } from '../src/lib/statusSummary.js';
 import {
-  DATA_REQUESTS, REPORT_WAYS, SUBPROCESSORS_REQUEST, UNCHECKED_WHY, dataRequestHref, documentTable, lineMark,
+  DATA_REQUESTS, REPORT_WAYS, SUBPROCESSORS_REQUEST, UNCHECKED_WHY, dataRequestHref, documentTable, legalDay, lineMark,
 } from '../src/pages/site/trustCenterModel.js';
 import { currentInterviewNotice } from '../src/pages/InterviewNoticePage.jsx';
 import StatusPage from '../src/pages/StatusPage.jsx';
@@ -194,4 +194,19 @@ test('5: subprocessors, disclosure and data actions say what they do, and the tw
     assert.equal(disc.textOf('trust-report-advisory-action'), 'Report a security concern privately');
     assert.match(disc.textOf('trust-report-advisory'), /GitHub/);
   } finally { await disc.close(); }
+});
+
+test('4: every legal row reads as a day word, and text that is not a date stays as written', async () => {
+  const rows = documentTable({ terms: 'July 8, 2026', privacy: 'October 29, 2026', risk: 'March 31, 2026', interview: currentInterviewNotice() });
+  assert.deepEqual(rows.slice(0, 4).map((r) => r.updated), ['8 Jul 2026', '29 Oct 2026', '31 Mar 2026', '22 Oct 2026']);
+  assert.equal(legalDay('Pending legal approval'), 'Pending legal approval', 'never a made-up day');
+  assert.equal(legalDay('Smarch 3, 2026'), 'Smarch 3, 2026');
+  assert.equal(legalDay(''), null);
+  assert.equal(legalDay('2026-10-22'), '22 Oct 2026', 'an ISO day reads the same way');
+  const v = await mount(h(TrustCenter), '/trust/documents');
+  try {
+    const t = v.text();
+    for (const d of ['8 Jul 2026', '29 Oct 2026', '31 Mar 2026']) assert.ok(t.includes(d), `the table shows ${d}`);
+    assert.ok(!/July 8, 2026|October 29, 2026|March 31, 2026/.test(t), 'no row keeps the long form');
+  } finally { await v.close(); }
 });

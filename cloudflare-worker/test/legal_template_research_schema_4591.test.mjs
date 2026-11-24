@@ -17,6 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 const root = new URL('../../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
@@ -33,7 +34,8 @@ const PRODUCTION = {
 };
 const NOT_INTENDED = 'axal_group_entity_draft_facts';
 
-const fresh = () => buildFresh(BASELINE, postCutoffMigrations(new URL(root).pathname).map((m) => m.sql));
+// D8354: the current schema from the D4133 cache; the older-baseline case below still builds fresh.
+const fresh = () => freshSchema();
 const master = (db, name) => db.prepare('SELECT type, name, sql FROM sqlite_master WHERE name = ?').get(name);
 /** name, type, NOT NULL, default, primary key: what a column is. */
 const columns = (db, table) => db.prepare('SELECT name, type, "notnull" AS nn, dflt_value AS dflt, pk FROM pragma_table_info(?) ORDER BY cid').all(table)

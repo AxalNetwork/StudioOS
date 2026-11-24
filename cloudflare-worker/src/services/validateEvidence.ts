@@ -73,7 +73,7 @@ const money = (cents: number | null, currency: string | null) =>
 /** D4586 § 4: an experiment supplies an observed result only once a result is recorded, whatever its status. */
 export const experimentObserved = (result: string | null | undefined) => typeof result === 'string' && result.trim() !== '';
 
-const STATUS_WORD: Record<string, string> = { planned: 'Planned', running: 'Running', done: 'Done' };
+const STATUS_WORD: Record<string, string> = { planned: 'Planned', running: 'Running', done: 'Done', stopped: 'Stopped' };
 
 /**
  * D4586 § 4: an experiment's evidence word. Its result when one is recorded; otherwise its status
@@ -81,7 +81,7 @@ const STATUS_WORD: Record<string, string> = { planned: 'Planned', running: 'Runn
  * recorded", "Running · no result yet".
  */
 export function experimentWord(status: string | null | undefined, result: string | null | undefined): string {
-  if (experimentObserved(result)) return String(result).trim();
+  if (status === 'done' && experimentObserved(result)) return String(result).trim();
   const s = String(status ?? '');
   return s === 'done' ? 'Done · no result recorded' : `${STATUS_WORD[s] ?? 'Status not recorded'} · no result yet`;
 }
@@ -164,19 +164,25 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
       date = v ? v.date : date;
     } else if (e.kind === 'experiment') {
       const x = /^[1-9][0-9]{0,9}$/.test(e.ref_id) ? await env.DB.prepare(
-        'SELECT title, status, result FROM hypothesis_experiments WHERE id = ? AND project_id = ?',
-      ).bind(Number(e.ref_id), projectId).first<{ title: string; status: string; result: string | null }>() : null;
+        'SELECT * FROM hypothesis_experiments WHERE id = ? AND project_id = ?',
+      ).bind(Number(e.ref_id), projectId).first<{ title: string; status: string; result: string | null; stopped_at?: string | null }>() : null;
       if (!x) continue;
-      observed = experimentObserved(x.result);
-      label = `${x.title} · ${experimentWord(x.status, x.result)}`;
+      observed = !x.stopped_at && x.status === 'done' && experimentObserved(x.result);
+      label = `${x.title} · ${experimentWord(x.stopped_at ? 'stopped' : x.status, x.result)}`;
     } else if (e.kind === 'signal') {
       const m = /^(signal|revenue|waitlist)-([1-9][0-9]{0,9})$/.exec(e.ref_id);
       if (!m) continue;
       const n = Number(m[2]);
       if (m[1] === 'signal') {
-        const s = await env.DB.prepare('SELECT kind, amount_cents, currency, signal_date FROM demand_signals WHERE id = ? AND project_id = ?')
-          .bind(n, projectId).first<{ kind: string; amount_cents: number | null; currency: string | null; signal_date: string | null }>();
+        const s = await env.DB.prepare('SELECT kind, amount_cents, currency, signal_date, source_kind, status FROM demand_signals WHERE id = ? AND project_id = ?')
+          .bind(n, projectId).first<{ kind: string; amount_cents: number | null; currency: string | null; signal_date: string | null; source_kind: string; status: string }>();
         if (!s) continue;
+        if (s.source_kind === 'typeform') {
+          if (!['confirmed', 'counted'].includes(s.status)) continue;
+          const reviewed = await env.DB.prepare("SELECT id FROM typeform_reviews WHERE signal_id = ? AND project_id = ? AND status = 'confirmed'")
+            .bind(n, projectId).first();
+          if (!reviewed) continue;
+        }
         label = [SIGNAL_KIND[s.kind] || s.kind, money(s.amount_cents, s.currency)].filter(Boolean).join(' · ');
         date = s.signal_date ?? date;
       } else if (m[1] === 'revenue') {

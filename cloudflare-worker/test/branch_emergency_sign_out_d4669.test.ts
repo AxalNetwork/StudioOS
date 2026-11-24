@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { SignJWT } from 'jose';
-import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
+import { freshSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { emergencySignOut, EMERGENCY_SIGN_OUT_ACTION } from '../src/rpc/branchOps.ts';
 import { sha256Hex } from '../src/rpc/secret.ts';
@@ -61,9 +61,6 @@ await build({
 });
 const worker = (await import(pathToFileURL(out).href)).default;
 
-const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const LATER = (postCutoffMigrations(ROOT) as Array<{ sql: string }>).map((m) => m.sql);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 // Obviously synthetic. HQ holds this; the stub branch never checks it.
@@ -74,7 +71,7 @@ const PLAIN = 2;           // an HQ admin without the elevation
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-type DB = ReturnType<typeof buildFresh>;
+type DB = ReturnType<typeof freshSchema>;
 function makeD1(db: DB) {
   return {
     prepare(sql: string) {
@@ -97,7 +94,7 @@ function makeD1(db: DB) {
 }
 
 function hqDb(): DB {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(HQ, 'admin', 'Hana HQ', 'hana@axal.example');
@@ -169,7 +166,7 @@ const KEY2 = `op_${'b'.repeat(32)}`;
 const FR_ALICE = 21; const FR_BEN = 22; const FR_GONE = 23;
 
 function branchDb(): DB {
-  const db = buildFresh(BASELINE, LATER, { dqs: true });
+  const db = freshSchema({ dqs: true });
   db.exec('PRAGMA foreign_keys = OFF;');
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, jwt_min_iat) VALUES (?, ?, ?, ?, ?, 0)');
   u.run(FR_ALICE, 'founder', 'Alice FR', 'Alice@FR.example', 1);
