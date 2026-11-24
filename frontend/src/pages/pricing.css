@@ -206,12 +206,52 @@
 .axp-lp-storage-t { font-weight: 700; font-size: 14px; color: var(--p-ink); }
 .axp-cell { display: flex; justify-content: center; font: 500 13px var(--font-mono); color: var(--p-ink); }
 .axp-row-phone { display: flex; justify-content: space-between; min-height: 46px; padding: 10px 16px; }
-.axp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin-bottom: 12px; }
+/* D5958 (PR-C1): the plan chips wrap, so the strip never scrolls the page sideways at 320 CSS pixels. */
+.axp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .axp-chip {
   flex: none; font-family: inherit; font-weight: 700; font-size: 13px; white-space: nowrap; border-radius: 99px; padding: 8px 14px; cursor: pointer;
   background: var(--p-card); color: var(--p-ink-2); border: 1px solid var(--p-line-3);
 }
 .axp-chip.is-on { background: #6d28d9; color: #fff; border-color: #6d28d9; }
+.axp-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; }
+.axp-chip-tick { display: inline-flex; }
+.axp-chip-own { font-weight: 500; }
+.axp-cell-phone { gap: 6px; align-items: center; font-family: inherit; font-weight: 600; text-align: right; justify-content: flex-end; }
+
+/* ── D5958 (#5958, canvas D5957 PR-E1 to PR-E8): What a paid plan produces, Founder tab ── */
+.axp-ex-note { margin: 4px 0 18px; }
+.axp-ex-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.axp-ex { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 15px; padding: 22px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.axp-ex-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* "Demonstration" in words, on a dotted outline: never colour alone (PR-E2 pin 1). */
+.axp-ex-demo { font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--p-ink-2); border: 1.5px dotted var(--p-ink-2); border-radius: 99px; padding: 3px 10px; }
+.axp-ex-plan { font-size: 12.5px; font-weight: 700; color: var(--p-violet); }
+.axp-ex-inplan { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--p-body); }
+.axp-ex-inplan.is-yes { color: var(--p-ink-2); font-weight: 700; }
+.axp-ex-t { margin: 0; font-weight: 800; font-size: 18px; letter-spacing: -.015em; color: var(--p-ink); }
+.axp-ex-s { margin: 0; font-size: 14px; line-height: 1.55; color: var(--p-body); }
+.axp-ex-box { border: 1px solid var(--p-line-2); border-radius: 11px; padding: 12px 14px; background: var(--p-wash); }
+.axp-ex-box.is-gen { background: var(--p-violet-soft); border-color: var(--p-violet-line); }
+/* The box headings and speakers use the darker ink: muted grey on the tinted boxes falls under 4.5:1 (axe). */
+.axp-ex-bh { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--p-ink-2); }
+.axp-ex-gen { display: inline-flex; align-items: center; gap: 4px; letter-spacing: normal; text-transform: none; font-weight: 700; color: var(--p-violet); }
+.axp-ex-gen i { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 4px; font-style: normal; font-size: 10px; color: #fff; background: var(--p-violet); }
+.axp-ex-box ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.5; color: var(--p-body); overflow-wrap: anywhere; }
+.axp-ex-box p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--p-body); }
+.axp-ex-k { color: var(--p-ink); }
+.axp-ex-who { color: var(--p-body); font-size: 12.5px; }
+.axp-ex-act { margin-top: auto; }
+.axp .axp-ex-act .axp-btn { min-height: 44px; }
+.axp-ex-flow { margin-top: 22px; }
+.axp-ex-flow ol { margin: 12px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.axp-ex-flow li { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--p-line); border-radius: 12px; padding: 12px 14px; background: var(--p-card); }
+.axp-ex-flow li div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--p-body); min-width: 0; }
+.axp-ex-flow li b { color: var(--p-ink); font-size: 14px; }
+.axp-ex-n { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 99px; font-weight: 800; font-size: 12px; color: var(--p-violet); border: 1.5px solid var(--p-violet-line); }
+.axp-ex-after { margin-top: 18px; display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; border: 1px solid var(--p-line); border-radius: 15px; padding: 18px 22px; background: var(--p-card); }
+.axp-ex-after ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--p-body); }
+.axp-ex-after li { display: inline-flex; align-items: center; gap: 6px; }
+.axp-card:focus-visible { outline: 2px solid var(--p-violet); outline-offset: 3px; }
 /* Keep selected focus visible inside the scrollable tab strips. */
 .axp-tab.is-on:focus-visible, .axp-chip.is-on:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
 .axp-phone { display: none; }
@@ -292,6 +332,7 @@
 /* ── narrow: the four-wide grids go two-wide ── */
 @container (max-width: 980px) {
   .axp-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .axp-ex-flow ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .axp-packs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -307,6 +348,9 @@
   .axp-desk { display: none; }
   .axp-phone { display: block; }
   .axp-mcards { display: flex; }
+  /* D5958 (PR-E6, PR-E7): the examples and the four steps stack on a phone. */
+  .axp-ex-grid, .axp-ex-flow ol { grid-template-columns: minmax(0, 1fr); }
+  .axp-ex { padding: 18px; }
   /* D1286 (CRP15 frame 1): the band stacks, Add tokens runs full width, every target is at least 44px. */
   .axp-tokband-card { padding: 18px; }
   .axp-tokband-row, .axp-tokband-main { flex-direction: column; align-items: stretch; gap: 14px; }

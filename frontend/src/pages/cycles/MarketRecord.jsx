@@ -15,7 +15,7 @@ import { DataState } from '../../ui/Honesty.jsx';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { RecordHeaderRow } from './RecordHeader.jsx';
 import { useRecordPhone } from './RecordView.jsx';
-import { declaredActions, dispatchOf, rowAction } from './recordModel.js';
+import { declaredActions, dispatchOf, recordHref, rowAction } from './recordModel.js';
 import { DecisionPill, Readiness, StatePill } from './MarketsHome.jsx';
 import {
   MARKET_DECISIONS, dayLabel, evidenceFor, handoffLinks, legalEntityHref, marketView, planLine, sizeLabel, stepOverdue, todayOf,
@@ -120,7 +120,7 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
       .catch(() => { if (live) setGeo({ code, state: 'unreadable', data: null }); });
     return () => { live = false; };
   }, [code, tries]);
-  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.customers) : null;
+  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners, m.customers) : null;
   const geoState = !code ? null : geo.code === code ? geo.state : 'loading';
 
   // The entry plan's rows carry the declared actions; the steps themselves come from `parts.market.steps`.
@@ -205,6 +205,7 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
   </nav>;
 
   const replies = Array.isArray(m.replies) ? m.replies : null;
+  const partners = Array.isArray(m.partners) ? m.partners : null;
   const acts = Array.isArray(activity) ? activity : [];
   const side = <>
     <Block id="market-country" title="Attached country" phone={phone} testid="market-country"
@@ -220,6 +221,15 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
       {view.size ? <><b className="font-mono text-[16px] text-axal-ink dark:text-gray-100">{sizeLabel(view.size)}</b>
         <p className={`m-0 text-[12px] ${MUTED}`}>Source: {view.size.source || 'not recorded'}</p></>
         : <><DataState state="not_recorded" reason="No size recorded" /><p className={`m-0 text-[12px] ${MUTED}`}>Add it with Edit, with its source.</p></>}
+    </Block>
+    <Block id="market-partners" title="Partners" phone={phone} testid="market-partners"
+      summary={!partners ? 'Unavailable' : partners.length ? `${partners.length} linked` : 'None linked'}>
+      {!partners ? <DataState state="unavailable" what="Linked partners" claim="This is not a claim that none is linked." />
+        : partners.length === 0 ? <><DataState state="none">No partner is linked to this market yet.</DataState>
+          <Link to={`/grow/partnerships${search}`} className={LINK}>Link one in Partnerships →</Link></>
+        : <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{partners.map((p) => <li key={p.uid} className="text-[12.5px]">
+          <Link to={recordHref('grow', 'partner-network', p.uid, search) || `/grow/partnerships${search}`} className={LINK}>{p.name}</Link>
+          <span className={`ml-2 text-[11px] ${MUTED}`}>{[p.type, p.stage].filter(Boolean).map((x) => String(x).replace(/_/g, ' ')).join(' · ')}</span></li>)}</ul>}
     </Block>
     <Block id="market-replies" title="Replies to a market ask" phone={phone} testid="market-replies"
       summary={!replies ? 'Unavailable' : replies.length ? `${replies.length} · latest ${replies[0].name || 'unnamed'}` : 'None yet'}>

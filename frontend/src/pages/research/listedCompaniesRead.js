@@ -276,9 +276,31 @@ export function listedCsvCells(x) {
 
 // ---- The Market directory's export ----------------------------------------------
 
-/** The market file's columns (RML-06B): the four the zone exported before D7172. */
-export const MARKET_CSV_HEADER = ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug'];
-export const marketCsvCells = (m) => [m.name, m.supplied_count, m.mi_sector || 'Not mapped', m.slug];
+/**
+ * The market file's columns (RML-06B): the four the zone exported before D7172,
+ * unchanged and first, then D7710's provenance columns (owner answer A, appended):
+ * the directory's date, the countries, the named and sector-level source counts,
+ * the newest named date and what it measures, and when the Worker answered.
+ * Every value comes from the list response; a missing one is "Not recorded" (D7172).
+ */
+export const MARKET_CSV_HEADER = [
+  'Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug',
+  'Directory as of', 'Countries', 'Sources naming the market', 'Sector-level sources (inherited)',
+  'Newest named source', 'Newest date basis', 'Read at',
+];
+const BASIS_WORDS = { reported: 'Date the source reports', period_measured: 'End of the period measured', retrieved: 'Date retrieved' };
+const kindCount = (m, k) => (Number.isFinite(m?.sources_by_kind?.[k]?.count) ? m.sources_by_kind[k].count : NOT_RECORDED);
+export const marketCsvCells = (m) => [
+  m.name, m.supplied_count, m.mi_sector || 'Not mapped', m.slug,
+  or(m.as_of),
+  m.countries?.status === 'recorded' && m.countries.value.length
+    ? m.countries.value.map((c) => `${c.code} ${c.count}`).join('; ') : NOT_RECORDED,
+  kindCount(m, 'signal_evidence'),
+  kindCount(m, 'market_intel'),
+  m.newest_source_at?.status === 'recorded' ? m.newest_source_at.value : NOT_RECORDED,
+  BASIS_WORDS[m.newest_source_basis] || NOT_RECORDED,
+  or(m.read_at),
+];
 
 /** The directory's sort value (`supplied_count:desc`) → the Worker's `sort` and `dir`. */
 export function marketSortParams(sort) {
@@ -314,7 +336,8 @@ export async function collectMarkets({ q, sort, request = null, fetchPage, pageS
     const items = r?.items || [];
     total = Number(r?.total) || 0;
     if (!items.length) break;
-    out.push(...items);
+    // D7710: each row keeps the read time of the page it came from.
+    out.push(...items.map((m) => ({ ...m, read_at: r?.read_at ?? null })));
   }
   return out;
 }

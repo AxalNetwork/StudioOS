@@ -63,7 +63,10 @@
  *                                        `body_invalid`, `field_not_accepted` { field } (a role, tools or a record),
  *                                        `agent_uid_invalid`, `workflow_context_invalid` (until #4535), `task_invalid`,
  *                                        `output_kind_invalid`, `taxonomy_focus_invalid`, `limit_invalid`; 409
- *                                        `agent_removed`. Reads only: no link, pin or event is written.
+ *                                        `agent_removed`. Reads only: no link, pin or event is written. D4538 part 8 (#5968): the
+ *                                        answer carries #4667's input gate (`input_unavailable`), the run path's
+ *                                        (`not_runnable`), each candidate's `inputs`, and its quality and run
+ *                                        evidence (`services/agents/skillDiscoveryEvidence.ts`), this company's runs only.
  *
  * GATES.
  *  - Read: an HQ skill is readable by every member; a company skill only by
@@ -118,6 +121,7 @@ import {
   type AttachCode, type Blocked,
 } from '../services/agents/skillLinks';
 import { checkDiscoveryRequest, discoverSkills, type DiscoverySkill } from '../services/agents/skillDiscovery';
+import { withDiscoveryEvidence, type EvidenceRow } from '../services/agents/skillDiscoveryEvidence';
 
 type C = Context<{ Bindings: Env }>;
 type SkillRow = {
@@ -923,7 +927,7 @@ const discoverWords: Record<string, string> = {
  * `version_not_published`). `readable` is the caller's read gate (`mayRead`), `suspended` the run gate
  * (`skillRunRefusal`) at that version, asked only of skills HQ ever suspended. Reads only.
  */
-async function discoveryCatalogue(env: Env, user: User, companyId: number | null): Promise<DiscoverySkill[]> {
+async function discoveryCatalogue(env: Env, user: User, companyId: number | null): Promise<{ skills: DiscoverySkill[]; rows: Map<string, EvidenceRow> }> {
   type Row = SkillRow & {
     v_version: number | null; v_name: string | null; v_purpose: string | null; v_steps_json: string | null; v_tools_json: string | null;
     v_output_kind: OutputKind | null; v_taxonomy_json: string | null; v_roles_json: string | null;
@@ -937,10 +941,12 @@ async function discoveryCatalogue(env: Env, user: User, companyId: number | null
     `SELECT DISTINCT m.skill_id FROM agent_skill_moderation m JOIN agent_skills s ON s.id = m.skill_id
       WHERE m.action = 'suspend' AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?))`, companyId ?? -1)).map((r) => r.skill_id));
   const out: DiscoverySkill[] = [];
+  const evidence = new Map<string, EvidenceRow>();
   for (const s of rows) {
     const published = s.v_version != null && s.current_version > 0;
+    evidence.set(s.uid, { id: s.id });
     out.push({
-      uid: s.uid, scope: s.scope, company: s.company_id, status: s.status,
+      uid: s.uid, scope: s.scope, company: s.company_id, status: s.status, slug: s.slug,
       readable: await mayRead(env, s, user),
       version: published ? s.current_version : null,
       suspended: published && everSuspended.has(s.id) && !!(await skillRunRefusal(env, s.id, s.current_version)),
@@ -953,7 +959,7 @@ async function discoveryCatalogue(env: Env, user: User, companyId: number | null
       taxonomy: published ? parse(s.v_taxonomy_json, [] as Tag[]) : [],
     });
   }
-  return out;
+  return { skills: out, rows: evidence };
 }
 
 /**
@@ -985,7 +991,14 @@ router.post('/skills/discover', async (c) => {
   if (a.status === 'removed') return say(c, 409, 'agent_removed', 'This agent was removed.');
   const companyId = await agentCompanyId(c.env, a);
   const agent = { role: a.role_key, company: companyId, tools: grantsOf(a.tool_grants_json).map((g) => g.tool) };
-  return c.json(discoverSkills(checked.request, agent, await discoveryCatalogue(c.env, user, companyId)));
+  const catalogue = await discoveryCatalogue(c.env, user, companyId);
+  // D4538-p8 (#5968): stages 3 to 5's facts, for the skills that pass the cheap gate: #4667's preflight on the
+  // agent's scope, the run path's agent refusals, the published version's quality evidence and this company's run measures.
+  const { rules } = await effectiveBook(c.env, scope, a.role_key);
+  const skills = await withDiscoveryEvidence(c.env, catalogue.skills, catalogue.rows, agent, {
+    agent: a, scope, rules, companyId, output_kind: checked.request.output_kind, now: new Date(),
+  });
+  return c.json(discoverSkills(checked.request, agent, skills));
 });
 
 // ── Run cost (D4121, #4121) ─────────────────────────────────────────────────

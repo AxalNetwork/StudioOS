@@ -148,3 +148,83 @@ export function basketOf(form, territory) {
   }
   return { weights, total, ok: total === 10000 && Object.values(weights).every((n) => Number.isInteger(n) && n > 0) };
 }
+
+/**
+ * D5956 (#5956), boards L47 and L48 — where each of the five figures goes when the review is applied, before → after:
+ * the annual fee and the royalty to the core terms, the minimum royalty to the schedule's § 4.4 minimum guarantee
+ * (D5953), the initial fee and the surcharge to the one-off initial invoice issued from Billing (D5954). A figure the
+ * recommendation does not record changes nothing ("Not recorded · no change"), never 0. Once the initial invoice is
+ * issued, its two figures are recorded on the decision only; while the invoices cannot be read, that is unknown.
+ * `invoices` is `{ status: 'loading'|'ready'|'unreadable', data }` from `GET /:uid/fee-invoices`.
+ */
+export const DESTINATIONS = Object.freeze({
+  annual_fee_cents: 'Core terms',
+  royalty_bps: 'Core terms',
+  minimum_royalty_cents: 'Schedule § 4.4 minimum guarantee',
+  initial_fee_cents: 'One-off initial invoice, issued from Billing',
+  regulatory_surcharge_cents: 'One-off initial invoice, billed once with the initial fee',
+});
+
+const DEST_ORDER = ['annual_fee_cents', 'royalty_bps', 'minimum_royalty_cents', 'initial_fee_cents', 'regulatory_surcharge_cents'];
+const COUNTS = { annual_fee_cents: 'per licence year', royalty_bps: '% of revenue', minimum_royalty_cents: 'per licence year', initial_fee_cents: 'one-off', regulatory_surcharge_cents: 'one-off' };
+
+/** The figure the form would apply: a typed override, else the recommendation's. NaN for typed text that is not a figure. */
+export function afterValue(view, form, f) {
+  const raw = form?.accepted?.[f.key];
+  if (raw !== undefined && String(raw).trim() !== '') {
+    if (f.kind === 'bps') return /^\d+$/.test(String(raw).trim()) ? Number(raw) : Number.NaN;
+    return centsFrom(raw, view?.terms?.currency ?? view?.recommendation?.currency);
+  }
+  const v = view?.recommendation?.recommended?.[f.key];
+  return v === undefined ? null : v;
+}
+
+export function applyDestinations({ view, form, invoices }) {
+  const cur = view?.terms?.currency ?? view?.recommendation?.currency;
+  const terms = view?.terms || {};
+  const prior = view?.latest_decision?.accepted || {};
+  const classes = (view?.countries || []).filter((c) => c?.country_code);
+  const cls = classes.length === 1 ? (classes[0].regulatory_class || NOT_RECORDED)
+    : classes.length ? classes.map((c) => `${c.country_code} ${c.regulatory_class || NOT_RECORDED}`).join(' · ') : NOT_RECORDED;
+  const initial = invoices?.status === 'ready'
+    ? (Array.isArray(invoices.data?.invoices) ? invoices.data.invoices.find((i) => i?.kind === 'initial') : null) || null
+    : undefined; // undefined: unknown
+  return DEST_ORDER.map((key) => {
+    const f = PRICING_FIGURES.find((x) => x.key === key);
+    const beforeRaw = key === 'annual_fee_cents' ? terms.annual_fee_cents
+      : key === 'royalty_bps' ? terms.revenue_share_bps
+        : key === 'minimum_royalty_cents' ? terms.minimum_guarantee_cents
+          : prior[key];
+    const before = beforeRaw === undefined ? null : beforeRaw;
+    const after = afterValue(view, form, f);
+    const label = key === 'regulatory_surcharge_cents' ? `Regulatory surcharge · class ${cls}` : f.label;
+    const row = { key, label, counts: COUNTS[key], before: figure(before, f.kind, cur), after: Number.isNaN(after) ? NOT_RECORDED : figure(after, f.kind, cur), goesTo: DESTINATIONS[key], tone: 'goes' };
+    if (after === null || after === undefined) {
+      const keep = key === 'minimum_royalty_cents' ? (before === null ? 'Schedule § 4.4 is not changed' : `Schedule § 4.4 keeps ${figure(before, f.kind, cur)}`)
+        : key === 'initial_fee_cents' ? 'Nothing for the initial invoice'
+          : key === 'regulatory_surcharge_cents' ? 'Never written as €0'
+            : 'The core terms keep their figure';
+      return { ...row, after: NOT_RECORDED, goesTo: `Not recorded · no change · ${keep}`, tone: 'none' };
+    }
+    if (key === 'initial_fee_cents' || key === 'regulatory_surcharge_cents') {
+      if (initial === undefined) return { ...row, goesTo: 'Invoices could not be read · whether one is issued is unknown', tone: 'unknown' };
+      if (initial) {
+        const kept = key === 'initial_fee_cents' ? initial.initial_fee_cents : initial.regulatory_surcharge_cents;
+        return { ...row, tone: 'decision', goesTo: key === 'initial_fee_cents'
+          ? `Recorded on the decision only · invoice ${initial.reference || 'already'} already issued`
+          : `Recorded on the decision only · the issued invoice keeps ${figure(kept ?? null, 'cents', initial.currency || cur)}` };
+      }
+    }
+    return row;
+  });
+}
+
+/** After an apply: the receipt's link to Billing, when an initial fee is now recorded and no initial invoice exists yet. */
+export function issueFromBillingNext({ view, form, invoices }) {
+  const fee = afterValue(view, form, PRICING_FIGURES[0]);
+  if (!Number.isFinite(fee) || fee <= 0) return null;
+  if (invoices?.status !== 'ready') return null;
+  const list = Array.isArray(invoices.data?.invoices) ? invoices.data.invoices : [];
+  if (list.some((i) => i?.kind === 'initial')) return null;
+  return { text: 'Initial invoice: issue it from Billing', href: `/admin/licences/${encodeURIComponent(view.licence_uid)}/fee-invoices` };
+}

@@ -559,7 +559,8 @@ export default function ProductsPage() {
 
   // A visitor reads the page in the public site's frame (its nav and footer,
   // as /pricing does); a member reads it in the app's, which `guard` draws.
-  if (!member) return <SitePage title="Plans and pricing">{page}</SitePage>;
+  // D6996 (#6996): its title and description are the registry's /pricing/products entry, "Products and token packs".
+  if (!member) return <SitePage>{page}</SitePage>;
   // The phone's account bar (A10m) is a member's; a visitor gets the page itself.
   return phone && member ? <PricingPhone pricing={pricing} budget={budget}>{page}</PricingPhone> : page;
 }

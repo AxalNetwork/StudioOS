@@ -8,6 +8,12 @@ export interface Env {
   TYPEFORM_APP_APPROVED?: string;
   TYPEFORM_CLIENT_ID?: string;
   TYPEFORM_CLIENT_SECRET?: string;
+  /** D5834: `1` once the owner's Intuit app is approved; the QuickBooks connector is off until then. */
+  QUICKBOOKS_APP_APPROVED?: string;
+  QUICKBOOKS_CLIENT_ID?: string;
+  QUICKBOOKS_CLIENT_SECRET?: string;
+  /** D5834: `production` reads Intuit's production API; anything else is the sandbox. */
+  QUICKBOOKS_ENVIRONMENT?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
@@ -159,6 +165,8 @@ export interface Env {
   CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
   /** D8073: the bearer token the production deploy job records a deploy with. Unset, the record refuses. */
   DEPLOY_RECORD_TOKEN?: string;
+  /** D8080: the bearer token the deploy job syncs the agent registry with. Unset, the sync refuses. */
+  AGENT_REGISTRY_TOKEN?: string;
   // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
   // generates it per deployment, puts the plaintext here and writes its SHA-256
   // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on

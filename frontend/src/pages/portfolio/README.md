@@ -137,6 +137,17 @@ What changed's "Save as my note" lands. A failed read is Unreadable with a
 Retry, never "no notes"; a failed save keeps the text with the sentence for
 the refusal's code (`NOTE_SENTENCES`). Decision notes:
 `documentation/architecture/decisions/D6222.md`.
+D6221 (#6221, canvas D6220 EW-01 to EW-14) draws the Exit Waterfall
+(`../WaterfallPage.jsx` at `/portfolio/waterfall`) in the same frame, with no
+tab current. `waterfallModel.js` is its pure half: carry by relationship
+(`carryOf`: the fund row, an LP's own record, or Not recorded with a labelled
+assumption), the inputs and the simulate body (`inputErrors`, `bodyOf`), the
+1× / 2× / 3× chips (`presetsOf`), the tiers, the four figures with Not
+computable in place of the engine's 0 (`figuresOf`), the per-LP rows, the
+saved scenarios, what changed since one was loaded, compare as saved
+(`compareOf`) and the two CSV files. `waterfall.css` holds its styles on the
+frame's tokens. An LP reads no scenario list and no other LP's row. Decision
+notes: `documentation/architecture/decisions/D6221.md`.
 D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
 "Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
 rules (the most pressing open period, its obligation facts, who may act from
@@ -178,3 +189,13 @@ and keeps nothing. The Statement sheet mounts it in its rail for the chosen
 date, and Edit ticks "Include as a cover note" with the proposal in that box.
 Decision notes: `documentation/architecture/decisions/D6888.md` and
 `documentation/architecture/decisions/D6888-p1.md`.
+D6907 part 2 (#6907, canvas PRM18 rail) adds Eadwyn's proposal of a right that
+is in the investor's signed paper but not recorded, on Ownership & rights:
+`ClauseProposals.jsx` is the card (Accept, Edit wording, Discard), and
+`clauseProposalModel.js` is its pure half (`proposalsOf`, `clauseLocation`,
+`unreadableDocs`, `railState`). It reads the clause read (D6907 part 1) only for
+the types `askableTypes` gives: not recorded, and no open request. Accept sends
+exactly one request to record the right, with the clause as its description,
+and Eadwyn never records one. A document it could not read is listed with its
+reason. Decision notes: `documentation/architecture/decisions/D6907.md` and
+`documentation/architecture/decisions/D6907-p2.md`.

@@ -134,10 +134,11 @@ export const buttonClass =
 export function NotComputable({ children, why }) {
   return (
     <span className="inline-flex items-baseline gap-1.5">
-      <span className="whitespace-nowrap rounded border border-axal-hairline bg-axal-ground px-1.5 py-0.5 text-[10px] font-bold text-axal-faint">
+      {/* #4845: grey that reads at 4.5:1 on the chip's ground (axal-faint was 2.3:1). */}
+      <span className="whitespace-nowrap rounded border border-axal-hairline bg-axal-ground px-1.5 py-0.5 text-[12px] font-bold text-gray-600 dark:text-gray-400">
         {children || 'Not recorded'}
       </span>
-      {why && <span className="text-[11px] leading-relaxed text-axal-faint">{why}</span>}
+      {why && <span className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">{why}</span>}
     </span>
   );
 }
@@ -227,10 +228,10 @@ export function SeamRead({ children }) {
 export function NoPartnerProfile() {
   return (
     <div
-      className="mb-3.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[8px] border border-dashed border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px] leading-relaxed text-axal-muted"
+      className="mb-3.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[8px] border border-dashed border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] leading-relaxed text-axal-muted"
       data-testid="no-partner-profile"
     >
-      <span className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+      <span className="text-[12px] font-extrabold uppercase tracking-[.08em] text-gray-600 dark:text-gray-400">
         Not linked to a firm
       </span>
       <span>
@@ -243,7 +244,7 @@ export function NoPartnerProfile() {
           will, so "an admin can attach it" is useless to them — they ARE the
           admin, and attaching their own sign-in to somebody's firm is the one
           act with no subject and no audit trail. Impersonation is the way in. */}
-      <span className="text-axal-faint">
+      <span className="text-gray-600 dark:text-gray-400">
         Reading this as an admin? Impersonate one of a firm’s accounts — that names whose book is
         being read, and records it.
       </span>
@@ -285,10 +286,13 @@ export const offerInputClass =
   + 'aria-[invalid=true]:border-red-600 max-sm:min-h-[44px] '
   + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:aria-[invalid=true]:border-red-400';
 
-/** The zone's ONE filled primary: amber, 13px, a 44px target below 640px. */
+/**
+ * The zone's ONE filled primary: amber, 13px, a 48px target below 640px
+ * (#4845: OF-10 "primary actions 48px on phones"; every other action is 44px).
+ */
 export const offerButtonClass =
   'inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-700 px-3.5 py-2 text-[13px] font-semibold text-white '
-  + 'hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[44px]' + OFFER_FOCUS;
+  + 'hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[48px]' + OFFER_FOCUS;
 
 /** Every other action: outlined, never filled (Export, Cancel, View, Edit). */
 export const offerGhostButtonClass =

@@ -224,6 +224,28 @@ export function licenceConsequence(action, l, reads = {}) {
         undo: { reversible: true, text: 'An invoice with nothing paid on it can be voided, with a reason. It is never deleted.' },
       };
     }
+    case 'issueInitialInvoice': {
+      // D5956 (#5956), board L42: the Issue review names the amounts, the decision they come from, the payee and the due
+      // date, what happens and how to undo it.
+      const t = reads.target || {};
+      const lines = Array.isArray(t.lines) ? t.lines : [];
+      return {
+        title: 'Issue the initial invoice', confirm: 'Issue initial invoice', tone: 'warn',
+        happens: [
+          ...lines.map((l) => ({ text: `${l.label}: ${l.amount}`, note: l.note })),
+          ...(t.nrSurcharge ? [{ text: 'Regulatory surcharge: Not recorded', note: 'Not billed. No €0 line is printed.' }] : []),
+          { text: t.total ? `One invoice for ${t.total} is issued and frozen` : 'One invoice is issued and frozen', note: 'Its lines, the class and the total never change after issue. It comes from the latest pricing decision on Terms › Pricing & Market.' },
+        ],
+        affects: [
+          { text: 'A second initial invoice can never be issued, even after a void' },
+          { text: 'Annual invoices are unaffected', note: 'Each licence year keeps its own invoice.' },
+          { text: 'Payee and due date come from the Terms schedule', note: 'The licensor, and the payment terms (30 days when none is recorded).' },
+          { text: 'Nothing is sent', note: 'The licensee sees it on their Statements tab; HQ sends nothing by email.' },
+        ],
+        reason: { min: null, statement: 'No reason is recorded. The audit log records who issued it, the amounts and when.' },
+        undo: { reversible: true, text: 'Void it while nothing is paid, with a reason. The one initial invoice stays used.' },
+      };
+    }
     case 'voidInvoice': {
       const inv = reads.target || {};
       const ref = inv.reference || 'this invoice';
@@ -312,4 +334,6 @@ export function licenceConsequence(action, l, reads = {}) {
 export const SHEET_ACTIONS = Object.freeze([
   'addAdmin', 'removeAdmin', 'issueInvoice', 'voidInvoice', 'sendAgreement', 'deploy', 'retryDeploy', 'reconcileDeploy', 'syncRetry',
   ...LIFECYCLE_ACTIONS,
+  // D5956 (#5956): the one-off initial invoice's Issue review (board L42).
+  'issueInitialInvoice',
 ]);

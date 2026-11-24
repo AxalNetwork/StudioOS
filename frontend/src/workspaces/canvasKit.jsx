@@ -267,15 +267,36 @@ export function Cell({
  * THE GRID SCROLLS RATHER THAN THE PAGE. `cols` is the artboard's own
  * `grid-template-columns` string, and five fr-columns do not fit a phone; the
  * wrapper takes the overflow so the body never scrolls sideways.
+ *
+ * `stack` (#4845, opt-in): below 640px each row is a labelled record, its
+ * cells under the column names, instead of a 640px grid the phone scrolls
+ * sideways (Offers v2 OF-10: "on phones rows become labelled cards"). The grid
+ * is drawn from 640px up. Without `stack` nothing changes.
  */
-export function Instrument({ title, meta, cols, head, rows, note, testid }) {
+export function Instrument({ title, meta, cols, head, rows, note, testid, stack = false }) {
   return (
     <Card padding="lg" data-testid={testid}>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{title}</h3>
         {meta ? <span className="text-[11px] text-gray-600 dark:text-gray-400">{meta}</span> : null}
       </div>
-      <div className="-mx-1 overflow-x-auto px-1">
+      {stack ? (
+        <ul className="m-0 list-none p-0 sm:hidden" data-testid={testid ? `${testid}-records` : undefined}>
+          {rows.map((r, i) => (
+            <li key={r.key ?? i} className="border-b border-axal-hairline py-2.5 last:border-0 dark:border-gray-800">
+              <dl className="m-0 grid grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5">
+                {r.cells.map((cell, j) => (
+                  <React.Fragment key={j}>
+                    <dt className="text-[12px] font-semibold text-gray-600 dark:text-gray-400">{head[j]}</dt>
+                    <dd className="m-0 min-w-0"><Cell {...cell} /></dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className={`-mx-1 overflow-x-auto px-1${stack ? ' hidden sm:block' : ''}`}>
         <div className="min-w-[640px]">
           <div className="grid gap-3 border-b border-axal-hairline pb-2 dark:border-gray-700" style={{ gridTemplateColumns: cols }}>
             {head.map((h) => (

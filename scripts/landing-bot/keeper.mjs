@@ -13,7 +13,7 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { breakers, giveUp, LABELS, mode, pathGuard, renderSticky, stickyComment } from './rules.mjs';
-import { KIND, plan, pushesReserved, reservationName, RESERVATION_PREFIX } from './keeper-plan.mjs';
+import { composeSticky, conflictOutcome, KEEPER_MAX_ATTEMPTS, keeperAttempts, KIND, plan, pushesReserved, reservationName, RESERVATION_PREFIX } from './keeper-plan.mjs';
 import { gitIn, mergeMain } from './keeper-merge.mjs';
 
 const REPO = /^[\w-]+\/[\w.-]+$/;
@@ -54,7 +54,7 @@ const PRS = `query($owner:String!,$name:String!,$after:String){repository(owner:
   nodes{number isDraft body mergeable isInMergeQueue updatedAt headRefName headRefOid
     headRepository{nameWithOwner} baseRepository{nameWithOwner} labels(first:50){nodes{name}}
     commits(last:1){nodes{commit{committedDate}}}
-    timelineItems(last:30,itemTypes:[LABELED_EVENT]){nodes{... on LabeledEvent{createdAt label{name}}}}}}}}`;
+    timelineItems(last:30,itemTypes:[LABELED_EVENT]){nodes{... on LabeledEvent{createdAt actor{login} label{name}}}}}}}}`;
 
 /** One GraphQL call per 100 open PRs, normalised to the shape rules.mjs reads. */
 export async function openPrs(gh) {
@@ -65,13 +65,15 @@ export async function openPrs(gh) {
     const conn = repo.pullRequests;
     for (const n of conn.nodes) {
       // D6476-p5: only the keeper's own hand-back and a session hand-back count; the visible `conflict` label does not.
+      // D6476-p6: the App's own bot:keeper-tried events, one of the three attempt records.
+      const keeperTriedEvents = (n.timelineItems?.nodes || []).filter((e) => e?.label?.name === LABELS.keeperTried).map((e) => ({ at: e.createdAt, actor: e.actor?.login ?? null }));
       const handBacks = (n.timelineItems?.nodes || []).filter((e) => [LABELS.keeperTried, LABELS.needsSession].includes(e?.label?.name)).map((e) => e.createdAt).sort();
       const committed = n.commits?.nodes?.[0]?.commit?.committedDate ?? null;
       // The later of the head commit's date and the PR's last update: a conservative "head changed" time.
       const changed = [committed, n.updatedAt].filter(Boolean).sort().pop() ?? null;
       out.push({
         number: n.number, state: 'open', draft: n.isDraft, body: n.body, mergeable: n.mergeable, inMergeQueue: n.isInMergeQueue,
-        headChangedAt: changed, handedBackAt: handBacks.pop() ?? null,
+        headChangedAt: changed, handedBackAt: handBacks.pop() ?? null, keeperTriedEvents,
         labels: (n.labels?.nodes || []).map((l) => l.name),
         head: { ref: n.headRefName, sha: n.headRefOid, repo: { full_name: n.headRepository?.nameWithOwner ?? null } },
         base: { repo: { full_name: n.baseRepository?.nameWithOwner ?? null } },
@@ -124,6 +126,8 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   for (const pr of prs.filter((p) => p.mergeable === 'CONFLICTING' && p.inMergeQueue === false)) {
     try { pr.files = (await pages(gh, `pulls/${pr.number}/files`, 30)).map((f) => ({ path: f.filename, previousPath: f.previous_filename })); } catch { pr.files = null; }
     try { pr.commits = await pages(gh, `pulls/${pr.number}/commits`, 3); } catch { pr.commits = null; }
+    // D6476-p6: the sticky comment's attempt lines; unread is null, and nothing is planned for that PR.
+    try { pr.stickyBody = stickyComment(await pages(gh, `issues/${pr.number}/comments`, 5), env.LANDING_BOT_LOGIN)?.body ?? ''; } catch { pr.stickyBody = null; }
   }
   try { ctx.pushesToday = await reservedToday(gh, day); } catch { ctx.pushesToday = null; }
   const result = plan(prs, ctx);
@@ -131,7 +135,7 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   const attempt = Number(env.GITHUB_RUN_ATTEMPT);
   // A rerun reserves nothing and pushes nothing: its first attempt's reservation is already counted.
   const act = attempt === 1 ? result.act : [];
-  writeFileSync(join(env.RUNNER_TEMP, 'keeper-plan.json'), JSON.stringify({ day, act: act.map((p) => ({ number: p.number, sha: p.head.sha, ref: p.head.ref })) }));
+  writeFileSync(join(env.RUNNER_TEMP, 'keeper-plan.json'), JSON.stringify({ day, act: act.map((p) => ({ number: p.number, sha: p.head.sha, ref: p.head.ref, attempt: keeperAttempts(p, env.LANDING_BOT_LOGIN).used + 1 })) }));
   output('reservation', reservationName({ day, runId, attempt, n: act.length }));
   output('count', act.length);
   summary(`### Branch keeper plan\n\n${act.length} PR(s) to merge main into: ${act.map((p) => `#${p.number}`).join(', ') || 'none'}.`);
@@ -140,10 +144,14 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   return { act, skipped: result.skipped };
 }
 
-export async function upsertSticky(gh, number, botLogin, lines) {
+/**
+ * Write the sticky comment. With `attempt` ({ k, outcome }, D6476-p6) the earlier `Keeper attempt` lines are kept and
+ * this attempt's line is added before `lines`.
+ */
+export async function upsertSticky(gh, number, botLogin, lines, attempt = null) {
   const comments = await pages(gh, `issues/${number}/comments`, 5);
   const mine = stickyComment(comments, botLogin);
-  const body = renderSticky(lines);
+  const body = renderSticky(attempt ? composeSticky(mine?.body ?? '', attempt.k, attempt.outcome, lines) : lines);
   if (mine) await gh.patch(`issues/comments/${mine.id}`, { body });
   else await gh.post(`issues/${number}/comments`, { body });
 }
@@ -162,6 +170,9 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
   const dispatch = [];
   let workflowRefusals = 0;
   for (const planned of act) {
+    // D6476-p6: this run's attempt number. A plan without one (written before p6) is treated as the last attempt.
+    const k = Number.isSafeInteger(planned.attempt) && planned.attempt > 0 ? planned.attempt : KEEPER_MAX_ATTEMPTS;
+    const last = k >= KEEPER_MAX_ATTEMPTS;
     // Re-read: mode, bot:off, breakers and the head may have changed since the plan.
     const pr = await gh.get(`pulls/${planned.number}`);
     const labels = (pr.labels || []).map((l) => l.name);
@@ -181,7 +192,7 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
       const m = mergeMain(dir);
       if (m.outcome === 'merged') {
         if (push(dir, repo, env.KEEPER_APP_TOKEN, planned.ref)) {
-          await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, [`Merged main into this branch (${m.commit.slice(0, 10)}).${m.unioned.length ? ` README rows kept from both sides: ${m.unioned.join(', ')}.` : ''} Pull before you push.`]);
+          await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, [`Merged main into this branch (${m.commit.slice(0, 10)}).${m.unioned.length ? ` README rows kept from both sides: ${m.unioned.join(', ')}.` : ''} Pull before you push.`], { k, outcome: `merged main (${m.commit.slice(0, 10)})` });
           summary(`- #${planned.number}: merged main and pushed`);
           continue;
         }
@@ -192,11 +203,12 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
         workflowRefusals += 1;
         try {
           await app.put(`pulls/${planned.number}/update-branch`, { expected_head_sha: planned.sha });
+          await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, ['GitHub refused the push, so main was merged through the update-branch API. Pull before you push.'], { k, outcome: 'updated through the update-branch API' });
           summary(`- #${planned.number}: push refused; updated through the update-branch API`);
         } catch {
           const g = giveUp(pr, 'GitHub refused both the push and the update-branch API', { files: [] });
           await app.post(`issues/${planned.number}/labels`, { labels: [g.label] });
-          await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, [g.body]);
+          await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, [g.body], { k, outcome: 'GitHub refused the push and the update-branch API; handed back' });
           summary(`- #${planned.number}: push and update-branch refused; handed back`);
         }
         continue;
@@ -207,15 +219,17 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
       if (m.outcome === 'refused' || !guard.ok) {
         const g = giveUp(pr, m.reason || 'the conflict touches a file no bot may write', { files, reproduce: 'git merge origin/main' });
         await app.post(`issues/${planned.number}/labels`, { labels: [g.label] });
-        await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, [g.body]);
+        await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, [g.body], { k, outcome: `refused (${m.reason || 'protected files'}); handed back` });
         summary(`- #${planned.number}: handed back (${m.reason || 'protected files'})`);
         continue;
       }
       // The indicator and the keeper's own record that its merge on this head left conflicts.
-      await app.post(`issues/${planned.number}/labels`, { labels: [LABELS.conflict, LABELS.keeperTried] });
-      await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, ['Merging main into this branch leaves conflicts in:', ...files.map((f) => `- \`${f}\``), '', 'The conflict resolver is asked to try; if it cannot, the owning session resolves them.']);
-      dispatch.push(planned.number);
-      summary(`- #${planned.number}: conflicts in ${files.length} file(s); labelled ${LABELS.conflict}`);
+      // D6476-p6: the last attempt hands back for good (needs-session) and never asks the resolver.
+      const c = conflictOutcome(k, files);
+      await app.post(`issues/${planned.number}/labels`, { labels: c.labels });
+      await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, c.lines, { k, outcome: c.outcome });
+      if (c.dispatch) dispatch.push(planned.number);
+      summary(`- #${planned.number}: conflicts in ${files.length} file(s); labelled ${LABELS.conflict}${last ? `; attempt ${k} of ${KEEPER_MAX_ATTEMPTS}, handed back for good` : ''}`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
