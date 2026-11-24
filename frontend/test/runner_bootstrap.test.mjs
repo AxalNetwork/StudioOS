@@ -306,3 +306,147 @@ test('root preflight refuses untrusted Node and Python paths before executing ei
   run.assert_not_called()
 `);
 });
+
+// Real private filesystem/state/locks; only privileged host ownership and service/account ports are synthetic.
+const operatorFixture = `from contextlib import contextmanager,ExitStack,redirect_stdout
+@contextmanager
+def operator(root):
+ original_stat=b.Path.stat
+ protected={root,*root.parents}
+ def root_stat(path,*args,**kwargs):
+  info=original_stat(path,*args,**kwargs)
+  if path in protected:
+   values=list(info);values[0]&=~0o022;values[4]=0;return os.stat_result(values)
+  return info
+ with ExitStack() as stack:
+  stack.enter_context(mock.patch.object(b.Path,'stat',root_stat))
+  stack.enter_context(mock.patch.object(b.os,'geteuid',return_value=0))
+  stack.enter_context(mock.patch.object(b,'trusted_file'))
+  yield
+def invoke(root,action):
+ output=io.StringIO()
+ with redirect_stdout(output):
+  result=b.main(Path(${JSON.stringify(profiles)}).parent,[action,'--profile','linux-x64','--root',str(root)])
+ return result,json.loads(output.getvalue())
+`;
+
+test('register acknowledges a complete existing enrollment without a token or activation, while new enrollment and start remain gated', () => {
+  fixture(operatorFixture + `with tempfile.TemporaryDirectory() as t:
+ root=Path(t)/'install';directory=root/'listener/runner';directory.mkdir(parents=True)
+ state={'identity':'studioos-linux-x64-'+('a'*32),'profile':'linux-x64','phase':'registered','runner_id':11,'group_id':r['self_hosted_group_id']}
+ b.save_state(root,state)
+ row={'gitHubUrl':'https://github.com/AxalNetwork','agentName':state['identity'],'agentId':11,'poolName':r['self_hosted_group'],'poolId':r['self_hosted_group_id']}
+ (directory/'.runner').write_text(json.dumps(row))
+ for name in ['.credentials','.credentials_rsaparams']:(directory/name).write_text('synthetic fixture material')
+ with operator(root),mock.patch.object(b,'isolation_enrollment_gate',wraps=b.isolation_enrollment_gate) as gate,mock.patch.object(b,'listener_command') as configure,mock.patch.object(b,'token_from_fd') as token,mock.patch.object(b,'service') as service:
+  for _ in range(2):
+   result,report=invoke(root,'register')
+   assert result==0 and report['identity']==state['identity']
+   assert report['registration']=='existing_not_duplicated'
+   assert report['online_idle_eligibility']=='unverified_operator_inventory_required'
+  assert json.loads((root/'state.json').read_text())==state
+  assert json.loads((directory/'.runner').read_text())==row
+  gate.assert_not_called();configure.assert_not_called();token.assert_not_called();service.assert_not_called()
+  (directory/'.runner').write_text(json.dumps(dict(row,gitHubUrl='https://github.com/AxalNetwork/StudioOS')))
+  refuses(lambda:invoke(root,'register'),'wrong_scope')
+  (directory/'.runner').unlink();(directory/'.credentials').unlink();(directory/'.credentials_rsaparams').unlink()
+  refuses(lambda:invoke(root,'register'),'isolation_canary_required')
+  refuses(lambda:invoke(root,'start'),'isolation_canary_required')
+  assert gate.call_count==2
+  configure.assert_not_called();token.assert_not_called();service.assert_not_called()
+`);
+});
+
+const archiveFixture = `import copy,shutil
+catalog=copy.deepcopy(r);profile=catalog['profiles']['linux-x64'];archives={};downloads=[]
+for kind,artifact in profile['artifacts'].items():
+ stream=io.BytesIO()
+ with tarfile.open(fileobj=stream,mode='w:gz') as archive:
+  name=('' if artifact['directory']=='.' else artifact['directory']+'/')+'bin/fixture'
+  content=('synthetic '+kind+' archive').encode();entry=tarfile.TarInfo(name);entry.size=len(content);entry.mode=0o755
+  archive.addfile(entry,io.BytesIO(content))
+ payload=stream.getvalue();artifact['sha256']=hashlib.sha256(payload).hexdigest();archives[artifact['sha256']]=payload
+verified_download=b.verified_download
+def download(artifact,destination):
+ downloads.append(next(kind for kind,item in profile['artifacts'].items() if item is artifact))
+ return verified_download(artifact,destination,lambda url:io.BytesIO(archives[artifact['sha256']]))
+listener=types.SimpleNamespace(pw_uid=1001,pw_gid=1001);job=types.SimpleNamespace(pw_uid=1002,pw_gid=1002)
+@contextmanager
+def installation(root):
+ with operator(root),ExitStack() as stack:
+  stack.enter_context(mock.patch.object(b,'load_registry',return_value=catalog))
+  stack.enter_context(mock.patch.object(b,'accounts',return_value=(listener,job)))
+  stack.enter_context(mock.patch.object(b.os,'chown'))
+  stack.enter_context(mock.patch.object(b,'verified_download',side_effect=download))
+  # These archives are intentionally not runtimes: native compatibility is a separate qualification gate.
+  stack.enter_context(mock.patch.object(b,'verify_tools',return_value={'fixture_tools':'synthetic'}))
+  yield
+`;
+
+test('fresh install verifies and extracts pinned fixture archives, persists one identity and remains idempotent without enrollment or service creation', () => {
+  fixture(operatorFixture + archiveFixture + `with tempfile.TemporaryDirectory() as t:
+ root=Path(t)/'install'
+ with installation(root),mock.patch.object(b,'listener_command') as configure,mock.patch.object(b,'service') as service:
+  first,report=invoke(root,'install');state=json.loads((root/'state.json').read_text())
+  second,again=invoke(root,'install')
+  assert first==second==0 and report==again and report['identity']==state['identity']
+  assert state['phase']=='verified' and json.loads((root/'state.json').read_text())==state
+  assert downloads==['runner','node','python']
+  for kind,item in profile['artifacts'].items():assert (root/('.installed-'+kind)).read_text()==item['sha256']
+  assert (root/'listener/runner/bin/fixture').read_text()=='synthetic runner archive'
+  assert not any((root/'listener/runner'/name).exists() for name in ['.runner','.credentials','.credentials_rsaparams'])
+  configure.assert_not_called();service.assert_not_called()
+`);
+});
+
+test('a crash after artifact publication refuses the unmarked destination and recovers only after scoped operator repair', () => {
+  fixture(operatorFixture + archiveFixture + `with tempfile.TemporaryDirectory() as t:
+ root=Path(t)/'install';write_text=b.Path.write_text;interrupted=[False]
+ def marker_write(path,*args,**kwargs):
+  if path==root/'.installed-node' and not interrupted[0]:interrupted[0]=True;raise OSError('synthetic power-loss window')
+  return write_text(path,*args,**kwargs)
+ with installation(root),mock.patch.object(b,'listener_command') as configure,mock.patch.object(b,'service') as service,mock.patch.object(b.Path,'write_text',marker_write):
+  try:invoke(root,'install')
+  except OSError:pass
+  else:raise AssertionError('publication interruption was ignored')
+  state=json.loads((root/'state.json').read_text());identity=state['identity']
+  assert state['phase']=='installing' and (root/'tools/node').is_dir() and not (root/'.installed-node').exists()
+  refuses(lambda:invoke(root,'install'),'unmarked_partial_install')
+  assert downloads==['runner','node']
+  # The private fixture is drained; emulate only the documented incomplete-artifact removal.
+  shutil.rmtree(root/'tools/node')
+  result,report=invoke(root,'install');assert result==0 and report['identity']==identity
+  assert json.loads((root/'state.json').read_text())['phase']=='verified'
+  assert downloads==['runner','node','node','python']
+  assert (root/'listener/runner/bin/fixture').read_text()=='synthetic runner archive'
+  assert not (root/'listener/runner/.runner').exists()
+  configure.assert_not_called();service.assert_not_called()
+`);
+});
+
+test('Linux service restart replaces the deadline in one unit and repeated stop/removal leaves no unit behind', () => {
+  fixture(`with tempfile.TemporaryDirectory() as t:
+ root=Path(t);state={'identity':'studioos-linux-x64-'+('a'*32)};script=Path('/opt/studioos-bootstrap/bootstrap.sh')
+ real_spec=b.service_spec;active=[False];calls=[]
+ def spec(*args,**kwargs):
+  name,path,content=real_spec(*args,**kwargs);return name,root/path.name,content
+ def command(args,**kwargs):
+  calls.append(args)
+  if args[1]=='start':active[0]=True
+  if args[1]=='stop':active[0]=False
+  return ''
+ def status(*args,**kwargs):return types.SimpleNamespace(returncode=0 if active[0] else 3)
+ with mock.patch.object(b.platform,'system',return_value='Linux'),mock.patch.object(b,'service_spec',side_effect=spec),mock.patch.object(b,'trusted_file'),mock.patch.object(b,'command',side_effect=command),mock.patch.object(b.subprocess,'run',side_effect=status):
+  b.service(root,state,script,'start',123456)
+  units=list(root.glob('*.service'));assert len(units)==1 and '_serve '+str(root)+' 123456' in units[0].read_text()
+  assert b.service(root,state,script,'status') is True
+  b.service(root,state,script,'stop');assert b.service(root,state,script,'status') is False
+  b.service(root,state,script,'start',234567)
+  assert list(root.glob('*.service'))==units and '234567' in units[0].read_text() and '123456' not in units[0].read_text()
+  assert 'User=studioos-runner' in units[0].read_text() and 'Restart=no' in units[0].read_text()
+  b.service(root,state,script,'stop');b.service(root,state,script,'stop')
+  b.service(root,state,script,'remove');b.service(root,state,script,'remove')
+  assert not list(root.glob('*.service')) and b.service(root,state,script,'status') is False
+  assert len({call[-1] for call in calls if call[1]=='start'})==1
+`);
+});

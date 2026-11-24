@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Capability Policies · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · AI agents · Operations › Policies · #8070 · continues HQ AI Agents SA0–SA9 (D4137)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC HQ · Capability policies — what each agent may do, granted or revoked one capability at a time with a reason</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The capability matrix at /hq/ai-agents/operations/policies, a second view of the Policies tab beside Platform settings (SA6, unchanged). Super admin only. Agents are rows; capabilities, written domain.action, are columns grouped by domain with a collapse per domain. A cell is Granted, Not granted, Locked (code.merge, deploy.production, cloud.write, finance.execute and email.send: a person does them, never an agent) or Not offered (the platform ceiling for the month). A grant or revoke happens in a side panel with a required reason and lands in Audit; it applies from the agent’s next run. Each agent shows its last refused run, which opens in Audit. Eadwyn (#5130) proposes revoking a grant unused for 30 days: accept, edit or discard; it never grants or revokes. The shell, tabs, tables, chips, panels and colours are copied from the landed HQ AI Agents canvas; the state words are Platform States (Not recorded, Unreadable, Refused). Violet dashed ◇ tags mark backend work on #8070; amber ⚑ tags owner picks drawn as option A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main 270cdf4a2a · [Northwind Labs], [Maya Ruiz], [Iris Chen], the eight agents, runs and dates are fictional; 8 agents, 28 grants, 18 of 20 grantable capabilities offered, 5 locked on every board</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ AI Agents Capability Policies Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SA10', 'Capability matrix · desktop 1440', 'Eight agents of [Northwind Labs] against 25 capabilities. Research, company, fund, code and web are expanded; the other six domains are collapsed to “granted of grantable”. The first row is the platform ceiling for November 2026. Each agent shows its role and last refusal; the code opens the run in Audit. The one primary action is Grant a capability…; selecting a cell opens the same panel.', [F('SA10', false, 1300), F('SA10B', 'Eadwyn open · proposes revoking email.draft unused for 34 days', 1380)]],
+      ['SA11', 'Grant panel', 'The side panel on [Competitor Analyst] × fund.read: what it allows in one sentence, the ceiling, the last change and who made it, Apply to role (⚑ Q1 A), the reason (10 to 200 characters) and the effect from the next run (⚑ Q2 A). The revoke, reached from Eadwyn’s proposal, reviews what the agent keeps. A locked cell explains itself and has nothing to press; a Worker refusal shows inline with its code and keeps the reason.', [F('SA11', false, 1300), C('SA11B', 'Revoke email.draft · from the proposal', 520, 1100), C('SA11C', 'Locked cell · refusal inline', 1040, 1080)]],
+      ['SA12', 'States', 'Loading in the matrix’s shape. Not recorded: no capability granted yet, every cell empty, the one action. Unreadable: the agents could not be read, the ceiling row still works, Try again. Refused: not a super admin, who can grant access. Saving, and Could not save with the text kept.', [F('SA12', 'Loading', 1000), F('SA12B', 'Not recorded · no grant yet', 1300), F('SA12C', 'Unreadable · ceiling still works', 900), F('SA12D', 'Refused · not a super admin', 760), C('SA12E', 'Saving · Could not save', 1040, 1040)]],
+      ['SA13', 'Phone 390', 'Agents as cards, each listing its granted capabilities as chips and its last refusal. Tapping a card opens the panel as a bottom sheet. Every target is 44 px.', [P('SA13', 'Cards'), P('SA13B', 'Grant sheet')]],
+      ['SA14', 'Dark · desktop 1440', 'SA10 and the grant panel on the dark tokens. Cells, states and tags keep their words and shapes.', [F('SA14', false, 1300), F('SA14B', 'Grant panel · dark', 1300)]],
+      ['SAP-H', 'Handoff', 'What was checked on main, backend required on #8070, the owner questions, frontend-only work, accessibility and the handoffs to Audit, #8071 Execution budgets and #8080 Registry. Decision file on landing: D4137-p<k>.md.', [W('SAPH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

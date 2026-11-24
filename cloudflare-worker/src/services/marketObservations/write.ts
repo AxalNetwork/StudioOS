@@ -1,6 +1,7 @@
 /** D7709 (#7709): bounded append-only observation writes and durable, body-free import receipts. */
 import type { Env } from '../../types';
 import { reportPrivateError } from '../../util/errorPrivacy';
+import { observationFieldsError, OBSERVATION_FIELDS, type ObservationFields } from '../researchObservations';
 
 export const MAX_BATCH_ROWS = 40;
 export class ImportRequestError extends Error {
@@ -17,7 +18,8 @@ export class ImportFailure extends Error {
     this.httpStatus = httpStatus !== null && Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? httpStatus : null;
   }
 }
-export interface Observation {
+/** One provider cell. D7716: the optional fields say what it counts, where and how; a value outside the exported lists is refused. */
+export interface Observation extends Partial<ObservationFields> {
   metric_key: string; metric_label: string; geography_type: 'country' | 'region' | 'city' | 'ecosystem';
   geography_code: string; period: string; value: number | null; unit: string;
   observation_status: 'actual' | 'estimate' | 'forecast' | 'axal_derived' | 'unspecified';
@@ -32,8 +34,10 @@ export interface ImportReport {
   rows_seen: number; rows_inserted: number; rows_unchanged: number;
   next_cursor: string | null; failure: string | null;
 }
-type Prior = { id: number; source_observation_key: string; vintage: string; value: number | null; observation_status: string };
-const same = (p: Prior, r: Observation) => p.value === r.value && p.observation_status === r.observation_status;
+type Prior = { id: number; source_observation_key: string; vintage: string; value: number | null; observation_status: string; limitations: string | null };
+/** D7717: a cell is unchanged only when its value, status and limitations (where a provider's flags land) all match. */
+const same = (p: Prior, r: Observation) => p.value === r.value && p.observation_status === r.observation_status
+  && (p.limitations ?? null) === (r.limitations ?? null);
 const keyOf = (r: Pick<Observation, 'source_observation_key' | 'vintage'>) => JSON.stringify([r.source_observation_key, r.vintage]);
 const failureOf = (error: unknown) => error instanceof ImportFailure ? error : new ImportFailure('database_unavailable');
 export const failureText = (f: ImportFailure) => f.kind + (f.httpStatus === null ? '' : ` HTTP ${f.httpStatus}`);
@@ -50,7 +54,7 @@ async function priorRows(env: Env, source: string, rows: Observation[]): Promise
   // One bounded prior read: the latest row and the requested edition, at most two per cell.
   const wanted = JSON.stringify(rows.map(r => ({ key: r.source_observation_key, vintage: r.vintage })));
   return (await env.DB.prepare(
-    `SELECT o.id,o.source_observation_key,o.vintage,o.value,o.observation_status
+    `SELECT o.id,o.source_observation_key,o.vintage,o.value,o.observation_status,o.limitations
        FROM research_market_observations o
       WHERE o.source_id=? AND EXISTS (
         SELECT 1 FROM json_each(?) w WHERE json_extract(w.value,'$.key')=o.source_observation_key
@@ -90,8 +94,11 @@ export async function runObservationBatch(env: Env, source: string, prepare: () 
     for (const r of rows) {
       if (!Number.isFinite(r.value) || !r.source_observation_key || r.source_observation_key.length > 200 || !r.vintage || r.vintage.length > 100)
         throw new ImportFailure('provider_payload');
+      // D7716: a field outside its exported list refuses the batch before any write; nothing is truncated or guessed.
+      if (observationFieldsError(r)) throw new ImportFailure('provider_payload');
       const old = identities.get(r.source_observation_key);
-      if (old && (old.vintage !== r.vintage || old.value !== r.value || old.observation_status !== r.observation_status))
+      if (old && (old.vintage !== r.vintage || old.value !== r.value || old.observation_status !== r.observation_status
+        || (old.limitations ?? null) !== (r.limitations ?? null)))
         throw new ImportFailure('provider_payload');
       identities.set(r.source_observation_key, r);
     }
@@ -113,16 +120,20 @@ export async function runObservationBatch(env: Env, source: string, prepare: () 
       const results = await env.DB.batch(pending.map(r => env.DB.prepare(
         `INSERT OR IGNORE INTO research_market_observations
           (source_id,metric_key,metric_label,geography_type,geography_code,period,value,unit,observation_status,
-           published_at,retrieved_at,confidence,source_observation_key,vintage,supersedes_observation_id)
+           published_at,retrieved_at,confidence,source_observation_key,vintage,supersedes_observation_id,
+           statistical_unit,scale,currency,price_basis,industry_scheme,industry_code,size_band,series_id,
+           supporting_passage,applicability_note,limitations)
          SELECT ?,?,?,?,?,?,?,?,?,?,?,'source_reported',?,?,
-           (SELECT id FROM research_market_observations WHERE source_id=? AND source_observation_key=? ORDER BY id DESC LIMIT 1)
+           (SELECT id FROM research_market_observations WHERE source_id=? AND source_observation_key=? ORDER BY id DESC LIMIT 1),
+           ?,?,?,?,?,?,?,?,?,?,?
           WHERE EXISTS (SELECT 1 FROM research_market_sources WHERE id=? AND enabled=1)
             AND NOT EXISTS (SELECT 1 FROM research_market_observations p WHERE p.source_id=? AND p.source_observation_key=?
               AND p.id=(SELECT MAX(q.id) FROM research_market_observations q WHERE q.source_id=p.source_id AND q.source_observation_key=p.source_observation_key)
-              AND p.value IS ? AND p.observation_status=?)`,
+              AND p.value IS ? AND p.observation_status=? AND p.limitations IS ?)`,
       ).bind(source, r.metric_key, r.metric_label, r.geography_type, r.geography_code, r.period, r.value, r.unit, r.observation_status,
         r.published_at, started, r.source_observation_key, r.vintage, source, r.source_observation_key,
-        source, source, r.source_observation_key, r.value, r.observation_status)));
+        ...OBSERVATION_FIELDS.map(f => r[f] ?? null),
+        source, source, r.source_observation_key, r.value, r.observation_status, r.limitations ?? null)));
       const ignored: Observation[] = [];
       for (let i = 0; i < results.length; i++) {
         if (Number(results[i].meta?.changes || 0) === 1) { inserted++; unchanged += duplicates.get(keyOf(pending[i])) || 0; }

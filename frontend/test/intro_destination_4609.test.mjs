@@ -20,7 +20,7 @@ const WORKER_MODULE = read('../../cloudflare-worker/src/services/introDestinatio
 const UID = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
 
 test('a built destination resolves back to the record and the system it came from', () => {
-  for (const kind of ['proposition', 'request']) {
+  for (const kind of ['proposition', 'request', 'ask']) {
     const url = introDestination(kind, UID);
     assert.equal(url, `${INTRO_ZONE}?intro=${UID}&kind=${kind}`);
     // The resolver takes the query, as a component holds it.
@@ -30,17 +30,18 @@ test('a built destination resolves back to the record and the system it came fro
     // `kind: null` and both surfaces claim the uid, which is the ambiguity this
     // whole contract exists to remove.
     assert.equal(introTargetIsMine(target, kind), true);
-    assert.equal(introTargetIsMine(target, kind === 'proposition' ? 'request' : 'proposition'), false);
+    for (const other of ['proposition', 'request', 'ask'].filter((k) => k !== kind)) assert.equal(introTargetIsMine(target, other), false);
   }
 });
 
-test('the Worker and the page agree on the zone and on the two kinds', () => {
+test('the Worker and the page agree on the zone and on the three kinds', () => {
   // ONE PATH, NAMED IN BOTH FILES. The bug was two paths: `/network` with
   // `?tab=` (five sites) and `/network/introductions` (four), each honoured by
   // a different component.
   assert.equal(INTRO_ZONE, '/network/introductions');
   assert.match(WORKER_MODULE, /export const INTRO_ZONE = '\/network\/introductions';/);
-  assert.match(WORKER_MODULE, /export type IntroKind = 'proposition' \| 'request';/);
+  // D6261 (#6261) added the third kind, an investor's intro ask.
+  assert.match(WORKER_MODULE, /export type IntroKind = 'proposition' \| 'request' \| 'ask';/);
   // The builder's own shape, so a change on one side fails here rather than in
   // production on whichever licence reads the other.
   assert.match(WORKER_MODULE, /\$\{INTRO_ZONE\}\?\$\{INTRO_PARAM\}=\$\{encodeURIComponent\(id\)\}&\$\{INTRO_KIND_PARAM\}=\$\{kind\}/);

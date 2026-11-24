@@ -1522,7 +1522,7 @@ captable.post('/register/:projectId/snapshot', async (c) => {
   } catch (e) {
     // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
     // the one record-erasure path as `unreferenced`; a cleanup failure never masks the refusal.
-    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced', { db: c.env.DB }).catch(() => {});
     return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
   }
   await noteStorageLanded(c.env, storage);
