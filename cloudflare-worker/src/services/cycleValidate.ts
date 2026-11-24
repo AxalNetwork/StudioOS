@@ -35,6 +35,7 @@ import {
   changedWithin, historyChangesAvailable, loadVerdictHistory, movedWithin, observationAt,
   parseObserved, recordVerdictChanges, RECENTLY_MOVED_DAYS,
 } from './verdictHistory';
+import { experimentsPart } from './validateExperiments';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 import { currentMarketFigures, marketFigureHistory, type MarketFigureRow } from './marketFigures';
@@ -1691,7 +1692,9 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     // D690 (#1692) step 3: a claim's evidence other than a pain link.
     ctx.env.DB.prepare(
       `SELECT id, hypothesis_id, kind, ref_id, direction, strength FROM hypothesis_evidence_links
-        WHERE project_id = ? ORDER BY id`,
+        WHERE project_id = ? AND (kind != 'experiment' OR EXISTS (SELECT 1 FROM hypothesis_experiments x
+          WHERE x.id = hypothesis_evidence_links.ref_id AND x.project_id = hypothesis_evidence_links.project_id
+            AND x.status = 'done' AND trim(COALESCE(x.result, '')) != '')) ORDER BY id`,
     ).bind(ctx.projectId).all<{ id: number; hypothesis_id: number; kind: string; ref_id: string; direction: string; strength: string | null }>(),
   ]);
   const { hyps } = gone ?? open;
@@ -1799,6 +1802,7 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     })), rq.page, {
       filters, sorts: LISTS.experiments.sorts,
       parts: {
+        experiments: await experimentsPart(ctx),
         stats: {
           hypotheses: openClaims.length,
           supported: count('supported'),

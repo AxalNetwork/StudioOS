@@ -3,6 +3,7 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { owningSlot, prIssue } from './rules.mjs';
 
 const exec = promisify(execFile);
 const classifier = fileURLToPath(new URL('../merge-policy.mjs', import.meta.url));
@@ -15,6 +16,12 @@ const positive = n => Number.isSafeInteger(n) && n > 0;
 const queueQuery = `query($owner: String!, $repo: String!) {
   repository(owner: $owner, name: $repo) {
     mergeQueue(branch: "main") { configuration { maximumEntriesToBuild } entries(first: 1) { totalCount } }
+  }
+}`;
+// #8076: the queue's entries with what admission needs: labels and the body that names the PR's issue.
+const entriesQuery = `query($owner: String!, $repo: String!) {
+  repository(owner: $owner, name: $repo) {
+    mergeQueue(branch: "main") { entries(first: 100) { totalCount nodes { pullRequest { number body labels(first: 50) { totalCount nodes { name } } } } } }
   }
 }`;
 const historyQuery = `query($owner: String!, $repo: String!, $number: Int!) {
@@ -155,6 +162,7 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
     return checks.filter(c => contexts.filter(ctx => ctx.context === c.name)
       .every(ctx => !positive(ctx.integration_id) || ctx.integration_id === c.app?.id));
   };
+  const slotCache = new Map();
   return {
     get,
     /**
@@ -241,6 +249,33 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
       const buildLimit = mergeQueue?.configuration?.maximumEntriesToBuild;
       if (!positive(buildLimit) || !Number.isSafeInteger(queuedCount) || queuedCount < 0) throw new Error('Unreadable merge queue capacity');
       return {freeQueueSlots: Math.max(0, buildLimit - queuedCount), queuedCount, buildLimit};
+    },
+    /**
+     * #8076 (D8076): every merge-queue entry as { number, labels, slot }. Incomplete pages throw, and the feeder then
+     * holds every candidate. A slot comes from the issue the PR body names (`owningSlot`).
+     */
+    async readQueueEntries() {
+      const {mergeQueue} = await graph(entriesQuery);
+      const conn = mergeQueue?.entries;
+      if (!Number.isSafeInteger(conn?.totalCount) || !Array.isArray(conn.nodes) || conn.nodes.length !== conn.totalCount) {
+        throw new Error('Unreadable merge queue entries');
+      }
+      const out = [];
+      for (const node of conn.nodes) {
+        const pr = node?.pullRequest;
+        if (!positive(pr?.number) || !Array.isArray(pr.labels?.nodes) || pr.labels.nodes.length !== pr.labels.totalCount) {
+          throw new Error('Unreadable merge queue entry');
+        }
+        out.push({number: pr.number, labels: pr.labels.nodes.map(l => l.name), slot: await this.readOwningSlot(pr)});
+      }
+      return out;
+    },
+    /** #8076: the PR's slot: 'S07', '' when its body names no issue or the issue has no slot label. A read error throws. */
+    async readOwningSlot(pull) {
+      const n = prIssue(pull?.body);
+      if (!n) return '';
+      if (!slotCache.has(n)) slotCache.set(n, get(`issues/${n}`).then(issue => owningSlot(pull.body, issue) ?? ''));
+      return slotCache.get(n);
     },
     async readCandidate(number) {
       if (!positive(number)) throw new Error('Invalid pull request number');

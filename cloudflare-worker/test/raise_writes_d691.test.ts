@@ -53,6 +53,7 @@ const P = 1;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  applySuppressionLedger(db); // D6654
   for (const t of [
     'users', 'projects', 'activity_logs', 'cap_table_scenarios', 'cap_table_holders', 'cap_table_vesting', 'raise_prospects',
     'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'data_room_files',
@@ -476,6 +477,7 @@ linksApp.route('/api/decks', deckShareActions);
 
 function linksFixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  applySuppressionLedger(db); // D6654
   for (const t of ['users', 'projects', 'activity_logs', 'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'raise_prospects']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
@@ -614,6 +616,7 @@ const R_FOUNDER = 21, COMMITTED = 22, INVITED = 23, R_ADVISOR = 24;
 const ROOM = 7;
 function roomFixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  applySuppressionLedger(db); // D6654
   db.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT UNIQUE NOT NULL, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
@@ -796,6 +799,7 @@ function ddlOnly(file: string): string {
 
 function cycleFixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  applySuppressionLedger(db); // D6654
   for (const t of [
     'users', 'projects', 'activity_logs', 'cap_table_scenarios', 'cap_table_holders', 'cap_table_vesting', 'raise_prospects', 'raise_rounds',
     'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'data_room_folders', 'data_room_files',
@@ -1282,6 +1286,7 @@ import {
 } from '../src/services/raiseWriters.ts';
 import { replaceDataRoomFile, removeDataRoomFile } from '../src/routes/data_room.ts';
 import { withGrantFolders } from './_data_room_scope.mjs';
+import { applySuppressionLedger } from './_suppression_ledger.mjs';
 
 async function refused2(p: Promise<unknown>): Promise<{ status: number; sentence: string }> {
   try { await p; } catch (e: any) {

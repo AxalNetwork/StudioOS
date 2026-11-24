@@ -1715,7 +1715,7 @@ export async function setLinkStrength(
   ]);
 }
 
-export const EXPERIMENT_STATUSES = ['planned', 'running', 'done'] as const;
+export const EXPERIMENT_STATUSES = ['planned', 'running', 'done', 'stopped'] as const;
 
 /**
  * Add an experiment to a claim.
@@ -1772,17 +1772,26 @@ export async function addExperiment(
 /** Move an experiment of this claim to planned, running or done, with its result. */
 export async function setExperimentStatus(
   env: Env,
-  input: { projectId: number; userId: number | null; hypothesisId: number; experiment_id: unknown; status: unknown; result?: unknown },
+  input: { projectId: number; userId: number | null; hypothesisId: number; experiment_id: unknown; status: unknown; result?: unknown; result_direction?: unknown },
 ): Promise<void> {
   const status = String(input.status ?? '');
   if (!(EXPERIMENT_STATUSES as readonly string[]).includes(status)) throw new WriterError(400, `status must be one of ${EXPERIMENT_STATUSES.join(', ')}`);
   const eid = intId(input.experiment_id);
   const ex = eid == null ? null : await env.DB.prepare(
-    'SELECT e.id, e.result, h.code FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id WHERE e.id = ? AND e.hypothesis_id = ? AND e.project_id = ? AND h.project_id = ?',
-  ).bind(eid, input.hypothesisId, input.projectId, input.projectId).first<{ id: number; result: string | null; code: string }>();
+    'SELECT e.*, h.code FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id WHERE e.id = ? AND e.hypothesis_id = ? AND e.project_id = ? AND h.project_id = ?',
+  ).bind(eid, input.hypothesisId, input.projectId, input.projectId).first<{ id: number; result: string | null; code: string; result_direction?: string | null; result_recorded_at?: string | null; stopped_at?: string | null }>();
   if (!ex) throw new WriterError(404, 'Experiment not found on this hypothesis');
-  await env.DB.prepare("UPDATE hypothesis_experiments SET status = ?, result = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
-    .bind(status, input.result === undefined ? ex.result : trimOrNull(input.result, 1000), ex.id, input.projectId).run();
+  const result = input.result === undefined ? ex.result : trimOrNull(input.result, 1000);
+  const direction = input.result_direction === undefined ? (status === 'done' ? ex.result_direction ?? null : null) : trimOrNull(input.result_direction, 30);
+  if (direction != null && !['supports', 'contradicts', 'inconclusive'].includes(direction)) throw new WriterError(400, 'Choose a valid result direction');
+  if (direction && (status !== 'done' || !result)) throw new WriterError(400, 'A result direction needs a completed experiment with an observed result');
+  await env.DB.prepare(`UPDATE hypothesis_experiments SET status = ?, result = ?, result_direction = ?,
+    stopped_at = CASE WHEN ? = 'stopped' THEN COALESCE(stopped_at, datetime('now')) ELSE NULL END,
+    result_recorded_at = CASE WHEN ? = 'done' AND ? IS NOT NULL THEN
+      CASE WHEN result IS ? THEN COALESCE(result_recorded_at, datetime('now')) ELSE datetime('now') END ELSE NULL END,
+    updated_at = datetime('now') WHERE id = ? AND project_id = ?`)
+    .bind(status === 'stopped' ? 'planned' : status, result, status === 'done' ? direction : null,
+      status, status, result, result, ex.id, input.projectId).run();
   await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'experiment_status_set', `${ex.code} experiment ${status}`);
 }
 

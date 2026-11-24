@@ -6,8 +6,10 @@ import { cycleOf } from './cycleModel.js';
 export const FOUNDER_TOOLS = [
   { path: '/build/brand', cycle: 'grow', module: 'distribution', label: 'Open landing-page builder', door: true, roles: ['admin', 'founder'] },
   { path: '/grow/launch', cycle: 'grow', module: 'distribution', label: 'Open launch calendar', door: true, roles: ['admin', 'founder'] },
-  { path: '/legal', cycle: 'build', module: 'company-creation', label: 'Open legal documents', door: true, roles: ['admin', 'founder'] },
-  { path: '/legal/send', cycle: 'build', module: 'company-creation', label: 'Open e-signature', door: true, roles: ['admin', 'founder', 'partner', 'investor', 'advisor'] },
+  // D6038 (#6038, BD11): on Company creation these two are supporting tools beside Add another filing, under the
+  // filings, not doors above the page's work; `supporting` is the short name that row draws.
+  { path: '/legal', cycle: 'build', module: 'company-creation', label: 'Open legal documents', supporting: 'Legal documents', door: true, roles: ['admin', 'founder'] },
+  { path: '/legal/send', cycle: 'build', module: 'company-creation', label: 'Open e-signature', supporting: 'E-signature', door: true, roles: ['admin', 'founder', 'partner', 'investor', 'advisor'] },
   // D1194 (#3128): Investor match is Capital relationships › Match; the old addresses only forward.
   { path: '/raise/capital-relationships/match', cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },
   { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
@@ -40,7 +42,7 @@ export function moduleToolLinks(cycle, slug, user, search = '') {
   if (!['admin', 'founder'].includes(user?.role)) return [];
   return FOUNDER_TOOLS.filter((tool) => tool.door && tool.cycle === cycle && tool.module === slug
     && tool.roles.includes(user.role) && hasTier(user, tool.requiredTier))
-    .map((tool) => ({ label: tool.label, href: doorHref(tool, search) }));
+    .map((tool) => ({ label: tool.label, href: doorHref(tool, search), ...(tool.supporting ? { supporting: tool.supporting } : {}) }));
 }
 
 /**

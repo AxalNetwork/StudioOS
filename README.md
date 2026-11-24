@@ -22,6 +22,7 @@ canonical entity map.
 | `backend/`          | FastAPI (Python) — **Replit-dev-only**, not deployed to production    |
 | `attached_assets/`  | Design specs, screenshots, methodology docs, legal templates          |
 | `docs/`             | Built frontend bundle (Vite output) — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
+| [LICENSE](./LICENSE) | The existing proprietary project notice, also stated below. |
 
 ## Local development on Replit
 

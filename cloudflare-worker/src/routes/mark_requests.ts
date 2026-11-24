@@ -219,7 +219,7 @@ r.post('/', async (c) => {
     } catch (e) {
       // The row was not written: the file this request just stored has nothing pointing at it. D6651: it
       // leaves through the one record-erasure path as `unreferenced`.
-      if (fileKey) { try { await eraseRecordObjects(c.env.FILES!, fileKey, 'unreferenced'); } catch { console.warn('[mark_requests] orphan_evidence_not_deleted'); } }
+      if (fileKey) { try { await eraseRecordObjects(c.env.FILES!, fileKey, 'unreferenced', { db: c.env.DB }); } catch { console.warn('[mark_requests] orphan_evidence_not_deleted'); } }
       // Two submits at once: the partial unique index keeps one; the other is the 409 above.
       if (/UNIQUE constraint failed/i.test(String((e as Error)?.message || ''))) {
         const again = await c.env.DB.prepare(OPEN_ONE)

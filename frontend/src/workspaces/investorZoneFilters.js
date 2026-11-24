@@ -343,31 +343,20 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Discarded', key: 'discarded' },
     { canvas: 'Show cleared', key: 'cleared' },
   ],
-  // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
-  // THE WORD SUGGESTS. Its own artboard code reads
-  // `PULLS.filter(p => p.state === 'Requested')` into a variable called
-  // `partial`, and its `Requested` row is `6 of 11 files · IP folder withheld`.
-  // It is a partly-staged room, which this page can see — `withheld_behind_nda`
-  // is on every row and the route already returns the count as `partial_count`.
-  // So the chip is live and wears the store's own word: keeping `Requested`
-  // would promise a request record, and the ops half of this same row spends a
-  // sentence explaining that none exists.
-  //
-  // `Granted` is the ALREADY-SCOPED kind of reason, like `Mine` on the pipeline
-  // board: the query selects only active grants, so `granted_count` is
-  // literally `items.length` and a chip would narrow nothing while looking like
-  // it might.
+  // D6269 (#6269): EACH CHIP SELECTS A REAL STATE, drawn to the Investor
+  // Research v2 Rooms canvas (IRV-02). `Partly staged` is a room with files
+  // behind an NDA (`withheld_behind_nda > 0`, the route's `partial_count`).
+  // `Requested` now means a request: your open requests (D6267's `requests`,
+  // `state = 'open'`), shown in the Requests block, and `Declined` the ones a
+  // founder declined, with their reason and date. `Granted` is no chip: every
+  // room listed is a live grant, so it is the Rooms granted tile's count.
+  // `Not staged` left with it: a company that never opened a room leaves no
+  // row to select. Both canvas labels stay on the old IR2 artboard.
   'research/diligence': [
     { canvas: 'All', key: 'all' },
-    {
-      canvas: 'Granted',
-      unbuilt: 'every room here is one you have been granted; the list loads active grants only, so this would select all of them',
-    },
-    { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
-    {
-      canvas: 'Not staged',
-      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find', hover: 'A company that never opened a room leaves no row here to find.',
-    },
+    { canvas: 'Partly staged', key: 'partial', label: 'Partly staged {n}' },
+    { canvas: 'Requested', key: 'requested', label: 'Requested {n}' },
+    { canvas: 'Declined', key: 'declined', label: 'Declined {n}' },
   ],
   // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
   // half says "a peer source is recorded per row, so there is no one set to

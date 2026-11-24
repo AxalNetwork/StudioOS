@@ -504,7 +504,7 @@ export class MeetingBotRun implements DurableObject {
     try { await botSession(this.env,run); }
     catch {
       // D886: recording permission ended, so the chunk is not kept. D6651: it leaves through the one record-erasure path.
-      await eraseRecordObjects(this.env.FILES!, saved.objectPath, 'erasure_request');
+      await eraseRecordObjects(this.env.FILES!, saved.objectPath, 'erasure_request', { db: this.env.DB });
       await this.env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ? AND seq = ?').bind(session.id,seq).run();
       throw new BotError(409,'consent_required','The recording permission ended during upload.');
     }
