@@ -22,7 +22,7 @@ const week = { week_start: '2026-10-05', week_end: '2026-10-11', clicks: 0, impr
 const report = { property: { site_url: 'sc-domain:example.invalid', property_kind: 'domain', access_state: 'ok' }, last_status: 'partial', last_success_at: '2026-10-12T00:00:00Z', fetched_through: '2026-10-09', weeks: [week] }; // Immutable source snapshot, explicitly stale
 const searchApi = (overrides = {}) => ({ properties: async () => ({ capability: { can_bind: true }, binding: { own: true, site_url: report.property.site_url, access_state: 'ok' }, choices: [{ ...report.property, usable: true, permission_level: 'siteOwner' }] }), results: async () => report, sync: async () => ({}), select: async () => ({}), check: async () => ({}), ...overrides });
 const survey = { capability: { can_bind: true }, binding: { own: true, form_id: 'FormFixture', access_state: 'ok', fields: [{ id: 'q1', type: 'yes_no', ref: 'intent' }] }, forms: { items: [{ id: 'FormFixture', title: 'Synthetic survey' }], page_count: 1 } };
-const surveyApi = (overrides = {}) => ({ forms: async () => survey, syncStatus: async () => ({ status: { state: 'ok', completed: 3, qualifying: 2, checkpoint: '2026-10-09', needs_remap: [] } }), reviews: async () => ({ counts: { confirmed_signals: 1 }, rows: [{ id: 7, status: 'pending', hypothesis_id: 6, mapping_version: 2, direction: 'supports', private_answer: 'SYNTHETIC PRIVATE QUOTE' }] }), mappings: async () => ({ items: [] }), sync: async () => ({ outcome: 'ok' }), prepare: async () => ({}), decide: async () => ({}), select: async () => ({}), check: async () => ({}), ...overrides }); // Synthetic source date
+const surveyApi = (overrides = {}) => ({ forms: async () => survey, syncStatus: async () => ({ status: { state: 'ok', completed: 3, qualifying: 2, checkpoint: '2026-10-09', needs_remap: [] } }), reviews: async () => ({ counts: { confirmed_signals: 1 }, rows: [{ id: 7, status: 'pending', hypothesis_id: 6, mapping_version: 2, direction: 'supports', private_answer: 'SYNTHETIC PRIVATE QUOTE' }] }), mappings: async () => ({ items: [], revision: 'synthetic-revision' }), sync: async () => ({ outcome: 'ok' }), prepare: async () => ({}), decide: async () => ({}), select: async () => ({}), check: async () => ({}), ...overrides }); // Synthetic source date
 async function mounted(Component, api) { const m = await mountContracts(h(Component, { projectId: 41, api }), '/grow/distribution/results?project_id=41', { id: 10, role: 'founder' }); await m.flush(); await m.flush(); return m; }
 
 test('organic property totals preserve zero, weighted CTR, Pacific dates and partial coverage without adding top-page detail', () => {
@@ -145,7 +145,7 @@ test('grant cancellation/return notices never trust raw provider errors or impor
 
 test('mapping chooses recorded hypothesis/experiment names and preserves an explicit target, with no automatic import or confirmation', async () => {
  const calls=[];const api=surveyApi({targets:async()=>({hypotheses:[{id:6,code:'H1',claim:'Synthetic customer need'}],experiments:[{id:9,hypothesis_id:6,title:'Synthetic intent experiment',status:'planned'},{id:10,hypothesis_id:999,title:'Unrelated experiment',status:'planned'}]}),setMappings:async(...args)=>{calls.push(['rules',...args]);return{items:[{id:12,field_id:'q1'}]};},evidenceMapping:async(...args)=>{calls.push(['target',...args]);return{};}});
- const m=await mounted(TypeformJourney,api);try{await m.click('Map question');await m.flush();assert.match(m.text(),/Synthetic customer need/);await m.fill('Hypothesis','6');assert.match(m.text(),/Synthetic intent experiment/);assert.doesNotMatch(m.text(),/Unrelated experiment/);await m.fill('Experiment (optional)','9');await m.click('Save mapping');assert.deepEqual(calls[1],['target',41,{field_mapping_id:12,hypothesis_id:6,experiment_id:9}]);assert.equal(calls.length,2);
+ const m=await mounted(TypeformJourney,api);try{await m.click('Map question');await m.flush();assert.match(m.text(),/Synthetic customer need/);await m.fill('Hypothesis','6');assert.match(m.text(),/Synthetic intent experiment/);assert.doesNotMatch(m.text(),/Unrelated experiment/);await m.fill('Experiment (optional)','9');await m.click('Save mapping');assert.deepEqual(calls[1],['target',41,{field_mapping_id:12,hypothesis_id:6,experiment_id:9}]);assert.equal(calls.length,2);assert.equal(calls[0][3],'synthetic-revision');
  }finally{await m.unmount();}
 });
 
@@ -168,4 +168,29 @@ test('a failed hypothesis link retains an explicit link-only retry without repea
  const input=m.nodes().find(n=>n.tagName==='BUTTON'&&m.props(n).children==='Import responses');assert.equal(m.props(input).disabled,true);
  await m.click('Retry hypothesis link');await m.flush();assert.equal(rules,1);assert.equal(links.length,2);assert.deepEqual(links[1],links[0]);assert.doesNotMatch(m.text(),/hypothesis link is unfinished/);
  }finally{await m.unmount();}
+});
+
+
+test('an unreadable mapping list cannot replace existing rules, and an explicit successful reread restores mapping',async()=>{
+ let readable=false,writes=0;
+ const api=surveyApi({mappings:async()=>{if(!readable)throw Error('unreadable');return{items:[],revision:'synthetic-current'};},setMappings:async()=>{writes++;return{};}});
+ const m=await mounted(TypeformJourney,api);
+ const mapButton=()=>m.nodes().find(n=>n.tagName==='BUTTON'&&m.props(n).children==='Map question');
+ try{assert.equal(m.props(mapButton()).disabled,true);assert.match(m.text(),/existing rules will not be replaced/);assert.equal(writes,0);
+ readable=true;await m.click('Read survey again');await m.flush();await m.flush();
+ assert.equal(m.props(mapButton()).disabled,false);assert.doesNotMatch(m.text(),/existing rules will not be replaced/);
+ }finally{await m.unmount();}
+});
+
+
+test('mutation: an unreadable mapping snapshot cannot enable replacement and readable snapshots do enable it',async()=>{
+ const path='pages/cycles/TypeformJourney.jsx';
+ await mutationCheck(readFileSync(new URL('../src/'+path,import.meta.url),'utf8'),path,async mod=>{
+  for(const readable of [false,true]){
+   const api=surveyApi({mappings:async()=>{if(!readable)throw Error('unreadable');return{items:[],revision:'synthetic-current'};}});
+   const m=await mounted(mod.default,api);
+   try{const button=m.nodes().find(n=>n.tagName==='BUTTON'&&m.props(n).children==='Map question');assert.equal(m.props(button).disabled,!readable);}
+   finally{await m.unmount();}
+  }
+ },[['disabled={busy || (!pendingTarget && !mappingRevision)}','disabled={busy}'],["setMappingRevision(values[2].value.revision)","setMappingRevision(null)"]]);
 });

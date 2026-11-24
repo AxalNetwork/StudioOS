@@ -80,9 +80,14 @@ async function world(env0: Record<string, string> = {}) {
 const path='/api/typeform/mappings';
 const rule={field_id:'choice',kind:'waitlist',choices:['yes'],keep_text:false};
 async function ready() {const w=await world(); await followTypeformBinding(w.env,PROJECT); return w;}
+async function save(w: Awaited<ReturnType<typeof ready>>, rules: unknown[] = [rule]) {
+ const view = await w.call(OWNER,'GET',`${path}?project=${PROJECT}`);
+ assert.equal(view.status,200,view.text);
+ return w.call(OWNER,'PUT',path,{project:PROJECT,mappings:rules,expected_mapping_revision:view.body.revision});
+}
 test('mapping GET is owner-scoped/read-only, dark-gated, and exposes stable fields without titles or grant data',async()=>{
  const w=await ready(); const r=await w.call(OWNER,'GET',`${path}?project=${PROJECT}`);
- assert.equal(r.status,200);assert.deepEqual(r.body.items,[]);assert.equal(w.tf.calls.length,0);
+ assert.equal(r.status,200);assert.deepEqual(r.body.items,[]);assert.match(r.body.revision,/^[a-f0-9]{64}$/);assert.equal(w.tf.calls.length,0);
  for(const who of [null,TEAMMATE,ADVISOR,STRANGER]) assert.notEqual((await w.call(who,'GET',`${path}?project=${PROJECT}`)).status,200);
  assert.equal((await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:[rule]},{impersonated_by:99})).status,403);
  w.env.TYPEFORM_APP_APPROVED='';assert.equal((await w.call(OWNER,'GET',`${path}?project=${PROJECT}`)).status,503);
@@ -90,7 +95,7 @@ test('mapping GET is owner-scoped/read-only, dark-gated, and exposes stable fiel
 });
 test('mapping writes validate against the exact recorded-region form, are idempotent, and never import or confirm evidence',async()=>{
  const w=await ready();
- for(let i=0;i<2;i++) assert.equal((await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:[rule]})).status,200);
+ for(let i=0;i<2;i++) assert.equal((await save(w)).status,200);
  assert.equal(w.tf.calls.length,2);assert.ok(w.tf.calls.every(u=>u==='https://api.eu.typeform.com/forms/FrmSyncA1'));
  const result=await w.call(OWNER,'GET',`${path}?project=${PROJECT}`);
  assert.equal(result.body.items.length,1); assert.equal(result.body.items[0].field_id,'choice');
@@ -98,7 +103,7 @@ test('mapping writes validate against the exact recorded-region form, are idempo
  for(const table of ['typeform_responses','typeform_answers','demand_signals']) assert.equal((w.db.prepare(`SELECT COUNT(*) n FROM ${table}`).get() as any).n,0);
  for(const bad of [{...rule,choices:['invented']},{...rule,field_id:'email'}, {...rule,kind:'prototype'},rule,rule]) {
   const body=bad===rule?[rule,rule]:[bad];
-  assert.equal((await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:body})).status,400);
+  assert.equal((await save(w,body)).status,400);
  }
  assert.equal((w.db.prepare('SELECT COUNT(*) n FROM typeform_field_mappings').get() as any).n,1);w.db.close();
 });
@@ -108,14 +113,14 @@ test('revoking company permission immediately before the write batch rolls back 
   w.db.prepare('UPDATE integration_companies SET enabled=0 WHERE integration_id=?').run(MINE);
   return t.batch(stmts);
  };const v=Reflect.get(t,k);return typeof v==='function'?v.bind(t):v;}});
- const r=await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:[rule]});
+ const r=await save(w);
  assert.equal(r.status,409);assert.equal((w.db.prepare('SELECT COUNT(*) n FROM typeform_field_mappings').get() as any).n,0);
  assert.equal((w.db.prepare('SELECT COUNT(*) n FROM decision_guard').get() as any).n,0);w.db.close();
 });
 test('switching the selected form while its provider read is pending refuses the old mapping',async()=>{
  const w=await ready();const original=w.tf.fetch;
  w.tf.fetch=(async(...args:any[])=>{const response=await (original as any)(...args);w.db.prepare('UPDATE typeform_form_bindings SET form_id=?').run(FORM_B);return response;}) as typeof fetch;
- const r=await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:[rule]});
+ const r=await save(w);
  assert.equal(r.status,409);assert.equal((w.db.prepare('SELECT COUNT(*) n FROM typeform_field_mappings').get() as any).n,0);w.db.close();
 });
 test('OAuth pilot return is a provider-bound fixed route, never an arbitrary redirect or inherited object key',()=>{
@@ -146,4 +151,45 @@ test('actual disconnect stops the selected source but does not automatically del
  assert.equal((w.db.prepare('SELECT COUNT(*) n FROM integrations WHERE id=501').get() as any).n,0);
  assert.equal((w.db.prepare("SELECT COUNT(*) n FROM demand_signals WHERE id=901 AND status='confirmed'").get() as any).n,1);
  assert.equal((w.db.prepare("SELECT COUNT(*) n FROM hypothesis_evidence_links WHERE ref_id='signal-901'").get() as any).n,1);w.db.close();
+});
+
+
+test('an unread or stale mapping list refuses replacement before provider access and preserves newer rules',async()=>{
+ const w=await ready();
+ const before=await w.call(OWNER,'GET',`${path}?project=${PROJECT}`);
+ assert.equal((await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:[rule]})).status,409);
+ assert.equal(w.tf.calls.length,0);
+ assert.equal((await save(w)).status,200);
+ const after=await w.call(OWNER,'GET',`${path}?project=${PROJECT}`);
+ assert.notEqual(after.body.revision,before.body.revision);
+ const calls=w.tf.calls.length;
+ const stale=await w.call(OWNER,'PUT',path,{project:PROJECT,mappings:[],expected_mapping_revision:before.body.revision});
+ assert.equal(stale.status,409);assert.equal(w.tf.calls.length,calls);
+ assert.deepEqual((await w.call(OWNER,'GET',`${path}?project=${PROJECT}`)).body,after.body);
+ w.db.close();
+});
+
+test('a mapping change immediately before the write batch rolls back replacement and its retractions',async()=>{
+ const w=await ready();assert.equal((await save(w)).status,200);
+ const mappingId=Number((w.db.prepare('SELECT id FROM typeform_field_mappings').get() as any).id);
+ w.db.prepare("INSERT INTO typeform_responses(id,sync_id,response_id,response_type,first_seen_at,last_seen_at) VALUES(701,?,'synthetic-response','completed',?,?)").run(w.syncIdOf(FORM_A),'2026-11-01T00:00:00Z','2026-11-01T00:00:00Z');
+ w.db.prepare("INSERT INTO typeform_answers(id,response_row_id,mapping_id,field_id,answer_text,created_at) VALUES(801,701,?,'choice','synthetic private answer',?)").run(mappingId,'2026-11-01T00:00:00Z');
+ w.db.exec(`INSERT INTO hypotheses (id,project_id,code,claim) VALUES (101,41,'H1','Synthetic claim');
+ INSERT INTO demand_signals (id,project_id,kind,signal_date,status,source_kind,source_typeform_key) VALUES (901,41,'waitlist','2026-11-01','confirmed','typeform','synthetic-source');
+ INSERT INTO hypothesis_evidence_links (uid,project_id,hypothesis_id,kind,ref_id,direction) VALUES ('synthetic-link',41,101,'signal','signal-901','supports');
+ INSERT INTO typeform_reviews (project_id,integration_id,source_key,evidence_mapping_id,mapping_version,answer_id,signal_id,status) VALUES (41,501,'synthetic-source',1,1,801,901,'confirmed');`);
+ const db=w.env.DB;let raced=false;
+ w.env.DB=new Proxy(db,{get(t,k){if(k==='batch')return(stmts:any[])=>{
+  raced=true;w.db.prepare("UPDATE typeform_field_mappings SET kind='would_pay' WHERE field_id='choice'").run();
+  return t.batch(stmts);
+ };const v=Reflect.get(t,k);return typeof v==='function'?v.bind(t):v;}});
+ const r=await save(w,[]);
+ assert.equal(raced,true);assert.equal(r.status,409,r.text);
+ assert.equal((w.db.prepare("SELECT kind FROM typeform_field_mappings WHERE field_id='choice'").get() as any).kind,'would_pay');
+ assert.equal((w.db.prepare('SELECT COUNT(*) n FROM decision_guard').get() as any).n,0);
+ assert.equal((w.db.prepare('SELECT COUNT(*) n FROM typeform_answers WHERE id=801').get() as any).n,1);
+ assert.equal((w.db.prepare('SELECT COUNT(*) n FROM demand_signals WHERE id=901').get() as any).n,1);
+ assert.equal((w.db.prepare("SELECT COUNT(*) n FROM hypothesis_evidence_links WHERE ref_id='signal-901'").get() as any).n,1);
+ assert.equal((w.db.prepare("SELECT status FROM typeform_reviews WHERE answer_id=801").get() as any).status,'confirmed');
+ w.db.close();
 });

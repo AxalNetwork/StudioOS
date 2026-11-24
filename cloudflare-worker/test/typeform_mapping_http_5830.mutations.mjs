@@ -15,7 +15,9 @@ try {
  for(const [name,before,after] of [
   ['approval bypass',"if (c.env.TYPEFORM_APP_APPROVED !== '1')",'if (false)'],
   ['binding-owner bypass',"const currentScope = await scope(c, project);","const currentScope = await scope(c, project); currentScope.userId = 11;"],
-  ['atomic revocation bypass','THEN 1 ELSE 0 END','THEN 1 ELSE 1 END']
+  ['atomic revocation bypass','THEN 1 ELSE 0 END','THEN 1 ELSE 1 END'],
+  ['stale snapshot bypass',"if (b.expected_mapping_revision !== before.revision)",'if (false)'],
+  ['commit snapshot bypass','AND (${SNAPSHOT_SQL}) = ?','AND (? IS NOT NULL OR ? IS NOT NULL)']
  ]) {
   assert.ok(original.includes(before),name+' target exists');writeFileSync(route,original.replace(before,after));result=run();
   assert.notEqual(result.status,0,name+' survived');assert.match(result.stdout+result.stderr,/AssertionError/,name+' must fail a behavioral assertion, not imports/syntax');console.log(name+': KILLED, exit '+result.status);

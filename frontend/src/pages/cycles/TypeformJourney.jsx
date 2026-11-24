@@ -19,6 +19,7 @@ function VentureTypeform({ projectId, api = typeformApi }) {
   const [round, setRound] = useState(0), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [dialog, setDialog] = useState(null), [form, setForm] = useState(''), [page, setPage] = useState(1), [field, setField] = useState('');
   const [pendingTarget, setPendingTarget] = useState(null);
+  const [mappingRevision, setMappingRevision] = useState(null);
   const [targets, setTargets] = useState(null), [targetsError, setTargetsError] = useState(false);
   const [draft, setDraft] = useState({ kind: 'need_to_have', choices: '', equals: 'true', min: '', keep_text: false, hypothesis: '', experiment: '' });
   const alive = useRef(true), action = useRef(false);
@@ -26,7 +27,7 @@ function VentureTypeform({ projectId, api = typeformApi }) {
   useEffect(() => {
     let live = true;
     if (!projectId) { setLoading(false); return undefined; }
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setMappingRevision(null);
     api.forms(projectId, page).then(async out => {
       if (!live) return;
       setRead(out);
@@ -35,7 +36,7 @@ function VentureTypeform({ projectId, api = typeformApi }) {
       if (!live) return;
       if (values[0].status === 'fulfilled') setStatus(values[0].value.status);
       if (values[1].status === 'fulfilled') setReviews(values[1].value);
-      if (values[2].status === 'fulfilled') setMappings(values[2].value.items || []);
+      if (values[2].status === 'fulfilled' && Array.isArray(values[2].value.items) && typeof values[2].value.revision === 'string' && values[2].value.revision) { setMappings(values[2].value.items); setMappingRevision(values[2].value.revision); }
       if (values.some(x => x.status === 'rejected')) setError('Unreadable: part of this survey could not be read. Counts below may be stale; read again.');
       setLoading(false);
     }).catch(e => { if (live) { setRead(null); setReviews(null); setStatus(null); setMappings([]); setError(typeformFailure(e)); setLoading(false); } });
@@ -59,8 +60,9 @@ function VentureTypeform({ projectId, api = typeformApi }) {
   const selected = fields.find(f => f.id === field), shape = mappingShape(selected?.type);
   const rule = mappingInput(selected, draft);
   const saveMapping = async () => {
+    if (!mappingRevision) throw new Error('mapping_snapshot_unreadable');
     const next = mappings.filter(m => m.field_id !== rule.field_id).map(m => ({ field_id: m.field_id, kind: m.kind, keep_text: !!m.keep_text, ...JSON.parse(m.rule_json || '{}') }));
-    const result = await api.setMappings(projectId, [...next, rule]);
+    const result = await api.setMappings(projectId, [...next, rule], mappingRevision);
     if (!alive.current) return;
     const mapped = result.items?.find(m => m.field_id === rule.field_id);
     if (!mapped) throw new Error('mapping_not_recorded');
@@ -76,8 +78,9 @@ function VentureTypeform({ projectId, api = typeformApi }) {
     <div className="flex flex-wrap gap-2"><Link className={BTN} to={`/account/connectors/typeform?project_id=${encodeURIComponent(projectId)}`}>Connect or reconnect Typeform</Link><button type="button" className={BTN} disabled={busy || loading} onClick={() => setRound(n => n + 1)}>Read survey again</button>
       {read?.capability?.can_bind && <button type="button" className={BTN} disabled={busy} onClick={() => { setForm(read.binding?.form_id || ''); setDialog('form'); }}>Choose form</button>}
       {own && <><button type="button" className={BTN} disabled={busy} onClick={() => run(() => api.check(projectId))}>Check form access</button><button type="button" className={BTN} disabled={busy} onClick={() => setDialog('unbind')}>Unbind form</button></>}
-      {own && read.binding.access_state === 'ok' && <><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.sync(projectId))}>Import responses</button><button type="button" className={BTN} disabled={busy} onClick={() => { if (!pendingTarget) setField(fields[0]?.id || ''); setDialog('mapping'); }}>{pendingTarget ? 'Finish hypothesis link' : 'Map question'}</button><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.prepare(projectId))}>Prepare review queue</button></>}
+      {own && read.binding.access_state === 'ok' && <><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.sync(projectId))}>Import responses</button><button type="button" className={BTN} disabled={busy || (!pendingTarget && !mappingRevision)} onClick={() => { if (!pendingTarget) setField(fields[0]?.id || ''); setDialog('mapping'); }}>{pendingTarget ? 'Finish hypothesis link' : 'Map question'}</button><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.prepare(projectId))}>Prepare review queue</button></>}
     </div>
+    {own && read.binding.access_state === 'ok' && !loading && !mappingRevision && <p role="alert">Question mappings are unreadable. Read the survey again before mapping; existing rules will not be replaced.</p>}
     {notice && <p role="status">{notice}</p>}{pendingTarget && <p role="alert">The question rule was saved, but its hypothesis link is unfinished. Finish the link before importing or preparing more reviews.</p>}{loading && <p role="status">Reading survey…</p>}{busy && <p role="status">Working…</p>}{error && <p role="alert">{error}</p>}
     {!projectId && <p>Choose a venture first.</p>}
     {read && !read.binding && <p>Not recorded: no survey selected for this venture.</p>}
@@ -101,13 +104,13 @@ function VentureTypeform({ projectId, api = typeformApi }) {
     {dialog && <Lightbox label="Typeform review" title={typeof dialog === 'string' ? ({ form: 'Choose form', mapping: 'Map a question', unbind: 'Unbind this form' }[dialog]) : dialog.kind === 'quote' ? 'Private quotation' : 'Review evidence change'} width={560} onClose={() => !busy && setDialog(null)} footer={<div className="flex justify-end gap-2"><button type="button" className={BTN} disabled={busy} onClick={() => setDialog(null)}>Cancel</button>
       {dialog === 'form' && <button type="button" className={BTN} disabled={busy || !form} onClick={() => run(() => api.select(projectId, form))}>Use this form</button>}
       {dialog === 'unbind' && <button type="button" className={BTN} disabled={busy} onClick={() => run(() => api.select(projectId, null))}>Unbind form</button>}
-      {dialog === 'mapping' && !pendingTarget && <button type="button" className={BTN} disabled={busy || !rule || !targets?.hypotheses?.some(h => String(h.id) === draft.hypothesis) || (draft.experiment && !targets?.experiments?.some(e => String(e.id) === draft.experiment && String(e.hypothesis_id) === draft.hypothesis))} onClick={() => run(saveMapping)}>Save mapping</button>}
+      {dialog === 'mapping' && !pendingTarget && <button type="button" className={BTN} disabled={busy || !mappingRevision || !rule || !targets?.hypotheses?.some(h => String(h.id) === draft.hypothesis) || (draft.experiment && !targets?.experiments?.some(e => String(e.id) === draft.experiment && String(e.hypothesis_id) === draft.hypothesis))} onClick={() => run(saveMapping)}>Save mapping</button>}
       {dialog === 'mapping' && pendingTarget && <><button type="button" className={BTN} disabled={busy} onClick={() => run(async () => { await api.evidenceMapping(projectId, pendingTarget); if (alive.current) setPendingTarget(null); })}>Retry hypothesis link</button><button type="button" className={BTN} disabled={busy} onClick={() => { setPendingTarget(null); setDialog(null); setNotice('The saved rule remains. Its link is unfinished; choose Map question to finish or change it later. Any affected evidence stays retracted until reviewed again.'); setRound(n => n + 1); }}>Leave link unfinished</button></>}
       {typeof dialog === 'object' && ['confirm', 'unlink'].includes(dialog.kind) && <button type="button" className={BTN} disabled={busy} onClick={() => run(() => api.decide(projectId, dialog.row.id, dialog.kind))}>{dialog.kind === 'confirm' ? 'Accept as evidence' : 'Unlink evidence'}</button>}
     </div>}>
       {dialog === 'form' && <fieldset><legend>Your Typeform forms</legend>{read?.forms_error ? <p role="alert">The form list could not be read. Cancel and read again.</p> : (read?.forms?.items || []).map(f => <label key={f.id} className="flex min-h-[44px] items-center gap-2"><input type="radio" name="typeform-form" value={f.id} checked={form === f.id} onChange={() => setForm(f.id)} />{f.title || f.id}</label>)}{page < (read?.forms?.page_count || 1) && <button type="button" className={BTN} onClick={() => setPage(n => n + 1)}>Next forms page</button>}{page > 1 && <button type="button" className={BTN} onClick={() => setPage(n => n - 1)}>Previous forms page</button>}</fieldset>}
       {dialog === 'unbind' && <p>Stop importing this form. Stored per-form history remains; it cannot propose or confirm new evidence while unbound.</p>}
-      {dialog === 'mapping' && <form noValidate onSubmit={e => e.preventDefault()}><fieldset disabled={busy || !!pendingTarget} className="space-y-3"><legend className="font-semibold">Question rule and evidence target</legend>
+      {dialog === 'mapping' && <form noValidate onSubmit={e => e.preventDefault()}><fieldset disabled={busy || !!pendingTarget || !mappingRevision} className="space-y-3"><legend className="font-semibold">Question rule and evidence target</legend>
         <label className="flex flex-col">Question (stable ID)<select className={INPUT} value={field} onChange={e => setField(e.target.value)}>{fields.map(f => <option key={f.id} value={f.id}>{f.ref || f.id} · {f.type}</option>)}</select></label>
         <label className="flex flex-col">Demand kind<select className={INPUT} value={draft.kind} onChange={e => setDraft(d => ({ ...d, kind: e.target.value }))}>{KINDS.map(k => <option key={k}>{k}</option>)}</select></label>
         {shape === 'choice' && <label className="flex flex-col">Qualifying choice IDs, comma separated<input className={INPUT} value={draft.choices} onChange={e => setDraft(d => ({ ...d, choices: e.target.value }))} /></label>}
