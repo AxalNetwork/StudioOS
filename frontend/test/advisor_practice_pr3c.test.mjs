@@ -35,6 +35,7 @@ const E = codeOnly(ENGAGEMENTS);
 const DELIVERY = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
 // #4715: the advisor router is advisors.ts plus the route modules it mounts.
 const WORKER = advisorRoutesSource();
+const DISTRIBUTION = codeOnly(read('cloudflare-worker/src/services/advisorDistribution.ts'));
 
 // ---------------------------------------------------------------------------
 // One writer, and it is the client's
@@ -139,11 +140,21 @@ test('a draft is neither listed nor openable, and the card says why', () => {
   // the consequence rather than leaving a founder wondering where something is.
   // CODE ONLY. The open route's docblock explains the filter in prose, so a raw
   // count over the file finds four — the self-matching trap, one more time.
-  const code = codeOnly(WORKER);
-  const routes = code.slice(code.indexOf("advisors.get('/received/deliverables'"));
-  // #5960 (D5960): and the file download, the fifth client route, requires a sent version too.
-  assert.equal((routes.match(/sent_at IS NOT NULL/g) || []).length, 5,
-    'the read filters twice (row and version), and open, acceptance and the file download require a sent version');
+  const list = DISTRIBUTION.slice(DISTRIBUTION.indexOf('export async function receivedDeliverables('), DISTRIBUTION.indexOf('export async function sendDeliverable('));
+  assert.match(list, /v\.sent_at IS NOT NULL AND v\.recipient_user_id = \?/,
+    'the row population belongs to the recipient and excludes drafts');
+  assert.match(list, /AND sent_at IS NOT NULL AND recipient_user_id = \?/,
+    'the batched versions also exclude drafts and other recipients');
+  for (const name of ['openDeliverable', 'acceptDeliverable']) {
+    const at = DISTRIBUTION.indexOf(`export async function ${name}(`);
+    assert.ok(at >= 0, `${name} policy exists`);
+    const end = DISTRIBUTION.indexOf('\nexport async function', at + 1);
+    const receipt = DISTRIBUTION.slice(at, end < 0 ? undefined : end);
+    assert.match(receipt, /v\.recipient_user_id = \? AND v\.sent_at IS NOT NULL/,
+      `${name} requires a sent version addressed to the caller`);
+  }
+  const fileRoute = WORKER.slice(WORKER.indexOf("advisors.get('/received/deliverables/:uid/file'"));
+  assert.match(codeOnly(fileRoute), /v\.recipient_user_id = \? AND v\.sent_at IS NOT NULL/, 'file access still belongs only to a sent version’s recipient');
   assert.match(GRANT, /work in progress until they hand it over/);
 });
 
@@ -153,7 +164,8 @@ test('the founder card states the two things it is not', () => {
   assert.match(GRANT, /not from the grants above/);
   // D573 gives the client a sign-off; advisor-side writes must still never set it.
   assert.match(GRANT, /Acceptance records your sign-off on that version/);
-  const advisorSide = WORKER.slice(0, WORKER.indexOf("advisors.post('/received/deliverables/:uid/open'"));
+  const advisorSide = WORKER.slice(0, WORKER.indexOf("advisors.post('/received/deliverables/:uid/open'"))
+    + DISTRIBUTION.slice(0, DISTRIBUTION.indexOf('export async function openDeliverable('));
   const signOff = [...advisorSide.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];
   for (const [, setClause] of signOff) {
     assert.ok(!/signed_off_at/.test(setClause), 'an advisor cannot set the client’s sign-off');
@@ -169,5 +181,7 @@ test('the receipt route is mounted where a founder can reach it, with no advisor
   // is the one mistake that would make this whole PR a no-op.
   assert.ok(!/requireMyAdvisor/.test(handler),
     'the client is not an advisor; gating on an advisor profile would refuse every founder');
-  assert.match(handler, /WHERE id = \? AND opened_at IS NULL/);
+  assert.match(handler, /openDeliverable\(c\.env, user,/);
+  const policy = DISTRIBUTION.slice(DISTRIBUTION.indexOf('export async function openDeliverable('), DISTRIBUTION.indexOf('export async function acceptDeliverable('));
+  assert.match(policy, /WHERE id = \? AND opened_at IS NULL/);
 });

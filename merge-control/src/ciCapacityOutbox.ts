@@ -13,6 +13,8 @@ type Intent = { requestId: string; mode: 'pilot'|'full-suite'; checkId: number|n
 /** GitHub has no check-run idempotency key. Retry only a bounded, repeatedly observed absence. */
 export const PUBLICATION_CREATE_LIMIT = 2;
 export class CapacityOutbox {
+  // Leave the prearmed 15-second recovery alarm in place until a complete turn proves it can slow down.
+  historyDelayMs = 0;
   private storage: DurableObjectStorage;private api: CapacityApi;private config: CapacityConfig & {appId:number};private corrections:SqlCapacityCorrections;
   constructor(storage: DurableObjectStorage, api: CapacityApi, config: CapacityConfig & { appId: number }) {
     this.storage=storage;this.api=api;this.config=config;this.corrections=new SqlCapacityCorrections(storage);
@@ -29,10 +31,6 @@ export class CapacityOutbox {
       return intent?.requestId===id&&intent.mode===mode&&intent.phase==='known'
         &&Number.isSafeInteger(intent.checkId)&&intent.checkId!>0&&JSON.parse(intent.sent??'null')?.status==='failure';
     }catch{return false;}};
-    const consider=(id:string)=>{
-      const compact=compactStore.compact?.(id);
-      if(compact?.publicationMode===mode&&compact.failed&&!sentFailure(id))this.corrections.enqueue(id);
-    };
     // Full requests are already bounded to 1000. Their stored negative flags cover observations outside the journal.
     for(const record of records){
       if(record.shards.some(shard=>shard.attempts.some(attempt=>attempt.verifiedTestFailure||attempt.phase==='failed'))
@@ -41,7 +39,10 @@ export class CapacityOutbox {
         try{if(row&&JSON.parse(JSON.parse(row.state).sent??'null')?.status)this.corrections.enqueue(record.submission.requestId);}catch{pending=true;}
       }
     }
-    const backfill=this.corrections.discover(compactStore,consider);
+    const backfill=this.corrections.discover(compactStore, record=>{
+      const id=record.submission.requestId;
+      if(record.publicationMode===mode&&record.failed&&!sentFailure(id))this.corrections.enqueue(id);
+    });
     const priority=records.filter(r=>{try{const row=read(`${r.submission.requestId}:${mode}`);const intent=row?JSON.parse(row.state) as Intent:null;
       return r.completedAt===null||!intent?.sent||JSON.parse(intent.sent).status==='pending';}catch{return true;}});
     const priorityIds=new Set(priority.map(r=>r.submission.requestId));
@@ -172,6 +173,8 @@ export class CapacityOutbox {
     }
     this.corrections.finishLegacy();
     // Keep bounded reconciliation/expiry alive while either representation still owes monitoring.
+    const urgent = pending || priority.length>0 || this.corrections.pending() || !this.corrections.legacyReady();
+    this.historyDelayMs = urgent ? 0 : compact.length===100 ? 30_000 : 60_000;
     return pending||garbage||backfill||this.corrections.pending()||records.length>0||compact.length>0;
   }
 }
