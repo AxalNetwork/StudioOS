@@ -92,6 +92,7 @@ export const SURFACES = [
   // D6862: Eadwyn's read of a decision's evidence, its system message and its task card.
   ['prompt', 'cloudflare-worker/src/services/verdictSummary.ts', 'the evidence read systemPrompt'],
   ['copy', 'frontend/src/pages/cycles/VerdictEvidencePanel.jsx', 'the Read the evidence task card on Record a decision'],
+  ['copy', 'frontend/src/pages/cycles/FeedbackTab.jsx', 'Grow › Feedback: Eadwyn\'s theme placements and their review (D6865 part 2)'],
 ];
 
 /**

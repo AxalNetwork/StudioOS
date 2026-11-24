@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Check, Loader2, ArrowLeft, Lock } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
-import { resolveOpenCohort, useCohortPlaces, placesLabel } from "../lib/spinoutLab";
+import { resolveOpenCohort, useCohortPlaces, placesLabel, trackFromSearch } from "../lib/spinoutLab";
+import { LAB_TRACKS } from "../lib/spinoutLabArsenal";
 import {
   APPLY_STEPS, ORIGIN_OPTIONS, TTO_OPTIONS, IP_OPTIONS, CONFIDENTIAL_NOTE, FIELD_LABEL,
   emptyBasics, emptyAnswers, missingOnStep, missingBasics, missingAnswers, answersPayload,
@@ -86,6 +87,16 @@ export function ApplyStep({ step, basics, answers, setBasics, setAnswers }) {
         <Field label="Company or working name">
           <input type="text" value={basics.company} onChange={(e) => b("company")(e.target.value)} placeholder="e.g. Northwind Labs" data-testid="apply-company" className={input} />
         </Field>
+        {/* D6989 (#6989): the starting point chosen on the Lab page arrives as `?track=` and is preselected here; it is stored with the application. */}
+        <div role="radiogroup" aria-label="Starting point" data-testid="apply-track">
+          <div className={labelCls}>Starting point</div>
+          <div className="flex flex-col gap-2">
+            {LAB_TRACKS.map((t) => (
+              <Choice key={t.id} on={basics.track === t.id} name={t.name} note={t.brief} testId={`apply-track-${t.id}`}
+                onClick={() => b("track")(basics.track === t.id ? "" : t.id)} />
+            ))}
+          </div>
+        </div>
         <Field label="What you are building">
           <textarea rows={4} value={basics.idea} onChange={(e) => b("idea")(e.target.value)} placeholder="What are you building, who is it for, and why now?" data-testid="apply-idea" className={area} />
         </Field>
@@ -233,7 +244,9 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
   const [appWindow, setAppWindow] = useState(null);
   const [showForm, setShowForm] = useState(previewMode !== "submitted");
 
-  const [basics, setBasics] = useState(emptyBasics);
+  // D6989: a starting point carried from the Lab page (`?track=`, through sign-up as `next`) is preselected.
+  const [linkedTrack] = useState(() => (typeof window !== "undefined" ? trackFromSearch(window.location.search) : null));
+  const [basics, setBasics] = useState(() => ({ ...emptyBasics(), track: linkedTrack || "" }));
   const [answers, setAnswers] = useState(emptyAnswers);
   const [step, setStep] = useState(1);
   const [savedAt, setSavedAt] = useState(null);
@@ -274,7 +287,8 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
       if (phase === "none" || phase === "withdrawn" || phase === "declined") {
         try {
           const d = fromDraft((await spinoutLab.applyDraft())?.draft);
-          if (d) { setBasics(d.basics); setAnswers(d.answers); setStep(d.step); setSavedAt(d.updatedAt); }
+          // A draft keeps its own starting point; one saved without any takes the link's.
+          if (d) { setBasics({ ...d.basics, track: d.basics.track || linkedTrack || "" }); setAnswers(d.answers); setStep(d.step); setSavedAt(d.updatedAt); }
         } catch (e) {
           setDraftNote(e?.message || "Your saved draft could not be read. Nothing was lost; reload to try again.");
         }
@@ -283,7 +297,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
       setLoadError(true);
     }
     setLoading(false);
-  }, [adopt, navigate]);
+  }, [adopt, navigate, linkedTrack]);
 
   useEffect(() => { if (!isPreview) load(); }, [isPreview, load]);
 
@@ -306,7 +320,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
     go(step + 1);
   };
 
-  const clearInputs = () => { setBasics(emptyBasics()); setAnswers(emptyAnswers()); setStep(1); setSavedAt(null); };
+  const clearInputs = () => { setBasics({ ...emptyBasics(), track: "" }); setAnswers(emptyAnswers()); setStep(1); setSavedAt(null); };
 
   /** The status read after a commit. It never undoes the commit: a failure only offers a retry, and a read that shows nothing is not believed. */
   const refreshStatus = async () => {
@@ -360,6 +374,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
         stage: basics.stage || STAGES[0],
         jurisdiction: juris.label,
         cohort: cohortName,
+        ...(basics.track ? { track: basics.track } : {}),
         ...(appWindow ? { target_cycle: { year: appWindow.year, month: appWindow.month } } : {}),
         answers: answersPayload(answers),
       });

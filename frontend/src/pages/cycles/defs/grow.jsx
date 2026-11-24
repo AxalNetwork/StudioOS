@@ -19,7 +19,8 @@ import UpdateAskReplies from '../UpdateAskReplies';
 import MarketsHome from '../MarketsHome';
 import MarketRecord from '../MarketRecord';
 import FeedbackThemes from '../FeedbackThemes';
-import FeedbackLoop from '../FeedbackLoop';
+import FeedbackTab, { addFeedbackAction } from '../FeedbackTab';
+import { api as mainApi } from '../../../lib/api';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import PartnershipsCoMarketing from '../PartnershipsCoMarketing';
@@ -48,6 +49,13 @@ const fromFacebook = (slug, data, ctx) => <GrowFromFacebook slug={slug} part={da
  * and the jobs board keeps its own editor. The metric log, Talent and the
  * compliance calendar stay one tool link away.
  */
+/** D6865 part 2 (#6891, GR-21C): Eadwyn's feedback-theme placements, through the existing proposal routes. */
+const FEEDBACK_PROPOSALS = {
+  list: (projectId) => mainApi.listValidateProposals(projectId),
+  accept: (id) => mainApi.acceptValidateProposal(id),
+  discard: (id) => mainApi.discardValidateProposal(id),
+};
+
 const grow = {
   Overview: GrowOverview,
   moduleName: (slug) => growModuleTitle(slug),
@@ -75,8 +83,17 @@ const grow = {
     // D6120 (#6120, GR-22, GR-27, GR-28): a market's record, its parts, entry plan, localisation and side column.
     'market-expansion': (record, ctx) => <MarketRecord record={record} activity={ctx.activity} onForm={ctx.onForm} onWrite={ctx.onWrite} onShowAll={ctx.onShowAll} />,
   }),
-  // D6120 (#6120, GR-21, GR-23, GR-25, GR-26, GR-27): Markets owns its page, ranked by readiness with Compare on it.
   homes: toFnMap({
+    // D6865 part 2 (#6891, GR-21, GR-27): Customers › Feedback owns its page (D6049): the counts, themes, the selected
+    // theme's items with their record chip and origin, the weight and Close the loop, Eadwyn's placements, and Add
+    // feedback as the one primary action (none while nothing is recorded: the empty state carries it).
+    'product-improvement': (data, ctx) => ({
+      sub: 'What customers, investors and your team ask for, grouped by theme, and who to tell when it ships.',
+      action: addFeedbackAction(data, ctx.search),
+      body: (p) => <FeedbackTab {...p} data={data} projectId={ctx.projectId} reload={ctx.reload} fillsOn={ctx.fillsOn}
+        api={cyclesWrite} proposals={FEEDBACK_PROPOSALS} />,
+    }),
+    // D6120 (#6120, GR-21, GR-23, GR-25, GR-26, GR-27): Markets owns its page, ranked by readiness with Compare on it.
     'market-expansion': (data) => ({
       sub: 'Ranked by readiness out of 40: four parts, each scored 0–10 with its source.',
       body: (p) => <MarketsHome {...p} parts={data?.parts ?? null} />,
@@ -120,10 +137,9 @@ const grow = {
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
     // D6098 (#6098): Rename or merge a theme; `parts.themes` reaches writers only.
-    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26).
+    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26); D6865 part 2
+    // (#6891) draws them in the Feedback tab's own page (`homes` above), so they are not repeated here.
     'product-improvement': (data, ctx) => (<>
-      <FeedbackLoop counts={data?.parts?.counts} themes={data?.parts?.themes} projectId={ctx.projectId}
-        api={cyclesWrite.grow} reload={ctx.reload} />
       <FeedbackThemes themes={data?.parts?.themes}
         onRename={ctx.projectId ? (body) => cyclesWrite.grow.feedbackTheme(ctx.projectId, body).then((out) => { ctx.reload(); return out; }) : undefined} />
       <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />

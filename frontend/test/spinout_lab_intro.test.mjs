@@ -189,27 +189,26 @@ test('the page says the gates are the same for every track', () => {
   assert.match(INTRO, /the same for every track/);
 });
 
-test('the apply link carries no track, because nothing records one', () => {
-  // spinout_applications has `incorporated` and a free-text `stage`, and no
-  // track column. RegisterPage reads only `lane` and `product`, so a third
-  // param would be dropped in silence — a choice that looks remembered and
-  // is not.
-  // Asserted against STRING LITERALS, not raw text: LabApplyBand tells the
-  // reader on screen that the track is not carried, and the lib's docblock
-  // says why. Naming the param in prose is the opposite of shipping it, and a
-  // bare /track=/ over the source cannot tell the two apart — codeOnly leaves
-  // indented JSX comments alone on purpose (see its header).
+test('the apply link carries the chosen track only through labApplyHref, which the application stores (D6989)', () => {
+  // D6989 (#6989) reversed the old rule: spinout_applications now has a
+  // `track` column, the apply route validates and stores it, and the link
+  // carries it. Only `labApplyHref()` builds such a link, so no page
+  // hand-writes a `track=` query that could drift from the three ids.
   const literals = (src) => [...src.matchAll(/'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g)]
     .map((m) => m[1] ?? m[2] ?? m[3]);
   for (const [label, src] of [['LabIntro', INTRO_CODE], ['marketing page', codeOnly(MARKETING)],
-    ['SpinoutLabPage', codeOnly(PAGE)], ['spinoutLab lib', codeOnly(LIB)]]) {
+    ['SpinoutLabPage', codeOnly(PAGE)]]) {
     for (const lit of literals(src)) {
-      assert.ok(!/[?&]track=/.test(lit), `${label} carries a track param: ${lit}`);
+      assert.ok(!/[?&]track=/.test(lit), `${label} hand-builds a track param: ${lit}`);
     }
   }
-  // And the two apply targets by name, so a rewrite cannot smuggle one in.
+  assert.match(MARKETING, /applyHref=\{labApplyHref\(track\)\}/);
+  assert.match(PAGE, /applyHref=\{labApplyHref\(track, \{ signedIn: true \}\)\}/);
+  // The two plain targets are unchanged.
   assert.match(LIB, /LAB_APPLY_HREF = '\/register\?lane=founder&product=spinout-lab'/);
   assert.match(LIB, /LAB_APPLY_HREF_SIGNED_IN = '\/spinout-lab\/apply'/);
+  // And the Worker stores it.
+  assert.match(LAB_ROUTE, /LAB_TRACK_IDS = \['form', 'fit', 'line'\] as const/);
 });
 
 // ---------------------------------------------------------------------------

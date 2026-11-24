@@ -24,6 +24,8 @@
  * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
  * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
+ *                                  D6865 part 2 (#6891): POST takes `reply_key` with origin `inbox_reply`, the Inbox
+ *                                  reply it is saved from (GR-24); a reply saved twice is a 409 naming the item
  *   PATCH /feedback/themes         { project, from, to, merge? }  D6098 (#6098): rename one theme, or merge it
  *                                  into another (`merge: true`; without it a merge is a 409 with the counts),
  *                                  with the roadmap items that answer it; the read's `parts.themes` (writers only)

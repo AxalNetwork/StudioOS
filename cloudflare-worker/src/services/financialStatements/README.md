@@ -13,6 +13,8 @@ is `documentation/architecture/decisions/D5833.md`.
 | `quickbooksSync.ts` | A QuickBooks sync (D5834): the connection binds the realm, the venture and the environment; it fetches, adapts and writes each statement; `last_synced_at` moves only on a complete sync. |
 | `store.ts` | The atomic, retry-safe revision writer, the reads and the founder's pins, guarded by project access and the writer's own connection. |
 
+The reads are served by `routes/financial_statements.ts` (D5836): the venture's founder, team and admins only, read only.
+
 Rules for adding to it:
 
 - A new provider is one adapter file that returns a `SnapshotInput`; the store

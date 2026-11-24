@@ -416,13 +416,39 @@ export function outcomeBadgesFor(jurisdictionKey) {
 // Apply targets
 // ---------------------------------------------------------------------------
 /**
- * The logged-out CTA. Deliberately carries only `lane` and `product`:
- * `pages/RegisterPage.jsx` reads exactly those two params, so any third —
- * a `track`, say — would be dropped in silence and the page would be
- * promising a choice nothing records.
+ * The logged-out and signed-in apply targets with no starting point chosen.
+ * D6989 (#6989): a chosen starting point rides on top of these through
+ * `labApplyHref()`, never as a fourth query param on /register: RegisterPage
+ * reads `lane` and `product`, and carries the rest only inside `next`, the
+ * same-origin return path it keeps across sign-up (`pendingNext.js`).
  */
 export const LAB_APPLY_HREF = '/register?lane=founder&product=spinout-lab';
 export const LAB_APPLY_HREF_SIGNED_IN = '/spinout-lab/apply';
+
+/**
+ * D6989: the Lab's three starting points, the ids of `LAB_TRACKS`
+ * (`spinoutLabArsenal.js`) and of the Worker's `LAB_TRACK_IDS`
+ * (`routes/spinout_lab.ts`), which stores one on the application.
+ */
+export const LAB_TRACK_IDS = Object.freeze(['form', 'fit', 'line']);
+
+/** A known starting point from a query string (`?track=fit`), or null. */
+export function trackFromSearch(search) {
+  const t = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('track');
+  return LAB_TRACK_IDS.includes(t) ? t : null;
+}
+
+/**
+ * The apply link for a chosen starting point. Signed in, the application page
+ * with `?track=`. Signed out, /register with the application page (and its
+ * `track`) as `next`, so the choice survives sign-up and is preselected when
+ * the member lands there. An unknown track gives the plain link.
+ */
+export function labApplyHref(track, { signedIn = false } = {}) {
+  if (!LAB_TRACK_IDS.includes(track)) return signedIn ? LAB_APPLY_HREF_SIGNED_IN : LAB_APPLY_HREF;
+  const apply = `${LAB_APPLY_HREF_SIGNED_IN}?track=${track}`;
+  return signedIn ? apply : `${LAB_APPLY_HREF}&next=${encodeURIComponent(apply)}`;
+}
 export const LAB_CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
 
 // ---------------------------------------------------------------------------

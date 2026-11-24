@@ -34,6 +34,8 @@ import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
 import { eraseRecordObjects } from '../services/recordErasure';
+import { companyPapers, electionRows, entitySummary } from '../services/buildCompanyCreation';
+import { suggestedFilings } from '../services/suggestedFilings';
 import { isResolved, statesFor, STATE_LABELS, type OkrEdge, type OkrState } from '../services/okrGraph';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1049,7 +1051,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+export async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -1120,8 +1122,17 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
       filings: combined.length, next_filing_due: nextFilingDue,
       // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
-      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
-        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
+      next_filing: nextFiling ? { id: nextFiling.id, title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null,
+      // #6038 (D6038, BD25, BD26, BD29): the module page's company-first blocks, each read and failing on its own.
+      // The overview reads none of them (#4603's budget), so its card is the module page's card, unchanged.
+      ...(opts.pageFacts ? {
+        entity: await entitySummary(env, p, order ?? null, steps),
+        elections: await electionRows(env, p, viewer, steps),
+        papers: await companyPapers(env, p, viewer),
+        // #8259 (D8259, BD28): the pack's filings not yet added or dismissed, failing on its own.
+        suggestions: await suggestedFilings(env, p, order ?? null, steps),
+      } : {}) },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1371,7 +1382,7 @@ async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, 
   }
 }
 
-async function context(c: any): Promise<Project | Response> {
+export async function context(c: any): Promise<Project | Response> {
   const user = await requireAuth(c);
   const raw = c.req.query('project');
   if (!raw || !/^\d+$/.test(raw) || Number(raw) < 1) return c.json({ detail: 'Valid project is required' }, 400);
@@ -1859,6 +1870,82 @@ async function patchRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   ]);
   return c.json({ ok: true, id });
 }
+
+/**
+ * D6033 (#6033, BD25): Solution design's risks as a list, 25 a page, read on its own.
+ * The module read keeps its counts only (#4603 part 2, 2026-11-07), so this read
+ * adds no statement to it. It has the module read's gate (`context`), lists the
+ * risks tied to no feature too (an accepted Build Plan risk writes none,
+ * buildPlanAccept.ts), and gives a writer the owners and features Add offers.
+ */
+export const RISKS_PER_PAGE = 25;
+const RISK_STATES = ['open', 'mitigating', 'closed'] as const;
+const RISK_ROW_FROM = `FROM venture_risks r
+       LEFT JOIN users u ON u.id = r.owner_user_id
+       LEFT JOIN mvp_features f ON f.id = r.feature_id AND f.project_id = r.project_id
+      WHERE r.project_id = ?
+        AND (? = '' OR r.state = ?)
+        AND (? = '' OR (? = 'tied' AND r.feature_id IS NOT NULL) OR (? = 'untied' AND r.feature_id IS NULL))`;
+const RISK_TOTAL_SQL = 'SELECT COUNT(*) AS n ' + RISK_ROW_FROM;
+const RISK_PAGE_SQL = `SELECT r.id, r.title, r.severity, r.state, r.mitigation, r.owner_user_id, u.name AS owner, f.id AS feature_id, f.title AS feature,
+        EXISTS (SELECT 1 FROM build_plan_items i WHERE i.project_id = r.project_id AND i.landed_table = 'venture_risks' AND i.landed_id = CAST(r.id AS TEXT)) AS from_plan
+       ` + RISK_ROW_FROM + `
+      ORDER BY CASE r.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, CASE r.state WHEN 'closed' THEN 1 ELSE 0 END, r.id
+      LIMIT ? OFFSET ?`;
+app.get('/risks', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const viewer = await requireAuth(c);
+  const state = c.req.query('state') ?? '';
+  const feature = c.req.query('feature') ?? '';
+  const rawPage = c.req.query('page') ?? '1';
+  if (state && !(RISK_STATES as readonly string[]).includes(state)) return c.json({ error: 'invalid_state', detail: 'State is open, mitigating or closed' }, 400);
+  if (feature && !['tied', 'untied'].includes(feature)) return c.json({ error: 'invalid_feature', detail: 'Feature is tied or untied' }, 400);
+  if (!/^[1-9]\d{0,5}$/.test(rawPage)) return c.json({ error: 'invalid_page', detail: 'Page is a whole number from 1' }, 400);
+  const page = Number(rawPage);
+  const filter = [state, state, feature, feature, feature];
+  const writes = canWrite(project, viewer);
+  // Five reads, each on its own; none is in the module read (D6033).
+  const [counts, total, found, owners, features] = await Promise.all([
+    c.env.DB.prepare(`SELECT COUNT(*) AS all_n,
+        COALESCE(SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END), 0) AS open_n,
+        COALESCE(SUM(CASE WHEN state = 'mitigating' THEN 1 ELSE 0 END), 0) AS mitigating_n,
+        COALESCE(SUM(CASE WHEN state = 'closed' THEN 1 ELSE 0 END), 0) AS closed_n,
+        COALESCE(SUM(CASE WHEN feature_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS tied_n,
+        COALESCE(SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END), 0) AS high_n,
+        COALESCE(SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END), 0) AS medium_n,
+        COALESCE(SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END), 0) AS low_n
+       FROM venture_risks WHERE project_id = ?`).bind(project.id).first<Record<string, unknown>>(),
+    c.env.DB.prepare(RISK_TOTAL_SQL).bind(project.id, ...filter).first<{ n: number }>(),
+    c.env.DB.prepare(RISK_PAGE_SQL).bind(project.id, ...filter, RISKS_PER_PAGE, (page - 1) * RISKS_PER_PAGE).all<any>(),
+    // A writer's Add offers the company's members and the venture's features; a reader is sent neither.
+    c.env.DB.prepare('SELECT u.id, u.name FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? AND ? = 1 ORDER BY lower(u.name), u.id')
+      .bind(project.company_id ?? -1, writes ? 1 : 0).all<any>(),
+    c.env.DB.prepare('SELECT id, title FROM mvp_features WHERE project_id = ? AND ? = 1 ORDER BY lower(title), id LIMIT 500').bind(project.id, writes ? 1 : 0).all<any>(),
+  ]);
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const k = (counts ?? {}) as Record<string, unknown>;
+  const matched = n(total?.n);
+  return c.json({
+    rows: ((found.results ?? []) as any[]).map(r => ({
+      id: Number(r.id), title: r.title, severity: r.severity, state: r.state,
+      mitigation: typeof r.mitigation === 'string' && r.mitigation.trim() ? r.mitigation.trim() : null,
+      owner: r.owner_user_id == null ? null : { you: Number(r.owner_user_id) === Number(viewer.id), name: r.owner ?? null },
+      feature: r.feature_id == null ? null : { id: Number(r.feature_id), title: r.feature },
+      from_plan: n(r.from_plan) === 1,
+    })),
+    total: matched, page, per_page: RISKS_PER_PAGE, pages: Math.max(1, Math.ceil(matched / RISKS_PER_PAGE)),
+    counts: {
+      all: n(k.all_n), open: n(k.open_n), mitigating: n(k.mitigating_n), closed: n(k.closed_n),
+      tied: n(k.tied_n), untied: n(k.all_n) - n(k.tied_n),
+      high: n(k.high_n), medium: n(k.medium_n), low: n(k.low_n),
+    },
+    can_write: writes,
+    ...(writes ? { choices: {
+      owners: ((owners.results ?? []) as any[]).map(u => ({ value: String(u.id), label: u.name ?? 'Unnamed member' })),
+      features: ((features.results ?? []) as any[]).map(f => ({ value: String(f.id), label: f.title })),
+    } } : {}),
+  });
+});
 
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision

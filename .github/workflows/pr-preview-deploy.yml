@@ -5,7 +5,7 @@ name: PR preview deploy
 # uploads the `pr-preview-docs` artifact. This workflow starts when that run
 # completes. GitHub reads a `workflow_run` workflow's file from the default
 # branch, so what runs here is main's code, never the branch's, and only a job
-# on main can enter the `pr-preview` environment (restricted to main) that
+# on main can enter the `preview` environment (restricted to main) that
 # holds PR_PREVIEW_CLOUDFLARE_API_TOKEN.
 #
 # The artifact is untrusted data. Nothing here runs a script from it, installs
@@ -114,12 +114,12 @@ jobs:
             // Deploy and delete both enter the environment: it must exist and
             // admit main only, or the token would not be where D7146 says.
             const requireEnvironment = async () => {
-              const { data: env } = await github.request('GET /repos/{owner}/{repo}/environments/{name}', { owner, repo, name: 'pr-preview' });
+              const { data: env } = await github.request('GET /repos/{owner}/{repo}/environments/{name}', { owner, repo, name: 'preview' });
               const policy = env.deployment_branch_policy;
-              if (!policy || policy.custom_branch_policies !== true) throw new Error('the pr-preview environment must allow selected branches only (main)');
-              const { data } = await github.request('GET /repos/{owner}/{repo}/environments/{name}/deployment-branch-policies', { owner, repo, name: 'pr-preview', per_page: 100 });
+              if (!policy || policy.custom_branch_policies !== true) throw new Error('the preview environment must allow selected branches only (main)');
+              const { data } = await github.request('GET /repos/{owner}/{repo}/environments/{name}/deployment-branch-policies', { owner, repo, name: 'preview', per_page: 100 });
               const rules = (data.branch_policies || []).map((b) => (b.type || 'branch') + ':' + b.name);
-              if (rules.length !== 1 || rules[0] !== 'branch:main') throw new Error('the pr-preview environment must admit exactly the main branch; found ' + (rules.join(', ') || 'none'));
+              if (rules.length !== 1 || rules[0] !== 'branch:main') throw new Error('the preview environment must admit exactly the main branch; found ' + (rules.join(', ') || 'none'));
             };
 
             if (pr.state === 'closed') {
@@ -148,7 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
-      name: pr-preview
+      name: preview
       url: ${{ steps.deploy.outputs.url }}
     permissions:
       actions: read
@@ -202,7 +202,7 @@ jobs:
         run: |
           set -o pipefail
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::PR_PREVIEW_CLOUDFLARE_API_TOKEN is not set in the pr-preview environment (D7146)"
+            echo "::error::PR_PREVIEW_CLOUDFLARE_API_TOKEN is not set in the preview environment (D7146)"
             exit 1
           fi
           deployed=0
@@ -255,7 +255,7 @@ jobs:
     if: needs.resolve.outputs.action == 'delete'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: pr-preview
+    environment: preview
     permissions: {}
     env:
       PREVIEW_NAME: studioos-pr-${{ needs.resolve.outputs.number }}

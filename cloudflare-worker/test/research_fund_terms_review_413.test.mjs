@@ -28,6 +28,8 @@ function database() {
     db.exec(stripForeignKeys(ddl));
   }
   db.exec(read('375')); db.exec(read('379'));
+  // D7710: the Markets read uses D7707's period and retrieval dates and D7708's index window.
+  db.exec(read('202611191833_7707')); db.exec(read('202611220337_7708'));
   return db;
 }
 async function request(db, path) {
