@@ -126,10 +126,13 @@ test('the Asked view names the target, or says Not available, or that the names 
 
 test('the workspace renders the joined name, the message and the date, and reads the list at the mounted path', () => {
   const src = readFileSync(new URL('../src/pages/investor/InvestorNetworkWorkspace.jsx', import.meta.url), 'utf8');
-  assert.match(src, /askTargetName\(ask, askNamesUnreadable\)/);
-  assert.match(src, /No message was sent with this ask\./);
-  assert.match(src, /Asked \{askDate\(ask\.created_at\)\}/);
-  assert.doesNotMatch(src, /Founder #\$\{ask/);
+  // D6261 moved each ask's card into InvestorAskCard.jsx; the workspace hands it the names flag.
+  const card = readFileSync(new URL('../src/pages/investor/InvestorAskCard.jsx', import.meta.url), 'utf8');
+  assert.match(src, /<InvestorAskCard [^>]*namesUnreadable=\{askNamesUnreadable\}/);
+  assert.match(card, /askTargetName\(ask, namesUnreadable\)/);
+  assert.match(card, /No message was sent with this ask\./);
+  assert.match(card, /Asked \{askDate\(ask\.created_at\)\}/);
+  assert.doesNotMatch(src + card, /Founder #\$\{ask/);
   assert.match(src, /quota=\{introQuota\}/);
   const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
   assert.match(api, /listIntroductions: \(\) => request\('\/introductions'\)/);

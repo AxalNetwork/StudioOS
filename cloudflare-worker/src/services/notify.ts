@@ -49,7 +49,20 @@ export type NotifyCategory =
   // exactly the kind of thing quiet hours and the digest exist for. A
   // critical one would wake someone at 3am about a deadline 30 days out.
   | 'compliance'
+  // D6695 (#6695) — a formation case: a request opened or answered, a stage
+  // changed, a registry question, registered. Not critical: quiet hours and the
+  // digest apply. The event types are FORMATION_NOTIFY_TYPES below.
+  | 'formation'
   | string;
+
+/** D6695 — the notification types of the `formation` category. */
+export const FORMATION_NOTIFY_TYPES = Object.freeze({
+  requestOpened: 'formation_request_opened',
+  requestAnswered: 'formation_request_answered',
+  stageChanged: 'formation_stage_changed',
+  registryQuestion: 'formation_registry_question',
+  registered: 'formation_registered',
+} as const);
 
 /** Categories that bypass quiet hours AND digest — spec'd by Task #14. */
 export const CRITICAL_CATEGORIES: ReadonlySet<string> = new Set([

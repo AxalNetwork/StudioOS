@@ -1,5 +1,6 @@
 // #6476: the ejection handler's pure rules: consent, the class of an ejection, and what to do about it.
 import { count, LABELS } from './rules.mjs';
+import { KEEPER_MAX_ATTEMPTS } from './keeper-plan.mjs';
 
 export const KIND = 'ejection';
 /** Owner, 2026-11-16: the bot may restore an entry only after these four classes. */
@@ -145,7 +146,7 @@ const retryableEligibility = (r) => RETRYABLE_ELIGIBILITY.some((re) => re.test(S
 /**
  * What to do. Re-queue only when everything holds. A condition that clears on its own (\`retry\`) waits, unlabelled,
  * for the next sweep inside RECOVERY_WINDOW_HOURS; one that needs the owner (\`owner\`) labels \`ejected\` at once.
- * @param c { klass, mergeable: GitHub's fresh true | false | null (unknown), keeperMerged, removedAt, consent, checks: 'green'|'pending'|'failed'|'unknown'|'changed'
+ * @param c { klass, mergeable: GitHub's fresh true | false | null (unknown), keeperMerged, keeperAttempts: number | null (D6476-p6), removedAt, consent, checks: 'green'|'pending'|'failed'|'unknown'|'changed'
  *            (or the older checksGreenOnHead boolean), headUnchangedSinceChecks, eligible: { ok, reasons }, breakers: { open, reasons },
  *            openAlertTitles, requeues: [{ pr, at }] (bot re-queues), pr, now, env, queueRuns: [{ conclusion }] (last 20) }
  * @returns { action: 'requeue'|'keeper'|'repair'|'label'|'wait', label?, reasons, retryUntil? }
@@ -171,6 +172,10 @@ export function decide(c) {
     }
     // A class that GitHub did not call a conflict, now conflicting, without consent: nothing to restore, so no keeper.
     if (c.klass !== 'conflict' && !c.consent?.valid) return label([c.consent?.reason ?? 'no consent', 'it now conflicts with main']);
+    // D6476-p6 (#8077): the keeper has used all its attempts. That is the owner's, never a wait for another keeper run.
+    if (Number.isSafeInteger(c.keeperAttempts) && c.keeperAttempts >= KEEPER_MAX_ATTEMPTS) {
+      return label([`the branch keeper used all ${KEEPER_MAX_ATTEMPTS} of its attempts on this pull request: a person resolves the conflict`]);
+    }
     // The keeper's no-model merge did not clear it: a person resolves it. Never re-dispatched, never re-queued.
     if (c.keeperMerged) return label(['the branch keeper merged main and GitHub still reports a conflict: a person resolves it']);
     if (removedAt !== null && c.now - removedAt < KEEPER_DISPATCH_MINUTES * 60_000) {

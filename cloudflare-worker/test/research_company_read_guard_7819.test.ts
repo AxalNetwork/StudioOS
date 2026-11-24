@@ -20,11 +20,18 @@ export const PENDING_READERS = [
   'services/competitorDirectoryLink.ts',
   'services/records/validate.ts',
   'services/researchCompanyDirectory.ts',
+  // D7810 (#7810): the publisher inventory groups every stored row, held and withdrawn ones included, by design.
+  'services/researchCompanyPublishers.ts',
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
-// D7819: #7821's classification writer is the one reviewed maintenance entry it anticipated. It reads every
-// physical catalogue row (held records included) only to recompute research_company_mapping, and serves none of them.
-export const MAINTENANCE_WRITERS: string[] = ['cloudflare-worker/src/services/researchCompanyClassification.ts'];
+export const MAINTENANCE_WRITERS: string[] = [
+  // D7821: recompute code-first mappings, including held companies, without serving catalogue rows.
+  'cloudflare-worker/src/services/researchCompanyClassification.ts',
+  // D7820 (#7820): an admin-only read (uid, name, source_name) for the review routes; it writes nothing to the table.
+  'cloudflare-worker/src/services/researchCompanyReview.ts',
+  // D7825 (#7825): the admin domain review sets or clears website_verified_at on the reviewed company only.
+  'cloudflare-worker/src/services/researchRecordIdentity.ts',
+];
 const OWN = 'cloudflare-worker/src/services/researchCompanyRead.ts';
 export function withoutComments(source: string, path = 'file.ts') {
   return transformSync(source, {
