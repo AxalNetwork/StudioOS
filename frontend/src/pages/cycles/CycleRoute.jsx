@@ -1040,7 +1040,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
             ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
         </> : aboveRecords}
-        {...(phone && isPartnerNetwork ? { showAboveRecordsWhenEmpty: true } : {})}
+        // D6033 (#6033): a def may name the modules whose part above the records also shows before any record.
+        {...(phone && (isPartnerNetwork || def.aboveRecordsWhenEmpty?.includes(slug)) ? { showAboveRecordsWhenEmpty: true } : {})}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
