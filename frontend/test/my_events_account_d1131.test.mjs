@@ -25,7 +25,7 @@ test('D1131: phone account sheet carries the same Current marker',async()=>{
   let code=readFileSync(new URL('../src/ui/phone/AccountSheet.jsx',import.meta.url),'utf8');
   code=code.replace(/import \{ api \}[^;]+;/,"const api={wellbeingDaily:async()=>({submitted_today:false})};")
     .replace(/import \{ useActiveCompany \}[^;]+;/,"const useActiveCompany=()=>({company:null});")
-    .replace(/import \{ CheckInStatus \}[^;]+;/,"const CheckInStatus=()=>null;");
+    .replace(/import \{ TodayStatusLine \}[^;]+;/,"const TodayStatusLine=()=>null;");
   const Sheet=(await sourceModule(code,'ui/phone/AccountSheet.jsx')).AccountSheet;
   for(const [path,current] of [['/my/events/past',true],['/account',false]]){
     const ui=await mountForm(h(Routes,{location:path},h(Route,{path:'*',element:h(Sheet,{user:{name:'Synthetic'},onClose(){},onLogout(){}})})),{modal:true});

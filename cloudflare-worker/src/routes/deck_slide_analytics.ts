@@ -13,10 +13,13 @@
  *
  * THE READ. `{ deck_id, link_id, investor, nda, status, withdrawn_at,
  * time_per_slide, views, last_viewed_at, read_seconds, cards, most_read,
- * ask_card_uid, timeline }`. `cards` are the link's own, in the order its
+ * ask_card_uid, timeline, visit_reads, visit_reads_limit }`. `cards` are the link's own, in the order its
  * reader sees them (a variant's order, D1565), each `{ card_uid, index, title,
  * seconds }`; `seconds` is null for a card no heartbeat counted. Missing is
  * null, never 0. A withdrawn link keeps everything read so far.
+ * `visit_reads` (D8249, #8249) is seconds per card per visit, newest first and
+ * at most `visit_reads_limit` visits (`services/decks/visitReads.ts`), from
+ * the same heartbeat rows; null with Time per slide off, as `cards` is.
  *
  * WHO. `projectOwned`, as `GET /:id/engagement`: the read for the venture's
  * readers, the consent with `write: true`. The link must be one of this
@@ -36,6 +39,7 @@ import type { RouteMount } from '../util/routeRegistry';
 import { askCardIndex } from '../services/decks/shareAnalytics';
 import { cardsWithSeconds, timePerSlideOn, visitTimeline, withTimePerSlide, type SecondsRow } from '../services/decks/slideAnalytics';
 import { readDailyQuery, shareDaily } from '../services/decks/shareDaily';
+import { VISIT_READS_LIMIT, visitReads } from '../services/decks/visitReads';
 
 const deckSlideAnalytics = new Hono<{ Bindings: Env }>();
 
@@ -73,6 +77,7 @@ export async function linkSlideAnalytics(env: Env, deckRow: any, row: Row) {
     }
   }
   const per = timed ? cardsWithSeconds(cards, seconds) : null;
+  const perVisit = timed ? await linkVisitReads(env, deckId, Number(row.id), cards) : null;
   return {
     deck_id: deckId,
     link_id: row.id,
@@ -92,7 +97,27 @@ export async function linkSlideAnalytics(env: Env, deckRow: any, row: Row) {
       nda_accepted_at: row.nda.state === 'accepted' ? row.nda.accepted_at : null,
       reached_ask: [...reached].map(([view_id, at]) => ({ view_id, at })),
     }),
+    visit_reads: perVisit,
+    visit_reads_limit: VISIT_READS_LIMIT,
   };
+}
+
+/**
+ * D8249 (#8249): the newest visits' heartbeat rows, read on their own so a
+ * link with many visits still answers its latest ones (the sum above reads
+ * oldest first). Bounded by the visit limit and the link's card count.
+ */
+async function linkVisitReads(env: Env, deckId: number, linkId: number, cards: any[]) {
+  const views = (await env.DB.prepare(
+    'SELECT id, created_at FROM deck_share_views WHERE share_token_id = ? AND deck_id = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+  ).bind(linkId, deckId, VISIT_READS_LIMIT).all<{ id: number; created_at: string }>()).results || [];
+  if (!views.length) return [];
+  const ids = views.map((v) => Number(v.id));
+  const rows = (await env.DB.prepare(
+    `SELECT view_id, slide_index, card_uid, seconds, updated_at FROM deck_view_slides
+      WHERE view_id IN (SELECT value FROM json_each(?)) ORDER BY view_id, slide_index LIMIT 10000`,
+  ).bind(JSON.stringify(ids)).all<SecondsRow>()).results || [];
+  return visitReads(cards, views, rows);
 }
 
 deckSlideAnalytics.get('/:id{[0-9]+}/investor-links/:shareId{[0-9]+}/analytics', async (c) => {

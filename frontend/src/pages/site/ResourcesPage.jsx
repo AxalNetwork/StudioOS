@@ -4,9 +4,12 @@ import SitePage from '../../components/site/SitePage';
 import NetworkSubNav from '../../components/site/NetworkSubNav';
 import { CIRCLE_TYPE_LABEL, ACCESS_TYPES } from '../../data/network';
 import {
-  HUB_LOADERS, useLiveList, useSiteStats, dirFigures, directoryTypeOf, directoryTypeLabel,
-  directoryRole, initials, tintFor, dateParts, articleMeta, sectorLabel, words,
+  HUB_LOADERS, useLiveList, useSiteStatsRead, dirFigures, directoryTypeOf, directoryTypeLabel,
+  directoryRole, initials, tintFor, dateParts, articleMeta, sectorLabel, words, listRead, statsRead,
 } from '../../lib/siteResources';
+import { useCohortRecord } from '../../lib/spinoutLab';
+import { LabProgramSlot, hasOpenCohort } from '../../components/site/LabProgramCard';
+import { DataState } from '../../ui/Honesty';
 import './network.css';
 
 /**
@@ -15,10 +18,19 @@ import './network.css';
  *
  * The copy is the owner's. Every row is read live, from the read its own
  * section's page makes (`lib/siteResources.js` `HUB_LOADERS`): five directory
- * rows, four events, three articles, three circles and four roles. A block
- * whose list is empty, or fails to load, says so in one sentence. The header's
- * figures are the stats endpoint's directory counts (D675), each drawn only
- * when the endpoint returns it as a positive number.
+ * rows, four events, three articles, three circles and four roles. The
+ * Programs & events block also draws the Spin-Out Lab's open cohort with the
+ * one `LabProgramCard` `/events` draws, from the cohort record (D6992).
+ * The header's figures are the stats endpoint's directory counts (D675), each
+ * drawn only when the endpoint returns it as a positive number.
+ *
+ * D6992 (#6992): every read is in one state (`lib/siteResources.js`
+ * `listRead`). A block whose read answered no rows says so in its own
+ * sentence; programmes and events each have their own. A block whose read
+ * FAILED says "Unavailable. We could not load this list." with Try again, never
+ * the empty sentence, and a failed stats read says the figures are
+ * unavailable rather than drawing none. Blocks with rows come before blocks
+ * without, in the canvas's order within each group.
  *
  * The directory block shows only what `GET /api/public/partners` already gives
  * a logged-out visitor: a name, a company and headline, and the entity type.
@@ -43,15 +55,34 @@ function Panel({ id, title, more, moreTo, children, foot }) {
   );
 }
 
-/** Rows, a loading line, or the empty sentence. */
+/** What a failed list read draws, after "Unavailable". */
+export const LIST_UNAVAILABLE = 'We could not load this list.';
+
+/**
+ * Rows, a loading line, the empty sentence, or Unavailable with Try again.
+ * `items` is a read (`useLiveList`'s value) or, for a caller holding plain
+ * data, an array or null (`listRead`).
+ */
 function LiveRows({ items, empty, children }) {
-  if (items === null) return <p className="ax-nw-empty">Loading…</p>;
-  if (!items || items.length === 0) return <p className="ax-nw-empty">{empty}</p>;
-  return <ul className="ax-nw-list">{items.map(children)}</ul>;
+  const read = listRead(items);
+  if (read.state === 'loading') return <p className="ax-nw-empty">Loading…</p>;
+  if (read.state === 'unavailable') {
+    return (
+      <div className="ax-nw-empty" data-testid="hub-list-unavailable">
+        <DataState state="unavailable" claim={LIST_UNAVAILABLE} onRetry={read.retry} retryLabel="Try again" />
+      </div>
+    );
+  }
+  if (read.state === 'empty') return <p className="ax-nw-empty">{empty}</p>;
+  return <ul className="ax-nw-list">{read.items.map(children)}</ul>;
 }
 
+/** True when a block's read holds rows to draw. */
+const hasRows = (value) => listRead(value).state === 'loaded';
+
 function HubHeader({ stats }) {
-  const figures = dirFigures(stats);
+  const read = statsRead(stats);
+  const figures = dirFigures(read.stats);
   return (
     <div className="ax-res-head">
       <div>
@@ -61,6 +92,11 @@ function HubHeader({ stats }) {
           Directory, writing, programs, circles, and open roles. Members see full profiles and request introductions; the rest is open to read.
         </p>
       </div>
+      {read.state === 'unavailable' && (
+        <div className="ax-res-figs-off" data-testid="hub-figures-unavailable">
+          <DataState state="unavailable" claim="We could not load the network's figures." onRetry={read.retry} retryLabel="Try again" />
+        </div>
+      )}
       {figures.length > 0 && (
         <ul className="ax-res-figs" aria-label="The network in figures">
           {figures.map((f) => (
@@ -107,10 +143,16 @@ export function DirectoryBlock({ members }) {
   );
 }
 
-export function EventsBlock({ events }) {
+/** The events' own empty line, apart from the programmes' line (D6992). */
+export const EVENTS_EMPTY = 'No events are scheduled right now.';
+
+export function EventsBlock({ events, cohort }) {
   return (
     <Panel id="ax-res-events-h" title="Programs & events" more="Calendar →" moreTo="/events">
-      <LiveRows items={events} empty="Nothing is scheduled right now.">
+      <h3 className="ax-lbl-q ax-res-sub">Programs</h3>
+      <LabProgramSlot read={cohort} wrap={(card) => <div className="ax-res-program">{card}</div>} />
+      <h3 className="ax-lbl-q ax-res-sub">Events</h3>
+      <LiveRows items={events} empty={EVENTS_EMPTY}>
         {(ev) => {
           const when = dateParts(ev.starts_at, ev.timezone);
           return (
@@ -217,39 +259,45 @@ export function JobsBlock({ jobs }) {
 }
 
 /**
- * The hub's body, from data it is handed: the stats, the five lists (each
- * null while loading, [] when empty or failed) and the article taxonomy.
+ * The hub's body, from data it is handed: the stats, the five lists, the
+ * article taxonomy and the cohort record. Each list is a read (`useLiveList`)
+ * or plain data (null while loading, an array once read); `cohort` is
+ * `useCohortRecord`'s value. Blocks with rows come first, then the rest, each
+ * group in the canvas's order; the first two fill the wide row.
  */
-export function ResourcesBody({ stats, members, events, articles, sectors, circles, jobs }) {
+export function ResourcesBody({ stats, members, events, articles, sectors, circles, jobs, cohort }) {
+  const sectorRows = listRead(sectors).items || [];
+  const blocks = [
+    { key: 'directory', rows: hasRows(members), el: <DirectoryBlock key="directory" members={members} /> },
+    { key: 'events', rows: hasRows(events) || hasOpenCohort(cohort), el: <EventsBlock key="events" events={events} cohort={cohort} /> },
+    { key: 'articles', rows: hasRows(articles), el: <ArticlesBlock key="articles" articles={articles} sectors={sectorRows} /> },
+    { key: 'circles', rows: hasRows(circles), el: <CirclesBlock key="circles" circles={circles} /> },
+    { key: 'jobs', rows: hasRows(jobs), el: <JobsBlock key="jobs" jobs={jobs} /> },
+  ];
+  const ordered = [...blocks.filter((b) => b.rows), ...blocks.filter((b) => !b.rows)];
   return (
     <div className="ax-wrap ax-nw ax-nw-hub">
       <HubHeader stats={stats} />
-      <div className="ax-res-2">
-        <DirectoryBlock members={members} />
-        <EventsBlock events={events} />
-      </div>
-      <div className="ax-res-3">
-        <ArticlesBlock articles={articles} sectors={sectors} />
-        <CirclesBlock circles={circles} />
-        <JobsBlock jobs={jobs} />
-      </div>
+      <div className="ax-res-2">{ordered.slice(0, 2).map((b) => b.el)}</div>
+      <div className="ax-res-3">{ordered.slice(2).map((b) => b.el)}</div>
     </div>
   );
 }
 
 export default function ResourcesPage() {
-  const stats = useSiteStats();
+  const stats = useSiteStatsRead();
   const members = useLiveList(HUB_LOADERS.members);
   const events = useLiveList(HUB_LOADERS.events);
   const articles = useLiveList(HUB_LOADERS.articles);
   const sectors = useLiveList(HUB_LOADERS.sectors);
   const circles = useLiveList(HUB_LOADERS.circles);
   const jobs = useLiveList(HUB_LOADERS.jobs);
+  const cohort = useCohortRecord();
   return (
     <SitePage title="Resources">
       <NetworkSubNav />
       <ResourcesBody
-        stats={stats} members={members} events={events} articles={articles} sectors={sectors} circles={circles} jobs={jobs}
+        stats={stats} members={members} events={events} articles={articles} sectors={sectors} circles={circles} jobs={jobs} cohort={cohort}
       />
     </SitePage>
   );

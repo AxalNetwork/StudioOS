@@ -27,6 +27,7 @@ import {
 import { continueLine, reviewDestination } from '../src/pages/admin/approvals/inboxModel.js';
 import { decidedItemPath } from '../src/pages/admin/approvals/lanesDecidedModel.js';
 import BestFitBoard from '../src/pages/admin/approvals/BestFitBoard.jsx';
+import { approvalsPageSource } from './_approvalsPage.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const h = React.createElement;
@@ -185,7 +186,7 @@ test('the doors: Inbox, Lanes, the item drawer and Decided all open the board; n
   assert.equal(reviewDestination('best_fit'), 'Best-Fit · Approvals');
   assert.match(continueLine('best_fit'), /made on the Best-Fit board in Approvals/);
   assert.equal(decidedItemPath({ laneKey: 'best_fit', itemId: 41 }), '/admin/approvals/best-fit/41');
-  const app = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const app = approvalsPageSource();
   assert.match(app, /case 'best_fit': return <Link to="\/admin\/approvals\/best-fit" className=\{LINK\}>Best-Fit<\/Link>;/, 'LaneDoor is a literal link');
   assert.match(app, /<Link to=\{`\/admin\/approvals\/best-fit\/\$\{id\}`\}/, 'the drawer lands on the item, by a literal template');
   assert.match(app, /<DressedDoor lane=\{v\.lane\} itemId=\{v\.id\} before="Continue review in "/);

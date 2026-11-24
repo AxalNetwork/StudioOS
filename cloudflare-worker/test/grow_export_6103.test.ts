@@ -51,6 +51,7 @@ async function fixture() {
   db.exec(file('202611041912'));
   db.exec(file('507'));
   db.exec(file('202611161128_6865')); // #6865: feedback's contact_uid and origin, which the Feedback read selects.
+  db.exec(file('202611220349_6891')); // D6865 part 2 (#6891): the feedback's reply link, which POST /feedback writes
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(ADVISOR, 'founder', 20, 'Ada', 'ada@co.example');

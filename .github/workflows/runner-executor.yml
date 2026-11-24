@@ -57,6 +57,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+      # Prepared dispatch-only supervisor capability; activation remains disabled and owner-gated.
+      id-token: write
     # Fixed main-definition pool allowlist; input is never a runner label or group.
     # Independent catalog admission on the selected target must agree before checkout.
     # D7907: github-8 is GitHub-hosted included compute (group 6), separate from the self-hosted pool.
@@ -67,12 +69,28 @@ jobs:
         shell: bash
     env:
       TZ: UTC
+      EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+      CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+      CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
     steps:
+      - name: Validate separately reviewed control and workflow revisions
+        env:
+          CONTROL_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CHILD_SHA: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
+          ACTUAL_CHILD_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 - <<'PYCODE'
+          import os, re
+          assert re.fullmatch('[a-f0-9]{40}', os.environ['CONTROL_SHA'])
+          assert re.fullmatch('[a-f0-9]{40}', os.environ['CHILD_SHA'])
+          assert os.environ['CHILD_SHA'] == os.environ['ACTUAL_CHILD_SHA']
+          PYCODE
       - name: Check out trusted admission code before any candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: AxalNetwork/StudioOS
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
           path: studioos-executor-${{ github.run_id }}-${{ github.run_attempt }}-control
           persist-credentials: false
       - name: Select reviewed native Node
@@ -85,12 +103,12 @@ jobs:
         with:
           python-version: '3.11.18'
       - name: Prepare only this run's directories
-        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" prepare
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" prepare
       - name: Independently admit this exact child before checkout
         id: admission
         env:
           GH_TOKEN: ${{ github.token }}
-          EXECUTOR_SHA: ${{ github.workflow_sha }}
+          EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
           CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
@@ -99,7 +117,7 @@ jobs:
           LEASE_GENERATION: ${{ inputs.generation }}
           PART: ${{ inputs.part }}
           PROFILE: ${{ inputs.profile }}
-        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-admission.mjs"
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" admit
       - name: Check out only the admitted immutable source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -119,13 +137,13 @@ jobs:
       - name: Verify runtime and exact plan before candidate dependency scripts
         env:
           GH_TOKEN: ${{ github.token }}
-          EXECUTOR_SHA: ${{ github.workflow_sha }}
+          EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
           CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
           CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
-        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" verify-plan
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" verify-plan
       # #7905/D8007: no candidate install runs as a host step for any profile. Installs and tests run only inside
       # the verified execution boundary that the Run step owns; without one the Run step refuses.
       - name: Run admitted Worker shard
@@ -133,13 +151,13 @@ jobs:
         timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || inputs.profile == 'github-8' && 29 || 26 }}
         env:
           GH_TOKEN: ${{ github.token }}
-          EXECUTOR_SHA: ${{ github.workflow_sha }}
+          EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
           CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
           CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
-        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" run
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" run
       - name: Upload test traces
         if: always() && steps.tests.outcome != 'skipped'
         continue-on-error: true
@@ -152,4 +170,4 @@ jobs:
           retention-days: 3
       - name: Remove only this child's files
         if: always()
-        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" cleanup
+        run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/capacity-executor.mjs" cleanup

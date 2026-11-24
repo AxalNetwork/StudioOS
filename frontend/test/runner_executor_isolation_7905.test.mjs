@@ -117,16 +117,19 @@ test('D7905 the receipt reader and catalog are composed only from repository con
   assert.equal((await trustedAuthority(env, { loadClient: async () => ({ ...client, createReceiptReader: () => { throw new Error('capacity_authority_unconfigured'); } }) })).readReceipt, undefined);
 });
 
-test('D7905 no profile installs or tests candidate code as a host step, uploads only a committed offer, and grants no OIDC yet', () => {
+test('D7905 no profile installs or tests candidate code as a host step, uploads only a committed offer, and stages OIDC only for the disabled trusted supervisor', () => {
   const text = read('../../.github/workflows/runner-executor.yml');
   assert.doesNotMatch(text, /Install admitted (Worker|root) dependencies/);
   assert.doesNotMatch(text, /run: npm ci/);
-  assert.doesNotMatch(text, /id-token:\s*write/, 'OIDC for the receipt reader is enablement work, not this change');
-  assert.equal(text.match(/CI_CAPACITY_URL: \$\{\{ vars\.CI_CAPACITY_URL \}\}/g).length, 3);
+  assert.match(text, /id-token:\s*write/);
+  assert.match(text, /github.event_name == 'workflow_dispatch'/);
+  assert.match(text, /vars\.RUNNER_EXECUTOR_ENABLED == 'true'/);
+  assert.doesNotMatch(text.split('jobs:')[0], /id-token:/);
+  assert.ok(text.includes('CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}'));
   const upload = text.split('- name: Upload test traces\n')[1].split('\n      - name:')[0];
   assert.match(upload, /trace-export\/\*\/ready\n/);
   assert.doesNotMatch(upload, /test-traces\n/);
   const cleanup = text.split('- name: Remove only this child\'s files\n')[1].split('\n      - name:')[0];
   assert.match(cleanup, /if: always\(\)/);
-  assert.match(cleanup, /runner-execution\.mjs" cleanup/);
+  assert.match(cleanup, /capacity-executor\.mjs" cleanup/);
 });

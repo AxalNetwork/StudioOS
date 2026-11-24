@@ -47,9 +47,17 @@ jobs:
       - name: Build the generated modules
         working-directory: candidate
         run: node scripts/build-generated.mjs
+      # A candidate branched before the parser landed (#8098) carries none of its own:
+      # test the base's parser, which is the one that reports below (#8246). A
+      # candidate that carries the parser always runs its own tests.
       - name: Test the ownership parser
-        working-directory: candidate
-        run: node --test scripts/ci/ownership-check.test.mjs
+        run: |
+          if [[ -f candidate/scripts/ci/ownership-check.mjs ]]; then
+            cd candidate
+          else
+            echo '::notice::the candidate carries no ownership parser; testing the base parser that reports'
+          fi
+          node --test scripts/ci/ownership-check.test.mjs
       - name: Report ownership overlaps
         env:
           GITHUB_TOKEN: ${{ github.token }}

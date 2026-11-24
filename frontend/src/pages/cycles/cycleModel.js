@@ -30,7 +30,7 @@ export const CYCLES = {
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
     // D6029 (BD23): Plan and Progress are Build-level pages, after Overview and before Tools.
     lead: BUILD_DESTINATIONS,
-    // Tools keeps this address until #5078 makes it one page.
+    // D5078 (#5078): this address is Operating systems › Tools, the page's Tools section.
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Build your deck',
     // D1221 (#2458) made Calls for Capital Raise's history tab. D5081 part 5 (#5081, RA-12): Calls, Commitments and

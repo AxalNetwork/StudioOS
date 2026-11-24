@@ -8,6 +8,7 @@ import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { researchMarketReadingsApi } from '../../lib/api/researchMarketReadings.js';
 import ReadingsSummary from './ReadingsSummary.jsx';
 import MarketDirectoryPanel, { CoverageNote } from './MarketDirectory.jsx';
+import { againstText, windowPhrase, windowText, WINDOW_NOT_RECORDED } from './indexWindow.js';
 import { DIRECTORY_TABS, MARKET_SORTS, readMarketQuery, writeMarketQuery, sectorSlug } from './marketDirectoryQuery.js';
 import { researchOverviewApi } from '../../lib/api/researchOverview.js';
 import { researchSectorsApi } from '../../lib/api/researchSectors.js';
@@ -207,9 +208,9 @@ function MoverRows({ rows, dir }) {
 }
 
 /**
- * Top movers this month (canvas "Top movers"), from the Research overview's
- * heat grid (`GET /api/research/overview`, D536): live index rows only, this
- * month to date against last month.
+ * Top movers (canvas "Top movers"), from the Research overview's heat grid
+ * (`GET /api/research/overview`, D536): live index rows only, the current
+ * point against the previous one, each naming its window (D7708).
  */
 export function TopMovers({ overview }) {
   const heat = overview?.data?.heat;
@@ -223,15 +224,15 @@ export function TopMovers({ overview }) {
     const { rising, falling } = topMovers(heat);
     const prev = previousPeriod(heat.period_key);
     body = !rising.length && !falling.length
-      ? <p><Unrecorded reason="No live index has a change on last month yet." /></p>
+      ? <p><Unrecorded reason="No live index has a change on the previous point yet." /></p>
       : (
         <>
-          <p className="text-[12.5px] text-axal-muted">Largest changes across the tracked sectors and six dimensions, against last month. This month is month to date.</p>
+          <p className="text-[12.5px] text-axal-muted">Largest changes across the tracked sectors and six dimensions: the score over {windowText(heat) === WINDOW_NOT_RECORDED ? 'its 30-day window (not recorded for this point)' : windowText(heat)}, {againstText(heat.previous_window)}.</p>
           <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-axal-muted">Rising</p>
-          {rising.length ? <MoverRows rows={rising} dir="up" /> : <p className="text-[12.5px] text-axal-muted">No live index rose on last month.</p>}
+          {rising.length ? <MoverRows rows={rising} dir="up" /> : <p className="text-[12.5px] text-axal-muted">No live index rose against the previous point.</p>}
           <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-axal-muted">Falling</p>
-          {falling.length ? <MoverRows rows={falling} dir="down" /> : <p className="text-[12.5px] text-axal-muted">No live index fell on last month.</p>}
-          <Caption>market_intel_indexes · global · {heat.period_key}{prev ? ` against ${prev}` : ''}</Caption>
+          {falling.length ? <MoverRows rows={falling} dir="down" /> : <p className="text-[12.5px] text-axal-muted">No live index fell against the previous point.</p>}
+          <Caption>market_intel_indexes · global · {heat.period_key}{prev ? ` against ${prev}` : ''} · {windowPhrase(heat)}</Caption>
         </>
       );
   }
@@ -625,7 +626,10 @@ export function useDirectoryExport(markets, params) {
   const ctl = marketExport({ status: markets.status, count, query: view.q, sort: view.sort,
     sortLabel: MARKET_SORTS.find((x) => x.value === view.sort)?.label });
   const rows = async () => {
-    if ((markets.data?.items?.length || 0) >= count && !markets.request?.offset) return markets.data?.items || [];
+    // D7710: a row carries its read's time into the file.
+    if ((markets.data?.items?.length || 0) >= count && !markets.request?.offset) {
+      return (markets.data?.items || []).map((m) => ({ ...m, read_at: markets.data?.read_at ?? null }));
+    }
     return collectMarkets({ request: markets.request, fetchPage: (p) => researchMarketsApi.list(p) });
   };
   return { ctl, rows };
