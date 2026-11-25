@@ -472,11 +472,19 @@ test('the journey: admitted after approval, called, received, reconciled, distri
   assert.deepEqual(dists.map((d) => [d.lp_id, d.amount_cents, d.status]), [[ctx.lpA, 120_000, 'pending'], [ctx.lpB, 80_000, 'pending']]);
   await agree(w, 'distribution pending');
   // The GP marks A's paid: A's portal counts it, B's still does not.
+  const returnsOf = (lp: number) => Number(w.rows('SELECT returns FROM limited_partners WHERE id = ?', lp)[0].returns ?? 0);
+  const returnsBefore = returnsOf(ctx.lpA);
   const paid = await w.call(GP, 'POST', `/api/funds/distributions/${dists[0].id}/mark-paid`);
   assert.equal(paid.status, 200, JSON.stringify(paid.body));
   await agree(w, 'distribution recorded');
   const perfA = (await portal(w, LP_A)).performance[0];
   assert.deepEqual([perfA.invested_amount, perfA.distributions_dollars, perfA.dpi], [6000, 1200, 0.2]);
+  // Owner answer (D8534): the paid row is the record of the payout. `returns` is not credited as well, so DPI and
+  // TVPI (returns + paid distributions) count the $1,200 once; a second press is refused and changes nothing.
+  assert.equal(returnsOf(ctx.lpA), returnsBefore, 'mark-paid leaves limited_partners.returns as it was');
+  const again = await w.call(GP, 'POST', `/api/funds/distributions/${dists[0].id}/mark-paid`);
+  assert.equal(again.status, 409, JSON.stringify(again.body));
+  assert.deepEqual([(await portal(w, LP_A)).performance[0].dpi, returnsOf(ctx.lpA)], [0.2, returnsBefore]);
 
   // INV3 on the investor's own Pay press: refused, the GP records payment; nothing moves and nothing leaves.
   const pay = await w.call(LP_B, 'POST', `/api/capital/calls/${ctx.lineB}/pay`);

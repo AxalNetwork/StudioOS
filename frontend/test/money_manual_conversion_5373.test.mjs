@@ -93,7 +93,7 @@ const ALLOW = [
     "frontend/src/pages/investor/deals/ClosingZone.jsx": 3,
     "cloudflare-worker/src/routes/_capital_call_writes.ts": 1,
     "cloudflare-worker/src/routes/capital.ts": 1,
-    "cloudflare-worker/src/routes/funds.ts": 5,
+    "cloudflare-worker/src/routes/funds.ts": 4,
     "cloudflare-worker/src/routes/liquidity.ts": 2,
     "cloudflare-worker/src/routes/networkfx.ts": 1,
     "cloudflare-worker/src/services/capitalAttestationTerms.ts": 2,
