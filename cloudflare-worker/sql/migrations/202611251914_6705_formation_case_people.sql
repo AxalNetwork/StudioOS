@@ -1,4 +1,5 @@
 -- D6705: private formation participants, capital, consent and screening.
+-- forward-fix: cloudflare-worker/sql/forward-fixes/6705_formation_case_guards.sql
 CREATE TABLE IF NOT EXISTS formation_case_people (
   id INTEGER PRIMARY KEY, uid TEXT NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))), case_id INTEGER NOT NULL REFERENCES formation_cases(id),
   name TEXT NOT NULL, user_id INTEGER REFERENCES users(id), residence_country TEXT,
