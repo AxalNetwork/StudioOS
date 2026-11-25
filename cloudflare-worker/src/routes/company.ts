@@ -1138,15 +1138,27 @@ async function listInvitations(env: Env, companyId: number): Promise<any[]> {
  * recovered — which is the property that makes the stored hash worth having.
  */
 async function issueInvitationEmail(
-  env: Env, company: Company, inviter: User, email: string, token: string,
+  env: Env, company: Company, inviter: User, tokenHash: string, token: string,
 ): Promise<boolean> {
   const base = String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
   const link = `${base}/company/invitations/accept?token=${encodeURIComponent(token)}`;
   try {
-    const { sendCompanyInvitationEmail } = await import('../services/email');
-    return await sendCompanyInvitationEmail(env, email, company.company_name, inviter.name || 'A teammate', link);
+    // D8536 (#8536): sent under the delivery contract. The reference is the
+    // invitation row and this issuance of its token (a resend mints a new
+    // token, so it is a new attempt); the address is the one the row names.
+    const inv = await env.DB.prepare(
+      `SELECT id FROM company_invitations WHERE token_hash = ?`,
+    ).bind(tokenHash).first<{ id: number }>();
+    if (!inv) return false;
+    const { sendCompanyInvitationEmailBound } = await import('../services/email');
+    const r = await sendCompanyInvitationEmailBound(env, {
+      flow: 'invitation',
+      subject: { kind: 'company_invitation', id: Number(inv.id) },
+      attempt: tokenHash.slice(0, 16),
+    }, { companyName: company.company_name, inviterName: inviter.name || 'A teammate', link });
+    return r.state === 'accepted';
   } catch (e) {
-    console.warn('[company] invitation email failed', { company_id: company.id }, e);
+    console.warn('[company] invitation email failed', { company_id: company.id }, (e as Error)?.name || 'Error');
     return false;
   }
 }
@@ -1197,7 +1209,7 @@ r.post('/company/:uid/invitations', async (c) => {
       throw e;
     }
 
-    const sent = await issueInvitationEmail(c.env, company, user, email, token);
+    const sent = await issueInvitationEmail(c.env, company, user, tokenHash, token);
     if (sent) {
       await c.env.DB.prepare(
         `UPDATE company_invitations SET email_sent = 1, updated_at = datetime('now') WHERE token_hash = ?`,
@@ -1258,7 +1270,7 @@ r.post('/company/:uid/invitations/:inviteUid/resend', async (c) => {
               updated_at = datetime('now')
         WHERE id = ?`,
     ).bind(tokenHash, inv.id).run();
-    const sent = await issueInvitationEmail(c.env, company, user, inv.email, token);
+    const sent = await issueInvitationEmail(c.env, company, user, tokenHash, token);
     if (sent) {
       await c.env.DB.prepare(
         `UPDATE company_invitations SET email_sent = 1, updated_at = datetime('now') WHERE id = ?`,

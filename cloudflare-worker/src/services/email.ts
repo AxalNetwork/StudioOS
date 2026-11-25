@@ -1,6 +1,13 @@
 import type { Env } from '../types';
 import { isSuppressed } from './newsletter';
 import { plainStripeAmount } from '../../../frontend/src/lib/money.js';
+import { sendRawEmailOutcome } from './email/gmail';
+import { deliverWithReference, type DeliveryResult, type SendReference } from './email/deliveryContract';
+
+// D8536 (#8536) — the delivery contract for critical flows lives in
+// `email/deliveryContract.ts`; its types are re-exported here so a caller
+// that already imports this file reads one place.
+export type { DeliveryFlow, DeliveryResult, DeliveryState, SendReference } from './email/deliveryContract';
 
 // A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
 // send inline, so a Google endpoint that never answers holds a person's sign-in
@@ -611,25 +618,18 @@ ${noteBlock}
  *
  * Every interpolated value is escaped. `companyName` and `inviterName` are
  * typed by a user, and this is HTML going to a third party's inbox.
+ *
+ * D8536: the subject, text and HTML are built here, pure, so a test reads
+ * exactly what is sent. The company settings page sends it under the delivery
+ * contract (`sendCompanyInvitationEmailBound` below); the HQ move invitation
+ * (`rpc/branchOps.ts`) still uses the unreferenced sender.
  */
-export async function sendCompanyInvitationEmail(
-  env: Env,
-  to: string,
-  companyName: string,
-  inviterName: string,
-  link: string,
-): Promise<boolean> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return false;
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.error('[EMAIL] Gmail credentials missing — company invitation not sent');
-    return false;
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
-    const co = escapeHtml(companyName);
-    const who = escapeHtml(inviterName);
-    const html = `<!DOCTYPE html>
+export function companyInvitationEmailContent(
+  companyName: string, inviterName: string, link: string,
+): { subject: string; html: string; text: string } {
+  const co = escapeHtml(companyName);
+  const who = escapeHtml(inviterName);
+  const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
@@ -669,10 +669,29 @@ export async function sendCompanyInvitationEmail(
   </p>
 </td></tr>
 </table></td></tr></table></body></html>`;
-    const text = `${inviterName} invited you to join ${companyName} on Axal VC StudioOS.\n\n`
-      + `Accept here: ${link}\n\nThis invitation expires in 14 days and works only for this email `
-      + `address. If you were not expecting it, you can ignore it — nothing happens until you accept.\n\n— Axal VC`;
-    const rawEmail = buildRawEmail(to, `${inviterName} invited you to ${companyName}`, html, text, 'Axal VC <noreply@axal.vc>');
+  const text = `${inviterName} invited you to join ${companyName} on Axal VC StudioOS.\n\n`
+    + `Accept here: ${link}\n\nThis invitation expires in 14 days and works only for this email `
+    + `address. If you were not expecting it, you can ignore it — nothing happens until you accept.\n\n— Axal VC`;
+  return { subject: `${inviterName} invited you to ${companyName}`, html, text };
+}
+
+export async function sendCompanyInvitationEmail(
+  env: Env,
+  to: string,
+  companyName: string,
+  inviterName: string,
+  link: string,
+): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — company invitation not sent');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = companyInvitationEmailContent(companyName, inviterName, link);
+    const rawEmail = buildRawEmail(to, subject, html, text, 'Axal VC <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
@@ -690,6 +709,23 @@ export async function sendCompanyInvitationEmail(
     console.error(`[EMAIL] Company invitation failed for ${to}: ${e?.message || 'Unknown error'}`);
     return false;
   }
+}
+
+/**
+ * D8536 (#8536) — the company invitation under the delivery contract. The
+ * address is the one the invitation row names (`ref.subject`), the answer is
+ * the contract state, and a retry of the same reference never mails twice.
+ * A refused send is tried once more in the same call, since nothing left.
+ */
+export async function sendCompanyInvitationEmailBound(
+  env: Env,
+  ref: SendReference,
+  content: { companyName: string; inviterName: string; link: string },
+): Promise<DeliveryResult> {
+  const { subject, html, text } = companyInvitationEmailContent(content.companyName, content.inviterName, content.link);
+  return deliverWithReference(env, ref, (to) => sendRawEmailOutcome(env, {
+    to, subject, html, text, from: 'Axal VC <noreply@axal.vc>', mailClass: 'transactional',
+  }), { tries: 2 });
 }
 
 /**
