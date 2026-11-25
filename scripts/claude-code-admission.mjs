@@ -12,7 +12,7 @@
  * A refusal exits 0 (the run ends there, with its reason in the summary); an internal error exits 1, admitting nothing.
  */
 import { appendFileSync, readFileSync } from 'node:fs';
-import { decide, headStillAdmitted, outputLines, parseAllowlist } from './lib/claudeCodeAdmission.mjs';
+import { decide, headStillAdmitted, outputLines, parseAllowlist, safeLine } from './lib/claudeCodeAdmission.mjs';
 
 const args = process.argv.slice(2);
 const env = process.env;
@@ -41,7 +41,9 @@ function fixtureApi(f) {
   };
 }
 
-const summary = (line) => { if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${line}\n`); };
+// Each summary line passes safeLine: the head SHA and the permission come from the API, so nothing but checked
+// printable text reaches the file.
+const summary = (line) => { if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${safeLine(line)}\n`); };
 
 async function main() {
   if (args[0] === '--fixture') {

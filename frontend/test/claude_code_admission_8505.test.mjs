@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { decide, headStillAdmitted, parseAllowlist, requestOf } from '../../scripts/lib/claudeCodeAdmission.mjs';
+import { decide, headStillAdmitted, parseAllowlist, requestOf, safeLine } from '../../scripts/lib/claudeCodeAdmission.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
 const WF = parse(readFileSync(new URL('.github/workflows/claude-code.yml', ROOT), 'utf8'));
@@ -150,4 +150,14 @@ test('the head check stops a moved head and an unreadable one', () => {
   assert.equal(headStillAdmitted(HEAD, MOVED).ok, false);
   assert.equal(headStillAdmitted(HEAD, undefined).ok, false);
   assert.equal(headStillAdmitted('', HEAD).ok, false);
+});
+
+test('nothing the API answers reaches the summary or the outputs unchecked', async () => {
+  // Mutation checked: the KNOWN_PERMISSIONS mapping removed → the injected permission reaches the summary.
+  const api = { permission: async () => 'read\n<img src=x>| [link](http://x)', pullHead: async () => ({ sha: HEAD }) };
+  const d = await decide(comment('outsider'), api);
+  assert.equal(d.reason, 'not_permitted');
+  assert.match(d.summary, /outsider has none permission/, 'an undefined permission reads as none');
+  assert.equal(safeLine('a\nb <x> `c` |d| [e](f) **g** →'), 'a b x c d e(f) g to ');
+  assert.equal(safeLine('x'.repeat(400)).length, 300);
 });

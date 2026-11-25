@@ -13,6 +13,8 @@
 /** The permissions that may start a run. The API's `permission` field folds `maintain` into `write`. */
 export const ADMIT_PERMISSIONS = Object.freeze(['admin', 'write']);
 export const MENTION = '@claude';
+/** The values the collaborator permission API's `permission` field can take; anything else is read as none. */
+export const KNOWN_PERMISSIONS = Object.freeze(['admin', 'maintain', 'write', 'triage', 'read', 'none']);
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/;
 const SHA = /^[0-9a-f]{40}$/;
 const NUMBER = /^[1-9][0-9]{0,9}$/;
@@ -77,7 +79,9 @@ export async function decide({ eventName, event, repository, ref, sha, allowlist
   }
   const allowed = allowlist.map((s) => s.toLowerCase());
   for (const login of req.requesters) {
-    const permission = await api.permission(login);
+    const answered = await api.permission(login);
+    // A value the API does not define never reaches the summary: it is read as none.
+    const permission = answered == null ? null : KNOWN_PERMISSIONS.includes(answered) ? answered : 'none';
     if (permission == null) return refuse('permission_unavailable', `the permission of ${login} could not be read, so the request is not admitted.`);
     if (!ADMIT_PERMISSIONS.includes(permission)) {
       return refuse('not_permitted', `${login} has ${permission} permission on this repository; a run needs write or admin.`, { requester: login });
@@ -104,10 +108,19 @@ export async function decide({ eventName, event, repository, ref, sha, allowlist
   };
 }
 
+/**
+ * A line as the job summary and $GITHUB_OUTPUT may carry it: one line, printable ASCII without markdown or HTML
+ * markup (no < > ` | [ ] ! * \\), at most 300 characters. Every value in a line is validated already; this is
+ * the last guard before the file.
+ */
+export function safeLine(text) {
+  return String(text ?? '').replace(/[\r\n]+/g, ' ').replace(/\s*→\s*/g, ' to ').replace(/[^\x20-\x7e]|[<>`|[\]!*\\]/g, '').slice(0, 300);
+}
+
 /** The admit job's outputs, as `name=value` lines for $GITHUB_OUTPUT. Only payload-derived, validated values. */
 export function outputLines(d) {
   const out = { admitted: d.admitted ? 'true' : 'false', reason: d.reason, kind: d.kind ?? '', number: d.number ?? '', head_sha: d.headSha ?? '', repository: d.repository ?? '' };
-  return Object.entries(out).map(([k, v]) => `${k}=${String(v).replace(/[\r\n]/g, ' ')}`);
+  return Object.entries(out).map(([k, v]) => `${k}=${safeLine(v)}`);
 }
 
 /** The model job's last gate: the pull request's head must still be the admitted one. */
