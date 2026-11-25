@@ -89,6 +89,12 @@
     "kind": "public_content",
     "state": "unreviewed"
   },
+  "GET /api/public/release-sites/:tenant/:company/:site": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "public_by_design",
+    "note": "D5585-p9: a website's public read of the release it shows. Off unless WORK_GRAPH_RELEASE_SITES is on (404 before any D1 or R2 read). Answers ids and digests only, for a public-audience release the line's publication pointer names and no takedown or tombstone covers; the path's tenant and company bind every read. Never cached, rate-limited per IP (release_site_read)."
+  },
   "GET /api/public/roadmap/votes": {
     "review": "optional_auth",
     "kind": "public_content",
