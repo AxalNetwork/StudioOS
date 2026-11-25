@@ -17,6 +17,7 @@
  * is `admission_unavailable`. Both are refusals: nothing is assumed admitted.
  */
 import type { Env } from '../../types';
+import { doNamespace } from '../../util/doNamespace';
 import type { Scope } from '../workGraphContracts';
 import { workspaceRefusal, type WorkspaceRefusal, type WorkspaceResult } from './workspaceSpec';
 import type { LeaseState } from './workspaceAdmission';
@@ -92,12 +93,12 @@ export function scopeRefusal(op: string, caller: unknown, args: unknown): Admiss
 const isResult = (v: unknown): v is { ok: boolean } => Boolean(v) && typeof v === 'object' && typeof (v as { ok?: unknown }).ok === 'boolean'
   && ((v as { ok: boolean }).ok === true ? 'value' in (v as object) : typeof (v as { code?: unknown }).code === 'string');
 
-async function call<T>(env: Pick<Env, 'WORKSPACE_ADMISSION'>, caller: Scope, op: WorkspaceAdmissionOp, args: unknown[]): Promise<ClientResult<T>> {
+async function call<T>(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>, caller: Scope, op: WorkspaceAdmissionOp, args: unknown[]): Promise<ClientResult<T>> {
   const refused = scopeRefusal(op, caller, args);
   if (refused) return refused;
-  const ns = env?.WORKSPACE_ADMISSION;
-  if (!ns) return clientRefusal('admission_unbound', 503);
+  if (!env?.WORKSPACE_ADMISSION) return clientRefusal('admission_unbound', 503);
   try {
+    const ns = doNamespace(env, env.WORKSPACE_ADMISSION);
     const stub = ns.get(ns.idFromName(coordinatorName({ tenant_id: caller.tenantId, company_id: caller.companyId })));
     const res = await stub.fetch('https://workspace-admission/op', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ op, caller: { tenantId: caller.tenantId, companyId: caller.companyId }, args }) });
@@ -115,7 +116,7 @@ async function call<T>(env: Pick<Env, 'WORKSPACE_ADMISSION'>, caller: Scope, op:
  * The client for one caller's venture. `caller` is the authenticated scope (a route's, never a request body's); every
  * method is refused `wrong_tenant` before any stub call when its arguments name another venture.
  */
-export function workspaceAdmissionClient(env: Pick<Env, 'WORKSPACE_ADMISSION'>, caller: Scope) {
+export function workspaceAdmissionClient(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>, caller: Scope) {
   return {
     /** #5570: enqueue a run the engine admitted (keyed by its run uid), run one admission pass, answer the caller's slot. */
     admission: {
@@ -144,7 +145,7 @@ export type WorkspaceAdmissionClient = ReturnType<typeof workspaceAdmissionClien
  * could not be read (`admission_unbound`, `admission_unavailable`, `invalid_admission_call`). `renderAdmissions`
  * answers `r.ok ? r.value : null`, and null is `admission_unverified`, never admitted.
  */
-export async function swarmSnapshotFor(env: Pick<Env, 'WORKSPACE_ADMISSION'>, scope: Scope): Promise<ClientResult<SwarmState>> {
+export async function swarmSnapshotFor(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>, scope: Scope): Promise<ClientResult<SwarmState>> {
   if (!validCaller(scope)) return clientRefusal('invalid_admission_call', 422);
   return workspaceAdmissionClient(env, scope).swarm.snapshotFor({ tenant_id: scope.tenantId, company_id: scope.companyId });
 }
