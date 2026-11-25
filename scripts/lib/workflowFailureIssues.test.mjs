@@ -1,3 +1,6 @@
+/**
+ * D6387: episode attribution, deduplication and safe evidence.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createWorkflowFailureReporter, normalizeWorkflowFailure } from './workflowFailureIssues.mjs';

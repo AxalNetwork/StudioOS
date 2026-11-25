@@ -1,4 +1,11 @@
 /**
+ * #4570: reads every Worker route's identity gate and ownership evidence from
+ * source — the handler, the router and path-scoped app middleware that cover
+ * it, and the functions it calls or hands on by name, three levels down. Errs
+ * towards review: a gate it cannot see reads as weaker, never stronger, and the
+ * auth module's own queries (the caller's row) are never ownership evidence.
+ * Owned by `../build-auth-inventory.mjs`; tested in `authInventory.test.mjs`.
+ *
  * #4570 (S1 of #4554) — the authorization inventory of the production Worker.
  *
  * Every (METHOD, path) the Worker serves, read statically from the same mounts

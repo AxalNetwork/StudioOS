@@ -1,3 +1,8 @@
+/**
+ * D5617: `claims.mjs` and `../claim.mjs`: claim metadata round trips and TTL
+ * expiry, one winner between two concurrent acquisitions, renew and release,
+ * comment-only reaping, the 403 label fallback, and the WIP cap.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { claimRef, claimMessage, parseClaim, isExpired } from './claims.mjs';

@@ -56,8 +56,10 @@ test.describe('axe: zero serious or critical violations', () => {
     await page.keyboard.press('Shift+ArrowDown');
     await expect(page.locator('[data-testid^="pitch-editor-block-"][aria-pressed="true"]')).toHaveCount(2);
     await expect(page.getByTestId('pitch-editor-selbar')).toBeVisible();
+    await page.getByRole('tab', { name: 'Eadwyn' }).click(); // D6057: the instruction box and the deck's Ask live in the inspector's Eadwyn tab
     await expect(page.getByTestId('pitch-instruction-field')).toBeVisible();
     expect(await blocking(page)).toEqual([]);
+    await first.focus(); // Escape clears from the stage; choosing the Eadwyn tab moved focus to the inspector
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-testid^="pitch-editor-block-"][aria-pressed="true"]')).toHaveCount(0);
   });
@@ -90,6 +92,7 @@ test.describe('axe: zero serious or critical violations', () => {
     await expect(page.getByTestId('deck-more')).toBeVisible();
     expect(await blocking(page)).toEqual([]);
     await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Eadwyn' }).click(); // D6057: the instruction box and the deck's Ask live in the inspector's Eadwyn tab
     await page.getByTestId('pitch-ask').click();
     await page.waitForLoadState('networkidle');
     expect(await blocking(page)).toEqual([]);
@@ -108,6 +111,9 @@ test.describe('axe: zero serious or critical violations', () => {
     await page.setViewportSize({ width: 820, height: 1180 });
     await openEditor(page, m.matrix[0].projectId);
     expect(await blocking(page)).toEqual([]);
+    // D6057: the rail lives in the inspector above the phone breakpoint and in the page below it, so resizing a live
+    // editor remounts it and starts its reads; leaving first keeps the next load from inheriting an aborted read.
+    await page.goto('about:blank');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/raise/pitch/edit?project_id=${m.matrix[0].projectId}`);
     await expect(page.getByTestId('pitch-editor')).toBeVisible();

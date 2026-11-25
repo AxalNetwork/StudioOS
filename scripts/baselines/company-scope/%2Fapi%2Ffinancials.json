@@ -1,0 +1,14 @@
+{
+  "GET /api/financials/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/financials/:projectId/export.xlsx": {
+    "kind": "target"
+  },
+  "POST /api/financials/:projectId/recompute": {
+    "kind": "target"
+  },
+  "PUT /api/financials/:projectId": {
+    "kind": "target"
+  }
+}

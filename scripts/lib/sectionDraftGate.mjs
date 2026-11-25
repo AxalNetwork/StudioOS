@@ -1,3 +1,10 @@
+// D5985 (#5985): whether a reproduced section defect may get one automatic
+// draft fix: section-triage's `cases` as the allowlist, trusted reproduced
+// evidence, #5681's excluded inputs, no self-generated events, existing claims
+// and PRs, the attempt, branch, PR and concurrency budget, and the stop switch.
+// Emits five fixed job fields or one reason code. Tested in
+// `sectionDraftGate.test.mjs`.
+//
 // D5985 (#5985): may a reproduced section defect get one automatic draft fix?
 // A pure eligibility check. It reads only the observation it is handed, makes no
 // GitHub call, starts no workflow and calls no agent. Dispatch is #5986's.

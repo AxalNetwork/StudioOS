@@ -42,6 +42,7 @@ import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
 import { securityBackups, seedSecurity, SECURITY_ADMIN } from './_security_seed.ts';
 import { seedFundAdmin } from './_fund_admin_seed.ts';
+import { seedVentureSpace } from './_venturespace_seed.ts';
 import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -102,6 +103,8 @@ const env: any = {
   RATE_LIMITS: noLimits(), TOKENS: memKV(), OAUTH_KV: memKV(), AI_SPEND: memKV(),
   // D4803 (#4803): the backup and drill markers the Security pass reads.
   BACKUPS: securityBackups(NOW),
+  // D8527 (#8527): the data room's download mints a link and reads nothing from storage.
+  FILES: { async put() {}, async delete() {}, async get() { return null; } },
 };
 const ctx: any = { waitUntil() {}, passThroughOnException() {} };
 const token = await createJWT(env, venture.founderUserId, `synthetic-${venture.founderUserId}@example.invalid`, 'founder');
@@ -170,8 +173,11 @@ security.user = await worker.fetch(new Request(`${ORIGIN}/api/auth/me`, { header
 // D4812 (#4812, part 8): the fund Fund Admin's browser pass reads, as that Super Admin (`_fund_admin_seed.ts`).
 const fundAdmin = seedFundAdmin(db, NOW, SECURITY_ADMIN.id);
 
+// D8527 (#8527): one isolated owner, co-founder and stranger per stale-access scenario (`_venturespace_seed.ts`).
+const venturespace = await seedVentureSpace(db, env);
+
 const me = await api('GET', '/api/auth/me').catch(() => null);
-const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security, fundAdmin };
+const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security, fundAdmin, venturespace };
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',

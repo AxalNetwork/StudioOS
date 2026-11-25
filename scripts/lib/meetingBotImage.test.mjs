@@ -1,3 +1,8 @@
+/**
+ * #2586: `meetingBotImage.mjs` and `../build-meeting-bot-image.mjs`: the image
+ * tag by full commit, fail-closed builds, the workflow's publication order, and
+ * a CLI that emits no fixture or failed-build output.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, mkdirSync } from 'node:fs';

@@ -216,7 +216,7 @@ test('who may: a co-founder proposes from a close, an advisor reads it, an outsi
   try {
     assert.equal((await proposeClose(f, ADVISOR)).status, 403);
     assert.equal((await call(f, ADVISOR, '/record/10/closes/cl-second')).status, 200, 'the venture’s read gate');
-    assert.equal((await call(f, OTHER, '/record/10/closes/cl-second')).status, 403);
+    assert.equal((await call(f, OTHER, '/record/10/closes/cl-second')).status, 404, 'a stranger is answered as for a missing venture (D8526)');
     const noReason = await proposeClose(f, ADMIN);
     assert.equal(noReason.status, 400);
     assert.equal(noReason.body.code, 'reason_required');

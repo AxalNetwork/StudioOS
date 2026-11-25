@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * Prints the codes the push-to-main deploy redeploys after HQ (D253): every
+ * `infra/branches/<code>.json` with status `provisioning` or `live`, skipping
+ * `_`-prefixed fixtures, `example` and `suspended`. The filter is
+ * `deployableBranches`, tested in
+ * `frontend/test/branch_redeploy_d253.test.mjs`.
+ *
  * D253 — which branches the push-to-main deploy redeploys.
  *
  * Prints one branch code per line: every `infra/branches/<code>.json` whose

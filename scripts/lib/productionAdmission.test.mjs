@@ -1,4 +1,10 @@
-/** D5501: disposable promotion fixtures over the real Actions admission decision. */
+/**
+ * D5501: trust, failure and supersession fixtures and mutation ordering in the
+ * release workflows.
+ *
+ * D5501: disposable promotion fixtures over the real Actions admission
+ * decision.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * Writes `infra/branches/<code>.json` from what `branch-provision.yml` just
+ * created, reading every value from the environment rather than from arguments
+ * — a `run:` block building JSON from dispatched values would have to
+ * interpolate them, which is the shell-injection shape Semgrep caught on PR 3.
+ * Validates the entry with the same `validateBranch` the guard uses, so one
+ * definition of a valid entry exists rather than two. Status is `provisioning`,
+ * never `live`: the Worker is not deployed when this runs.
+ *
  * Write `infra/branches/<code>.json` from what provisioning just created.
  *
  * WHY THIS IS A SCRIPT AND NOT A HEREDOC IN THE WORKFLOW. Two reasons, and the

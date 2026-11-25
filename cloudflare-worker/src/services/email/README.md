@@ -7,7 +7,8 @@ registry.
 | File | What it does |
 | --- | --- |
 | `send.ts` | Single entry point for registry templates — render, enqueue, mirror to the bell, deliver. |
-| `gmail.ts` | Gmail OAuth MIME send (`sendRawEmail`). |
+| `gmail.ts` | Gmail OAuth MIME send (`sendRawEmail`; `sendRawEmailOutcome` answers accepted / refused / timed_out). |
+| `deliveryContract.ts` | D8536 — the delivery contract for critical flows: send reference, state, recipient bound to the subject record, and the `email_send_refs` ledger that reconciles a retry. |
 | `inviteChrome.ts` | M0 shared chrome from the Emails canvas — 600px shell, postal footer, unsubscribe rule. |
 | `canvasEmailParts.ts` | Reusable HTML fragments (CTA, tint tables, inviter block, digest cards). |
 | `canvasTransactional.ts` | Canvas templates M1–M5 renderers (workspace invite, signature, capital call, digest, spin-out decision). |
@@ -25,3 +26,6 @@ of the header/footer.
 - The unsubscribe rule is three-way: broadcast ✓, transactional ✗, personal ✗.
   `footerFor` enforces it; callers do not pass a custom footer.
 - No load-bearing images in the header — the canvas wordmark is text.
+- A critical-flow email (sign-in, invitations, billing, signatures, alerts)
+  is sent under a send reference (`deliveryContract.ts`, D8536): its address
+  comes from the subject record, and no link is ever written to a log line.

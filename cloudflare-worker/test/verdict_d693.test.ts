@@ -595,6 +595,10 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
     if (rel === 'services/records/types.ts' && lines.length <= 1) continue;
     if (rel === 'services/cycleActivity.ts' && lines.length <= 4) continue;
     if (rel === 'services/records/verdict.ts' && lines.every((l) => /\bstore: 'validation_decision(s|_commitments)'/.test(l))) continue;
+    // D8530 (#8530): the VentureSpace data inventory names each verdict table once, as an entry's table name
+    // in its foreign-key list, and reads or writes none of them.
+    if (rel === 'services/ventureSpaceDataInventory.ts' && lines.length <= 3
+      && lines.every((l) => /^\s*\['validation_decision(s|_commitments|_shares)', 'p', 'cascade'\],$/.test(l))) continue;
     offenders.push(rel);
   }
   assert.deepEqual(offenders, []);

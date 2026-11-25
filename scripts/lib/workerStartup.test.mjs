@@ -1,4 +1,9 @@
-/** D5532: startup diagnostics and release gate with synthetic artifacts. */
+/**
+ * D5532: startup budget, profile accounting and Wrangler bundle identity
+ * fixtures.
+ *
+ * D5532: startup diagnostics and release gate with synthetic artifacts.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
