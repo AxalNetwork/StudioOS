@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * D6312: Session 1's audit writes for the `coordinator-audit` skill:
+ * `snapshot`, weekly `delta`, `plan` from verified findings, then `apply`
+ * (notes, labels, closes) and `file` (new tasks, one list per parent). Dry run
+ * unless `--go`; re-reads each issue before changing it and skips one that
+ * moved; every write carries a run marker so a re-run never repeats it.
+ *
  * #6312: the coordinator's GitHub side, for the `coordinator-audit` skill.
  *
  *   snapshot --out DIR                 every open issue and PR, plus main's sha and the time

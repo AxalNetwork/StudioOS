@@ -24,6 +24,7 @@
 import type { Env } from '../types';
 import { formatMoney } from './fundNotices';
 import { subscriptionOwner } from './planSubscription';
+import { invoiceNamesSubscriptionField, invoiceSubscriptionId } from './stripeInvoiceShape';
 
 export const ALERT_KINDS = ['payment_failed', 'needs_confirmation', 'refund', 'dispute'] as const;
 export type AlertKind = typeof ALERT_KINDS[number];
@@ -68,7 +69,8 @@ async function familyOf(env: Env, subId: string): Promise<string | null> {
 async function renewalOf(env: Env, invoice: Record<string, unknown>) {
   if (!(RENEWAL_REASONS as readonly string[]).includes(String(invoice.billing_reason))) return null;
   const invoiceId = idOf(invoice.id, 'in');
-  const subId = idOf(invoice.subscription, 'sub');
+  // D8510: pre-Basil `subscription` or Basil `parent.subscription_details.subscription`.
+  const subId = idOf(invoiceSubscriptionId(invoice), 'sub');
   if (!invoiceId || !subId) return null;
   const userId = await subscriptionOwner(env, subId);
   if (!userId) return null;
@@ -182,10 +184,10 @@ async function stripeGet<T>(env: Env, path: string, query: Record<string, string
 async function planOfInvoice(env: Env, invoiceRef: unknown) {
   const invoiceId = idOf(invoiceRef, 'in');
   if (!invoiceId) return null;
-  let subRef = invoiceRef && typeof invoiceRef === 'object' ? (invoiceRef as { subscription?: unknown }).subscription : undefined;
+  let subRef: unknown = invoiceNamesSubscriptionField(invoiceRef) ? invoiceSubscriptionId(invoiceRef) : undefined;
   if (subRef === undefined) {
     if (!env.STRIPE_SECRET_KEY) return null;
-    subRef = (await stripeGet<{ subscription?: unknown }>(env, `/invoices/${invoiceId}`)).subscription;
+    subRef = invoiceSubscriptionId(await stripeGet<Record<string, unknown>>(env, `/invoices/${invoiceId}`));
   }
   const subId = idOf(subRef, 'sub');
   if (!subId) return null;

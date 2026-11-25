@@ -1,0 +1,8 @@
+{
+  "GET /api/room-library/settings/:projectUid": {
+    "kind": "target"
+  },
+  "PUT /api/room-library/settings/:projectUid": {
+    "kind": "target"
+  }
+}

@@ -476,23 +476,28 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
 
   async function onSave() {
     if (!analysis) return;
+    const run = ++runFor.current;
+    const target = analysis.id;
     setSavingEdits(true);
     setError('');
     try {
-      const full = await api.competitors.save(analysis.id, {
+      const full = await api.competitors.save(target, {
         title: analysis.title,
         output: analysis.output,
-        candidates: analysis.candidates,
+        // D7814 option A: send identities and editable fields, never stored evidence.
+        candidates: (analysis.candidates || []).map(({ id, name, category, summary }) => ({ id, name, category, summary })),
         // D7176: a save names the version it was made on; an older one answers 409.
         base_version: analysis.version,
       });
+      if (runFor.current !== run || full?.id !== target) return;
       setAnalysis(full);
       setDirty(false);
       setStatus('Saved.');
     } catch (e) {
+      if (runFor.current !== run) return;
       setError(e.message || 'Save failed.');
     } finally {
-      setSavingEdits(false);
+      if (runFor.current === run) setSavingEdits(false);
     }
   }
 

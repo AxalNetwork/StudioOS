@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * D1581 (#3828): the staging test that the phone remote advances Present within
+ * 300 ms. It pairs a deck, joins as the phone, and times each step from the
+ * request to the frame on Present's socket. It needs `STUDIOOS_BASE`,
+ * `STUDIOOS_TOKEN` and a deck id; exits 1 at 300 ms or more. Not in CI.
+ *
  * D1581 (#3828) — the staging test: "the remote advances Present within 300 ms".
  *
  * Pairs a deck, joins as the phone, opens Present's socket, sends steps and

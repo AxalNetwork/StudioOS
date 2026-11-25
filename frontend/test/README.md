@@ -261,6 +261,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
+| `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
 | `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
 Prefer scoped business clocks and explicit observable outcomes to a fixed count
@@ -287,3 +289,4 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
+| `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |

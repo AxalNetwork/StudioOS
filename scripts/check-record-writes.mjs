@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/** D6651: fails on a put or delete of a `record` R2 prefix outside `cloudflare-worker/src/services/recordStore.ts` (writes) and `cloudflare-worker/src/services/recordErasure.ts` (deletes); baseline `record-writes-baseline.json` started empty. */
 /**
  * D6651 (#6651) — record files are write-once: no direct write or delete of a `record` prefix outside its helper.
  *

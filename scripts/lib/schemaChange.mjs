@@ -1,5 +1,13 @@
 import { GUARDS } from './guardCatalog.mjs';
 /**
+ * #6326: the schema-change rules apart from git: a new migration's name and
+ * whether its identity is taken, what is wrong with a branch's new migration
+ * names (a refused name, a shared stamp and issue, a future stamp, another
+ * issue, a new number), what in their SQL needs a second look (CREATE without
+ * IF NOT EXISTS, NOT NULL with no default, drop, rename, transaction), runtime
+ * DDL in added Worker lines, and the schema guard list. Owned by
+ * `../schema-change.mjs`; tested in `schemaChange.test.mjs`.
+ *
  * #6326 — the schema-change skill's rules, apart from git and the disk.
  *
  * It decides:

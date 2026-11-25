@@ -11,6 +11,7 @@ import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
+import FoundingTeamHome from '../FoundingTeamHome';
 import SolutionDesignRisks from '../SolutionDesignRisks';
 import RoadmapBoard from '../RoadmapBoard';
 import { mvpPhoneRow } from '../mvpTable';
@@ -70,6 +71,10 @@ const build = {
   // one action is the first system to reconnect or connect (BD23); its bands draw under Cadence only, and its
   // connector parts (the Sources region, `placesSources`) under Tools only.
   homes: toFnMap({
+    'founding-team': (data, ctx) => ({
+      sub: 'Agree the split and vesting, and record each founder’s filing.',
+      body: (p) => <FoundingTeamHome {...p} data={data} projectId={ctx.projectId} />,
+    }),
     'operating-systems': (data, ctx) => ({
       action: data?.parts?.systems?.next?.href ? { label: data.parts.systems.next.text, href: data.parts.systems.next.href } : null,
       body: Object.assign((p) => <OperatingSystemsHome {...p} data={data} projectId={ctx.projectId} />, { placesSources: true }),

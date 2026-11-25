@@ -1,0 +1,17 @@
+{
+  "GET /api/lp-reports": {
+    "kind": "filter"
+  },
+  "GET /api/lp-reports/:uid": {
+    "kind": "target"
+  },
+  "POST /api/lp-reports": {
+    "kind": "target"
+  },
+  "POST /api/lp-reports/:uid/publish": {
+    "kind": "target"
+  },
+  "PUT /api/lp-reports/:uid": {
+    "kind": "target"
+  }
+}

@@ -136,6 +136,20 @@
     "test": "cloudflare-worker/test/research_observations_7716.test.ts",
     "note": "D7716: an observation is a sourced public statistic (provider, source URL, usage note), not a member's record; every signed-in user may read any one, and a request with no sign-in is refused with 401 (tested on all four routes)."
   },
+  "GET /api/research/organizations/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_organizations_7826.test.ts",
+    "note": "Research catalogue organizations, not owned records: every signed-in user may read one, through one access decision. Anything derived from a company record is shown only to an account the Companies rule admits (D7178) and only while D7819's served rows serve it; fund links only while SERVED_FUNDS serves the row. An organization the caller may not see answers 404 exactly as a missing one."
+  },
+  "GET /api/research/organizations/record/:type/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_organizations_7826.test.ts",
+    "note": "The organization of a catalogue record: a company record is refused by the Companies rule (D7178) before anything is read, so an account outside it gets one 403 for an existing and a missing record; a fund record follows SERVED_FUNDS and one uid move. An organization the caller may not see answers { organization: null }, the same as none."
+  },
   "GET /api/research/record-identity/:kind/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

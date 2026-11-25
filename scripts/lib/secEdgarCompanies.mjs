@@ -1,4 +1,11 @@
 /**
+ * What a SEC EDGAR company row carries and how a migration is written from
+ * EDGAR's company_tickers_exchange.json: one row per CIK, the first listing as
+ * its ticker, nothing EDGAR does not record, every row citing its source and
+ * licence, `INSERT OR IGNORE` in batches of 100. The header number is the
+ * leading digits of `--out` (404 created the table; 412 holds the rows). Owned
+ * by `../import-sec-edgar.mjs` (D595).
+ *
  * SEC EDGAR's public company list → one migration's rows (#1230, D595).
  *
  * The pure half of `../import-sec-edgar.mjs`: it reads the body of

@@ -22,6 +22,8 @@ import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
 import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
+import { useLeaveGuard } from '../../lib/leaveGuard.js';
+import { backToResults } from './companyDirectoryState.js';
 
 /**
  * `/research/companies/:id` — one saved competitor analysis (canvas 90eb4cf2),
@@ -45,10 +47,10 @@ import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
  * and asks first when the draft is dirty. Each failure keeps the dossier open
  * with Retry.
  *
- * SAVE SENDS THE TITLE AND THE OUTPUT, NEVER THE CANDIDATE SET. The bulk
- * candidate write re-inserts every row and turns a blank relevance into 0, so
- * a category is changed through the one-company route, which touches only
- * that column, and the set is added to and removed from one row at a time.
+ * SAVE SENDS THE TITLE AND THE OUTPUT. Candidate edits use the one-company
+ * route, which preserves evidence and changes only permitted fields. D7814
+ * also makes list saves update those fields in place, retaining candidate
+ * identities and their scores, pricing, sources and signals.
  * Each save names the version it was made on; an older one answers 409.
  *
  * THE LANDSCAPE READ IS A RESTATEMENT, NOT A MODEL, as the canvas draws it:
@@ -327,7 +329,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
 
   /** An action's answer, merged: the record is the server's, the draft keeps what the person changed. */
   const mergeIn = useCallback((before, full) => {
-    if (!full) return;
+    if (!full || !sameRecord(recordKey(before?.id), recordKey(full.id))) throw new Error('The analysis response belongs to another record.');
     setAnalysis(full);
     setDraft((d) => mergeDraft(d, before, full));
   }, []);
@@ -335,10 +337,17 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   // D4607: the record this page loaded, by its route identity. Writes go to
   // it, and only while it is still the one the route names.
   const routeKey = recordKey(id);
+  const routeIdentity = useRef(routeKey);
+  routeIdentity.current = routeKey;
   const [loadedKey, setLoadedKey] = useState(null);
   const gate = useRef(null);
   if (!gate.current) gate.current = createRecordGate();
   useEffect(() => () => gate.current.invalidate(), []);
+  const readTicket = () => {
+    const key = routeKey;
+    const fresh = gate.current.begin();
+    return () => fresh() && sameRecord(key, routeIdentity.current);
+  };
 
   const load = useCallback(async () => {
     const fresh = gate.current.begin();
@@ -351,7 +360,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     setLoadedKey(null);
     try {
       const full = await api.competitors.get(id);
-      if (!fresh()) return;
+      if (!fresh() || !sameRecord(key, routeIdentity.current)) return;
+      if (!sameRecord(recordKey(full?.id), key)) throw new Error('The analysis response belongs to another record.');
       take(full);
       setLoadedKey(key);
       setState('ready');
@@ -403,19 +413,21 @@ export default function CompanyAnalysis({ role = 'founder' }) {
 
   /** The row-level actions (Add, Remove, category, Accept the read): their answer merges into the draft. */
   const run = async (key, fn, ok) => {
+    if (!current || !analysis) return;
+    const fresh = readTicket();
     const mine = ++runFor.current;
     const before = analysis;
     setBusy(key);
     setNotice(null);
     try {
       const full = await fn();
-      if (runFor.current !== mine) return;
+      if (runFor.current !== mine || !fresh()) return;
       if (full) mergeIn(before, full);
       if (ok) setNotice({ ok: true, text: ok });
     } catch (e) {
-      if (runFor.current === mine) setNotice({ ok: false, text: e?.message || 'That did not go through.' });
+      if (runFor.current === mine && fresh()) setNotice({ ok: false, text: e?.message || 'That did not go through.' });
     } finally {
-      if (runFor.current === mine) setBusy('');
+      if (runFor.current === mine && fresh()) setBusy('');
     }
   };
 
@@ -429,13 +441,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   const errored = status === 'error';
   const acting = busy !== '';
 
-  // Leaving the page with unsaved changes asks first (RS-14 A2 B).
-  useEffect(() => {
-    if (!dirty || typeof window === 'undefined') return undefined;
-    const ask = (e) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', ask);
-    return () => window.removeEventListener('beforeunload', ask);
-  }, [dirty]);
+  // D7814: one shared guard covers links, navigate, Back/Forward and reload.
+  useLeaveGuard(dirty && current);
 
   // Title and output only — see the docblock on why the candidate set never
   // travels with a save. Bound to the loaded record: the id it was read with,
@@ -444,6 +451,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   const save = async () => {
     if (!current || !draft || !analysis) return null;
     const target = JSON.parse(loadedKey)[0];
+    const fresh = readTicket();
     const mine = ++runFor.current;
     const before = analysis;
     setBusy('save');
@@ -451,27 +459,32 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     setNotice(null);
     try {
       const full = await api.competitors.save(target, { title: draft.title.trim().slice(0, 200), output: outputFrom(draft, analysis), base_version: analysis.version });
-      if (runFor.current !== mine) return null;
+      if (runFor.current !== mine || !fresh()) return null;
       mergeIn(before, full);
       return full;
     } catch (e) {
-      if (runFor.current !== mine) return null;
+      if (runFor.current !== mine || !fresh()) return null;
       const conflict = e?.status === 409 ? Number(e?.data?.current_version) || null : null;
       setSaveError({ text: e?.message || 'The server did not answer.', conflict });
       return null;
     } finally {
-      if (runFor.current === mine) setBusy('');
+      if (runFor.current === mine && fresh()) setBusy('');
     }
   };
 
   /** Load the version on record after a 409, keeping every field the person changed. */
   const loadLatest = async () => {
+    if (!current || !analysis) return;
+    const fresh = readTicket();
+    const target = analysis.id;
     const before = analysis;
     try {
-      const full = await api.competitors.get(id);
+      const full = await api.competitors.get(target);
+      if (!fresh() || recordKey(full?.id) !== recordKey(target)) return;
       mergeIn(before, full);
       setSaveError(null);
     } catch (e) {
+      if (!fresh()) return;
       setSaveError((s) => ({ ...(s || {}), text: e?.message || 'The saved version could not be read.' }));
     }
   };
@@ -485,14 +498,15 @@ export default function CompanyAnalysis({ role = 'founder' }) {
 
   // Refresh sources (RS-14 B1): the stored sources only; the draft stays as typed.
   const refresh = async () => {
+    const fresh = readTicket();
     const mine = ++runFor.current;
     const before = analysis;
     setBusy('refresh');
     setFailure(null);
     setResult(null);
     try {
-      const full = await api.competitors.refresh(id);
-      if (runFor.current !== mine) return;
+      const full = await api.competitors.refresh(analysis.id);
+      if (runFor.current !== mine || !fresh()) return;
       mergeIn(before, full);
       const r = full?.refresh || {};
       const byId = Object.fromEntries((r.results || []).map((x) => [x.id, x]));
@@ -507,33 +521,34 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       });
       refreshRef.current?.focus?.();
     } catch (e) {
-      if (runFor.current !== mine) return;
+      if (runFor.current !== mine || !fresh()) return;
       setFailure({ kind: 'refresh', title: 'Refresh failed. Nothing changed.', text: `${e?.message || 'The server did not answer.'} Every source below is the copy from its last fetch, with its date. Your draft is as you left it.` });
       focusLater(failRef);
     } finally {
-      if (runFor.current === mine) setBusy('');
+      if (runFor.current === mine && fresh()) setBusy('');
     }
   };
 
   // Rerun discovery (RS-14 B2): a proposal to review; nothing is replaced.
   const rerun = async (inputs) => {
+    const fresh = readTicket();
     const mine = ++runFor.current;
     setBusy('rerun');
     setFailure(null);
     setResult(null);
     try {
-      const p = await api.competitors.rerun(id, { inputs: inputs || analysis.inputs, keep_manual: true }, railPressHeaders('analyse:again'));
-      if (runFor.current !== mine) return;
+      const p = await api.competitors.rerun(analysis.id, { inputs: inputs || analysis.inputs, keep_manual: true }, railPressHeaders('analyse:again'));
+      if (runFor.current !== mine || !fresh()) return;
       if (!p?.proposal_id) throw new Error('The rerun did not return a review.');
       setProposal(p);
       setSelection(defaultSelection(p));
       setReviewError('');
     } catch (e) {
-      if (runFor.current !== mine) return;
+      if (runFor.current !== mine || !fresh()) return;
       setFailure({ kind: 'rerun', title: 'Rerun failed. Nothing was replaced.', text: `${e?.message || 'The server did not answer.'} Your draft is as you left it.` });
       focusLater(failRef);
     } finally {
-      if (runFor.current === mine) setBusy('');
+      if (runFor.current === mine && fresh()) setBusy('');
     }
   };
 
@@ -547,16 +562,17 @@ export default function CompanyAnalysis({ role = 'founder' }) {
 
   const acceptReview = async () => {
     if (!proposal || !selection) return;
+    const fresh = readTicket();
     const mine = ++runFor.current;
     const before = analysis;
     setBusy('apply');
     setReviewError('');
     try {
-      const full = await competitorReviewApi.apply(id, proposal.base_version, {
+      const full = await competitorReviewApi.apply(analysis.id, proposal.base_version, {
         proposal_id: proposal.proposal_id,
         add: [...selection.add], remove: [...selection.remove], output: [...selection.output],
       });
-      if (runFor.current !== mine) return;
+      if (runFor.current !== mine || !fresh()) return;
       mergeIn(before, full);
       const a = full?.applied || {};
       const n = (a.added || 0) + (a.removed || 0) + (a.rewritten || 0);
@@ -570,23 +586,24 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       });
       focusLater(resultRef);
     } catch (e) {
-      if (runFor.current !== mine) return;
+      if (runFor.current !== mine || !fresh()) return;
       setReviewError(e?.message || 'The selected changes were not applied.');
     } finally {
-      if (runFor.current === mine) setBusy('');
+      if (runFor.current === mine && fresh()) setBusy('');
     }
   };
 
   // Export (RS-14 C1): the saved version, checked before anything is downloaded.
   // The preview (RS-13 B5, D7175 part 2) reads through `loadExport` on its own; see `openPreview`.
   const doExport = async (format, at = version, opener = exportOpener.current) => {
+    const fresh = readTicket();
     const mine = ++runFor.current;
     setBusy('export');
     setFailure(null);
     setResult(null);
     try {
-      const got = await fetchExport(`${api.competitors.exportUrl(id, format)}&version=${encodeURIComponent(at)}`);
-      if (runFor.current !== mine) return;
+      const got = await fetchExport(`${api.competitors.exportUrl(analysis.id, format)}&version=${encodeURIComponent(at)}`);
+      if (runFor.current !== mine || !fresh()) return;
       const problem = exportProblem(got.status, got.type, format);
       const label = format === 'md' ? 'Markdown' : 'JSON';
       if (problem) {
@@ -609,11 +626,11 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       setResult({ kind: 'export', title: `Downloaded version ${v}`, text: name });
       (opener || exportRef.current)?.focus?.();
     } catch (e) {
-      if (runFor.current !== mine) return;
+      if (runFor.current !== mine || !fresh()) return;
       setFailure({ kind: 'export', format, title: `${format === 'md' ? 'Markdown' : 'JSON'} export failed. Nothing was downloaded.`, text: `${e?.message || 'The server did not answer.'} Your dossier is open and unchanged.` });
       focusLater(failRef);
     } finally {
-      if (runFor.current === mine) setBusy('');
+      if (runFor.current === mine && fresh()) setBusy('');
     }
   };
 
@@ -636,7 +653,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     setFilePreview(format);
   };
   const loadPreview = async (format) => {
-    const got = await loadExport(`${api.competitors.exportUrl(id, format)}&version=${encodeURIComponent(version)}`, format);
+    const got = await loadExport(`${api.competitors.exportUrl(analysis.id, format)}&version=${encodeURIComponent(version)}`, format);
     const v = got.version || version;
     return { text: got.text, version: v, name: exportFilename(id, v, format) };
   };
@@ -851,7 +868,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       )}
     >
       <div data-testid="company-analysis" className="space-y-3 pb-20 md:pb-0">
-        <Link to="/research/companies" className="text-[12px] font-semibold text-violet-700 underline dark:text-violet-300">
+        <Link to={backToResults(typeof sessionStorage === 'undefined' ? null : sessionStorage).href} className="text-[12px] font-semibold text-violet-700 underline dark:text-violet-300">
           ‹ Companies
         </Link>
 
@@ -898,7 +915,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
             <StateChip kind="refused" label="Not on your list" />
             <h1 className="mt-1.5 text-[15px] font-extrabold tracking-tight">This analysis is not on your list.</h1>
             <p className="mt-1.5 text-[12.5px] text-axal-muted">An analysis belongs to the person who ran it.</p>
-            <Link to="/research/companies" className={`${ghostBtn} mt-3 inline-block`}>‹ Companies</Link>
+            <Link to={backToResults(typeof sessionStorage === 'undefined' ? null : sessionStorage).href} className={`${ghostBtn} mt-3 inline-block`}>‹ Companies</Link>
           </Card>
         )}
 
@@ -1282,12 +1299,12 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                   <select aria-label={`Classification for ${c.name}`}
                                     className="min-h-[44px] rounded-md border border-axal-hairline bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
                                     value={c.category === 'adjacent' ? 'adjacent' : 'direct'} disabled={busy !== ''}
-                                    onChange={(e) => run('category', () => api.competitors.candidateUpdate(id, c.id, { category: e.target.value }))}>
+                                    onChange={(e) => run('category', () => api.competitors.candidateUpdate(analysis.id, c.id, { category: e.target.value }))}>
                                     <option value="direct">Direct</option>
                                     <option value="adjacent">Adjacent</option>
                                   </select>
                                   <button type="button" className="min-h-[44px] px-2 text-[12px] font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
-                                    disabled={busy !== ''} onClick={() => run('remove', () => api.competitors.removeCandidate(id, c.id))}>
+                                    disabled={busy !== ''} onClick={() => run('remove', () => api.competitors.removeCandidate(analysis.id, c.id))}>
                                     {`Remove ${c.name}`}
                                   </button>
                                 </div>
@@ -1335,7 +1352,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                       className="rounded-md border border-axal-hairline bg-white px-1.5 py-1 text-[11.5px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
                                       value={c.category === 'adjacent' ? 'adjacent' : 'direct'}
                                       disabled={busy !== ''}
-                                      onChange={(e) => run('category', () => api.competitors.candidateUpdate(id, c.id, { category: e.target.value }))}
+                                      onChange={(e) => run('category', () => api.competitors.candidateUpdate(analysis.id, c.id, { category: e.target.value }))}
                                     >
                                       <option value="direct">Direct</option>
                                       <option value="adjacent">Adjacent</option>
@@ -1368,7 +1385,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                   <td className="py-2.5">
                                     <button type="button" className="text-[11.5px] font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
                                       disabled={busy !== ''}
-                                      onClick={() => run('remove', () => api.competitors.removeCandidate(id, c.id))}>
+                                      onClick={() => run('remove', () => api.competitors.removeCandidate(analysis.id, c.id))}>
                                       Remove
                                     </button>
                                   </td>
@@ -1403,7 +1420,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                           </label>
                           <button type="button" className={primaryBtn} disabled={!manual.name.trim() || busy !== ''}
                             onClick={() => run('add', async () => {
-                              const full = await api.competitors.addCandidate(id, { ...manual, name: manual.name.trim() }, railPressHeaders('extract:candidate'));
+                              const full = await api.competitors.addCandidate(analysis.id, { ...manual, name: manual.name.trim() }, railPressHeaders('extract:candidate'));
                               setManual(EMPTY_MANUAL);
                               return full;
                             })}>
@@ -1515,7 +1532,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                         <button type="button" className={ghostBtn} disabled={!preview.trim() || dirty || busy !== ''}
                           onClick={() => run('accept', async () => {
                             const notes = notesWithRead(out.notes, preview.trim());
-                            const full = await api.competitors.save(id, { output: { ...out, notes }, base_version: analysis.version });
+                            const full = await api.competitors.save(analysis.id, { output: { ...out, notes }, base_version: analysis.version });
                             setPreview('');
                             return full;
                           }, 'Written into your notes.')}>

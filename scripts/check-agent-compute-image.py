@@ -1,3 +1,5 @@
+# D4557: local-only image build, isolation tests, scan, SBOM and synthetic
+# profile evidence.
 """D4557: local-only immutable image build, isolation tests, scan, SBOM and synthetic profile measurements."""
 import argparse
 import json

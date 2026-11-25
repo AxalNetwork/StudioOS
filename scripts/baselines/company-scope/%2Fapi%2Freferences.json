@@ -1,0 +1,23 @@
+{
+  "DELETE /api/references/:id": {
+    "kind": "target"
+  },
+  "GET /api/references": {
+    "kind": "filter"
+  },
+  "GET /api/references/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/references/:id": {
+    "kind": "target"
+  },
+  "POST /api/references": {
+    "kind": "target"
+  },
+  "POST /api/references/:id/consent": {
+    "kind": "target"
+  },
+  "POST /api/references/:id/summarize": {
+    "kind": "target"
+  }
+}
