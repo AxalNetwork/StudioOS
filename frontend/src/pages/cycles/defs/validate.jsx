@@ -188,6 +188,12 @@ const validate = {
       action: null,
       body: () => <SegmentCompare projectId={ctx.projectId} records={data?.records} />,
     } : null),
+    // D6018 (#6018, V10): the Verdict page leads with the evidence, then the choice.
+    verdict: (data, ctx) => ({
+      sub: 'Review the evidence, then choose.',
+      action: null,
+      body: (p) => <VerdictHome {...p} data={data} projectId={ctx.projectId} />,
+    }),
   }),
   add: toFnMap({
     // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.
@@ -200,7 +206,6 @@ const validate = {
       (projectId, id, body) => cyclesApi.recordAction('validate', projectId, 'customer-research', id, 'set-stage', body)),
   }),
   // The AI fill bands the Validate desk carried, on the module they fill.
-  homes: toFnMap({ verdict: (data,ctx)=>({ sub:'Review the evidence, then choose.', action:null, body:p=><VerdictHome {...p} data={data} projectId={ctx.projectId}/> }) }),
   fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
   // D697 (#1659): the three bottom sections, what the Interviews, Pain map
   // and Hypotheses pages drew. They read nothing: counts are the module
