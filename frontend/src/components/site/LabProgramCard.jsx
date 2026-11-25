@@ -23,6 +23,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { DataState, Unrecorded } from '../../ui/Honesty';
 import { COHORT_WEEKS, placesFromRecord } from '../../lib/spinoutLab';
+import { studioLicenceEnquiryPath } from '../../lib/siteFirm';
 import { numberWord } from '../../lib/numberWords';
 import '../../pages/site/network2.css';
 
@@ -70,6 +71,9 @@ export function LabProgramCard({ read }) {
       </dl>
       <Link to="/spinout-lab/apply" className="ax-btn ax-btn-primary ax-n2-program-cta">
         Apply to {cohort.name}
+      </Link>
+      <Link to={studioLicenceEnquiryPath('spinout-lab')} className="ax-n2-textlink">
+        Ask about running the Lab at your studio
       </Link>
     </article>
   );

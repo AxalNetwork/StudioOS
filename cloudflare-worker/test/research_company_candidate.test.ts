@@ -26,7 +26,8 @@ test('a pricing path is a pricing source, and a bare host is a homepage', () => 
 
 test('the candidate patch does not write a score, an origin, or a homepage', () => {
   const body = slice("competitors.patch('/:id/candidates/:cid'", "competitors.post('/:id/candidates/:cid/sources'");
-  assert.match(body, /category !== 'direct' && body\.category !== 'adjacent'/);
+  // D7814 (#7814): category is checked against its two values, when sent.
+  assert.match(body, /'category' in body && \(typeof body\.category !== 'string' \|\| !\['direct', 'adjacent'\]\.includes\(body\.category\)\)/);
   assert.doesNotMatch(body, /relevance_score/);
   assert.doesNotMatch(body, /SET url/);
   assert.doesNotMatch(body, /origin =/);

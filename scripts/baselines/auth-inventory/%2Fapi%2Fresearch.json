@@ -80,6 +80,13 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/fund-shortlist/requests/:requestId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_fund_shortlist_7845.test.ts",
+    "note": "Every request and dossier read binds the authenticated owner. Another member request id is indistinguishable from an unknown id; sharing a project does not enter this path."
+  },
   "GET /api/research/funds/:uid/reports": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

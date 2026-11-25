@@ -271,10 +271,21 @@ function override(ov: Overrides | undefined, kind: OverrideKind, raw: string): M
 }
 
 /** A company's `sector` label → at most one market. */
+/** Exact company keys win. Normalized collisions remain explicit instead of merging targets. */
+export function resolveCompanySectorOverride(raw: string, ov?: Overrides): { targets: string[] | null; collisions: string[] } {
+  const rows = ov?.get('company_sector');
+  const exact = rows?.get(raw);
+  if (exact !== undefined) return { targets: [...exact], collisions: [] };
+  const matches = [...(rows ?? [])].filter(([key]) => normalizeLabel(key) === normalizeLabel(raw));
+  const signatures = new Set(matches.map(([, targets]) => JSON.stringify([...new Set(targets)].sort())));
+  if (signatures.size > 1) return { targets: null, collisions: matches.map(([key]) => key).sort() };
+  return { targets: matches.length ? [...matches[0][1]] : null, collisions: [] };
+}
 export function mapCompanySector(raw: string | null | undefined, ov?: Overrides): Mapping {
   const value = String(raw ?? '');
-  const manual = override(ov, 'company_sector', value);
-  if (manual) return manual;
+  const manual = resolveCompanySectorOverride(value, ov);
+  if (manual.collisions.length) return UNMAPPED(value);
+  if (manual.targets !== null) return { raw: value, targets: manual.targets, method: 'manual', rule: 'research_taxonomy_overrides:company_sector', unmatched: [] };
   const slug = COMPANY_SECTOR_RULES[normalizeLabel(value)];
   return slug ? { raw: value, targets: [slug], method: 'rule', rule: 'COMPANY_SECTOR_RULES', unmatched: [] } : UNMAPPED(value);
 }

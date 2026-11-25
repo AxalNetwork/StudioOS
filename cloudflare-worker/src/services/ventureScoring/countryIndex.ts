@@ -226,3 +226,45 @@ export async function indexSources(env: Env) {
     };
   });
 }
+
+// D8255 (#8255): one country's latest figures, for a market's record in Grow.
+export type CountryIndexLine = {
+  key: IndexSourceKey; name: string; publisher: string; citation_url: string;
+  /** `ok`: the edition holds this country; `not_named`: a list edition that does not name it; `not_recorded`: nothing to say; `unreadable`: the read failed. */
+  state: 'ok' | 'not_named' | 'not_recorded' | 'unreadable';
+  edition: string | null; as_of: string | null; licence: string | null;
+  values: Array<{ indicator: string; label: string; value: number }>;
+  reason: string | null;
+};
+export type CountryIndexRead = { state: 'ok' | 'unreadable'; lines: CountryIndexLine[] };
+
+/**
+ * The newest edition of each source in `sources`, read for one country, by the same rule `collectors.ts` applies:
+ * a source with no recorded licence is not read, and a value counts only while its edition's licence is the one
+ * recorded now. A country the edition holds no figure for is Not recorded, never a 0; a list edition that does
+ * not name the country says so ("not named"). Each source is read on its own, so one failing leaves the others.
+ */
+export async function countryIndexLines(env: Env, country: string | null, sources: IndexSourceKey[] = ['wgi', 'fatf']): Promise<CountryIndexRead> {
+  const lines: CountryIndexLine[] = [];
+  for (const key of sources) {
+    const s = INDEX_SOURCES[key];
+    const base = { key, name: s.name, publisher: s.publisher, citation_url: s.citation_url, edition: null, as_of: null, licence: s.licence, values: [] as CountryIndexLine['values'] };
+    if (s.licence === null) { lines.push({ ...base, state: 'not_recorded', reason: `${s.publisher}’s ${s.name} has no recorded licence, so it is not read (${LICENCE_DECISION}).` }); continue; }
+    if (!country || !CODE.test(country)) { lines.push({ ...base, state: 'not_recorded', reason: 'No country is attached to this market.' }); continue; }
+    try {
+      const ed = await env.DB.prepare(`SELECT edition, published_on FROM country_index_editions WHERE source = ? AND licence = ? ORDER BY published_on DESC, id DESC LIMIT 1`)
+        .bind(key, s.licence).first<{ edition: string; published_on: string }>();
+      if (!ed) { lines.push({ ...base, state: 'not_recorded', reason: `No ${s.publisher} edition is imported.` }); continue; }
+      const rows = (await env.DB.prepare(`SELECT indicator, value FROM country_index_values WHERE source = ? AND edition = ? AND licence = ? AND country = ? ORDER BY indicator`)
+        .bind(key, ed.edition, s.licence, country).all<{ indicator: string; value: number }>()).results || [];
+      const values = rows.map((r) => ({ indicator: r.indicator, label: s.indicators[r.indicator] ?? r.indicator, value: Number(r.value) }));
+      const at = { edition: ed.edition, as_of: ed.published_on };
+      if (values.length) lines.push({ ...base, ...at, state: 'ok', values, reason: null });
+      else if (s.kind === 'list') lines.push({ ...base, ...at, state: 'not_named', reason: null });
+      else lines.push({ ...base, ...at, state: 'not_recorded', reason: `The ${s.publisher} ${ed.edition} edition holds no figure for this country.` });
+    } catch {
+      lines.push({ ...base, state: 'unreadable', reason: `${s.publisher}’s figures could not be read.` });
+    }
+  }
+  return { state: lines.some((l) => l.state === 'unreadable') ? 'unreadable' : 'ok', lines };
+}

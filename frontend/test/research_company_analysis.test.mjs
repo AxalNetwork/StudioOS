@@ -134,14 +134,13 @@ test('the landscape read restates the page, and Accept appends it to the notes',
 });
 
 test('a save never sends the candidate set, so a blank relevance is never written as 0', () => {
-  // `PATCH /competitors/:id` re-inserts every candidate with
-  // `Number(relevance_score) || 0`. The page sends title and output only, and
-  // changes a category through the one-company route.
-  // D4607: the editor's Save goes to the loaded record (`target`), Accept to the page's id.
-  const saves = [...page.matchAll(/api\.competitors\.save\((?:id|target), \{([^}]*)\}/g)].map((m) => m[1]);
+  // D7814: list saves preserve stored evidence. This page still sends title
+  // and output only, and changes a category through the one-company route.
+  // Save and Accept both target the loaded record, never the URL's id.
+  const saves = [...page.matchAll(/api\.competitors\.save\((?:analysis\.id|target), \{([^}]*)\}/g)].map((m) => m[1]);
   assert.ok(saves.length >= 2, 'the saves could not be found');
   for (const body of saves) assert.doesNotMatch(body, /candidates/);
-  assert.match(page, /api\.competitors\.candidateUpdate\(id, c\.id, \{ category: e\.target\.value \}\)/);
+  assert.match(page, /api\.competitors\.candidateUpdate\(analysis\.id, c\.id, \{ category: e\.target\.value \}\)/);
   assert.match(page, /c\.relevance_score == null \? <Unrecorded \/>/);
 });
 

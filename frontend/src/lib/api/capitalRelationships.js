@@ -35,6 +35,7 @@ const pick = (q = {}, keys) => {
 const matchQuery = (q = {}) => pick(q, MATCH_KEYS);
 const ACTIVITY_KEYS = ['q', 'kind', 'investor', 'page'];
 export const capitalRelationshipsApi = {
+  overview: (projectId, part) => request(`/cycles/raise/capital-relationships/overview?${project(projectId)}${pick({ part }, ['part'])}`),
   summary: (projectId, page = 1) => request(`/cycles/raise/capital-relationships/summary?${projectId == null ? '' : project(projectId)}&page=${encodeURIComponent(String(page))}`),
   supportRead: (projectId, reason, { page = 1, prospectId } = {}) => request(`/cycles/raise/capital-relationships/support-read?${project(projectId)}`, {
     method: 'POST', body: JSON.stringify({ reason, page, ...(prospectId == null ? {} : { prospect_id: prospectId }) }),

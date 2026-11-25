@@ -1,9 +1,10 @@
-// D5896 (#5896, part 1 (a) of #5026) — HQ's Axal VC package catalogue, read only. Board L29 of the Licences and
+// D5896 (#5896, part 1 (a) of #5026) — HQ's Axal VC package catalogue. Board L29 of the Licences and
 // Contracts v2 addendum. Worker: routes/admin_licence_packages.ts over services/licencePackagesStore.ts (D5022),
 // Super Admin on HQ only.
 //   GET /api/admin/licence-packages?all=1                 → { packages: [version, …] } every version, by key then newest first
 //   GET /api/admin/licence-packages/:key/versions          → { package_key, versions: [version, …] } newest first, no items
 //   GET /api/admin/licence-packages/:key/versions/:version → { package: { …version, items: [{ program_key, … }] } }
+// PATCH /:key/versions/:version/items/:program/delivery updates one draft item under the HQ write bar.
 // D5897 (#5897, part 1 (b)) — the writes, all behind the Super Admin write bar:
 //   POST /api/admin/licence-packages                               a new key's DRAFT v1        → 201 { package }
 //   POST /api/admin/licence-packages/:key/versions                 the key's next DRAFT        → 201 { package }
@@ -22,6 +23,10 @@ export const licencePackagesApi = {
   /** Every version of every package key (`?all=1`), drafts and retired ones included. */
   catalogue: () => request('/admin/licence-packages?all=1'),
   versions: (packageKey) => request(`/admin/licence-packages/${enc(packageKey)}/versions`),
+  updateItemDelivery: (packageKey, version, program, body) => request(
+    `/admin/licence-packages/${enc(packageKey)}/versions/${enc(version)}/items/${enc(program)}/delivery`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  ),
   version: (packageKey, version) => request(`/admin/licence-packages/${enc(packageKey)}/versions/${enc(version)}`),
   /** A new package key's draft v1: `{ package_key, name, …fields, items }`. */
   create: (body) => request('/admin/licence-packages', { method: 'POST', body: JSON.stringify(body) }),
