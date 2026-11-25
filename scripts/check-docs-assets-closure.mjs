@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * A chunk under `docs/assets/` referencing a chunk that is not there — a route
+ * that broke the moment a user clicked it. `check-spa-live.mjs` could not see
+ * this: its route list is hardcoded and names no lazy Zone route, and it
+ * cancels every asset body, so it never followed one chunk→chunk edge. Reads
+ * `docs/assets/` only; never builds. Carries a self-check, because an extractor
+ * that handled one of the two reference forms this bundler emits scanned 18
+ * chunks of 1276 and reported a pass.
+ *
  * Fails the build when a chunk under `docs/assets/` references a chunk that is
  * not there — a dangling edge in the built module graph.
  *

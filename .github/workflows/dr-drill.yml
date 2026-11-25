@@ -8,14 +8,17 @@ name: Monthly DR Drill
 # (D263).
 #
 # Schedule: 1st of the month at 06:00 UTC. Also runnable on demand.
+#
+# D8531: the drill job's marker and summary keep restore correctness, the
+# recovery point age (RPO) and the recovery time (RTO) apart, and record the
+# file drill as passed, failed or not run; "proven" needs both.
 
 on:
   schedule:
     - cron: '0 6 1 * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 # Non-secret config only. Secrets are scoped to the specific steps that
 # consume them (see the drill + notify steps below) so they aren't exposed
@@ -34,8 +37,17 @@ env:
 
 jobs:
   drill:
+    # D8531: recovery counts as proven only when the D1 restore and the file
+    # drill both pass in the same run, so the D1 drill runs after the file
+    # drill (skipped or not) and records its result in drill-d1.json and the
+    # job summary. `!cancelled()` keeps it running when the file drill was
+    # skipped or failed.
+    needs: independent-file-drill
+    if: ${{ !cancelled() }}
     environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 60
     # D263 — a step's `if:` cannot see that step's own `env:`, so "Notify on
     # failure" used to test a variable that was always empty there, and it was
@@ -96,6 +108,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
           DR_DRILL_DB_FILE: ${{ runner.temp }}/dr-drill-${{ github.run_id }}-${{ github.run_attempt }}.db
+          # D8531: success, failure, skipped or cancelled; the marker says passed, failed or not run.
+          FILE_DRILL_RESULT: ${{ needs.independent-file-drill.result }}
         run: bash scripts/dr-drill.sh
 
       - name: Delete this run’s throwaway database
@@ -124,7 +138,11 @@ jobs:
   independent-file-drill:
     name: Synthetic outside file restore
     if: vars.FILE_DR_PREVIEW_ENABLED == 'true'
+    # D8069: the outside copy's keys are read only inside production-ops, like every DR and recovery job.
+    environment: production-ops
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

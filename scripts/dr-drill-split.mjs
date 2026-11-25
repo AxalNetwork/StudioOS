@@ -42,8 +42,9 @@
  *   post    indexes, views and triggers, after the data, so restoring a row
  *           never fires a trigger: the backup already holds what the
  *           triggers wrote.
- * The export's PRAGMAs, any transaction control (D1 refuses it) and any
- * statement on D1's internal `_cf_*` tables are dropped and counted.
+ * The export's PRAGMAs, any transaction control (D1 refuses it), any
+ * statement on D1's internal `_cf_*` tables and (D8531) the statistics,
+ * `ANALYZE` and the sqlite_stat1..4 rows, are dropped and counted.
  *
  * NEVER PRINTS BACKUP CONTENT. It prints counts, byte sizes and phase names
  * only. Table names are schema and appear in no output either. A parse error
@@ -313,6 +314,8 @@ const RE_DELETE = new RegExp(String.raw`^DELETE\s+FROM\s+${QNAME}`, 'i');
 const RE_TXN = /^(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/i;
 const RE_REFS = new RegExp(String.raw`\bREFERENCES\s+${QNAME}`, 'gi');
 const INTERNAL = (t) => t.startsWith('_cf_');
+const STATS = (t) => /^sqlite_stat\d/.test(t);
+const RE_ANALYZE = /^ANALYZE\b/i;
 
 /** Index of the bracket closing the one at `open`, skipping quoted text; -1 if none. */
 function closeParen(text, open) {
@@ -696,9 +699,16 @@ export function createRestorePlanner({ store = memoryStore() } = {}) {
       if (parsed) info.set(t, parsed);
       return;
     }
+    // D8531: statistics are not data. `wrangler d1 export` writes
+    // `ANALYZE sqlite_schema;` and then sqlite_stat1/sqlite_stat4's rows when
+    // the source has run ANALYZE or `PRAGMA optimize`; replayed, the rows land
+    // in the data phase before the post-phase ANALYZE creates their table, and
+    // the import stops on "no such table: sqlite_stat1". They are derived from
+    // the data, so they are dropped and counted, and D1 rebuilds them.
+    if (RE_ANALYZE.test(s)) { counts.dropped_internal += 1; return; }
     if ((m = RE_INSERT.exec(s) || RE_DELETE.exec(s))) {
       const t = unquote(m[1]);
-      if (INTERNAL(t)) { counts.dropped_internal += 1; return; }
+      if (INTERNAL(t) || STATS(t)) { counts.dropped_internal += 1; return; }
       counts.data += 1;
       if (t === 'sqlite_sequence') store.append(SEQUENCE, s);
       else { order(t); store.append(t, s); }

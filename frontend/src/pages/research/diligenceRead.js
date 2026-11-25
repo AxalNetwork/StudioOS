@@ -58,3 +58,67 @@ export function activityLine(a) {
   if (a.file_removed) return { verb, what: 'a document no longer in the room' };
   return { verb, what: a.file_name || null };
 }
+
+/** A stored timestamp as milliseconds ("2026-11-03 09:34:00" or ISO), or null when it does not parse. */
+function stamp(v) {
+  if (!v) return null;
+  const t = Date.parse(String(v).replace(' ', 'T'));
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * #6270 (canvas IRV-03): is this file new since the reader's previous visit?
+ *
+ * `true` when it was staged after `last_opened_at` (the visit before this one,
+ * which the worker reads before it logs this visit). `false` when it was
+ * staged before. `null` when there is nothing to compare: a first visit, or a
+ * staged date that was not recorded. A null is never drawn as "New".
+ */
+export function stagedSinceLastVisit(createdAt, lastOpenedAt) {
+  const staged = stamp(createdAt);
+  const last = stamp(lastOpenedAt);
+  if (staged === null || last === null) return null;
+  return staged > last;
+}
+
+/**
+ * #6270: where the NDA with this founder stands, from the room read's `nda`
+ * (`{ status: none | out_for_signature | on_file, valid_until }`, D6267), in
+ * the canvas's words (IRV-03B: No NDA, NDA out for signature, NDA signed).
+ * `null` when the read did not carry it, which the page shows as Not recorded.
+ */
+export function roomNdaState(nda) {
+  const status = nda?.status;
+  if (status === 'on_file') {
+    const until = day(nda.valid_until);
+    return { status, label: 'NDA signed', line: until ? `An NDA with this founder is on file until ${until}.` : 'An NDA with this founder is on file, with no end date recorded.' };
+  }
+  if (status === 'out_for_signature') {
+    return { status, label: 'NDA out for signature', line: 'Waiting for signatures. The files behind it open once every party has signed.' };
+  }
+  if (status === 'none') return { status, label: 'No NDA', line: 'No NDA is active between you and this founder.' };
+  return null;
+}
+
+/** The folder a room file sits in, by name, or null for a file outside every listed folder. */
+export function folderNameOf(folders, folderUid) {
+  if (!folderUid) return null;
+  const f = (Array.isArray(folders) ? folders : []).find((x) => x && x.uid === folderUid);
+  return f ? f.name : null;
+}
+
+/**
+ * #6270 (canvas IRV-03C): the accepted memo as a plain-text file. The body is
+ * the reader's accepted text, trimmed and otherwise unchanged; the head names the company and when it
+ * was accepted, and the file is named for the company and the day.
+ */
+export function memoExport({ company, body, acceptedAt }) {
+  const name = String(company || 'room').trim() || 'room';
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'room';
+  const accepted = when(acceptedAt);
+  const head = `Room memo · ${name}${accepted ? ` · accepted ${accepted}` : ''}`;
+  const dated = stamp(acceptedAt);
+  const d = dated === null ? null : new Date(dated);
+  const suffix = d ? `-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
+  return { filename: `room-memo-${slug}${suffix}.txt`, text: `${head}\n\n${String(body || '').trim()}\n` };
+}

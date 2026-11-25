@@ -8,7 +8,8 @@
  *   5. The date bound: at most 90 days; a bad or reversed range is 422.
  *   6. Tenancy: the venture's writers only; another venture's links never count.
  *
- * In-memory SQLite: the baseline and every post-cutoff migration. Synthetic names only.
+ * In-memory SQLite: the baseline and every post-cutoff migration, built once per run
+ * (`_schema_once.mjs`, #8437) and copied into a fresh database for each test. Synthetic names only.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_share_daily_4272.test.ts
@@ -16,19 +17,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckSlideAnalytics from '../src/routes/deck_slide_analytics.ts';
-import { dropOff, funnelOf, readDailyQuery } from '../src/services/decks/shareDaily.ts';
+import { dropOff, funnelOf, readDailyQuery, readerCount } from '../src/services/decks/shareDaily.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-4272-share-daily-0123456789abcd';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const FOUNDER = 3, OTHER = 4;
 const P = 5, OTHER_P = 6, V1 = 10, V2 = 11, ELSEWHERE = 12, PAT = 7;
 const SLIDES = [
@@ -40,9 +37,8 @@ const SLIDES = [
 const RANGE = 'from=2026-10-01&to=2026-10-10';
 
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  // #8437: the schema is built once per run (_schema_once.mjs) and copied into a fresh database for each test.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false }));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Oz Other', 'oz@example.test', 1002);
@@ -170,4 +166,55 @@ test('#4272: the pure parts: no knowable link is null, not 0; no timed view is a
   assert.equal(funnelOf([{ nda_required: false, opened: true, accepted: false, timed: false, ask_index: 3, furthest: null }], false).reached_ask, null);
   assert.equal(funnelOf([{ nda_required: false, opened: true, accepted: false, timed: true, ask_index: null, furthest: 3 }], false).reached_ask, null, 'no ask card');
   assert.deepEqual(dropOff(SLIDES, []).map((c) => [c.seconds, c.drop_pct]), [[null, null], [null, null], [null, null], [null, null]]);
+});
+
+// ── D8250 (#8250): distinct readers and seconds per reader, both by link ──
+
+test('#8250: many links: readers are the distinct investor links with a view, under the NDA and version filters', async () => {
+  const db = fixture();
+  const r = await daily(db);
+  // Links 1 (NDA, two views), 2 (open) and 6 (open, v1). Link 4 is no investor link; link 5 is another venture's.
+  // Mutation checked: COUNT(*) for COUNT(DISTINCT …) → link 1's revisit counts twice and this is 4.
+  assert.deepEqual(r.body.readers, { by: 'link', count: 3 });
+  assert.deepEqual((await daily(db, `${RANGE}&nda=yes`)).body.readers, { by: 'link', count: 1 });
+  assert.deepEqual((await daily(db, `${RANGE}&nda=no`)).body.readers, { by: 'link', count: 2 });
+  assert.deepEqual((await daily(db, `${RANGE}&version=1`)).body.readers, { by: 'link', count: 1 });
+});
+
+test('#8250: one link: a revisit is the same reader; seconds per reader divide by links, not by visits', async () => {
+  const db = fixture();
+  db.prepare("INSERT INTO deck_view_slides (view_id, slide_index, card_uid, seconds) VALUES (102, 0, 'cover', 6)").run();
+  const r = await daily(db, `${RANGE}&nda=yes`);
+  assert.deepEqual(r.body.readers, { by: 'link', count: 1 }, 'link 1 opened twice: one reader');
+  const cur = r.body.dropoff.current;
+  // Cover: 10 + 6 on link 1's two views, 30 on link 2's: 46 s over 2 links. Traction: 20 + 10 over 2. Ask: 5 on link 1.
+  // Mutation checked: counting view_id instead of link_id → cover has 3 readers and 15 s.
+  assert.deepEqual(cur.cards.map((c: any) => [c.card_uid, c.seconds, c.readers, c.seconds_per_reader]),
+    [['cover', 46, 2, 23], ['traction', 30, 2, 15], ['market', null, null, null], ['ask', 5, 1, 5]],
+    'a card nobody read has no readers and no average: null, never 0');
+});
+
+test('#8250: zero links: no view in the range counts no reader, null rather than 0', async () => {
+  const r = await daily(fixture(), 'from=2026-11-01&to=2026-11-05');
+  assert.equal(r.status, 200);
+  // Mutation checked: `count: n` (0 kept) → this reads 0 and fails.
+  assert.deepEqual(r.body.readers, { by: 'link', count: null });
+  assert.ok(r.body.dropoff.current.cards.every((c: any) => c.readers === null && c.seconds_per_reader === null));
+});
+
+test('#8250: an unreadable read stays unreadable: no reader count is invented', async () => {
+  const db = fixture();
+  db.exec('DROP TABLE deck_share_views');
+  const r = await daily(db);
+  assert.deepEqual([r.status, r.body.state], [500, 'unreadable']);
+  assert.equal(r.body.readers, undefined);
+});
+
+test('#8250: the pure parts: a counted row with no link leaves readers null; the NDA filter applies', () => {
+  const rows = [{ view_id: 1, index: 0, seconds: 10, link_id: 7 }, { view_id: 2, index: 0, seconds: 4, link_id: 8 }, { view_id: 3, index: 1, seconds: 5, link_id: 9 }, { view_id: 4, index: 1, seconds: 9 }];
+  // Mutation checked: dropping the unlinked guard → card 1 has 1 reader and 14 s, a guess, and this fails.
+  assert.deepEqual(dropOff(SLIDES, rows).slice(0, 2).map((c) => [c.seconds, c.readers, c.seconds_per_reader]), [[14, 2, 7], [14, null, null]]);
+  assert.deepEqual(readerCount([{ nda_required: 1, n: 2 }, { nda_required: 0, n: 3 }], 'all'), { by: 'link', count: 5 });
+  assert.deepEqual(readerCount([{ nda_required: 1, n: 2 }], 'no'), { by: 'link', count: null });
+  assert.deepEqual(readerCount([], 'all'), { by: 'link', count: null });
 });

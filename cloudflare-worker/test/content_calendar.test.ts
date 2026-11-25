@@ -141,7 +141,10 @@ test('Beehiiv, X, TikTok and Facebook never write the content calendar: only its
   walk(root);
   const naming = files.filter((f) => readFileSync(f, 'utf8').includes('content_calendar_items')).map((f) => f.slice(root.length)).sort();
   // D1486 §b (#3981): the calendar's page-only reader names the table too, and only reads it.
-  assert.deepEqual(naming, ['routes/grow_calendar.ts', 'services/calendar/growReaders.ts', 'services/campaignOptions.ts', 'services/distribution/overview.ts', 'services/distributionDrafts.ts', 'services/growCampaigns.ts', 'services/growChannels.ts', 'services/growWriters.ts', 'services/notion/grow.ts']);
+  assert.deepEqual(naming, ['routes/grow_calendar.ts', 'services/calendar/growReaders.ts', 'services/campaignOptions.ts', 'services/distribution/overview.ts', 'services/distributionDrafts.ts', 'services/growCampaigns.ts', 'services/growChannels.ts', 'services/growWriters.ts', 'services/notion/grow.ts', 'services/ventureSpaceDataInventory.ts']);
+  // D8530 (#8530): the VentureSpace data inventory names the table so CI can say what each lifecycle event does
+  // to it; it never queries a table.
+  assert.doesNotMatch(readFileSync(join(root, 'services/ventureSpaceDataInventory.ts'), 'utf8'), /\.(prepare|exec|batch)\(/, 'the data inventory never queries the content calendar');
   // D4447: campaign plans link existing pieces; they never edit or publish them.
   const channelReader = readFileSync(join(root, 'services/growChannels.ts'), 'utf8');
   assert.doesNotMatch(channelReader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'channels never write the content calendar');

@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * D4130 (not a check): cuts `npm run test:drift` into the parts CI runs in
+ * parallel, derived from `package.json` — the frontend and worker suites as
+ * `--test-shard` shards (`SHARDS`), everything else as `rest`. `--list` prints
+ * the parts; `<part>` runs one. `frontend/test/ci_suite_parts_4130.test.mjs`
+ * holds the union to the suite and ci.yml's matrix to the parts. Locally, run
+ * the whole suite with `npm run test:drift`.
+ *
  * D5609 (#5609): test:drift parts derived from package scripts. SHARDS is the
  * only count source. --plan <timings.json> writes suite-plan.json and emits
  * a compact JSON array of names; --without-rest omits rest from that array.
@@ -249,11 +256,27 @@ function main(argv) {
     env.TEST_TRACE_ROOT = root;
   }
   const sh = (command) => spawnSync('sh', ['-c', command], { cwd: root, stdio: 'inherit', env });
+  const early = queuePreflight({ env: { ...env, CI_FAILURE_PART: part.name }, root, sh });
+  if (early !== 0) return early;
   if (generated !== 0) {
     if (part.name === REST) runPart({ commands: ['npm run test:guards'], env: { ...env, CI_FAILURE_PART: part.name }, root, sh });
     return generated;
   }
   return runPart({ commands: part.commands, env: { ...env, CI_FAILURE_PART: part.name }, root, sh, continueIndependent: part.name === REST });
+}
+
+/**
+ * D8416: what every part of a merge-queue run checks before its own commands. A candidate can hold a workflow
+ * that does not parse when neither main nor the PR does (two PRs add the same job key and merge without a
+ * conflict), and the queue's matrix is fail-fast, so the first part to get here stops the others. Each command
+ * is also one of test:guards', so the full-suite verdict still includes it.
+ */
+export const QUEUE_PREFLIGHT = Object.freeze(['node scripts/check-production-credentials.mjs']);
+
+/** D8416: run QUEUE_PREFLIGHT for a queue candidate only; a failure is recorded and annotated as any command's is. */
+export function queuePreflight({ env = process.env, ...options }) {
+  if (env.GITHUB_EVENT_NAME !== 'merge_group') return 0;
+  return runPart({ ...options, env, commands: QUEUE_PREFLIGHT, continueIndependent: false });
 }
 
 /** D5505: Actions PR runs identify the head while GITHUB_SHA identifies the tested merge. */

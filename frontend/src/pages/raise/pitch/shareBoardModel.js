@@ -3,6 +3,7 @@
 // tested without a page. A value the read answers as null is "Not recorded",
 // never 0; a counted 0 (a day with no views, a link nobody opened) is a 0.
 import { NOT_RECORDED } from './pitchStudioModel';
+import { ABSENCE, durationWords } from './slideAnalyticsModel.js';
 
 export const NDA_LINE = 'The NDA is set per link. Each investor gets their own link.';
 export const NO_LINKS = 'No investor link yet. Share the deck to see who reads it.';
@@ -93,4 +94,95 @@ export function posthogLine(read) {
   const tracked = Array.isArray(read.data?.tracked) ? read.data.tracked : [];
   if (!tracked.length) return { kind: 'neutral', text: 'PostHog is connected. Track a metric on Pitch to see it beside your share days.' };
   return { kind: 'tracked', text: 'From PostHog', tracked };
+}
+
+// ── D6062 (#6062, Pitch Studio v2 PS-08 A): visits, the most-read card, reach ──
+
+export const OVERVIEW_ZERO = 'Measured: your investor links exist and nobody opened one in this period.';
+export const NO_TIMED_CARD = 'No card on this version has counted reading time in this period.';
+export const NO_ASK_FUNNEL = 'No link here sends an ask card and counts time per slide, so reaching the ask cannot be counted.';
+export const ASK_ZERO = 'Measured: no link that times its cards reached the ask in this period.';
+// D8250 (#8250): readers are counted by link, the only identity a share link has.
+export const NO_READERS = 'No investor link was opened in this period, so there is no reader to count.';
+export const READERS_UNSENT = 'This read did not count readers.';
+export const NO_PER_READER = 'No card counted reading time on a link in this period, so there is no average per reader.';
+export const PER_READER_UNSENT = 'This read did not count readers on this card.';
+export const ZERO_DAY_NOTE = 'A grey line is a day with no views, counted: a measured zero, not missing data.';
+
+/**
+ * PS-08 A's three tiles from the daily read (D4272): Visits with first views
+ * and revisits, the most-read card on the version shown, and how many links
+ * reached the ask of those opened. A null the read answers is Not recorded; a
+ * counted 0 is a measured zero. Reactions and feedback are not a tile here:
+ * they wait for proposal 9 (D6062).
+ */
+export function overviewFigures(data) {
+  if (!data || typeof data !== 'object') {
+    const u = { kind: 'unreadable', why: ABSENCE.unreadable.line };
+    return { visits: u, mostRead: u, ask: u, investors: u, perReader: u };
+  }
+  const days = Array.isArray(data.days) ? data.days : [];
+  const views = days.reduce((s, d) => s + (Number(d.nda) || 0) + (Number(d.open) || 0), 0);
+  const first = days.reduce((s, d) => s + (Number(d.first_nda) || 0) + (Number(d.first_open) || 0), 0);
+  const visits = views === 0
+    ? { kind: 'measured_zero', value: '0', why: OVERVIEW_ZERO }
+    : { kind: 'value', value: String(views), sub: `${first} first ${first === 1 ? 'view' : 'views'} · ${views - first} ${views - first === 1 ? 'revisit' : 'revisits'}` };
+
+  const cur = data.dropoff?.current;
+  const cards = Array.isArray(cur?.cards) ? cur.cards : [];
+  let top = null;
+  for (const c of cards) if (Number(c?.seconds) > 0 && (!top || Number(c.seconds) > Number(top.seconds))) top = c;
+  const mostRead = top
+    ? { kind: 'value', value: `${Number(top.index) + 1} · ${top.title || `Card ${Number(top.index) + 1}`}`, sub: `${durationWords(top.seconds)} in all on v${cur.version} · links with Time per slide on` }
+    : { kind: 'not_recorded', why: NO_TIMED_CARD };
+
+  const f = data.funnels || {};
+  const known = [f.nda, f.open].filter((x) => x && x.reached_ask != null);
+  let ask;
+  if (!known.length) ask = { kind: 'not_recorded', why: NO_ASK_FUNNEL };
+  else {
+    const n = known.reduce((s, x) => s + (Number(x.reached_ask) || 0), 0);
+    const opened = known.reduce((s, x) => s + (Number(x.opened) || 0), 0);
+    const sub = `of ${opened} opened ${opened === 1 ? 'link' : 'links'} · counted on links with Time per slide on`;
+    ask = n === 0 ? { kind: 'measured_zero', value: '0', why: ASK_ZERO, sub } : { kind: 'value', value: String(n), sub };
+  }
+  return { visits, mostRead, ask, ...readerFigures(data, views, top) };
+}
+
+/**
+ * D8250 (#8250): PS07's "N investors" under Visits and the most-read card's
+ * average per reader. Both count share links, the only identity a link has:
+ * one investor with two links is two, two people on one link are one, and the
+ * words say "link". With no view, no timed card or no count from the read,
+ * each is Not recorded, never 0.
+ */
+export function readerFigures(data, views, top) {
+  if (!data || typeof data !== 'object') {
+    const u = { kind: 'unreadable', why: ABSENCE.unreadable.line };
+    return { investors: u, perReader: u };
+  }
+  const raw = data.readers?.count;
+  const n = raw == null ? null : Number(raw);
+  let investors;
+  if (!views) investors = { kind: 'not_recorded', why: NO_READERS };
+  else if (!(n > 0)) investors = { kind: 'not_recorded', why: READERS_UNSENT };
+  else investors = { kind: 'value', value: `${n} investor ${n === 1 ? 'link' : 'links'} opened` };
+
+  let perReader;
+  const per = top ? Number(top.seconds_per_reader) : NaN;
+  const readers = top ? Number(top.readers) : NaN;
+  if (!top) perReader = { kind: 'not_recorded', why: NO_PER_READER };
+  else if (!(per > 0) || !(readers > 0)) perReader = { kind: 'not_recorded', why: PER_READER_UNSENT };
+  else perReader = { kind: 'value', value: `${durationWords(per)} per link on average · ${readers} ${readers === 1 ? 'link' : 'links'} read it` };
+  return { investors, perReader };
+}
+
+/** The period the daily read answered, as the board heads it: "1 Oct to 30 Oct 2026". */
+export function periodWords(data) {
+  const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const d = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.split('-').map(Number) : null);
+  const a = d(data?.from);
+  const b = d(data?.to);
+  if (!a || !b) return null;
+  return `${a[2]} ${M[a[1] - 1]} to ${b[2]} ${M[b[1] - 1]} ${b[0]}`;
 }

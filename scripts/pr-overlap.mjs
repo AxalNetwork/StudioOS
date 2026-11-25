@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-/** D5616: bounded GitHub overlap report; PR refs are data, never checked out or executed. */
+/**
+ * D5616: bounded advisory open-PR overlap and real merge-tree conflict checks;
+ * `--dry-run` writes no comments.
+ *
+ * D5616: bounded GitHub overlap report; PR refs are data, never checked out or
+ * executed.
+ */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';

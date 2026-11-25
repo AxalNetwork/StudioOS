@@ -1,0 +1,8 @@
+{
+  "GET /api/lab-report-shares": {
+    "kind": "filter"
+  },
+  "POST /api/lab-report-shares": {
+    "kind": "target"
+  }
+}

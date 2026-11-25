@@ -22,7 +22,7 @@ const FIXTURE_ID = 'Iv1.d751-health-fixture-id';
 const FIXTURE_SECRET = 'd751-health-fixture-secret';
 const GH = { GITHUB_APP_CLIENT_ID: FIXTURE_ID, GITHUB_APP_CLIENT_SECRET: FIXTURE_SECRET };
 // #5291 adds TikTok, a read-only OAuth connector, to the catalogue's offer; D5839 Search Console; D5827 Typeform; D2403 X.
-const OFFERED = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'google_search_console', 'hubspot', 'slack', 'stripe', 'tiktok', 'typeform', 'vercel', 'x', 'zoom'];
+const OFFERED = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'google_search_console', 'hubspot', 'quickbooks', 'slack', 'stripe', 'tiktok', 'typeform', 'vercel', 'x', 'zoom'];
 const ctx: any = { waitUntil() {}, passThroughOnException() {} };
 
 function fixture(opts: { env?: Record<string, string>; unreadable?: boolean } = {}) {

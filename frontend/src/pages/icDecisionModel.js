@@ -29,15 +29,26 @@ export function ownRecusal(user, votes) {
   return (votes || []).find((v) => Number(v.user_id) === Number(user.id) && v.vote === 'recused') || null;
 }
 
+// D8248 (#8248): the words a stored vote reads as, on every IC screen. The
+// owner chose the Commit canvas's words (option A on #6144): `yes` reads
+// Invest, `no` reads Pass. The stored values and the Worker's contract
+// (`yes | no | abstain | recused`, cloudflare-worker/src/routes/ic.ts) are
+// unchanged; only the words a person reads move. Recused keeps its own word,
+// apart from Abstain. Every screen prints a vote through this table.
+export const VOTE_WORDS = { yes: 'Invest', no: 'Pass', abstain: 'Abstain', recused: 'Recused' };
+
+/** A stored vote in words; an unknown value is shown as stored, never as a vote word. */
+export function voteWord(vote) {
+  return Object.hasOwn(VOTE_WORDS, String(vote)) ? VOTE_WORDS[vote] : String(vote ?? 'Not recorded');
+}
+
 // The tally in words and numbers. A count the read did not carry is
 // "Not recorded", never 0. Recused sits beside the tally, never in it.
 export function tallyText(tally) {
   if (!tally || typeof tally !== 'object') return 'Votes not recorded';
   const n = (k) => (Number.isFinite(Number(tally[k])) && tally[k] !== null && tally[k] !== undefined ? String(Number(tally[k])) : 'Not recorded');
-  return `Yes ${n('yes')} · No ${n('no')} · Abstain ${n('abstain')} · Recused ${n('recused')}`;
+  return ['yes', 'no', 'abstain', 'recused'].map((k) => `${VOTE_WORDS[k]} ${n(k)}`).join(' · ');
 }
-
-export const VOTE_WORDS = { yes: 'Yes', no: 'No', abstain: 'Abstain', recused: 'Recused' };
 
 export const CONDITION_WORDS = { open: 'Open', met: 'Met', waived: 'Waived' };
 

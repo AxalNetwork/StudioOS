@@ -1,0 +1,305 @@
+{
+  "DELETE /api/decks/:id/shares/:shareId": {
+    "kind": "target"
+  },
+  "DELETE /api/decks/:id{[0-9]+}/draft": {
+    "kind": "target"
+  },
+  "DELETE /api/decks/:id{[0-9]+}/logos/:key": {
+    "kind": "target"
+  },
+  "DELETE /api/decks/:id{[0-9]+}/qa/answers/:key": {
+    "kind": "target"
+  },
+  "DELETE /api/decks/:id{[0-9]+}/remote": {
+    "kind": "target"
+  },
+  "DELETE /api/decks/:id{[0-9]+}/typed-values/:key": {
+    "kind": "target"
+  },
+  "DELETE /api/decks/proposals/:id": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id/cards/:hash/rendition/:size": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id/engagement": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id/notes": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id/reviews": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/batches": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/button-clicks": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/card-status": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/changes-since": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/check": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/derive-update": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/draft": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/element-models": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/figures": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/grid": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/logos": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/model-presets": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/presence": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/presence/ws": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/qa": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/remote": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/remote/ws": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/stage-plan": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/typed-values": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/usage": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/venture-elements": {
+    "kind": "target"
+  },
+  "GET /api/decks/:id{[0-9]+}/venture-elements/:element": {
+    "kind": "target"
+  },
+  "GET /api/decks/areas/batches/:uid${UID}": {
+    "kind": "target"
+  },
+  "GET /api/decks/areas/batches/:uid${UID}/events": {
+    "kind": "target"
+  },
+  "GET /api/decks/brand-kit": {
+    "kind": "filter"
+  },
+  "GET /api/decks/by-project/:pid": {
+    "kind": "target"
+  },
+  "GET /api/decks/chart-series": {
+    "kind": "filter"
+  },
+  "GET /api/decks/checks": {
+    "kind": "filter"
+  },
+  "GET /api/decks/new/context": {
+    "kind": "filter"
+  },
+  "GET /api/decks/recommend": {
+    "kind": "filter"
+  },
+  "GET /api/decks/sources": {
+    "kind": "filter"
+  },
+  "GET /api/decks/stage-norms": {
+    "kind": "filter"
+  },
+  "GET /api/decks/videos/:uid/file": {
+    "kind": "target"
+  },
+  "PATCH /api/decks/:id{[0-9]+}/cards/:uid": {
+    "kind": "target"
+  },
+  "PATCH /api/decks/:id{[0-9]+}/cards/:uid/areas/:area": {
+    "kind": "target"
+  },
+  "PATCH /api/decks/:id{[0-9]+}/logos/:key": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/autofill": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/cards/:card/assist": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/cards/:card/assist/quote": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/critic": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/critic/quote": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/notes": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/restore": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/review": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id/share": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/areas": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/areas/instruct": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/areas/instruct/quote": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/areas/quote": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/check": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/claims/:uid/use-record": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/diagrams/check": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/logos": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/paste": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/qa/answers": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/refresh": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/remix": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/remote/pair": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/remote/step": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/reorder-for-stage": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/restore-card": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/save-as-template": {
+    "kind": "target"
+  },
+  "POST /api/decks/:id{[0-9]+}/videos/upload": {
+    "kind": "target"
+  },
+  "POST /api/decks/apply-method": {
+    "kind": "target"
+  },
+  "POST /api/decks/areas/:uid${UID}/judge": {
+    "kind": "target"
+  },
+  "POST /api/decks/areas/:uid${UID}/judge/quote": {
+    "kind": "target"
+  },
+  "POST /api/decks/areas/batches/:uid${UID}/cancel": {
+    "kind": "target"
+  },
+  "POST /api/decks/areas/batches/:uid${UID}/retry-failed": {
+    "kind": "target"
+  },
+  "POST /api/decks/areas/batches/:uid${UID}/seen": {
+    "kind": "target"
+  },
+  "POST /api/decks/generate": {
+    "kind": "target"
+  },
+  "POST /api/decks/narrative/build": {
+    "kind": "target"
+  },
+  "POST /api/decks/narrative/outline": {
+    "kind": "target"
+  },
+  "POST /api/decks/new/quote": {
+    "kind": "target"
+  },
+  "POST /api/decks/outline": {
+    "kind": "target"
+  },
+  "POST /api/decks/proposals/:id/keep": {
+    "kind": "target"
+  },
+  "POST /api/decks/proposals/:id/keep-slides": {
+    "kind": "target"
+  },
+  "POST /api/decks/proposals/:id/regenerate-card": {
+    "kind": "target"
+  },
+  "POST /api/decks/quotes/index": {
+    "kind": "target"
+  },
+  "POST /api/decks/quotes/search": {
+    "kind": "target"
+  },
+  "POST /api/decks/remote/join": {
+    "kind": "target"
+  },
+  "POST /api/decks/stage-norms": {
+    "kind": "target"
+  },
+  "POST /api/decks/templates/:uid/apply": {
+    "kind": "target"
+  },
+  "PUT /api/decks/:id": {
+    "kind": "target"
+  },
+  "PUT /api/decks/:id{[0-9]+}/draft-doc": {
+    "kind": "target"
+  },
+  "PUT /api/decks/:id{[0-9]+}/element-models": {
+    "kind": "target"
+  },
+  "PUT /api/decks/:id{[0-9]+}/model-presets": {
+    "kind": "target"
+  },
+  "PUT /api/decks/:id{[0-9]+}/qa/answers/:key": {
+    "kind": "target"
+  },
+  "PUT /api/decks/:id{[0-9]+}/typed-values/:key": {
+    "kind": "target"
+  },
+  "PUT /api/decks/brand/watermark": {
+    "kind": "target"
+  }
+}

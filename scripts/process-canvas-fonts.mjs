@@ -1,3 +1,9 @@
+/**
+ * One-off: in the two Fill with Eadwyn canvases under `design/incoming/`,
+ * replaces the inlined `@font-face` style block inside `<helmet>` with Google
+ * Fonts links (Roboto Mono, Space Grotesk); a canvas without `@font-face` is
+ * skipped.
+ */
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const FILES = [

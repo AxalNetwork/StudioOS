@@ -144,6 +144,32 @@ async function contactOf(env: Env, pid: number, raw: unknown): Promise<string | 
   return String(row.uid);
 }
 
+/**
+ * D6865 part 2 (#6891, GR-24): the Inbox message a feedback item is saved from
+ * (`services/growInbox.ts` keys). A recorded reply (`contact:<id>`) must be an
+ * inbound reply of the linked contact in this venture; a mailbox message
+ * (`mail:<digest>`) is a digest of mail Axal never stores, so only its shape is
+ * checked. Either way it is matched inside its own thread only (`contact_uid`).
+ */
+export const REPLY_KEY = /^(?:contact:[1-9][0-9]{0,18}|mail:[a-f0-9]{64})$/;
+async function replyKeyOf(env: Env, pid: number, raw: unknown, contactUid: string | null, origin: string): Promise<string | null> {
+  if (raw == null || raw === '') return null;
+  if (typeof raw !== 'string' || !REPLY_KEY.test(raw)) throw new Refused(400, 'Choose the reply to save', 'reply_key');
+  if (origin !== 'inbox_reply') throw new Refused(400, 'Only an Inbox reply is saved with a reply', 'reply_key');
+  if (!contactUid) throw new Refused(400, 'A reply is saved with the person who sent it', 'contact_uid');
+  if (raw.startsWith('contact:')) {
+    const reply = await env.DB.prepare(
+      `SELECT r.id FROM contact_replies r JOIN contacts c ON c.id = r.contact_id
+        WHERE r.id = ? AND c.uid = ? AND c.project_id = ? AND r.direction = 'inbound'`,
+    ).bind(Number(raw.slice(8)), contactUid, pid).first<{ id: number }>();
+    if (!reply) throw new Refused(404, 'That reply is not in this person’s Inbox thread', 'reply_key');
+  }
+  const saved = await env.DB.prepare('SELECT uid FROM product_feedback WHERE project_id = ? AND contact_uid = ? AND reply_key = ?')
+    .bind(pid, contactUid, raw).first<{ uid: string }>();
+  if (saved) throw new Refused(409, 'That reply is already saved as feedback', 'reply_key', { uid: String(saved.uid) });
+  return raw;
+}
+
 export async function addFeedback(
   env: Env, pid: number, user: User, b: Body, options: { sourceProposalId?: number | null } = {},
 ): Promise<{ uid: string }> {
@@ -158,6 +184,7 @@ export async function addFeedback(
   // D6865: a PostHog proposal is a survey answer; a body that names no origin was typed.
   const origin = oneOf(b.origin, FEEDBACK_ORIGINS, 'origin') ?? (sourceProposalId != null ? 'posthog_survey' : 'typed');
   const contactUid = await contactOf(env, pid, b.contact_uid);
+  const replyKey = await replyKeyOf(env, pid, b.reply_key, contactUid, origin);
   if (sourceProposalId != null) {
     const existing = await env.DB.prepare('SELECT uid FROM product_feedback WHERE uid = ? AND project_id = ?')
       .bind(id, pid).first<{ uid: string }>();
@@ -165,12 +192,13 @@ export async function addFeedback(
   }
   await env.DB.prepare(
     `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label,
-       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin, reply_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, pid, text, source, str(b.from_name, 200), email(b.from_email, 'from_email'), str(b.from_company, 200), str(b.theme, 80),
     item?.ref ?? null, item?.label ?? str(b.roadmap_item_label, 200), flag(b.notify_on_ship),
-    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin).run();
-  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged', summary: 'Feedback logged' });
+    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin, replyKey).run();
+  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged',
+    summary: replyKey ? 'Feedback saved from an Inbox reply' : origin === 'interview' ? 'Feedback saved from an interview' : 'Feedback logged' });
   return { uid: id };
 }
 
@@ -588,16 +616,49 @@ function termsFields(b: Body, prev: Row = {}) {
   };
 }
 
+/**
+ * D8254 (#8254): the markets a body names (`markets`: market uids), each the venture's own. Absent means unchanged
+ * (null); an empty list unlinks every market. A uid that is not this venture's market is a 400 before anything is written.
+ */
+async function partnerMarketIds(env: Env, pid: number, b: Body): Promise<number[] | null> {
+  if (!has(b, 'markets')) return null;
+  const raw = b.markets;
+  const list = raw == null || raw === '' ? [] : Array.isArray(raw) ? raw : [raw];
+  const uids = [...new Set(list.map((x) => String(x ?? '').trim()).filter(Boolean))];
+  if (uids.length > 100) throw new Refused(400, 'A partner links up to 100 markets', 'markets');
+  if (!uids.length) return [];
+  const res = await env.DB.prepare(`SELECT id, uid FROM markets WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))`)
+    .bind(pid, JSON.stringify(uids)).all<{ id: number; uid: string }>();
+  const found = new Map((res.results || []).map((m) => [String(m.uid), Number(m.id)]));
+  const missing = uids.find((u) => !found.has(u));
+  if (missing) throw new Refused(400, 'Choose markets of this venture', 'markets');
+  return uids.map((u) => found.get(u) as number);
+}
+
+/** Replaces the partner's links with `marketIds`, as statements for the caller's batch. */
+function partnerMarketStatements(env: Env, partnerId: number, marketIds: number[], userId: number) {
+  return [
+    env.DB.prepare(`DELETE FROM growth_partner_markets WHERE partner_id = ? AND market_id NOT IN (SELECT value FROM json_each(?))`).bind(partnerId, JSON.stringify(marketIds)),
+    ...(marketIds.length ? [env.DB.prepare(`INSERT OR IGNORE INTO growth_partner_markets (partner_id, market_id, created_by) SELECT ?, value, ? FROM json_each(?)`)
+      .bind(partnerId, userId, JSON.stringify(marketIds))] : []),
+  ];
+}
+
 export async function addPartner(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
   const name = str(b.name, 200);
   if (!name) throw new Refused(400, 'A partner has a name', 'name');
   const t = termsFields(b);
+  const marketIds = await partnerMarketIds(env, pid, b);
   const id = newUid();
   await env.DB.prepare(
     `INSERT INTO growth_partners (uid, project_id, name, type, stage, terms, terms_kind, terms_pct, terms_amount_cents, terms_currency,
        renewal_on, contact_name, contact_email, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, pid, name, oneOf(b.type, PARTNER_TYPES, 'type', true), oneOf(b.stage, PARTNER_STAGES, 'stage') ?? 'talking', t.terms,
     t.terms_kind, t.terms_pct, t.terms_amount_cents, t.terms_currency, t.renewal_on, t.contact_name, t.contact_email, user.id).run();
+  if (marketIds?.length) {
+    const made = await env.DB.prepare('SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?').bind(id, pid).first<{ id: number }>();
+    if (made) await env.DB.batch(partnerMarketStatements(env, made.id, marketIds, user.id));
+  }
   await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: id, action: 'grow_partner_added', summary: 'Partner added' });
   return { uid: id };
 }
@@ -605,6 +666,7 @@ export async function addPartner(env: Env, pid: number, user: User, b: Body): Pr
 export async function updatePartner(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
   const row = await owned<Row & { id: number }>(env, 'SELECT * FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
   const t = termsFields(b, row);
+  const marketIds = await partnerMarketIds(env, pid, b);
   let name = row.name;
   if (has(b, 'name')) { name = str(b.name, 200); if (!name) throw new Refused(400, 'A partner has a name', 'name'); }
   await env.DB.prepare(
@@ -612,6 +674,7 @@ export async function updatePartner(env: Env, pid: number, user: User, uid: stri
        renewal_on = ?, contact_name = ?, contact_email = ?, updated_at = ? WHERE id = ?`,
   ).bind(name, has(b, 'type') ? oneOf(b.type, PARTNER_TYPES, 'type', true) : row.type, has(b, 'stage') ? oneOf(b.stage, PARTNER_STAGES, 'stage', true) : row.stage,
     t.terms, t.terms_kind, t.terms_pct, t.terms_amount_cents, t.terms_currency, t.renewal_on, t.contact_name, t.contact_email, nowIso(), row.id).run();
+  if (marketIds) await env.DB.batch(partnerMarketStatements(env, row.id, marketIds, user.id));
   await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_updated', summary: 'Partner updated' });
   return { uid };
 }
@@ -717,6 +780,101 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
     p.cost_score, p.cost_source, x.geography_ref, x.size_cents, x.size_currency, x.size_source, user.id, nowIso(), row.id).run();
   await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_updated', summary: 'Market updated' });
   return { uid };
+}
+
+// ── Eadwyn's proposals on a market (D8251, GR-24) ───────────────────────────
+
+export const PROPOSAL_KINDS = ['score', 'plan', 'comparison'] as const;
+type Source = { label: string; url: string | null };
+
+function proposalSources(raw: unknown, required: boolean): Source[] {
+  const list = raw == null ? [] : Array.isArray(raw) ? raw : null;
+  if (!list || list.length > 10) throw new Refused(400, 'Sources are a list of up to 10', 'sources');
+  const out: Source[] = list.map((x: any) => {
+    const label = str(x?.label, 120);
+    const url = x?.url == null || x.url === '' ? null : String(x.url).slice(0, 500);
+    if (!label || (url && !/^https:\/\/[^\s]+$/.test(url))) throw new Refused(400, 'A source has a label and, if it links, an https address', 'sources');
+    return { label, url };
+  });
+  if (required && !out.length) throw new Refused(400, 'A proposed score names its source', 'sources');
+  return out;
+}
+
+/** The proposal's payload, validated by its kind; nothing outside the kind's own keys is kept. */
+function proposalPayload(kind: string, raw: unknown): Record<string, unknown> {
+  const p = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  if (kind === 'score') {
+    const part = MARKET_PARTS.find(([k]) => k === p.part)?.[0];
+    if (!part) throw new Refused(400, 'A proposed score is for one of the four parts', 'part');
+    const value = score(p.score, 'score');
+    if (value == null) throw new Refused(400, 'A proposed score is a whole number from 0 to 10', 'score');
+    return { part, score: value };
+  }
+  if (kind === 'plan') {
+    const steps = Array.isArray(p.steps) ? p.steps : [];
+    if (!steps.length || steps.length > 12) throw new Refused(400, 'A drafted plan has 1 to 12 steps', 'steps');
+    return { steps: steps.map((x: any) => {
+      const text = str(x?.text, 300);
+      if (!text) throw new Refused(400, 'A step says what is to be done', 'steps');
+      return { text, due_on: x?.due_on == null || x.due_on === '' ? null : day(x.due_on, 'due_on') };
+    }) };
+  }
+  if (kind === 'comparison') {
+    const text = str(p.text, 2000);
+    if (!text) throw new Refused(400, 'A comparison is written out', 'text');
+    return { text };
+  }
+  throw new Refused(400, 'A proposal is a score, a plan or a comparison', 'kind');
+}
+
+/**
+ * What Eadwyn's run calls to leave a proposal on a market. It is not a route: nothing a founder does creates one.
+ * Nothing here touches the market's own fields; only `decideMarketProposal` with an accept does, through the Edit path.
+ */
+export async function recordMarketProposal(env: Env, pid: number, marketUid: string, input: { kind: unknown; payload: unknown; sources?: unknown }): Promise<{ uid: string }> {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const kind = oneOf(input.kind, PROPOSAL_KINDS, 'kind', true) as string;
+  const payload = proposalPayload(kind, input.payload);
+  const sources = proposalSources(input.sources, kind === 'score');
+  const uid = newUid();
+  await env.DB.prepare('INSERT INTO market_proposals (uid, market_id, kind, payload, sources) VALUES (?, ?, ?, ?, ?)')
+    .bind(uid, m.id, kind, JSON.stringify(payload), JSON.stringify(sources)).run();
+  return { uid };
+}
+
+/**
+ * The founder's decision on one proposal of this market. It is decided once: a second decision is a 409 and writes
+ * nothing. Accept writes through the existing market paths (`updateMarket` for a score, `addEntryStep` for each step
+ * of a plan; a comparison has nothing to write and is only marked read); Dismiss writes nothing. A failed write
+ * puts the proposal back, so Accept can be tried again.
+ */
+export async function decideMarketProposal(env: Env, pid: number, user: User, marketUid: string, proposalUid: unknown, decision: 'accept' | 'dismiss'): Promise<{ uid: string; state: string }> {
+  const uid = str(proposalUid, 64);
+  if (!uid) throw new Refused(400, 'Say which proposal', 'proposal');
+  const p = await env.DB.prepare(
+    `SELECT p.id, p.kind, p.payload, p.sources, p.state FROM market_proposals p JOIN markets m ON m.id = p.market_id
+      WHERE p.uid = ? AND m.uid = ? AND m.project_id = ?`,
+  ).bind(uid, marketUid, pid).first<{ id: number; kind: string; payload: string; sources: string; state: string }>();
+  if (!p) throw new Refused(404, 'Not found');
+  const next = decision === 'accept' ? 'accepted' : 'dismissed';
+  const claimed = await env.DB.prepare(`UPDATE market_proposals SET state = ?, decided_by = ?, decided_at = ? WHERE id = ? AND state = 'proposed'`)
+    .bind(next, user.id, nowIso(), p.id).run();
+  if (!changed(claimed)) throw new Refused(409, 'This proposal was already decided');
+  if (decision === 'accept') {
+    try {
+      const payload = JSON.parse(p.payload) as any;
+      if (p.kind === 'score') {
+        const sources = JSON.parse(p.sources) as Source[];
+        await updateMarket(env, pid, user, marketUid, { [`${payload.part}_score`]: payload.score, [`${payload.part}_source`]: sources.map((s) => s.label).join('; ').slice(0, 200) });
+      } else if (p.kind === 'plan') {
+        for (const step of payload.steps) await addEntryStep(env, pid, user, marketUid, { text: step.text, due_on: step.due_on });
+      }
+    } catch (e) {
+      await env.DB.prepare(`UPDATE market_proposals SET state = 'proposed', decided_by = NULL, decided_at = NULL WHERE id = ?`).bind(p.id).run();
+      throw e;
+    }
+  }
+  return { uid, state: next };
 }
 
 // ── Durable company-building ────────────────────────────────────────────────

@@ -40,6 +40,8 @@ async function mount(el, { dom = false } = {}) {
     const make = document.createElement.bind(document);
     document.createElement = (tag) => Object.assign(make(tag), { querySelector: () => null, querySelectorAll: () => [], focus() { this.focused = (this.focused || 0) + 1; document.activeElement = this; } });
     document.body = document.createElement('body');
+    // D5078: a `#tools` address scrolls to its section (useScrollToHash); this document has no ids to find.
+    if (typeof document.getElementById !== 'function') document.getElementById = () => null;
   }
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
@@ -296,9 +298,11 @@ test('9–10. the frame\'s dialog is the same node from list to tool and back, a
   } finally { connectorsApi.fed = saved; await m.unmount(); }
 });
 
-// ── 13. CycleRoute itself draws Operating systems' Tools history and loads a system's choices ──
+// ── 13. CycleRoute itself draws Operating systems' Tools history, and a system's Connect opens its record ──
+// D5078 (#5078, BD20 B): the module page no longer draws the systems as an editable table. Choose
+// connector lives on the system's record page (its record actions); the Systems row links there.
 
-test('13. mounted CycleRoute: Operating systems draws the Worker\'s parts.tools, and Choose connector reads that kind\'s choices', async () => {
+test('13. mounted CycleRoute: Operating systems › Tools draws the Worker\'s parts.tools; Systems links a kind to its record', async () => {
   const { default: CycleRoute } = await import('../src/pages/cycles/CycleRoute.jsx');
   const reads = [];
   const json = (body) => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
@@ -309,29 +313,31 @@ test('13. mounted CycleRoute: Operating systems draws the Worker\'s parts.tools,
       return json({
         module: { slug: 'operating-systems', name: 'Operating systems' }, card: { state: 'ok' },
         records: { cols: [{ key: 'system', label: 'System' }, { key: 'used_by', label: 'Used by' }], rows: [{ id: 'workspace', cells: { system: 'Workspace', used_by: 'Everyone' } }], total: 1 },
-        parts: { tools: { cols: [{ key: 'tool', label: 'Tool' }, { key: 'action', label: 'Action' }], rows: [{ id: 'tool-0', cells: { tool: 'HubSpot', action: { text: 'Open', href: '/build/connect?tool=hubspot&project_id=7' } } }], total: 1, state: 'ok' } },
+        parts: {
+          systems: { state: 'ok', rows: [{ kind: 'workspace', label: 'Workspace', state: 'not_connected', provider: null, line: 'Connect a provider to start',
+            action: { intent: 'connect', text: 'Connect', href: '/build/operating-systems/workspace?project_id=7' } }], summary: { not_connected: 1 }, next: null },
+          tools: { cols: [{ key: 'tool', label: 'Tool' }, { key: 'action', label: 'Action' }], rows: [{ id: 'tool-0', cells: { tool: 'HubSpot', action: { text: 'Manage', href: '/build/connect?tool=hubspot&project_id=7' } } }], total: 1, state: 'ok' },
+        },
       });
     }
-    if (u.includes('/cycles/build/systems/choices')) return json({ kinds: [{ kind: 'workspace', label: 'Workspace', choices: [{ provider_key: 'google', display_name: 'Google Workspace' }] }] });
     if (/\/projects(\?|$)/.test(u)) return json([{ id: 7, name: 'Acme' }]);
     return json({});
   };
-  const m = await mount(h(MemoryRouter, { initialEntries: ['/build/operating-systems?project_id=7'] },
-    h(Routes, null, h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) }))), { dom: true });
+  const route = (entry) => h(MemoryRouter, { initialEntries: [entry] },
+    h(Routes, null, h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) })));
+  const tools = await mount(route('/build/operating-systems?project_id=7#tools'), { dom: true });
   try {
-    await m.settle();
-    assert.ok(m.by('cycle-part-tools') && m.by('tools-row-0'), 'the Tools history is drawn from the module read\'s parts.tools');
-    const open = m.walk().find((n) => m.pr(n).href === '/build/connect?tool=hubspot&project_id=7');
-    assert.ok(open, 'its Open link is the Worker\'s href');
-    assert.ok(!reads.some((u) => u.includes('/systems/choices')), 'no choices read before a row is chosen');
-    const choose = m.walk().find((n) => /^Choose connector /.test(m.pr(n)['aria-label'] || ''));
-    assert.ok(choose, 'the Workspace row offers Choose connector');
-    await act(async () => { m.pr(choose).onClick(); });
-    await m.settle();
-    assert.ok(reads.some((u) => /\/cycles\/build\/systems\/choices\?project=7$/.test(u)), 'the form loads the choices for this project');
-    assert.match(m.text(), /Google Workspace/, 'the kind\'s choice is offered');
-    assert.match(m.text(), /None \(removes Workspace, Used by included\)/, 'and Workspace\'s None says what it removes');
-  } finally { await m.unmount(); globalThis.fetch = savedFetch; }
+    await tools.settle();
+    assert.ok(tools.by('cycle-part-tools') && tools.by('tools-row-0'), 'the Tools history is drawn from the module read\'s parts.tools');
+    assert.ok(tools.walk().find((n) => tools.pr(n).href === '/build/connect?tool=hubspot&project_id=7'), 'its action is the Worker\'s href');
+  } finally { await tools.unmount(); }
+  const systems = await mount(route('/build/operating-systems?project_id=7'), { dom: true });
+  try {
+    await systems.settle();
+    assert.ok(!systems.by('cycle-part-tools'), 'Systems does not draw the tools');
+    assert.ok(systems.walk().find((n) => systems.pr(n).href === '/build/operating-systems/workspace?project_id=7'), 'Workspace\'s Connect opens its record');
+    assert.ok(!reads.some((u) => u.includes('/systems/choices')), 'no choices are read on the module page');
+  } finally { await systems.unmount(); globalThis.fetch = savedFetch; }
 });
 
 // ── 14–15. the docs say what the code now does ──────────────────────────────

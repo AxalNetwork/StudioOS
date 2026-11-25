@@ -1,0 +1,8 @@
+{
+  "GET /api/research/funds": {
+    "kind": "filter"
+  },
+  "GET /api/research/funds/:uid": {
+    "kind": "target"
+  }
+}

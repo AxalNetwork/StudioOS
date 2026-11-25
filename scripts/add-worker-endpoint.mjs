@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * #6326: preflight for the `add-worker-endpoint` skill. It reads the branch
+ * diff against `origin/main`, reports the endpoint house rules the diff trips
+ * and the tests that name each changed file, and prints (or, with `--run`,
+ * runs) the guards in order. Its rules are in `lib/addWorkerEndpoint.mjs`,
+ * tested by `lib/addWorkerEndpoint.test.mjs`.
+ *
  * #6326: the preflight for the `add-worker-endpoint` skill. It reads what this
  * branch adds or changes against `origin/main` and says which house rules a new
  * Worker route and its client method trip, before CI does.

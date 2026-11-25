@@ -192,6 +192,15 @@ export function checkoutRefusal(err) {
 const REGISTER = (lane, plan = {}) => registerPathFor({ lane, ...plan });
 
 /**
+ * #6984 (X2): the closing "Get started" keeps the active tab's role: `?lane=` from the tab's family (`?for=`), so the
+ * investor tab opens `/register?lane=investor`. The Models tab names no role and opens bare `/register`.
+ */
+export function closingRegisterPath(tab) {
+  const family = PRICING_TABS.find((t) => t.key === tab)?.family || null;
+  return registerPathFor({ lane: family });
+}
+
+/**
  * A role tab's cards: `{ cards, saving }`, or `{ unreadable: true }` when the
  * read failed. `specs` are the canvas's cards for the tab, `billing` is
  * `monthly` | `yearly`, `held` the card id the member holds, `signedIn` whether
@@ -240,7 +249,8 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     }
     if (current) card.button = { label: 'Current plan', to: null, disabled: true };
     else if (!offered) card.button = { label: 'Not offered yet', to: null, disabled: true };
-    else if (spec.custom) card.button = { label: spec.cta || 'Contact Axal VC', to: '/contact', disabled: false };
+    // #6984 (X2): the only custom card is Institutional, so its contact opens on the invest topic.
+    else if (spec.custom) card.button = { label: spec.cta || 'Contact Axal VC', to: '/contact?topic=invest', disabled: false };
     // #4651: a paid card carries its plan and interval to registration (`planIntent.js`); a free card keeps `?lane=` only.
     else if (!signedIn) card.button = { label: spec.cta || 'Get started', to: REGISTER(spec.lane, plan && !spec.free ? { tab, planKey: planKeyOfSpec(spec), interval: yearly && year ? 'yearly' : 'monthly', seen: (yearly && year ? year : month ?? year)?.unit_amount ?? null } : {}), disabled: false };
     else if (spec.free) card.button = { label: held ? 'Manage plan' : 'Get started', to: held ? '/account/billing' : REGISTER(spec.lane), disabled: false };

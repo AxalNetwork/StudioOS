@@ -4,7 +4,7 @@ import PublicFooter from '../components/PublicFooter';
 import LabIntro from '../components/spinout/LabIntro';
 import { GraduatesSection } from './SpinoutLabPage';
 import {
-  LAB_APPLY_HREF, useCohortRecord, useCohortDirectory, useShippedFeed,
+  labApplyHref, useCohortRecord, useCohortDirectory, useShippedFeed,
 } from '../lib/spinoutLab';
 import { DEFAULT_TRACK } from '../lib/spinoutLabArsenal';
 
@@ -31,9 +31,9 @@ import { DEFAULT_TRACK } from '../lib/spinoutLabArsenal';
  * because a visitor has no position in them.
  */
 export default function SpinoutLabMarketingPage() {
-  // Client state only — the track restyles which tools lead, the jurisdiction
-  // restyles the entity/filing wording. Neither is recorded anywhere; see
-  // LabIntro's header for why no `track` param rides the apply link.
+  // The track restyles which tools lead and, since D6989 (#6989), rides the
+  // apply link through sign-up to the application, which stores it. The
+  // jurisdiction restyles the entity/filing wording and is not carried.
   const [track, setTrack] = useState(DEFAULT_TRACK);
   const [jurisdiction, setJurisdiction] = useState('de');
   // D385 — the cohort as the server names it, the same read the brief makes.
@@ -51,7 +51,7 @@ export default function SpinoutLabMarketingPage() {
         <LabIntro
           surface="public"
           cohort={cohort}
-          applyHref={LAB_APPLY_HREF}
+          applyHref={labApplyHref(track)}
           track={track}
           onTrack={setTrack}
           jurisdiction={jurisdiction}

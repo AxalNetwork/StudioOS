@@ -168,7 +168,7 @@ test('the gates are the record\'s: an advisor reads, another founder is refused'
   const { f } = await seeded();
   assert.equal((await call(f, ADVISOR, '/record/10/history?section=record')).status, 200);
   assert.equal((await call(f, COFOUNDER, '/record/10/history?section=changes')).status, 200);
-  assert.equal((await call(f, OTHER, '/record/10/history?section=record')).status, 403);
+  assert.equal((await call(f, OTHER, '/record/10/history?section=record')).status, 404, 'a stranger is answered as for a missing venture (D8526)');
   // With no section, D1017's read is unchanged.
   const old = await call(f, OWNER, '/record/10/history');
   assert.equal(old.status, 200);

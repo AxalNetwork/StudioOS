@@ -1,3 +1,4 @@
+/** D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. */
 // D7283: exercise public tracker privacy and its local export command without contacting GitHub.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'

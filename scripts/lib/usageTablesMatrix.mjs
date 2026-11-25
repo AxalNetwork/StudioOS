@@ -1,4 +1,9 @@
 /**
+ * #4568: reads every SQL string naming a usage table, plans it, and builds the
+ * index, foreign-key and consumer matrix; `planDiff` compares plans with
+ * candidate indexes. Owned by `../usage-tables-matrix.mjs` and
+ * `cloudflare-worker/test/usage_indexes_4568.test.ts`.
+ *
  * #4568 (D1 scale S2) — the dependency matrix for the five usage tables, read
  * from the code: every SQL string in `cloudflare-worker/src` that names one of
  * them, what it does to each (read or write), and the query plan SQLite picks

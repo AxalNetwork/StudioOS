@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * #4105 (not an importer): writes `frontend/src/lib/apiModules.generated.js`,
+ * the re-export line of every module under `frontend/src/lib/api/`, so a new
+ * API domain is one file and no edit to `api.js`. The index is gitignored,
+ * never committed (D5612); `build-generated.mjs` runs this. `--check` exits 1
+ * when the generator is not deterministic or git tracks the index;
+ * `check-api-drift.mjs` fails on the same. Rules in `lib/apiModules.mjs`.
+ *
  * build-api-index — writes `frontend/src/lib/apiModules.generated.js`, the
  * re-export index of every client module under `frontend/src/lib/api/` (#4105).
  *

@@ -90,5 +90,6 @@ the root cannot quietly refill with the 38 files this folder was created to
 hold.
 | `operations/AGENT_COMPUTE_4557.md` | General compute local verification and owner-gated hosted acceptance. |
 | [Workflow Slack delivery](operations/WORKFLOW_SLACK_6370.md) | Configure private workflow channels and verify a completed run in Slack. |
+| [Country catalogue reconcile](operations/COUNTRY_CATALOGUE_RECONCILE.md) | Read, repair, import and re-read the licence-pricing country figures (D7714). |
 | [GitHub Actions repair issues](operations/WORKFLOW_FAILURE_ISSUES_6387.md) | Configure signed completion events and verify automatic issue filing. |
 | [Production deployment credentials](operations/PRODUCTION_CREDENTIALS.md) | Set up the release and operations environments and verify credential rotation. |

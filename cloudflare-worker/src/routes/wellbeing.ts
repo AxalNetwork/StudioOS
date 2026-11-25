@@ -1946,12 +1946,10 @@ wellbeing.get('/experts/me/stripe/status', async (c) => {
     });
   }
   try {
-    const key = c.env.STRIPE_SECRET_KEY;
-    const res = await fetch(`https://api.stripe.com/v1/accounts/${e.stripe_account_id}`, {
-      headers: { Authorization: `Bearer ${key}` },
-    });
-    if (!res.ok) throw new Error(`stripe_${res.status}`);
-    const acct = await res.json() as { charges_enabled?: boolean; payouts_enabled?: boolean };
+    // D8510: through the Worker's one Stripe client, so it names the same API version.
+    const acct = await stripeCall<{ charges_enabled?: boolean; payouts_enabled?: boolean }>(
+      c.env, `/accounts/${e.stripe_account_id}`, {}, { method: 'GET' },
+    );
     const ce = acct.charges_enabled ? 1 : 0;
     const pe = acct.payouts_enabled ? 1 : 0;
     await c.env.DB.prepare(

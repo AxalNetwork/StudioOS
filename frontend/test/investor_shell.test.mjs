@@ -344,9 +344,10 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
     /const shows = \(section\) => !known \|\| zone === section;/,
     'the investor Network page must narrow to the zone it was given');
   // And the fund zone pages own their own composition, so the generic investor
-  // chrome must not be stacked on top of them either.
+  // chrome must not be stacked on top of them either. D6233 (#6233): nor on the
+  // locked surface, which is the one FundLocked every Fund route draws.
   assert.match(codeOnly(read(`${investorDir}/InvestorWorkspacePage.jsx`)),
-    /key === 'fund' && fundUnlocked && children\) return children/,
+    /if \(page === 'fund'\) return fundUnlocked && children \? children : <FundLocked /,
     'the four Fund zone pages get the generic header stacked above their own');
 });
 

@@ -1184,8 +1184,23 @@ async function recordProject(c: Ctx, user: AuthUser) {
 async function recordReader(c: Ctx) {
   const user = await requireAuth(c);
   const { projectId, proj } = await recordProject(c, user);
-  if (!canReadProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  if (!canReadProject(user, proj)) {
+    // D8526: a stranger to the venture gets the answer a missing venture gets, so the refusal never tells them it exists.
+    if (await strangerTo(c, user, proj, projectId)) throw new HttpError(404, 'Project not found');
+    throw new HttpError(403, "You don't have access to that project");
+  }
   return projectId;
+}
+
+/**
+ * D8526: no relation to the venture at all: not an admin, not its owner, no project seat of any role. A member who
+ * lacks a capability already knows the venture exists and keeps the capability map's 403 (D5074); a stranger is
+ * answered as if the venture did not exist.
+ */
+async function strangerTo(c: Ctx, user: any, proj: NonNullable<Awaited<ReturnType<typeof loadProject>>>, projectId: number): Promise<boolean> {
+  if (String(user.role).toLowerCase() === 'admin') return false;
+  if (holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === proj.founder_id) return false;
+  return (await getProjectMembershipRole(c.env, projectId, user.id)) == null;
 }
 
 /** D5074: who the caller is on this venture, for the capability map. Read once, by the read and by every write. */
@@ -1211,6 +1226,8 @@ async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: numb
   const { projectId, proj } = await recordProject(c, user);
   const standing = await recordStanding(c, user, proj, projectId);
   const caps = recordCapabilities(standing);
+  // D8526: as `recordReader`, before the plan check, whose 402 would otherwise tell a stranger the venture exists.
+  if (!standing.readable && await strangerTo(c, user, proj!, projectId)) throw new HttpError(404, 'Project not found');
   if (!caps.plan) ensureTier(user, 'studio');
   if (!recordCan(caps, 'propose')) throw new HttpError(403, "You don't have access to that project");
   if (recordCan(caps, 'admin_reason_required')) {

@@ -1,3 +1,4 @@
+/** D7145 tests the credential inventory, deployment environments and the temporary PR preview exception. */
 /** D7145: fixture workflows must keep production credentials inside their recorded job environments. */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -124,4 +125,39 @@ test('unterminated interpolations fail closed without blocking the guard', () =>
   });
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+// D8416 (#8416): on 2026-11-24 two merge-queue rounds failed on a workflow the guard could not
+// parse, and the stack trace named no file.
+test('a workflow that does not parse is named by path, line and column, and the others are still checked', () => {
+  const doubled = workflow().replace('    runs-on: ubuntu-latest\n',
+    '    permissions:\n      contents: read\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n');
+  const line = doubled.split('\n').findIndex((text, index, lines) =>
+    text === '    permissions:' && lines.slice(0, index).includes('    permissions:')) + 1;
+  assert.ok(line > 0, 'the fixture has the key twice');
+  const issues = checkProductionCredentials([
+    ['release.yml', doubled],
+    ['later.yml', workflow({ env: null })],
+  ], { secrets: [token, ops], jobs: [row, { ...row, workflow: 'later.yml' }] });
+  assert.deepEqual(issues, [
+    `.github/workflows/release.yml:${line}:5: DUPLICATE_KEY: Map keys must be unique (a merge can add the same key twice without a conflict; keep one)`,
+    'later.yml/publish: expected a literal production environment',
+  ]);
+});
+
+test('every parse error in one workflow is reported, without the inventory rows it could not confirm', () => {
+  const broken = 'on: push\njobs:\n  a:\n    runs-on: x\n    runs-on: y\n  b: [unclosed\n';
+  const issues = audit(broken, [row]);
+  assert.equal(issues.length, 2, issues.join('\n'));
+  assert.match(issues[0], /^\.github\/workflows\/release\.yml:5:5: DUPLICATE_KEY: /);
+  assert.match(issues[1], /^\.github\/workflows\/release\.yml:\d+:\d+: [A-Z_]+: /);
+  assert.doesNotMatch(issues.join('\n'), /inventory job no longer reads|\n\s+at /);
+});
+
+test('a file that parses but is not a workflow is named instead of throwing', () => {
+  for (const source of ['', 'jobs: {}\n', 'on: push\n', 'on: push\njobs: [a]\n', '- on\n- jobs\n']) {
+    assert.deepEqual(audit(source, [row]),
+      ['.github/workflows/release.yml:1:1: not a workflow: it needs an "on" trigger and a "jobs" mapping'], JSON.stringify(source));
+  }
+  assert.deepEqual(audit(workflow(), [row]), []);
 });

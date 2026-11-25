@@ -30,8 +30,7 @@ on:
   workflow_dispatch:
 
 # D5501: a pending candidate waits for checks without holding the write lock.
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   admission:
@@ -356,6 +355,8 @@ jobs:
     name: live current and previous lazy chunks
     needs: deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

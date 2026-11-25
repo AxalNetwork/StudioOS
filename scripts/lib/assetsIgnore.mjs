@@ -1,4 +1,10 @@
 /**
+ * What `docs/.assetsignore` withholds from the Worker's asset upload, and why
+ * each file stays private: the retention ledger, the build stamp, and a stray
+ * Pages entry script — never `_headers`, which wrangler reads to set the
+ * security headers. One literal file per line, refused otherwise. Owned by
+ * `../build-frontend.mjs` (D271).
+ *
  * The files in `docs/` the Worker's asset upload must not publish (D271).
  *
  * WHY THIS EXISTS. `docs/` is the Worker's `[assets]` directory, and wrangler

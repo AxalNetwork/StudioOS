@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+/** D7145 checks each workflow job against the production credential inventory and enforces its environment. */
 /** D7145: check every Actions workflow against the production credential inventory. */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from 'yaml';
+import { parseDocument } from 'yaml';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const INVENTORY = 'documentation/operations/production-credential-inventory.json';
@@ -73,6 +74,29 @@ function legacyPreview(file, job, triggers, names) {
     sameNames(triggers, ['pull_request']) && sameNames(names, ['CLOUDFLARE_API_TOKEN']);
 }
 
+/**
+ * D8416: read one workflow, or say where it cannot be read. Two PRs that each add the same key to
+ * one job merge without a conflict, so the diagnostic names the file, line and column.
+ */
+function readWorkflow(file, source) {
+  const document = parseDocument(source);
+  const problems = document.errors.map(error => {
+    const at = error.linePos?.[0];
+    const where = at ? `${at.line}:${at.col}` : '?:?';
+    const what = error.message.split('\n')[0].replace(/ at line \d+, column \d+:?$/, '');
+    const hint = error.code === 'DUPLICATE_KEY'
+      ? ' (a merge can add the same key twice without a conflict; keep one)' : '';
+    return `.github/workflows/${file}:${where}: ${error.code}: ${what}${hint}`;
+  });
+  if (problems.length) return { problems };
+  const value = document.toJS();
+  const jobs = value?.jobs;
+  if (!jobs || typeof jobs !== 'object' || Array.isArray(jobs) || value.on == null) {
+    return { problems: [`.github/workflows/${file}:1:1: not a workflow: it needs an "on" trigger and a "jobs" mapping`] };
+  }
+  return { value };
+}
+
 /** Return diagnostics for workflow filename/source pairs; tests supply an in-memory repository. */
 export function checkProductionCredentials(workflows, inventory) {
   const errors = [];
@@ -85,7 +109,14 @@ export function checkProductionCredentials(workflows, inventory) {
     rows.set(key, row);
   }
   for (const [file, source] of workflows) {
-    const { jobs, on, ...settings } = parse(source);
+    const read = readWorkflow(file, source);
+    if (read.problems) {
+      errors.push(...read.problems);
+      // Its jobs were not read, so its inventory rows are neither confirmed nor stale.
+      for (const [key, row] of rows) if (row.workflow === file) rows.delete(key);
+      continue;
+    }
+    const { jobs, on, ...settings } = read.value;
     const triggers = typeof on === 'string' ? [on] : Array.isArray(on) ? on : Object.keys(on);
     const isPr = triggers.some(trigger => ['pull_request', 'pull_request_target'].includes(trigger));
     const global = secretReads({ on, ...settings }, catalog);

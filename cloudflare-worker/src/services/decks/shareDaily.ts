@@ -16,7 +16,16 @@
  *             card or counts time per slide: it cannot be known.
  *   dropoff   `{ current, previous }`: seconds per card on a version and the
  *             one before it, with the share of readers who stop after each
- *             card. Seconds nobody counted are null, never 0.
+ *             card. Seconds nobody counted are null, never 0. D8250 (#8250):
+ *             each card also carries `readers`, the share links whose views
+ *             counted time on it, and `seconds_per_reader`, its seconds over
+ *             those links (rounded); both null when nobody counted the card.
+ *   readers   D8250 (#8250): `{ by: 'link', count }`, the distinct investor
+ *             links with a view in the range, under the same version and NDA
+ *             filters as `days`. A link is the only identity a share link has,
+ *             so a reader is a link: one investor holding two links counts
+ *             twice, two people sharing one link count once. `count` is null
+ *             when no view was counted: there is no reader to count.
  *
  * Bounded by the date range (at most 90 days), not by a row cap. Counts only:
  * no hash, email or reader identity leaves this read.
@@ -98,32 +107,61 @@ export function funnelOf(links: LinkFacts[], gated: boolean): Funnel {
   };
 }
 
-export type ViewSeconds = { view_id: number; index: number; seconds: number };
-export type DropCard = { index: number; card_uid: string | null; title: string | null; seconds: number | null; drop_pct: number | null };
+export type ViewSeconds = { view_id: number; index: number; seconds: number; link_id?: number | null };
+export type DropCard = {
+  index: number; card_uid: string | null; title: string | null; seconds: number | null; drop_pct: number | null;
+  readers: number | null; seconds_per_reader: number | null;
+};
+
+/** D8250: the distinct investor links with a view, per NDA class, under the NDA filter. Null when there is none. */
+export function readerCount(rows: Array<{ nda_required: number | null; n: number }>, nda: NdaFilter): { by: 'link'; count: number | null } {
+  let n = 0;
+  for (const r of rows) {
+    const gated = Number(r.nda_required) === 1;
+    if ((nda === 'yes' && !gated) || (nda === 'no' && gated)) continue;
+    n += Number(r.n) || 0;
+  }
+  return { by: 'link', count: n > 0 ? n : null };
+}
 
 /**
  * Seconds per card on one version, and the share of readers who stop after
  * each card: of the views that read card i (their furthest card is i or later),
  * the share whose furthest is i. The last card, and a card nobody reached, has
- * no drop. With no timed view at all, every value is null.
+ * no drop. With no timed view at all, every value is null. D8250: a card's
+ * readers are the distinct links (`link_id`) whose views counted seconds on
+ * it; a counted row with no link leaves the card's readers null, never a guess.
  */
 export function dropOff(cards: Array<{ uid?: unknown; title?: unknown }>, rows: ViewSeconds[]): DropCard[] {
   const secs = new Map<number, number>();
   const furthest = new Map<number, number>();
+  const linksOn = new Map<number, Set<number>>();
+  const unlinked = new Set<number>();
   for (const r of rows) {
     const s = Math.max(0, Math.trunc(Number(r.seconds) || 0));
     if (s <= 0 || r.index < 0 || r.index >= cards.length) continue;
     secs.set(r.index, (secs.get(r.index) ?? 0) + s);
+    const link = r.link_id == null ? NaN : Number(r.link_id);
+    if (Number.isSafeInteger(link)) {
+      if (!linksOn.has(r.index)) linksOn.set(r.index, new Set());
+      linksOn.get(r.index)!.add(link);
+    } else unlinked.add(r.index);
     furthest.set(r.view_id, Math.max(furthest.get(r.view_id) ?? -1, r.index));
   }
   const reach = cards.map((_, i) => [...furthest.values()].filter((f) => f >= i).length);
-  return cards.map((c, i) => ({
-    index: i,
-    card_uid: typeof c?.uid === 'string' ? c.uid : null,
-    title: typeof c?.title === 'string' && c.title.trim() ? c.title.trim().slice(0, 200) : null,
-    seconds: secs.get(i) ?? null,
-    drop_pct: i < cards.length - 1 && reach[i] > 0 ? Math.round(100 * (1 - reach[i + 1] / reach[i])) : null,
-  }));
+  return cards.map((c, i) => {
+    const seconds = secs.get(i) ?? null;
+    const readers = seconds == null || unlinked.has(i) ? null : (linksOn.get(i)?.size || null);
+    return {
+      index: i,
+      card_uid: typeof c?.uid === 'string' ? c.uid : null,
+      title: typeof c?.title === 'string' && c.title.trim() ? c.title.trim().slice(0, 200) : null,
+      seconds,
+      drop_pct: i < cards.length - 1 && reach[i] > 0 ? Math.round(100 * (1 - reach[i + 1] / reach[i])) : null,
+      readers,
+      seconds_per_reader: seconds != null && readers ? Math.round(seconds / readers) : null,
+    };
+  });
 }
 
 type DeckRow = { id: number; version: number; slides: string | null };
@@ -148,6 +186,18 @@ export async function shareDaily(env: Env, projectId: number, q: DailyQuery) {
         AND date(v.created_at) BETWEEN ?3 AND ?4
       GROUP BY d, t.nda_required`,
   ).bind(projectId, q.version, q.from, q.to).all<DayRow>()).results || [];
+
+  // D8250: distinct readers, by link (the only identity a share link has), on the same views as `days`.
+  const readerRows = (await env.DB.prepare(
+    `SELECT t.nda_required AS nda_required, COUNT(DISTINCT v.share_token_id) AS n
+       FROM deck_share_views v
+       JOIN pitch_deck_share_tokens t ON t.id = v.share_token_id
+       JOIN pitch_decks d ON d.id = v.deck_id
+      WHERE d.project_id = ?1 AND (?2 IS NULL OR d.version = ?2)
+        AND (t.prospect_id IS NOT NULL OR t.investor_label IS NOT NULL)
+        AND date(v.created_at) BETWEEN ?3 AND ?4
+      GROUP BY t.nda_required`,
+  ).bind(projectId, q.version, q.from, q.to).all<{ nda_required: number | null; n: number }>()).results || [];
 
   // The links sent in the range, each with what its readers did (at any time since).
   const links = (await env.DB.prepare(
@@ -191,15 +241,15 @@ export async function shareDaily(env: Env, projectId: number, q: DailyQuery) {
     const cards = slidesOf(d);
     const uids = cards.map((c: any) => (typeof c?.uid === 'string' ? c.uid : null));
     const rows = ((await env.DB.prepare(
-      `SELECT s.view_id, s.slide_index, s.card_uid, s.seconds
+      `SELECT s.view_id, s.slide_index, s.card_uid, s.seconds, v.share_token_id AS link_id
          FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
          JOIN pitch_deck_share_tokens t ON t.id = v.share_token_id
         WHERE v.deck_id = ?1 AND (t.prospect_id IS NOT NULL OR t.investor_label IS NOT NULL)
           AND date(v.created_at) BETWEEN ?2 AND ?3
         LIMIT 50000`,
-    ).bind(d.id, q.from, q.to).all<{ view_id: number; slide_index: number; card_uid: string | null; seconds: number }>()).results || [])
+    ).bind(d.id, q.from, q.to).all<{ view_id: number; slide_index: number; card_uid: string | null; seconds: number; link_id: number | null }>()).results || [])
       // A row named by uid counts for that card; one written before migration 714 named it by place.
-      .map((r) => ({ view_id: Number(r.view_id), index: r.card_uid ? uids.indexOf(r.card_uid) : Number(r.slide_index), seconds: Number(r.seconds) }));
+      .map((r) => ({ view_id: Number(r.view_id), index: r.card_uid ? uids.indexOf(r.card_uid) : Number(r.slide_index), seconds: Number(r.seconds), link_id: r.link_id == null ? null : Number(r.link_id) }));
     return { version: d.version, deck_id: d.id, cards: dropOff(cards, rows) };
   };
 
@@ -211,6 +261,7 @@ export async function shareDaily(env: Env, projectId: number, q: DailyQuery) {
     version: q.version,
     versions: decks.map((d) => ({ version: d.version, deck_id: d.id })),
     days: daySeries(dayRows, q),
+    readers: readerCount(readerRows, q.nda),
     funnels: { nda: funnelOf(facts, true), open: funnelOf(facts, false) },
     dropoff: { current: pair[0] ? await dropFor(pair[0]) : null, previous: pair[1] ? await dropFor(pair[1]) : null },
   };

@@ -18,6 +18,7 @@ files say how to act on it.
 | `PROCESSING_AND_RETENTION_5510.md` | Trace Axal VC data collection, tentative processor/vendor inventory, erasure/retention evidence and pending legal/production verification without publishing secret or user data (#5510). |
 | `DECK_GRID.md` | Run deck builder v2, the Grid (D1547, #3792): switch off a model, refund a batch, unstick a batch, purge an image including a DMCA takedown. Says which steps have a route, which are SQL, and that none is tested on staging yet; `deck_grid_runbook_3792` keeps the names true to the code and `deck_grid_runbook_d1547` runs the SQL. |
 | `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
+| `COUNTRY_CATALOGUE_RECONCILE.md` | Check every country figure in the licence-pricing catalogue against its history, repair the one value with no history row, build and send the import through the supported route, and read again (D7714). |
 | `SCHEMA_DRIFT.md` | What schema checks run before a deploy, what the post-deploy `schema-drift` job finds after it, and how a red result is escalated and corrected without silencing the check (#4591). |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
 | `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
@@ -67,3 +68,4 @@ and a link in `documentation/README.md`.
 | `GITHUB_ADMIN_BASELINE.md` | D8082: the GitHub admin settings `slot:chatgptpro` set (rulesets, environments, Actions, Apps, runner groups; cloud names and quotas), which the weekly read-only `admin-drift.yml` checks, filing one issue per drift. |
 | [Production credentials](PRODUCTION_CREDENTIALS.md) | D7145 environment setup, token permissions, verification and retirement. |
 | `runner-image-8008/` | Review the Linux candidate runtime contract, offline image inputs and qualification evidence gates (D8008). |
+| `RESEARCH_SOURCE_IMPORT.md` | D7745: preview, apply in bounded chunks, seal, reconcile and remove a private Research package; pacing, 429s and which digest proves what. |

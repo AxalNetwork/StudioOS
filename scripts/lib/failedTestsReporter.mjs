@@ -1,4 +1,7 @@
 /**
+ * D6464: a node:test reporter writing one JSON line per failed test, read by
+ * the suite runner.
+ *
  * D6464 (#6464): a node:test reporter that writes one JSON line per failed
  * test, `{ "file": "<repo path>", "test": "<name>" }`, to its destination.
  * The suite runner adds it beside TAP under merge_group only, then reads the

@@ -35,6 +35,9 @@
  *            was out of capacity) and `gateway_required` /
  *            `gateway_misconfigured` end the run with the task open again,
  *            and pause nothing. Every run from here is `engine: true`.
+ *            D8071: just before `agentRun`, the budget (`agentBudgets.reserve`)
+ *            halts the run `budget_exhausted` (or `budget_unreadable`) with the
+ *            task open again; after it, `settle` adds the call's usage once.
  *   propose  the run and the task wait for a decision; the sponsor and the
  *            managers hear of it (in-app, `proactive_nudges`).
  *   wait     the Workflow's `waitForEvent('decision', 7 days)`.
@@ -50,7 +53,7 @@
  * not retry them; a throw is a transient error, retried 3 times.
  */
 import type { Env, User } from '../types';
-import { agentRun as realAgentRun, PROMPT_MAX, refusalDetail, runKeyOf, type AgentRunInput, type AgentRunResult } from '../services/agents/agentRun';
+import { AGENT_MAX_TOKENS, agentRun as realAgentRun, PROMPT_MAX, refusalDetail, runKeyOf, type AgentRunInput, type AgentRunResult } from '../services/agents/agentRun';
 import { railByRunKey } from '../services/railProposals';
 import { skillEvidenceForRun, skillSlugOf } from '../services/agents/skillEvidence';
 import { moduleOf } from '../services/agents/catalogue';
@@ -68,6 +71,7 @@ import {
 import { dailyLimit, needsCeilings } from './capacity';
 import { BREAKER_KEY, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from './runtime';
 import { cancelComputeRun, computeProposal, computeRunRequested, dispatchCompute } from '../services/agents/computeBridge';
+import { reserve as reserveBudget, settle as settleBudget, verdictSummary, type BudgetRun } from '../services/agentBudgets';
 
 export type Decision = { status: 'accepted' | 'edited' | 'discarded' };
 export type StepOut = { go: true; [k: string]: unknown } | { go: false; status: string; refusal: string | null };
@@ -293,6 +297,12 @@ export async function context(d: LoopDeps, uid: string): Promise<StepOut> {
 
 // ── run ─────────────────────────────────────────────────────────────────────
 
+/** D8071: the run as the budget reads it. */
+const budgetRunOf = (l: Loaded): BudgetRun => ({
+  uid: l.run.uid, agent_id: l.agent.id, task_id: l.task.id, attempt: Number(l.run.attempt),
+  scope_kind: l.agent.scope_kind, company_id: l.agent.company_id, project_id: l.agent.project_id,
+});
+
 const RUN_PAUSES: Record<string, PauseReason> = {
   spend_limit: 'spend_limit', ai_paused: 'ai_paused', agent_cap_reached: 'cap', sponsor_lost_access: 'sponsor_left', tool_disconnected: 'tool_disconnected',
 };
@@ -342,6 +352,12 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
     }
     if (slug) readiness = { slug, limits: checked.evidence?.limits ?? [] };
   }
+  // D8071: the budget before the model call. A run that would pass a cap halts here, with nothing held or charged.
+  // A step that already proposed is not checked again: its retry replays that proposal and is settled below.
+  if (!(await railByRunKey(d.env, l.agent.sponsor_user_id, runKeyOf(uid)))) {
+    const budget = await reserveBudget(d.env, budgetRunOf(l), { tokens: Math.ceil(b.prompt.length / 4) + AGENT_MAX_TOKENS }, 'run', d.now());
+    if (!budget.ok) return end(d, l, 'run', 'halted', budget.code, verdictSummary(budget));
+  }
   const r = await d.agentRun(d.env, {
     agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid, engine: true,
     ...(sk.kind === 'skill' ? { skill: sk.uid, skillVersion: sk.version } : {}),
@@ -349,6 +365,9 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
     ...(readiness ? { readiness } : {}),
   });
   if (r.ok) {
+    // D8071: what the call used, from the usage ledger, settled once for this step. A throw retries the step,
+    // whose replay charges nothing and settles the same row.
+    await settleBudget(d.env, budgetRunOf(l), r.usageLogId ?? null, 'run', d.now());
     await markRun(d.env, uid, 'run', { status: 'done', summary: r.replayed ? 'Ran before; the same proposal stands.' : 'Wrote a proposal.' },
       { usageLogId: r.usageLogId, proposalUid: r.proposal.uid });
     return { go: true, proposal_uid: r.proposal.uid };

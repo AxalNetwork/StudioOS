@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * D849 (#2472): no `console.*` call, `logActorAct(...)` call or `activity_logs`
+ * write in `cloudflare-worker/src` names a bearer, a secret or an `axk_` value.
+ * It reads each call's arguments with strings and comments blanked (keeping
+ * every `${}` expression), and fails on an identifier containing `bearer` or
+ * `secret` — an object key names a field and passes — or on the text `axk_`. A
+ * name that matches but is not a credential goes in its `ALLOW` map with the
+ * reason; an entry that stops matching fails too.
+ *
  * D849 (#2472): no log line and no activity row carries a credential.
  *
  * A member API key (`axk_…`, D841) or an OAuth bearer is a password: shown
