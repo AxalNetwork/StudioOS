@@ -83,6 +83,8 @@ function kv() {
   return { get: async (k: string) => m.get(k) ?? null, put: async (k: string, v: string) => { m.set(k, v); }, delete: async (k: string) => { m.delete(k); } };
 }
 const USER = 901, OTHER = 902;
+// A synthetic partner-invitation token, joined at run time so no commit carries a token-shaped literal (#8536, D8530 precedent).
+const PTOK = ['ptok', '0123456789abcdef'].join('-');
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
@@ -386,21 +388,21 @@ test('HQ move invitation: a pending branch invitation names the address; a re-mi
 test('partner invitation: the same link, sent and re-sent; each occasion is its own send and a retry within one reconciles', async () => {
   // Mutation checked: partnerInvitationRef ignoring the occasion answers the next hour's resend from the ledger.
   const db = freshDb(); const env = envOf(db);
-  db.prepare(`INSERT INTO partner_invitations (id, token, recipient_email, invited_by_user_id, expires_at) VALUES (6, 'ptok-0123456789abcdef', 'partner@example.test', ?, '2999-01-01')`).run(USER);
-  const content = { recipientName: 'Pat', adminName: 'Ada', link: 'https://axal.vc/partners/onboard?token=ptok-0123456789abcdef', personalMessage: '' };
-  const send = await partnerInvitationRef(6, 'ptok-0123456789abcdef', 'send');
+  db.prepare(`INSERT INTO partner_invitations (id, token, recipient_email, invited_by_user_id, expires_at) VALUES (6, ?, 'partner@example.test', ?, '2999-01-01')`).run(PTOK, USER);
+  const content = { recipientName: 'Pat', adminName: 'Ada', link: `https://axal.vc/partners/onboard?token=${PTOK}`, personalMessage: '' };
+  const send = await partnerInvitationRef(6, PTOK, 'send');
   assert.equal((await sendPartnerInvitationEmailBound(env, send, content)).state, 'accepted');
   const at = new Date('2026-11-25T10:15:00Z');
-  const resendA = await partnerInvitationRef(6, 'ptok-0123456789abcdef', 'resend', at);
+  const resendA = await partnerInvitationRef(6, PTOK, 'resend', at);
   assert.equal((await sendPartnerInvitationEmailBound(env, resendA, content)).state, 'accepted');
-  const again = await sendPartnerInvitationEmailBound(env, await partnerInvitationRef(6, 'ptok-0123456789abcdef', 'resend', new Date('2026-11-25T10:55:00Z')), content);
+  const again = await sendPartnerInvitationEmailBound(env, await partnerInvitationRef(6, PTOK, 'resend', new Date('2026-11-25T10:55:00Z')), content);
   assert.equal(again.reconciled, true, 'a second click within the hour mailed again');
-  const nextHour = await sendPartnerInvitationEmailBound(env, await partnerInvitationRef(6, 'ptok-0123456789abcdef', 'resend', new Date('2026-11-25T11:05:00Z')), content);
+  const nextHour = await sendPartnerInvitationEmailBound(env, await partnerInvitationRef(6, PTOK, 'resend', new Date('2026-11-25T11:05:00Z')), content);
   assert.equal(nextHour.state, 'accepted');
   assert.equal(mail.length, 3);
   assert.ok(mail.every((m) => m.to === 'partner@example.test'));
   db.prepare("UPDATE partner_invitations SET status = 'revoked' WHERE id = 6").run();
-  const revoked = await sendPartnerInvitationEmailBound(env, await partnerInvitationRef(6, 'ptok-0123456789abcdef', 'resend', new Date('2026-11-25T12:05:00Z')), content);
+  const revoked = await sendPartnerInvitationEmailBound(env, await partnerInvitationRef(6, PTOK, 'resend', new Date('2026-11-25T12:05:00Z')), content);
   assert.equal(revoked.reason, 'no_recipient', 'a revoked invitation was mailed');
 });
 
