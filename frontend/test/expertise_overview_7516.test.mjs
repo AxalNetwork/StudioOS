@@ -40,7 +40,7 @@ const PROOF = {
     { id: 11, title: 'Enterprise GTM', attested: false, status: 'self_stated', consents: [{ state: 'needs_reconfirmation', attester_name: 'R. Example' }] },
     { id: 12, title: 'Series A close', attested: true, status: 'attested', consents: [{ state: 'confirmed', attester_name: 'Q. Example' }] },
   ],
-  page: { total: 2, next_offset: null }, counts: { total: 2, attested: 1, self_stated: 1, awaiting: 0 },
+  page: { total: 2, next_offset: null }, counts: { total: 2, attested: 1, self_stated: 1, awaiting: 0, needs_reconfirmation: 1 },
 };
 const THINKING = {
   items: [{ id: 21, title: 'Pricing your first retainer', status: 'changes_requested' }],
@@ -94,13 +94,17 @@ test('Publication reads the whole-list counts: services published, articles publ
   assert.equal(unlisted.value.word, 'Profile not listed');
 });
 
-test('Verification is confirmed, awaiting and self-stated from the counts, and reconfirmation only from a whole list', () => {
-  // Mutation checked: the `wholePage` guard dropped → a partial page still claims "1 needs reconfirmation".
+test('Verification is confirmed, awaiting, self-stated and needs reconfirmation, every one from the whole-list counts', () => {
   const c = cellOf(allReady(), 'verification');
   assert.equal(c.value.fact, '1 confirmed · 0 awaiting');
   assert.equal(c.value.sub, '1 self-stated · 1 needs reconfirmation.');
-  const paged = cellOf(allReady({ proof: ok({ ...PROOF, page: { total: 300, next_offset: 200 } }) }), 'verification');
-  assert.equal(paged.value.sub, '1 self-stated.', 'a page of 300 claims is not counted as if it were all of them');
+  // D7807 (#7807): a partial page reads the Worker's whole-list figure, never the page's.
+  // Mutation checked: `num(c.needs_reconfirmation)` replaced by the old `wholePage(...) ? reconfirmations(proof).length : null` → the paged sub drops "40 need reconfirmation".
+  const paged = cellOf(allReady({ proof: ok({ ...PROOF, page: { total: 300, next_offset: 200 }, counts: { ...PROOF.counts, total: 300, self_stated: 299, needs_reconfirmation: 40 } }) }), 'verification');
+  assert.equal(paged.value.sub, '299 self-stated · 40 need reconfirmation.', 'a page of 300 claims states the whole list’s figure');
+  // Mutation checked: `num(c.needs_reconfirmation)` replaced by `reconfirmations(proof).length` → the stale row on the page is counted and "1 needs reconfirmation" appears.
+  const unread = cellOf(allReady({ proof: ok({ ...PROOF, counts: { ...PROOF.counts, needs_reconfirmation: null } }) }), 'verification');
+  assert.equal(unread.value.sub, '1 self-stated.', 'a count that did not come back is left out, never counted off the page');
   const empty = cellOf(allReady({ proof: ok({ items: [], page: { total: 0, next_offset: null }, counts: { total: 0, attested: 0, self_stated: 0, awaiting: 0 } }) }), 'verification');
   assert.equal(empty.value.word, 'No claims yet');
 });
