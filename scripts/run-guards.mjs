@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/** D5505: full `npm run test:guards`, advisory `npm run test:guards:preflight`, and `--guard <id>` reproduction; emits bounded guard results. */
 /** D5505 (#5505): full guards, local preflight and single-guard repro from one ordered catalog. */
 import { writeFileSync, rmSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';

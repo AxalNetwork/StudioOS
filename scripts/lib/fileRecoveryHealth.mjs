@@ -1,3 +1,4 @@
+/** D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. */
 /** D6653 (#6653): metadata-only file backup health; unknown evidence never closes an alert. */
 export const FILE_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const FILE_BACKUP_REASONS = Object.freeze(['run_failed', 'heartbeat_missing', 'heartbeat_invalid', 'run_reported_failure', 'copy_missing', 'missed_run', 'healthy', 'unavailable', 'disabled']);

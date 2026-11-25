@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * D6464: builds the known-flaky test list from the last days of merge-queue CI
+ * runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci`
+ * issue per listed test). Logic in `lib/flakyTests.mjs`.
+ *
  * D6464 (#6464): build the known-flaky test list from recent CI runs.
  *
  *   node scripts/flaky-tests.mjs [--days 7] [--write] [--open-issues] [--json] [--why]
@@ -16,6 +20,10 @@
  * GitHub access: in GitHub Actions, GITHUB_TOKEN (or GH_TOKEN) with fetch;
  * anywhere else, the `gh` CLI and its own credential.
  * Reads only, except --open-issues, which creates issues.
+ *
+ * `flaky-tests.json`: D6464: the tracked flaky list. `test-drift-parts.mjs`
+ * reads it under merge_group to retry a listed test's file once; only a PR
+ * committing `flaky-tests.mjs` output changes it.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';

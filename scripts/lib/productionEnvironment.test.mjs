@@ -1,3 +1,4 @@
+/** D7145 runtime-policy response and release-step ordering regression fixtures. */
 /** D7145: exercise the release preflight against GitHub REST response fixtures. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

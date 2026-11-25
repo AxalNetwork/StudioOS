@@ -1,5 +1,11 @@
 #!/usr/bin/env node
+// D5614: AST check for new test clock reads/fixed sleeps;
+// `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink.
+//
 // D5614: reject new real-clock test reads; existing exceptions can only shrink.
+//
+// `test-clock-allowlist.txt`: D5614: reviewed starting inventory of test
+// real-clock dependencies; the follow-up guard permits only removals.
 import { readFileSync, globSync, statSync } from 'node:fs';
 import { dirname, resolve, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';

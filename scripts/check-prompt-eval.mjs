@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * D1519 (#3771): a changed deck prompt
+ * (`cloudflare-worker/src/services/decks/prompts/`) fails unless
+ * `documentation/product/ELEMENT_EVAL.md` records the new prompts hash, or the
+ * PR carries the owner's `prompt-eval-waiver` label
+ * (`PROMPT_EVAL_WAIVER=true`). `--write` records the hash after the eval is
+ * re-run. Run by `.github/workflows/prompt-eval-gate.yml` (label-aware, so it
+ * re-runs when the label changes), not by `test:guards`. Its rules are tested
+ * in `cloudflare-worker/test/deck_prompts_d1519.test.ts`.
+ *
  * D1519 (#3771, deck v2 A20) — a changed deck prompt must come with its eval.
  *
  * Every file in `cloudflare-worker/src/services/decks/prompts/` is hashed

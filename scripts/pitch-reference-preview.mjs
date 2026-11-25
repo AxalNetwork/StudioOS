@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+// D898 §8.6 (#3658): draws the synthetic reference decks
+// (`cloudflare-worker/test/fixtures/pitchReferenceDecks.ts`) in the three
+// themes at 16:9 and as the phone card list, and screenshots them, for design
+// review. Not the product renderer; run with the TypeScript loader, `node
+// --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs
+// scripts/pitch-reference-preview.mjs <out-dir>`.
+//
 // D898 §8.6 (#3658) — draws the reference decks for design review: both
 // decks (`cloudflare-worker/test/fixtures/pitchReferenceDecks.ts`) in the three
 // themes at 16:9, and the phone editor's card list at 390px, as HTML, then

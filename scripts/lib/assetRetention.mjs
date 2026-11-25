@@ -1,4 +1,8 @@
 /**
+ * Which hashed assets in `docs/` a build keeps and which it may prune, and
+ * (D529) whether the build had a restored previous build to carry the window
+ * forward or restarted it.
+ *
  * Task #15 — hashed-asset retention across SPA builds.
  *
  * Prod serves the SPA from `docs/` through the Cloudflare Worker's `[assets]`

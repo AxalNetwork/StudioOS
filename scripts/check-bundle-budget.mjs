@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * The frontend shell growing past its budget (#4573): the critical path every
+ * first visit fetches (entry, modulepreloads, stylesheets, the entry's static
+ * imports) over 500 KiB brotli or 95 files, or the entry chunk over 900 KiB
+ * raw. The budgets are the 2026-11-06 baseline plus a little room; a PR that
+ * moves code into the shell on purpose raises them and says why. Reads `docs/`
+ * only; never builds.
+ *
  * #4573 (Performance P1) — the frontend shell's size budget.
  *
  * Fails when what every first visit must fetch before the app runs (the entry

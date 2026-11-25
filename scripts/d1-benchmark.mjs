@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * #4567: the local D1 contention benchmark (`npm run bench:d1`). It drives the
+ * Worker's own services over a throwaway migrated node:sqlite with synthetic
+ * fixtures and stubbed inference, ramps or runs a closed loop, and writes
+ * aggregates: statements per operation and stage, plans, index counts,
+ * fairness, growth. It exits 1 when an invariant is not 0. Harness:
+ * `cloudflare-worker/test/_d1_bench.ts`; runbook:
+ * `documentation/operations/D1_BENCHMARK.md`.
+ *
  * #4567 — the local D1 contention benchmark (harness: `cloudflare-worker/test/_d1_bench.ts`).
  *
  *   npm run bench:d1 -- --tenants 1,10,100,1000 --ops 400 --concurrency 8 --out bench.json

@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * D6312: lands an owner-approved Claude Design canvas for the `land-canvas`
+ * skill: checks each file's SHA-256 against the digests on the issue, copies it
+ * into `design/incoming/` with the `· Boards` name, prints the board list, and
+ * `--waiting N` lists the blocked issues to release.
+ *
  * #6312: lands an owner-approved Claude Design canvas, for the `land-canvas` skill.
  *
  *   node scripts/land-canvas.mjs --issue 4846 --name "Build v2" --from DIR [--write]

@@ -1,5 +1,10 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # the globals set here are read by the sourcing script
+# D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill)
+# and `restore-d1.sh` (the operator's restore): fetch, manifest check, the
+# independent copy's decryption, chunked import and row-count comparison. Never
+# run on its own.
+#
 # ---------------------------------------------------------------------------
 # scripts/dr-restore-lib.sh — D5337 (#5337)
 #

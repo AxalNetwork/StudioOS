@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 /**
+ * #3939 (D1478): the model job table drifting from the catalogue — a current
+ * catalogue id in no row or in two, an offered id the table does not hide that
+ * no job lists (#4313 part 3: models are reached through the jobs, not the page
+ * rows), a job with no Default or two, a Default outside its kind, a deprecated
+ * id named in source outside the catalogue and the router's price list (it
+ * caught `railMatrixOverrides.json`'s Gemma 3 12B), a reader under Draw, a text
+ * model under Listen, a deck element group with no job id. Runs in
+ * `test:guards` (with the Worker's TypeScript loader, since it imports
+ * `modelUseCases.ts` and the rows `railMatrix.ts` builds); its rules have
+ * fixture tests in `frontend/test/model_coverage_check_3939.test.mjs`.
+ *
  * #3939 (D1478, task 5 of the model use-case plan, #3721 §6 PR 5) — the
  * model-coverage drift check. It fails the build when the job table that
  * decides which model each job runs (`services/ai/modelUseCases.ts`, task 0)
