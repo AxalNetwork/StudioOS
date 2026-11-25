@@ -2391,6 +2391,15 @@ const studioos = {
         // finished processed with what arrived (30 min), and runs that
         // stopped moving resumed from their stage (15 min, §5.9.3). Every
         // minute; each rule reads a bounded batch.
+        // D8525 (#8525): a venture's move whose after-step (runs ended, boards told) failed stays owed; retried
+        // here, a bounded batch every minute, until it succeeds.
+        try {
+          const { retryMoveFollowups } = await import('./services/agents/transfer');
+          const r = await retryMoveFollowups(env, now);
+          if (r.done || r.failed) cronSummary.push(`move followups done=${r.done} failed=${r.failed}`);
+        } catch (e) {
+          taskFailed('move followups', e instanceof Error ? e.message : 'error');
+        }
         try {
           const { sweepInterviewSessions } = await import('./services/sessionSweeper');
           const r = await sweepInterviewSessions(env, now);
