@@ -164,9 +164,8 @@ export async function startLocalWorker({ handle = null } = {}) {
       const address = links.get(token);
       links.delete(token);
       if (!address) return send(302, undefined, { location: '/login?magic_error=expired' });
-      let entry = accounts.get(address);
-      const newSignup = !entry;
-      if (newSignup) { harness.addAccount({ email: address, name: address.split('@')[0], role: 'exploring', onboarded: false }); entry = accounts.get(address); }
+      const newSignup = !accounts.has(address);
+      if (newSignup) harness.addAccount({ email: address, name: address.split('@')[0], role: 'exploring', onboarded: false });
       const session = `synthetic-session-${++seq}`;
       sessions.set(session, address);
       // A pre-created (`/register`) account is `exploring` and not onboarded; auth.ts treats it as existing, so /dashboard.
