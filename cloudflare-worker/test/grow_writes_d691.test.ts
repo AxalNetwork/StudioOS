@@ -24,6 +24,7 @@ import { durableCard } from '../src/services/growCycle.ts';
 import jobs from '../src/routes/jobs.ts';
 import { RECORD_ID } from '../src/services/records/owned.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -40,13 +41,11 @@ const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) =
 
 /** The baseline plus every post-cutoff migration, stopping before `upTo` when given. */
 function build(upTo?: string): DatabaseSync {
-  const db = new DatabaseSync(':memory:');
+  // #8437: each schema (the full one, or the one cut before `upTo`) is built once per run by
+  // _schema_once.mjs and copied into a fresh database here. Foreign keys are off only while the copy
+  // loads, then on, as the per-test build had them.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false }), upTo ? { below: migrationNumber(upTo) } : {});
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(BASELINE);
-  for (const name of newer) {
-    if (upTo && compareMigrations(name, upTo) >= 0) break;
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
   return db;
 }
 

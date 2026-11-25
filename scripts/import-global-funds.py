@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# D7325: offline validator and duplicate-safe SQL generator for primary-source fund-manager research; `--check` verifies the committed migration.
 """D7325: validate cited manager facts and render a repeatable worldwide seed.
 
 Offline only. Reads the pinned, committed catalogue migrations; never contacts

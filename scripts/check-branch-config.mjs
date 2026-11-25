@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * A branch registry entry that does not render a deployable Worker config: a
+ * route that is HQ's own host, storage ids that are HQ's, a missing Durable
+ * Object migration tag, a URL var still pointing at HQ, or a binding added to
+ * `[env.production]` that the rename rules do not cover.
+ *
  * Every branch registry entry renders a deployable Worker config.
  *
  * WHY THIS RUNS ON EVERY BUILD, not just when a branch is deployed. The

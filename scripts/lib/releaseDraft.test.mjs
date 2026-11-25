@@ -1,3 +1,7 @@
+/**
+ * `../release-draft.mjs`: the date counters, historical backfill, pagination,
+ * fixed published versions and idempotent draft updates.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

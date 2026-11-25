@@ -1,4 +1,10 @@
-/** D5535: read-only Cloudflare queue admission for a trusted production candidate. */
+/**
+ * D5535: prove the trusted candidate’s production producers, consumers and
+ * dead-letter queues exist in the release account before mutation.
+ *
+ * D5535: read-only Cloudflare queue admission for a trusted production
+ * candidate.
+ */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';

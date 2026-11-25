@@ -179,6 +179,8 @@ read -rp "Type the exact target DB name to confirm ('${TARGET_DB}'): " CONFIRM |
 # ---------- 4. Import, then compare ---------------------------------
 log "importing in chunks; a multi-GB export takes a while"
 dr_import_chunks "${TARGET_DB}" "${BACKUP}" "${MANIFEST}" "${TMP}"
+# D8531: the table sets first (missing and extra tables fail by name and kind), then the counts.
+dr_compare_tables "${TARGET_DB}" "${MANIFEST}" "${BACKUP}" "${TMP}"
 dr_compare_counts "${TARGET_DB}" "${MANIFEST}" "${TMP}"
 
 log "restore complete: ${LATEST_KEY} (sha256 ${BACKUP_SHA}) into ${TARGET_DB}"

@@ -30,9 +30,20 @@
  *
  * Every run goes through `skillLifecycle.runCase`, through `run()`, charged to
  * the admin who pressed Run. Neither prompts nor outputs are stored.
+ *
+ * WITHOUT A MODEL (`runCaseWithoutModel`, D8520, #8520). The checks of a case
+ * whose result no model decides, for pull-request CI
+ * (`scripts/check-skill-eval-cases.mjs`): the case's shape (`checkCase`), its
+ * output kind against the skill's, every read it feeds granted by the skill's
+ * tools, and, when the case carries known outputs (a #4588 scenario), the
+ * correct output passing `judge()` and each incorrect one failing on the
+ * assertion it targets. A case with known outputs is DETERMINISTIC; one
+ * without (a golden case) still has its shape and reads checked, and its
+ * judgement waits for a model run on the board.
  */
 import type { Env } from '../../types';
-import { EVALUATOR, caseSha, checkCase, runCase, type CaseExpect, type CaseInput, type DraftParts } from './skillLifecycle';
+import { EVALUATOR, caseSha, checkCase, judge, runCase, type CaseExpect, type CaseInput, type DraftParts } from './skillLifecycle';
+import { incorrectText, type Incorrect } from './skillScenarios';
 import { missingTools, type OutputKind } from './skills';
 import { versionOf, versionTools, toolLabel, type SkillRow, type VersionRow } from './skillLinks';
 import { skillRunRefusal } from './skillModeration';
@@ -90,6 +101,45 @@ export function versionParts(v: VersionRow): DraftParts {
     name: v.name, purpose: v.purpose, steps: parse<string[]>(v.steps_json, []), tools: versionTools(v),
     output_kind: v.output_kind as OutputKind, tags: [], roles: parse<string[]>(v.roles_json, []),
   };
+}
+
+// ── Without a model (D8520) ─────────────────────────────────────────────────
+
+/** A case's known outputs: one that must pass, and edits of it that must each fail on their target. */
+export type KnownOutputs = { correct: string; incorrect: Incorrect[] };
+export type ModelFreeCase = { name: string; input: unknown; expect: unknown; outputs?: KnownOutputs | null };
+export type ModelFreeCheck = 'case_invalid' | 'output_kind_mismatch' | 'read_not_granted' | 'correct_output_fails' | 'incorrect_output_invalid' | 'incorrect_output_not_caught';
+export type ModelFreeFailure = { check: ModelFreeCheck; reason: string };
+/** `deterministic`: the case carries known outputs, so its judgement needs no model. */
+export type ModelFreeResult = { case: string; deterministic: boolean; failures: ModelFreeFailure[] };
+
+/** A read key's source (`stripe.revenue` → `stripe`), which a `<source>.read` tool grants. */
+const sourceOf = (key: string) => key.split('.')[0];
+
+/** Every check of one case that no model decides; see the header. Pure. */
+export function runCaseWithoutModel(skill: { tools: readonly string[]; output_kind: string }, c: ModelFreeCase): ModelFreeResult {
+  const outputs = c.outputs && typeof c.outputs.correct === 'string' ? c.outputs : null;
+  const out: ModelFreeResult = { case: c.name, deterministic: !!outputs, failures: [] };
+  const fail = (check: ModelFreeCheck, reason: string) => out.failures.push({ check, reason });
+  const k = checkCase({ name: c.name, input: c.input, expect: c.expect });
+  if (!k.ok) { fail('case_invalid', k.message); return out; }
+  if (k.expect.output !== skill.output_kind) fail('output_kind_mismatch', `The case expects a ${k.expect.output}; the skill proposes a ${skill.output_kind}.`);
+  const granted = new Set(skill.tools.map(sourceOf));
+  for (const key of Object.keys(k.input.records)) {
+    if (!granted.has(sourceOf(key))) fail('read_not_granted', `The case feeds ${key}, and the skill's tools do not grant ${sourceOf(key)}.read.`);
+  }
+  if (!outputs) return out;
+  const good = judge(k.expect, outputs.correct, k.input);
+  if (good.result !== 'pass') fail('correct_output_fails', `The known-correct output fails: ${good.detail ?? 'no detail'}`);
+  for (const [i, bad] of (Array.isArray(outputs.incorrect) ? outputs.incorrect : []).entries()) {
+    let text: string;
+    try { text = incorrectText(outputs.correct, bad); } catch (e) { fail('incorrect_output_invalid', `Incorrect output ${i + 1}: ${(e as Error).message}`); continue; }
+    const r = judge(k.expect, text, k.input);
+    const target = String(bad.targets ?? '');
+    if (r.result !== 'fail') fail('incorrect_output_not_caught', `Incorrect output ${i + 1} passes; it should fail on ${target}.`);
+    else if (!(r.detail ?? '').toLowerCase().includes(target.toLowerCase())) fail('incorrect_output_not_caught', `Incorrect output ${i + 1} fails on "${r.detail}", not on ${target}.`);
+  }
+  return out;
 }
 
 // ── The run path ────────────────────────────────────────────────────────────

@@ -1,5 +1,28 @@
 #!/usr/bin/env node
 /**
+ * A client error report that never arrives, in three shapes that all run
+ * without throwing. **Reversed arguments** — `reportError(err, { where })`
+ * instead of `reportError('Scope:op', err)` — shipped at 27 call sites:
+ * `toEntry` reads `.name`/`.message`/`.stack` off the context object, so the
+ * entry carried no stack, a message of `"[object Object]"`, and the error's own
+ * text in `scope`, the one beaconed field with no redaction, which the Worker
+ * writes verbatim into a deployment log line. **A missing import** is worse and
+ * was undetectable: `reportError` is a Web API global, so
+ * `SpinoutLabLpWorkspacePage.jsx` called `window.reportError()` instead —
+ * reporting the scope string as an uncaught exception and discarding the real
+ * error — and `no-undef`, this repo's only ESLint rule, can never flag a
+ * legitimate global. The two need separate assertions, because the
+ * argument-order check *passes* the unimported call. Third, a scope `redact()`
+ * would rewrite (`auth:refresh` → `auth:[redacted]`) loses support the one
+ * string they grep by. Fourth and commonest, **no report at all**: 36 catches
+ * logged to the console and nowhere else, 33 of them across the eight Spin-Out
+ * Lab pages that never imported the helper — visible only to whoever already
+ * had that browser's devtools open, which is nobody. Every surviving
+ * `console.*` is allowlisted with a reason, the methods that reason covers,
+ * and, for the five error boundaries, a requirement that the file still calls
+ * `reportError` — so a boundary that quietly loses its report fails rather than
+ * resting on an entry that stopped being true.
+ *
  * The client error beacon reaches production, or it does not.
  *
  * `frontend/src/lib/log.js` is the SPA's only error reporter: it consoles,

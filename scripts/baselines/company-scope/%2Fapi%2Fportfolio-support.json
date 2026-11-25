@@ -1,0 +1,14 @@
+{
+  "GET /api/portfolio-support": {
+    "kind": "filter"
+  },
+  "GET /api/portfolio-support/:uid/history": {
+    "kind": "target"
+  },
+  "PATCH /api/portfolio-support/:uid": {
+    "kind": "target"
+  },
+  "POST /api/portfolio-support": {
+    "kind": "target"
+  }
+}

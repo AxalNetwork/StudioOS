@@ -27,15 +27,34 @@ building this change.
 
 ## Webhook payload version
 
-The billing handler reads `invoice.subscription` and `invoice.payment_intent`,
-which are the pre-Basil invoice shape (for example Stripe API `2024-06-20`).
-The actual webhook destination API version is **UNVERIFIED**: it is configured
-in Stripe, not pinned by `routes/billing.ts`. Its Stripe REST client also sends
-no `Stripe-Version` header. The connector's separate version header is not
-proof of the billing destination's version.
+Two Stripe API versions decide whether renewals work (D8510, #8510):
 
-The owner must inspect the billing webhook destination's configured API
-version in Stripe's Developers/Workbench event destinations and record that
-version on #1008. If the endpoint uses Basil (`2025-03-31.basil`) or later,
-verify/adapt the invoice relationship fields before changing or confirming the
-payload contract. Do not guess a live endpoint version from a fixture.
+- **The request version.** `stripeCall()` in `routes/billing.ts` sends
+  `Stripe-Version` from the constant `STRIPE_API_VERSION`. The constant is
+  **unset**, so no header is sent and every platform call runs on the
+  account's default version, which a dashboard upgrade can change. Account
+  default version: **UNVERIFIED** (owner to record on #8510).
+- **The webhook destination's version.** It is configured in Stripe, not in
+  the repository, and decides the shape of the events `/api/billing/webhook`
+  receives. Destination version: **UNVERIFIED** (owner to record on #8510).
+
+The renewal handlers (`invoice.paid`, `invoice.payment_failed`,
+`invoice.payment_action_required`) read an invoice's subscription from both
+shapes through `services/stripeInvoiceShape.ts`: `invoice.subscription`
+(pre-Basil, for example `2024-06-20`) and
+`invoice.parent.subscription_details.subscription` (Basil, `2025-03-31.basil`
+and later). `test/stripe_api_version_8510.test.ts` runs each event in both
+shapes through the real webhook. Before D8510 the Basil shape opened no alert,
+sent no renewal notice and repaired no row left at `incomplete`.
+
+Still pre-Basil only: the renewal **Pay** and **Confirm** actions read
+`invoice.payment_intent` from an API response (`billingRecovery.ts`,
+`billingAlerts.ts`). Basil removed that field, so setting
+`STRIPE_API_VERSION` to a Basil version must move those reads in the same
+change.
+
+To record the values: in Stripe Workbench, read the account's default API
+version and the API version of the event destination that points at
+`/api/billing/webhook`, and post both strings on #8510 (version strings only,
+never an endpoint id or key). Setting the constant is then a one-line change,
+reviewed with the fixtures. Do not guess either version from a fixture.

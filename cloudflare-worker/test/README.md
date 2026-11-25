@@ -405,7 +405,6 @@ catalogue version only in the fixture.
 | `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
 | `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
 
-`capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.
 `research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
 
 `research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
@@ -423,3 +422,6 @@ catalogue version only in the fixture.
 | `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
 
 `research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
+| `formation_rules_6704.test.ts` | D6704: deterministic fixture comparisons, append-only suggestions/choices/memos, flag and structure gates. |
+
+`capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.

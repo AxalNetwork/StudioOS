@@ -1,4 +1,10 @@
-/** D1430 (#3702): Advisor and Operating Partner price requests, offline only. */
+/**
+ * D1430: offline Advisor/Operating Partner price requests on `plan_group`;
+ * missing products are `product_needed`. Same private `--catalog` export and
+ * audited action format as the Founder/Investor planners.
+ *
+ * D1430 (#3702): Advisor and Operating Partner price requests, offline only.
+ */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { OWNER_PLAN_PRICES, pricesForMetadata } from './lib/ownerPlanPrices.mjs';

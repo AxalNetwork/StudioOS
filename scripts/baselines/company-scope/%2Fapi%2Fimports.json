@@ -1,0 +1,8 @@
+{
+  "POST /api/imports/angellist/commit": {
+    "kind": "target"
+  },
+  "POST /api/imports/deck": {
+    "kind": "target"
+  }
+}

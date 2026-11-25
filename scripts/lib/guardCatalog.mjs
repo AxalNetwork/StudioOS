@@ -1,3 +1,4 @@
+/** guard-commands.json: D5505: the single ordered guard command/flag catalog, preflight selection and prerequisite metadata. */
 /** D5505 (#5505): the ordered guard catalog consumed by CLI tools and wiring checks. */
 import { readFileSync } from 'node:fs';
 import { selectGuards } from './guardRunner.mjs';

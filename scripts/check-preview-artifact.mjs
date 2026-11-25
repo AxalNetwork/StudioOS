@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * D7146 (#7146): checks a pull request's `pr-preview-docs` artifact zip as
+ * untrusted data and unpacks it into an empty `docs/` for the trusted preview
+ * deploy, all or nothing: static file types only, file-count and size caps, no
+ * symlink, path traversal or configuration file. Run by
+ * `.github/workflows/pr-preview-deploy.yml`; rules in
+ * `lib/previewArtifact.mjs`, tested by `lib/previewArtifact.test.mjs`.
+ *
  * D7146 (#7146): check a pull request's preview build artifact and unpack it
  * for the trusted deploy. Run by `.github/workflows/pr-preview-deploy.yml`
  * from main's checkout, on the zip GitHub serves for the `pr-preview-docs`

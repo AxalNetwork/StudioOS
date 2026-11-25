@@ -1,4 +1,10 @@
-/** D7255 (#7255): exercise real descriptors, permissions, link replacement and mutation recovery in private fixtures. */
+/**
+ * D7255: private-file permissions, link refusals, descriptor-bound edits and
+ * CLI recovery regressions with disposable local fixtures.
+ *
+ * D7255 (#7255): exercise real descriptors, permissions, link replacement and
+ * mutation recovery in private fixtures.
+ */
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, watch, writeFileSync } from 'node:fs';

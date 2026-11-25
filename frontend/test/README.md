@@ -261,6 +261,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
 | `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
 | `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
@@ -271,7 +272,6 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
-`capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.
 `company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
 `portfolio_unavailable_6201.test.mjs` (D6201) keeps explicit route failure reasons on financial figures and reporting, and excludes failed reads from chase rows.
 `icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
@@ -289,3 +289,4 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
+`capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.
