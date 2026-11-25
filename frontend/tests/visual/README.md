@@ -61,6 +61,10 @@ and StudioHome at `/raise/pitch`).
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 | `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
 
+| `account_journey_8529.spec.mjs` | D8529 (#8529): the whole account journey at 1440 and 390 — company and projects, an emailed invitation read from the outbox, sign-in returning to it, one seat, the right settings after a reload, an old address resolving after a move, and a revoked seat |
+| `_account_journey_seed.ts` | What `server.ts` seeds for that spec: two onboarded accounts per width that own nothing yet; made-up names |
+| `_outbox.ts` | The server's outbox: the Worker's mailer runs, its two Gmail calls are answered by exact host and recorded, and `GET /__visual/outbox?to=` lists the messages; nothing is sent |
+
 | `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
 
 | `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |

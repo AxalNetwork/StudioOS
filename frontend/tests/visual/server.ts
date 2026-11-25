@@ -42,6 +42,8 @@ import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
 import { securityBackups, seedSecurity, SECURITY_ADMIN } from './_security_seed.ts';
 import { seedFundAdmin } from './_fund_admin_seed.ts';
+import { installOutbox } from './_outbox.ts';
+import { seedAccountJourney } from './_account_journey_seed.ts';
 import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -104,6 +106,9 @@ const env: any = {
   BACKUPS: securityBackups(NOW),
 };
 const ctx: any = { waitUntil() {}, passThroughOnException() {} };
+// D8529 (#8529): the mailer runs, and its messages land in this outbox (`_outbox.ts`), never in a real inbox.
+const mail = installOutbox();
+Object.assign(env, mail.env, { PUBLIC_BASE_URL: ORIGIN });
 const token = await createJWT(env, venture.founderUserId, `synthetic-${venture.founderUserId}@example.invalid`, 'founder');
 
 /** One card per structure: a heading in the first area, then a line of body text, a figure, a list. */
@@ -170,8 +175,11 @@ security.user = await worker.fetch(new Request(`${ORIGIN}/api/auth/me`, { header
 // D4812 (#4812, part 8): the fund Fund Admin's browser pass reads, as that Super Admin (`_fund_admin_seed.ts`).
 const fundAdmin = seedFundAdmin(db, NOW, SECURITY_ADMIN.id);
 
+// D8529 (#8529): two accounts per width for the account journey (`_account_journey_seed.ts`).
+const journey = await seedAccountJourney(db, env);
+
 const me = await api('GET', '/api/auth/me').catch(() => null);
-const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security, fundAdmin };
+const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security, fundAdmin, journey };
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
@@ -184,6 +192,12 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/__visual/manifest') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(manifest));
+      return;
+    }
+    if (url.pathname === '/__visual/outbox') {
+      const to = url.searchParams.get('to');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(mail.outbox.filter((m) => !to || m.to.toLowerCase().includes(to.toLowerCase()))));
       return;
     }
     if (url.pathname.startsWith('/api/')) {
