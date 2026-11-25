@@ -1,4 +1,6 @@
 # D7909: pinned opt-in pilot submission; ordinary CI never waits for this job.
+# D8626: a merge-queue candidate's ci.yml waits for `accepted`. Unset (disabled, refused, failed) means every
+# suite part runs hosted, so this workflow can delay a candidate by one job but never drop a part.
 name: Capacity pilot planner
 on:
   workflow_call:
@@ -15,22 +17,34 @@ on:
         description: Separately approved direct main workflow revision
         type: string
         required: true
+    outputs:
+      accepted:
+        description: "'true' only when the coordinator accepted this exact request (D8626)"
+        value: ${{ jobs.submit.outputs.accepted }}
+      request_id:
+        description: The accepted request's id, for the caller's log
+        value: ${{ jobs.submit.outputs.request_id }}
 permissions:
   contents: read
 jobs:
   submit:
     if: >-
-      github.repository == 'AxalNetwork/StudioOS' &&
-      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-      vars.CI_CAPACITY_ENABLED == 'true'
+      github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/pr-') &&
+      vars.CI_CAPACITY_QUEUE_ROUTING == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       actions: read
       id-token: write
+    outputs:
+      accepted: ${{ steps.submit.outputs.accepted }}
+      request_id: ${{ steps.submit.outputs.request_id }}
     env:
       CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
+      CI_CAPACITY_QUEUE_ROUTING: ${{ vars.CI_CAPACITY_QUEUE_ROUTING }}
       CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
       CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
       CAPACITY_SUBMISSION: ${{ inputs.submission }}
@@ -94,6 +108,10 @@ jobs:
           artifact-ids: ${{ steps.metadata.outputs.artifact_id }}
           path: ${{ runner.temp }}/capacity-plan
       - name: Submit once without waiting for external execution
+        id: submit
+        # D8626: in the queue a refusal (bound, outage, identity) must not fail the candidate's run: `accepted` stays
+        # unset and its parts run hosted. A main push keeps its visible failure.
+        continue-on-error: ${{ github.event_name == 'merge_group' }}
         env:
           CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
         run: node control/scripts/ci/capacity-planner.mjs

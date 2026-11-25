@@ -88,6 +88,10 @@ export const EXCEPTIONS = [
     workflow: 'pr-preview-deploy.yml', job: 'delete', allow: ['deploy-trigger'], expires: '2027-01-31', owner: '#8069',
     reason: 'D7146: the same workflow_run workflow deletes the preview when its pull request closes.',
   },
+  {
+    workflow: 'ci.yml', job: 'capacity-route', allow: ['id-token'], expires: '2027-01-31', owner: '#8626',
+    reason: 'D8626: the pinned capacity planner authenticates a merge-queue submission with GitHub OIDC; it runs only under queue routing, from a reviewed main commit, never on a pull request.',
+  },
 ];
 
 /** Every kind a violation can have, with the sentence the table prints. */

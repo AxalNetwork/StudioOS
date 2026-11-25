@@ -25,7 +25,11 @@ const ci = parse(read('.github/workflows/ci.yml'));
 const suite = ci.jobs.suite;
 
 test('the suite needs no plan job, and reads nothing a plan job writes', () => {
-  assert.deepEqual(suite.needs, ['verified']);
+  // D8626: `capacity-route` is the only other need. It is a merge-queue job skipped before it starts unless queue
+  // routing is on, so a pull request or a push never waits for it; a queue candidate waits only when it is routed.
+  assert.deepEqual(suite.needs, ['verified', 'capacity-route']);
+  assert.match(ci.jobs['capacity-route'].if, /^\$\{\{ !cancelled\(\) && github\.event_name == 'merge_group' && .*vars\.CI_CAPACITY_QUEUE_ROUTING == 'true'/);
+  assert.match(ci.jobs.route.if, /^\$\{\{ github\.event_name == 'merge_group' && .*vars\.CI_CAPACITY_QUEUE_ROUTING == 'true' \}\}$/);
   const text = JSON.stringify(suite);
   assert.doesNotMatch(text, /needs\.plan/);
   assert.equal(suite.steps.filter((step) => step.with?.name === 'suite-plan').length, 0, 'no step downloads the plan artifact');
@@ -79,6 +83,8 @@ test('the plan job is still there for what reads it, and the full-suite gate is 
   assert.equal(plan.needs, 'verified');
   assert.ok(plan.steps.some((step) => step.with?.name === 'suite-plan' && String(step.uses).startsWith('actions/upload-artifact@')), 'the artifact the capacity pilot reads');
   assert.ok(plan.steps.some((step) => step.id === 'capacity'), 'the pilot submission step');
-  assert.deepEqual(ci.jobs.gate.needs, ['verified', 'plan', 'suite']);
+  // D8626: the gate also reads `capacity-route`, only to refuse a routed candidate when main does not require
+  // ci-capacity/full-suite. Its pass rule for every other run is the one below, unchanged.
+  assert.deepEqual(ci.jobs.gate.needs, ['verified', 'plan', 'capacity-route', 'suite']);
   assert.equal(ci.jobs['capacity-submit'].needs, 'plan');
 });

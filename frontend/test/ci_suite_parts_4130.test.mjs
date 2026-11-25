@@ -83,7 +83,8 @@ test('both workflow matrices consume only generated names and the gate requires 
   assert.equal(ci.split(macTimeout).length, 2, 'exactly one bounded Mac-part timeout');
   assert.equal((ci.replace(macTimeout, '').match(/(?:frontend|worker)-\d+-of-\d+/g) || []).length, sharded, 'no additional part lists outside the queue matrix');
   assert.equal(new Set(JSON.parse(literal)).size, plan.parts.length, 'the literal list has no repeated part');
-  assert.match(ci, /needs: \[verified, plan, suite\]/);
+  // D8626: `capacity-route` joins the gate's needs for the routed-candidate refusal; the pass rule is unchanged.
+  assert.match(ci, /needs: \[verified, plan, capacity-route, suite\]/);
   assert.match(ci, /if \{ \{ \[ "\$PLAN" = "success" \] && \[ "\$EVENT" != "merge_group" \]; \} \|\| \{ \[ "\$PLAN" = "skipped" \] && \[ "\$EVENT" = "merge_group" \]; \}; \} && \[ "\$SUITE" = "success" \]; then/);
   assert.match(ci, /  plan:\n    name: suite plan\n    needs: verified\n    if: \$\{\{ !cancelled\(\) && needs\.verified\.outputs\.run == '' && github\.event_name != 'merge_group' \}\}\n/);
   assert.match(ci, /--plan-file suite-plan\.json/);
