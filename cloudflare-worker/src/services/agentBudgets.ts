@@ -146,15 +146,44 @@ export async function workspaceUsage(env: DbEnv, s: ScopeKey, now = new Date()) 
   };
 }
 
-/** The task's caps (NULL = the agent's) and what its runs have settled. */
+/**
+ * D8081 (#8081): the tokens a task's tree holds. Its own settled tokens, plus each child it handed off
+ * (an accepted `agent_handoffs` step whose `from_task_id` is this task): while the child's task is open
+ * it holds its share (its `budget_tokens_cap`) or what its own tree used if that is more; once the
+ * child's task is done or cancelled it holds only what it used, so the unused share returns to the parent.
+ * Derived from settled rows, never written, so a retried step or a second settle cannot count twice.
+ */
+export async function taskTreeTokens(env: DbEnv, taskId: number, depth = 0): Promise<number> {
+  const own = await env.DB.prepare('SELECT SUM(tokens) AS tokens FROM agent_budget_settlements WHERE task_id = ?').bind(taskId).first<{ tokens: number | null }>();
+  return Number(own?.tokens ?? 0) + await childHoldTokens(env, taskId, depth);
+}
+
+/** D8081: what this task's children hold against it (see `taskTreeTokens`). A chain is at most 3 deep. */
+export async function childHoldTokens(env: DbEnv, taskId: number, depth = 0): Promise<number> {
+  if (depth >= 4) return 0;
+  const children = (await env.DB.prepare(
+    `SELECT t.id, t.status, t.budget_tokens_cap FROM agent_handoffs h JOIN scope_tasks t ON t.id = h.created_task_id
+      WHERE h.from_task_id = ? AND h.status = 'accepted' AND h.created_task_id IS NOT NULL`,
+  ).bind(taskId).all<{ id: number; status: string; budget_tokens_cap: number | null }>()).results ?? [];
+  let held = 0;
+  for (const c of children) {
+    const used = await taskTreeTokens(env, c.id, depth + 1);
+    const open = c.status !== 'done' && c.status !== 'cancelled';
+    held += open ? Math.max(Number(c.budget_tokens_cap ?? 0), used) : used;
+  }
+  return held;
+}
+
+/** The task's caps (NULL = the agent's) and what its runs have settled, with its children's holds (D8081). */
 async function taskBudget(env: DbEnv, taskId: number) {
-  const [t, used] = await Promise.all([
+  const [t, used, tokens] = await Promise.all([
     env.DB.prepare('SELECT budget_tokens_cap, budget_minutes_cap, budget_retries_cap FROM scope_tasks WHERE id = ?').bind(taskId).first<Record<string, unknown>>(),
-    env.DB.prepare('SELECT SUM(tokens) AS tokens, SUM(ms) AS ms FROM agent_budget_settlements WHERE task_id = ?').bind(taskId).first<{ tokens: number | null; ms: number | null }>(),
+    env.DB.prepare('SELECT SUM(ms) AS ms FROM agent_budget_settlements WHERE task_id = ?').bind(taskId).first<{ ms: number | null }>(),
+    taskTreeTokens(env, taskId),
   ]);
   return {
     tokens_cap: num(t?.budget_tokens_cap), minutes_cap: num(t?.budget_minutes_cap), retries_cap: num(t?.budget_retries_cap),
-    tokens: Number(used?.tokens ?? 0), ms: Number(used?.ms ?? 0),
+    tokens, ms: Number(used?.ms ?? 0),
   };
 }
 

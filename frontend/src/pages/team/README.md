@@ -75,7 +75,7 @@ board → file map and what waits for which issue are in
 | `EngineParts.jsx` | D1531: `useEngineRead` and the pieces the engine screens share (Reading…, could not be read, chips, sentences, progress). |
 | `GoalsView.jsx` | Goals (TM10a, TM10a2, TM10e) and one goal's plan with the planner (TM10b, TM10c, TM10d). Work's Goals view and the company Team page's Goals section. |
 | `SuggestAgentsSheet.jsx` | An agent for this goal (TM15), and TM18c's Suggest a company team: one `addAgent` per ticked row, each result in words. |
-| `HandoffTrail.jsx` | The handoff trail (TM13): chains, depth, "task created", refused loops. |
+| `HandoffTrail.jsx` | The handoff trail (TM13): chains, depth, each step's role word (D8081: planner, worker, reviewer), "task created", refused loops. |
 | `AgentEvaluation.jsx` | How agents are doing (TM14), 30 or 90 days, and the skills' golden cases (TM14b). |
 | `MoveNotices.jsx` | A project's move as each side sees it (TM18a–TM18c); Dismiss is kept in this browser. |
 | `EngineControl.jsx` | The team's engine control (TM19a), the engine banner (TM19b) and Start this task with its quote (TM19f). |
