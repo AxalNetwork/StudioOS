@@ -266,6 +266,28 @@ whichever environment you didn't edit. `scripts/check-wrangler-binding-parity.mj
 enforces this and runs inside `npm run test:guards`, so a green `test:drift`
 already covers it.
 
+### 2.3 AI gateways and agent settings agree across the tables (D8508, #8508)
+
+The AI Gateway slugs (`CF_AI_GATEWAY_SLUG_*`) and the agent settings
+(`AGENT_*`, `OPENAI_MODEL`, `TEAM_AGENTS_ENABLED`) are plain variables, so they
+appear in `[vars]`, `[env.production.vars]` and `[env.preview.vars]`.
+`scripts/check-ai-gateways.mjs` reads the three tables and the Worker's source,
+and fails, naming the file, the table and the key, when:
+
+- a value differs from `[env.production.vars]` and the script's `ALLOWED` list
+  does not name that table, key and exact value with a reason;
+- a path the code refuses without a gateway is switched on with an empty or
+  malformed slug (an engine run without `AGENT_AI_GATEWAY`; the provider
+  gateway without its own `CF_AI_GATEWAY_SLUG_PROVIDERS`);
+- an agent account's model has no price (`PROVIDER_MODELS`,
+  `GATEWAY_TEXT_MODELS` or `AGENT_OPENAI_RATES`).
+
+It runs in `npm run test:guards` and as the release preflight step "Check AI
+gateway and agent settings". It reads files only: whether each gateway exists
+on the account and whether `AGENT_AI_GATEWAY_TOKEN` is bound is the live layer,
+which waits for the owner's decision on read access in #8508. To accept a new
+difference, add an `ALLOWED` entry with its reason in the same PR.
+
 ---
 
 ## 3. Capture a rollback point first

@@ -1,0 +1,35 @@
+{
+  "GET /api/fund-fees/:fundId": {
+    "kind": "target"
+  },
+  "GET /api/fund-fees/:fundId/periods/:quarter": {
+    "kind": "target"
+  },
+  "GET /api/fund-fees/:fundId/periods/:quarter/statements/:lpId": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/net-invested": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/offsets": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/periods/:quarter/funding-call": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/periods/:quarter/issue": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/periods/:quarter/preview": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/terms": {
+    "kind": "target"
+  },
+  "POST /api/fund-fees/:fundId/terms/:termsUid/confirm": {
+    "kind": "target"
+  },
+  "PUT /api/fund-fees/:fundId/lps/:lpId/admission": {
+    "kind": "target"
+  }
+}

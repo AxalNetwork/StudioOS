@@ -185,6 +185,13 @@ jobs:
           overwrite: true
           retention-days: 3
 
+      # D8508 (#8508) — layer 1, static: the AI gateway slugs and agent
+      # settings agree across wrangler.toml's tables (or carry an allowlisted
+      # reason), a switched-on path has its gateway, and each agent account's
+      # model is priced. Reads files only: no credential, no Cloudflare call.
+      - name: Check AI gateway and agent settings
+        run: node scripts/check-ai-gateways.mjs
+
       - name: Verify required production queues
         id: queues
         env:

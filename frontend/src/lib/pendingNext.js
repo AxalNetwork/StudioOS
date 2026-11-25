@@ -85,6 +85,11 @@ function readPendingNext() {
 let consumed = false;
 let value = null;
 let redirected = false;
+// D8537 (#8537): the history entry (React Router's `location.key`) the redirect was issued from. React Router runs a
+// `<Navigate>` as a transition, so an urgent re-render can still draw the page being left (a `/me` answer landing on
+// `/studio` after the email link). Read there, a spent flag let that page's own guard redirect too, and its redirect
+// won: a new account that chose a plan was sent to `/exploring` instead of the plan's checkout.
+let redirectedFrom = null;
 
 // Reads (and clears from storage) the pending next path. Cached in module
 // state so StrictMode double-renders and later RequireAuth mounts within
@@ -102,12 +107,17 @@ export function consumePendingNextOnce() {
 // without this flag a target outside RequireAuth (unlikely but possible)
 // would re-trigger the bounce every time the user entered a protected
 // route.
-export function markPendingNextRedirected() {
+export function markPendingNextRedirected(fromKey = null) {
   redirected = true;
+  redirectedFrom = fromKey;
 }
 
-export function pendingNextRedirected() {
-  return redirected;
+/**
+ * Whether the redirect has been issued. Not yet on the entry it was issued from (`hereKey`): a re-render there, before
+ * the navigation lands, keeps redirecting to the target. Any other entry, the target or a later page, reads true.
+ */
+export function pendingNextRedirected(hereKey = null) {
+  return redirected && !(redirectedFrom !== null && hereKey === redirectedFrom);
 }
 
 // If this page load already landed ON the stored target — e.g. the worker's

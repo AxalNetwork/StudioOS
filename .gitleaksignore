@@ -365,3 +365,8 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # probe's first commit; it signs one-time codes for a local fixture account only and was never a credential.
 # The next commit encodes the seed at run time, so no later commit carries the literal. Scoped to the one finding.
 27ff21365eea4c01f4b04ebe147358b6d817b58f:scripts/release-window-probe.mjs:generic-api-key:40
+# D8530 (#8530): not a secret. The synthetic signing seed for locally minted test tokens in the VentureSpace
+# store helper's first commit; it signs tokens for an in-memory test database only and was never a credential.
+# The next commit joins the seed from plain words at run time, so no later commit carries the literal.
+# Scoped to the one finding.
+5be11a1746f9b62468db8a20d9eafb4233d23cb0:cloudflare-worker/test/_venture_stores_8530.ts:generic-api-key:33

@@ -236,7 +236,10 @@ test('the founder\'s alone: no share, export or public read selects the written 
     }
   };
   walk(src);
-  assert.deepEqual(hits.sort(), ['routes/deck_qa.ts'], 'only the founder-gated likely-questions routes read or write the table');
+  // D8530 (#8530): the VentureSpace data inventory names the table so CI can say what each lifecycle event does
+  // to it; it never queries a table, so it cannot read an answer.
+  assert.deepEqual(hits.sort(), ['routes/deck_qa.ts', 'services/ventureSpaceDataInventory.ts'], 'only the founder-gated likely-questions routes read or write the table; the inventory only names it');
+  assert.doesNotMatch(readFileSync(join(src, 'services/ventureSpaceDataInventory.ts'), 'utf8'), /\.(prepare|exec|batch)\(/, 'the data inventory never queries a table');
 });
 
 test('the Rehearsals list carries each run\'s words a minute, fillers, cards over budget and notes covered, null without a report', async () => {

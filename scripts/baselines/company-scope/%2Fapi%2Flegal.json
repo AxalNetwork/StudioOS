@@ -1,0 +1,14 @@
+{
+  "POST /api/legal/cofounder-agreement": {
+    "kind": "target"
+  },
+  "POST /api/legal/incorporate/checkout": {
+    "kind": "target"
+  },
+  "POST /api/legal/incorporate/wizard": {
+    "kind": "target"
+  },
+  "POST /api/legal/incorporation/order": {
+    "kind": "target"
+  }
+}
