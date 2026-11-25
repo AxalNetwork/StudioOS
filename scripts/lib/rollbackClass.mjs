@@ -1,3 +1,9 @@
+// D7151 (#7151): a release's rollback class — `auto`, `auto-additive` or
+// `manual` — from its pending D1 statements (each with file and line), its
+// Durable Object migration tags against the live one, and the live version's
+// bindings it drops; unknown is manual. Owned by
+// `../release-rollback-class.mjs`; tested in `rollbackClass.test.mjs`.
+//
 // D7151 (#7151): may this release be rolled back automatically?
 //
 // A Worker rollback reverts the code and never D1 (DEPLOY.md §3), so after a

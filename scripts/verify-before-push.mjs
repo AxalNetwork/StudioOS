@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #6326: the local checks before a push for the `verify-before-push` skill.
+ * `plan` lists the steps for the changed files in CI's order (generated, build,
+ * guards, static checks, migration and LFS gates, affected tests, `test:drift`
+ * parts); `run --only/--from` runs them with a timeout per step and one log
+ * each, killing the process group on timeout; `summary` prints the results so
+ * far, marks those from an older tree STALE, and gives a STATUS `tests:` line.
+ * Advisory (D5610); `--full` is everything `test:drift` runs. Never pushes,
+ * merges or calls GitHub.
+ *
  * #6326: the local checks before a push, for the `verify-before-push` skill,
  * in steps that each finish inside one session.
  *

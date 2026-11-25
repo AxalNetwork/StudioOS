@@ -1,0 +1,32 @@
+{
+  "DELETE /api/revenue/projects/:projectId/entries/:uid": {
+    "kind": "target"
+  },
+  "GET /api/revenue/projects/:projectId/entries": {
+    "kind": "target"
+  },
+  "GET /api/revenue/projects/:projectId/mercury-credits": {
+    "kind": "target"
+  },
+  "GET /api/revenue/projects/:projectId/mercury-spend": {
+    "kind": "target"
+  },
+  "PATCH /api/revenue/projects/:projectId/entries/:uid": {
+    "kind": "target"
+  },
+  "POST /api/revenue/projects/:projectId/entries": {
+    "kind": "target"
+  },
+  "POST /api/revenue/projects/:projectId/entries/import": {
+    "kind": "target"
+  },
+  "POST /api/revenue/projects/:projectId/entries/import-mercury": {
+    "kind": "target"
+  },
+  "POST /api/revenue/projects/:projectId/entries/import-stripe": {
+    "kind": "target"
+  },
+  "POST /api/revenue/projects/:projectId/mercury-spend/snapshot": {
+    "kind": "target"
+  }
+}

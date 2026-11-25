@@ -1,4 +1,7 @@
 /**
+ * D6464: classify flaky tests from queue logs, merge and expire the list, and
+ * decide a merge_group retry.
+ *
  * D6464 (#6464): the known-flaky test list and the one rule that may retry.
  *
  * Pure functions only: no network, no clock, no file system. The collector

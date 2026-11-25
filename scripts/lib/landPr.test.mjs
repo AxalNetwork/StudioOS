@@ -1,3 +1,8 @@
+/**
+ * #6326: `landPr.mjs`: the landing log and summary parsers, rows 3 and 6 and
+ * #5500, the merge queue rules, required checks on the exact head, and
+ * `decide`'s gates in order.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {

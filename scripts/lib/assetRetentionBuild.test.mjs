@@ -1,3 +1,7 @@
+/**
+ * D1364: real build-wrapper restore, protected output cap and total static-file
+ * limit with synthetic bundler output.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

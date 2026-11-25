@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * A migration reading a column that only SOME definitions of a multiply-defined
+ * table have — D1 keeps one table per name, so it cannot apply unless that
+ * shape happened to win. Exceptions live in
+ * `migration-column-shapes-baseline.json`.
+ *
  * Fails the build when a migration reads a column that only SOME definitions of
  * a multiply-defined table have.
  *

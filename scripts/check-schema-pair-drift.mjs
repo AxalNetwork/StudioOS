@@ -1,5 +1,31 @@
 #!/usr/bin/env node
 /**
+ * Two definitions of one table that stop declaring the same columns. A table
+ * here is often created twice — once by a migration or the baseline, once by a
+ * runtime `CREATE TABLE IF NOT EXISTS` in a route so a database that missed the
+ * migration heals itself — and D1 holds one table per name, so whichever runs
+ * first wins and a column only the loser declares never exists. It has shipped
+ * three times: `metrics_snapshots` twice (#183, #202), leaving the
+ * `traction_review` queue job dead against the losing shape, and
+ * `partner_profiles` (D187), where
+ * `cloudflare-worker/src/routes/profiling.ts`'s bootstrap beat migration 028
+ * and twenty-six partner accounts were told in chat to accept an invitation
+ * that did not exist. **Neither sibling can see it**: `check-sqlite-columns`
+ * UNIONS every definition, deliberately, because it cannot know which is live,
+ * and `check-sqlite-table-collisions` fires only on the mutually fatal subset
+ * and says in its own header that definitions which merely differ are usually
+ * fine — every one of the three shipped defects lived between those two. Each
+ * definition is built in real `node:sqlite` **with its own side's `ALTER … ADD
+ * COLUMN`s applied**, resolving the fifteen `ADD COLUMN ${col}` loops, because
+ * a CREATE-only comparison reports `partner_profiles` — a case D187 closed — as
+ * divergent and starts with twenty-one false findings. Column NAMES only:
+ * measured across all 267 pairs, the five type differences are every one of
+ * them `TIMESTAMP` against `TEXT` on a date column, which store the same bytes
+ * under SQLite's affinity rules, and the fourteen NOT NULL / DEFAULT / PK
+ * differences are the fatality question its sibling owns. Exceptions live in
+ * `schema-pair-drift-baseline.json` with a reviewed reason each, and the gate
+ * fails on a stale entry as well as a new one.
+ *
  * Fails the build when two definitions of one table stop declaring the same
  * columns.
  *

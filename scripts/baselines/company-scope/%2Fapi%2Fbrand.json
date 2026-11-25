@@ -1,0 +1,59 @@
+{
+  "DELETE /api/brand/landing/pages/:id": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/by-project/:pid": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/by-project/:pid/page-slug-available": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/by-project/:pid/pages": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/by-project/:pid/preview-url": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/by-project/:pid/waitlist": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/pages/:id": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/pages/:id/preview-url": {
+    "kind": "target"
+  },
+  "GET /api/brand/landing/pages/:id/public-url": {
+    "kind": "target"
+  },
+  "GET /api/brand/site/by-project/:pid": {
+    "kind": "target"
+  },
+  "POST /api/brand/custom-templates": {
+    "kind": "target"
+  },
+  "POST /api/brand/landing/by-project/:pid/pages": {
+    "kind": "target"
+  },
+  "POST /api/brand/landing/by-project/:pid/publish": {
+    "kind": "target"
+  },
+  "POST /api/brand/landing/pages/:id/archive": {
+    "kind": "target"
+  },
+  "POST /api/brand/landing/pages/:id/publish": {
+    "kind": "target"
+  },
+  "PUT /api/brand/landing/by-project/:pid": {
+    "kind": "target"
+  },
+  "PUT /api/brand/landing/pages/:id": {
+    "kind": "target"
+  },
+  "PUT /api/brand/landing/pages/:id/address": {
+    "kind": "target"
+  },
+  "PUT /api/brand/site/by-project/:pid": {
+    "kind": "target"
+  }
+}

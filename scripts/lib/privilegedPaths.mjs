@@ -1,3 +1,4 @@
+/** D8067: re-exports the one privileged-path list from `merge-control/src/lib/classify.mjs` and derives the generated CODEOWNERS block (`codeownersBlock`, `withCodeownersBlock`) and the ruleset's fnmatch file-path condition (`rulesetPaths`). */
 /**
  * D8067 (#8067): the privileged paths, for the gates that are not code. The list itself is
  * `merge-control/src/lib/classify.mjs` PRIVILEGED_PATHS: that file must stay import-free for the Merge Control

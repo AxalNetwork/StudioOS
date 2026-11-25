@@ -1724,12 +1724,14 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const pendingNext = user && !oauthBootstrapping ? consumePendingNextOnce() : null;
   const pendingTargetPath = pendingNext ? pendingNext.split(/[?#]/)[0] : null;
   const atPendingNext = !!(pendingTargetPath && location.pathname === pendingTargetPath);
-  const pendingRedirect = !!(pendingNext && !atPendingNext && !pendingNextRedirected());
+  // D8537: keyed on the history entry, so a re-render of the page being left
+  // (before the transition lands) still redirects instead of its own guard.
+  const pendingRedirect = !!(pendingNext && !atPendingNext && !pendingNextRedirected(location.key));
   useEffect(() => {
     // Marked post-commit so StrictMode's double render can't half-consume
     // the redirect (both renders return the same <Navigate>).
-    if (pendingRedirect) markPendingNextRedirected();
-  }, [pendingRedirect]);
+    if (pendingRedirect) markPendingNextRedirected(location.key);
+  }, [pendingRedirect, location.key]);
 
   // #4579 (D4579): a destination that needs a finished account (Grow) does not
   // exempt the visitor from setup the way an invitation does. The setup gates

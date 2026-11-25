@@ -1,3 +1,4 @@
+/** #5976: Generate or check the workflow trigger and required-check inventory from the committed Actions YAML. */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';

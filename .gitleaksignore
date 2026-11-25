@@ -361,3 +361,8 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # SAME_WRITE, a plain constant, so no later commit carries it. Scoped to the
 # one finding.
 4e9cfd8335c37678ad99e0f6e236abb6d2d6c508:frontend/test/company_suggested_filings_8259.test.mjs:generic-api-key:87
+# D8530 (#8530): not a secret. The synthetic signing seed for locally minted test tokens in the VentureSpace
+# store helper's first commit; it signs tokens for an in-memory test database only and was never a credential.
+# The next commit joins the seed from plain words at run time, so no later commit carries the literal.
+# Scoped to the one finding.
+5be11a1746f9b62468db8a20d9eafb4233d23cb0:cloudflare-worker/test/_venture_stores_8530.ts:generic-api-key:33

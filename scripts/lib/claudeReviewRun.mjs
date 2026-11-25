@@ -1,4 +1,9 @@
 /**
+ * The whole review run with git, the GitHub API and the Anthropic client handed
+ * in, so a missing secret, a fork, an empty or oversized diff, a repeat, a
+ * budget refusal, an API failure, a refusal and a malformed answer are all
+ * tested with fakes.
+ *
  * The advisory review, start to finish, with every effect handed in.
  *
  * `../claude-review/review.mjs` supplies the real git, GitHub API and

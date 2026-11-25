@@ -1,0 +1,26 @@
+{
+  "GET /api/engagements": {
+    "kind": "filter"
+  },
+  "GET /api/engagements/:id": {
+    "kind": "target"
+  },
+  "GET /api/engagements/:id/reviews": {
+    "kind": "target"
+  },
+  "POST /api/engagements/:id/cancel": {
+    "kind": "target"
+  },
+  "POST /api/engagements/:id/deliver": {
+    "kind": "target"
+  },
+  "POST /api/engagements/:id/invoice": {
+    "kind": "target"
+  },
+  "POST /api/engagements/:id/reviews": {
+    "kind": "target"
+  },
+  "POST /api/engagements/:id/start": {
+    "kind": "target"
+  }
+}

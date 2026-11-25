@@ -1,3 +1,6 @@
+// The migration ledger's shape, the baseline cutoff, and what to do with each
+// file — apply, mark, or skip. Owned by `../migrate-d1.mjs`.
+//
 // Task #9 — Pure planning logic for the D1 migration runner.
 //
 // Kept free of any I/O (no wrangler, no fs side effects beyond reading the

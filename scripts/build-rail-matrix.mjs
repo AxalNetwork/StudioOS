@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 /**
+ * D764 (#2089, not an importer): writes
+ * `cloudflare-worker/src/services/ai/railMatrix.json`, one row per canvas page
+ * (its kind and router task; since #4313 part 3 no model list, as each page
+ * lists its kind's job), from the owner's canvas tables
+ * (`design/incoming/airail-every-page-data/canvas.json`) and
+ * `lib/railMatrixOverrides.json`. Since D764 PR 3 it also writes one row per
+ * option registered in `frontend/src/lib/railOptions/`, with its kind's models.
+ * It refuses inputs that break D720 §5's rules, held on each canvas kind's list
+ * and every option row. `--check` exits 1 when the committed file is not its
+ * output; `rail_matrix_d764.test.ts` runs the same comparison.
+ *
  * D764 (#2089) — the Worker's model matrix, generated from the owner's canvas.
  *
  *   node scripts/build-rail-matrix.mjs           write the matrix
@@ -40,6 +51,12 @@
  * prices, every model fits its kind's shape, every paid-only default has a
  * non-paid alternative of the same shape, and member-visible strings follow
  * the voice rule.
+ *
+ * `railMatrixOverrides.json`: D764 (#2089): what `../build-rail-matrix.mjs`
+ * adds to the owner's canvas: each canvas model's Workers AI id and
+ * capabilities, each kind's shape, the kinds that read `axal-search`, and the
+ * page rows the canvas has no board for (`Admin · Home`). Edit it, then rerun
+ * the script.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

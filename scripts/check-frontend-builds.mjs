@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * A frontend that does not build. Every other check here reads the source as
+ * TEXT, so a parse error passes the whole suite and surfaces one push later in
+ * CI. Runs the real bundler into a temp directory — never `docs/`.
+ *
  * Fails the build when the frontend does not build.
  *
  * WHY THIS EXISTS, and it is not hypothetical. `npm run test:drift` is the gate

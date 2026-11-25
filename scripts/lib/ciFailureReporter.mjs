@@ -1,3 +1,4 @@
+/** D5502: node:test JSONL evidence beside TAP without assertion values or stacks. */
 /** D5502 (#5502): bounded structured node:test evidence beside TAP; no assertion values or stack traces. */
 import { relative, isAbsolute } from 'node:path';
 import { safeFile } from './ciFailures.mjs';
