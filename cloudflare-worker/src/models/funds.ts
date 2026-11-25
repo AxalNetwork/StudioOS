@@ -143,16 +143,17 @@ export const LPs = {
     // `lp.*` already selects them. Selecting the users columns under the same
     // bare names made the later duplicate win, so every LP row with a NULL
     // user_id came back with name/email NULL — exactly the unlinked LPs whose
-    // only identity IS the operator-entered pair. The account's values still
-    // take precedence when the row is linked.
+    // only identity IS the operator-entered pair. The account’s values
+    // supply a fallback when the fund has no contact correction (D6237).
     //
+    // D6237: a fund-register correction does not rewrite the linked account.
     // `kyc_status` (D371) is the linked account's; an LP with no account has
     // none, and reads NULL rather than a status nobody recorded. The LP page's
     // KYC column and "KYC pending" filter read it, and got nothing before.
     return env.DB.prepare(
       `SELECT lp.*,
-              COALESCE(u.email, lp.email) AS email,
-              COALESCE(u.name,  lp.name)  AS name,
+              COALESCE(lp.email, u.email) AS email,
+              COALESCE(lp.name,  u.name)  AS name,
               u.id AS account_user_id,
               u.kyc_status AS kyc_status
          FROM limited_partners lp

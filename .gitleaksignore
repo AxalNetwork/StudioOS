@@ -348,6 +348,12 @@ ccc09e1c70105242b457a98dac385fd9e5d349f8:cloudflare-worker/test/research_company
 # The same string, quoted in the comment above as first written (commit d3fc770); the
 # next commit rewords the comment, so no later commit carries it. Scoped to that line.
 d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
+
+# D6237: the first LP-maintenance fixture used a made-up local signing seed,
+# solely for tokens checked against its own synthetic SQLite environment.
+# The fixture now imports the shared unit-test seed. Keep the already-pushed
+# history intact and identify only this one finding, following D334/D482.
+18fd9d91c305f4aec554c5dcef42594f9c95642d:cloudflare-worker/test/fund_lp_maintenance_6237.test.ts:generic-api-key:15
 # D7745 (#7745): the research import rehearsal test's first commit passed two
 # invented run labels for a local SQLite rehearsal as literal run identifiers;
 # generic-api-key read them as secrets. They were never credentials. The next
