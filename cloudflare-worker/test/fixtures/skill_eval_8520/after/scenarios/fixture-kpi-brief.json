@@ -1,0 +1,25 @@
+{
+  "skill": "fixture-kpi-brief",
+  "pack_revision": 1,
+  "note": "D8520 fixture. Every record is made up.",
+  "scenarios": [
+    {
+      "case_id": "fixture-kpi-brief-revenue",
+      "revision": 1,
+      "name": "Fixture KPI brief: revenue and one missing KPI",
+      "covers": "a recorded KPI, a missing KPI and recorded revenue",
+      "input": { "records": {
+        "grow.records": { "kpis": [ { "name": "Active sites", "value": 120 }, { "name": "Churned sites", "value": null } ] },
+        "stripe.revenue": { "month": "2026-10", "amount": 41000, "currency": "USD" }
+      } },
+      "expect": { "output": "brief", "must_include": ["41,000 USD"], "must_say_not_recorded": ["Churned sites"], "must_not_include": [] },
+      "outputs": {
+        "correct": "- Active sites: 120\n- Churned sites: Not recorded\n- Revenue in 2026-10: 41,000 USD",
+        "incorrect": [
+          { "targets": "41,000 USD", "edit": [["41,000 USD", "40,000 USD"]] },
+          { "targets": "Churned sites", "edit": [["- Churned sites: Not recorded\n", ""]] }
+        ]
+      }
+    }
+  ]
+}
