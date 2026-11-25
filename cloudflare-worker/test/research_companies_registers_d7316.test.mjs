@@ -2,13 +2,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import fs, { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   loadPrimaryEvidence, main, prepareRegisterSnapshot, primaryRecordSha256, projectPrimaryRecord,
-  registerMigration, registerMigrationStatements, REGISTRIES, sourceWebsite,
+  registerMigration, registerMigrationStatements, REGISTRIES, sourceWebsite, writeSqlPlan,
 } from '../../scripts/import-register-companies.mjs';
 import { MAX_STATEMENT_BYTES } from '../../scripts/import-wikidata-worldwide.mjs';
 
@@ -247,4 +249,210 @@ test('D7316 CLI emits only a proposal, reports failed worldwide gates honestly, 
     await assert.rejects(main(bad), /must not overwrite a primary source ledger/);
     assert.deepEqual(readFileSync(join(dir, 'proof-0.jsonl')), before);
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+// D8198 uses real temporary files; the narrow hooks place a competing operation at a deterministic boundary.
+async function withFsHook(t, method, implementation, run) {
+  const replacement = t.mock.method(fs, method, implementation);
+  syncBuiltinESMExports();
+  try { return await run(); } finally { replacement.mock.restore(); syncBuiltinESMExports(); }
+}
+const retainedStat = (path) => {
+  const { ino, mode, size, mtimeNs } = fs.statSync(path, { bigint: true });
+  return { ino, mode, size, mtimeNs };
+};
+
+test('D8198 creates exact SQL and accepts identical read-only replay without rewriting the inode', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-replay-')), path = join(dir, 'nested', 'proposal.sql');
+  const sql = '-- Unicode proposal Ω\nSELECT 1;\n';
+  try {
+    writeSqlPlan(path, sql);
+    assert.deepEqual(readFileSync(path), Buffer.from(sql));
+    fs.chmodSync(path, 0o444);
+    fs.utimesSync(path, new Date('2000-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'));
+    const before = retainedStat(path), read = fs.readFileSync;
+    let compared;
+    await withFsHook(t, 'readFileSync', (fd, ...args) => {
+      if (typeof fd === 'number') {
+        compared = fd;
+        assert.throws(() => fs.writeSync(fd, 'unexpected write'), { code: 'EBADF' });
+      }
+      return read(fd, ...args);
+    }, () => writeSqlPlan(path, sql));
+    assert.equal(typeof compared, 'number');
+    assert.throws(() => fs.fstatSync(compared), { code: 'EBADF' });
+    assert.deepEqual(retainedStat(path), before);
+    assert.deepEqual(readFileSync(path), Buffer.from(sql));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 rejects different existing bytes, including invalid UTF-8 that decodes like the proposed text', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-bytes-')), path = join(dir, 'proposal.sql');
+  try {
+    const sql = '-- \uFFFD\n';
+    for (const bytes of [Buffer.from('different SQL\n'), Buffer.from([0x2d, 0x2d, 0x20, 0xff, 0x0a])]) {
+      writeFileSync(path, bytes);
+      const before = retainedStat(path), open = fs.openSync;
+      let compared;
+      await withFsHook(t, 'openSync', (name, flags, ...args) => {
+        const fd = open(name, flags, ...args);
+        if (name === path) compared = fd;
+        return fd;
+      }, () => assert.throws(() => writeSqlPlan(path, sql), /different existing SQL plan/));
+      assert.throws(() => fs.fstatSync(compared), { code: 'EBADF' });
+      assert.deepEqual(readFileSync(path), bytes);
+      assert.deepEqual(retainedStat(path), before);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 preserves a different process winning exclusive creation and accepts its identical replay', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-creator-')), sql = '-- intended proposal\n';
+  try {
+    for (const [name, competing] of [['different.sql', '-- another proposal\n'], ['identical.sql', sql]]) {
+      const path = join(dir, name), open = fs.openSync;
+      let won = false, before;
+      await withFsHook(t, 'openSync', (target, flags, ...args) => {
+        if (target === path && (flags & fs.constants.O_CREAT) && !won) {
+          const child = spawnSync(process.execPath, ['--input-type=module', '--eval',
+            "import { writeFileSync, utimesSync } from 'node:fs'; writeFileSync(process.argv[1], process.argv[2], {flag:'wx'}); utimesSync(process.argv[1], new Date('2000-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'));", path, competing],
+          { encoding: 'utf8', timeout: 2000 });
+          assert.equal(child.status, 0, child.stderr);
+          won = true; before = retainedStat(path);
+        }
+        return open(target, flags, ...args);
+      }, () => competing === sql ? writeSqlPlan(path, sql) : assert.throws(() => writeSqlPlan(path, sql), /different existing SQL plan/));
+      assert.equal(won, true);
+      assert.equal(readFileSync(path, 'utf8'), competing);
+      assert.deepEqual(retainedStat(path), before);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 compares the opened inode even when its pathname is replaced before the read', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-descriptor-')), path = join(dir, 'proposal.sql'), moved = join(dir, 'original.sql');
+  const sql = '-- intended proposal\n', prior = '-- different original\n';
+  try {
+    writeFileSync(path, prior);
+    const open = fs.openSync;
+    let compared;
+    await withFsHook(t, 'openSync', (name, flags, ...args) => {
+      const fd = open(name, flags, ...args);
+      if (name === path && typeof flags === 'number' && !(flags & fs.constants.O_CREAT) && compared === undefined) {
+        compared = fd;
+        fs.renameSync(path, moved); writeFileSync(path, sql, { flag: 'wx' });
+      }
+      return fd;
+    }, () => assert.throws(() => writeSqlPlan(path, sql), /different existing SQL plan/));
+    assert.throws(() => fs.fstatSync(compared), { code: 'EBADF' });
+    assert.equal(readFileSync(path, 'utf8'), sql);
+    assert.equal(readFileSync(moved, 'utf8'), prior);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 refuses a final symlink even when its target has identical SQL', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-symlink-')), path = join(dir, 'proposal.sql'), target = join(dir, 'source.sql');
+  const sql = '-- preserve this target\n';
+  try {
+    writeFileSync(target, sql); fs.symlinkSync(target, path);
+    const before = retainedStat(target);
+    assert.throws(() => writeSqlPlan(path, sql), { code: 'ELOOP' });
+    assert.equal(fs.lstatSync(path).isSymbolicLink(), true);
+    assert.equal(readFileSync(target, 'utf8'), sql);
+    assert.deepEqual(retainedStat(target), before);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 rejects a FIFO without a writer instead of blocking or accepting empty content', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-fifo-')), path = join(dir, 'proposal.sql');
+  try {
+    assert.equal(spawnSync('mkfifo', [path]).status, 0);
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '--import',
+      new URL('./_ts-loader.mjs', import.meta.url).href, '--input-type=module', '--eval',
+      "const { writeSqlPlan } = await import(process.argv[2]); try { writeSqlPlan(process.argv[1], ''); process.exitCode = 2; } catch (error) { if (error.message !== 'Existing SQL plan must be a regular file') throw error; }",
+      path, new URL('../../scripts/import-register-companies.mjs', import.meta.url).href], { encoding: 'utf8', timeout: 2000 });
+    assert.equal(child.status, 0, child.error?.message || child.stderr);
+    assert.equal(fs.lstatSync(path).isFIFO(), true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 propagates creation and partial-write failures, closes descriptors and preserves replacement paths', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-failure-')), path = join(dir, 'proposal.sql'), partial = join(dir, 'partial.sql');
+  const sql = '-- intended proposal\n', denied = Object.assign(new Error('denied'), { code: 'EACCES' });
+  try {
+    const open = fs.openSync;
+    await withFsHook(t, 'openSync', (name, ...args) => { if (name === path) throw denied; return open(name, ...args); },
+      () => assert.throws(() => writeSqlPlan(path, sql), error => error === denied));
+    assert.equal(fs.existsSync(path), false);
+    const write = fs.writeFileSync, failure = Object.assign(new Error('write failed'), { code: 'EIO' });
+    let created;
+    await withFsHook(t, 'writeFileSync', (fd, bytes, ...args) => {
+      if (typeof fd !== 'number') return write(fd, bytes, ...args);
+      created = fd; write(fd, bytes.subarray(0, 3));
+      fs.renameSync(path, partial); write(path, 'replacement belongs to another writer', { flag: 'wx' });
+      throw failure;
+    }, () => assert.throws(() => writeSqlPlan(path, sql), error => error === failure));
+    assert.throws(() => fs.fstatSync(created), { code: 'EBADF' });
+    assert.equal(readFileSync(partial, 'utf8'), sql.slice(0, 3));
+    assert.equal(readFileSync(path, 'utf8'), 'replacement belongs to another writer');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+async function outputFixture(dir) {
+  const db = database();
+  try {
+    const { evidence, paths } = await sources(dir, [{ registry: 'BRREG', records: [native('BRREG')] }]);
+    const old = baseline(db), rows = [candidate('BRREG', 1)];
+    writeFileSync(join(dir, 'candidates.json'), JSON.stringify(rows));
+    writeFileSync(join(dir, 'existing.json'), JSON.stringify(old));
+    writeFileSync(join(dir, 'holds.json'), '[]');
+    const outputs = ['proposal.sql', 'statements.json', 'report.json', 'audit.json'].map(name => join(dir, name));
+    const args = ['--candidates', join(dir, 'candidates.json'), '--source-manifests', paths[0], '--existing', join(dir, 'existing.json'),
+      '--quality-holds', join(dir, 'holds.json'), '--as-of', AS_OF, '--baseline-observed-at', RETRIEVED,
+      '--out', outputs[0], '--statements', outputs[1], '--report', outputs[2], '--audit', outputs[3]];
+    return { args, outputs, sql: registerMigration(prepare(rows, old, evidence).accepted, AS_OF) };
+  } finally { db.close(); }
+}
+
+test('D8198 CLI rejects SQL conflicts before JSON writes and preserves all input/source path guards', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-cli-conflict-'));
+  try {
+    const { args, outputs } = await outputFixture(dir);
+    for (const [index, path] of outputs.entries()) writeFileSync(path, 'preserve existing artifact ' + index);
+    const before = outputs.map(path => readFileSync(path));
+    await assert.rejects(main(args), /different existing SQL plan/);
+    assert.deepEqual(outputs.map(path => readFileSync(path)), before);
+    for (const input of ['--candidates', '--existing', '--quality-holds', '--source-manifests']) {
+      const bad = [...args], path = args[args.indexOf(input) + 1], bytes = readFileSync(path);
+      bad[bad.indexOf('--out') + 1] = path;
+      await assert.rejects(main(bad), /Input and output paths must be distinct/);
+      assert.deepEqual(readFileSync(path), bytes);
+    }
+    const proof = join(dir, 'proof-0.jsonl'), bytes = readFileSync(proof);
+    for (const output of ['--out', '--report', '--audit', '--statements']) {
+      const bad = [...args]; bad[bad.indexOf(output) + 1] = proof;
+      await assert.rejects(main(bad), /must not overwrite a primary source ledger/);
+      assert.deepEqual(readFileSync(proof), bytes);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('D8198 CLI retains a completed SQL proposal after a JSON failure and safely resumes on replay', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sql-cli-resume-'));
+  try {
+    const { args, outputs, sql } = await outputFixture(dir), blocked = join(dir, 'blocked-parent');
+    writeFileSync(blocked, 'not a directory');
+    const fail = [...args]; fail[fail.indexOf('--report') + 1] = join(blocked, 'report.json');
+    await assert.rejects(main(fail));
+    assert.equal(readFileSync(outputs[0], 'utf8'), sql);
+    assert.equal(readFileSync(blocked, 'utf8'), 'not a directory');
+    assert.equal(fs.existsSync(outputs[1]), false);
+    assert.equal(fs.existsSync(outputs[3]), false);
+    fs.utimesSync(outputs[0], new Date('2000-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'));
+    const before = retainedStat(outputs[0]);
+    assert.equal(await main(args), 0);
+    assert.deepEqual(retainedStat(outputs[0]), before);
+    assert.deepEqual(JSON.parse(readFileSync(outputs[1], 'utf8')).length, JSON.parse(readFileSync(outputs[2], 'utf8')).statement_count);
+    assert.equal(JSON.parse(readFileSync(outputs[3], 'utf8')).proposed_sql_sha256, sha(Buffer.from(sql)));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

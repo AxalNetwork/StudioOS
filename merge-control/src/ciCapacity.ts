@@ -3,10 +3,13 @@ import {
   activeAttempt, admitReceipt, aggregateCapacity, applyObservation, selectPools, submissionMatches,
   validateCapacityPolicy, HOSTED_JOB_CEILING_MS, EXTERNAL_RUN_CEILING_MS, RESULT_DELIVERY_RESERVE_MS, receiptMatches, CapacityDispatchRefused,
 } from './lib/ciCapacityPolicy.ts';
+import { CAPACITY_COMPACT_LIMIT, CapacityCompactTable, compactProject, compactReceipt, compactAggregate } from './ciCapacityCompact.ts';
+import type { CapacityCompactConsumer, CapacityCompactStore, CompactView } from './ciCapacityCompact.ts';
 import type {
   Aggregate, CapacityInventory, CapacityPolicy, CapacityRequest, ChildObservation, CiAttempt,
   CiProvenance, CiSubmission, ExecutionReceipt, PrerequisiteResult,
 } from './lib/ciCapacityPolicy.ts';
+import type { CapacityCompactFailedStore } from './ciCapacityCompact.ts';
 
 export const CAPACITY_REQUEST_LIMIT = 1000;
 export const CAPACITY_RETENTION_MS = 7 * 24 * 60 * 60_000;
@@ -21,12 +24,27 @@ export interface CapacityStore {
   prune(before: number): void;
   save(request: CapacityRequest): void;
 }
+/** D8339: what a settled request still has outstanding, from evidence the store does not hold.
+ * `owed`: a result is still to be published or corrected; the request stays, whatever its age.
+ * `revisable`: published, but the publisher may still lower it while the request is kept; it leaves by age only.
+ * `final`: nothing can change; it may also leave by count. `superseded` is read from the parent fence. */
+export type CapacityEvidence = 'owed' | 'revisable' | 'final';
+export type CapacityEvictionGuard = (request: CapacityRequest, superseded: boolean) => CapacityEvidence;
+const leaseEnd = (request: CapacityRequest) => Math.max(request.deadline,
+  ...request.shards.flatMap(shard => shard.attempts.flatMap(a => [a.startDeadline, a.executionDeadline, a.cancelDeadline ?? 0])));
 
 /** Bounded full receipts, indexed work and compact permanent identity fences. */
-export class SqlCapacityStore implements CapacityStore {
+export class SqlCapacityStore implements CapacityStore, CapacityCompactStore, CapacityCompactFailedStore {
   private readonly storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
-  constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>) {
-    this.storage = storage;
+  private readonly evictable: CapacityEvictionGuard | null;
+  private readonly compacts: CapacityCompactTable;
+  private readonly consumer: CapacityCompactConsumer | null;
+  /** Without a guard, receipts leave by age alone, published or not, and a full store refuses, as before D8339.
+   * Without a compact consumer no request is compacted and no compact record expires (D8348). */
+  constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>, evictable: CapacityEvictionGuard | null = null,
+    consumer: CapacityCompactConsumer | null = null) {
+    this.storage = storage; this.evictable = evictable; this.consumer = consumer;
+    this.compacts = new CapacityCompactTable(storage);
     storage.transactionSync(() => {
       storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_requests (
         id TEXT PRIMARY KEY, parent TEXT NOT NULL UNIQUE, state TEXT NOT NULL)`);
@@ -72,11 +90,80 @@ export class SqlCapacityStore implements CapacityStore {
   }
   prune(before: number): void {
     this.storage.transactionSync(() => {
-      this.storage.sql.exec(`DELETE FROM ci_capacity_requests WHERE id IN
-        (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)`, before);
-      this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?', before);
       // Parent, request and child tombstones survive receipt retention: no identity can be reused.
+      if (this.consumer) this.expireCompact(before, this.consumer);
+      if (this.evictable) { this.retain(before, this.evictable); return; }
+      // D8348: an identity held both whole and compact is inconsistent state. Neither side is ever removed.
+      this.storage.sql.exec(`DELETE FROM ci_capacity_requests WHERE id IN
+        (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)
+        AND id NOT IN (SELECT id FROM ci_capacity_compact)`, before);
+      this.storage.sql.exec(`DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?
+        AND id NOT IN (SELECT id FROM ci_capacity_compact)`, before);
     });
+  }
+  /** D8339: with a guard, age and count removal share one test. One pass over settled history, oldest
+   * completion first: a request older than the age limit leaves unless something is owed; at the cap, the
+   * oldest `final` request leaves to make room for one admission. A request stays while a lease of its own
+   * is open or the guard cannot answer. Finding nothing leaves the store full, and the caller refuses
+   * `capacity_storage_bound`. The pass reads at most 1,000 requests and stops at the first request inside
+   * the age limit once the store is below the cap. */
+  private retain(before: number, guard: CapacityEvictionGuard): void {
+    // The cutoff is the caller's clock less the age limit, so this is the caller's clock.
+    const now = before + CAPACITY_RETENTION_MS;
+    let count = this.count();
+    // Read once, when a handoff is first tried: the compact table is not counted on every candidate.
+    const room = { left: null as number | null };
+    const settled = this.storage.sql.exec<{ id: string; completed_at: number }>(`SELECT id, completed_at FROM ci_capacity_index
+      WHERE pending = 0 ORDER BY completed_at, id LIMIT 1000`).toArray();
+    for (const { id, completed_at } of settled) {
+      const aged = completed_at <= before;
+      if (!aged && count < CAPACITY_REQUEST_LIMIT) break;
+      const request = this.get(id);
+      if (!request || !(leaseEnd(request) <= now)) continue;
+      // D8348: an identity held both whole and compact is inconsistent state. Neither side is ever removed.
+      if (this.compacts.has(id)) continue;
+      const s = request.submission;
+      let evidence: CapacityEvidence = 'owed';
+      try { evidence = guard(request, this.newerParent(s.parentRunId, s.parentAttempt)); }
+      catch { /* Unreadable publication evidence keeps the request. */ }
+      if (evidence !== 'final' && !(aged && evidence === 'revisable')) {
+        // D8348: a published pass inside the age limit leaves only by handing its authority to a compact record.
+        if (evidence !== 'revisable' || !this.handoff(request, room)) continue;
+      }
+      this.storage.sql.exec('DELETE FROM ci_capacity_requests WHERE id = ?', id);
+      this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE id = ?', id);
+      count--;
+    }
+  }
+  /** D8348: writes the compact record of a passing request. The caller deletes the full request in the same
+   * transaction, so a restart finds one or the other. False leaves the request whole: no consumer, an unknown
+   * mode, a full compact table, or a request the projection cannot carry. */
+  private handoff(request: CapacityRequest, room: { left: number | null }): boolean {
+    if (!this.consumer) return false;
+    let mode: unknown = null;
+    try { mode = this.consumer.mode(); } catch { return false; }
+    const s = request.submission;
+    room.left ??= CAPACITY_COMPACT_LIMIT - this.compacts.count();
+    if (room.left <= 0) return false; // The pass has already refused an identity that is compact as well.
+    const record = compactProject(request, mode, this.newerParent(s.parentRunId, s.parentAttempt));
+    if (!record) return false;
+    this.compacts.insert(record);
+    room.left--;
+    return true;
+  }
+  private expireCompact(before: number, consumer: CapacityCompactConsumer): void {
+    this.compacts.expire(before, record => {
+      // The same rule from the other side: while a full request shares the identity, the record stays.
+      if (this.storage.sql.exec('SELECT id FROM ci_capacity_requests WHERE id = ?', record.submission.requestId).toArray().length) return 'owed';
+      return consumer.evidence(record, this.newerParent(record.submission.parentRunId, record.submission.parentAttempt));
+    });
+  }
+  compactCount(): number { return this.compacts.count(); }
+  compact(id: string): CompactView | null { return this.compacts.get(id); }
+  compactPage(after: string, limit: number): CompactView[] { return this.compacts.page(after, limit); }
+  compactFailedPage(after: string, limit: number): CompactView[] { return this.compacts.failedPage(after, limit); }
+  compactFailure(receipt: ExecutionReceipt, jobId: number): boolean {
+    return this.storage.transactionSync(() => this.compacts.fail(receipt, jobId));
   }
   private index(request: CapacityRequest): void {
     const s = request.submission;
@@ -135,10 +222,12 @@ export class CiCapacity {
   private readonly repository: string;
   private readonly policy: CapacityPolicy;
   private readonly now: () => number;
-  constructor(store: CapacityStore, ports: CapacityPorts, repository: string, policy: CapacityPolicy, now: () => number = Date.now) {
+  private readonly pendingFailure: (id:string)=>boolean;
+  private readonly correctionDue:(id:string)=>void;
+  constructor(store: CapacityStore, ports: CapacityPorts, repository: string, policy: CapacityPolicy, now: () => number = Date.now, pendingFailure: (id:string)=>boolean = ()=>false, correctionDue:(id:string)=>void = ()=>{}) {
     validateCapacityPolicy(policy);
     this.store = store; this.ports = ports; this.repository = repository;
-    this.policy = structuredClone(policy); this.now = now;
+    this.policy = structuredClone(policy); this.now = now;this.pendingFailure=pendingFailure;this.correctionDue=correctionDue;
   }
 
   private ordered<T>(fn: () => Promise<T>): Promise<T> {
@@ -259,24 +348,42 @@ export class CiCapacity {
   ownsResult(receipt: ExecutionReceipt): { current: boolean; receipt: ExecutionReceipt } | null {
     const request=this.store.get(receipt.requestId),shard=request?.shards.find(s=>s.name===receipt.logicalShard);
     const attempt=shard?.attempts.find(a=>a.generation===receipt.generation);
+    if(!request){
+      const history=(this.store as CapacityStore & Partial<CapacityCompactStore>).compact?.(receipt.requestId);
+      const preserved=history?compactReceipt(history,receipt.logicalShard,receipt.generation):null;
+      // Historical ownership only: every compact result is non-current, even its last successful generation.
+      return preserved&&receiptMatches(preserved,receipt)?{current:false,receipt:preserved}:null;
+    }
     if(!attempt||attempt.childRunId===null||!receiptMatches(this.bound(attempt),receipt))return null;
-    return {current:attempt.generation===shard!.generation,receipt:this.bound(attempt)};
+    const duplicate=(this.store as CapacityStore & Partial<CapacityCompactStore>).compact?.(receipt.requestId);
+    return {current:!duplicate&&attempt.generation===shard!.generation,receipt:this.bound(attempt)};
   }
 
   /** Called only after authenticated job verification. Negative truth fences immediately; cleanup is re-observed. */
   recordExecutionFailure(receipt: ExecutionReceipt,jobId: number): Promise<void> {
     return this.ordered(async()=>{
       const request=this.store.get(receipt.requestId);
-      if(!request||!this.ownsResult(receipt)||!validRunId(jobId))throw new Error('capacity_result_owner');
+      if(!this.ownsResult(receipt)||!validRunId(jobId))throw new Error('capacity_result_owner');
+      const compact=this.store as CapacityStore & Partial<CapacityCompactStore>;
+      if(!request){
+        if(compact.compactFailure?.(receipt,jobId)!==true)throw new Error('capacity_result_owner');
+        this.correctionDue(receipt.requestId);return;
+      }
+      // A duplicate is inconsistent state; preserve negative truth on BOTH sides before acknowledgement.
+      if(compact.compact?.(receipt.requestId)&&compact.compactFailure?.(receipt,jobId)!==true)throw new Error('capacity_result_owner');
       if(!applyObservation(request,{receipt,workflowPath:'.github/workflows/runner-executor.yml',workflowAttempt:1,jobId,
         runnerProfile:receipt.profile,status:'in_progress',conclusion:null,jobConclusion:null,testStep:'failure',startedAt:null,cleanupConfirmed:false},this.now()))throw new Error('capacity_result_owner');
-      this.store.save(request);
+      this.store.save(request);this.correctionDue(receipt.requestId);
     });
   }
 
   status(id: string): Aggregate | null {
     const request = this.store.get(id);
-    if (!request) return null;
+    const history=(this.store as CapacityStore & Partial<CapacityCompactStore>).compact?.(id);
+    if((request||history)&&this.pendingFailure(id))return {status:'failure',reason:'verified_failure'};
+    if(!request)return history?compactAggregate(history,this.store.newerParent(history.submission.parentRunId,history.submission.parentAttempt)):null;
+    if(history?.failed)return {status:'failure',reason:'verified_failure'};
+    if(history)return {status:'pending',reason:'capacity_history_conflict'};
     request.superseded = this.superseded(request);
     return aggregateCapacity(request, this.now());
   }

@@ -38,7 +38,8 @@ test('an Institutional reader gets the Fund zone row; an LP without the tier doe
 
 test('a locked visitor sees the locked notice, never an empty list', () => {
   const html = page({ locked: true, state: { items: [], loading: false, error: null } });
-  assert.match(html, /data-testid="fund-performance-locked"/);
+  // D6233 (#6233): the one locked Fund surface, asking the Investor licence (no tier).
+  assert.match(html, /data-testid="investor-fund-locked" data-zone="performance" data-need="licence"/);
   assert.doesNotMatch(html, /no funds are available|No funds match/);
   assert.doesNotMatch(html, /Refresh fund performance/);
 });

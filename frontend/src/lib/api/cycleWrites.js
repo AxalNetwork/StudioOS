@@ -93,6 +93,9 @@ export function makeCycleWrites(request) {
       distributionOverview: (projectId, { week } = {}) => request(`/cycles/grow/distribution/overview?${new URLSearchParams({ project: String(projectId), ...(week !== undefined ? { week } : {}) })}`),
       campaignUpdate: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D6865 part 2 (#6891, GR-24): Save as feedback from an Inbox reply. The reply's key links it, so the
+      // reply carries "Saved as feedback"; a reply saved twice is a 409 naming the item it already is.
+      feedbackFromReply: (projectId, replyKey, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, origin: 'inbox_reply', reply_key: replyKey, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channelSpend: (projectId, uid, month, body) => request(`/cycles/grow/channels/${seg(uid)}/spend/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
       // D695 (#1657): Enter a KPI and Open a role, through #1697's routes.
@@ -192,6 +195,8 @@ export function makeCycleWrites(request) {
       unmatchGithubLogin: (projectId, login) => request(`/cycles/build/founding-team/github-logins/${seg(login)}?${q(projectId)}`, { method: 'DELETE' }),
       acceptCompanyProposal: (projectId, id) => request(`/cycles/build/company-creation/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
       dismissCompanyProposal: (projectId, id) => request(`/cycles/build/company-creation/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
+      // D8259 (#8259, BD28): "Not now" on a suggested filing; it stays hidden for this venture.
+      dismissSuggestedFiling: (projectId, key) => request(`/cycles/build/company-creation/suggested-filings/${seg(key)}/dismiss?${q(projectId)}`, { method: 'POST' }),
       // D1099 (#2964): the founder's decision on the step Vercel's facts proposed. Nothing changes on Vercel.
       acceptVercelProposal: (projectId, id) => request(`/cycles/build/company-creation/vercel-proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
       dismissVercelProposal: (projectId, id) => request(`/cycles/build/company-creation/vercel-proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),

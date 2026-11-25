@@ -1,0 +1,32 @@
+/* D6233 (#6233, FV2): the one locked Fund surface. Palette tokens only, redefined under .dark. */
+.fl-locked{--ink:#18181b;--muted:#615c6e;--body:#4a4553;--line:#e7e7ed;--paper:#fff;--ground:#f7f7f9;--lav:#ede9fe;--vt:#5b21b6;--accent:#4f46e5;--accent-ink:#fff;--focus:#4f46e5;display:block;padding:22px 24px 30px;background:var(--ground);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-family:var(--font-app)}
+.fl-crumb{font-size:11px;color:var(--muted);margin-bottom:12px}
+.fl-crumb b{color:var(--ink)}
+.fl-card{display:flex;flex-direction:column;gap:16px;max-width:1040px;padding:32px;background:var(--paper);border:1px solid var(--line);border-radius:12px}
+.fl-head{display:flex;gap:14px;align-items:center}
+.fl-lock{display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:11px;background:var(--lav);color:var(--vt)}
+.fl-kicker{display:block;font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--vt)}
+.fl-head h1{margin:4px 0 0;font-size:24px;line-height:1.15;letter-spacing:-.03em;font-weight:800}
+.fl-body{margin:0;max-width:760px;font-size:13.5px;line-height:1.55;color:var(--body)}
+.fl-inc-title{margin:0;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.fl-inc{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.fl-inc li{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--ground)}
+.fl-inc b{font-size:13px}
+.fl-inc small{font-size:12px;line-height:1.45;color:var(--body)}
+.fl-action{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.fl-btn{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 16px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;text-decoration:none}
+.fl-btn:hover{filter:brightness(1.08);color:var(--accent-ink)}
+.fl-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.fl-cap,.fl-note{font-size:11.5px;line-height:1.5;color:var(--muted)}
+.fl-note{margin:0}
+.dark .fl-locked{--ink:#f3f2f7;--muted:#a6a2b8;--body:#c0bdcb;--line:#2c2b3c;--paper:#171622;--ground:#12111b;--lav:#2a2350;--vt:#c4b5fd;--accent:#818cf8;--accent-ink:#12111b;--focus:#c4b5fd}
+@media(max-width:640px){
+  .fl-locked{padding:16px;border-radius:0;border-left:0;border-right:0}
+  .fl-card{padding:20px 16px;gap:14px}
+  .fl-head{align-items:flex-start}
+  .fl-head h1{font-size:22px}
+  .fl-inc{grid-template-columns:1fr}
+  .fl-inc li{padding:10px 12px}
+  .fl-action{flex-direction:column;align-items:stretch}
+  .fl-btn{width:100%;min-height:44px}
+}

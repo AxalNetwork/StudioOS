@@ -25,14 +25,27 @@ export const growArea = (key = '') => GROW_AREAS.find((a) => a.key === key || a.
 /** A Grow module page's heading: its own title where it has one, else its area's name. */
 export const growModuleTitle = (slug = '') => GROW_MODULE_TITLES[slug] || growArea(slug)?.name || null;
 export const growTabs = (search = '', active = '') => GROW_AREAS.map((a) => ({ key: a.key, name: a.name, href: a.path + projectSearch(search), active: a === growArea(active || '') }));
+/**
+ * D6865 part 2 (#6891, the #6099 canvas GR-21, owner question 3 = A): Customers' tab row is GR-06's Pipeline ·
+ * Accounts · Feedback. Pipeline is today's `/grow/customers` and Feedback `/grow/product-improvement`; Accounts
+ * has no page on main, so it is drawn and not linked (`unbuilt` is its reason).
+ */
 const GROW_SUBSECTIONS = [
   [{ key: 'focus', name: 'Focus' }, { key: 'revenue-and-traction', name: 'KPIs and revenue' }],
-  [{ key: 'customers', name: 'Customers' }, { key: 'product-improvement', name: 'Feedback' }],
+  [{ key: 'customers', name: 'Pipeline', group: 'Customers' }, { key: 'accounts', name: 'Accounts', group: 'Customers', unbuilt: 'Accounts has no page yet.' },
+    { key: 'product-improvement', name: 'Feedback', group: 'Customers' }],
 ];
 
 export function growSubsections(search, active) {
-  const group = GROW_SUBSECTIONS.find(items => items.some(item => item.key === active));
-  return (group || []).map(item => ({ ...item, href: '/grow/' + item.key + projectSearch(search), active: item.key === active }));
+  const group = GROW_SUBSECTIONS.find(items => items.some(item => item.key === active && !item.unbuilt));
+  return (group || []).map(item => ({ ...item, href: item.unbuilt ? null : '/grow/' + item.key + projectSearch(search), active: item.key === active }));
+}
+
+/** D6865 part 2 (#6891): the Feedback tab's count, from Product improvement's read; a failed or absent count draws none, never 0. */
+export function growTabCounts(slug, data) {
+  if (slug !== 'product-improvement') return null;
+  const n = Number(data?.parts?.counts?.items);
+  return data?.parts?.counts && Number.isFinite(n) && n >= 0 ? { 'product-improvement': n } : null;
 }
 export const reportingHref = (search = '') => '/grow/reporting' + projectSearch(search);
 

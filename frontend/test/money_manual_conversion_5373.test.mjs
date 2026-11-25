@@ -44,7 +44,7 @@ const ALLOW = [
     "frontend/src/pages/raise/pitch/typedChartsModel.js": 1,
     "cloudflare-worker/src/services/analyticsReports.ts": 3,
     "cloudflare-worker/src/routes/admin_assessment.ts": 1,
-    "cloudflare-worker/src/routes/advisors_engagements.ts": 1,
+    "cloudflare-worker/src/services/advisorEngagements.ts": 1,
     "cloudflare-worker/src/routes/advisory.ts": 2,
     "cloudflare-worker/src/routes/monitoring.ts": 1,
     "cloudflare-worker/src/routes/positions.ts": 1,
@@ -85,7 +85,7 @@ const ALLOW = [
     "frontend/src/pages/admin/fundAdmin/performanceModel.js": 5,
     "frontend/src/pages/hq/HqFundsPage.jsx": 1,
     "frontend/src/pages/investor/FundLedgerPanel.jsx": 1,
-    "frontend/src/pages/investor/InvestorFundLPs.jsx": 2,
+    "frontend/src/pages/investor/fundLpRecordModel.js": 2, // D6242: the register's dollar figures, moved from InvestorFundLPs.jsx
     "frontend/src/pages/investor/InvestorFundLanding.jsx": 2,
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
     "frontend/src/pages/investor/fundCallsModel.js": 2,

@@ -14,7 +14,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import * as M from '../src/pages/wellbeing/reflectionsModel.js';
 import { PeriodCards, ReflectionView } from '../src/pages/wellbeing/Reflections.jsx';
-import FounderWellbeingMenu from '../src/components/FounderWellbeingMenu.jsx';
+import FounderWellbeingMenu, { loadReflectionEditor } from '../src/components/FounderWellbeingMenu.jsx';
 
 const h = React.createElement;
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
@@ -220,6 +220,10 @@ test('This month: what was recorded, counted only from what was written; Edit re
 });
 
 test('the heart opens Today: loading, a failed read with Retry, not yet with Save today, and saved with Edit reflection', async () => {
+  // #8438: the popover's editor is React.lazy. Its dynamic import resolves on module-loader time, not on a count of
+  // event-loop turns, so under CPU load it outlasted mount()'s flush and the editor was still the Suspense fallback.
+  // Wait for the module itself: lazy() shares this promise, so once it settles the editor renders within a flush.
+  await loadReflectionEditor();
   let first = true;
   const v = await mount(h(FounderWellbeingMenu), {
     'GET /wellbeing/reflections/today': () => { if (first) { first = false; return { __status: 503, code: 'reflections_unreadable' }; } return TODAY(); },

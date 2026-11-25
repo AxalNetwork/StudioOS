@@ -12,6 +12,20 @@ Create `production-ops` with the name declared in the workflows and configure it
 
 The compute preview remains subject to its existing owner-gated setup. Before enabling it, the owner must create its exact environment, independent-review protection, main-only branch restriction and preview-only credential.
 
+## Environments the workflows name (D8069, #8069)
+
+#8063 created `preview`, `staging`, `production` and `production-ops`, each admitting `main` only, with the owner as required reviewer on the two production ones. The workflows now name them as follows. Owner gates still open are listed in [D8069](../architecture/decisions/D8069.md#owner-gates).
+
+| Environment | Secret names its jobs read |
+| --- | --- |
+| `production` | `CLOUDFLARE_API_TOKEN`, `MERGE_CONTROL_CLOUDFLARE_API_TOKEN`, `MEETING_BOT_CLOUDFLARE_API_TOKEN`, `ARCHIVE_OBSERVER_CLOUDFLARE_API_TOKEN` |
+| `production-ops` | `CLOUDFLARE_API_TOKEN`, the `DR_COPY_*`, `FILE_RECOVERY_*`, `FILE_DR_COPY_*` and `FILE_DR_PREVIEW_*` keys, `BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, `WORKGRAPH_INGEST_TOKEN` |
+| `preview` | `PR_PREVIEW_CLOUDFLARE_API_TOKEN` (Workers Scripts edit only, D7146). It stays under this name until the repository `CLOUDFLARE_API_TOKEN` is deleted, so a missing environment secret cannot fall back to the production token |
+
+The pull-request preview used to look up an environment named `pr-preview`, which was never created (#7424). It now looks up and enters `preview`. Its first run after merge fails, with a message, until `PR_PREVIEW_CLOUDFLARE_API_TOKEN` is added to `preview`.
+
+`CLOUDFLARE_ACCOUNT_ID` is an identifier, not a credential. Some environment-free jobs read it, and it can move to a repository variable.
+
 ## Decisions needed before cutover
 
 The existing callers expose a scope conflict in the requested two-token plan. Resolve the affected paths before merging the credential cutover or dispatching them.

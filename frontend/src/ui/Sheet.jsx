@@ -173,7 +173,8 @@ function SheetFrame({
           <div className="flex shrink-0 items-center gap-1">
             {headerActions}
             <button type="button" onClick={() => close.current?.()} aria-label="Close" data-testid={`${testId}-close`}
-              className="-mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[20px] leading-none text-axal-muted hover:bg-gray-100 hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100">×</button>
+              // #4845: a 44px target on a phone (OF-09d) and a visible focus ring.
+              className="-mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[20px] leading-none text-axal-muted hover:bg-gray-100 hover:text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-current max-sm:h-11 max-sm:w-11 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100">×</button>
           </div>
         </header>
         )}

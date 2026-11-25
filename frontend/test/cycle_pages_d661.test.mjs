@@ -273,7 +273,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   const route = cycleRouteText();
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
-  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
+  assert.match(route, /add=\{narrativeAdmin \|\| companyReadOnly \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)(?:\.filter\(\(_, i\) => !forms\[i\]\.addressOnly\))?\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
   assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);

@@ -247,10 +247,16 @@ export type EngagementRow = {
 export async function requireOwnEngagement(
   c: Context<{ Bindings: Env }>, advisorId: number, id: number,
 ): Promise<EngagementRow> {
-  const row = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
-    .bind(id).first<EngagementRow>();
-  if (!row || row.advisor_id !== advisorId) {
+  const row = await ownEngagement(c.env, advisorId, id);
+  if (!row) {
     throw c.json({ detail: 'Engagement not found' }, 404);
   }
   return row;
+}
+
+/** D4704 part 3: the same ownership policy for domain services without HTTP. */
+export async function ownEngagement(env: Env, advisorId: number, id: number): Promise<EngagementRow | null> {
+  const row = await env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+    .bind(id).first<EngagementRow>();
+  return row && row.advisor_id === advisorId ? row : null;
 }
