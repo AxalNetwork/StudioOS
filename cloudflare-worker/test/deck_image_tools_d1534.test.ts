@@ -27,7 +27,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckImageEdits, { __setToolDepsForTest } from '../src/routes/deck_image_edits.ts';
@@ -39,7 +39,7 @@ import { OFF_MESSAGE, OFF_MESSAGES, UPSCALE_TOO_LARGE_MESSAGE, resultUrl, toolIn
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -48,10 +48,6 @@ import * as browserLook from '../../frontend/src/pages/raise/pitch/imageLook.js'
 
 const TOOLS_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRACTS.imageEditAi.schema, import.meta.url), 'utf8'));
 
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1534-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 const BRIA = 'bria/remove-background';
@@ -82,7 +78,7 @@ async function fixture({ on = false, balance = 5_000_000, bria = 'ok' as 'ok' | 
   size = [1024, 768] as [number, number], parentMime = 'image/png' as 'image/png' | 'image/jpeg' } = {}) {
   __resetForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  loadSchema(db);
   const insert = db.prepare('INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (?, ?, ?, ?, ?, 1, ?)');
   insert.run(FOUNDER, 'founder', 100, 'Ada Quill', 'synthetic-2@example.invalid', 'studio');
   insert.run(OTHER, 'founder', 300, 'Synthetic other', 'synthetic-3@example.invalid', 'studio');

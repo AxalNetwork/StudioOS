@@ -91,6 +91,13 @@ and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { belo
 is the schema as it stood before migration N. A test that needs the migrated
 schema calls it rather than replaying the files, which took 4–10 s per file.
 `schema_once_d4133.test.ts` holds the copy to a fresh build.
+`_schema_budget.mjs` (D8467) is what keeps that true. `_ts-loader.mjs` imports it, so every Worker test
+process counts the whole migration files it executes; two chains' worth is allowed (one build of the schema, and
+as much again for cuts or for re-running a migration) and each one past that throws, naming the file and the helper to call instead. The shared
+build is not counted. `scripts/test-schema-replays.txt` lists the files that were over when the rule arrived;
+a file leaves that list by being fixed, and a new file is added only when it is about the build itself.
+`SCHEMA_REPLAY_REPORT=<file>` turns the refusal off and writes each file's count, one JSON line per test file.
+`schema_replay_budget_8467.test.mjs` holds it to that on a three-migration chain of its own.
 D1174 regressions live in the use-of-funds, Raise card/record, financial
 integrity and access suites. Synthetic Mercury rows prove accepted mappings,
 private owner/session/company scope, missing versus zero, and local read

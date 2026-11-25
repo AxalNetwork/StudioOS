@@ -23,26 +23,12 @@ const MIGRATION = read(`${DIR}/574_cap_table_pools_vesting_per_venture.sql`);
 const chain = (pred: (n: number) => boolean) => readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF && pred(migrationNumber(n))).sort(compareMigrations);
 
 const scratch = mkdtempSync(join(tmpdir(), 'cap-d1020-'));
-const seed = join(scratch, 'before-574.sqlite');
-{
-  const db = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
-  loadSchema(db, { below: 574 });
-  db.close();
-}
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-const SECRET = 'synthetic-cap-table-d1020-'.repeat(3);
-// Accounts: 4 founds ventures 10 and 11; 7 founds venture 20; 6 is venture
-// 10's advisor; 3 is an investor; 1 is an admin.
-const FOUNDER = 4; const OTHER = 7; const ADVISOR = 6; const INVESTOR = 3;
-
-let serial = 0;
-/** Rows seeded before 574 runs, so the backfill is what is tested. */
-function fixture({ upgrade = true } = {}) {
-  const file = join(scratch, `${++serial}.sqlite`);
-  copyFileSync(seed, file);
-  const db = new DatabaseSync(file, { enableForeignKeyConstraints: false });
-  db.exec(`
+// Both starting points are built once per run; every test copies one, so each still begins on its own
+// fresh database holding the same rows. `before` is the schema below 574 with the rows seeded, so the
+// backfill is what is tested. `after` is that file with 574 and the chain above it run over those rows.
+const ROWS = `
     INSERT INTO users (id, role, name, email, founder_id, is_active, subscription_tier) VALUES
       (1, 'admin', 'Synthetic admin', 'admin@example.invalid', NULL, 1, 'studio'),
       (3, 'investor', 'Synthetic investor', 'investor@example.invalid', NULL, 1, 'free'),
@@ -70,14 +56,35 @@ function fixture({ upgrade = true } = {}) {
       (306, 7, 105, NULL, '2026-06-01', 50, 25, 'manual');
     INSERT INTO cap_table_option_pools (id, user_id, name, shares_authorized, shares_issued, shares_available, source) VALUES
       (401, 4, 'Option pool', 1000, 200, 800, 'carta');
-  `);
-  if (upgrade) {
-    db.exec(MIGRATION);
-    for (const name of chain((n) => n > 574)) db.exec(read(`${DIR}/${name}`));
-  }
-  if (upgrade) db.exec(`INSERT INTO cap_table_share_classes(id,project_id,name,kind,authorized_shares) VALUES (901,10,'Common','common',10000);
+`;
+const before = join(scratch, 'before-574.sqlite');
+const after574 = join(scratch, 'after-574.sqlite');
+{
+  const db = new DatabaseSync(before, { enableForeignKeyConstraints: false });
+  loadSchema(db, { below: 574 });
+  db.exec(ROWS);
+  db.close();
+  copyFileSync(before, after574);
+  const up = new DatabaseSync(after574, { enableForeignKeyConstraints: false });
+  up.exec(MIGRATION);
+  for (const name of chain((n) => n > 574)) up.exec(read(`${DIR}/${name}`));
+  up.exec(`INSERT INTO cap_table_share_classes(id,project_id,name,kind,authorized_shares) VALUES (901,10,'Common','common',10000);
     INSERT INTO cap_table_issuances(project_id,kind,holder_id,class_id,shares,source,origin,status) VALUES
     (10,'founding',101,901,600,'typed','owner','recorded'),(10,'founding',102,901,400,'typed','owner','recorded');`);
+  up.close();
+}
+
+const SECRET = 'synthetic-cap-table-d1020-'.repeat(3);
+// Accounts: 4 founds ventures 10 and 11; 7 founds venture 20; 6 is venture
+// 10's advisor; 3 is an investor; 1 is an admin.
+const FOUNDER = 4; const OTHER = 7; const ADVISOR = 6; const INVESTOR = 3;
+
+let serial = 0;
+/** Rows seeded before 574 runs, so the backfill is what is tested. */
+function fixture({ upgrade = true } = {}) {
+  const file = join(scratch, `${++serial}.sqlite`);
+  copyFileSync(upgrade ? after574 : before, file);
+  const db = new DatabaseSync(file, { enableForeignKeyConstraints: false });
   const files = new Map<string, Uint8Array>();
   const FILES = {
     put: async (key: string, bytes: Uint8Array) => { files.set(key, bytes); },
