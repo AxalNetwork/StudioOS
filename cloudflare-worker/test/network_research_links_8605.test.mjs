@@ -6,12 +6,16 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadSchema, SCHEMA_OPTIONS } from './_schema_once.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const MIGRATIONS = new URL('../sql/migrations/', import.meta.url);
 const OLD = readFileSync(new URL('202611191414_7672_network_directory.sql', MIGRATIONS), 'utf8');
 const NEW = readFileSync(new URL('202611251148_8605_network_research_links_soft_refs.sql', MIGRATIONS), 'utf8');
 const IMPORTER = fileURLToPath(new URL('../../scripts/import-research-funds.py', import.meta.url));
 const LIST = 'Synthetic fund list 8605';
+const THIS = '202611251148_8605_network_research_links_soft_refs.sql';
+const EURO = 'EuroTech VC Funds (public spreadsheet)';
+const SHAI = 'Shai Goldman — new VC funds at/below $200M';
 const at = '2026-11-25T00:00:00Z';
 
 /** The fresh schema, foreign keys on, with one Network organisation, its source record and a reviewer. */
@@ -62,6 +66,24 @@ test('the bridge names no catalogue table, and keeps its other foreign keys', ()
   const indexes = d.prepare("SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='network_directory_research_links' AND sql IS NOT NULL ORDER BY name").all();
   assert.deepEqual(indexes.map((i) => i.name), ['idx_network_directory_research_company', 'idx_network_directory_research_fund']);
   assert.ok(indexes.every((i) => /^CREATE UNIQUE INDEX/.test(i.sql) && /WHERE \w+_directory_uid IS NOT NULL$/.test(i.sql)));
+  d.close();
+});
+
+test('the rebuilt table is the 7672 table with the two catalogue references gone and needs_review added, nothing else', () => {
+  const d = fresh();
+  const shape = () => d.prepare("SELECT sql FROM sqlite_master WHERE name = 'network_directory_research_links'").get().sql.replace(/\s+/g, ' ').trim();
+  const now = shape();
+  d.exec('DROP TABLE network_directory_research_links'); d.exec(OLD);
+  let expected = shape();
+  for (const [from, to] of [
+    [' REFERENCES research_company_directory(uid)', ''],
+    [' REFERENCES research_fund_directory(uid)', ''],
+    ["CHECK (status IN ('reviewed', 'withdrawn'))", "CHECK (status IN ('reviewed', 'needs_review', 'withdrawn'))"],
+  ]) {
+    assert.ok(expected.includes(from), from);
+    expected = expected.replace(from, to);
+  }
+  assert.equal(now, expected);
   d.close();
 });
 
@@ -125,7 +147,9 @@ test('every other rule the bridge had still refuses what it refused', () => {
 test("the importer's statements carry moved links for review, never collide, and replay to the same rows", () => {
   const d = fresh();
   // 'still-listed' moved once, but this import lists it again: a move counts only when its old uid is gone.
-  const moves = { 'mgr-old': 'mgr-old-i', 'shared-x': 'target-taken', 'twin-1': 'twin-new', 'twin-2': 'twin-new', 'withdrawn-old': 'withdrawn-new', 'still-listed': 'still-listed-ii' };
+  // 'stale-old' has a move to a uid this import does not list; 'gone-share' and 'still-listed-2' move to one uid, and only the first is gone.
+  const moves = { 'mgr-old': 'mgr-old-i', 'shared-x': 'target-taken', 'twin-1': 'twin-new', 'twin-2': 'twin-new', 'withdrawn-old': 'withdrawn-new', 'still-listed': 'still-listed-ii',
+    'stale-old': 'never-listed', 'gone-share': 'shared-new', 'still-listed-2': 'shared-new' };
   for (const [from, to] of Object.entries(moves)) d.prepare('INSERT INTO research_fund_directory_uid_moves (old_uid,new_uid,moved_on) VALUES (?,?,?)').run(from, to, '2026-11-25');
   for (const uid of [...Object.keys(moves), 'target-taken', 'gone-fund', 'gone-2', 'kept-fund']) fund(d, uid);
   company(d, 'co-a');
@@ -138,10 +162,13 @@ test("the importer's statements carry moved links for review, never collide, and
   link(d, 'gone', { fundUid: 'gone-fund' });
   link(d, 'withdrawn-gone', { fundUid: 'gone-2', status: 'withdrawn' });
   link(d, 'still', { fundUid: 'still-listed' });
+  link(d, 'stale', { fundUid: 'stale-old' });
+  link(d, 'share-gone', { fundUid: 'gone-share' });
+  link(d, 'share-still', { fundUid: 'still-listed-2' });
   link(d, 'kept', { fundUid: 'kept-fund' });
   link(d, 'company', { companyUid: 'co-a' });
   // The list comes back with every move applied and one fund dropped.
-  reimport(d, ['mgr-old-i', 'target-taken', 'twin-new', 'withdrawn-new', 'kept-fund', 'still-listed', 'still-listed-ii']);
+  reimport(d, ['mgr-old-i', 'target-taken', 'twin-new', 'withdrawn-new', 'kept-fund', 'still-listed', 'still-listed-ii', 'shared-new', 'still-listed-2']);
   const statements = importerStatements(true);
   assert.equal(statements.length, 2);
   run(d, statements);
@@ -155,6 +182,9 @@ test("the importer's statements carry moved links for review, never collide, and
     gone: { fund: 'gone-fund', company: null, status: 'needs_review' },
     'withdrawn-gone': { fund: 'gone-2', company: null, status: 'withdrawn' },
     still: { fund: 'still-listed', company: null, status: 'reviewed' },
+    stale: { fund: 'stale-old', company: null, status: 'needs_review' },
+    'share-gone': { fund: 'shared-new', company: null, status: 'needs_review' },
+    'share-still': { fund: 'still-listed-2', company: null, status: 'reviewed' },
     kept: { fund: 'kept-fund', company: null, status: 'reviewed' },
     company: { fund: null, company: 'co-a', status: 'reviewed' },
   };
@@ -178,5 +208,79 @@ test("a list with no moves only marks links whose fund left it, and an empty bri
   run(d, statements);
   assert.equal(row(d, 'stays').status, 'reviewed');
   assert.equal(row(d, 'leaves').status, 'needs_review');
+  d.close();
+});
+
+/** Both writers' real output and the CLI's file names, from the importer itself. */
+function writers(euroStem, shaiStem) {
+  const code = `import contextlib, importlib.util, io, json, sys, tempfile
+from datetime import date
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('import_research_funds', sys.argv[1])
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+today = date(2026, 11, 25)
+euro, _ = mod.eurotech_vehicle_migration(today, sys.argv[2])
+refused, root = [], mod.ROOT
+with tempfile.TemporaryDirectory() as tmp:
+    out = Path(tmp) / 'shai.sql'
+    mod.write_shai_migration(mod.shai_directory(today)[0], out, sys.argv[3], today.isoformat())
+    shai = out.read_text()
+    folder = Path(tmp) / 'cloudflare-worker/sql/migrations'
+    folder.mkdir(parents=True)
+    mod.ROOT = Path(tmp)
+    try:
+        for command in ('shai-migration', 'eurotech-migration'):
+            for bad in ('768', '202611191414_7672_x', '202611251148_8605_x'):
+                try:
+                    mod.main_shai([command, bad]); refused.append(False)
+                except SystemExit:
+                    refused.append(True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            mod.main_shai(['shai-migration', sys.argv[3]])
+            mod.main_shai(['eurotech-migration', sys.argv[2]])
+    finally:
+        mod.ROOT = root
+    written = sorted(p.name for p in folder.iterdir())
+print(json.dumps({'euro': euro, 'shai': shai, 'refused': refused, 'written': written}))`;
+  const r = spawnSync('python3', ['-I', '-c', code, IMPORTER, euroStem, shaiStem], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout);
+}
+const inserted = (text) => [...text.matchAll(/INSERT OR REPLACE INTO research_fund_directory \(uid,[^)]*\) VALUES \('([^']+)'/g)].map((m) => m[1]);
+
+test('both list writers carry the bridge statements, and the CLI only names a file that runs after this migration', () => {
+  const euroStem = '202611251149_8605_research_fund_directory_eurotech', shaiStem = '202611251150_8605_research_fund_directory_shai_list';
+  const { euro, shai, refused, written } = writers(euroStem, shaiStem);
+  assert.deepEqual(refused, [true, true, true, true, true, true], 'a number or a stem stamped before or at this migration is refused');
+  assert.deepEqual(written, [`${euroStem}.sql`, `${shaiStem}.sql`]);
+  for (const name of written) assert.ok(compareMigrations(name, THIS) > 0, `${name} runs after ${THIS}`);
+
+  const d = fresh();
+  const move = d.prepare(`SELECT m.old_uid AS old, m.new_uid AS new FROM research_fund_directory_uid_moves m
+    WHERE NOT EXISTS (SELECT 1 FROM research_fund_directory x WHERE x.uid = m.old_uid) ORDER BY m.old_uid`).all()
+    .find((m) => euro.includes(`VALUES ('${m.new}',`));
+  assert.ok(move, 'a recorded EuroTech move whose new uid the list writes');
+  // A kept link sits on a listed uid that no recorded move targets, so the move above cannot be held back by it.
+  const targets = new Set(d.prepare('SELECT new_uid FROM research_fund_directory_uid_moves').all().map((m) => m.new_uid));
+  const euroKept = inserted(euro).find((uid) => !targets.has(uid)), shaiKept = inserted(shai).find((uid) => !targets.has(uid));
+  fund(d, 'euro-dropped-8605', EURO); fund(d, 'shai-dropped-8605', SHAI);
+  link(d, 'euro-moved', { fundUid: move.old });
+  link(d, 'euro-dropped', { fundUid: 'euro-dropped-8605' });
+  link(d, 'euro-kept', { fundUid: euroKept });
+  link(d, 'shai-dropped', { fundUid: 'shai-dropped-8605' });
+  link(d, 'shai-kept', { fundUid: shaiKept });
+  const expected = {
+    'euro-moved': { fund: move.new, company: null, status: 'needs_review' },
+    'euro-dropped': { fund: 'euro-dropped-8605', company: null, status: 'needs_review' },
+    'euro-kept': { fund: euroKept, company: null, status: 'reviewed' },
+    'shai-dropped': { fund: 'shai-dropped-8605', company: null, status: 'needs_review' },
+    'shai-kept': { fund: shaiKept, company: null, status: 'reviewed' },
+  };
+  const all = () => Object.fromEntries(Object.keys(expected).map((uid) => [uid, { ...row(d, uid) }]));
+  d.exec(euro); d.exec(shai);
+  assert.deepEqual(all(), expected);
+  d.exec(euro); d.exec(shai);
+  assert.deepEqual(all(), expected, 'a replay of either file changes nothing');
+  assert.equal(d.prepare('PRAGMA foreign_key_check').all().length, 0);
   d.close();
 });

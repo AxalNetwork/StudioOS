@@ -377,13 +377,33 @@ class ShaiMigrationTests(unittest.TestCase):
                 outs.append(out.read_text())
         self.assertEqual(outs[0], outs[1])
 
-    def test_the_cli_refuses_a_number_that_is_not_one(self):
-        for good in ('413', '0426', '999'):
-            self.assertTrue(mod.is_migration_number(good), good)
-        for bad in ('378; DROP', '42', '12345', '41a', ''):
-            self.assertFalse(mod.is_migration_number(bad), bad)
-        with self.assertRaises(SystemExit):
-            mod.main_shai(['shai-migration', '378; DROP'])
+    def test_the_cli_takes_only_a_stem_stamped_after_the_bridge_migration(self):
+        # D8605: the migration carries the bridge statements, so it must sort
+        # after 202611251148_8605. A numbered file sorts before every stamped one.
+        for good in ('202611251149_8605_research_fund_directory_shai_list', '202612010000_9001_x'):
+            self.assertTrue(mod.is_bridge_ready_stem(good), good)
+        for bad in ('768', '378; DROP', '202611251148_8605_same_minute', '202611191414_7672_x', '202611251149_8605_x; DROP', ''):
+            self.assertFalse(mod.is_bridge_ready_stem(bad), bad)
+        for command in ('shai-migration', 'eurotech-migration'):
+            for bad in ('768', '202611191414_7672_x'):
+                with self.assertRaises(SystemExit):
+                    mod.main_shai([command, bad])
+
+    def test_the_cli_writes_the_stem_it_was_given(self):
+        import tempfile
+        stem = '202611251149_8605_research_fund_directory_shai_list'
+        root = mod.ROOT
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'cloudflare-worker/sql/migrations').mkdir(parents=True)
+            mod.ROOT = Path(tmp)
+            try:
+                mod.main_shai(['shai-migration', stem])
+            finally:
+                mod.ROOT = root
+            written = sorted(p.name for p in (Path(tmp) / 'cloudflare-worker/sql/migrations').iterdir())
+            text = (Path(tmp) / 'cloudflare-worker/sql/migrations' / f'{stem}.sql').read_text()
+        self.assertEqual(written, [f'{stem}.sql'])
+        self.assertIn(mod.bridge_statements(with_moves=False)[0], text)
 
 
 
