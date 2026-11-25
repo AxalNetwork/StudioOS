@@ -31,7 +31,7 @@ import { takedownRelease } from '../src/services/workGraphReleaseTakedowns.ts';
 import { ProviderMeter, drainReleaseEffects } from '../src/services/workGraphReleaseAdapters.ts';
 import { RELEASE_SIGN_DOC_TYPE, releaseSignBody, releaseSignFacts, signedDocumentAdapter } from '../src/services/workGraphReleaseSigning.ts';
 import { signingEmailFor } from '../src/routes/esign.ts';
-import { releaseSignEmailContent } from '../src/services/email.ts';
+import { releaseSignEmailContent, signingRef } from '../src/services/email.ts';
 
 const OWNER = (ALICE as { userId: number }).userId; // registered the line
 const REF = 'owner-signoff';
@@ -321,13 +321,16 @@ test('8. the release envelope is mailed the release email; the agreement email i
 
   // The body is read back exactly; a body that names no release is never sent the agreement email instead.
   assert.deepEqual(releaseSignFacts(envelopes(w)[0].document_body), { lineAssetUid: c.line, manifestUid: m.manifestUid, digest: m.digest });
-  const facts = (body: string) => signingEmailFor(x.env, { documentType: RELEASE_SIGN_DOC_TYPE, documentBody: body, title: 'T' }, 'a@example.test', 'A', 'https://l', 'S');
+  // D8536: the email goes to the recipients row a send reference names (the world's own signer), not to a passed address.
+  const rec = recipients(w)[0];
+  const ref = await signingRef(rec.id, rec.signing_token, 'resend');
+  const facts = (body: string) => signingEmailFor(x.env, { documentType: RELEASE_SIGN_DOC_TYPE, documentBody: body, title: 'T' }, ref, 'A', 'https://l', 'S');
   assert.deepEqual(await facts(envelopes(w)[0].document_body.replace('# StudioOS release sign-off', '# Something else')), { ok: false, reason: 'refused' });
   assert.deepEqual(await facts(envelopes(w)[0].document_body.replace(`sha256:${m.digest}`, 'sha256:abc')), { ok: false, reason: 'refused' });
   assert.equal(x.gmail.sent.length, 1, 'nothing mailed for a body that names no release');
 
   // Every other document keeps the agreement email, subject and words as before.
-  assert.deepEqual(await signingEmailFor(x.env, { documentType: 'founder_nda_v1', documentBody: 'b', title: 'Mutual NDA' }, 'b@example.test', 'Bo Smith', 'https://l/esign/t', 'Sam'), { ok: true, reason: null });
+  assert.deepEqual(await signingEmailFor(x.env, { documentType: 'founder_nda_v1', documentBody: 'b', title: 'Mutual NDA' }, ref, 'Bo Smith', 'https://l/esign/t', 'Sam'), { ok: true, reason: null });
   const agreement = decoded(x.gmail.sent[1]);
   assert.equal(agreement.subject, 'Your Closing Binder is ready: Mutual NDA');
   assert.equal(agreement.from, 'Axal Deals <deal@axal.vc>');
