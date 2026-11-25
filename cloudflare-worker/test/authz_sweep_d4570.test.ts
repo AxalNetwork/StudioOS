@@ -66,6 +66,9 @@ const GATE_NOT_REACHED = new Set([
  */
 const FEATURE_ON: Array<{ prefix: string; env: Record<string, string>; query?: string; body?: Record<string, unknown> }> = [
   { prefix: '/api/round-calls', env: { ROUND_CALLS_ENABLED: 'true' }, query: 'project_id=1', body: { project_id: 1 } },
+  // #5830: the Typeform question mappings answer 503 while the Typeform app is not approved; approved, the venture
+  // gate runs. PUT reads its mapping list before the gate (400 for none), so the request carries an empty one.
+  { prefix: '/api/typeform/mappings', env: { TYPEFORM_APP_APPROVED: '1' }, query: 'project=1', body: { project: 1, mappings: [] } },
 ];
 const featureOf = (path: string) => FEATURE_ON.find((f) => path === f.prefix || path.startsWith(`${f.prefix}/`));
 

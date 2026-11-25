@@ -122,6 +122,22 @@ test('only static file types are accepted, and configuration files never come fr
   assert.match(nameProblem('_worker.js'), /configuration/);
 });
 
+test('every file the build copies from frontend/public is a type the preview accepts', () => {
+  // #8468: eleven program-brief PDFs in frontend/public made every preview artifact refused, and no test
+  // noticed, because each case named its own files. The build copies frontend/public into docs/ whole, so
+  // every name there must pass; the configuration files are the trusted job's to write, not the artifact's.
+  // Mutation checked: 'pdf' removed from ALLOWED_EXTENSIONS fails here naming the eleven briefs.
+  const root = new URL('../../frontend/public/', import.meta.url).pathname;
+  const walk = (dir, rel = '') => readdirSync(join(root, rel), { withFileTypes: true }).flatMap((e) => {
+    const name = rel ? `${rel}/${e.name}` : e.name;
+    return e.isDirectory() ? walk(dir, name) : [name];
+  });
+  const files = walk(root).filter((name) => !CONTROL_NAMES.includes(name.split('/').at(-1)));
+  assert.ok(files.length > 100, `${files.length} files under frontend/public`);
+  assert.ok(files.some((name) => name.endsWith('.pdf')), 'the program briefs are still there');
+  assert.deepEqual(files.map((name) => [name, nameProblem(name)]).filter(([, problem]) => problem), []);
+});
+
 test('size lies, CRC mismatches, encryption, odd methods and bombs are refused', () => {
   // Mutation checked: the CRC comparison removed; maxOutputLength removed.
   assert.match(refusal([INDEX, { name: 'a.js', data: 'hello', crc: 1 }]), /CRC mismatch/);
