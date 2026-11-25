@@ -76,7 +76,10 @@ test('the registry is off by default, outside preview and on a branch, and needs
   assert.equal((await w.call('drafting-assets')).status, 200);
   assert.equal((await w.call('drafting-assets', undefined, { who: PLAIN })).status, 403);
   assert.equal((await w.call('drafting-assets', deck, { who: PLAIN })).status, 403);
-  assert.equal((await w.call('drafting-assets', deck, { session: 'no-factor' })).status, 403);
+  // A live session without the TOTP step-up reads, but cannot write.
+  w.db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, 'password-only', 'password', datetime('now'))").run(SUPER);
+  assert.equal((await w.call('drafting-assets', undefined, { session: 'password-only' })).status, 200);
+  assert.equal((await w.call('drafting-assets', deck, { session: 'password-only' })).status, 403);
   assert.equal((await w.call('drafting-assets', deck, { company: FOREIGN })).status, 404);
   for (const [environment, flag, branch] of [['production', 'preview', ''], ['preview', undefined, ''], ['preview', 'on', ''], ['preview', 'preview', 'fixture']]) {
     Object.assign(w.env, { ENVIRONMENT: environment, WORK_GRAPH_DRAFTING: flag, BRANCH_CODE: branch });
