@@ -161,6 +161,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         issued: fmtDate(p.issued_at),
         type: 'Quarterly',
         kind: 'issued',
+        readHref: `/funds/${p.fund_id}/reporting/${p.id}`,
         periodRow: p,
       }));
     const now = new Date();

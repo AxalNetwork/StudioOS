@@ -552,7 +552,24 @@ export function portfolioProjectFor(pathname = '') {
 export const companyLegalPath = (uid) => `${companySettingsPathFor(uid)}/legal`;
 export const companyProjectsPath = (uid, id = null) => `${companySettingsPathFor(uid)}/projects${id != null ? `/${enc(id)}` : ''}`;
 /** Make it a company (PF3b, PF6b): Incorporate, prefilled with the project (D1414). */
-export const incorporatePath = (id) => `/incorporate?project=${enc(id)}`;
+export const incorporatePath = (id, kind = 'project') => `/incorporate?${kind === 'company' ? 'company' : 'project'}=${enc(id)}`;
+
+/** D6688: display only the Worker's formation_state; never infer it from missing legal facts. */
+export function formationEntry(row, kind = 'company') {
+  const allowed = kind === 'project' ? row?.my_seat === 'owner' && Number.isSafeInteger(row.id) && row.id > 0
+    : !!row && /^[A-Za-z0-9_-]{1,64}$/.test(row.uid || '') && !row.archived_at && (!!row.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(row.my_role));
+  const state = row?.formation_state;
+  if (state === 'incorporated') return { state, allowed: false, href: null };
+  if (state === 'in_formation') return {
+    state, allowed,
+    href: allowed && Number.isSafeInteger(row.formation_order_id) && row.formation_order_id > 0
+      ? `/incorporate/success?incorporation_id=${row.formation_order_id}` : null,
+  };
+  if (state === 'not_incorporated') return {
+    state, allowed, href: allowed ? incorporatePath(kind === 'company' ? row.uid : row.id, kind) : null,
+  };
+  return { state: 'unreadable', allowed: false, href: null };
+}
 
 /** The entity types D1415 stores, in words (PF4a, PF8). */
 export const LEGAL_FORMS = Object.freeze([
@@ -638,6 +655,7 @@ export function portfolioCard(c, { activeUid = null, paths = null } = {}) {
   const extra = loc.ok && loc.value && more.ok && Number(more.value) > 1 ? ` +${Number(more.value) - 1}` : '';
   return {
     uid: c.uid,
+    formationEntry: formationEntry(c),
     name: String(c.company_name || '').trim() || NOT_RECORDED,
     // #4201: the mark draws it (a stored logo's served path, or an outside URL).
     logoUrl: c.logo_url || null,
@@ -658,6 +676,7 @@ export function portfolioProject(p, paths = null) {
   const team = blockValue(p.member_count);
   return {
     id: p.id,
+    formationEntry: formationEntry(p, 'project'),
     name: String(p.name || '').trim() || 'Untitled project',
     path: paths?.get?.(`p-${p.id}`) || null,
     stage: stageWord(p.stage),

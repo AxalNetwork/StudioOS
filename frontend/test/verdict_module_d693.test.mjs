@@ -67,12 +67,12 @@ test('18: Record a decision renders CO:335\'s copy, Proceed first, the 56px box,
     await mount.flush();
     const text = mount.text();
     for (const copy of ['Validate · Verdict', 'Record a decision', 'For the venture or one hypothesis. Earlier decisions stay.',
-      'Decision', 'Proceed', 'Pivot', 'Stop', 'For', 'The venture', 'H2 · Dispatchers lose an hour a day', 'Reasoning',
-      'Evidence it rests on', 'Partners do not see decisions.', 'Record']) assert.ok(text.includes(copy), copy);
+      'Decision', 'Proceed', 'Pivot', 'Stop', 'For', 'The venture', 'H2 · Dispatchers lose an hour a day', 'Rationale',
+      'Evidence this decision rests on · pick what you relied on', 'Partners do not see decisions.', 'Record']) assert.ok(text.includes(copy), copy);
     assert.equal(text.includes('If Pivot: the new hypothesis'), false, 'If Pivot shows only while Pivot is chosen');
     assert.equal(/[[\]]/.test(text), false, 'no bracket reaches the page');
     const input = (name, value) => mount.nodes().find((n) => n.tagName === 'INPUT' && mount.props(n).name === name && mount.props(n).value === value);
-    assert.equal(mount.props(input('decision', 'proceed')).checked, true, 'Proceed is the default');
+    assert.equal(mount.props(input('decision', 'proceed')).checked, false, 'no decision is preselected');
     assert.equal(mount.props(input('for', 'venture')).checked, true, 'The venture is the default');
     const reasoning = mount.by('cycle-form-reasoning');
     assert.equal(reasoning.tagName, 'TEXTAREA');
@@ -102,6 +102,7 @@ test('18: no evidence starts checked, the note counts the checks, and If Pivot s
     await mount.input('pivot_claim', 'Fleet managers buy it');
     await mount.choose('decision', 'stop');
     assert.equal(mount.by('cycle-form-pivot_claim'), undefined, 'gone again off Pivot');
+    await mount.input('reasoning','The evidence supports stopping');
     await mount.submit();
     assert.equal(saved.length, 1);
     assert.deepEqual(saved[0].evidence, ['evidence-1', 'pain-4-2']);
@@ -256,7 +257,7 @@ function record({ withheld = false, evidence = 3, commitments = 2 } = {}) {
     ],
     main: [
       { key: 'reasoning', title: 'Reasoning', rows: [{ a: 'Three fleets paid for the pilot.' }], empty: 'No reasoning recorded.' },
-      { key: 'evidence', title: 'Evidence it rests on', rows: Array.from({ length: evidence }, (_, i) => ({
+      { key: 'evidence', title: 'Evidence this decision rests on · pick what you relied on', rows: Array.from({ length: evidence }, (_, i) => ({
         a: `Pilot invoice ${i + 1} · H2`, b: 'Measured · 12 Oct', c: i === 0 ? 'Contradicts' : 'Supports', tone: i === 0 ? 'bad' : 'ok',
       })), empty: 'No evidence checked.' },
     ],
@@ -425,7 +426,7 @@ const VERDICT_READ = {
     },
   },
   records: {
-    cols: ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by'],
+    cols: ['Decision', 'For', 'Rationale', 'Evidence', 'Date · by'],
     rows: [
       { id: 41, decision: 'proceed', state: 'given', for: 'The venture', reasoning: 'Three fleets paid for the pilot.', evidence: 6, date: '2026-10-12', by: 'Fay Founder' },
       { id: 40, decision: 'stop', state: 'withheld', for: 'H2 · Dispatchers lose an hour a day', reasoning: '2 of 5 pieces of evidence', evidence: 2, date: '2026-10-05', by: 'Fay Founder' },
@@ -435,7 +436,7 @@ const VERDICT_READ = {
     filters: [{ key: 'decision', label: 'Decision', options: [] }, { key: 'for', label: 'For', options: [] }],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
-  parts: { can_write: true },
+  parts: { can_write: true, evidence_state: { state:'ok', supporting:6, contradicting:0, fit_unrecorded:0, missing_results:0, hypotheses_without_evidence:0, results_recorded:0, experiments_done:0, coverage:{counted:6,bar:5,state:'given',interviews:6,organizations:3}, current:{id:41,decision:'proceed',date:'2026-10-12',reasoning:'Three fleets paid for the pilot.',evidence:6} } },
   can_read_decisions: true,
 };
 
@@ -484,14 +485,14 @@ test('17: /validate/verdict renders the Decisions table from the module read, wi
     const reads = v.calls.filter((c) => c[0] === 'module');
     assert.ok(reads.length >= 1 && reads.every((c) => c[1] === 'validate' && c[3] === 'verdict'), JSON.stringify(reads));
     const t = v.text();
-    assert.match(t, /Decisions/);
+    assert.match(t, /Decision history/);
     assert.match(t, /Three fleets paid for the pilot\./);
     assert.match(t, /Withheld/);
     assert.match(t, /2 of 5 pieces of evidence/);
     assert.match(t, /Starts H4 · Owners decide/);
     assert.match(t, /12 Oct · Fay Founder/);
     assert.match(t, /Proceed/);
-    assert.match(t, /the venture’s current verdict · 12 Oct · rests on 6 pieces of evidence/);
+    assert.match(t, /Rests on 6 sources recorded with this decision/);
     assert.ok(v.hrefs().some((href) => /^\/validate\/verdict\/41(\?|$)/.test(href)), 'a row opens its record');
     // Test 21: Export summary sits under the table and calls the CSV export.
     await v.click('Export summary');
@@ -539,10 +540,10 @@ test('12: the card adapter draws the timeline (Withheld hollow, Next last) and t
     { label: 'Proceed', date: '14 Jul', done: true }, { label: 'Withheld', date: '3 Sep', done: false },
     { label: 'Proceed', date: '12 Oct', done: true }, { label: 'Next', date: '24 Oct', done: false },
   ] });
-  assert.deepEqual(big, { kind: 'big', value: 'Proceed', label: 'the venture’s current verdict · 12 Oct · rests on 6 pieces of evidence' });
+  assert.deepEqual(big, { kind: 'big', value: 'Proceed', label: 'the founder’s recorded decision · 12 Oct · rests on 6 pieces of evidence' });
   // One piece; an old-route decision drops the clause; one step and no Next draws no timeline.
   assert.match(CARDS.verdict({ ...VERDICT_READ.card.series, current: { decision: 'stop', date: '2026-10-12', evidence: 1 } })[1].label, /rests on 1 piece of evidence$/);
-  assert.equal(CARDS.verdict({ ...VERDICT_READ.card.series, current: { decision: 'stop', date: '2026-10-12', evidence: null } })[1].label, 'the venture’s current verdict · 12 Oct');
+  assert.equal(CARDS.verdict({ ...VERDICT_READ.card.series, current: { decision: 'stop', date: '2026-10-12', evidence: null } })[1].label, 'the founder’s recorded decision · 12 Oct');
   assert.deepEqual(CARDS.verdict({ decisions: [{ decision: 'proceed', state: 'given', date: '2026-10-12' }], current: { decision: 'proceed', date: '2026-10-12', evidence: 5 }, next: null }).map((x) => x.kind), ['big']);
   assert.deepEqual(CARDS.verdict(null), []);
   // The table's keys follow the Worker's columns.

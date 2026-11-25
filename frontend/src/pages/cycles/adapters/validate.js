@@ -277,7 +277,7 @@ function verdict(s) {
   const c = s.current;
   if (c && DECISION_WORD[c.decision]) {
     const rests = num(c.evidence) ? ` · rests on ${c.evidence} ${c.evidence === 1 ? 'piece' : 'pieces'} of evidence` : '';
-    out.push({ kind: 'big', value: DECISION_WORD[c.decision], label: `the venture’s current verdict${dayMonth(c.date) ? ` · ${dayMonth(c.date)}` : ''}${rests}` });
+    out.push({ kind: 'big', value: DECISION_WORD[c.decision], label: `the founder’s recorded decision${dayMonth(c.date) ? ` · ${dayMonth(c.date)}` : ''}${rests}` });
   }
   return out;
 }

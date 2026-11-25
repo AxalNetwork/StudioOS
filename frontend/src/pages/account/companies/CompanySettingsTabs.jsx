@@ -14,6 +14,7 @@ import {
 } from './companiesModel';
 import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, NotYours, PCard, ProjectMark, Reading } from './portfolioUi.jsx';
 import LegalSheet from './LegalSheet.jsx';
+import FormationEntry, { useCompanyFormation } from './FormationEntry';
 import ComplianceCard from '../../work/ComplianceCard.jsx';
 
 /**
@@ -94,6 +95,7 @@ function LegalTab({ uid, name }) {
   const reread = useCallback(() => setTick((n) => n + 1), []);
   const load = useCallback(() => portfolio.legal(uid), [uid]);
   const legal = useBlock(load, tick);
+  const formation = useCompanyFormation(uid, tick);
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState('');
   if (legal.status === 'loading' && !legal.value) return <PCard title="Legal facts"><Reading /></PCard>;
@@ -102,6 +104,9 @@ function LegalTab({ uid, name }) {
   const facts = legalFacts(l);
   return (
     <>
+      {formation.state !== 'incorporated' && <PCard title={formation.state === 'not_incorporated' ? 'Not incorporated yet' : 'Incorporation'} testId="company-formation-settings">
+        <FormationEntry entry={l.can_edit && !l.archived ? formation : { ...formation, allowed: false, href: null }} name={name} uid={uid} onRetry={reread} onLegal={() => setEditing(true)} showRefusal />
+      </PCard>}
       {notice ? <p role="status" className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`}>{notice}</p> : null}
       <PCard title="Legal facts" testId="company-legal-tab"
         aside={l.can_edit ? <button type="button" className={BTN_TEXT} onClick={() => setEditing(true)} data-testid="company-legal-tab-edit">Edit</button> : null}>

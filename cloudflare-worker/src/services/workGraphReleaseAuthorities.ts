@@ -204,6 +204,37 @@ export async function releaseAuthoritiesForScope(env: Pick<Env, 'DB'>, scope: Au
   return out;
 }
 
+/**
+ * D5585 part 9 — the people of one scope whose account is revoked, for `ReleaseContext.revokedUserIds`. Revoked is the
+ * platform's own account revocation, `users.is_active = 0`: the flag a session is refused on (`auth.ts`), which an
+ * HQ licence revocation and an admin deactivation set. The platform never deletes a `users` row (`dsrRequests.ts`), so
+ * there is no other account state to read. A removed company link is not a revocation of the person: it already
+ * withdraws their grants here (both resolvers join the link), so their approvals stop counting through `authorities`.
+ *
+ * Who is checked: the company's linked people (every grant holder was linked when granted), and everyone the scope's
+ * release records name as acting — reviewers of decisions, attesters (an agent's sponsor too), manifest authors, and the
+ * approvers of component heads (whom publication re-checks; a revoked one refuses it `revoked_author`). The answer
+ * is not capped: a cap would drop a revocation, and dropping one would let that person's decisions count. Its size is
+ * bounded by those people, not by the platform's users. Reactivating the account (`is_active = 1`) restores them on the
+ * next request.
+ */
+export async function revokedReleaseUsers(env: Pick<Env, 'DB'>, scope: AuthorityScope): Promise<Set<number>> {
+  if (!scopeOk(scope)) return new Set();
+  const m = new Meter(env);
+  const t = scope.tenantId, co = scope.companyId;
+  const rows = await m.all<{ id: number }>(env.DB.prepare(
+    `SELECT u.id FROM users u
+      WHERE u.is_active = 0 AND u.id IN (
+        SELECT user_id FROM user_company_links WHERE company_id = ?
+        UNION SELECT reviewer_user_id FROM work_graph_release_decisions WHERE tenant_id = ? AND company_id = ?
+        UNION SELECT actor_user_id FROM work_graph_release_attestations WHERE tenant_id = ? AND company_id = ?
+        UNION SELECT actor_user_id FROM work_graph_release_manifests WHERE tenant_id = ? AND company_id = ?
+        UNION SELECT approver_user_id FROM work_graph_events
+         WHERE tenant_id = ? AND company_id = ? AND approver_user_id IS NOT NULL)`,
+  ).bind(co, t, co, t, co, t, co, t, co));
+  return new Set(rows.map((r) => Number(r.id)));
+}
+
 /** The grants of one scope: who holds what now, and (with `history`) every grant and revocation, newest first. */
 export async function listReleaseAuthorityGrants(
   env: Pick<Env, 'DB'>, scope: AuthorityScope, opts: { userId?: number | null; history?: boolean; limit: number },
