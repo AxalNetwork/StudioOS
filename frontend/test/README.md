@@ -283,8 +283,10 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
 
+| `research_changed_interfaces_7815.test.mjs` | D7815: actual project Compare retry/status recovery, tab results return and stale catalogue/dossier responses after route changes. |
 | `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
+`company_attribution_7812.test.mjs` walks the canonical publisher reference across company table, responsive cards, profile and analysis subject attribution, including missing/unreviewed provenance and field-read failure.
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
