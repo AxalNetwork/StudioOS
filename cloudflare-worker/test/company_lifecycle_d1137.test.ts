@@ -50,6 +50,7 @@ function fixture() {
   db.exec(M685); // D1415: projects.slug, which a move checks
   db.exec(M4963);
   addAgentEngineTables(db); // #3850 (E6): a move changes the engine's goals and tasks in its own batch
+  db.exec(tableFromBaseline(BASELINE, 'data_room_grants')); // D8535 (#8535): a move ends the venture's data-room grants in its own batch
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);

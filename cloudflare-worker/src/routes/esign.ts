@@ -1664,10 +1664,24 @@ esign.post('/sign/:token', async (c) => {
     // observe `remaining=0` and double-fire the contract_signed notify.
     // `meta.changes` reflects the real row count touched; only the winner
     // proceeds to dispatch the notification.
-    const upd = await c.env.DB.prepare(
+    // #8516 — the record of each required effect (services/esignEffects.ts)
+    // rides in the same batch as the completion, so a step that fails after it
+    // is a `failed` row the tick replays, not a console line.
+    const { recordRequiredEffects } = await import('../services/esignEffects');
+    const typeRow = await c.env.DB.prepare(`SELECT document_type FROM esign_envelopes WHERE id = ?`).bind(rec.envelope_id).first<{ document_type: string | null }>();
+    const completeStmt = c.env.DB.prepare(
       `UPDATE esign_envelopes SET status = 'completed', signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP
          WHERE id = ? AND status != 'completed'`
-    ).bind(signedKey, rec.envelope_id).run();
+    ).bind(signedKey, rec.envelope_id);
+    let upd: { meta?: { changes?: number } };
+    try {
+      [upd] = await c.env.DB.batch([completeStmt, ...recordRequiredEffects(c.env, rec.envelope_id, typeRow?.document_type)]);
+    } catch (e) {
+      // The record must never cost the signer their completion: if the batch
+      // cannot write it, complete the envelope alone and say so.
+      console.error('[esign] effect_record_unwritten', (e as Error)?.name || 'error');
+      upd = await completeStmt.run();
+    }
     const wonRace = (upd.meta?.changes ?? 0) > 0;
     // Best-effort; never blocks the sign API.
     if (wonRace) try {
@@ -1685,14 +1699,14 @@ esign.post('/sign/:token', async (c) => {
         } catch (e) { console.warn('[esign] booklet_gp_stage_failed', (e as Error)?.name || 'error'); }
       }
       // D1216 — a staged envelope's stage records its signature and sends the
-      // next stage (never Axal's: a Super Admin releases that one). Its own
-      // try, so it never fails the signature.
-      if (envelopeRow?.envelope_uuid) {
-        try {
-          const { onStagedEnvelopeCompleted } = await import('../services/stagedSigning');
-          await onStagedEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
-        } catch (e) { console.warn('[esign] staged_next_stage_failed', (e as Error)?.name || 'error'); }
-      }
+      // next stage (never Axal's: a Super Admin releases that one). #8516: it
+      // runs from its `esign_effects` record, written with the completion
+      // above; a failure leaves the record `failed` for the tick's replay.
+      // Its own try, so it never fails the signature.
+      try {
+        const { runEnvelopeEffects } = await import('../services/esignEffects');
+        await runEnvelopeEffects(c.env, rec.envelope_id, c.env.APP_URL || 'https://axal.vc');
+      } catch (e) { console.warn('[esign] effect_record_failed', (e as Error)?.name || 'error'); }
       // Task #3 (Y-1) — Trust Center hook: when a 3-way Founder ↔ Investor
       // ↔ Axal NDA reaches `completed`, flip the matching `pairwise_ndas`
       // row to `active` and stamp a 12-month `valid_until`. Without this,

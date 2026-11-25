@@ -16,6 +16,8 @@
  *   follows          the data stays with the venture, unchanged: the event does not touch it, and it keeps naming the
  *                    venture, so it moves, sits in Trash and comes back with it.
  *   removed          a code path deletes it (`by` names it).
+ *   changed          a code path rewrites the venture's row on purpose and keeps it (`by` names it), as a move ending
+ *                    the venture's data-room grants does (D8535).
  *   kept             it stays, for the stated reason (a legal or financial record, an audit trail).
  *   not_applicable   the store does not belong to a venture (it is keyed to a company), so a venture event leaves it.
  *   unspecified      nobody has decided. `today` says what the code does now (`untouched`, `unlinked` = its
@@ -49,6 +51,7 @@ export type Today = 'untouched' | 'unlinked' | 'changed' | 'refuses' | 'unknown'
 export type Answer =
   | { is: 'follows' }
   | { is: 'removed'; by: string }
+  | { is: 'changed'; by: string }
   | { is: 'kept'; reason: string }
   | { is: 'not_applicable'; reason: string }
   | { is: 'unspecified'; question: QuestionId; today: Today };
@@ -476,6 +479,13 @@ const ERASURE: Record<string, Answer> = {
   scope_tasks: unspecified('Q1', 'changed'), // an open task assigned to the account's agent is cancelled, not removed
 };
 
+/** A move that rewrites a venture's row on purpose. D8535 (#8535): the grants were given under the company the
+ *  venture leaves, so the move's batch (`projectMoveStatements`) sets the active ones to `revoked`; the owner shares
+ *  the room again from the new company. */
+const MOVE: Record<string, Answer> = {
+  data_room_grants: { is: 'changed', by: "projectMoveStatements (an active grant becomes 'revoked', D8535)" },
+};
+
 function d1Store([name, keyed, hard]: readonly [string, Keyed, HardDelete]): Store {
   const venture = keyed !== 'c';
   return {
@@ -484,7 +494,7 @@ function d1Store([name, keyed, hard]: readonly [string, Keyed, HardDelete]): Sto
     name,
     keyed_by: keyed === 'p' ? 'project' : keyed === 'c' ? 'company' : 'project_and_company',
     answers: {
-      move: !venture ? COMPANY_DATA : keyed === 'pc' ? unspecified('Q2', 'untouched') : FOLLOWS,
+      move: MOVE[name] ?? (!venture ? COMPANY_DATA : keyed === 'pc' ? unspecified('Q2', 'untouched') : FOLLOWS),
       archive: venture ? FOLLOWS : COMPANY_DATA,
       restore: venture ? FOLLOWS : COMPANY_DATA,
       hard_delete: HARD_DELETE[hard],

@@ -71,6 +71,10 @@ export function projectMoveStatements(env: Pick<Env, 'DB'>, m: ProjectMove): D1P
     moveGuard(env, m),
     env.DB.prepare('UPDATE projects SET company_id = ? WHERE id = ? AND company_id IS ? AND slug IS ?')
       .bind(m.to, m.projectId, m.from, m.slug ?? null),
+    // D8535 (#8535): the venture's data-room grants were given under the company it leaves; a move ends them, in the
+    // same batch, as the owner's revoke does (`status = 'revoked'`). The owner shares the room again from its new home.
+    env.DB.prepare(`UPDATE data_room_grants SET status = 'revoked', updated_at = ? WHERE project_id = ? AND status = 'active'`)
+      .bind(new Date().toISOString(), m.projectId),
     membershipEvent(env, {
       kind: 'project_move', projectId: m.projectId, companyId: m.to ?? m.from, actorUserId: m.actorUserId,
       before: { company_id: m.from }, after: { company_id: m.to },

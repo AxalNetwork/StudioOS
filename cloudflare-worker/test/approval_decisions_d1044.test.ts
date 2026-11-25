@@ -148,7 +148,7 @@ test('every lane is in the log, in the canvas\'s order, and every recorded lane 
   }
   // D5302: Due diligence, KYB and Wellbeing experts record their decisions now.
   assert.deepEqual(DECISION_LANES.filter((l) => !l.recorded).map((l) => l.key),
-    ['jobs', 'ai_runs']);
+    ['jobs', 'ai_runs', 'formation_cases']);
 });
 
 test('a referral\'s verdicts are the store\'s own list', () => {
