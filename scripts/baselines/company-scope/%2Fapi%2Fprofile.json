@@ -1,0 +1,11 @@
+{
+  "GET /api/profile/preview": {
+    "kind": "filter"
+  },
+  "GET /api/profile/venture": {
+    "kind": "filter"
+  },
+  "PATCH /api/profile/venture": {
+    "kind": "target"
+  }
+}

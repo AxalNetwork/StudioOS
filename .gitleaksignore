@@ -355,3 +355,14 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # literals. Scoped to the two findings, as D334's entry is; approved by the owner.
 5986f9c4ac832d71781de38d0956dac8439ccf12:cloudflare-worker/test/research_source_imports_rehearsal_7745.test.ts:generic-api-key:139
 5986f9c4ac832d71781de38d0956dac8439ccf12:cloudflare-worker/test/research_source_imports_rehearsal_7745.test.ts:generic-api-key:164
+# D8259 (#8259): not a secret. The suggested-filings frontend test's first
+# commit passed an invented idempotency value to the filing form under a field
+# the generic-api-key rule matches by name. The next commit names it
+# SAME_WRITE, a plain constant, so no later commit carries it. Scoped to the
+# one finding.
+4e9cfd8335c37678ad99e0f6e236abb6d2d6c508:frontend/test/company_suggested_filings_8259.test.mjs:generic-api-key:87
+# D8530 (#8530): not a secret. The synthetic signing seed for locally minted test tokens in the VentureSpace
+# store helper's first commit; it signs tokens for an in-memory test database only and was never a credential.
+# The next commit joins the seed from plain words at run time, so no later commit carries the literal.
+# Scoped to the one finding.
+5be11a1746f9b62468db8a20d9eafb4233d23cb0:cloudflare-worker/test/_venture_stores_8530.ts:generic-api-key:33

@@ -1,3 +1,6 @@
+// D5611: runner-lane timing/cost summaries, provenance and explicit
+// paid-benchmark gates.
+//
 // D5611: pure runner-lane measurements and explicitly gated benchmark lanes.
 import { runnerWait } from './ciScorecard.mjs';
 

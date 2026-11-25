@@ -1,0 +1,17 @@
+{
+  "DELETE /api/services/offerings/:id": {
+    "kind": "target"
+  },
+  "GET /api/services/offerings": {
+    "kind": "filter"
+  },
+  "GET /api/services/offerings/:id": {
+    "kind": "target"
+  },
+  "POST /api/services/offerings": {
+    "kind": "target"
+  },
+  "PUT /api/services/offerings/:id": {
+    "kind": "target"
+  }
+}

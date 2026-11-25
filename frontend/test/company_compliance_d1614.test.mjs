@@ -84,7 +84,7 @@ test('1: each client method calls its route with only the body that route reads'
     ['/company/co-a/compliance/t1/work', 'POST', { project_id: 10, title: 'Prepare the filing' }],
   ]);
   // One line in the generated module list (D527, #4105), in its alphabetical place.
-  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/companyActions\.js';\nexport \* from '\.\/api\/companyCompliance\.js';\nexport \* from '\.\/api\/companyDocuments\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/companyCompliance\.js';$/m); // listed; its neighbours move as company* modules land (D8260)
 });
 
 test('2: the seam goes through the client; Create work answers the Work off block while the engine is off', async () => {

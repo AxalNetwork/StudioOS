@@ -1,0 +1,14 @@
+{
+  "GET /api/comarketing/founder/by-project/:pid": {
+    "kind": "target"
+  },
+  "GET /api/comarketing/me/attributions": {
+    "kind": "filter"
+  },
+  "GET /api/comarketing/me/pitches": {
+    "kind": "filter"
+  },
+  "POST /api/comarketing/me/pitches": {
+    "kind": "target"
+  }
+}

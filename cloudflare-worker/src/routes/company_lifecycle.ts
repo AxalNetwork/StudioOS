@@ -27,6 +27,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { mapError, nowIso } from './_t13t14t15_helpers';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { runDecision, decisionGuard, clearGuard } from '../services/decisionBatch';
 import { archivedRefusal, isArchived } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -107,17 +108,21 @@ r.post('/company/:uid/transfer', async (c) => {
     if (!target) return c.json({ detail: 'That person is not a member of this company' }, 404);
     if (target.is_primary_admin && !demote) return c.json({ detail: 'That member is already a primary admin', code: 'already_primary' }, 409);
     // The grant first, then the demote, in one batch: whichever way it ends,
-    // the company keeps a primary admin.
-    const stmts = [
-      c.env.DB.prepare('UPDATE user_company_links SET is_primary_admin = 1 WHERE id = ?').bind(target.id),
+    // the company keeps a primary admin. D8528: the grant is the decision. If the
+    // target's seat went after it was read (removed in another request), the
+    // grant changes no row and nothing after it runs, the demote included.
+    const outcome = await runDecision(c.env, [
+      c.env.DB.prepare('UPDATE user_company_links SET is_primary_admin = 1 WHERE id = ? AND company_id = ? AND user_id = ?').bind(target.id, g.company.id, targetId),
+      decisionGuard(c.env),
       ...(demote ? [c.env.DB.prepare('UPDATE user_company_links SET is_primary_admin = 0 WHERE id = ?').bind(g.link.id)] : []),
       membershipEvent(c.env, {
         kind: 'transfer', companyId: g.company.id, actorUserId: user.id, targetUserId: targetId,
         before: { target_primary_admin: Boolean(target.is_primary_admin), actor_primary_admin: true },
         after: { target_primary_admin: true, actor_primary_admin: !demote },
       }),
-    ];
-    await c.env.DB.batch(stmts);
+      clearGuard(c.env),
+    ]);
+    if (outcome.lost) return c.json({ detail: 'That person is not a member of this company' }, 404);
     return c.json({ uid: g.company.uid, primary_admin_user_id: targetId, demoted: demote });
   } catch (e) { return mapError(c, e); }
 });

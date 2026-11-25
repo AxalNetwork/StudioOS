@@ -23,11 +23,12 @@ concurrency:
   group: release-draft
   cancel-in-progress: false
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   rename:
+    permissions:
+      contents: write
     name: add the stage suffix to unsuffixed releases
     runs-on: ubuntu-latest
     timeout-minutes: 30

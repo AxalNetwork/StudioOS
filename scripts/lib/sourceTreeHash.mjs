@@ -1,4 +1,7 @@
 /**
+ * The content hash of `frontend/src` that `docs/.build-source` records, so "is
+ * this bundle built from this source" is answerable (D103).
+ *
  * A content hash of a source tree, as it exists on disk right now.
  *
  * WHY IT IS NOT A GIT CALL. The build runs against the WORKING TREE, usually

@@ -73,7 +73,7 @@ export interface Doc {
 }
 
 /** The R2 pointer a row holds, or null. Read here only; never returned. */
-function pointerOf(content: string | null): { r2_key: string; content_type: string } | null {
+export function pointerOf(content: string | null): { r2_key: string; content_type: string } | null {
   if (!content) return null;
   try {
     const p = JSON.parse(content);

@@ -352,3 +352,14 @@ export function setupActions({ works = false, search = '' } = {}) {
     { key: 'import', label: IMPORT_ACTION, href: importHref(search) },
   ];
 }
+
+
+/** D6079: each Overview block must carry its own source result, never an invented zero. */
+export function overviewPart(key, value) {
+  if (!value || typeof value !== 'object') return { state: 'unreadable', reason: 'This Overview source could not be read.' };
+  if (['unreadable', 'not_recorded', 'refused'].includes(value.state) && typeof value.reason === 'string') return value;
+  if (value.state === 'ok' && (key === 'fit'
+    ? value.counts && ['fits', 'outside', 'unclear', 'not_recorded'].every((k) => Number.isInteger(value.counts[k]) && value.counts[k] >= 0)
+    : Array.isArray(value.items))) return value;
+  return { state: 'unreadable', reason: 'This Overview source could not be read.' };
+}

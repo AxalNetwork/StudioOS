@@ -1,0 +1,62 @@
+{
+  "GET /api/round-calls": {
+    "kind": "filter"
+  },
+  "GET /api/round-calls/:uid": {
+    "kind": "target"
+  },
+  "GET /api/round-calls/:uid/export.csv": {
+    "kind": "target"
+  },
+  "GET /api/round-calls/:uid/export.pdf": {
+    "kind": "target"
+  },
+  "GET /api/round-calls/:uid/follow-through": {
+    "kind": "target"
+  },
+  "GET /api/round-calls/:uid/source-audience": {
+    "kind": "target"
+  },
+  "GET /api/round-calls/context": {
+    "kind": "filter"
+  },
+  "GET /api/round-calls/readiness": {
+    "kind": "filter"
+  },
+  "POST /api/round-calls": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/audience-preview": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/commitments": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/counsel-request": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/manage": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/remind": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/send": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/successor": {
+    "kind": "target"
+  },
+  "POST /api/round-calls/:uid/terms-draft": {
+    "kind": "target"
+  },
+  "PUT /api/round-calls/:uid": {
+    "kind": "target"
+  },
+  "PUT /api/round-calls/:uid/audience": {
+    "kind": "target"
+  },
+  "PUT /api/round-calls/:uid/questions/:questionUid": {
+    "kind": "target"
+  }
+}

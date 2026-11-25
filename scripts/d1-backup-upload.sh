@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Uploads the nightly D1 SQL export to the primary R2 bucket over its
+# S3-compatible multipart API.
+#
 # Upload the primary D1 export with the S3 multipart transfer client.
 # R2 uses the API token's ID as the access key ID and the SHA-256 of its
 # value as the secret. Both credentials live only in this process tree.

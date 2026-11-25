@@ -47,14 +47,26 @@ export const WINDOWS = Object.freeze({ reconcileMs: 15_000, externalStartMs: 90_
 /** One job container, from `scripts/ci/runners/job-container.mjs`: --cpus 2, --memory 4 GiB, --pids-limit 256. */
 export const SLOT_RESOURCES = Object.freeze({ cpus: 2, memoryGiB: 4, pids: 256, workTmpfsGiB: 4 });
 
-/** Hosted CI on 2026-11-22T00:00Z to 2026-11-23T10:40Z, 668 ci.yml runs and 10,192 executed jobs (D8333 §2). */
+/**
+ * Hosted CI on 2026-11-22T00:00Z to 2026-11-23T10:42Z: 668 ci.yml runs, 9,350 jobs that held a runner. Every
+ * figure is the output of `scripts/ci/capacity-stage-evidence.mjs` on those records (D8421), which counts a job
+ * as running only while it held a runner. The first record (D8333) also counted 281 suite jobs that were
+ * cancelled while still waiting, and reported a peak of 147 running; the true peak of all ci.yml jobs is 60.
+ */
 export const MEASURED = Object.freeze({
-  workerShardMinutes: Object.freeze({ p50: 25.4, p90: 38.9, p95: 43.0 }),
-  frontendShardMinutes: Object.freeze({ p50: 11.8, p95: 15.1 }),
-  suiteShardsRunning: Object.freeze({ timeAverage: 37.8, peak: 147 }),
-  workerShardsStartedPerHour: Object.freeze({ median: 74, max: 177 }),
-  workerShardShareByEvent: Object.freeze({ merge_group: 1327, pull_request: 1206, push: 0 }),
-  queueWaitMinutes: Object.freeze({ p50: 6.9, p95: 61.7 }),
+  workerShardMinutes: Object.freeze({ p50: 26.0, p90: 39.1, p95: 43.1 }),
+  frontendShardMinutes: Object.freeze({ p50: 11.8, p95: 15.0 }),
+  /** All ci.yml jobs: never more than 60 at once, 56 held for 30 minutes. */
+  hostedJobsRunning: Object.freeze({ peak: 60, sustained30: 56 }),
+  suiteShardsRunning: Object.freeze({ timeAverage: 36.1, peak: 60, sustained30: 56 }),
+  /** What would have run had each suite shard started when it was created; a floor, cancelled waits excluded. */
+  suiteShardsOffered: Object.freeze({ peak: 192, sustained30: 88 }),
+  /** Merge-queue Worker shards, the only work the prepared route may move off hosted runners. */
+  queueWorkerShardsOffered: Object.freeze({ peak: 54, sustained30: 20 }),
+  workerShardsCompletedPerHour: Object.freeze({ median: 76, busiest: 118 }),
+  workerShardsRanByEvent: Object.freeze({ merge_group: 1193, pull_request: 1182, push: 0 }),
+  /** Suite shards, creation to start. */
+  queueWaitMinutes: Object.freeze({ p50: 8.5, p95: 62.6 }),
 });
 
 const positive = (n) => Number.isFinite(n) && n > 0;

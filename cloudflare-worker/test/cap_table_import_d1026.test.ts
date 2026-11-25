@@ -167,7 +167,7 @@ test('the record and its history as one CSV: every status, formulas neutralised,
     assert.match(csv, /\r\nHistory\r\n/);
     assert.match(csv, /captable\.issuance\.voided/);
     assert.equal(one(f, `SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'cap_table_record_exported' AND project_id = 10`).n, 1);
-    assert.equal((await call(f, PARTNER, '/record/10/export.csv')).status, 403);
+    assert.equal((await call(f, PARTNER, '/record/10/export.csv')).status, 404, 'a stranger is answered as for a missing venture (D8526)');
   } finally { f.db.close(); }
 });
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -100,45 +100,37 @@ export default function EngagementsZone() {
   const [bookings, setBookings] = useState(null);
   const [deliverables, setDeliverables] = useState(null);
 
+  const readEpoch = useRef(0);
+  const [activityLoading, setActivityLoading] = useState(true);
   const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, error: '' }));
-    try {
-      // #4714 (D4714): every page; `totals` are the whole set's.
-      const read = await readEveryPage((page) => api.listMyAdvisorEngagements(page));
-      const data = { items: read.items, totals: read.first?.totals || null };
+    const epoch = ++readEpoch.current;
+    const current = () => epoch === readEpoch.current;
+    setState(s => ({ ...s, loading: true, error: '' }));
+    setActivityLoading(true); setCandidatesRead(null); setCandidates([]);
+    const primary = readEveryPage((page) => api.listMyAdvisorEngagements(page)).then(read => {
+      if (!current()) return;
       setPartial(partialLine(read));
-      // WHO THIS ADVISOR MAY LINK, as a TOLERATED SECOND SOURCE. The candidates
-      // are the people who have booked them — the relationship the worker checks
-      // — and an advisor whose bookings will not load still has a contract
-      // board, so this never takes the page down with it.
-      const held = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null);
-      setCandidatesRead(held != null);
-      setBookings(held ? held.items : null);
-      // #4831 (D4831): the work filed under each engagement, for the card's
-      // activity line, the sheet's Delivery tab and the #4684 warning. A
-      // tolerated read like the bookings: the board stands without it.
-      const work = await readEveryPage((page) => api.listMyAdvisorDeliverables(page)).catch(() => null);
-      setDeliverables(work ? work.items : null);
+      setState({ loading: false, error: '', items: read.items, totals: read.first?.totals || null });
+    }).catch(error => {
+      if (current()) setState({ loading: false, error: zoneError(error, error?.message || 'The engagement record could not be read.', 'practice'), items: [], totals: null });
+    });
+    const held = readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null).then(held => {
+      if (!current()) return;
+      setCandidatesRead(held != null); setBookings(held ? held.items : null);
       const seen = new Map();
-      for (const b of held?.items || []) {
-        if (b.client_user_id && !seen.has(b.client_user_id)) {
-          seen.set(b.client_user_id, {
-            id: b.client_user_id,
-            name: b.client_name || b.founder_name || b.client_email || `Member #${b.client_user_id}`,
-          });
-        }
-      }
-      setCandidates([...seen.values()].sort((a, b) => a.name.localeCompare(b.name)));
-      setState({ loading: false, error: '', items: data?.items || [], totals: data?.totals || null });
-    } catch (error) {
-      setState({
-        loading: false,
-        error: zoneError(error, error?.message || 'The engagement record could not be read.', 'practice'),
-        items: [], totals: null,
+      for (const b of held?.items || []) if (b.client_user_id && !seen.has(b.client_user_id)) seen.set(b.client_user_id, {
+        id: b.client_user_id, name: b.client_name || b.founder_name || b.client_email || `Member #${b.client_user_id}`,
       });
-    }
+      setCandidates([...seen.values()].sort((a, b) => a.name.localeCompare(b.name)));
+    });
+    const work = readEveryPage((page) => api.listMyAdvisorDeliverables(page)).catch(() => null).then(work => {
+      if (current()) setDeliverables(work ? work.items : null);
+    });
+    await Promise.all([held, work]);
+    if (current()) setActivityLoading(false);
+    await primary;
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => { readEpoch.current++; }; }, [load]);
   // The board above the log renders under a skeleton first, so the scroll to
   // `#access-log` waits until it has its height.
   useScrollToHash(state.loading);
@@ -420,7 +412,7 @@ export default function EngagementsZone() {
                     ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-faint">Nothing here.</p>
                     : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
                       onAdvance={advance} candidates={candidates} candidatesRead={candidatesRead} onLink={linkClient}
-                      activity={activityLine(e, bookings, deliverables)} onOpen={() => setOpenId(e.id)}
+                      activity={activityLoading ? 'Reading activity…' : activityLine(e, bookings, deliverables)} onOpen={() => setOpenId(e.id)}
                       onOpenClient={openClient} />)}
                 </div>
               </div>
@@ -735,7 +727,9 @@ function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLi
         <p className="mt-1 text-[9.5px] leading-relaxed text-axal-faint">
           {e.founder_user_id
             ? 'Linked. Work products can be sent to them, and they can record having opened one. Changing the account never moves work already sent: it stays with the person it went to.'
-            : !candidatesRead
+            : candidatesRead == null
+              ? 'Reading the accounts you could link…'
+              : !candidatesRead
               ? 'Your bookings could not be read, so the accounts you could link are not listed. Reload to try again.'
               : options.length === 0
               ? 'Nobody has booked you yet, so there is no account to link. The contract works either way.'

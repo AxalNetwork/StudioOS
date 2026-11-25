@@ -1,4 +1,7 @@
 /**
+ * The assets ONE build's shells reach — what the no-ledger seed keeps, so
+ * `docs/assets` stops growing (D183).
+ *
  * The set of hashed assets ONE build's `index.html` actually reaches.
  *
  * WHY THIS EXISTS. `planAssetRetention`'s no-ledger path seeds every asset

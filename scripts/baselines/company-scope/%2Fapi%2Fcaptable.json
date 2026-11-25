@@ -1,0 +1,119 @@
+{
+  "DELETE /api/captable/409a/:projectId/events/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/captable/scenarios/:uid": {
+    "kind": "target"
+  },
+  "DELETE /api/captable/shares/:id": {
+    "kind": "target"
+  },
+  "GET /api/captable/409a/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/captable/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/captable/equity-plan": {
+    "kind": "filter"
+  },
+  "GET /api/captable/live": {
+    "kind": "filter"
+  },
+  "GET /api/captable/record/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/captable/record/:projectId/closes/:closeUid": {
+    "kind": "target"
+  },
+  "GET /api/captable/record/:projectId/export.csv": {
+    "kind": "target"
+  },
+  "GET /api/captable/record/:projectId/history": {
+    "kind": "target"
+  },
+  "GET /api/captable/register/:projectId/export.csv": {
+    "kind": "target"
+  },
+  "GET /api/captable/scenarios": {
+    "kind": "filter"
+  },
+  "GET /api/captable/scenarios/:uid": {
+    "kind": "target"
+  },
+  "GET /api/captable/scenarios/:uid/export.csv": {
+    "kind": "target"
+  },
+  "GET /api/captable/scenarios/:uid/shares": {
+    "kind": "target"
+  },
+  "GET /api/captable/scenarios/by-project/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/captable/scenarios/by-project/:projectId/compare": {
+    "kind": "target"
+  },
+  "GET /api/captable/scenarios/by-project/:projectId/today": {
+    "kind": "target"
+  },
+  "PATCH /api/captable/record/:projectId/classes/:uid": {
+    "kind": "target"
+  },
+  "POST /api/captable/409a/:projectId": {
+    "kind": "target"
+  },
+  "POST /api/captable/409a/:projectId/events": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/classes": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/closes/:closeUid/proposals": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/document-read": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/issuances": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/issuances/:uid/void": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/proposals": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/proposals/:uid/accept": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/proposals/:uid/dismiss": {
+    "kind": "target"
+  },
+  "POST /api/captable/record/:projectId/proposals/import": {
+    "kind": "target"
+  },
+  "POST /api/captable/register/:projectId/snapshot": {
+    "kind": "target"
+  },
+  "POST /api/captable/scenarios": {
+    "kind": "target"
+  },
+  "POST /api/captable/scenarios/:uid/share": {
+    "kind": "target"
+  },
+  "POST /api/captable/scenarios/by-project/:projectId/simulate": {
+    "kind": "target"
+  },
+  "POST /api/captable/scenarios/by-project/:projectId/variants": {
+    "kind": "target"
+  },
+  "PUT /api/captable/carta/venture": {
+    "kind": "target"
+  },
+  "PUT /api/captable/record/:projectId/currency": {
+    "kind": "target"
+  },
+  "PUT /api/captable/scenarios/:uid": {
+    "kind": "target"
+  }
+}
