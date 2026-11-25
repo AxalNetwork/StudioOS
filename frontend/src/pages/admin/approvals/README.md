@@ -6,8 +6,16 @@ under the shared admin header (D936). `/admin/held/approvals` forwards here with
 
 | File | What it is |
 |---|---|
-| `approvalsModel.js` | Pure functions: the tabs and boards by address, the twenty lanes in the canvas's groups, HQ's nine, Not a queue, ages and bands, and every block built from the reads. No React, so `node --test` loads it alone. |
-| `inboxModel.js` | D1045 (#2893): pure functions for part 7 — the inbox's query from the address, its rows, tiles, page line and the two charts; the item at `/admin/approvals/items/<lane>-<id>`, Assign and History; each lane's Notifies and HQ's counts; Decided's rows and notes; Waiting on HQ. D1047 (#2895): a phone card's age pill, the Filters count and the Sort words. |
+| `approvalsModel.js` | Page addresses, tab selection and shared copy. Keeps the existing exports for board and lane consumers. |
+| `inboxModel.js` | Public imports for the Inbox, assignment, item details, Decided and weekly results. |
+| `inboxQueueModel.js` | Inbox query parameters, queue rows, filters, urgency, counts and summaries. |
+| `approvalsLanesModel.js` | Lane definitions and labels, the glance counts, HQ lanes and age-band breakdowns. |
+| `approvalDecidedModel.js` | Decided query parameters, rows, coverage notes and pagination. |
+| `approvalAssignmentModel.js` | Reviewer choices, ownership and assignment across pages. |
+| `approvalWeeklyModel.js` | Weekly totals and the decision chart. |
+| `approvalItemModel.js` | The item drawer, history and review destinations. |
+| `approvalsBoardModel.js` | The tester, expert and pitch board rows, metrics and decision copy. |
+| `approvalsFormat.js` | Time, date and number formatting used across views. |
 | `AdminApprovals.jsx` | The page that picks the view (APR1–APR3, APR9–APR14): it reads HQ's inbox, item and decision reads and the Studio glance for the lane counts, draws the header and its tabs, and opens Inbox, Lanes or Decided, the item drawer and the Assign dialog from the files below. D5882 (#5882): it re-exports `BandPill`, `UrgencyPill`, `LaneDoor`, `HqDoor`, `AssignDialog` and `OwnerCell` for the boards. |
 | `approvalsUi.jsx` | D5882: what the views share — the styles, the age and urgency pills, one read answered alone (`useRead`), a lane's Waiting cell, a chart with "View as table", and the failed card. |
 | `approvalDoors.jsx` | D5882: every door the page opens. `LaneDoor` and `HqDoor` write each lane's door as a literal link; the Best-Fit item door is a literal template. |
