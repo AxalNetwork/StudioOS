@@ -145,14 +145,14 @@ test('the addresses, the tabs, the boards, and the redirect\'s key', () => {
   }
 });
 
-test('the twenty lanes in four groups; nine new; all twenty the glance counts (D1041, D1132); HQ\'s nine', () => {
+test('the twenty lanes in four groups; nine new; all twenty the glance counts (D1041, D1132); HQ’s read and assign lanes', () => {
   assert.equal(LANES.length, 20);
   assert.deepEqual([...new Set(LANES.map((l) => l.group))], ['people', 'programs', 'community', 'deals']);
   assert.equal(LANES.filter((l) => l.isNew).length, 9);
   assert.equal(LANES.filter((l) => l.glance).length, 20, 'D1132: every lane is counted');
   assert.deepEqual(LANES.filter((l) => !l.glance).map((l) => l.key), [], 'D1132: Product testers is counted now that its store exists');
   assert.deepEqual(LANES.filter((l) => l.here).map((l) => l.key), ['product_testers', 'wellbeing_experts', 'comarketing']);
-  assert.equal(HQ_LANES.length, 9);
+  assert.deepEqual(HQ_LANES.map(l => l.key), ['testing_programs', 'learning', 'tickets', 'payouts', 'ai_runs', 'notices', 'support', 'proposals', 'grants', 'formation_cases']);
 });
 
 test('ages and bands: "6 d 2 h", none under 24 hours, amber to 72, red from 72; unknown is null', () => {
@@ -659,7 +659,7 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.match(v.of('approvals-hq-payouts'), /Payout requests\s*4 waiting\s*oldest 3 d 8 h.*Commissions/);
     assert.equal(v.of('approvals-hq-count-tickets'), 'Could not be read');
     assert.equal(v.of('approvals-hq-count-grants'), 'Not read here yet', 'a lane off the glance is never 0');
-    assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
+    assert.equal(v.of('approvals-tab-lanes').replace(/\s+/g, ''), 'Lanes' + (LANES.length + HQ_LANES.length));
     // D5302: Program proposals opens HQ's queue (D964), which decides it; never "not built yet".
     assert.match(v.of('approvals-hq-proposals'), /Programs › Proposals/);
     assert.doesNotMatch(v.of('approvals-hq-proposals'), /not built yet/);

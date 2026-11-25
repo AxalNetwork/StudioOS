@@ -56,7 +56,7 @@
 import type { Env } from '../types';
 import { newUid } from '../routes/_t13t14t15_helpers';
 import { isCalendarDate } from './section83b';
-import { readCase, transition, type Actor, type CaseRow, type Stage } from './formationCase';
+import { caseWriteBatch, readCase, transition, type Actor, type CaseRow, type Stage } from './formationCase';
 import { filingCompanyStatements, type CompanyOutcome, type RegisteredAddress } from './incorporationCompany';
 import { logAdminAction } from './adminAudit';
 
@@ -106,7 +106,7 @@ const FILING_UPDATE =
   + 'certificate_document_id = COALESCE(?, certificate_document_id), '
   + "updated_at = datetime('now') "
   + 'WHERE id = ? AND state = ? AND revision = ? '
-  + 'AND EXISTS (SELECT 1 FROM formation_filing_events WHERE filing_id = ? AND to_revision = ?)';
+  + 'AND EXISTS (SELECT 1 FROM formation_filing_events WHERE filing_id = ? AND to_revision = ?) RETURNING ' + FILING_COLS;
 // A new pack clears any approval; an approval names the pack hash it approved.
 const PACK_UPDATE =
   'UPDATE formation_filings SET pack_document_id = ?, pack_sha256 = ?, founder_approved_at = NULL, founder_approved_sha256 = NULL, '
@@ -158,7 +158,7 @@ function changeStatements(env: Env, f: FilingRow, c: Change, actor: Actor, after
   const read = [f.id, f.state, f.revision];
   const event = env.DB.prepare(afterCase ? EVENT_INSERT_AFTER_CASE : EVENT_INSERT).bind(
     f.id, f.state, c.to, next, c.occurredOn ?? null, actor.userId ?? null, c.evidenceDocumentId ?? null,
-    JSON.stringify({ party: actor.party, ...(c.detail || {}) }), ...read,
+    JSON.stringify({ party: actor.party, ...(c.detail || {}), ...actor.hqWrite?.attribution }), ...read,
     ...(afterCase ? [afterCase.caseId, afterCase.stage, afterCase.revision] : []),
   );
   const update = env.DB.prepare(FILING_UPDATE).bind(
@@ -170,9 +170,9 @@ function changeStatements(env: Env, f: FilingRow, c: Change, actor: Actor, after
 
 /** A filing-only change: the two statements, then the filing as it now is, or 409 when it moved in between. */
 async function applyChange(env: Env, f: FilingRow, c: Change, actor: Actor, extra: D1PreparedStatement[] = []): Promise<FilingResult> {
-  const results = await env.DB.batch([...changeStatements(env, f, c, actor), ...extra]);
+  const results = await caseWriteBatch(env, actor, [...changeStatements(env, f, c, actor), ...extra], 1);
   if (!(Number(results[1]?.meta?.changes ?? 0) > 0)) return fail(409, 'filing_moved');
-  return { ok: true, filing: (await readFiling(env, f.id))! };
+  return { ok: true, filing: results[1].results[0] as unknown as FilingRow };
 }
 
 /** A filing change carried by a case transition: both move in one batch, or neither does. */
@@ -188,9 +188,10 @@ async function applyWithCase(
     detail: { filing_uid: f.uid, filing_kind: f.kind, filing_to: c.to },
   });
   if (!t.ok) return fail(409, t.error === 'case_moved' ? 'filing_moved' : t.error);
-  const filing = (await readFiling(env, f.id))!;
-  // The batch held: the case moved only with its filing event, and the filing update ran right after it.
-  if (filing.state !== c.to) return fail(409, 'filing_moved');
+  // Use the row from this transaction. A subsequent query/answer can already have advanced the filing again.
+  const filing = t.results.flatMap(r => r.results ?? []).find((row): row is FilingRow =>
+    typeof row === 'object' && row !== null && 'uid' in row && row.uid === f.uid && 'state' in row && row.state === c.to);
+  if (!filing) return fail(409, 'filing_moved');
   return { ok: true, filing, case: { stage: to } };
 }
 
@@ -465,7 +466,7 @@ async function acceptanceFacts(env: Env, input: Acceptance, f: Pick<FilingRow, '
  * registered, the order is filed with filed_on = the registry's date, and the
  * company is written (D1415, extended here) in the same batch.
  */
-export async function acceptFiling(env: Env, filingId: number, input: Acceptance, actor: Actor, now = today()): Promise<FilingResult> {
+export async function acceptFiling(env: Env, filingId: number, input: Acceptance, actor: Actor, now = today(), deferRegistration = false): Promise<FilingResult> {
   const fc = await filingAndCase(env, filingId);
   if (isFail(fc)) return fc;
   const { f, kase } = fc;
@@ -483,6 +484,33 @@ export async function acceptFiling(env: Env, filingId: number, input: Acceptance
   }
   if (!['ready_to_file', 'submitted', 'registry_query'].includes(kase.stage)) return fail(409, 'case_not_awaiting_registry');
 
+  if (deferRegistration) {
+    change.detail = { awaiting_hq_confirmation: true, address: facts.address };
+    return applyChange(env, f, change, actor, [
+      caseDoc(env, kase.id, f.id, facts.cert!, 'certificate', 'all', actor),
+      env.DB.prepare("UPDATE formation_cases SET waiting_on = 'hq', updated_at = datetime('now') WHERE id = ?").bind(kase.id),
+    ]);
+  }
+  return registerCompany(env, kase, f, change, { date: facts.decidedOn, number: facts.number!, cert: facts.cert!, address: facts.address }, actor);
+}
+
+/** HQ confirms the facts of the partner acceptance already on record. */
+export async function confirmPartnerRegistration(env: Env, filingId: number, actor: Actor): Promise<FilingResult> {
+  const fc = await filingAndCase(env, filingId);
+  if (isFail(fc)) return fc;
+  const { f, kase } = fc;
+  if (actor.party !== 'hq' || !actor.userId) return fail(403, 'hq_only');
+  if (!drivesCase(f, kase) || !['submitted', 'registry_query', 'ready_to_file'].includes(kase.stage)
+    || f.state !== 'accepted' || !f.decided_on || !f.registration_number || !f.certificate_document_id) return fail(409, 'registration_not_pending');
+  const event = await env.DB.prepare("SELECT detail_json FROM formation_filing_events WHERE filing_id = ? AND to_revision = ? AND to_state = 'accepted'")
+    .bind(f.id, f.revision).first<{ detail_json: string }>();
+  const detail = event && JSON.parse(event.detail_json);
+  if (!detail?.awaiting_hq_confirmation || detail.recorded_for_partner_id !== actor.hqWrite?.attribution.recorded_for_partner_id) return fail(409, 'registration_not_pending');
+  return registerCompany(env, kase, f, null, { date: f.decided_on, number: f.registration_number, cert: f.certificate_document_id, address: detail.address ?? null }, actor);
+}
+
+async function registerCompany(env: Env, kase: CaseRow, f: FilingRow, change: Change | null,
+  facts: { date: string; number: string; cert: number; address: RegisteredAddress | null }, actor: Actor): Promise<FilingResult> {
   const order = await env.DB.prepare(
     `SELECT i.id, i.project_id, i.subject_company_id, i.company_name, i.jurisdiction_id, i.registered_agent_name, i.registered_agent_address
        FROM formation_case_orders o JOIN incorporations i ON i.id = o.incorporation_id
@@ -490,17 +518,24 @@ export async function acceptFiling(env: Env, filingId: number, input: Acceptance
   ).bind(kase.id).first<any>();
   if (!order) return fail(409, 'case_has_no_order');
   const adminId = Number(actor.userId ?? 0);
-  const { statements, outcome } = await filingCompanyStatements(env, order, facts.decidedOn, adminId, {
-    number: facts.number!, certificateDocumentId: facts.cert!, address: facts.address,
+  const { statements, outcome } = await filingCompanyStatements(env, order, facts.date, adminId, {
+    number: facts.number, certificateDocumentId: facts.cert, address: facts.address,
   });
   const after = [kase.id, 'registered', kase.revision + 1];
-  const r = await applyWithCase(env, f, change, actor, kase, 'registered', {
-    orderSet: { filed_on: facts.decidedOn, filed_by: actor.userId ?? null }, orderNow: ['filed_recorded_at'],
-    extra: [
-      env.DB.prepare(CASE_DOC_INSERT_AFTER_CASE).bind(newUid(), kase.id, f.id, facts.cert, 'certificate', 'all', actor.userId ?? null, facts.cert, ...after),
-      ...statements,
-    ],
-  });
+  const payload = {
+    orderSet: { filed_on: facts.date, filed_by: actor.userId ?? null }, orderNow: ['filed_recorded_at'],
+    extra: [env.DB.prepare(CASE_DOC_INSERT_AFTER_CASE).bind(newUid(), kase.id, f.id, facts.cert, 'certificate', 'all', actor.userId ?? null, facts.cert, ...after), ...statements],
+  };
+  // D6698: confirmation consumes the already accepted filing. A second accepted filing event would misstate the registry's act.
+  if (!change) {
+    const moved = await transition(env, kase.id, 'registered', actor, {
+      ...payload, expectRevision: kase.revision, filingAsRead: { id: f.id, state: 'accepted' },
+      detail: { filing_uid: f.uid, filing_kind: f.kind, confirmed: true },
+    });
+    if (!moved.ok) return fail(moved.status, moved.error);
+    return { ok: true, filing: f, case: { stage: 'registered' }, company: outcome };
+  }
+  const r = await applyWithCase(env, f, change, actor, kase, 'registered', payload);
   if (!r.ok) return r;
   return { ...r, company: outcome };
 }
@@ -538,12 +573,12 @@ export async function recordLegacyRegistration(
     env.DB.prepare(
       `INSERT INTO formation_filings (uid, case_id, kind, submitted_by_party, submitted_on, state, decided_on, registration_number,
          certificate_document_id, attempt, supersedes_filing_id, recorded_after_the_fact, created_by)
-       VALUES (?, ?, 'incorporation', 'hq', ?, 'accepted', ?, ?, ?, ?, ?, 1, ?)`,
+       VALUES (?, ?, 'incorporation', 'hq', ?, 'accepted', ?, ?, ?, ?, ?, 1, ?) RETURNING ` + FILING_COLS,
     ).bind(uid, kase.id, order.filed_on, facts.decidedOn, facts.number, facts.cert, (prior?.attempt ?? 0) + 1, prior?.id ?? null, actor.userId),
     env.DB.prepare(
       `INSERT INTO formation_filing_events (filing_id, from_state, to_state, to_revision, occurred_on, recorded_by, evidence_document_id, detail_json)
        SELECT id, NULL, 'accepted', 0, ?, ?, ?, ? FROM formation_filings WHERE uid = ?`,
-    ).bind(facts.decidedOn, actor.userId, facts.evidence, JSON.stringify({ party: 'hq', correction: 'legacy_registration', incorporation_id: order.id }), uid),
+    ).bind(facts.decidedOn, actor.userId, facts.evidence, JSON.stringify({ party: 'hq', ...actor.hqWrite?.attribution, correction: 'legacy_registration', incorporation_id: order.id }), uid),
     env.DB.prepare(
       `INSERT OR IGNORE INTO formation_case_documents (uid, case_id, filing_id, document_id, class, visible_to, added_by)
        SELECT ?, case_id, id, ?, 'certificate', 'all', ? FROM formation_filings WHERE uid = ?`,
@@ -562,18 +597,19 @@ export async function recordLegacyRegistration(
           AND EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND archived_at IS NULL)`,
     ).bind(company, actor.userId, facts.cert, company, company));
   }
+  let written: D1Result[];
   try {
-    await env.DB.batch(statements);
+    written = await caseWriteBatch(env, actor, statements, 0);
   } catch (e) {
     if (/UNIQUE/i.test(String((e as Error)?.message))) return fail(409, 'filing_live');
     throw e;
   }
-  if (actor.email) {
+  if (!actor.hqWrite && actor.email) {
     await logAdminAction(env, actor.userId, actor.email, 'formation_legacy_registration', {
       case_uid: kase.uid, incorporation_id: order.id, filing_uid: uid, registry_date: facts.decidedOn,
     });
   }
-  return { ok: true, filing: (await env.DB.prepare(FILING_BY_UID).bind(uid).first<FilingRow>())! };
+  return { ok: true, filing: written[0].results[0] as unknown as FilingRow };
 }
 
 function caseDoc(env: Env, caseId: number, filingId: number | null, documentId: number, cls: string, visibleTo: string, actor: Actor) {
