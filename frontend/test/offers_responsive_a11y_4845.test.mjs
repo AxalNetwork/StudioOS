@@ -149,7 +149,6 @@ async function mount(element, path = '/offers') {
   return v;
 }
 const RAW = 'D1_ERROR: no such column: secret_internal_flag at offset 42';
-const hasClass = (v, n, cls) => String(v.props(n).className || '').split(/\s+/).includes(cls);
 const headingsOf = (v, root) => (root ? v.nodes().filter((n) => /^H[1-6]$/.test(n.tagName) && root.contains(n)) : [])
   .map((n) => Number(n.tagName[1]));
 
