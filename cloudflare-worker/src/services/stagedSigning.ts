@@ -323,26 +323,40 @@ export async function releaseCountersign(env: Env, superAdmin: Caller, uid: stri
 // ---------------------------------------------------------------------------
 
 /**
- * Called by the sign route when an envelope completes. A stage records its
- * signature and sends the next stage, except Axal's, which waits for its
- * release. Never fails the signature: a send that cannot happen logs a code.
- * Returns whether the envelope was a stage, so the route can tell.
+ * The staged next-stage effect (#8516, D8516). Records this stage's signature
+ * and sends the next stage, except Axal's, which waits for its release. It
+ * THROWS when the send cannot happen, so the caller (services/esignEffects.ts)
+ * can record the failure and replay it.
+ *
+ * Idempotent: the signature is stamped once, and a next stage that already
+ * carries an envelope is `already_sent`, never sent again, so a replay invites
+ * the next signer exactly once. Returns what it found:
+ *   `not_staged` the envelope is not a stage; `none` no stage follows, or the
+ *   next is Axal's (released by a Super Admin); `sent`; `already_sent`.
  */
-export async function onStagedEnvelopeCompleted(env: Env, envelopeUuid: string, appUrl: string): Promise<boolean> {
+export async function runStagedNextStage(env: Env, envelopeUuid: string, appUrl: string): Promise<'not_staged' | 'none' | 'sent' | 'already_sent'> {
   const stage = await env.DB.prepare('SELECT * FROM esign_staged_signers WHERE envelope_uuid = ?').bind(envelopeUuid).first<SignerRow>();
-  if (!stage) return false;
+  if (!stage) return 'not_staged';
   await env.DB.prepare('UPDATE esign_staged_signers SET signed_at = CURRENT_TIMESTAMP WHERE id = ? AND signed_at IS NULL').bind(stage.id).run();
   const staged = await stagedById(env, stage.staged_id);
-  if (!staged) return true;
+  if (!staged) return 'none';
   const next = (await signersOf(env, staged.id)).find((s) => s.position === stage.position + 1);
-  if (next && next.role !== 'axal') {
-    try {
-      await sendStage(env, staged, next.position, { senderId: Number(staged.created_by), senderName: 'Axal VC', appUrl });
-    } catch (e) {
-      console.warn(`[stagedSigning] next stage not sent staged=${staged.id} code=${e instanceof StagedRefusal ? e.code : 'error'}`);
-    }
+  if (!next || next.role === 'axal') return 'none';
+  if (next.envelope_uuid) return 'already_sent';
+  try {
+    await sendStage(env, staged, next.position, { senderId: Number(staged.created_by), senderName: 'Axal VC', appUrl });
+  } catch (e) {
+    if (e instanceof StagedRefusal && e.code === 'stage_already_sent') return 'already_sent';
+    console.warn(`[stagedSigning] next stage not sent staged=${staged.id} code=${e instanceof StagedRefusal ? e.code : 'error'}`);
+    throw e;
   }
-  return true;
+  return 'sent';
+}
+
+/** The class a failed staged effect is recorded under: a refusal's code, else the exception's name. */
+export function stagedErrorClass(e: unknown): string {
+  if (e instanceof StagedRefusal) return e.code;
+  return (e as Error)?.name || 'error';
 }
 
 // ---------------------------------------------------------------------------
