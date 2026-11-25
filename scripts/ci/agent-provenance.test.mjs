@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, branchIssue, checkCommit, checkRange, main, parseTrailers, shown,
+  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, branchIssue, checkCommit, checkRange, main, parseTrailers, readPrMerges, shown,
 } from './agent-provenance.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -125,6 +125,26 @@ test('only a merge that adds nothing of its own is exempt', () => {
   assert.equal(checkCommit(commit('fix: a', { cleanMerge: true })).exempt, false, 'a single-parent commit is never a merge');
 });
 
+test('#8606: a pull request GitHub merged into the branch is exempt only when the list names it', () => {
+  // GitHub's squash: the merged PR's trailers, then its own Co-authored-by paragraph, so no block parses.
+  const squash = commit(`feat: x (#8253) (#8270)\n\n${CHAIN.replace('S08', 'S22').replace('#8068', '#8253')}\n\nCo-authored-by: A <a@example.invalid>`, { sha: 'e'.repeat(40) });
+  assert.equal(checkCommit(squash).exempt, false, 'unlisted, it is an authored commit like any other');
+  assert.equal(checkCommit(squash).problems.length, 4);
+  const row = checkCommit({ ...squash, prMerge: true });
+  assert.deepEqual([row.exempt, row.prMerge, row.problems], [true, true, []]);
+  const own = commit(`fix: a\n\n${CHAIN}`);
+  const doc = checkRange({ commits: [own, squash], branch: 'agent/claude/8068-identity-chain', prMerges: new Set([squash.sha]) });
+  assert.equal(doc.verdict, 'pass', doc.problems.join('; '));
+  assert.deepEqual([doc.slot, doc.task], ['S08', '#8068'], 'the merged PR\'s slot and task do not join the branch\'s');
+  assert.equal(checkRange({ commits: [own, squash], branch: 'agent/claude/8068-identity-chain' }).verdict, 'fail', 'without the list the range fails as before');
+  const bare = commit('fix: no trailers', { sha: 'f'.repeat(40) });
+  assert.equal(checkRange({ commits: [own, squash, bare], prMerges: new Set([squash.sha]) }).verdict, 'fail', 'the branch\'s own commits still need the chain');
+  assert.deepEqual(checkRange({ commits: [squash], prMerges: new Set([squash.sha]) }).problems, ['every commit is a clean or pull-request merge; no commit carries the chain']);
+  assert.deepEqual([...readPrMerges(`${'a'.repeat(40)}\n\n${'b'.repeat(40)}\n`)], ['a'.repeat(40), 'b'.repeat(40)]);
+  assert.throws(() => readPrMerges('HEAD\n'), /not a commit sha/);
+  assert.throws(() => readPrMerges('A'.repeat(40)), /not a commit sha/, 'one spelling only');
+});
+
 test('a range names one slot and one task, the branch\'s issue, and skips branches outside agent/**', () => {
   const ok = commit(`fix: a\n\n${CHAIN}`);
   assert.equal(checkRange({ commits: [ok], branch: 'agent/claude/8068-identity-chain' }).verdict, 'pass');
@@ -224,6 +244,24 @@ test('end to end: a clean merge from main is exempt, a merge with its own conten
   assert.equal(r.status, 1, 'a merge that adds a file must carry the chain');
 });
 
+test('end to end (#8606): a commit the --pr-merges file lists is exempt and reported as a pull request merge', (t) => {
+  const { dir, put } = fixture(t);
+  put(`feat: one\n\n${CHAIN}`);
+  const merged = put('feat: another task (#8270)\n\nCo-authored-by: A <a@example.invalid>');
+  const list = join(dir, 'pr-merges.txt');
+  let r = run(dir, ['--base', 'main', '--head', 'HEAD', '--branch', 'agent/claude/8068-identity-chain']);
+  assert.equal(r.status, 1, 'without the list the merge is an authored commit');
+  writeFileSync(list, `${merged}\n`);
+  r = run(dir, ['--base', 'main', '--head', 'HEAD', '--branch', 'agent/claude/8068-identity-chain', '--pr-merges', list]);
+  assert.equal(r.status, 0, r.lines.join('\n'));
+  assert.ok(r.lines.includes(`agent-provenance: ${merged.slice(0, 12)} pull request merged into this branch, exempt`), r.lines.join('\n'));
+  writeFileSync(list, '');
+  assert.equal(run(dir, ['--base', 'main', '--head', 'HEAD', '--pr-merges', list]).status, 1, 'an empty list exempts nothing');
+  writeFileSync(list, 'not-a-sha\n');
+  assert.equal(run(dir, ['--base', 'main', '--head', 'HEAD', '--pr-merges', list]).status, 2);
+  assert.equal(run(dir, ['--base', 'main', '--head', 'HEAD', '--pr-merges', join(dir, 'absent.txt')]).status, 2);
+});
+
 test('end to end: a branch outside agent/** is skipped without reading git, and still writes the artifact', (t) => {
   const { dir, put } = fixture(t);
   put('feat: no trailers');
@@ -250,7 +288,10 @@ test('the workflow is advisory, runs on pull_request and merge_group, judges age
   assert.match(wf, /^ {4}continue-on-error: true$/m, 'advisory until the owner makes it required (D8068)');
   assert.match(wf, /^permissions:\n {2}contents: read\n {2}pull-requests: read\n/m);
   assert.match(wf, /git show "\$BASE_SHA:scripts\/ci\/agent-provenance\.mjs"/, 'the check that judges a branch comes from its base');
-  assert.match(wf, /node "\$RUNNER_TEMP\/agent-provenance\.mjs" --base "\$RANGE_BASE" --head "\$RANGE_HEAD" --branch "\$BRANCH" --out "\$RUNNER_TEMP\/provenance\.json" --source "\$SOURCE"/);
+  assert.match(wf, /node "\$RUNNER_TEMP\/agent-provenance\.mjs" --base "\$RANGE_BASE" --head "\$RANGE_HEAD" --branch "\$BRANCH" --out "\$RUNNER_TEMP\/provenance\.json" --source "\$SOURCE" "\$\{extra\[@\]\}"/);
+  // #8606: the API names a pull request's merge by its merge_commit_sha, and only a base copy that takes the list gets it.
+  assert.match(wf, /gh api "repos\/\$REPO\/commits\/\$sha\/pulls" --jq "\[\.\[\] \| select\(\.merged_at != null and \.merge_commit_sha == \\"\$sha\\"\)/);
+  assert.match(wf, /if grep -q -- "'--pr-merges'" "\$RUNNER_TEMP\/agent-provenance\.mjs"; then extra=\(--pr-merges "\$RUNNER_TEMP\/pr-merges\.txt"\); fi/);
   assert.match(wf, /name: provenance\n {10}path: \$\{\{ runner\.temp \}\}\/provenance\.json/);
   // The branch name is outsider text: it reaches the script through env only, never inside run:.
   assert.match(wf, /^ {10}PR_HEAD_REF: \$\{\{ github\.event\.pull_request\.head\.ref \}\}$/m);
