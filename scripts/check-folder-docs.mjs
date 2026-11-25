@@ -123,6 +123,7 @@ const DOCUMENTED = new Map([
   ['scripts',                         'build, deploy and the CI guards'],
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
+  ['scripts/baselines/company-scope', 'one company-scope ledger per route family (D8526)'],
   ['scripts/ci',                      'CI evidence, provider boundaries and verified tool acquisition'],
   ['scripts/ci/runners',              'Runner bootstrap, supervisor lifecycle, execution boundaries, export and recovery evidence'],
   ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],

@@ -1,0 +1,119 @@
+{
+  "DELETE /api/deals/:id/dealroom/leave": {
+    "kind": "target"
+  },
+  "DELETE /api/deals/:id/notes/:uid": {
+    "kind": "target"
+  },
+  "DELETE /api/deals/views/:uid": {
+    "kind": "target"
+  },
+  "GET /api/deals": {
+    "kind": "filter"
+  },
+  "GET /api/deals/:id/activity": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/case": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/commitments": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/deck": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/notes": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/stage": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/summary": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/summary/pdf": {
+    "kind": "target"
+  },
+  "GET /api/deals/:id/whats-new": {
+    "kind": "target"
+  },
+  "GET /api/deals/dealroom/quota": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow/:dealId/events": {
+    "kind": "target"
+  },
+  "GET /api/deals/flow/attention": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow/attention-rule": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow/compare-note": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow/inbox": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow/owners": {
+    "kind": "filter"
+  },
+  "GET /api/deals/flow/passes": {
+    "kind": "filter"
+  },
+  "GET /api/deals/invitations/mine": {
+    "kind": "filter"
+  },
+  "GET /api/deals/views": {
+    "kind": "filter"
+  },
+  "PATCH /api/deals/flow/:dealId": {
+    "kind": "target"
+  },
+  "PATCH /api/deals/views/:uid": {
+    "kind": "target"
+  },
+  "POST /api/deals/:id/commitments": {
+    "kind": "target"
+  },
+  "POST /api/deals/:id/commitments/:uid/withdrawal": {
+    "kind": "target"
+  },
+  "POST /api/deals/:id/dealroom/join": {
+    "kind": "target"
+  },
+  "POST /api/deals/:id/notes": {
+    "kind": "target"
+  },
+  "POST /api/deals/:id/transfers": {
+    "kind": "target"
+  },
+  "POST /api/deals/flow": {
+    "kind": "target"
+  },
+  "POST /api/deals/flow/:dealId/pass": {
+    "kind": "target"
+  },
+  "POST /api/deals/flow/compare-note": {
+    "kind": "target"
+  },
+  "POST /api/deals/flow/compare-note/keep": {
+    "kind": "target"
+  },
+  "POST /api/deals/flow/inbox/:key/dismiss": {
+    "kind": "target"
+  },
+  "POST /api/deals/views": {
+    "kind": "target"
+  },
+  "PUT /api/deals/:id/notes/:uid": {
+    "kind": "target"
+  },
+  "PUT /api/deals/flow/attention-rule": {
+    "kind": "target"
+  }
+}

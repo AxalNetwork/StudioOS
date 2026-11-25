@@ -1,0 +1,14 @@
+{
+  "GET /api/admin/workgraph/drafting/:assetUid": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting/:assetUid/candidates": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting/:assetUid/clauses/:clauseId/lease": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting/:assetUid/confirm-publication": {
+    "kind": "target"
+  }
+}

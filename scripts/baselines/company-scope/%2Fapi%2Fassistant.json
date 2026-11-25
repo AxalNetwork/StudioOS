@@ -1,0 +1,5 @@
+{
+  "POST /api/assistant/message": {
+    "kind": "target"
+  }
+}

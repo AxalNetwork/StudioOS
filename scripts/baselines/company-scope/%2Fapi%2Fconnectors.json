@@ -1,0 +1,29 @@
+{
+  "GET /api/connectors/:key": {
+    "kind": "target"
+  },
+  "GET /api/connectors/:uid/repositories": {
+    "kind": "target"
+  },
+  "GET /api/connectors/oauth/:provider/start": {
+    "kind": "target"
+  },
+  "GET /api/connectors/suggestions": {
+    "kind": "filter"
+  },
+  "POST /api/connectors/:uid/push": {
+    "kind": "target"
+  },
+  "POST /api/connectors/:uid/sync": {
+    "kind": "target"
+  },
+  "POST /api/connectors/connect": {
+    "kind": "target"
+  },
+  "POST /api/connectors/requests": {
+    "kind": "target"
+  },
+  "PUT /api/connectors/:uid/repositories": {
+    "kind": "target"
+  }
+}
