@@ -445,6 +445,20 @@
     ]
   },
   {
+    "id": "check-skill-eval-cases",
+    "command": [
+      "node",
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      "./cloudflare-worker/test/_ts-loader.mjs",
+      "scripts/check-skill-eval-cases.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
     "id": "check-test-clock",
     "command": [
       "node",

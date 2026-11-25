@@ -85,6 +85,7 @@ test.describe('the integrated editor', () => {
     await page.getByTestId('pitch-editor-block-b2').click();
     await page.getByTestId('pitch-editor-block-b3').click({ modifiers: ['Shift'] });
     await expect(page.getByTestId('pitch-editor-selbar')).toBeVisible();
+    await page.getByRole('tab', { name: 'Eadwyn' }).click(); // D6057: the instruction box and the deck's Ask live in the inspector's Eadwyn tab
     await expect(page.getByTestId('pitch-instruction-field')).toBeVisible();
     await page.mouse.move(0, 0);
     await expect(page.getByTestId('pitch-editor-stage')).toHaveScreenshot('editor-selection.png');
@@ -109,6 +110,7 @@ test.describe('the integrated editor', () => {
     await page.getByTestId('deck-more-open').click();
     await expect(page.getByTestId('deck-more-menu')).toHaveScreenshot('deck-more-menu.png');
     await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Eadwyn' }).click(); // D6057: the instruction box and the deck's Ask live in the inspector's Eadwyn tab
     await page.getByTestId('pitch-ask').click();
     await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('pitch-ask-sheet')).toHaveScreenshot('deck-ask.png');
@@ -130,6 +132,9 @@ test.describe('the integrated editor', () => {
     await page.mouse.move(0, 0);
     await expect(page.getByTestId('pitch-editor-cards')).toHaveAttribute('data-orientation', 'row');
     await expect(page.getByTestId('pitch-editor')).toHaveScreenshot('editor-tablet.png');
+    // D6057: the rail lives in the inspector above the phone breakpoint and in the page below it, so resizing a live
+    // editor remounts it and starts its reads; leaving first keeps the next load from inheriting an aborted read.
+    await page.goto('about:blank');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/raise/pitch/edit?project_id=${m.matrix[0].projectId}`);
     await expect(page.getByTestId('pitch-editor')).toBeVisible();

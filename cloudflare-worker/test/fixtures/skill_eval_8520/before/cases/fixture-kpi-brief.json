@@ -1,0 +1,7 @@
+{
+  "skill": "fixture-kpi-brief",
+  "version": 1,
+  "note": "D8520 fixture. Every record is made up.",
+  "input": { "records": { "grow.records": { "kpis": [ { "name": "Active sites", "value": 120 }, { "name": "Churned sites", "value": null } ] } } },
+  "expect": { "output": "brief", "must_include": ["120"], "must_say_not_recorded": ["Churned sites"], "must_not_include": ["Churned sites: 0"] }
+}
