@@ -1,4 +1,9 @@
 /**
+ * Which comments in the Worker may say "Cloudflare Access": a small lexer that
+ * tells a comment from a string, a template literal or a regex, and the rule
+ * that every mention must be quoted by an entry in
+ * `../access-comment-allowlist.json`. Owned by `../check-access-comments.mjs`.
+ *
  * Which comments in the Worker may say "Cloudflare Access", and which may not.
  *
  * THE BUG IT CATCHES. Task #33 took the Cloudflare Access middleware off

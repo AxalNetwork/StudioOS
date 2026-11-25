@@ -1,0 +1,11 @@
+{
+  "GET /api/projects": {
+    "kind": "filter"
+  },
+  "POST /api/projects": {
+    "kind": "target"
+  },
+  "POST /api/projects/submit": {
+    "kind": "target"
+  }
+}

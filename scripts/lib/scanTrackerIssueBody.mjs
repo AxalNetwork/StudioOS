@@ -1,3 +1,4 @@
+/** D7283: public Code Scanning tracker instructions from validated coordinates; finding evidence stays in a private export or protected alert. Owned by `../scan-remediation/trackers.mjs`. */
 // D7283: render actionable public trackers from coordinates without publishing finding payloads.
 const ownerName = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/
 const repoName = /^[A-Za-z0-9_.-]{1,100}$/

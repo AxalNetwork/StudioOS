@@ -1,4 +1,9 @@
-/** D4557: derive isolated host binding types from its own Wrangler config without augmenting the site's Env. */
+/**
+ * D4557: generate ignored module-scoped host binding types.
+ *
+ * D4557: derive isolated host binding types from its own Wrangler config
+ * without augmenting the site's Env.
+ */
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 const target = new URL('../agent-compute/worker-configuration.d.ts', import.meta.url);

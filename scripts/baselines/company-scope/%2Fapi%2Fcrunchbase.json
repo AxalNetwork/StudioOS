@@ -1,0 +1,8 @@
+{
+  "GET /api/crunchbase/projects/:id/competitors": {
+    "kind": "target"
+  },
+  "POST /api/crunchbase/projects/:id/apply": {
+    "kind": "target"
+  }
+}

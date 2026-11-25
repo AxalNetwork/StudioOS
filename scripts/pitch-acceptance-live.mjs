@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 /**
+ * #3662: the Pitch deck studio's live acceptance run. Signs in with a test
+ * account's session the owner confirms is synthetic
+ * (`PITCH_TEST_ACCOUNT=synthetic`), screenshots the five studio pages at
+ * desktop and phone widths and, with `PITCH_EXPORTS=1`, checks the test deck's
+ * PDF, PowerPoint and HTML exports are the files they claim. Writes a pass /
+ * fail / not-tested matrix with the revision. Creates no share, sends nothing,
+ * accepts no terms. **Exits 2 and verifies nothing when not configured, never
+ * 0.** Run by hand, not by a workflow; see
+ * `documentation/operations/PITCH_ACCEPTANCE.md`. Guarded by
+ * `frontend/test/pitch_acceptance_live_3662.test.mjs`.
+ *
  * #3662 — the Pitch acceptance run, live. It signs in as a SYNTHETIC test
  * founder the owner set up, opens the Pitch deck studio's pages in a real
  * browser at desktop and phone widths, screenshots each, and (only when

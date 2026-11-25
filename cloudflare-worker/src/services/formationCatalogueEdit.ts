@@ -35,7 +35,7 @@ export function canonicalJson(value: unknown): string {
   const walk = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === 'object') {
-      const out: Record<string, unknown> = {};
+      const out: Record<string, unknown> = Object.create(null);
       for (const k of Object.keys(v as Record<string, unknown>).sort()) {
         const x = (v as Record<string, unknown>)[k];
         if (x !== undefined) out[k] = walk(x);
@@ -185,17 +185,23 @@ const SPECS: Readonly<Record<Entity, Spec>> = Object.freeze({
       { name: 'counsel_required', kind: 'bool', default: 1 },
       { name: 'position', kind: 'int', default: 0 },
     ],
-    cols: ['form_id', 'item_key', 'phase', 'kind', 'acting_party', 'title', 'template_key', 'counsel_required', 'position'], json: [],
-    select: `SELECT x.id, x.form_id, f.form_key, x.item_key, x.phase, x.kind, x.acting_party, x.title, x.template_key, x.counsel_required, x.position
+    cols: ['form_id', 'item_key', 'phase', 'kind', 'acting_party', 'title', 'template_key', 'counsel_required', 'position',
+      'obligation_phase', 'source_id', 'checked_on', 'due_rule_json', 'event_kind', 'recurrence'], json: ['due_rule_json'],
+    select: `SELECT x.id, x.form_id, f.form_key, x.item_key, x.phase, x.kind, x.acting_party, x.title, x.template_key, x.counsel_required, x.position,
+                    x.obligation_phase, x.source_id, x.checked_on, x.due_rule_json, x.event_kind, x.recurrence
                FROM formation_pack_items x JOIN formation_entity_forms f ON f.id = x.form_id WHERE x.version_id = ?`,
-    insert: `INSERT INTO formation_pack_items (version_id, form_id, item_key, phase, kind, acting_party, title, template_key, counsel_required, position)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    update: `UPDATE formation_pack_items SET form_id = ?, item_key = ?, phase = ?, kind = ?, acting_party = ?, title = ?, template_key = ?, counsel_required = ?, position = ?
+    insert: `INSERT INTO formation_pack_items (version_id, form_id, item_key, phase, kind, acting_party, title, template_key, counsel_required, position,
+              obligation_phase, source_id, checked_on, due_rule_json, event_kind, recurrence)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    update: `UPDATE formation_pack_items SET form_id = ?, item_key = ?, phase = ?, kind = ?, acting_party = ?, title = ?, template_key = ?, counsel_required = ?, position = ?,
+                obligation_phase = ?, source_id = ?, checked_on = ?, due_rule_json = ?, event_kind = ?, recurrence = ?
               WHERE id = ? AND version_id = ? AND form_id IS ? AND item_key IS ? AND phase IS ? AND kind IS ? AND acting_party IS ? AND title IS ?
-                AND template_key IS ? AND counsel_required IS ? AND position IS ?`,
+                AND template_key IS ? AND counsel_required IS ? AND position IS ? AND obligation_phase IS ? AND source_id IS ?
+                AND checked_on IS ? AND due_rule_json IS ? AND event_kind IS ? AND recurrence IS ?`,
     remove: `DELETE FROM formation_pack_items
               WHERE id = ? AND version_id = ? AND form_id IS ? AND item_key IS ? AND phase IS ? AND kind IS ? AND acting_party IS ? AND title IS ?
-                AND template_key IS ? AND counsel_required IS ? AND position IS ?`,
+                AND template_key IS ? AND counsel_required IS ? AND position IS ? AND obligation_phase IS ? AND source_id IS ?
+                AND checked_on IS ? AND due_rule_json IS ? AND event_kind IS ? AND recurrence IS ?`,
   },
   questions: {
     entity: 'questions', key: ['form_key', 'question_key'], parent: 'form_optional',
@@ -272,6 +278,14 @@ export function canonicalRow(spec: Spec, raw: Record<string, unknown>): Record<s
     const v = raw[fieldCol(f)];
     out[f.name] = f.kind === 'json' ? (v == null ? null : parseJson(v)) : (v ?? null);
     if (f.kind === 'bool' || f.kind === 'int' || f.kind === 'source' || f.kind === 'cents') out[f.name] = v == null ? null : Number(v);
+  }
+  // D6713 obligation metadata is part of the content even before it has an editor.
+  // Omitting absent optional values preserves existing row revisions for the legacy seed.
+  if (spec.entity === 'pack') {
+    for (const key of ['obligation_phase', 'source_id', 'checked_on', 'event_kind', 'recurrence']) {
+      if (raw[key] != null) out[key] = raw[key];
+    }
+    if (raw.due_rule_json != null) out.due_rule = parseJson(raw.due_rule_json);
   }
   if (spec.cols.includes('checked_by')) out.checked_by = raw.checked_by == null ? null : Number(raw.checked_by);
   return out;

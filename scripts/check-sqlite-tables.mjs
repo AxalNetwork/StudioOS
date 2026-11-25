@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ * SQL against a table nothing creates.
+ *
  * Fails the build when the worker queries a table nothing creates.
  *
  * Nine such tables were in production when this was written. Three of them —

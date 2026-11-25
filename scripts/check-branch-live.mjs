@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-/** Read-only public smoke checks for declared branches. Never provisions or deploys. */
+/**
+ * Read-only public smoke checks for real branch declarations; `--plan` lists
+ * destinations without network requests. Refuses an example-only registry,
+ * invalid targets and shared storage before calling the existing live-smoke
+ * runner. Public responses do not establish authenticated tenant isolation.
+ *
+ * Read-only public smoke checks for declared branches. Never provisions or
+ * deploys.
+ */
 import { readdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';

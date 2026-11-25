@@ -1,4 +1,8 @@
 /**
+ * Which database a migration run touches, and which database may never be
+ * bootstrapped. One `--branch <code>` target per subsidiary, each naming the
+ * config that declares it.
+ *
  * Which database `migrate-d1.mjs` is pointed at, decided in one place.
  *
  * The runner used to hold a three-way switch on flags with the database name

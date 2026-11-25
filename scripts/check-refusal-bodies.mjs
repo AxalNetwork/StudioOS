@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * D278 — a `message`, `detail` or `error` key in a route that takes an
+ * exception's or a provider's text. Floor of helper calls so it cannot pass
+ * empty; a named ledger of sites kept on purpose, each with its reason, that
+ * refuses stale entries.
+ *
  * check-refusal-bodies — D278.
  *
  * Under cloudflare-worker/src/routes, no `message`, `detail` or `error` key

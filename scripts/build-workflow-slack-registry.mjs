@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * Generates the private channel-ID routing configuration from the approved
+ * Slack bot's actual memberships. See [workflow Slack
+ * rollout](../documentation/operations/WORKFLOW_SLACK_6370.md).
+ */
 import { readFile, writeFile, realpath } from 'node:fs/promises';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';

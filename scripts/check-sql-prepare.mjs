@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * A `${}` inside `DB.prepare()`. Exceptions live in `baselines/sql-prepare/`
+ * and are argued one at a time.
+ *
  * SQL-injection tripwire for `DB.prepare(`…`)` — the other half of M3.
  *
  * `check-sql-unsafe.mjs` guards `sql.unsafe(…)`, and that is the smaller

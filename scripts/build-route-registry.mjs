@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #4105 (not an importer): checks every `mount` export under
+ * `cloudflare-worker/src/routes/` and writes
+ * `cloudflare-worker/src/routes/_registry.ts`, the list `index.ts` mounts
+ * without a line per router. The registry is gitignored, never committed
+ * (D5612); `build-generated.mjs` runs this. `--check` exits 1 when a descriptor
+ * is unsound, the generator is not deterministic, or git tracks the registry;
+ * `route_registry_4105.test.ts` runs the same checks. Rules in
+ * `lib/routeRegistry.mjs`.
+ *
  * build-route-registry — writes `cloudflare-worker/src/routes/_registry.ts`,
  * the list of Worker route modules that mount themselves (#4105).
  *

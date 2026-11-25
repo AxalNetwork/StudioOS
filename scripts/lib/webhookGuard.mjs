@@ -1,4 +1,10 @@
 /**
+ * Whether the WhatsApp webhook refuses an unsigned POST (D754): any 2xx fails,
+ * 401 or 403 passes as guarded, 503 passes as not configured yet, and any other
+ * answer or an unreachable host is not this check's business. The probe takes
+ * `fetch` handed in, so it is tested with fakes; it never calls Meta and needs
+ * no secret. Owned by `../check-spa-live.mjs`.
+ *
  * D754 (#1982) — the WhatsApp webhook refuses an unsigned body.
  *
  * `POST /api/channels/whatsapp/webhook` checks Meta's `X-Hub-Signature-256`

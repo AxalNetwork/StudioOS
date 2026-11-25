@@ -1,0 +1,8 @@
+{
+  "GET /api/private-data/founder/:userId": {
+    "kind": "target"
+  },
+  "GET /api/private-data/portfolio/metrics": {
+    "kind": "filter"
+  }
+}

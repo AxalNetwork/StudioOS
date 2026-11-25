@@ -1,3 +1,8 @@
+/**
+ * D5339: `noAnthropicInProd.mjs` over fixture trees: the reviewed tree passes;
+ * a provider import, a new Anthropic endpoint or key name, or an assistant
+ * mount without its flag check fails.
+ */
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

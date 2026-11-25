@@ -1,3 +1,5 @@
+// D6387: signed event admission, dispatch scope and error handling.
+//
 // D6387: exercise the signed event through Cloudflare intake and the exact GitHub workflow dispatch.
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
