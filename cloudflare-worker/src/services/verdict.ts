@@ -1308,3 +1308,32 @@ export async function sharedDecisionFor(env: Env, user: User, decisionId: unknow
     superseded_at: d.superseded_at,
   };
 }
+
+
+/** D6018 (#6018): the live evidence snapshot is separate from any recorded decision. */
+export async function verdictEvidenceState(ctx: Ctx) {
+  try {
+    const { claimsOf, loadHypotheses, loadInterviews } = await import('./cycleValidate');
+    const { loadPainGroupModel } = await import('./painGroups');
+    const [items, current, hypotheses, interviews, pains, results, recent] = await Promise.all([
+      evidenceFor(ctx.env, ctx.projectId), currentDecision(ctx.env, ctx.projectId, 'venture'),
+      loadHypotheses(ctx, 'open'), loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true }),
+      ctx.env.DB.prepare(`SELECT e.id, e.result FROM hypothesis_experiments e JOIN hypotheses h ON h.id=e.hypothesis_id AND h.project_id=e.project_id
+        WHERE e.project_id=? AND h.retired_at IS NULL AND e.status='done'`).bind(ctx.projectId).all<{id:number;result:string|null}>(),
+      decisionsFor(ctx.env,ctx.projectId,{scope:'venture',sort:'newest',pageSize:1}),
+    ]);
+    const { coverage } = await offeredCoverage(ctx.env, ctx.projectId, 'venture', items.map(e=>e.id), { evidenceSource: async()=>items });
+    const claims = claimsOf(hypotheses.hyps, hypotheses.links, interviews, pains);
+    const latest=recent.rows[0];
+    const observedHypotheses = new Set(items.filter(e=>e.kind!=='experiment'||e.observed===true).map(e=>Number(e.hypothesis_id)));
+    return { state: 'ok', coverage,
+      latest:latest?{id:Number(latest.id),decision:latest.decision,state:latest.state,reasoning:latest.reasoning,evidence:Number(latest.evidence_count)}:null,
+      supporting: claims.reduce((n,c)=>n+c.supporting,0), contradicting: claims.reduce((n,c)=>n+c.contradicting,0),
+      fit_unrecorded: claims.reduce((n,c)=>n+c.fit_unrecorded,0),
+      hypotheses_without_evidence: claims.filter(c=>!observedHypotheses.has(c.id)).length,
+      experiments_done: (results.results||[]).length,
+      results_recorded: (results.results||[]).filter(e=>!!e.result?.trim()).length,
+      missing_results: (results.results||[]).filter(e=>!e.result?.trim()).length,
+      current: current ? { id:Number(current.id), decision:current.decision, reasoning:current.reasoning, date:day(current.decided_at), evidence:isOldRoute(current)?null:Number(current.evidence_count) } : null };
+  } catch (err) { console.warn('[verdict] evidence snapshot unreadable:', (err as Error)?.message); return { state:'unreadable' }; }
+}

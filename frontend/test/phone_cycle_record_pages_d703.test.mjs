@@ -185,13 +185,15 @@ test('6 (route): <CycleRoute cycle="validate" slug="verdict" /> below 1024px is 
     const bars = m.fibers(CycleBar);
     assert.equal(bars.length, 1);
     assert.deepEqual([bars[0].back.label, bars[0].back.to, bars[0].title, bars[0].sub, bars[0].eadwynLabel],
-      ['Validate', `/validate${Q}`, 'Verdict', 'Every decision, oldest to newest, never overwritten.', 'Validate · Verdict']);
-    assert.match(m.text(m.by('phone-module-next')), /One next thing.*Record the decision for the sprint ending 24 Oct\./);
-    assert.equal(pr(m.by('phone-module-cta')).href, `/validate/verdict/new${Q}`, 'Record a decision, #1704\'s Add');
-    const heading = walk(m.by('phone-module-chart')).find((n) => n.tagName === 'H2');
-    assert.equal([pr(heading).children].flat().join(''), 'Verdict · at a glance');
-    assert.match(m.text(), /the venture’s current verdict · 12 Oct · rests on 6 pieces of evidence/);
-    assert.match(m.text(), /Decisions · 1–1 of 1/);
+      // D6018 (#6018): V10's own home carries the canvas sub-line on the phone too.
+      ['Validate', `/validate${Q}`, 'Verdict', 'Review the evidence, then choose.', 'Validate · Verdict']);
+    // D6018 (#6018): V10 owns the page on the phone as on desktop: no generic next-thing or glance chart, and a read
+    // without the evidence snapshot says so rather than drawing a computed verdict.
+    assert.equal(m.all('verdict-v10').length, 1);
+    assert.equal(m.by('phone-module-chart'), undefined);
+    assert.match(m.text(), /Evidence snapshot unavailable\./);
+    assert.match(m.text(m.by('verdict-founder-decision')), /Current decision unavailable\./);
+    assert.match(m.text(), /Decision history.*Three fleets paid for the pilot\..*1–1 of 1/);
   } finally { await m.close(); }
 });
 

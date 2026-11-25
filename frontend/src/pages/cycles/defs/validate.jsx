@@ -18,6 +18,7 @@ import { interviewListOf } from '../../../lib/discoveryEvidence';
 import { useActiveRecording } from '../../../contexts/ActiveRecordingContext';
 import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
+import VerdictHome from '../VerdictHome';
 import ValidateExperiments from '../ValidateExperiments';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
@@ -187,6 +188,12 @@ const validate = {
       action: null,
       body: () => <SegmentCompare projectId={ctx.projectId} records={data?.records} />,
     } : null),
+    // D6018 (#6018, V10): the Verdict page leads with the evidence, then the choice.
+    verdict: (data, ctx) => ({
+      sub: 'Review the evidence, then choose.',
+      action: null,
+      body: (p) => <VerdictHome {...p} data={data} projectId={ctx.projectId} />,
+    }),
   }),
   add: toFnMap({
     // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.
