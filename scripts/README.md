@@ -249,4 +249,3 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 
 
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
-| `build-classification-crosswalk.mjs` | D7821: deterministically writes the UK SIC crosswalk seed from its reviewed asset and imported SIC_SECTORS; `--check` verifies it without database access. |
