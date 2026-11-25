@@ -20,7 +20,7 @@ test.beforeEach(() => test.mock.timers.enable({ apis: ['Date'], now: Date.parse(
 test.afterEach(() => test.mock.timers.reset());
 
 const SECRET = 'synthetic-5074-only-not-a-real-credential'.repeat(2);
-const OWNER = 1, COFOUNDER = 2, OTHER = 3, ADVISOR = 4, REMOVED = 5, INVESTOR = 6, MEMBER_OWNER = 7, ADMIN = 30, HQ = 31;
+const OWNER = 1, COFOUNDER = 2, OTHER = 3, ADVISOR = 4, REMOVED = 5, INVESTOR = 6, ADMIN = 30, HQ = 31;
 const P = 101;
 
 function fixture() {

@@ -46,6 +46,8 @@ export function HqDoor({ lane }) {
     case 'support': return <Link to="/admin/hq-support" className={LINK}>Support</Link>;
     case 'proposals': return <Link to="/admin/programs/proposals" className={LINK}>Programs › Proposals</Link>;
     case 'grants': return <Link to="/admin/licences/programs/requests" className={LINK}>Licences › Program access by licence › Requests</Link>;
+    // D6698: no HQ case page yet. Cases are read and assigned in this lane; case actions are recorded in Formation.
+    case 'formation_cases': return <span className={SUB}>Read and assign here</span>;
     default: return <span className={SUB}>{lane.waits}</span>;
   }
 }

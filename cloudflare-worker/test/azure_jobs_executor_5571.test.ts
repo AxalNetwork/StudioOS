@@ -56,7 +56,7 @@ function fakeArm() {
         return f === 'ambiguous202' ? { status: 202, body: null } : { status: 200, body: { name, id: `${JOB}/executions/${name}` } };
       }
       if (req.method === 'GET' && path === `${JOB}/executions`) return { status: 200, body: { value: [...executions.values()] } };
-      const m = path.match(new RegExp(`^${JOB.replace(/[.()]/g, '\\$&')}/executions/([^/]+)(/stop)?$`));
+      const m = path.match(new RegExp(`^${JOB.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/executions/([^/]+)(/stop)?$`));
       if (m && req.method === 'GET') {
         if (faults.get) { const s = faults.get; delete faults.get; return { status: s, body: null }; }
         return executions.has(m[1]) ? { status: 200, body: executions.get(m[1]) } : { status: 404, body: null };

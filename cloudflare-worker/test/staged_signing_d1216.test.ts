@@ -19,7 +19,7 @@
  */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { makeD1 } from './_d1_sqlite.mjs';
@@ -36,7 +36,9 @@ const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t)
   + '\n' + migration('434_contract_template_publications.sql')
   + '\n' + migration('475_legal_document_files.sql')
   + '\n' + migration('479_template_kind_party.sql')
-  + '\n' + migration('633_staged_signing.sql');
+  + '\n' + migration('633_staged_signing.sql')
+  // #8516: the next stage is sent from its esign_effects record.
+  + '\n' + readdirSync(new URL('../sql/migrations/', import.meta.url)).filter((f) => /^\d{12}_8516_esign_effects\.sql$/.test(f)).map(migration).join('\n');
 const SECRET = ['d1216', 'staged', 'esign', 'fixture', 'secret'].join('-');
 
 const ADMIN = 1, FOUNDER = 2, INVESTOR = 3, STRANGER = 4, SUPER = 6, OTHER_INVESTOR = 7;

@@ -54,7 +54,7 @@ function StudioAccess({ programKey, user, snapshot }) {
     </div>}
     {stamp ? <p className={SUB}>{stamp}</p> : null}
     {row && unreadableRequests ? retry : null}
-    {action && nextAction[action.kind] ? <Link to={studioProgramAccessPath(programKey, action.kind, status.request?.uid)} className={LINK} data-testid="studio-program-action">{nextAction[action.kind]}</Link> : null}
+    {action && nextAction[action.kind] ? <Link to={studioProgramAccessPath(programKey, action.kind)} className={LINK} data-testid="studio-program-action">{nextAction[action.kind]}</Link> : null}
   </>;
 }
 

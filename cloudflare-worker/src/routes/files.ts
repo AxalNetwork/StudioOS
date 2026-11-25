@@ -14,6 +14,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyAndConsumeToken } from '../services/signedDownload';
+import { dataRoomLinkOpen } from './data_room';
 
 const files = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +27,14 @@ files.get('/dl/:token', async (c) => {
   if ('error' in verified) {
     // Generic 403 — never tell the caller WHICH check failed.
     return c.json({ error: 'forbidden' }, 403);
+  }
+
+  // D8535: an investor's data-room link asks the room's gate again when it is opened, so a grant revoked (or ended by
+  // a move) after the link was minted stops it, and so does a file moved out of the grant's folders. A gate that
+  // cannot be read opens nothing. The founder's own links (`data_room_founder:`) are not an investor's and pass.
+  if (verified.audience.startsWith('data_room:')) {
+    const open = await dataRoomLinkOpen(c.env, verified.audience.slice('data_room:'.length), verified.userId, verified.key).catch(() => false);
+    if (!open) return c.json({ error: 'forbidden' }, 403);
   }
 
   const obj = await c.env.FILES.get(verified.key);

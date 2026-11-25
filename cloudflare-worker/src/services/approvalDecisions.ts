@@ -461,6 +461,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "FROM hq_escalations e WHERE e.status IN ('answered', 'declined') AND e.answered_at IS NOT NULL "
       + "AND e.kind IN ('program_grant', 'program_terms_change', 'program_end')",
   },
+  unrecordedLane('formation_cases'),
 ];
 
 /** D5879: a lane's label is the registry's, the same one the inbox board prints. */
