@@ -10,7 +10,7 @@
 // === 1`). This makes the whole notify call atomic and safe under
 // concurrent submit + nightly audit + retried jobs.
 import type { Env } from '../types';
-import { sendFlaggedScoreEmail } from './email';
+import { sendFlaggedScoreEmailBound } from './email';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const NOTIFY_KIND_FLAGGED = 'flagged_score_alert';
@@ -98,7 +98,7 @@ async function insertNotificationOnce(
   body: string,
   link: string,
   metaJson: string,
-): Promise<boolean> {
+): Promise<number | null> {
   try {
     const r: any = await env.DB.prepare(
       `INSERT OR IGNORE INTO notifications (user_id, kind, dedupe_key, title, body, link, meta)
@@ -106,10 +106,12 @@ async function insertNotificationOnce(
     ).bind(userId, kind, dedupeKey, title, body, link, metaJson).run();
     // D1 surfaces affected rows on `meta.changes` (or `meta.rows_written`).
     const changes = r?.meta?.changes ?? r?.meta?.rows_written ?? 0;
-    return Number(changes) === 1;
+    if (Number(changes) !== 1) return null;
+    // D8536 — the row's id is the alert email's subject record.
+    return Number(r?.meta?.last_row_id || 0) || null;
   } catch (e) {
     console.error('[notifications] insert failed', e);
-    return false;
+    return null;
   }
 }
 
@@ -145,12 +147,14 @@ export async function notifyAdminsOfFlaggedScore(env: Env, alert: FlaggedAlert):
   const reviewUrl = `${appUrl.replace(/\/$/, '')}${link}`;
 
   for (const admin of admins) {
-    const inserted = await insertNotificationOnce(
+    const notificationId = await insertNotificationOnce(
       env, admin.id, NOTIFY_KIND_FLAGGED, dedupeKey, title, body, link, metaJson,
     );
-    if (!inserted) continue; // dedupe — another worker already paged this admin
+    if (!notificationId) continue; // dedupe — another worker already paged this admin
     try {
-      await sendFlaggedScoreEmail(env, admin.email, admin.name || admin.email, {
+      // D8536 — to the admin the notification row names, under the reference
+      // `alert:admin_alert:<notification id>:1`.
+      await sendFlaggedScoreEmailBound(env, { flow: 'alert', subject: { kind: 'admin_alert', id: notificationId }, attempt: 1 }, admin.name || admin.email, {
         projectName: alert.projectName || `project #${alert.projectId}`,
         snapshotId: alert.snapshotId,
         totalScore: alert.totalScore,

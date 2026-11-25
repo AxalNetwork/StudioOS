@@ -366,3 +366,8 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # The next commit joins the seed from plain words at run time, so no later commit carries the literal.
 # Scoped to the one finding.
 5be11a1746f9b62468db8a20d9eafb4233d23cb0:cloudflare-worker/test/_venture_stores_8530.ts:generic-api-key:33
+
+# D8536 (#8536): not a secret. A synthetic partner-invitation token in the part 3 delivery-contract test's
+# first commit; it lives in an in-memory test database only. The next commit joins it at run time, so no
+# later commit carries the literal. Scoped to the one finding.
+4fc894d823fb758e40b911aa26d83357a2e91917:cloudflare-worker/test/email_delivery_contract_8536_part3.test.ts:generic-api-key:390

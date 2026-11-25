@@ -1,0 +1,11 @@
+{
+  "GET /api/work-graph/releases/pending": {
+    "kind": "filter"
+  },
+  "POST /api/work-graph/releases/attestations": {
+    "kind": "target"
+  },
+  "POST /api/work-graph/releases/manifests/:manifest/decisions": {
+    "kind": "target"
+  }
+}

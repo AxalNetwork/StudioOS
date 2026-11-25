@@ -23,7 +23,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { isSuperAdmin, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
-import { sendPartnerInvitationEmailResult } from '../services/email';
+import { asEmailSendResult, partnerInvitationRef, sendPartnerInvitationEmailBound } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, activatePartnerDealOnSignature, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
 import { notAllowedRefusal, readBranchDealTypes } from '../services/partnerDealTypes';
@@ -128,9 +128,12 @@ admin_partners.post('/invitations', async (c) => {
 
   const invitationId = Number(ins.id);
   const link = `${appUrl(c.env)}/partners/onboard?token=${token}`;
-  const sendResult = await sendPartnerInvitationEmailResult(
-    c.env, email, name, admin.name || 'Axal VC', link, personalMessage,
-  );
+  // D8536 part 3: under the delivery contract. The address is the one the
+  // invitation row names, and a retry of this send never mails it twice.
+  const sendResult = asEmailSendResult(await sendPartnerInvitationEmailBound(
+    c.env, await partnerInvitationRef(invitationId, token, 'send'),
+    { recipientName: name, adminName: admin.name || 'Axal VC', link, personalMessage },
+  ));
 
   const emailSent = sendResult.ok;
   await c.env.DB.prepare(
@@ -366,10 +369,13 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
     if (current.status === 'signed') return c.json({ error: 'Already signed' }, 409);
     if (current.status === 'revoked') return c.json({ error: 'Invitation has been revoked' }, 409);
   }
-  const sendResult = renewed ?? await sendPartnerInvitationEmailResult(
-    c.env, inv.recipient_email, inv.recipient_name || '',
-    admin.name || 'Axal VC', link, inv.personal_message || '',
-  );
+  // D8536 part 3: the same link again (D923), so the reference's occasion is
+  // this hour's resend: a second click within the hour after an accepted send
+  // is answered from the ledger instead of mailing twice.
+  const sendResult = renewed ?? asEmailSendResult(await sendPartnerInvitationEmailBound(
+    c.env, await partnerInvitationRef(id, String(inv.token), 'resend'),
+    { recipientName: inv.recipient_name || '', adminName: admin.name || 'Axal VC', link, personalMessage: inv.personal_message || '' },
+  ));
   const emailSent = sendResult.ok;
   await c.env.DB.prepare(
     `UPDATE partner_invitations SET last_sent_at = ?, send_count = send_count + 1, last_send_ok = ?, last_send_reason = ? WHERE id = ?`,

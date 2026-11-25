@@ -31,8 +31,8 @@ import { hasTotpConfigured, loadTotp, loadTotpPairedAt, persistNewTotpEnrolment,
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
-import { sendVerificationEmail } from '../services/email';
-import { send as sendSecurityEmail } from '../services/email/send';
+import { sendVerificationEmailBound } from '../services/email';
+import { sendBound as sendSecurityEmailBound } from '../services/email/send';
 import {
   ensureUserSettings as ensureUserSettingsTable,
   getUserSettings,
@@ -542,10 +542,12 @@ settings.post('/email-change/request', async (c) => {
   // late the change is final.
   const revokeExpires = new Date(now + 24 * 3600 * 1000).toISOString();
 
-  await sql`INSERT INTO email_change_requests
+  const requested = await sql`INSERT INTO email_change_requests
             (user_id, old_email, new_email, confirm_token_hash, revoke_token_hash, confirm_expires_at, revoke_expires_at)
-            VALUES (${user.id}, ${user.email}, ${newEmail}, ${confirmHash}, ${revokeHash}, ${confirmExpires}, ${revokeExpires})`;
+            VALUES (${user.id}, ${user.email}, ${newEmail}, ${confirmHash}, ${revokeHash}, ${confirmExpires}, ${revokeExpires})
+            RETURNING id`;
   await sql.end();
+  const requestId = Number(requested[0]?.id);
 
   const confirmUrl = `${APP_URL(c.env)}/account/email/confirm?token=${confirmRaw}`;
   const revokeUrl = `${APP_URL(c.env)}/account/email/revoke?token=${revokeRaw}`;
@@ -554,8 +556,16 @@ settings.post('/email-change/request', async (c) => {
   // Gmail OAuth + branding. The subject is repurposed but the body still
   // reads as a "Verify this address" CTA, which is correct for the
   // confirm side. The revoke side gets a plain one-pager.
-  const sentConfirm = await sendVerificationEmail(c.env, newEmail, user.name || newEmail, confirmUrl).catch(() => false);
-  const sentRevoke = await sendVerificationEmail(c.env, user.email, user.name || user.email, revokeUrl).catch(() => false);
+  //
+  // D8536 part 3: both go under the delivery contract. The subject is this
+  // request row (one row, one issuance of both links): the confirm side goes
+  // to the new address and the revoke side to the old, as the row names them.
+  // A newer request revokes this one above, so its links have no recipient.
+  const bound = async (kind: 'email_change_confirm' | 'email_change_revoke', name: string, url: string) =>
+    (await sendVerificationEmailBound(c.env, { flow: 'sign_in', subject: { kind, id: requestId }, attempt: 1 }, name, url)
+      .catch(() => null))?.state === 'accepted';
+  const sentConfirm = await bound('email_change_confirm', user.name || newEmail, confirmUrl);
+  const sentRevoke = await bound('email_change_revoke', user.name || user.email, revokeUrl);
 
   return c.json({
     ok: true,
@@ -832,16 +842,25 @@ settings.post('/totp/enrol/confirm', async (c) => {
   // session step_up_due_at || user_recovery_state.step_up_due_at; re-enrol clears
   // this too).
   try { await sql`UPDATE user_recovery_state SET step_up_due_at = NULL, updated_at = datetime('now') WHERE user_id = ${user.id}`; } catch {}
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-            VALUES ('totp_enrolled', 'Authenticator app enrolled (first-time, optional TOTP)', ${user.email}, ${user.id})`;
+  const enrolled = await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('totp_enrolled', 'Authenticator app enrolled (first-time, optional TOTP)', ${user.email}, ${user.id})
+            RETURNING id`;
   await sql.end();
 
   // Security notification — standard factor-addition control (mirrors
   // auth_passkey_added). Best-effort; never blocks enrolment.
+  //
+  // D8536 part 3: under the delivery contract. The subject is the
+  // `totp_enrolled` row just written, so the address is the account it names
+  // and a queue retry of this alert reconciles instead of mailing it twice.
   try {
     const notifyIp = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64) || 'unknown';
-    await sendSecurityEmail(c.env, 'auth_totp_added', user.email, { name: user.name || user.email, ip: notifyIp }, { userId: user.id });
-  } catch (e) { console.error('[settings:totp-enrol] notification email failed', e); }
+    const activityId = Number(enrolled[0]?.id);
+    if (activityId) {
+      await sendSecurityEmailBound(c.env, 'auth_totp_added', { flow: 'alert', subject: { kind: 'totp_enrolment', id: activityId }, attempt: 1 },
+        { name: user.name || user.email, ip: notifyIp }, { userId: user.id });
+    }
+  } catch (e) { console.error('[settings:totp-enrol] notification email failed', (e as Error)?.name || 'Error'); }
 
   return c.json({
     ok: true,
@@ -1181,15 +1200,21 @@ settings.post('/founder/invites', async (c) => {
   const tokenRaw = generateToken();
   const tokenHash = await hashToken(tokenRaw);
   const expires = new Date(Date.now() + FOUNDER_INVITE_EXPIRY_DAYS * 86400 * 1000).toISOString();
-  await sql`INSERT INTO founder_invites
+  const invited = await sql`INSERT INTO founder_invites
             (project_id, inviter_user_id, invitee_email, invitee_name, role, token_hash, expires_at)
-            VALUES (${projectId}, ${user.id}, ${inviteeEmail}, ${inviteeName}, ${role}, ${tokenHash}, ${expires})`;
+            VALUES (${projectId}, ${user.id}, ${inviteeEmail}, ${inviteeName}, ${role}, ${tokenHash}, ${expires})
+            RETURNING id`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('cofounder_invited', ${`Invited ${inviteeEmail} as ${role}`}, ${user.email}, ${user.id})`;
   await sql.end();
 
   const acceptUrl = `${APP_URL(c.env)}/invites/cofounder?token=${tokenRaw}`;
-  const sent = await sendVerificationEmail(c.env, inviteeEmail, inviteeName || inviteeEmail, acceptUrl).catch(() => false);
+  // D8536 part 3: under the delivery contract; the invitation row is the
+  // subject and names the address. The body is the one this invite has
+  // always been sent with.
+  const sent = (await sendVerificationEmailBound(c.env,
+    { flow: 'invitation', subject: { kind: 'founder_invite', id: Number(invited[0]?.id) }, attempt: 1 },
+    inviteeName || inviteeEmail, acceptUrl).catch(() => null))?.state === 'accepted';
   return c.json({
     ok: true,
     invitee_email: inviteeEmail,

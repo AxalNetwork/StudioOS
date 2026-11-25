@@ -18,6 +18,14 @@
  *   GET  /authorities?tenant_id&company_id[&user_id][&history=1]   part 8: who holds which release authority, and the history
  *   POST /authorities/grant             { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
  *   POST /authorities/revoke            { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
+ *   GET  /scopes                        part 11: every tenant and company with release lines, with the company's name
+ *   GET  /status                        part 11: which release switches are on (admin, delivery, sites), booleans only
+ *   GET  /authorities/candidates?tenant_id&company_id   part 11: the company's linked people, what each holds, each key's seq
+ *
+ * NAMES (part 11, D5585-p11). Every read that returns user ids also returns `people`: `{ [userId]: { name } }`, the name
+ * other members see (`effectiveDisplayName`), never an email. A line has no name of its own (`lineName: null`,
+ * `lineNameReason: 'not_recorded'`). The manifest evaluation explains every live decision that does not count
+ * (`notCounted[]`, one reason each, from the same rule that counts).
  *
  * GATES. Reads: `requireSuperAdmin` (HQ only). Writes and the drain: `requireSuperAdminWriteBar` (a TOTP session, a
  * recent step-up, then the elevation). Every write is recorded with the actor through `logAdminAction`, whatever its
@@ -54,9 +62,14 @@ import {
   RELEASE_AUTHORITIES, grantReleaseAuthority, listReleaseAuthorityGrants, revokeReleaseAuthority,
 } from '../services/workGraphReleaseAuthorities';
 import {
-  EFFECT_STATES, RELEASE_DRAIN_LIMITS, listLimit, listLineManifests, listReleaseDeliveries, listReleaseLines,
-  releaseAdminContext, releaseAdminEnabled, scopeFrom, summariseDrain,
+  EFFECT_STATES, LINE_NAME_NOT_RECORDED, RELEASE_DRAIN_LIMITS, listLimit, listLineManifests, listReleaseDeliveries, listReleaseLines,
+  RELEASE_REFUSAL_SENTENCES, RELEASE_REFUSAL_STATUS, releaseAdminContext, releaseAdminEnabled, scopeFrom, summariseDrain,
 } from '../services/workGraphReleaseAdmin';
+import { companyUnderOtherTenant } from '../services/workGraphReleaseAuthorities';
+import {
+  RELEASE_DIRECTORY_LIMITS, listGrantCandidates, listReleaseScopes, releasePeople, releaseSwitches,
+} from '../services/workGraphReleaseDirectory';
+import type { ReleaseState } from '../services/workGraphReleases';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -68,39 +81,8 @@ r.use('*', async (c, next) => {
   await next();
 });
 
-/** Our sentence for each refusal code the release services send. */
-const SENTENCES: Record<string, string> = {
-  malformed: 'The request is missing a field or has one in the wrong shape.',
-  not_found: 'No such release line or manifest.',
-  wrong_tenant: 'That release belongs to another tenant or company than the one this request names.',
-  unknown_reference: 'The request names a manifest, line or revision that does not belong to this release.',
-  stale_approval: 'The digest you reviewed is not this manifest’s digest any more. Reload the release and review it again.',
-  stale_revision: 'The line’s publication pointer has moved since you loaded it. Reload the line and try again.',
-  idempotency_conflict: 'This idempotency key was already used for a different request.',
-  composite_incompatible: 'A pinned piece stopped being its asset’s accepted head while the release was being published.',
-  audience_forbidden: 'A pinned piece may not be shown to this line’s audience.',
-  rebuild_required: 'A pinned piece is out of date and must be rebuilt before this release can go out.',
-  reapproval_required: 'A pinned piece changed and must be approved again before this release can go out.',
-  attestation_missing: 'A pinned piece lacks the evidence its policy profile requires.',
-  approval_required: 'A policy profile in this manifest has no live publish approval of this digest.',
-  changes_requested: 'A reviewer’s latest decision on this manifest asks for changes.',
-  no_authority: 'Nobody in this request holds the authority this act needs.',
-  effect_target: 'This release cannot be delivered to one of the targets named.',
-  queue_full: 'The tenant’s release outbox is full. Wait for the drain to catch up.',
-  taken_down: 'A takedown covers this release or one of its pieces, so it cannot go out again.',
-  not_published: 'Only a manifest this line has published can be re-pinned.',
-  is_head: 'That manifest is already what the line’s pointer names.',
-  tombstoned: 'A pinned piece was tombstoned and cannot be re-pinned.',
-  person_required: 'Only a person can do this.',
-  revoked_author: 'The person acting has been revoked.',
-  unpinned_component: 'A pinned piece no longer matches the digest the manifest records.',
-  unapproved_release: 'A pinned piece’s bytes were not approved by a person when they became its head.',
-  unknown_authority: 'That is not a release authority. Name one of the authorities the release policy uses.',
-  not_member: 'That person is not linked to this company, so they cannot hold its release authorities.',
-  already_held: 'That person already holds this release authority in this company.',
-  not_held: 'That person does not hold this release authority in this company, so there is nothing to revoke.',
-};
-const STATUS: Record<string, number> = { malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 };
+const SENTENCES = RELEASE_REFUSAL_SENTENCES;
+const STATUS = RELEASE_REFUSAL_STATUS;
 
 function refused(c: Context, x: { code: string; ids?: string[]; cost?: Cost; currentHead?: unknown; current?: unknown }) {
   return refuse(c, STATUS[x.code] ?? 409, {
@@ -125,6 +107,20 @@ async function body(c: Context): Promise<Record<string, any> | null> {
 }
 const queryScope = (c: Context): Scope | null => scopeFrom(c.req.query('tenant_id'), c.req.query('company_id'));
 
+/**
+ * Part 11: every person a release evaluation names — its author, the reviewers who count and those who do not. Whoever
+ * asked for changes (`changesRequestedBy`) is among the latter: their live decision is `changes_requested` there.
+ */
+const releasePeopleIds = (rel: ReleaseState | null): number[] => (rel ? [
+  rel.authorUserId, ...rel.approvals.map((a) => a.reviewerUserId), ...rel.notCounted.map((d) => d.reviewerUserId),
+] : []);
+
+/** Part 11: the names of the people an answer names, and the statement it cost. */
+async function named(env: Env, ids: Iterable<number | null | undefined>) {
+  const m = new Meter(env);
+  return { people: await releasePeople(env, m, ids), cost: m.cost };
+}
+
 async function audit(c: Context<{ Bindings: Env }>, user: { id: number; email?: string | null }, action: string, details: Record<string, unknown>) {
   await logAdminAction(c.env, Number(user.id), String(user.email ?? ''), action, details);
 }
@@ -136,7 +132,9 @@ r.get('/lines', async (c) => {
   await requireSuperAdmin(c);
   const scope = queryScope(c);
   if (!scope) return badScope(c);
-  return c.json({ ok: true, scope, ...(await listReleaseLines(c.env, scope, listLimit(c.req.query('limit')))) });
+  const list = await listReleaseLines(c.env, scope, listLimit(c.req.query('limit')));
+  const names = await named(c.env, list.lines.map((l) => l.createdByUserId));
+  return c.json({ ok: true, scope, lines: list.lines, people: names.people, cost: addCost(list.cost, names.cost) });
 });
 
 r.get('/deliveries', async (c) => {
@@ -163,9 +161,11 @@ r.get('/lines/:line', async (c) => {
   const served = await servedRelease(c.env, ctx, line);
   if (!served.ok) return refused(c, served);
   const list = await listLineManifests(c.env, scope, line, listLimit(c.req.query('limit')));
+  const names = await named(c.env, [...releasePeopleIds(pub.release), ...list.manifests.map((x) => x.actorUserId)]);
   return c.json({
-    ok: true, scope, lineAssetUid: line, headSeq: pub.headSeq, published: pub.release, served: served.served, withheld: served.withheld,
-    manifests: list.manifests, cost: addCost(addCost(pub.cost, served.cost), list.cost),
+    ok: true, scope, lineAssetUid: line, ...LINE_NAME_NOT_RECORDED, headSeq: pub.headSeq, published: pub.release, served: served.served,
+    withheld: served.withheld, manifests: list.manifests, people: names.people,
+    cost: addCost(addCost(addCost(pub.cost, served.cost), list.cost), names.cost),
   });
 });
 
@@ -175,7 +175,8 @@ r.get('/manifests/:manifest', async (c) => {
   if (!scope) return badScope(c);
   const s = await releaseStatus(c.env, await releaseAdminContext(c.env, scope), c.req.param('manifest'));
   if (!s.ok) return refused(c, s);
-  return c.json({ ok: true, scope, release: s.release, cost: s.cost });
+  const names = await named(c.env, releasePeopleIds(s.release));
+  return c.json({ ok: true, scope, release: s.release, people: names.people, cost: addCost(s.cost, names.cost) });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -296,7 +297,39 @@ r.get('/authorities', async (c) => {
   const res = await listReleaseAuthorityGrants(c.env, scope, {
     userId: u === undefined ? null : Number(u), history: c.req.query('history') === '1', limit: listLimit(c.req.query('limit')),
   });
-  return c.json({ ok: true, scope, authorities: RELEASE_AUTHORITIES, ...res });
+  const names = await named(c.env, [
+    ...res.holders.flatMap((h) => [h.userId, h.grantedByUserId]), ...(res.events ?? []).flatMap((e) => [e.userId, e.actorUserId]),
+  ]);
+  return c.json({ ok: true, scope, authorities: RELEASE_AUTHORITIES, ...res, people: names.people, cost: addCost(res.cost, names.cost) });
+});
+
+// Part 11 (D5585-p11): the people a grant may name. Only people linked to the company; a company whose release records
+// live under another tenant is refused `wrong_tenant`, as a grant there would be.
+r.get('/authorities/candidates', async (c) => {
+  await requireSuperAdmin(c);
+  const scope = queryScope(c);
+  if (!scope) return badScope(c);
+  const m = new Meter(c.env);
+  if (await companyUnderOtherTenant(c.env, m, scope)) return refused(c, { code: 'wrong_tenant', ids: [String(scope.companyId)], cost: m.cost });
+  const res = await listGrantCandidates(c.env, m, scope, RELEASE_DIRECTORY_LIMITS.candidatesMax);
+  return c.json({ ok: true, scope, authorities: RELEASE_AUTHORITIES, ...res, cost: m.cost });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Part 11 (D5585-p11): the scope bar and the switches
+
+r.get('/scopes', async (c) => {
+  await requireSuperAdmin(c);
+  const m = new Meter(c.env);
+  const res = await listReleaseScopes(c.env, m, RELEASE_DIRECTORY_LIMITS.scopesMax);
+  return c.json({ ok: true, ...res, cost: m.cost });
+});
+
+// Booleans only: whether delivery (`WORK_GRAPH_RELEASE_DELIVERY=preview`) and public sites (`WORK_GRAPH_RELEASE_SITES=on`)
+// are on, so the page can say so before a drain is tried. Never the variables' values. Nothing is read past the gate.
+r.get('/status', async (c) => {
+  await requireSuperAdmin(c);
+  return c.json({ ok: true, switches: releaseSwitches(c.env) });
 });
 
 /** A grant or a revocation by the Super Admin who passed the write bar. */

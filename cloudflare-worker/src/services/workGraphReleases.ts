@@ -589,6 +589,39 @@ export interface ComponentState extends ManifestComponent {
   missingAttestations: Requirement[];
 }
 export interface PublishApproval { profile: ProfileName; approvalRef: string; reviewerUserId: number; authority: string; decidedAt: string }
+/**
+ * Part 11 (D5585-p11): why a reviewer's live decision on a manifest does not count as a publish approval of it. One
+ * code per decision, the first rule of `decisionNotCounted` it fails, in the order the evaluation applies them.
+ */
+export const DECISION_NOT_COUNTED = [
+  'withdrawn', 'changes_requested', 'other_digest', 'other_audience', 'reviewer_revoked', 'author_own', 'authority_not_held',
+  'authority_not_for_profile',
+] as const;
+export type DecisionNotCountedReason = (typeof DECISION_NOT_COUNTED)[number];
+export interface NotCountedDecision {
+  profile: ProfileName; reviewerUserId: number; authority: string; decision: string; decidedAt: string; reason: DecisionNotCountedReason;
+}
+/** The fields of a live decision row the counting rule reads. */
+export interface LiveDecision { profile: ProfileName; authority: string; decision: string; reviewer_user_id: number; audience: string; manifest_digest: string }
+
+/**
+ * THE counting rule (part 11 made it one function, so the evaluation and its explanation cannot drift): null when a
+ * reviewer's live decision counts as a publish approval of this manifest for this line's audience, else the reason it
+ * does not. Authority and revocation are re-read from the context, never trusted from the decision (D5458).
+ */
+export function decisionNotCounted(
+  ctx: ReleaseContext, man: Pick<ManifestRow, 'manifest_digest' | 'actor_user_id'>, lineAudience: string, d: LiveDecision,
+): DecisionNotCountedReason | null {
+  if (d.decision === 'withdraw') return 'withdrawn';
+  if (d.decision !== 'approve') return 'changes_requested';
+  if (d.manifest_digest !== man.manifest_digest) return 'other_digest';
+  if (d.audience !== lineAudience) return 'other_audience';
+  if (ctx.revokedUserIds?.has(d.reviewer_user_id)) return 'reviewer_revoked';
+  if (d.reviewer_user_id === man.actor_user_id) return 'author_own';
+  if (!(ctx.authorities?.get(d.reviewer_user_id) ?? []).includes(d.authority)) return 'authority_not_held';
+  if (!POLICY_PROFILES[d.profile].authorities.includes(d.authority)) return 'authority_not_for_profile';
+  return null;
+}
 export interface ReleaseState {
   manifestUid: string; lineAssetUid: string; audience: Audience; digest: string; partial: boolean; baseManifestUid: string | null;
   /** True while the line's publication pointer names this manifest. */
@@ -598,6 +631,10 @@ export interface ReleaseState {
   /** Profiles in the manifest with no live publish approval of this digest. */
   missingApprovals: ProfileName[];
   approvals: PublishApproval[];
+  /** Part 11: the person who cut the manifest (for an agent, its sponsor). */
+  authorUserId: number;
+  /** Part 11: every other live decision, with the one reason `decisionNotCounted` gives for it. */
+  notCounted: NotCountedDecision[];
   /** Reviewers whose latest decision is reject or request_changes. */
   changesRequestedBy: number[];
   /** Part 2: the earlier published manifest this one re-pins, or null. */
@@ -691,12 +728,14 @@ export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseConte
   ).bind(man.manifest_uid));
   const changesRequestedBy = [...new Set(decisions.filter((d) => d.decision === 'reject' || d.decision === 'request_changes').map((d) => d.reviewer_user_id))];
   const approvals: PublishApproval[] = [];
+  const notCounted: NotCountedDecision[] = [];
   for (const d of decisions) {
-    if (d.decision !== 'approve' || d.manifest_digest !== man.manifest_digest || d.audience !== line.audience) continue;
     // Authority and revocation are re-read at publication time, not trusted from the decision (D5458).
-    if (ctx.revokedUserIds?.has(d.reviewer_user_id) || d.reviewer_user_id === man.actor_user_id) continue;
-    if (!(ctx.authorities?.get(d.reviewer_user_id) ?? []).includes(d.authority)) continue;
-    if (!POLICY_PROFILES[d.profile].authorities.includes(d.authority)) continue;
+    const reason = decisionNotCounted(ctx, man, line.audience, d);
+    if (reason) {
+      notCounted.push({ profile: d.profile, reviewerUserId: d.reviewer_user_id, authority: d.authority, decision: d.decision, decidedAt: d.decided_at, reason });
+      continue;
+    }
     approvals.push({ profile: d.profile, approvalRef: d.approval_ref, reviewerUserId: d.reviewer_user_id, authority: d.authority, decidedAt: d.decided_at });
   }
   const profiles = [...new Set(body.components.flatMap((c) => c.profiles))].sort();
@@ -704,7 +743,7 @@ export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseConte
   return {
     manifestUid: man.manifest_uid, lineAssetUid: man.line_asset_uid, audience: man.audience, digest: man.manifest_digest,
     partial: man.partial === 1, baseManifestUid: man.base_manifest_uid, published: line.head_revision_uid === man.manifest_uid,
-    status, components, missingApprovals, approvals, changesRequestedBy, repinOf: body.repin ?? null, takedowns,
+    status, components, missingApprovals, approvals, authorUserId: man.actor_user_id, notCounted, changesRequestedBy, repinOf: body.repin ?? null, takedowns,
   };
 }
 

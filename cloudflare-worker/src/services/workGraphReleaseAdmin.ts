@@ -39,6 +39,44 @@ import { releaseAuthoritiesForScope, revokedReleaseUsers } from './workGraphRele
 export const RELEASE_ADMIN_ON = 'on';
 export const releaseAdminEnabled = (env: Pick<Env, 'WORK_GRAPH_RELEASE_ADMIN'>) => env.WORK_GRAPH_RELEASE_ADMIN === RELEASE_ADMIN_ON;
 
+/** Our sentence for each refusal code the release services send (the admin routes and part 10's reviewer routes). */
+export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Object.freeze({
+  malformed: 'The request is missing a field or has one in the wrong shape.',
+  not_found: 'No such release line or manifest.',
+  wrong_tenant: 'That release belongs to another tenant or company than the one this request names.',
+  unknown_reference: 'The request names a manifest, line or revision that does not belong to this release.',
+  stale_approval: 'The digest you reviewed is not this manifest’s digest any more. Reload the release and review it again.',
+  stale_revision: 'The line’s publication pointer has moved since you loaded it. Reload the line and try again.',
+  idempotency_conflict: 'This idempotency key was already used for a different request.',
+  composite_incompatible: 'A pinned piece stopped being its asset’s accepted head while the release was being published.',
+  audience_forbidden: 'A pinned piece may not be shown to this line’s audience.',
+  rebuild_required: 'A pinned piece is out of date and must be rebuilt before this release can go out.',
+  reapproval_required: 'A pinned piece changed and must be approved again before this release can go out.',
+  attestation_missing: 'A pinned piece lacks the evidence its policy profile requires.',
+  approval_required: 'A policy profile in this manifest has no live publish approval of this digest.',
+  changes_requested: 'A reviewer’s latest decision on this manifest asks for changes.',
+  no_authority: 'Nobody in this request holds the authority this act needs.',
+  effect_target: 'This release cannot be delivered to one of the targets named.',
+  queue_full: 'The tenant’s release outbox is full. Wait for the drain to catch up.',
+  taken_down: 'A takedown covers this release or one of its pieces, so it cannot go out again.',
+  not_published: 'Only a manifest this line has published can be re-pinned.',
+  is_head: 'That manifest is already what the line’s pointer names.',
+  tombstoned: 'A pinned piece was tombstoned and cannot be re-pinned.',
+  person_required: 'Only a person can do this.',
+  revoked_author: 'The person acting has been revoked.',
+  unpinned_component: 'A pinned piece no longer matches the digest the manifest records.',
+  unapproved_release: 'A pinned piece’s bytes were not approved by a person when they became its head.',
+  unknown_authority: 'That is not a release authority. Name one of the authorities the release policy uses.',
+  not_member: 'That person is not linked to this company, so they cannot hold its release authorities.',
+  already_held: 'That person already holds this release authority in this company.',
+  not_held: 'That person does not hold this release authority in this company, so there is nothing to revoke.',
+  policy_profile: 'No piece of this manifest is under that policy profile, so it has nothing to decide there.',
+  agent_review: 'Only a person can decide on a release.',
+  self_approval: 'The author of a manifest cannot approve it.',
+  approval_incomplete: 'This policy profile needs its approval to name the evidence, rights or disclosure it relied on.',
+});
+export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 });
+
 export const RELEASE_DRAIN_LIMITS = Object.freeze({
   /** Effects one scheduled drain delivers at most. */
   scheduled: 25,
@@ -87,19 +125,32 @@ export const listLimit = (v: unknown) => {
   return Number.isSafeInteger(n) && n > 0 ? Math.min(n, RELEASE_DRAIN_LIMITS.listMax) : RELEASE_DRAIN_LIMITS.listMax;
 };
 
+/**
+ * Part 11 (D5585-p11): a release line has no name of its own. It is a `composite` asset, and neither
+ * `work_graph_assets` nor `work_graph_release_lines` has a name or title column; a line is its uid, audience and
+ * project. Every read says so (`lineName: null`, `lineNameReason: 'not_recorded'`) rather than inventing one.
+ */
+export const LINE_NAME_NOT_RECORDED = { lineName: null, lineNameReason: 'not_recorded' } as const;
+
 export interface ReleaseLineItem {
   lineAssetUid: string; projectId: number | null; audience: string; createdByUserId: number; createdAt: string;
   headManifestUid: string | null; headSeq: number; manifests: number;
+  /** Part 11: always null, with its reason (`LINE_NAME_NOT_RECORDED`). */
+  lineName: null; lineNameReason: 'not_recorded';
+  /** Part 11: the name of the line's project, when it names one of this company's projects that is not deleted. */
+  projectName: string | null;
 }
 
 /** The release lines of one scope, newest first, each with the manifest its publication pointer names. */
 export async function listReleaseLines(env: Pick<Env, 'DB'>, scope: Scope, limit: number): Promise<{ lines: ReleaseLineItem[]; cost: Cost }> {
   const m = new Meter(env);
   const rows = await m.all<{ line_asset_uid: string; project_id: number | null; audience: string; created_by_user_id: number; created_at: string;
-    head_revision_uid: string | null; head_seq: number; manifests: number }>(env.DB.prepare(
+    head_revision_uid: string | null; head_seq: number; manifests: number; project_name: string | null }>(env.DB.prepare(
     `SELECT l.line_asset_uid, l.project_id, l.audience, l.created_by_user_id, l.created_at, a.head_revision_uid, a.head_seq,
-            (SELECT COUNT(*) FROM work_graph_release_manifests x WHERE x.line_asset_uid = l.line_asset_uid) AS manifests
+            (SELECT COUNT(*) FROM work_graph_release_manifests x WHERE x.line_asset_uid = l.line_asset_uid) AS manifests,
+            p.name AS project_name
        FROM work_graph_release_lines l JOIN work_graph_assets a ON a.asset_uid = l.line_asset_uid
+       LEFT JOIN projects p ON p.id = l.project_id AND p.company_id = l.company_id AND p.deleted_at IS NULL
       WHERE l.tenant_id = ? AND l.company_id = ?
       ORDER BY l.created_at DESC, l.line_asset_uid
       LIMIT ?`,
@@ -108,6 +159,7 @@ export async function listReleaseLines(env: Pick<Env, 'DB'>, scope: Scope, limit
     lines: rows.map((r) => ({
       lineAssetUid: r.line_asset_uid, projectId: r.project_id, audience: r.audience, createdByUserId: r.created_by_user_id,
       createdAt: r.created_at, headManifestUid: r.head_revision_uid, headSeq: Number(r.head_seq), manifests: Number(r.manifests),
+      ...LINE_NAME_NOT_RECORDED, projectName: r.project_name ?? null,
     })),
     cost: { ...m.cost },
   };

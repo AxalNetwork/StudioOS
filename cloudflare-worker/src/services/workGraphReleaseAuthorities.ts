@@ -76,6 +76,21 @@ function refuse(m: Meter, code: AuthorityRefusalCode, ids: string[], current?: {
   return { ok: false, code, ids, cost: { ...m.cost }, ...(current ? { current } : {}) };
 }
 
+/**
+ * One company, one tenant: its release lines and its grants name the tenant it lives under. True when any of them names
+ * a tenant other than the scope's, so a request naming that company under this tenant is `wrong_tenant`. Part 10's
+ * reviewer routes ask the same question before they read anything else of the scope.
+ */
+export async function companyUnderOtherTenant(env: Pick<Env, 'DB'>, m: Meter, scope: AuthorityScope): Promise<boolean> {
+  const foreign = await m.first<{ tenant_id: number }>(env.DB.prepare(
+    `SELECT tenant_id FROM work_graph_release_authority_events WHERE company_id = ? AND tenant_id <> ?
+     UNION ALL
+     SELECT tenant_id FROM work_graph_release_lines WHERE company_id = ? AND tenant_id <> ?
+     LIMIT 1`,
+  ).bind(scope.companyId, scope.tenantId, scope.companyId, scope.tenantId));
+  return !!foreign;
+}
+
 async function change(env: Pick<Env, 'DB'>, op: 'grant' | 'revoke', input: AuthorityChangeInput): Promise<AuthorityChangeResult> {
   const m = new Meter(env);
   if (!input || !scopeOk(input.scope) || !posInt(input.userId) || !posInt(input.actorUserId) || !keyOk(input.idempotencyKey)
@@ -100,14 +115,7 @@ async function change(env: Pick<Env, 'DB'>, op: 'grant' | 'revoke', input: Autho
   const first = await replay();
   if (first) return first;
 
-  // One company, one tenant: its release lines and its grants name the tenant it lives under.
-  const foreign = await m.first<{ tenant_id: number }>(env.DB.prepare(
-    `SELECT tenant_id FROM work_graph_release_authority_events WHERE company_id = ? AND tenant_id <> ?
-     UNION ALL
-     SELECT tenant_id FROM work_graph_release_lines WHERE company_id = ? AND tenant_id <> ?
-     LIMIT 1`,
-  ).bind(companyId, tenantId, companyId, tenantId));
-  if (foreign) return refuse(m, 'wrong_tenant', [String(companyId)]);
+  if (await companyUnderOtherTenant(env, m, input.scope)) return refuse(m, 'wrong_tenant', [String(companyId)]);
 
   if (op === 'grant') {
     const linked = await m.first<{ one: number }>(env.DB.prepare(

@@ -23,7 +23,7 @@ import {
   type PromoRow,
 } from './promos';
 import { canRedeemPromo, reservePromo, type Refusal } from './promoRedemption';
-import { sendBrandedInvoiceEmail } from './email';
+import { sendBrandedInvoiceEmailBound } from './email';
 import { AXAL_ENTITIES } from './legalDocFormat';
 import { bindingKey } from '../util/schemaBootstrap';
 import { suffixAmount } from '../../../frontend/src/lib/money.js';
@@ -602,8 +602,10 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
             break;
           }
         }
-        await sendBrandedInvoiceEmail(env, {
-          to: buyer.email,
+        // D8536 — to the buyer the order row names, under the reference
+        // `billing:order_receipt:<order_ref>:1`: a re-run of this step for the
+        // same order is answered from the ledger instead of mailed again.
+        await sendBrandedInvoiceEmailBound(env, { flow: 'billing', subject: { kind: 'order_receipt', id: orderRef }, attempt: 1 }, {
           name: buyer.name,
           amountCents: row.total_cents,
           currency: row.currency,
