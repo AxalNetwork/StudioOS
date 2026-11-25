@@ -100,6 +100,9 @@ const SKIPS_IN_QUEUE = Object.freeze([
 // test_tracer_5608.test.mjs keeps it advisory: neither gate needs it.
 // D5502: bounded read-only failure diagnostics also run after a queue failure.
 const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608', classify: 'D5502' });
+// D8626: `route` feeds `capacity-route`, which the full-suite check needs. Both run in the queue only while
+// vars.CI_CAPACITY_QUEUE_ROUTING is 'true'; with it off they are skipped before they start.
+const QUEUE_ROUTING = Object.freeze({ route: 'D8626' });
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
@@ -142,6 +145,10 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
       if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
       if (f === 'ci.yml' && Object.hasOwn(QUEUE_ADVISORY, j.id)) continue;
+      if (f === 'ci.yml' && Object.hasOwn(QUEUE_ROUTING, j.id)) {
+        assert.match(j.if, /github\.event_name == 'merge_group' && .*vars\.CI_CAPACITY_QUEUE_ROUTING == 'true'/, `${j.name} runs only under queue routing`);
+        continue;
+      }
       if (Object.hasOwn(ADVISORY_QUEUE_WORKFLOWS, f)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
@@ -155,7 +162,8 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   const all = jobs(code('ci.yml'));
   const gate = all.find((j) => queueName(j) === AGGREGATOR);
   const body = gate.body.join('\n');
-  assert.deepEqual(gate.needs, ['verified', 'plan', 'suite']);
+  // D8626: `capacity-route` is read only to refuse a routed candidate whose Worker result main does not require.
+  assert.deepEqual(gate.needs, ['verified', 'plan', 'capacity-route', 'suite']);
   // The two ways to pass, and nothing else.
   assert.match(body, /if \[ "\$EVENT" = "push" \] && \[ -n "\$VERIFIED_RUN" \] && \[ "\$SUITE" = "skipped" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
   // D7108 part 2: `plan` succeeded off the queue, or was skipped in it.

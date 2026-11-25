@@ -147,6 +147,7 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 
 `workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart, concurrency and settlement identity (D5570 part 2).
 `swarm_audit_do_5586_p2.test.mjs` hosts the audited swarm admission in a real SQLite Durable Object with a real D1: request, settle and a venture snapshot round-trip, the audit copy survives a D1 failure and a restart (D5586 part 2).
+`workspace_admission_do_5586_p3.test.mjs` reaches the real `WorkspaceAdmission` class through its binding with the typed client (Miniflare, real D1): #5570 admission and the swarm round-trip across a restart, another venture refused before any stub call and inside the object, `admission_unbound` without a binding, the audit still copied to D1 (D5586 part 3). `workspace_admission_client_5586_p3.test.ts` covers the client without a runtime and the wrangler.toml wiring.
 `_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
 
 ## Conventions

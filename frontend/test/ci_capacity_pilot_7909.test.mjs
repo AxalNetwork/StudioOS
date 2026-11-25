@@ -56,7 +56,9 @@ test('D7909 bounded metadata is stable per parent attempt and never acquires OID
  const first=await capacitySubmission(env,f.api),again=await capacitySubmission(env,f.api);
  assert.deepEqual(first,again);assert.equal(first.planDigest,'sha256:'+createHash('sha256').update(c.plan).digest('hex'));
  assert.deepEqual(first.prerequisites,PILOT_PREREQUISITES);assert.equal(first.shards.length,6);
- for(const patch of [{GITHUB_EVENT_NAME:'pull_request'},{GITHUB_EVENT_NAME:'merge_group'},{GITHUB_REF:'refs/heads/other'},{CAPACITY_PLAN_ARTIFACT_ID:'0'},{GITHUB_RUN_ATTEMPT:'2'}]){
+ // D8626: a queue candidate is not submitted under CI_CAPACITY_ENABLED alone; it has its own flag.
+ assert.deepEqual(await capacitySubmission({...env,GITHUB_EVENT_NAME:'merge_group'},f.api),{accepted:false,reason:'queue_routing_disabled'});
+ for(const patch of [{GITHUB_EVENT_NAME:'pull_request'},{GITHUB_EVENT_NAME:'merge_group',CI_CAPACITY_QUEUE_ROUTING:'true'},{GITHUB_REF:'refs/heads/other'},{CAPACITY_PLAN_ARTIFACT_ID:'0'},{GITHUB_RUN_ATTEMPT:'2'}]){
   await assert.rejects(capacitySubmission({...env,...patch},f.api),/context|parent/);
  }
  assert.equal(f.calls.every(call=>call.method==='GET'&&call.path===PREFIX+'/actions/runs/12'),true);
@@ -308,11 +310,11 @@ const BASE_JOB_DIGESTS={
   "frontend":'e2884e1ba35220b8',
   "worker":'338f2e46f9af2c9f',
   "verified":'671cbb73f43df103',
-  "suite":'c7c40cb382c001d6',
+  "suite":'ed1af766388ae3b8', // D8626: needs capacity-route, and a job env telling test-drift-parts.mjs a Worker part was routed.
   "test-deps":'584ab84cbc836df0',
   "fast":'066a8e32945222c9',
   "landing":'bea23ba6bac95c0c',
-  "gate":'8dc0dedfdbe09d02',
+  "gate":'a0da00b955654e3e', // D8626: refuses a routed candidate while main does not require ci-capacity/full-suite.
   "selection-shadow":'41ac4055f5a3c941',
   "classify":'d594dedf4e520c73',
   "visual":'327ad9c92989eca2', // #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step.
@@ -337,8 +339,12 @@ test('D7909 literal pinned caller leaves the ordinary hosted graph and queue mat
  assert.equal(caller.with.submission,'${{ needs.plan.outputs.capacity_submission }}');
  assert.equal(caller.with.executor_sha,'${{ vars.CI_CAPACITY_EXECUTOR_SHA }}');
  assert.equal(caller.with.child_workflow_sha,'${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}');
- // 4f7dfaca… is `git rev-parse cb63d3997d5770892934932b3c7a534485a8a875:.github/workflows/capacity-planner.yml`, the same blob the first pin (19927c89) held.
- assert.equal(execFileSync('git',['hash-object','.github/workflows/capacity-planner.yml'],{encoding:'utf8'}).trim(),'4f7dfaca48403d2d0b9cc9e83403ebca48525a8d','the literal pin must contain the exact prepared planner');
+ // D8335: the pin names a main commit, so a planner change lands first and its pin moves in a later PR. The pin
+ // cb63d399 holds blob 4f7dfaca (the first pin, 19927c89, held the same). D8626 prepares the next revision below: it
+ // adds the merge-queue gate and the `accepted` output. Until the pin moves to the commit that lands it, both
+ // callers run 4f7dfaca, which submits on main pushes only, so a queue candidate's `accepted` stays unset.
+ assert.equal(execFileSync('git',['hash-object','.github/workflows/capacity-planner.yml'],{encoding:'utf8'}).trim(),'40b0b0fa262c0ee6a9161176e609effe57ed9950','the prepared planner is the reviewed D8626 revision');
+ assert.equal(current.jobs['capacity-route'].uses,caller.uses,'the queue caller pins the same reviewed planner as the push caller');
  const config=readFileSync('wrangler.merge-control.toml','utf8');
  assert.match(config,/CAPACITY_ENABLED = "false"/);assert.match(config,/CAPACITY_PUBLICATION = "pilot"/);assert.match(config,/CAPACITY_CONFIG = ""/);
 });

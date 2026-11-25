@@ -501,6 +501,10 @@ class_name = "ScopeAgent"
 [[durable_objects.bindings]]
 name       = "WORK_GRAPH_LEASE"
 class_name = "WorkGraphLease"
+# D5586 part 3 (#5586): #5570's admission coordinator, one object by name for every tenant sharing a provider quota; hosts the compute leases and the audited swarm admission. Preview-only: nothing calls its client yet.
+[[durable_objects.bindings]]
+name       = "WORKSPACE_ADMISSION"
+class_name = "WorkspaceAdmission"
 
 [[migrations]]
 tag                = "v1-realtime"
@@ -536,6 +540,10 @@ new_sqlite_classes = ["DeckRemote"]
 [[migrations]]
 tag = "v8-work-graph-lease"
 new_sqlite_classes = ["WorkGraphLease"]
+# D5586 part 3 (#5586): the admission coordinator; append-only.
+[[migrations]]
+tag = "v9-workspace-admission"
+new_sqlite_classes = ["WorkspaceAdmission"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -967,6 +975,10 @@ class_name = "ScopeAgent"
 [[env.production.durable_objects.bindings]]
 name       = "WORK_GRAPH_LEASE"
 class_name = "WorkGraphLease"
+# D5586 part 3 (#5586): #5570's admission coordinator, one object by name for every tenant sharing a provider quota; hosts the compute leases and the audited swarm admission. Preview-only: nothing calls its client yet.
+[[env.production.durable_objects.bindings]]
+name       = "WORKSPACE_ADMISSION"
+class_name = "WorkspaceAdmission"
 
 [[env.production.migrations]]
 tag                = "v1-realtime"
@@ -999,6 +1011,10 @@ new_sqlite_classes = ["DeckRemote"]
 [[env.production.migrations]]
 tag = "v8-work-graph-lease"
 new_sqlite_classes = ["WorkGraphLease"]
+# D5586 part 3 (#5586): the admission coordinator; append-only.
+[[env.production.migrations]]
+tag = "v9-workspace-admission"
+new_sqlite_classes = ["WorkspaceAdmission"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -1279,6 +1295,10 @@ class_name = "ScopeAgent"
 [[env.preview.durable_objects.bindings]]
 name       = "WORK_GRAPH_LEASE"
 class_name = "WorkGraphLease"
+# D5586 part 3 (#5586): #5570's admission coordinator, one object by name for every tenant sharing a provider quota; hosts the compute leases and the audited swarm admission. Preview-only: nothing calls its client yet.
+[[env.preview.durable_objects.bindings]]
+name       = "WORKSPACE_ADMISSION"
+class_name = "WorkspaceAdmission"
 
 [[env.preview.migrations]]
 tag                = "v1-realtime"
@@ -1311,6 +1331,10 @@ new_sqlite_classes = ["DeckRemote"]
 [[env.preview.migrations]]
 tag = "v8-work-graph-lease"
 new_sqlite_classes = ["WorkGraphLease"]
+# D5586 part 3 (#5586): the admission coordinator; append-only.
+[[env.preview.migrations]]
+tag = "v9-workspace-admission"
+new_sqlite_classes = ["WorkspaceAdmission"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).

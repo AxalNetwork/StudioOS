@@ -35,6 +35,8 @@
  *   queue_full            the tenant's outbox has no room for this publication's effects
  *   taken_down            (part 2) a manifest a takedown covers, or one pinning a component revision a takedown covers
  *   not_published         (part 2) a re-pin of a manifest the line never published
+ *   render_unadmitted     (part 12) a pinned render (video, brand image) that #5586's swarm admission did not admit
+ *                         and settle, at a measured cost, within its reserve; refused at approval and at publication
  *
  * PART 2 (D5585-p2) adds, here: a manifest that RE-PINS an earlier published manifest's component revisions (`repin` in
  * its body) is current although those revisions are no longer their assets' heads, and its publication passes them to
@@ -56,6 +58,8 @@ import {
   type AdvanceHeadEnv, type Cost, type RefusalCode,
 } from './workGraphRevisions';
 import { WORK_GRAPH_EFFECT_LIMITS } from './workGraphEffects';
+import type { SwarmState } from './agents/swarmAdmission';
+import { renderAdmissionOf, type RenderAdmission } from './workGraphReleaseRenders';
 
 export const AUDIENCES = ['internal', 'investors', 'partners', 'public'] as const;
 export type Audience = (typeof AUDIENCES)[number];
@@ -150,13 +154,19 @@ export type WorkGraphReleaseLimits = typeof WORK_GRAPH_RELEASE_LIMITS;
 /** The caller's resolved context: D5579's scope and revocations, plus each person's authorities (the route resolves them). */
 export interface ReleaseContext extends ValidationContext {
   authorities?: ReadonlyMap<number, readonly string[]>;
+  /**
+   * Part 12 (D5585-p12): #5586's swarm admission state (`SwarmAdmission.snapshot()`), which says whether each pinned
+   * render was admitted and settled within its reserve. Absent or null means it was not read: a manifest that pins a
+   * render is then refused `render_unadmitted` (`admission_unverified`), never assumed admitted.
+   */
+  renderAdmissions?: SwarmState | null;
 }
 
 export type ReleaseRefusalCode =
   | RefusalCode
   | 'audience_forbidden' | 'policy_profile' | 'incomplete_package' | 'rebuild_required' | 'reapproval_required'
   | 'attestation_missing' | 'no_authority' | 'self_approval' | 'approval_incomplete' | 'changes_requested'
-  | 'effect_target' | 'queue_full' | 'taken_down' | 'not_published';
+  | 'effect_target' | 'queue_full' | 'taken_down' | 'not_published' | 'render_unadmitted';
 export interface ReleaseRefusal { ok: false; code: ReleaseRefusalCode; ids: string[]; cost: Cost; currentHead?: { revisionUid: string | null; headSeq: number } }
 
 const MANIFEST_PROFILE = 'application/vnd.studioos.release-manifest+json';
@@ -289,13 +299,15 @@ export interface ComponentRow {
   source_locator: string; source_id: string; source_revision: string; residency: string | null; tenant_id: number;
   company_id: number; project_id: number | null; kind: string; access_class: string; approval_policy: string;
   head_revision_uid: string | null;
+  /** Part 12: who wrote the revision, from what, as what; `renderAdmissionOf` reads them. */
+  actor_kind: string; agent_run_id: string | null; parent_uids_json: string; media_profile: string;
 }
 
 export async function readComponents(env: Pick<Env, 'DB'>, m: Meter, revisionUids: string[]): Promise<Map<string, ComponentRow>> {
   const rows = await m.all<ComponentRow>(env.DB.prepare(
     `SELECT r.revision_uid, r.asset_uid, r.digest, r.tombstoned_at, r.source_store, r.source_locator, r.source_id,
             r.source_revision, r.residency, a.tenant_id, a.company_id, a.project_id, a.kind, a.access_class, a.approval_policy,
-            a.head_revision_uid
+            a.head_revision_uid, r.actor_kind, r.agent_run_id, r.parent_uids_json, r.media_profile
        FROM work_graph_revisions r JOIN work_graph_assets a ON a.asset_uid = r.asset_uid
       WHERE r.revision_uid IN (SELECT value FROM json_each(?))`,
   ).bind(JSON.stringify(revisionUids)));
@@ -544,6 +556,9 @@ export async function decideRelease(env: Pick<Env, 'DB'>, ctx: ReleaseContext, i
     if (input.purpose === 'publish' && ((needs.citations && !citations.length) || (needs.rights && !input.rightsRef) || (needs.disclosure && !input.disclosureRef))) {
       return m.refuse('approval_incomplete', [man.manifest_uid, input.profile]);
     }
+    // Part 12: no approval, publish or render, of a manifest whose pinned render #5586 did not admit and settle.
+    const gaps = await renderGapsOf(env, m, ctx, body);
+    if (gaps.length) return m.refuse('render_unadmitted', [man.manifest_uid, ...renderGapIds(gaps)]);
   }
   if (citations.length) {
     const found = await m.all<{ revision_uid: string }>(env.DB.prepare(
@@ -587,7 +602,26 @@ export interface ComponentState extends ManifestComponent {
    */
   reasons: ('superseded' | 'input_changed' | 'tombstoned' | 'repinned' | 'taken_down')[];
   missingAttestations: Requirement[];
+  /** Part 12: whether this piece, when it is a render, meets `render_admitted`; null when it is not a render. */
+  render: RenderAdmission | null;
 }
+/** Part 12: one pinned render that does not meet `render_admitted`, with #5586's own reason. */
+export interface RenderGap extends RenderAdmission { asset: string; revision: string; role: string; gap: NonNullable<RenderAdmission['gap']> }
+
+/** The pinned renders of a manifest that fail `render_admitted`. No read at all when nothing pinned can be a render. */
+export function renderGapsFrom(components: readonly { asset: string; revision: string; role: string }[], rows: ReadonlyMap<string, ComponentRow>, ctx: ReleaseContext): RenderGap[] {
+  return components.flatMap((c) => {
+    const r = rows.get(c.revision);
+    const a = r ? renderAdmissionOf(r, ctx.renderAdmissions) : null;
+    return a && a.gap ? [{ ...a, gap: a.gap, asset: c.asset, revision: c.revision, role: c.role }] : [];
+  });
+}
+const RENDER_KINDS: readonly string[] = ['video', 'image', 'brand'];
+async function renderGapsOf(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseContext, body: ManifestBody): Promise<RenderGap[]> {
+  if (!body.components.some((c) => RENDER_KINDS.includes(c.kind))) return [];
+  return renderGapsFrom(body.components, await readComponents(env, m, body.components.map((c) => c.revision)), ctx);
+}
+export const renderGapIds = (gaps: readonly RenderGap[]) => gaps.flatMap((g) => [g.asset, g.revision, g.gap, ...(g.admissionCode ? [g.admissionCode] : [])]);
 export interface PublishApproval { profile: ProfileName; approvalRef: string; reviewerUserId: number; authority: string; decidedAt: string }
 /**
  * Part 11 (D5585-p11): why a reviewer's live decision on a manifest does not count as a publish approval of it. One
@@ -641,6 +675,8 @@ export interface ReleaseState {
   repinOf: string | null;
   /** Part 2: applied takedowns covering this manifest or a component it pins. Retained evidence; never served. */
   takedowns: TakedownRef[];
+  /** Part 12: pinned renders that fail `render_admitted`; any one refuses approval and publication. */
+  renderGaps: RenderGap[];
 }
 export interface TakedownRef { id: number; scope: 'manifest' | 'component'; revisionUid: string | null; reasonCode: string; createdAt: string }
 
@@ -712,8 +748,10 @@ export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseConte
     status = worse(status, s);
     const have = new Set(atts.filter((a) => a.revision_uid === c.revision && a.digest === c.digest).map((a) => a.requirement));
     const missingAttestations = [...new Set(c.profiles.flatMap((p) => POLICY_PROFILES[p].requirements))].filter((q) => !have.has(q));
-    return { ...c, headRevisionUid: r?.head_revision_uid ?? null, status: s, reasons, missingAttestations };
+    const render = r ? renderAdmissionOf(r, ctx.renderAdmissions) : null;
+    return { ...c, headRevisionUid: r?.head_revision_uid ?? null, status: s, reasons, missingAttestations, render };
   });
+  const renderGaps = renderGapsFrom(body.components, now, ctx);
 
   // The live decision of each reviewer is their latest row for (purpose, profile).
   const decisions = await m.all<{ id: number; profile: ProfileName; authority: string; decision: string; reviewer_user_id: number;
@@ -744,6 +782,7 @@ export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseConte
     manifestUid: man.manifest_uid, lineAssetUid: man.line_asset_uid, audience: man.audience, digest: man.manifest_digest,
     partial: man.partial === 1, baseManifestUid: man.base_manifest_uid, published: line.head_revision_uid === man.manifest_uid,
     status, components, missingApprovals, approvals, authorUserId: man.actor_user_id, notCounted, changesRequestedBy, repinOf: body.repin ?? null, takedowns,
+    renderGaps,
   };
 }
 
@@ -797,7 +836,8 @@ export type PublishResult =
 
 /**
  * Publish a manifest. Refused unless every component is still its asset's accepted head, every pinned input is
- * current, every profile's attestations exist at the pinned digests, every profile has a live publish approval of this
+ * current, every profile's attestations exist at the pinned digests, every pinned render was admitted and settled by
+ * #5586's swarm admission within its reserve (part 12), every profile has a live publish approval of this
  * digest for this audience by a person with the authority (not the author), nobody's latest decision asks for changes,
  * and D5579's release check passes (each component's bytes were approved by a person when they became its head).
  * Then one batch: #5581's CAS on the line's head from `expectedManifestUid`, its `advance_head` audit row, and one
@@ -876,6 +916,8 @@ export async function publishRelease(
     if (outside) return audited('audience_forbidden', [outside.asset, outside.access, line.audience]);
     const unattested = state.components.filter((c) => c.missingAttestations.length);
     if (unattested.length) return audited('attestation_missing', unattested.flatMap((c) => [c.asset, ...c.missingAttestations]));
+    // Part 12: a pinned render #5586 did not admit and settle within its reserve, with the admission's own reason.
+    if (state.renderGaps.length) return audited('render_unadmitted', [man.manifest_uid, ...renderGapIds(state.renderGaps)]);
     if (state.changesRequestedBy.length) return audited('changes_requested', state.changesRequestedBy.map(String));
     if (state.missingApprovals.length) return audited('approval_required', [man.manifest_uid, ...state.missingApprovals]);
     // Effects the package can carry: a PR needs code, a signed document a contract, a website a public audience.

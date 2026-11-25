@@ -14,6 +14,7 @@ mounted under `/api/network/directory` (`routes/network_directory.ts`), over #76
 | `GET /admin/reviews?status=` | Review items and the source rows they name; Super Admin |
 | `POST /admin/entries/:uid/publish` | Publish an organisation, behind the write bar; people are held (#7739) |
 | `POST /admin/entries/:uid/suppress` | Hide an entry from members, behind the write bar |
+| `POST /admin/organisation-apply` | Apply a reviewed organisation-only upload: re-planned on the server, resumable batches, read back; Super Admin behind the write bar, not a support session (`services/networkDirectoryApply.ts`) |
 
-No route reads `network_directory_private_sources`, applies an import plan, or creates an account, a relationship,
-a notice or an outreach. See D7674.
+No route reads a `network_directory_private_sources` cell, accepts SQL, publishes on apply, or creates an account, a
+relationship, a notice or an outreach. See D7674 and D7674 part 2.
