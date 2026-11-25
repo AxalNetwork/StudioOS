@@ -399,6 +399,7 @@ catalogue version only in the fixture.
 | `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
 
 - `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
+- `research_fund_shortlist_7845.test.ts` — D7845 atomic shortlist, withholding, ownership and replay checks.
 `research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
 
 `research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
