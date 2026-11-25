@@ -334,7 +334,12 @@ class ShaiMigrationTests(unittest.TestCase):
             'CREATE TABLE research_fund_directory_reports (fund_uid TEXT NOT NULL, period TEXT NOT NULL, report_date TEXT, '
             'fund_size_cents INTEGER, source_url TEXT NOT NULL, PRIMARY KEY (fund_uid, period));'
             'CREATE TABLE research_fund_sources (source_name TEXT PRIMARY KEY, repo_copy TEXT, repo_copy_note TEXT);'
+            'CREATE TABLE network_directory_research_links (uid TEXT PRIMARY KEY, fund_directory_uid TEXT, status TEXT NOT NULL);'
         )
+        bridge = 'INSERT INTO network_directory_research_links (uid, fund_directory_uid, status) VALUES (?,?,?)'
+        db.execute(bridge, ('to-a-removed-row', 'old-unreproducible-uid', 'reviewed'))
+        db.execute(bridge, ('to-another-list', 'kept-euro', 'reviewed'))
+        db.execute(bridge, ('withdrawn-link', 'old-unreproducible-uid-2', 'withdrawn'))
         ins = 'INSERT INTO research_fund_directory (uid,name,source_name,source_url,as_of) VALUES (?,?,?,?,?)'
         db.execute(ins, ('old-unreproducible-uid', 'Old row', mod.SHAI_SOURCE, 'u', '2026-01-01'))
         db.execute(ins, ('kept-euro', 'EuroTech row', mod.EURO_SOURCE, 'u', '2026-01-01'))
@@ -351,8 +356,14 @@ class ShaiMigrationTests(unittest.TestCase):
         self.assertEqual(db.execute('SELECT COUNT(*) FROM research_fund_directory_reports').fetchone()[0], 0)
         self.assertEqual(db.execute('SELECT repo_copy FROM research_fund_sources').fetchone()[0],
                          'attached_assets/shai-goldman-new-vc-funds.csv')
+
+        def links():
+            return dict(db.execute('SELECT uid, status FROM network_directory_research_links'))
+        # D8605: a reviewed link whose fund this import removed is held for review.
+        self.assertEqual(links(), {'to-a-removed-row': 'needs_review', 'to-another-list': 'reviewed', 'withdrawn-link': 'withdrawn'})
         db.executescript(text)
         self.assertEqual(uids(), first, 'a replay changed the rows')
+        self.assertEqual(links(), {'to-a-removed-row': 'needs_review', 'to-another-list': 'reviewed', 'withdrawn-link': 'withdrawn'})
 
     def test_the_migration_is_byte_identical_on_a_second_run(self):
         import tempfile
@@ -366,13 +377,33 @@ class ShaiMigrationTests(unittest.TestCase):
                 outs.append(out.read_text())
         self.assertEqual(outs[0], outs[1])
 
-    def test_the_cli_refuses_a_number_that_is_not_one(self):
-        for good in ('413', '0426', '999'):
-            self.assertTrue(mod.is_migration_number(good), good)
-        for bad in ('378; DROP', '42', '12345', '41a', ''):
-            self.assertFalse(mod.is_migration_number(bad), bad)
-        with self.assertRaises(SystemExit):
-            mod.main_shai(['shai-migration', '378; DROP'])
+    def test_the_cli_takes_only_a_stem_stamped_after_the_bridge_migration(self):
+        # D8605: the migration carries the bridge statements, so it must sort
+        # after 202611251148_8605. A numbered file sorts before every stamped one.
+        for good in ('202611251149_8605_research_fund_directory_shai_list', '202612010000_9001_x'):
+            self.assertTrue(mod.is_bridge_ready_stem(good), good)
+        for bad in ('768', '378; DROP', '202611251148_8605_same_minute', '202611191414_7672_x', '202611251149_8605_x; DROP', ''):
+            self.assertFalse(mod.is_bridge_ready_stem(bad), bad)
+        for command in ('shai-migration', 'eurotech-migration'):
+            for bad in ('768', '202611191414_7672_x'):
+                with self.assertRaises(SystemExit):
+                    mod.main_shai([command, bad])
+
+    def test_the_cli_writes_the_stem_it_was_given(self):
+        import tempfile
+        stem = '202611251149_8605_research_fund_directory_shai_list'
+        root = mod.ROOT
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'cloudflare-worker/sql/migrations').mkdir(parents=True)
+            mod.ROOT = Path(tmp)
+            try:
+                mod.main_shai(['shai-migration', stem])
+            finally:
+                mod.ROOT = root
+            written = sorted(p.name for p in (Path(tmp) / 'cloudflare-worker/sql/migrations').iterdir())
+            text = (Path(tmp) / 'cloudflare-worker/sql/migrations' / f'{stem}.sql').read_text()
+        self.assertEqual(written, [f'{stem}.sql'])
+        self.assertIn(mod.bridge_statements(with_moves=False)[0], text)
 
 
 
@@ -455,9 +486,26 @@ class VehicleImportTests(unittest.TestCase):
         path = mod.ROOT / 'cloudflare-worker/sql/migrations' / f'{self.STEM}.sql'
         committed = path.read_text()
         as_of = re.search(r'as of (\d{4}-\d{2}-\d{2})\.', committed).group(1)
-        text, counts = mod.eurotech_vehicle_migration(date.fromisoformat(as_of), self.STEM)
+        # Written before the Network bridge existed (D8605), so without its statements.
+        text, counts = mod.eurotech_vehicle_migration(date.fromisoformat(as_of), self.STEM, bridge=False)
         self.assertEqual(text, committed)
         self.assertEqual(counts['vehicles'], 1364)
+
+    def test_a_new_import_adds_the_bridge_statements_and_only_them(self):
+        # D8605 (#8605): a list import written from now on carries the Network
+        # links, after every saved reference has moved.
+        today = date(2026, 11, 25)
+        bare, _ = mod.eurotech_vehicle_migration(today, self.STEM, bridge=False)
+        text, _ = mod.eurotech_vehicle_migration(today, self.STEM)
+        statements = mod.bridge_statements(with_moves=True)
+        self.assertTrue(text.endswith('\n'.join(statements) + '\n'))
+        added = [line for line in text.splitlines() if line not in bare.splitlines()]
+        self.assertEqual(added, [
+            '-- 4. Network links (D8605). A link on a moved uid is carried and set to',
+            '--    needs_review; a reviewed link whose fund is gone is set to needs_review.',
+        ] + statements)
+        last_reference = max(text.index(f'UPDATE {t} SET {c} =') for t, c, _ in mod.UID_REFERENCES)
+        self.assertGreater(text.index(statements[0]), last_reference)
 
     def test_a_stem_is_minute_issue_slug(self):
         self.assertTrue(mod.is_migration_stem(self.STEM))
