@@ -353,12 +353,6 @@ export async function runStagedNextStage(env: Env, envelopeUuid: string, appUrl:
   return 'sent';
 }
 
-/** The class a failed staged effect is recorded under: a refusal's code, else the exception's name. */
-export function stagedErrorClass(e: unknown): string {
-  if (e instanceof StagedRefusal) return e.code;
-  return (e as Error)?.name || 'error';
-}
-
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
