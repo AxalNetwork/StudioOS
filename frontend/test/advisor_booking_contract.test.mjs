@@ -127,17 +127,18 @@ test('a legacy key is never read without the key the worker actually emits', () 
   }
 });
 
-test('the two callers that were broken now go through the shared adapter', () => {
+test('the directory and active Practice booking callers use the shared adapter', () => {
   for (const f of [
     'frontend/src/pages/AdvisorsPage.jsx',
-    'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
+    'frontend/src/pages/advisor/practice/OpportunitiesZone.jsx',
+    'frontend/src/pages/advisor/practice/SessionsZone.jsx',
   ]) {
-    assert.match(codeOnly(read(f)), /from '\.\/kit'|from '\.\/advisor\/advisory\/kit'/,
+    assert.match(codeOnly(read(f)), /from '\.\.\/advisory\/kit'|from '\.\/advisor\/advisory\/kit'/,
       `${f} must read the shared slot/booking adapters`);
   }
   // And nothing re-privatises them: the private copies in OpportunitiesPage
   // are exactly why every other caller stayed broken.
-  const opps = codeOnly(read('frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx'));
+  const opps = codeOnly(read('frontend/src/pages/advisor/practice/OpportunitiesZone.jsx'));
   assert.doesNotMatch(opps, /const slotStart = /, 'the private adapters must not come back');
 });
 

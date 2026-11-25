@@ -91,6 +91,13 @@ and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { belo
 is the schema as it stood before migration N. A test that needs the migrated
 schema calls it rather than replaying the files, which took 4–10 s per file.
 `schema_once_d4133.test.ts` holds the copy to a fresh build.
+`_schema_budget.mjs` (D8467) is what keeps that true. `_ts-loader.mjs` imports it, so every Worker test
+process counts the whole migration files it executes; two chains' worth is allowed (one build of the schema, and
+as much again for cuts or for re-running a migration) and each one past that throws, naming the file and the helper to call instead. The shared
+build is not counted. `scripts/test-schema-replays.txt` lists the files that were over when the rule arrived;
+a file leaves that list by being fixed, and a new file is added only when it is about the build itself.
+`SCHEMA_REPLAY_REPORT=<file>` turns the refusal off and writes each file's count, one JSON line per test file.
+`schema_replay_budget_8467.test.mjs` holds it to that on a three-migration chain of its own.
 D1174 regressions live in the use-of-funds, Raise card/record, financial
 integrity and access suites. Synthetic Mercury rows prove accepted mappings,
 private owner/session/company scope, missing versus zero, and local read
@@ -410,6 +417,8 @@ catalogue version only in the fixture.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+
+| `portfolio_saved_views_6209.test.ts` | Private Portfolio views: SQLite ownership, page isolation, optimistic writes, access refusals, validation and unreadable reads. |
 | `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
 
 `research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.

@@ -207,8 +207,12 @@ test('the only writer of opened_at is the client\'s own route', () => {
   const CLIENT_ROUTE = "advisors.post('/received/deliverables/:uid/open'";
   const at = src.indexOf(CLIENT_ROUTE);
   assert.ok(at > 0, 'the client\'s open route must exist, or this file has no writer at all');
-  const advisorSide = src.slice(0, at);
-  const clientSide = src.slice(at, src.indexOf("advisors.post('/received/deliverables/:uid/accept'", at));
+  const domain = readFileSync(resolve(HERE, '../src/services/advisorDistribution.ts'), 'utf8');
+  const open = domain.indexOf('export async function openDeliverable(');
+  const accept = domain.indexOf('export async function acceptDeliverable(');
+  assert.ok(open > 0 && accept > open, 'receipt policies must exist');
+  const advisorSide = src.slice(0, at) + domain.slice(0, open);
+  const clientSide = domain.slice(open, accept);
 
   const updatesIn = (region: string) =>
     [...region.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];

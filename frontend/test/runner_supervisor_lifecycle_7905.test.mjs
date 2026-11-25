@@ -43,14 +43,16 @@ function engineFixture(t, { rmFails = false, survivesRm = false, inspectAfterRm 
   return { root, source, plan, storeRoot: store, calls, engine, isRemoved: () => removed };
 }
 /** The candidate phases run as REAL child processes: `install` and `test` map to shell scripts by phase. */
-const realSpawn = scripts => args => {
-  const script = args.at(-1).includes('npm ci') ? scripts.install : scripts.test;
-  return spawn('/bin/sh', ['-c', script], { stdio: 'ignore' });
+const realSpawn = (scripts, spawned = () => {}) => args => {
+  const phase = args.at(-1).includes('npm ci') ? 'install' : 'test';
+  const child = spawn('/bin/sh', ['-c', scripts[phase]], { stdio: 'ignore' });
+  spawned(phase, child);
+  return child;
 };
 const completeExport = async () => ({ state: 'complete', files: 1, bytes: 10 });
-function supervisor(t, f, { scripts = { install: 'exit 0', test: 'exit 0' }, admit = async () => live(), signal = new AbortController().signal, exporter = completeExport, recheck = async () => true } = {}) {
+function supervisor(t, f, { scripts = { install: 'exit 0', test: 'exit 0' }, spawned, admit = async () => live(), signal = new AbortController().signal, exporter = completeExport, recheck = async () => true } = {}) {
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
-  const job = new JobContainer(POLICY, { engine: f.engine, spawnEngine: realSpawn(scripts), stage: () => {}, namespace: () => true });
+  const job = new JobContainer(POLICY, { engine: f.engine, spawnEngine: realSpawn(scripts, spawned), stage: () => {}, namespace: () => true });
   const store = recoveryStore({ root: f.storeRoot, create: true });
   const logs = [], outputs = [];
   const run = () => runInContainer({ job, executionIsolation: async () => true, admit, recheck, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal, store, exporter, log: l => logs.push(l), output: o => outputs.push(o) });
@@ -88,8 +90,10 @@ test('D7905 a real test failure keeps its raw exit, and an install failure is ne
 
 test('D7905 cancellation during the test exits 130 after verified removal; a late abort after an observed failure keeps the failure', async t => {
   let f = engineFixture(t), controller = new AbortController();
-  let s = supervisor(t, f, { scripts: { install: 'exit 0', test: 'sleep 30' }, signal: controller.signal });
-  const running = s.run(); setTimeout(() => controller.abort(), 100);
+  // #8489: abort once the test phase is running, not 100 ms after run() starts, which on a busy runner can still
+  // be the install phase.
+  let s = supervisor(t, f, { scripts: { install: 'exit 0', test: 'sleep 30' }, signal: controller.signal, spawned: phase => { if (phase === 'test') setTimeout(() => controller.abort(), 100); } });
+  const running = s.run();
   assert.equal(await running, 130);
   assert.deepEqual([s.outcome().result, s.outcome().test.status, s.outcome().cleanup.state], ['cancelled', 'cancelled', 'complete']);
   assert.deepEqual(records(f), []);

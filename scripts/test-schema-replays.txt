@@ -1,0 +1,45 @@
+# D8467 (#8467): Worker test files that executed more than two chains' worth of whole migration files when
+# the budget arrived (census of 2026-11-24 on main d4e7a3245b; one chain is 768 files). A listed file is not
+# stopped. A listed file that has been fixed stays valid, so the PR that fixes one need not edit this list.
+# A new entry is for a file about the build itself, with the reason after `#`.
+cloudflare-worker/test/calendar_external_d1485.test.ts         # 9.0 chains; #8449
+cloudflare-worker/test/cap_table_venture_d1020.test.ts         # 8.6 chains; #8441
+cloudflare-worker/test/channels_messaging_d684.test.ts         # 2.5 chains
+cloudflare-worker/test/company_compliance_3976.test.ts         # 9.6 chains; #8446
+cloudflare-worker/test/data_room_nda_choice_d1102.test.ts      # 3.0 chains
+cloudflare-worker/test/data_room_search_3938.test.ts           # 6.0 chains; #8456
+cloudflare-worker/test/deck_brand_kit_d1562.test.ts            # 6.0 chains; #8455
+cloudflare-worker/test/deck_card_status_d1579.test.ts          # 4.0 chains; #8463
+cloudflare-worker/test/deck_image_edits_d1544.test.ts          # 8.0 chains; #8447
+cloudflare-worker/test/deck_image_sweep_d1508.test.ts          # 7.5 chains; #8458
+cloudflare-worker/test/deck_image_tools_d1534.test.ts          # 12.0 chains; #8442
+cloudflare-worker/test/deck_preflight_dismissals_4208.test.ts  # 5.0 chains; #8460
+cloudflare-worker/test/deck_publish_d1564.test.ts              # 6.0 chains; #8461
+cloudflare-worker/test/deck_recordings_d1590.test.ts           # 9.0 chains; #8451
+cloudflare-worker/test/deck_rehearsal_d1580.test.ts            # 5.0 chains
+cloudflare-worker/test/deck_rehearsal_live_d1580.test.ts       # 6.0 chains; #8457
+cloudflare-worker/test/deck_share_attribution_4598.test.ts     # 5.0 chains; #8462
+cloudflare-worker/test/deck_share_daily_4272.test.ts           # 10.0 chains; #8444
+cloudflare-worker/test/deck_share_feedback_6064.test.ts        # 3.0 chains
+cloudflare-worker/test/deck_share_null_limit_d895.test.ts      # 9.4 chains; #8459
+cloudflare-worker/test/deck_slide_analytics_d1573.test.ts      # 9.0 chains; #8445
+cloudflare-worker/test/deck_templates_d1535.test.ts            # 4.0 chains
+cloudflare-worker/test/deck_update_reuse_d1584.test.ts         # 3.0 chains
+cloudflare-worker/test/deck_usage_d1524.test.ts                # 3.0 chains
+cloudflare-worker/test/deck_visit_reads_d8249.test.ts          # 4.0 chains
+cloudflare-worker/test/deck_voice_d1569.test.ts                # 8.0 chains; #8448
+cloudflare-worker/test/grow_feedback_themes_6098.test.ts       # 8.0 chains; #8453
+cloudflare-worker/test/grow_writes_d691.test.ts                # 20.5 chains; #8440
+cloudflare-worker/test/job_comp_public_2181.test.ts            # 3.3 chains
+cloudflare-worker/test/legal_notice_kinds_d716.test.ts         # 3.3 chains
+cloudflare-worker/test/linkedin_connector_d1350.test.ts        # 2.4 chains
+cloudflare-worker/test/match_rows_ne1_surfaces_3938.test.ts    # 3.0 chains
+cloudflare-worker/test/meeting_bot_assembly_d886.test.ts       # 8.4 chains
+cloudflare-worker/test/meeting_bot_control_d886.test.ts        # 7.4 chains
+cloudflare-worker/test/meeting_bot_privacy_d886.test.ts        # 3.5 chains
+cloudflare-worker/test/messages_drop_d1345.test.ts             # 2.9 chains
+cloudflare-worker/test/partner_invitation_fixes_d924.test.ts   # 498 migrations per upgraded fixture, 19 fixtures (about 12 chains); #8443
+cloudflare-worker/test/raise_prospect_signals_d1568.test.ts    # 6.0 chains; #8454
+cloudflare-worker/test/telegram_readiness_d868.test.ts         # 3.5 chains
+cloudflare-worker/test/whatsapp_readiness_d861.test.ts         # 2.1 chains
+cloudflare-worker/test/whatsapp_switch_on_d754.test.ts         # 4.1 chains
