@@ -38,6 +38,7 @@ import {
   type StripeErrorKind,
 } from '../util/stripeError';
 import { refuse } from '../util/refusal';
+import { planSubscriptionKey, planSwapKey } from '../util/stripeKey';
 import { assertStripeMoneyKind, type StripeMoneyKind } from '../services/moneyRails';
 
 // Epic 6 — Market Intel Pro billing surface.
@@ -801,7 +802,7 @@ billing.post('/plan/checkout', async (c) => {
     const sub = await stripeCall<{
       id: string; status: string;
       latest_invoice?: { payment_intent?: { client_secret?: string } };
-    }>(c.env, '/subscriptions', subParams, { moneyKind: 'platform_plan' });
+    }>(c.env, '/subscriptions', subParams, { moneyKind: 'platform_plan', idempotencyKey: planSubscriptionKey(user.uid, priceId) });
     const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
     if (!clientSecret) {
       // Zero-due first invoice (e.g. a trial) → already active/trialing.
@@ -1373,7 +1374,12 @@ billing.post('/subscription/swap/confirm', async (c) => {
     // D707: the swap re-stamps `metadata[kind]`, so it stamps the matching money kind too.
     const moneyKind = params['metadata[kind]'] === 'investor' ? 'investor_tier' as const
       : params['metadata[kind]'] === 'tier' ? 'platform_plan' as const : undefined;
-    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params, { moneyKind });
+    // #8523: a double press of Confirm is one proration; the key names the held price and the target, so a
+    // deliberate swap back and forth later (a different window) is a new change.
+    const fromPriceId = String(sub.items?.data?.[0]?.price?.id ?? '');
+    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params, {
+      moneyKind, idempotencyKey: planSwapKey(Number(user.id), subId, fromPriceId, priceId),
+    });
     // Align D1 immediately (webhook will re-affirm). Scoped to the calling user.
     if (scope === 'investor' && mapped?.investorTier) {
       const t = mapped.investorTier as InvestorTier;

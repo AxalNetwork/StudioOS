@@ -150,6 +150,14 @@
     ]
   },
   {
+    "id": "stripe-idempotency",
+    "command": [
+      "node",
+      "scripts/build-stripe-inventory.mjs",
+      "--check"
+    ]
+  },
+  {
     "id": "check-regulated-wording",
     "command": [
       "node",
@@ -190,6 +198,13 @@
       "node",
       "scripts/check-preview-isolation.mjs",
       "--static"
+    ]
+  },
+  {
+    "id": "check-ai-gateways",
+    "command": [
+      "node",
+      "scripts/check-ai-gateways.mjs"
     ]
   },
   {
@@ -450,6 +465,17 @@
       "--import",
       "./cloudflare-worker/test/_ts-loader.mjs",
       "scripts/check-skill-library.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-model-inventory",
+    "command": [
+      "node",
+      "scripts/build-model-inventory.mjs",
+      "--check"
     ],
     "requires": [
       "generated"

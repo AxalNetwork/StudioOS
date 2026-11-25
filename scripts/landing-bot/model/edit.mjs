@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 // #6473: the `edit` job's entry point: one round of the model on the checkout, writing a patch and manifest or nothing.
 /**
- *   node edit.mjs --task task.json --work <checkout> --out <dir> --round <n> --base <sha> [--feedback verify.json]
+ *   node edit.mjs --task task.json --work <checkout> --out <dir> --round <n> --base <sha> --controller <sha>
+ *                 [--feedback verify.json]
  *                 [--stage stage.json]   (merge mode, #6475: the report stage.mjs wrote)
  *
  * Runs in the `repair` environment with the model credentials and no GitHub
  * write token. It runs no repository code: the checkout is read as data and
- * this folder's own code comes from `main`. It writes `<out>/result.json`
+ * this folder's own code comes from the controller commit (#8506). It writes `<out>/result.json`
  * always, and `<out>/patch.json` with `<out>/manifest.json` only when the
- * edits pass every check. It never prints a credential.
+ * edits pass every check, with `<out>/record.json` (#8506, `record.mjs`): the
+ * run, attempt, task, target head and controller revision the patch was made
+ * by, which `verify` and the caller's publish step check against their own
+ * inputs. It never prints a credential.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -18,6 +22,7 @@ import { createWorkspace } from './workspace.mjs';
 import { providerOrder, runRound } from './loop.mjs';
 import { checkChanges, manifestFor, patchFor } from './patch.mjs';
 import { makeProviders, NAMES } from './providers.mjs';
+import { identityFrom, identityProblems, recordFor } from './record.mjs';
 
 const SHA = /^[0-9a-f]{40}$/;
 
@@ -32,12 +37,15 @@ export function args(argv) {
 }
 
 /** The whole round; returns the result object it wrote. Exposed for tests with stub providers. */
-export async function editMain({ task: taskPath, work, out, round, base, feedback, stage }, { env = process.env, providers } = {}) {
+export async function editMain({ task: taskPath, work, out, round, base, controller, feedback, stage }, { env = process.env, providers, identity = identityFrom(env) } = {}) {
   mkdirSync(out, { recursive: true });
   const write = (name, v) => writeFileSync(join(out, name), `${JSON.stringify(v, null, 2)}\n`);
   const finish = (result) => { write('result.json', result); return result; };
   const n = Number(round);
   if (!SHA.test(String(base)) || !Number.isSafeInteger(n) || n < 1) return finish({ outcome: 'no_patch', reason: 'bad base or round' });
+  // #8506: no model call unless the patch's record can be written.
+  const unknown = identityProblems({ identity, controller, head: base });
+  if (unknown.length) return finish({ outcome: 'no_patch', reason: 'the run cannot be recorded', problems: unknown });
 
   const { task, errors } = parseTask(readFileSync(taskPath, 'utf8'));
   if (!task) return finish({ outcome: 'no_patch', reason: 'the task is invalid', errors });
@@ -70,8 +78,10 @@ export async function editMain({ task: taskPath, work, out, round, base, feedbac
   const changes = workspace.changes();
   const problems = checkChanges(changes, task.allowed_files, { resolving });
   if (problems.length) return finish({ ...result, round: n, outcome: 'no_patch', reason: 'the edits failed a check', problems });
-  write('patch.json', patchFor({ baseSha: base, changes }));
+  const patchText = `${JSON.stringify(patchFor({ baseSha: base, changes }), null, 2)}\n`;
+  writeFileSync(join(out, 'patch.json'), patchText);
   write('manifest.json', manifestFor({ baseSha: base, round: n, result, changes }));
+  write('record.json', recordFor({ identity, task, controller, head: base, round: n, patchText }));
   return finish({ ...result, round: n, files: changes.map((c) => c.path) });
 }
 

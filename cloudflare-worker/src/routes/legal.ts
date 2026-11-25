@@ -31,6 +31,7 @@ import {
   totalEquityPct,
 } from '../services/cofounderAgreement';
 import { refuse } from '../util/refusal';
+import { incorporationKey } from '../util/stripeKey';
 import { canEdit } from '../services/companyAccess';
 import { listPositions, recordParties, recordPosition } from '../services/cofounderAgreementParties';
 
@@ -748,7 +749,7 @@ legal.post('/incorporation/order', async (c) => {
       // invoice's PaymentIntent then carries the computed tax in its amount.
       // Requires the customer to have a tax-determinable address once enabled.
       ...automaticTaxParams(stripeTaxEnabled(c.env)),
-    }, { moneyKind: 'marketplace' });
+    }, { moneyKind: 'marketplace', idempotencyKey: incorporationKey(incId, 'invoice') });
     // 2) Add the incorporation fee as the sole line item on this invoice.
     await stripeCall(c.env, '/invoiceitems', {
       customer,
@@ -756,12 +757,12 @@ legal.post('/incorporation/order', async (c) => {
       amount: String(amountCents),
       currency,
       description: `Incorporation — ${j.label} — ${companyName}`,
-    }, { moneyKind: 'marketplace' });
+    }, { moneyKind: 'marketplace', idempotencyKey: incorporationKey(incId, 'item') });
     // 3) Finalize → Stripe mints the PaymentIntent we confirm in-app.
     const finalized = await stripeCall<{
       id: string;
       payment_intent: { id: string; client_secret: string } | string;
-    }>(c.env, `/invoices/${inv.id}/finalize`, { 'expand[0]': 'payment_intent' });
+    }>(c.env, `/invoices/${inv.id}/finalize`, { 'expand[0]': 'payment_intent' }, { idempotencyKey: incorporationKey(incId, 'finalize') });
 
     let piId: string;
     let clientSecret: string;
