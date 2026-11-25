@@ -1,4 +1,11 @@
-/** Owner's 2026-10-21 Investor prices. Offline only; no production access. */
+/**
+ * Offline Investor Plus/Pro price requests from D1430’s owner table; missing
+ * Plus is `product_needed`, Institutional prices are archived after
+ * verification. Existing subscriptions retain their recorded price. Run with
+ * `--catalog /path/to/catalog-export.json`; no production access.
+ *
+ * Owner's 2026-10-21 Investor prices. Offline only; no production access.
+ */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { planRecurringPrices, OWNER_PRICE_REASON } from './plan-founder-prices.mjs';

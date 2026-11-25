@@ -1,0 +1,14 @@
+{
+  "GET /api/fund-performance/:id/history": {
+    "kind": "target"
+  },
+  "GET /api/fund-performance/:id/positions": {
+    "kind": "target"
+  },
+  "POST /api/fund-performance/positions/:id/valuations": {
+    "kind": "target"
+  },
+  "PUT /api/fund-performance/positions/:id/fund": {
+    "kind": "target"
+  }
+}

@@ -1,4 +1,9 @@
 /**
+ * A branch Worker's whole `wrangler.toml`, derived from HQ's `[env.production]`
+ * table, plus what a registry entry must contain and what a rendered config
+ * must never say. Owned by `../gen-branch-wrangler.mjs` and
+ * `../check-branch-config.mjs`.
+ *
  * A branch Worker's config, derived from HQ's — never written by hand.
  *
  * WHY IT IS DERIVED. A branch is the same codebase deployed again

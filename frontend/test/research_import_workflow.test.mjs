@@ -69,9 +69,13 @@ test('no step condition reads inputs, which a research-import event leaves empty
   assert.deepEqual(conditions, ["if: env.SOURCE != 'urls'", "if: env.SOURCE == 'urls'"]);
 });
 
-test('the token may write contents and nothing else', () => {
-  const perms = yml.slice(yml.indexOf('\npermissions:'), yml.indexOf('\nconcurrency:')).trim().split('\n');
-  assert.deepEqual(perms.map((l) => l.trim()), ['permissions:', 'contents: write']);
+test('only the import job may write contents, with no other token scope', () => {
+  const defaults = yml.slice(yml.indexOf('\npermissions:'), yml.indexOf('\nconcurrency:')).trim();
+  assert.equal(defaults, 'permissions: {}');
+  const job = yml.slice(yml.indexOf('\n  import:'), yml.indexOf('\n    steps:'));
+  const permissions = /^    permissions:\n((?:      [^\n]*\n)+)/m.exec(job);
+  assert.ok(permissions, 'the import job declares its own token permissions');
+  assert.deepEqual(permissions[1].trim().split('\n').map((line) => line.trim()), ['contents: write']);
 });
 
 test('no ${{ }} expression sits inside any run block, so a dispatched value is never spliced into a script', () => {

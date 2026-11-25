@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 /**
- * D5612 (#5612) — build the generated files that are not committed (three modules; D8519 added the model inventory):
+ * D5612 (#5612, not an importer): runs `build-route-registry.mjs`,
+ * `build-api-index.mjs` and `build-skill-library.mjs`, which write the three
+ * generated modules that are gitignored and never committed (and, since D4574
+ * H3, the skill library's entries asset, `frontend/public/skill-library/`,
+ * gitignored too). D8519 adds the generated model inventory. Node built-ins only, so it runs before `npm ci`;
+ * `build-frontend.mjs`, the `pre*` npm hooks, `test-drift-parts.mjs` and each
+ * CI job that runs `tsc`, `node --test`, `wrangler` or `vite` run it first
+ * (`frontend/test/generated_before_build_5612.test.mjs`). `--check` runs each
+ * generator's `--check`.
+ *
+ * D5612 (#5612) — build the generated files that are not committed:
  *
  *   cloudflare-worker/src/routes/_registry.ts                       scripts/build-route-registry.mjs
  *   frontend/src/lib/apiModules.generated.js                        scripts/build-api-index.mjs

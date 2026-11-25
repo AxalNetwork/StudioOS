@@ -261,6 +261,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
 | `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
 | `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 

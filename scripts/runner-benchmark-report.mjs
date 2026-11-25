@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// D5611: read-only report for one branch-only runner benchmark, with rounded
+// per-job cost and wait evidence.
+//
 // D5611: read one benchmark run and its paginated jobs; print provenance and lane measurements only.
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';

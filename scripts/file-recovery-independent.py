@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof.
 """D6653: encrypted independent file copies, metadata heartbeats and synthetic-only outside-store drills.
 
 Credentials are role-scoped to child processes. No key, member content, bucket,

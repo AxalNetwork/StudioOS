@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// D5663: attempt-bound future-clock TAP and exit manifests.
+//
 // D5663: run one approved test part without issue/Slack credentials; atomically publish its exit and TAP digest.
 import { createHash } from 'node:crypto';
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from 'node:fs';

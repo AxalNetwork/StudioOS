@@ -280,6 +280,8 @@ test('grid_generate off stops the one press (404 not_switched_on) and says so in
 test('only an admin writes a flag; an unknown key, scope or value is refused with nothing written; a write is seen at once', async () => {
   const f = await fixture();
   try {
+    const readFlags = f.db.prepare('SELECT * FROM feature_flags ORDER BY key, scope, scope_id');
+    const initialFlags = readFlags.all();
     assert.equal((await call(f, 2, 'PUT', '/api/admin/feature-flags', { key: 'grid_generate', scope: 'global', enabled: false })).status, 403);
     assert.equal((await call(f, 2, 'GET', '/api/admin/feature-flags')).status, 403);
     for (const [body, code] of [
@@ -292,14 +294,18 @@ test('only an admin writes a flag; an unknown key, scope or value is refused wit
       const r = await call(f, 9, 'PUT', '/api/admin/feature-flags', body);
       assert.deepEqual([r.status, r.body.error], [400, code], JSON.stringify(body));
     }
-    assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM feature_flags').get() as any).n, 0);
+    assert.deepEqual(readFlags.all(), initialFlags);
     await call(f, 2, 'GET', '/api/decks/new/context?project_id=1'); // primes the cache
     const w = await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'grid_generate', scope: 'user', scope_id: 2, enabled: false, reason: 'Synthetic test reason.' });
     assert.deepEqual(w.body, { ok: true, key: 'grid_generate', scope: 'user', scope_id: '2', enabled: false });
     assert.equal((await call(f, 2, 'GET', '/api/decks/new/context?project_id=1')).body.grid_generate, false, 'the write dropped the cache');
     const list = await call(f, 9, 'GET', '/api/admin/feature-flags');
     // #4189 (D4155 K2): the writer by name, never a bare id.
-    assert.equal(list.body.flags.length, 1); assert.deepEqual(list.body.flags[0].updated_by?.name, 'Synthetic member 9'); assert.equal(list.body.cache_s, 60);
+    assert.equal(list.body.flags.length, initialFlags.length + 1);
+    const written = list.body.flags.find((flag: { key: string; scope: string; scope_id: string }) =>
+      flag.key === 'grid_generate' && flag.scope === 'user' && flag.scope_id === '2');
+    assert.equal(written?.updated_by?.name, 'Synthetic member 9');
+    assert.equal(list.body.cache_s, 60);
   } finally { f.close(); }
 });
 

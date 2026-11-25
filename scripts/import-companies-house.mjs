@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * Migration 405: UK companies from Companies House's free bulk company data
+ * (D596). Active, UK-origin, non-dormant limited companies in a SIC code its
+ * reviewed table maps to the crosswalk, oldest first and round-robin across
+ * sectors to a cap; every row cites the register, the company's page and the
+ * OGL line. It reads no address column and takes no officer or person with
+ * significant control. Tested on fixtures in
+ * `cloudflare-worker/test/research_companies_house_d596.test.mjs`. Run it with
+ * `node --experimental-strip-types`, on the unzipped month's file.
+ *
  * Companies House → migration 405: UK companies for the Research directory,
  * with no personal data (D596, issue #1231).
  *

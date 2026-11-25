@@ -1,4 +1,12 @@
 /**
+ * #6326: the mutation check's rules apart from the file system: spec validation
+ * (repository-relative paths, never `docs/`, `node_modules/`, `.git/` or the
+ * test itself; `find` exactly once), the loader argv for each test folder
+ * (mirrors `test:worker`, `test:frontend`, `test:meeting-bot`,
+ * `test:merge-control`, `test:retention`), failed test names from TAP, the
+ * caught/wrong failure/equivalent/survived/timeout verdict and the summary
+ * line. Owned by `../mutation-check.mjs`; tested in `mutationCheck.test.mjs`.
+ *
  * #6326: the mutation check's decisions, apart from the file system and the
  * test runner. Which spec is valid, what a mutation does to a file's text,
  * which command runs a test file (with the loader its suite needs), which

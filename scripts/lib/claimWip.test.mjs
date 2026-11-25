@@ -1,3 +1,8 @@
+/**
+ * D5617: `claimWip.mjs`: PRs grouped by body and branch reference, unattributed
+ * PRs kept, expired claims listed, `needs-session` weighting, and the two
+ * GraphQL windows deduplicated.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { capBlockers, formatWip, parseWipCap, readOpenPulls, readWip } from './claimWip.mjs';

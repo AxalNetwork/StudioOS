@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * #4568: the five usage tables' dependency matrix, read from
+ * `cloudflare-worker/src` and planned on the migrated schema: every statement,
+ * the index it uses, each index's readers, foreign keys and triggers.
+ * `--candidates` prints the plan diff with D4568's indexes. Reads files only.
+ * Rules in `lib/usageTablesMatrix.mjs`.
+ *
  * #4568 — the usage tables' dependency matrix, read from the code and planned on
  * the migrated schema (rules: `scripts/lib/usageTablesMatrix.mjs`).
  *

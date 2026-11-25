@@ -958,6 +958,12 @@ jobs:
       - name: Expertise axe and phone navigation (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/expertise_axe_7517.spec.js --retries=0 --trace off
+      # #8537 (D8537): the public journey at 1440 and 390 — Pricing to sign-up and back to the plan's checkout, a Grow
+      # action through sign-in and back, a session that ended back in by the email link. The local Worker in
+      # tests/e2e/_helpers.js serves the docs/ built above and keeps the sign-in links in an outbox; no email, no account.
+      - name: Public journey (local Worker, fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/public_journey.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

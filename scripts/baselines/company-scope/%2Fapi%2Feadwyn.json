@@ -1,0 +1,20 @@
+{
+  "GET /api/eadwyn/deck-tools": {
+    "kind": "filter"
+  },
+  "POST /api/eadwyn/actions/:uid/confirm": {
+    "kind": "target"
+  },
+  "POST /api/eadwyn/conversations": {
+    "kind": "target"
+  },
+  "POST /api/eadwyn/conversations/:uid/ask": {
+    "kind": "target"
+  },
+  "POST /api/eadwyn/conversations/:uid/quote": {
+    "kind": "target"
+  },
+  "POST /api/eadwyn/deck-tools/:name": {
+    "kind": "target"
+  }
+}

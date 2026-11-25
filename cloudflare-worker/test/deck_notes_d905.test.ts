@@ -181,7 +181,10 @@ test("a note never leaves through the deck's own read, a share or an export: onl
   const readers: string[] = [];
   const walk = (dir: string) => { for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && /\.ts$/.test(p) && /deck_notes/.test(readFileSync(p, 'utf8'))) readers.push(p.slice(src.length)); } };
   walk(src);
-  assert.deepEqual(readers.sort(), ['index.ts', 'routes/deck_notes.ts', 'services/projectTrash.ts'], 'index.ts mounts it; #3747 hard-delete only erases it');
+  // D8530 (#8530): the VentureSpace data inventory names the table so CI can say what each lifecycle event does
+  // to it; it never queries a table, so it cannot read a note.
+  assert.deepEqual(readers.sort(), ['index.ts', 'routes/deck_notes.ts', 'services/projectTrash.ts', 'services/ventureSpaceDataInventory.ts'], 'index.ts mounts it; #3747 hard-delete only erases it; the inventory only names it');
+  assert.doesNotMatch(readFileSync(join(src, 'services/ventureSpaceDataInventory.ts'), 'utf8'), /\.(prepare|exec|batch)\(/, 'the data inventory never queries a table');
   assert.equal(/FROM\s+deck_notes|JOIN\s+deck_notes/i.test(readFileSync(join(src, 'index.ts'), 'utf8')), false);
   const cleanupSQL = sqlStrings(readFileSync(join(src, 'services/projectTrash.ts'), 'utf8'))
     .filter(({ body }) => /\bdeck_notes\b/i.test(body)).map(({ body }) => body.trim());

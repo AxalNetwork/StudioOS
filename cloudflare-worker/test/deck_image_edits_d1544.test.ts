@@ -23,7 +23,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckImageEdits from '../src/routes/deck_image_edits.ts';
@@ -38,17 +38,13 @@ import { sanitizeTheme } from '../src/services/decks/slideModel.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 
 const VARY_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRACTS.imageVary.schema, import.meta.url), 'utf8'));
 
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1544-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 const SCHNELL = '@cf/black-forest-labs/flux-1-schnell';
@@ -80,8 +76,8 @@ const P_OTHER = '00000000-0000-4000-8000-000000000004';
 
 async function fixture({ partner = true, images = true, theme = null as any, face = 'NO' } = {}) {
   __resetForTest();
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  // #8437: the schema is built once per run (_schema_once.mjs) and copied into a fresh database for each test.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true }));
   const insert = db.prepare('INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (?, ?, ?, ?, ?, 1, ?)');
   insert.run(FOUNDER, 'founder', 100, 'Ada Quill', 'synthetic-2@example.invalid', 'studio');
   insert.run(OTHER, 'founder', 300, 'Synthetic other', 'synthetic-3@example.invalid', 'studio');

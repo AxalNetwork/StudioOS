@@ -1,4 +1,9 @@
-/** D1430 (#3702): the owner's price targets, for offline planning and drift checks.
+/**
+ * D1430 (#3702): the owner’s six paid plan targets and unpriced profiles,
+ * shared only by offline planners and the live drift check. Runtime prices
+ * remain Stripe’s D1 mirror.
+ *
+ * D1430 (#3702): the owner's price targets, for offline planning and drift checks.
  * Runtime prices remain Stripe's catalogue mirrored in D1, never this table. */
 export const OWNER_PLAN_PRICES = Object.freeze([
   { licence_key: 'founder:growth', metadata_key: 'tier', metadata_value: 'growth', name: 'Validate + Build', month: 2000, year: 20400 },

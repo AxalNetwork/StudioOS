@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+/**
+ * #2586 (D886 B8): builds the meeting bot's runtime image from `meeting-bot/`
+ * only when its Dockerfile and ignore file both exist, through
+ * `lib/meetingBotImage.mjs`; prints `image=<ref>` on a real build. `--fixture`
+ * builds a scratch image to smoke-test CI plumbing and emits no publishable
+ * output. No migrations, deployment, login or publication.
+ */
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';

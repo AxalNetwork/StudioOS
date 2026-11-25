@@ -150,7 +150,9 @@ test('magic/start queues the link before it says the mail is on its way', () => 
   // missing, which production is not. Awaiting it is what makes the 202
   // true: the previous `waitUntil` returned first and dropped the errand,
   // so the screen said "sent" and the first message left only on Resend.
-  assert.match(handler, /await sendEmail\(c\.env, 'auth_magic_link'/);
+  // D8536: the awaited call is `sendBound` (send() under the token row's
+  // send reference), which enqueues exactly as `send()` does.
+  assert.match(handler, /await sendBound\(c\.env, signup \? 'auth_signup_link' : 'auth_magic_link', ref,/);
   assert.ok(
     !/immediate:\s*true/.test(handler),
     'immediate: true would wait on Gmail inside the sign-in request',

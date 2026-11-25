@@ -184,9 +184,10 @@ test('a pool with no size recorded, or overgranted, leaves fully diluted unavail
 test('who may read and write: the venture gate, the plan, and only the owner records', async () => {
   const f = fresh();
   try {
-    for (const id of [PARTNER, INVESTOR, OTHER]) {
-      assert.equal((await call(f, id, '/record/10')).status, 403, `${id} read`);
-      assert.equal((await call(f, id, '/record/10/proposals', 'POST', { kind: 'safe', holder_name: 'X' })).status, 403, `${id} propose`);
+    // D8526: a member who may not read is refused 403; a stranger to the venture is answered as a missing one, 404.
+    for (const [id, refusal] of [[PARTNER, 404], [INVESTOR, 403], [OTHER, 404]]) {
+      assert.equal((await call(f, id, '/record/10')).status, refusal, `${id} read`);
+      assert.equal((await call(f, id, '/record/10/proposals', 'POST', { kind: 'safe', holder_name: 'X' })).status, refusal, `${id} propose`);
     }
     assert.equal((await call(f, ADVISOR, '/record/10')).status, 200);
     assert.equal((await call(f, ADVISOR, '/record/10/history')).status, 200);
@@ -429,7 +430,7 @@ test('a currency per venture: USD by default, set by the owner, and a recorded a
     const r = (await call(f, OWNER, '/record/10')).body;
     assert.deepEqual(r.currency, { code: 'EUR', source: 'set' });
     assert.deepEqual(r.instruments.rows.map((i: any) => [i.holder.name, i.currency]), [['Dollar Angel', 'USD'], ['Euro Angel', 'EUR']]);
-    assert.deepEqual((await call(f, OWNER, '/record/20')).status, 403, 'another venture’s is not read');
+    assert.deepEqual((await call(f, OWNER, '/record/20')).status, 404, 'another venture’s is not read, nor confirmed to exist (D8526)');
   } finally { f.db.close(); }
 });
 
