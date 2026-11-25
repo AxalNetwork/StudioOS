@@ -10,6 +10,23 @@ name: Claude Code
 # that token. It has its own federation rule, separate from claude-review.yml's
 # pull-request rule; documentation/operations/CLAUDE_REVIEW.md §4b sets it up.
 #
+# D8505 (#8505): three decisions, three jobs, each holding only its own token.
+#   admit   read-only. Decides who may start a run before anything else: the
+#           requester's real permission on the repository (the collaborator
+#           permission API, write or admin), optionally the owner's list in the
+#           variable CLAUDE_CODE_ALLOWED_ACTORS, and binds the run to this
+#           repository, the issue or pull request and its head SHA
+#           (scripts/claude-code-admission.mjs). A refusal ends here: no model
+#           call, no write scope, one line in the job summary.
+#   claude  the model. `contents: read`, `pull-requests: read` (to re-read the
+#           head) and `id-token: write` for the federation of D5530; its checkout
+#           keeps no credential. A pull request whose head moved since admission
+#           stops it before the action starts.
+# The pinned action makes its own GitHub writes (the tracking comment, a branch
+# push) inside its step, with the token it obtains for itself, not this job's
+# GITHUB_TOKEN; it has no mode that hands the writes to a later job, so there is
+# no separate mutation job. D8505.md records this and what #8061 changes.
+#
 # Trigger paths:
 #   - Issue comment mentioning `@claude`
 #   - PR review / review-comment mentioning `@claude`
@@ -45,22 +62,16 @@ concurrency:
   group: claude-code-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
+permissions: {}
 
 jobs:
-  claude:
+  admit:
     # Only run on `@claude` mentions or manual dispatch — keeps cost down
     # and avoids accidental fires on unrelated comments.
     #
     # #4571 SC-02: and only when the person who wrote the mention is an OWNER,
-    # MEMBER or COLLABORATOR of this repository. Anyone can comment on a public
-    # repository; without this, any comment with `@claude` started a job holding
-    # write tokens and the API key, relying on the action's own permission check.
-    # A manual dispatch needs write access already, so it is not gated here.
+    # MEMBER or COLLABORATOR of this repository. That label is a cheap first
+    # filter, not the decision: the admission script reads the real permission.
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment'              && contains(github.event.comment.body, '@claude')
@@ -72,11 +83,44 @@ jobs:
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      admitted: ${{ steps.decide.outputs.admitted }}
+      reason: ${{ steps.decide.outputs.reason }}
+      kind: ${{ steps.decide.outputs.kind }}
+      number: ${{ steps.decide.outputs.number }}
+      head_sha: ${{ steps.decide.outputs.head_sha }}
+      repository: ${{ steps.decide.outputs.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 1
+          persist-credentials: false
+
+      - name: Decide who may start this run
+        id: decide
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_ALLOWED_ACTORS: ${{ vars.CLAUDE_CODE_ALLOWED_ACTORS }}
+        run: node scripts/claude-code-admission.mjs
+
+  claude:
+    needs: admit
+    if: needs.admit.outputs.admitted == 'true' && needs.admit.outputs.repository == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       # Hard-fail with a readable message if the federation variables are
       # missing or malformed. Without this, the action fails with a generic 401.
@@ -87,6 +131,16 @@ jobs:
           CLAUDE_CODE_SERVICE_ACCOUNT_ID: ${{ vars.CLAUDE_CODE_SERVICE_ACCOUNT_ID }}
           CLAUDE_CODE_WORKSPACE_ID: ${{ vars.CLAUDE_CODE_WORKSPACE_ID }}
         run: node scripts/check-claude-code-federation.mjs
+
+      # D8505: the run is bound to the head the admit job read. A push since
+      # then stops it here, before the model starts or anything is written.
+      - name: Head still at the admitted commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ADMITTED_KIND: ${{ needs.admit.outputs.kind }}
+          ADMITTED_NUMBER: ${{ needs.admit.outputs.number }}
+          ADMITTED_HEAD_SHA: ${{ needs.admit.outputs.head_sha }}
+        run: node scripts/claude-code-admission.mjs --verify-head
 
       - name: Run Claude Code
         uses: anthropics/claude-code-action@ec7c223ff45a0763d3d5e530c74403d14f8ddd10 # v1
