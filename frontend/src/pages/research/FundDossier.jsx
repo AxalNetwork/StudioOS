@@ -278,9 +278,12 @@ export default function FundDossier({ role = 'founder' }) {
   // write that answers after the route has moved to another fund is dropped,
   // and writes go to the loaded fund only while the route still names it.
   const routeKey = recordKey(uid);
+  const route = useRef(routeKey);
+  route.current = routeKey;
   const [loadedKey, setLoadedKey] = useState(null);
   const gate = useRef(null);
   if (!gate.current) gate.current = createRecordGate();
+  const loadedRead = useRef(() => false);
   const writeFor = useRef(0);
   // Writes on one fund go one after another, each naming the `updated_at` the
   // one before it left, so two saves in flight never conflict with each other.
@@ -290,6 +293,7 @@ export default function FundDossier({ role = 'founder' }) {
 
   const load = useCallback(async () => {
     const fresh = gate.current.begin();
+    loadedRead.current = fresh;
     const key = recordKey(uid);
     setLoading(true);
     setError(null);
@@ -424,52 +428,68 @@ export default function FundDossier({ role = 'founder' }) {
     setTimeout(() => noteRef.current?.focus?.(), 0);
   };
 
-  // Linking and Keep as my own record go through the same queue; a refusal
-  // reaches the chooser, which keeps the choice and says why.
-  const link = async (catalogueUid) => {
-    const target = JSON.parse(loadedKey)[0];
+  // The three refresh paths share field saves’ queue, but retain the first
+  // load’s ticket: beginning a refresh must not invalidate another pending read.
+  const queueRefresh = (work) => {
+    if (!current) return Promise.resolve();
+    const key = loadedKey;
+    const epoch = writeFor.current;
+    const fresh = loadedRead.current;
+    const belongs = () => fresh() && epoch === writeFor.current && sameRecord(key, route.current);
+    const target = JSON.parse(key)[0];
+    const run = async () => {
+      if (!belongs()) return;
+      try { await work(target, belongs); }
+      catch (error) { if (belongs()) throw error; }
+    };
+    const next = queue.current.then(run, run);
+    queue.current = next.catch(() => null);
+    return next;
+  };
+  const link = (catalogueUid) => queueRefresh(async (target, belongs) => {
     await api.research.fundUpdate(target, { catalogue_uid: catalogueUid });
+    if (!belongs()) return;
     const row = await api.research.fundGet(target);
+    if (!belongs()) return;
     setDrafts((d) => mergeDrafts(d, fundRef.current, row, []));
     showFund(row);
     setChooserOpen(false);
     setAnnouncement(`Linked to ${row.public_record?.record?.name || catalogueUid}. Catalogue id ${catalogueUid}. Your note and reads are unchanged.`);
-    setTimeout(() => identityRef.current?.focus?.(), 0);
-  };
-  const keepOwn = async () => {
-    const target = JSON.parse(loadedKey)[0];
+    setTimeout(() => { if (belongs()) identityRef.current?.focus?.(); }, 0);
+  });
+  const keepOwn = () => queueRefresh(async (target, belongs) => {
     await api.research.fundUpdate(target, { own_record: true });
+    if (!belongs()) return;
     const row = await api.research.fundGet(target);
+    if (!belongs()) return;
     setDrafts((d) => mergeDrafts(d, fundRef.current, row, []));
     showFund(row);
     setChooserOpen(false);
     setAnnouncement('Kept as your own record. It will not be offered a match again. You can link it later from its identity block.');
-    setTimeout(() => identityRef.current?.focus?.(), 0);
-  };
+    setTimeout(() => { if (belongs()) identityRef.current?.focus?.(); }, 0);
+  });
 
-  // Write into the note appended the brief on the Worker. Re-read, take the
-  // stored note (it was not being edited: Accept waits while it is), keep any
-  // other unsaved box, and move focus to the added text.
-  const acceptedBrief = async () => {
-    if (!current) return;
-    const target = JSON.parse(loadedKey)[0];
+  // Accept already wrote the brief. Its queued re-read preserves other edits.
+  const acceptedBrief = () => queueRefresh(async (target, belongs) => {
     const before = (fundRef.current?.note || '').trim().length;
     try {
       const row = await api.research.fundGet(target);
+      if (!belongs()) return;
       setDrafts((d) => mergeDrafts(d, fundRef.current, row, ['note']));
       showFund(row);
       setAnnouncement(`Brief written into your note at ${clock()}. Nothing was sent to ${row.name}.`);
       setTimeout(() => {
+        if (!belongs()) return;
         const el = noteRef.current;
         if (!el) return;
         el.focus?.();
-        const at = before ? Math.min(before + 2, String(row.note || '').length) : 0;
+        const at = Math.min(before ? before + 2 : 0, String(row.note || '').length);
         el.setSelectionRange?.(at, String(row.note || '').length);
       }, 0);
     } catch {
-      await load();
+      if (belongs()) await load();
     }
-  };
+  });
 
   const checklist = missingChecklist(fund);
   const gaps = gapCount(checklist);
