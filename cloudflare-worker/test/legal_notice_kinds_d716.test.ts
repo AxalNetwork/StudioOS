@@ -8,14 +8,15 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import * as W from '../src/services/legalDocFormat.ts';
 import * as M from '../../frontend/src/lib/legalDocFormat.js';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
@@ -180,13 +181,12 @@ test('securities_legend is a policy in both; the booklet lists nine parts in ord
 // Migration 478
 // ---------------------------------------------------------------------------
 
-const FILES = readdirSync(MIG).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations)
-  .filter((f) => migrationNumber(f) > BASELINE_CUTOFF);
+// #8598 (#8437): the baseline and the migrations up to the cut (all of them, or those before `upTo`) are
+// built once per run by _schema_once.mjs and loaded into each test's own fresh in-memory database.
 function build(upTo?: string) {
-  const db = new DatabaseSync(':memory:');
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  loadSchema(db, upTo ? { below: migrationNumber(upTo) } : {});
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const f of FILES) { if (upTo && f >= upTo) break; db.exec(readFileSync(resolve(MIG, f), 'utf8')); }
   return db;
 }
 const one = (db: DatabaseSync, sql: string, ...a: any[]) => ({ ...(db.prepare(sql).get(...a) as any) });
