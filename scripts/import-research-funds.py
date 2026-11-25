@@ -474,7 +474,10 @@ def write_shai_migration(directory: dict[str, dict], out: Path, number: str, as_
         '-- row with the same uid is replaced: D597 (migration 413) withholds Deep\n'
         '-- Tech, so without this the firm would be shown by no list.\n'
         '-- Re-runnable: the same deletes, then uid-keyed INSERT OR REPLACE.\n'
+        '-- A reviewed Network link whose fund is no longer listed is set to\n'
+        '-- needs_review (D8605).\n'
     )
+    bridge = '\n'.join(bridge_statements(with_moves=False)) + '\n'
     purge = (
         'DELETE FROM research_fund_directory_reports WHERE fund_uid IN '
         '(SELECT uid FROM research_fund_directory WHERE source_name = %s);\n'
@@ -490,7 +493,7 @@ def write_shai_migration(directory: dict[str, dict], out: Path, number: str, as_
             sql(SHAI_SOURCE),
         )
     )
-    out.write_text(header + purge + body + trailer)
+    out.write_text(header + purge + body + bridge + trailer)
     return body.count('INSERT OR REPLACE')
 
 
@@ -520,12 +523,47 @@ UID_REFERENCES = (
 )
 
 
+BRIDGE_TABLE = 'network_directory_research_links'
+
+
+def bridge_statements(with_moves: bool) -> list[str]:
+    """D8605 (#8605): keep the Network-to-Research bridge honest after a list import.
+
+    The bridge holds a fund uid as a plain reference, so a re-import never fails
+    on it. A link is never silently re-pointed: a uid move can turn a manager
+    key into a vehicle row, so every moved link is set to `needs_review`, and a
+    withdrawn link stays withdrawn.
+
+    With `with_moves`, a link on a uid this import moved is carried to the new
+    uid, but only when it is the one link moving onto that uid and the uid holds
+    no link yet, so the bridge's unique index can never fail the migration. Then,
+    for every import, a reviewed link whose fund is no longer in the catalogue
+    (not carried, or its row left the list) is set to `needs_review`. Both
+    statements are correct on an empty bridge and on a replay.
+    """
+    b = BRIDGE_TABLE
+    gone = f'NOT EXISTS (SELECT 1 FROM research_fund_directory d WHERE d.uid = {b}.fund_directory_uid)'
+    lines = []
+    if with_moves:
+        target = f'(SELECT m.new_uid FROM {MOVES_TABLE} m WHERE m.old_uid = {b}.fund_directory_uid)'
+        lines.append(
+            f"UPDATE {b} SET fund_directory_uid = {target}, "
+            f"status = CASE status WHEN 'withdrawn' THEN 'withdrawn' ELSE 'needs_review' END "
+            f'WHERE fund_directory_uid IS NOT NULL AND {gone} AND {target} IS NOT NULL '
+            f'AND NOT EXISTS (SELECT 1 FROM {b} o WHERE o.fund_directory_uid = {target}) '
+            f'AND (SELECT COUNT(*) FROM {b} l JOIN {MOVES_TABLE} m2 ON m2.old_uid = l.fund_directory_uid '
+            f'WHERE m2.new_uid = {target}) = 1;'
+        )
+    lines.append(f"UPDATE {b} SET status = 'needs_review' WHERE status = 'reviewed' AND fund_directory_uid IS NOT NULL AND {gone};")
+    return lines
+
+
 def is_migration_stem(text: str) -> bool:
     """A D4106 migration stem: UTC minute, issue number, slug."""
     return re.fullmatch(r'\d{12}_\d+_[a-z0-9_]+', text) is not None
 
 
-def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
+def eurotech_vehicle_migration(today: date, stem: str, bridge: bool = True) -> tuple[str, dict]:
     """D7166 (#7166): the EuroTech list again, one row per vehicle, sizes fixed.
 
     Returns the migration text and its counts. Only EuroTech rows and their
@@ -533,6 +571,11 @@ def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
     migration 378 used whose vehicle now has another uid is recorded in
     `research_fund_directory_uid_moves`, and the columns that hold a directory
     uid are moved with it.
+
+    `bridge` (D8605) adds the Network link statements and their header lines.
+    Migration 202611180052_7166 was written before the bridge existed, so it is
+    reproduced with `bridge=False`; every list import written from now on keeps
+    the default.
     """
     moves: dict[str, str] = {}
     directory, reports, rows = parse_euro(today, moves)
@@ -552,6 +595,10 @@ def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
         '--    378 read that as full euros, a millionth of the size. It is millions.',
         "-- 3. Moves. Each 378 uid that no longer names a row maps to the vehicle 378's",
         '--    row showed, and every saved reference to it is moved with it.',
+        *([
+            '-- 4. Network links (D8605). A link on a moved uid is carried and set to',
+            "--    needs_review; a reviewed link whose fund is gone is set to needs_review.",
+        ] if bridge else []),
         '--',
         "-- Only this list's rows and reports are replaced. Re-runnable: the same",
         '-- deletes, uid-keyed upserts, and updates that find nothing left to move.',
@@ -577,6 +624,8 @@ def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
             f'WHERE {extra}{column} IN (SELECT old_uid FROM {MOVES_TABLE} '
             'WHERE old_uid NOT IN (SELECT uid FROM research_fund_directory));'
         )
+    if bridge:
+        lines.extend(bridge_statements(with_moves=True))
     counts = {'rows_read': rows, 'vehicles': len(directory), 'reports': len(reports), 'moves': len(moves)}
     return '\n'.join(lines) + '\n', counts
 
