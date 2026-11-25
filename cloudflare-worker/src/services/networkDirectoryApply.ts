@@ -20,11 +20,22 @@
 import type { Env } from '../types';
 import { DirectoryRefusal } from './networkDirectory';
 import { VERSION, buildDirectoryPlan, canonical, type DirectoryPlan, type PlanBatch } from '../../../scripts/lib/networkDirectoryPlan.mjs';
+import { recordsDigest } from '../../../scripts/lib/networkDirectoryDigest.mjs';
+
+export { recordsDigest };
 
 export const APPLY_CONTRACT = 'network-directory-organisation-apply-v1';
 /** The #7672 migration whose tables the plan writes. An upload names it; the database must hold its tables. */
 export const APPLY_SCHEMA = '202611191414_7672_network_directory';
-export const APPLY_LIMITS = Object.freeze({ MAX_BODY_BYTES: 4 * 1024 * 1024, MAX_RECORDS: 5000, MAX_BATCHES_PER_CALL: 200, DEFAULT_BATCHES_PER_CALL: 100 });
+/**
+ * D1 allows 1,000 queries per Worker invocation on the paid plan, and each statement inside a `batch()` counts as
+ * one (Cloudflare's D1 limits page; `services/labMilestoneCredits.ts` sizes its backfill by the same 1,000). This
+ * service stops a call once its own statements would pass `STATEMENT_BUDGET`, which leaves the rest of the cap for
+ * the gate, the audit write and headroom; the caller sends the same upload again to resume.
+ */
+export const D1_QUERIES_PER_INVOCATION = 1000;
+export const APPLY_LIMITS = Object.freeze({ MAX_BODY_BYTES: 4 * 1024 * 1024, MAX_RECORDS: 5000, MAX_BATCHES_PER_CALL: 200, DEFAULT_BATCHES_PER_CALL: 100,
+  STATEMENT_BUDGET: 400 });
 /**
  * #7739 Q4 A: no real production apply while the queue alert is open (#8232, formerly #5719). Lifting this is a
  * reviewed one-line change, never a request field.
@@ -162,14 +173,6 @@ export function applyEnvelope(body: Record<string, unknown>, env: Pick<Env, 'ENV
   return { target_environment: target, records: records as Record<string, any>[], manifest, snapshot: snapshot as ApplyEnvelope['snapshot'], plan: plan as ApplyEnvelope['plan'], max_batches: maxBatches };
 }
 
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/** The SHA-256 the uploader states for its records: of their canonical JSON, the planner's own canonical form. */
-export const recordsDigest = (records: unknown) => sha256Hex(canonical(records));
-
 /** Re-plan on the server, then hold the result to what was reviewed. */
 export async function replan(input: ApplyEnvelope): Promise<DirectoryPlan> {
   if (input.snapshot.record_count !== input.records.length || (await recordsDigest(input.records)) !== input.snapshot.records_sha256) {
@@ -293,14 +296,39 @@ async function runRow(env: Env, uid: string) {
 
 const statements = (env: Env, b: PlanBatch) => b.statements.map(s => env.DB.prepare(s.sql).bind(...s.params));
 
+/**
+ * The same database, counting what it runs: one per prepared statement executed, one per statement in a batch.
+ * Every read and write of an apply goes through it, so `used` is the call's own share of D1's per-invocation limit.
+ */
+function metered(env: Env) {
+  const meter = { used: 0 };
+  const wrap = (stmt: any): any => ({
+    inner: stmt,
+    bind: (...args: unknown[]) => wrap(stmt.bind(...args)),
+    first: (...args: unknown[]) => { meter.used++; return stmt.first(...args); },
+    all: () => { meter.used++; return stmt.all(); },
+    run: () => { meter.used++; return stmt.run(); },
+  });
+  const DB = {
+    prepare: (sql: string) => wrap(env.DB.prepare(sql)),
+    batch: (list: any[]) => { meter.used += list.length; return env.DB.batch(list.map(x => x.inner)); },
+  };
+  return { env: { ...env, DB } as unknown as Env, meter };
+}
+
 export type ApplyResult = {
   status: 'complete' | 'in_progress';
   replayed: boolean;
+  /** Whether this call ran any write statement (a plan batch, the review batch or the completion). */
+  wrote: boolean;
   run_uid: string;
   applied_batches: number;
   pending_batches: number;
   total_batches: number;
   protected_entries: number;
+  /** Statements this call ran against D1, and the per-call budget they stay under. */
+  statements_run: number;
+  statement_budget: number;
   read_back: ReadBack | null;
   summary: Record<string, unknown>;
 };
@@ -316,11 +344,15 @@ const mismatch = (rb: ReadBack, extra: Record<string, unknown>) => refuse(409, '
   { read_back: rb, ...extra });
 
 /**
- * Apply up to `max_batches` pending batches of the reviewed plan, in order, each atomically, then read back.
- * `complete` only when every checkpoint exists, the counts reconcile and no protected entry changed.
+ * Apply the reviewed plan's pending batches in order, each atomically, up to `max_batches` and the statement
+ * budget, then read back. `complete` only when every checkpoint exists, the counts reconcile and no protected entry
+ * changed. Once anything may have been written, every failure leaves as a refusal naming the run, the batches
+ * applied and `wrote`, so the route can audit it.
  */
-export async function applyOrganisationManifest(env: Env, input: ApplyEnvelope): Promise<ApplyResult> {
+export async function applyOrganisationManifest(rawEnv: Env, input: ApplyEnvelope): Promise<ApplyResult> {
   const plan = await replan(input);
+  const { env, meter } = metered(rawEnv);
+  const budget = APPLY_LIMITS.STATEMENT_BUDGET;
   const runUid = plan.summary.run_uid;
   const tables = await env.DB.prepare(SCHEMA_PROBE).first<{ n: number }>();
   if (Number(tables?.n ?? 0) !== SCHEMA_TABLES) throw refuse(503, 'schema_not_ready', `The database does not hold the ${APPLY_SCHEMA} tables yet. Release the migration first.`);
@@ -328,13 +360,13 @@ export async function applyOrganisationManifest(env: Env, input: ApplyEnvelope):
   const sources = [...new Set([...planned.values()].map(p => p.source))].sort();
   const before = await existingEntries(env, sources, planned);
   const protectedCount = [...before.values()].filter(isProtected).length;
-  const base = { run_uid: runUid, total_batches: plan.batches.length, protected_entries: protectedCount, summary: summaryOut(plan) };
+  const base = { run_uid: runUid, total_batches: plan.batches.length, protected_entries: protectedCount, statement_budget: budget, summary: summaryOut(plan) };
 
   const run = await runRow(env, runUid);
   if (run?.status === 'complete') {
     const rb = await readBack(env, plan);
-    if (!rb.reconciled) throw mismatch(rb, { run_uid: runUid });
-    return { ...base, status: 'complete', replayed: true, applied_batches: 0, pending_batches: 0, read_back: rb };
+    if (!rb.reconciled) throw mismatch(rb, { run_uid: runUid, applied_batches: 0, wrote: false });
+    return { ...base, status: 'complete', replayed: true, wrote: false, applied_batches: 0, pending_batches: 0, statements_run: meter.used, read_back: rb };
   }
   for (const [uid, e] of before) {
     if (e.kind !== planned.get(uid)!.kind) throw refuse(409, 'entity_kind_conflict', 'A planned organisation already exists as a person entry. Review the identity; nothing was written.');
@@ -344,30 +376,43 @@ export async function applyOrganisationManifest(env: Env, input: ApplyEnvelope):
 
   const done = new Set(((await env.DB.prepare('SELECT row_key FROM network_directory_import_rows WHERE run_uid = ?')
     .bind(runUid).all<{ row_key: string }>()).results ?? []).map(r => r.row_key));
-  const tail = new Set(['duplicate-reviews', 'complete']);
-  const pending = plan.batches.filter(b => b.key === 'prepare' ? !run : !tail.has(b.key) && !done.has(b.key));
+  const tailBatches = plan.batches.filter(b => b.key === 'duplicate-reviews' || b.key === 'complete');
+  const tailKeys = new Set(tailBatches.map(b => b.key));
+  const pending = plan.batches.filter(b => b.key === 'prepare' ? !run : !tailKeys.has(b.key) && !done.has(b.key));
+  // Kept back in every call: the protected re-read, the review and completion batches, the four read-back counts
+  // and the final run read, so the call that applies the last batch can still finish inside the budget.
+  const reserve = sources.length + tailBatches.reduce((n, b) => n + b.statements.length, 0) + 4 + 1;
   let applied = 0;
-  for (const b of pending.slice(0, input.max_batches)) {
-    try { await env.DB.batch(statements(env, b)); }
-    catch (e) {
-      console.warn('[network_directory_apply] batch failed', (e as Error)?.name ?? 'unknown');
-      throw refuse(503, 'apply_batch_failed', 'A batch failed and was rolled back. Every earlier batch is kept; send the same upload again to resume.',
-        { run_uid: runUid, applied_batches: applied, pending_batches: pending.length - applied });
+  let wrote = false;
+  const progress = (extra: Record<string, unknown> = {}) => ({ run_uid: runUid, applied_batches: applied, pending_batches: pending.length - applied, wrote, ...extra });
+  try {
+    for (const b of pending.slice(0, input.max_batches)) {
+      if (meter.used + b.statements.length + reserve > budget) break;
+      try { await env.DB.batch(statements(env, b)); }
+      catch (e) {
+        console.warn('[network_directory_apply] batch failed', (e as Error)?.name ?? 'unknown');
+        throw refuse(503, 'apply_batch_failed', 'A batch failed and was rolled back. Every earlier batch is kept; send the same upload again to resume.', progress());
+      }
+      applied++;
+      wrote = true;
     }
-    applied++;
+    if (pending.length && !applied) {
+      throw refuse(422, 'plan_exceeds_call_budget', 'The next batch of this plan does not fit in one call’s statement budget. Split the upload; nothing was written.', progress());
+    }
+    const after = await existingEntries(env, sources, planned);
+    if (fingerprint(before) !== fingerprint(after)) throw mismatch(await readBack(env, plan), progress({ protected_entry_changed: true }));
+    if (applied < pending.length) {
+      return { ...base, status: 'in_progress', replayed: false, wrote, applied_batches: applied, pending_batches: pending.length - applied, statements_run: meter.used, read_back: null };
+    }
+    for (const b of tailBatches.filter(b => b.key === 'duplicate-reviews')) { wrote = true; await env.DB.batch(statements(env, b)); }
+    const rb = await readBack(env, plan);
+    if (!rb.reconciled) throw mismatch(rb, progress());
+    for (const b of tailBatches.filter(b => b.key === 'complete')) { wrote = true; await env.DB.batch(statements(env, b)); }
+    if ((await runRow(env, runUid))?.status !== 'complete') throw mismatch(rb, progress({ run_not_complete: true }));
+    return { ...base, status: 'complete', replayed: false, wrote, applied_batches: applied, pending_batches: 0, statements_run: meter.used, read_back: rb };
+  } catch (e) {
+    if (e instanceof DirectoryRefusal) throw e;
+    console.warn('[network_directory_apply] step failed', (e as Error)?.name ?? 'unknown');
+    throw refuse(503, 'apply_step_failed', 'A step after the batches failed. What was committed is kept and the run is not complete; send the same upload again to resume.', progress());
   }
-  const after = await existingEntries(env, sources, planned);
-  if (fingerprint(before) !== fingerprint(after)) {
-    throw mismatch(await readBack(env, plan), { run_uid: runUid, applied_batches: applied, protected_entry_changed: true });
-  }
-  if (applied < pending.length) {
-    return { ...base, status: 'in_progress', replayed: false, applied_batches: applied, pending_batches: pending.length - applied, read_back: null };
-  }
-  for (const b of plan.batches.filter(b => b.key === 'duplicate-reviews')) await env.DB.batch(statements(env, b));
-  const rb = await readBack(env, plan);
-  if (!rb.reconciled) throw mismatch(rb, { run_uid: runUid, applied_batches: applied });
-  for (const b of plan.batches.filter(b => b.key === 'complete')) await env.DB.batch(statements(env, b));
-  if ((await runRow(env, runUid))?.status !== 'complete') throw mismatch(rb, { run_uid: runUid, applied_batches: applied, run_not_complete: true });
-  return { ...base, status: 'complete', replayed: false, applied_batches: applied, pending_batches: 0, read_back: rb };
 }
-

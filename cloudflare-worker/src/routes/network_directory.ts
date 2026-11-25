@@ -121,17 +121,47 @@ async function change(c: Ctx, action: 'publish' | 'suppress') {
 directory.post('/admin/entries/:uid/publish', (c) => change(c, 'publish'));
 directory.post('/admin/entries/:uid/suppress', (c) => change(c, 'suppress'));
 
-/** The upload under a byte ceiling, then parsed; nothing past the ceiling is parsed. */
+const tooLarge = () => new DirectoryRefusal(413, 'body_too_large', 'The upload is larger than this route accepts. Nothing was read or written.', { max_bytes: APPLY_LIMITS.MAX_BODY_BYTES });
+
+/**
+ * The upload under a byte ceiling, then parsed. A declared Content-Length over the ceiling is refused before a byte
+ * is read; a body without one is read as a stream with a running count and cancelled at the ceiling.
+ */
 async function uploadBody(c: Ctx): Promise<Record<string, unknown>> {
-  const text = await c.req.text();
-  if (new TextEncoder().encode(text).byteLength > APPLY_LIMITS.MAX_BODY_BYTES) {
-    throw new DirectoryRefusal(413, 'body_too_large', 'The upload is larger than this route accepts. Nothing was read or written.', { max_bytes: APPLY_LIMITS.MAX_BODY_BYTES });
+  const declared = c.req.header('content-length');
+  if (declared !== undefined && /^\d+$/.test(declared.trim()) && Number(declared) > APPLY_LIMITS.MAX_BODY_BYTES) throw tooLarge();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = c.req.raw.body?.getReader();
+  if (reader) {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > APPLY_LIMITS.MAX_BODY_BYTES) { await reader.cancel().catch(() => {}); throw tooLarge(); }
+      chunks.push(value);
+    }
   }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const ch of chunks) { bytes.set(ch, at); at += ch.byteLength; }
   try {
-    const v = JSON.parse(text);
+    const v = JSON.parse(new TextDecoder().decode(bytes));
     if (v && typeof v === 'object' && !Array.isArray(v)) return v;
   } catch { /* fall through */ }
   throw new DirectoryRefusal(400, 'invalid_json', 'The upload was not a JSON object, so nothing was read or written.');
+}
+
+/**
+ * One audit row for a call that wrote anything, with ids and counts only. The apply is already committed, so a
+ * failed audit write is logged and the call still answers what happened (D7674 part 2).
+ */
+async function auditApply(c: Ctx, admin: User, details: Record<string, unknown>) {
+  try {
+    await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_organisation_apply', details);
+  } catch (e) {
+    console.warn('[network_directory] apply audit failed', (e as Error)?.name ?? 'unknown');
+  }
 }
 
 directory.post('/admin/organisation-apply', async (c) => {
@@ -141,17 +171,14 @@ directory.post('/admin/organisation-apply', async (c) => {
   }
   try {
     const out = await applyOrganisationManifest(c.env, applyEnvelope(await uploadBody(c), c.env));
-    if (out.applied_batches > 0) {
-      // Ids and counts only: no source value reaches the audit row.
-      await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_organisation_apply',
-        { run_uid: out.run_uid, status: out.status, applied_batches: out.applied_batches, pending_batches: out.pending_batches });
+    if (out.wrote) {
+      await auditApply(c, admin, { run_uid: out.run_uid, status: out.status, applied_batches: out.applied_batches, pending_batches: out.pending_batches });
     }
     return c.json(out, out.status === 'complete' ? 200 : 202);
   } catch (e) {
-    // A failed or unreconciled call that still committed batches is audited too.
-    if (e instanceof DirectoryRefusal && Number(e.extra.applied_batches ?? 0) > 0) {
-      await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_organisation_apply',
-        { run_uid: e.extra.run_uid, status: e.code, applied_batches: e.extra.applied_batches });
+    // A failed or unreconciled call that may have written is audited too.
+    if (e instanceof DirectoryRefusal && e.extra.wrote === true) {
+      await auditApply(c, admin, { run_uid: e.extra.run_uid, status: e.code, applied_batches: e.extra.applied_batches });
     }
     return answer(c, e);
   }

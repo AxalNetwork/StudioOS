@@ -1,13 +1,17 @@
 /** D7674 part 2 (#7674): the organisation-only controlled apply over the migrated schema. Synthetic organisations only. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import directory from '../src/routes/network_directory.ts';
 import { readiness } from '../src/services/networkDirectory.ts';
-import { APPLY_CONTRACT, APPLY_SCHEMA, recordsDigest, replan } from '../src/services/networkDirectoryApply.ts';
-import { VERSION, buildDirectoryPlan } from '../../scripts/lib/networkDirectoryPlan.mjs';
+import { APPLY_CONTRACT, APPLY_LIMITS, APPLY_SCHEMA, D1_QUERIES_PER_INVOCATION, recordsDigest, replan } from '../src/services/networkDirectoryApply.ts';
+import { VERSION, buildDirectoryPlan, canonical } from '../../scripts/lib/networkDirectoryPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
@@ -33,13 +37,13 @@ function fixture(environment = 'development') {
   const app = new Hono<any>().route('/api/network/directory', directory);
   app.onError((e, c) => c.json({ error: 'refused' }, (AUTH_ERROR_STATUSES[e.message] || 500) as any));
   const env = { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: environment } as any;
-  async function call(path: string, method = 'POST', who: number | null = 9, body?: unknown, opts: { claims?: Record<string, unknown>; env?: any; raw?: string } = {}) {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  async function call(path: string, method = 'POST', who: number | null = 9, body?: unknown, opts: { claims?: Record<string, unknown>; env?: any; raw?: string; headers?: Record<string, string>; bodyInit?: any } = {}) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
     if (who !== null) headers.Authorization = 'Bearer ' + await new SignJWT({ user_id: who, jti: 'synthetic-' + who, ...(opts.claims ?? {}) })
       .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
     const pending: Promise<unknown>[] = [];
     const r = await app.request('https://unit.test/api/network/directory' + path,
-      { method, headers, body: opts.raw ?? (body === undefined ? undefined : JSON.stringify(body)) }, opts.env ?? env,
+      { method, headers, body: opts.bodyInit ?? opts.raw ?? (body === undefined ? undefined : JSON.stringify(body)), ...(opts.bodyInit ? { duplex: 'half' } : {}) } as any, opts.env ?? env,
       { waitUntil(p: Promise<unknown>) { pending.push(p); }, passThroughOnException() {} } as any);
     await Promise.allSettled(pending);
     return { status: r.status, body: await r.json() as any };
@@ -323,4 +327,138 @@ test('the apply service accepts no SQL and selects no private source cell', () =
   assert.doesNotMatch(code(service), /raw_json/, 'private cells are counted, never selected');
   assert.doesNotMatch(code(service), /prepare\((?:body|input)\b/, 'no statement text comes from the request');
   assert.doesNotMatch(code(service), /publication_status\s*=\s*'published'/, 'an apply never publishes');
+});
+
+const auditRows = (f: ReturnType<typeof fixture>) => f.n("SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='network_directory_organisation_apply'");
+
+/** The test's own view of D1: every prepared statement executed and every statement in a batch, as D1 counts them. */
+function counting(base: any, onPrepare: (sql: string) => void = () => {}) {
+  const seen = { n: 0 };
+  const wrap = (stmt: any): any => ({
+    bind: (...a: unknown[]) => wrap(stmt.bind(...a)),
+    first: (...a: unknown[]) => { seen.n++; return stmt.first(...a); },
+    all: () => { seen.n++; return stmt.all(); },
+    run: () => { seen.n++; return stmt.run(); },
+    raw: () => { seen.n++; return stmt.raw(); },
+    inner: stmt,
+  });
+  const DB = { ...base.DB,
+    prepare: (sql: string) => { onPrepare(sql); return wrap(base.DB.prepare(sql)); },
+    batch: (list: any[]) => { seen.n += list.length; return base.DB.batch(list.map(x => x.inner)); },
+    exec: (sql: string) => { seen.n++; return base.DB.exec(sql); } };
+  return { env: { ...base, DB }, seen };
+}
+
+test('a step after the batches that fails is a refusal naming the run, and is audited; the completion-only retry is audited too', async () => {
+  const f = fixture();
+  // Delta shares Alpha's LinkedIn, so the plan ends with a duplicate-review batch.
+  const records = [...THREE, org('recOrgD', 'Delta Example Fund', T1, { LinkedIn: 'https://www.linkedin.com/company/recorga' })];
+  const body = await upload(records, { version: 1, rows: [...THREE_MANIFEST.rows, row('recOrgD')] });
+  assert.ok(buildDirectoryPlan({ records: body.records, manifest: body.manifest }).batches.some(b => b.key === 'duplicate-reviews'));
+  const broken = counting(f.env, sql => { if (sql.startsWith("UPDATE network_directory_import_runs SET status='complete'")) throw new Error('synthetic failure quoting Alpha Example Ventures'); });
+  const r = await f.call(PATH, 'POST', 9, body, { env: broken.env });
+  assert.equal(r.status, 503, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'apply_step_failed');
+  assert.equal(r.body.run_uid, body.plan.run_uid);
+  assert.equal(r.body.applied_batches, 5, 'every record batch was committed before the completion step failed');
+  assert.equal(r.body.wrote, true);
+  assert.doesNotMatch(JSON.stringify(r.body), /Alpha Example/);
+  assert.equal((f.db.prepare('SELECT status FROM network_directory_import_runs').get() as any).status, 'planned');
+  assert.equal(auditRows(f), 1, 'the failed call that committed batches is audited');
+
+  // A retry with no record batch left runs the review batch, then fails reading back: still a write, still audited.
+  const readFails = counting(f.env, sql => { if (sql.includes('COUNT(DISTINCT e.uid)')) throw new Error('synthetic read-back failure'); });
+  const half = await f.call(PATH, 'POST', 9, body, { env: readFails.env });
+  assert.equal(half.body.error, 'apply_step_failed', JSON.stringify(half.body));
+  assert.deepEqual([half.body.applied_batches, half.body.wrote], [0, true]);
+  assert.equal(auditRows(f), 2, 'the review-only call is audited');
+
+  const retry = await f.call(PATH, 'POST', 9, body);
+  assert.equal(retry.status, 200, JSON.stringify(retry.body));
+  assert.equal(retry.body.applied_batches, 0, 'no record batch is left');
+  assert.equal(retry.body.wrote, true, 'the review and completion batches ran');
+  assert.equal(retry.body.replayed, false);
+  assert.equal(auditRows(f), 3, 'a retry that only completes the run is audited');
+  assert.equal((await f.call(PATH, 'POST', 9, body)).body.wrote, false);
+  assert.equal(auditRows(f), 3, 'a replay that writes nothing is not audited');
+
+  // A plan with no duplicate-review batch: the retry's only write is the completion, and it is audited.
+  const g = fixture();
+  const plain = await upload(THREE, THREE_MANIFEST);
+  const noComplete = counting(g.env, sql => { if (sql.startsWith("UPDATE network_directory_import_runs SET status='complete'")) throw new Error('synthetic'); });
+  assert.equal((await g.call(PATH, 'POST', 9, plain, { env: noComplete.env })).body.error, 'apply_step_failed');
+  const only = await g.call(PATH, 'POST', 9, plain);
+  assert.deepEqual([only.status, only.body.applied_batches, only.body.wrote], [200, 0, true]);
+  assert.equal(auditRows(g), 2, 'the completion-only call is audited');
+});
+
+test('a failed audit write does not turn a committed apply into an error', async () => {
+  const f = fixture();
+  const noAudit = counting(f.env, sql => { if (/admin_audit_log|activity_logs/.test(sql)) throw new Error('synthetic audit failure'); });
+  const r = await f.call(PATH, 'POST', 9, await upload(THREE, THREE_MANIFEST), { env: noAudit.env });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.status, 'complete');
+});
+
+test('each call stays under its statement budget; a large plan stops early and resumes to completion', async () => {
+  const f = fixture();
+  const records = Array.from({ length: 150 }, (_, i) => org('recBig' + String(i).padStart(3, '0'), 'Synthetic Example Org ' + i));
+  const manifest = { version: 1, rows: records.map(r => row(r.source_record_id)) };
+  const body = { ...(await upload(records, manifest)), max_batches: 200 };
+  const plan = buildDirectoryPlan({ records, manifest });
+  assert.ok(plan.summary.statements > APPLY_LIMITS.STATEMENT_BUDGET, 'the plan is larger than one call may run');
+  const calls: any[] = [];
+  for (let i = 0; i < 10; i++) {
+    const metered = counting(f.env);
+    const r = await f.call(PATH, 'POST', 9, body, { env: metered.env });
+    assert.ok([200, 202].includes(r.status), JSON.stringify(r.body));
+    assert.ok(r.body.statements_run <= APPLY_LIMITS.STATEMENT_BUDGET, `call ${i} ran ${r.body.statements_run} statements`);
+    assert.ok(metered.seen.n <= D1_QUERIES_PER_INVOCATION, `call ${i} ran ${metered.seen.n} queries in all, gate and audit included`);
+    calls.push({ status: r.body.status, pending: r.body.pending_batches, applied: r.body.applied_batches, seen: metered.seen.n });
+    if (r.body.status === 'complete') break;
+  }
+  assert.equal(calls[0].status, 'in_progress');
+  assert.ok(calls[0].pending > 0 && calls[0].applied < 200, 'the budget, not max_batches, stopped the first call: ' + JSON.stringify(calls[0]));
+  assert.equal(calls.at(-1).status, 'complete', JSON.stringify(calls));
+  assert.ok(calls.length >= 2);
+  assert.equal(f.n('SELECT COUNT(*) AS n FROM network_directory_entries'), 150, 'every organisation once');
+  assert.equal(f.n('SELECT COUNT(*) AS n FROM network_directory_import_rows'), 150);
+});
+
+test('a declared Content-Length over the ceiling is refused before the body is read', async () => {
+  const f = fixture();
+  let pulled = false;
+  const stream = new ReadableStream({ pull(ctrl) { pulled = true; ctrl.enqueue(new TextEncoder().encode('{}')); ctrl.close(); } }, { highWaterMark: 0 });
+  const r = await f.call(PATH, 'POST', 9, undefined, { bodyInit: stream, headers: { 'Content-Length': String(APPLY_LIMITS.MAX_BODY_BYTES + 1) } });
+  assert.equal(r.status, 413, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'body_too_large');
+  assert.equal(pulled, false, 'not a byte of the body was read');
+  // Without a declared length the stream is counted and cut off at the ceiling.
+  const chunk = new Uint8Array(1024 * 1024).fill(32);
+  let sent = 0;
+  const endless = new ReadableStream({ pull(ctrl) { if (++sent > 8) ctrl.close(); else ctrl.enqueue(chunk); } }, { highWaterMark: 0 });
+  const cut = await f.call(PATH, 'POST', 9, undefined, { bodyInit: endless });
+  assert.equal(cut.status, 413);
+  assert.ok(sent <= 6, 'reading stopped at the ceiling: ' + sent + ' chunks');
+});
+
+test('the planner CLI prints the records digest and count the upload copies, by the Worker’s own function', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nd7674-'));
+  try {
+    const records = THREE;
+    writeFileSync(join(dir, 'records.json'), JSON.stringify(records));
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(THREE_MANIFEST));
+    const out = spawnSync(process.execPath, ['scripts/plan-network-directory.mjs', '--records', join(dir, 'records.json'), '--manifest', join(dir, 'manifest.json'),
+      '--out', join(dir, 'plan.json')], { encoding: 'utf8' });
+    assert.equal(out.status, 0, out.stderr);
+    const summary = JSON.parse(out.stdout);
+    assert.deepEqual(summary.snapshot, { record_count: 3, records_sha256: await recordsDigest(records) });
+    assert.equal(summary.snapshot.records_sha256, createHash('sha256').update(canonical(records)).digest('hex'), 'SHA-256 of the planner’s canonical JSON');
+    const body = await upload(records, THREE_MANIFEST);
+    assert.equal(summary.snapshot.records_sha256, body.snapshot.records_sha256);
+    assert.equal(summary.run_uid, body.plan.run_uid);
+    const f = fixture();
+    const r = await f.call(PATH, 'POST', 9, { ...body, snapshot: summary.snapshot, plan: { run_uid: summary.run_uid, review_manifest_hash: summary.review_manifest_hash } });
+    assert.equal(r.status, 200, 'the CLI summary is enough to fill the upload: ' + JSON.stringify(r.body));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
