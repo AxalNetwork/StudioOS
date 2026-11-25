@@ -80,7 +80,8 @@ async function ensureInfraSchema(env: Env) {
       finished_at TIMESTAMP,
       status TEXT NOT NULL DEFAULT 'started',
       summary TEXT,
-      error TEXT
+      error TEXT,
+      task_outcomes TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_crh_trigger_time ON cron_run_history(trigger_name, started_at)`,
   ];
