@@ -86,9 +86,9 @@ test('every store answers every event, once, in one of the five forms', () => {
     assert.deepEqual(Object.keys(s.answers).sort(), [...LIFECYCLE_EVENTS].sort(), s.id);
     for (const e of LIFECYCLE_EVENTS) {
       const a = s.answers[e];
-      assert.ok(['follows', 'removed', 'kept', 'not_applicable', 'unspecified'].includes(a.is), `${s.id} ${e}`);
+      assert.ok(['follows', 'removed', 'changed', 'kept', 'not_applicable', 'unspecified'].includes(a.is), `${s.id} ${e}`);
       if (a.is === 'kept' || a.is === 'not_applicable') assert.ok(a.reason.trim(), `${s.id} ${e}: a reason`);
-      if (a.is === 'removed') assert.ok(a.by.trim(), `${s.id} ${e}: the code path`);
+      if (a.is === 'removed' || a.is === 'changed') assert.ok(a.by.trim(), `${s.id} ${e}: the code path`);
       if (a.is === 'unspecified') {
         assert.ok(a.question in QUESTIONS, `${s.id} ${e}: ${a.question}`);
         if (a.today === 'unknown') assert.equal(s.kind, 'other', `${s.id}: a D1 or R2 store is read by the lifecycle test`);
