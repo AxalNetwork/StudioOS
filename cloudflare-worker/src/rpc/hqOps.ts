@@ -38,7 +38,7 @@ import {
   CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
 import {
-  parseRequest, parseNoteFor, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind,
+  parseRequest, parseNoteFor, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind, REQUEST_FORMAT,
   isProgramRequestKind, type RequestRefusalCode,
 } from '../services/escalationRequests';
 import {
@@ -1070,7 +1070,7 @@ export async function recordLicenceRequest(
 
 /** One licence's requests on HQ's tier, newest first. Only that licence's rows. */
 export async function listLicenceRequests(
-  env: Env, licenceUid: string, limit = 100,
+  env: Env, licenceUid: string, limit = 100, program: string | null = null,
 ): Promise<{ items: Array<LicenceRequestRow & { sla: 'ok' | 'due_soon' | 'past' }>; complete: boolean }> {
   requireHq(env);
   const cap = Math.max(1, Math.min(200, Number(limit) || 100));
@@ -1078,8 +1078,11 @@ export async function listLicenceRequests(
     `SELECT uid, kind, subject, subject_ref, detail, raised_by_name, raised_by_branch_user_id, status,
             due_at, created_at, answer, answered_by_name, answered_at
        FROM hq_escalations WHERE branch_code = ? AND subject_ref = ?
+        AND (? IS NULL OR (kind IN ('program_grant', 'program_terms_change', 'program_end')
+          AND CASE WHEN substr(detail, 1, 5) = '{"v":' AND json_valid(detail)
+               THEN json_extract(detail, '$.v') = ? AND json_extract(detail, '$.request.program') = ? ELSE 0 END))
       ORDER BY created_at DESC, id DESC LIMIT ?`,
-  ).bind(HQ_TIER_CODE, licenceUid, cap + 1).all<LicenceRequestRow>();
+  ).bind(HQ_TIER_CODE, licenceUid, program, REQUEST_FORMAT, program, cap + 1).all<LicenceRequestRow>();
   const now = Date.now();
   const all = (rows.results || []).map((r) => ({ ...r, sla: escalationSlaBand(r, now) }));
   const complete = all.length <= cap;

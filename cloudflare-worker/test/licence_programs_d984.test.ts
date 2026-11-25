@@ -337,3 +337,64 @@ test('each grant write pushes the licence, and the branch\'s binding receives th
   assert.equal(r.body.pushed.ok, false);
   assert.equal(r.body.pushed.code, null);
 });
+
+
+test('own issued custom grants reach HQ and branch readers; drafts and other studios remain private', async () => {
+  const head = hq();
+  const registry = head.prepare("INSERT INTO programs (key, grp, name, status, position, licence_uid) VALUES (?, 'Learning', ?, 'live', 20, ?)");
+  const record = head.prepare("INSERT INTO program_grants (uid, licence_id, program_key, state, set_at) VALUES (?, ?, ?, ?, '2026-10-01')");
+  for (const [key, id, studio, state] of [['north-pilot', 1, LIVE, 'granted'], ['east-pilot', 2, SECOND, 'granted'], ['north-draft', 1, LIVE, 'draft']] as const) {
+    registry.run(key, key.toUpperCase(), studio);
+    record.run('g-' + key, id, key, state);
+  }
+  head.prepare("UPDATE program_grants SET signed_revision = 1, terms_revision = 2 WHERE program_key = 'north-pilot'").run();
+  const branch = database();
+  await pushTo(branch, head, '2026-10-20T10:00:00Z');
+  for (const result of [await mine(head, HOLDER), await mine(branch, HOLDER, BRANCH)]) {
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    const p = byKey(result.body.programs);
+    assert.equal(p['north-pilot'].name, 'NORTH-PILOT');
+    assert.equal(p['north-pilot'].custom, true);
+    assert.equal(p['north-pilot'].standing, 'granted');
+    assert.equal(p['north-pilot'].grant.schedule.status, 'amendment_needed');
+    assert.equal(p['north-pilot'].grant.schedule.revision, 2);
+    assert.equal(p['north-pilot'].grant.in_force, false);
+    assert.equal(p['east-pilot'], undefined);
+    assert.equal(p['north-draft'], undefined);
+  }
+  assert.equal(byKey((await mine(head, OTHER_HOLDER)).body.programs)['north-pilot'], undefined);
+});
+
+
+test('accepted HQ service descriptions belong to one licence and survive the dated copy independently of grants', async () => {
+  const head = hq();
+  const offer = head.prepare(`INSERT INTO licence_package_offers
+    (uid, licence_uid, package_uid, package_key, package_name, package_version, pricing_recommendation_uid,
+    country_pricing_snapshot_uid, currency, recommended_annual_fee_cents, accepted_annual_fee_cents,
+    state, starts_on, ends_on, composition_json, recommendation_json, created_at, created_by, create_key,
+    create_hash, decided_by, acceptance_json)
+    VALUES (?, ?, 'p', 'full', 'Full service', 3, 'recommendation', 'snapshot', 'USD', 100, 100,
+      ?, '2027-01-01', '2027-12-31', '[]', '{}', '2026-11-10', 1, ?, 'hash', 1, ?)`);
+  for (const [uid, licence, state, services] of [
+    ['o1', LIVE, 'accepted', [{ program_key: 'product-testing', description: 'HQ schedules eight testing sessions.' }]],
+    ['o2', SECOND, 'accepted', [{ program_key: 'product-testing', description: 'Other studio only.' }]],
+    ['o3', LIVE, 'offered', [{ program_key: 'influencer', description: 'An offer awaiting acceptance.' }]],
+    ['o4', LIVE, 'accepted', undefined],
+  ] as const) offer.run(uid, licence, state, uid, JSON.stringify({ hq_services: services }));
+  const expected = [{ program_key: 'product-testing', description: 'HQ schedules eight testing sessions.',
+    package_name: 'Full service', package_version: 3, starts_on: '2027-01-01', ends_on: '2027-12-31' }];
+  const branch = database();
+  await pushTo(branch, head, '2026-11-10T15:00:00Z');
+  for (const result of [await mine(head, HOLDER), await mine(branch, HOLDER, BRANCH)]) {
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.deepEqual(result.body.hq_services, expected);
+    assert.equal(byKey(result.body.programs)['product-testing'].standing, 'hq_only');
+    assert.equal(byKey(result.body.programs)['product-testing'].grant, null);
+  }
+  assert.equal((await mine(head, HQ_ADMIN)).body.hq_services, undefined);
+  const old = JSON.stringify({ grants: [], offered: {} });
+  branch.prepare('UPDATE branch_licence SET program_grants_json = ?').run(old);
+  const legacy = await mine(branch, HOLDER, BRANCH);
+  assert.equal(legacy.status, 200);
+  assert.equal(legacy.body.hq_services, undefined);
+});

@@ -9,6 +9,7 @@ import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOvervie
 import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
 import LabGrantBoundary from './LabGrantBoundary';
+import StudioProgramAccess from '../programs/StudioProgramAccess';
 import LabGraduation from './LabGraduation';
 import LabApplications from './LabApplications';
 import LabHosts from './LabHosts';
@@ -239,7 +240,7 @@ const SECTIONS = {
 /** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
 const DESKS = { hosts: LabHosts, formation: LabFormation, graduation: LabGraduation, 'how-it-runs': LabHowItRuns, settings: LabSettings, activity: LabActivity };
 
-function AdminLabBody({ onImpersonate }) {
+function AdminLabBody({ onImpersonate, licenceSnapshot }) {
   const { user } = useAuth();
   const superAdmin = isSuperAdminUser(user);
   const loc = useLocation();
@@ -306,6 +307,7 @@ function AdminLabBody({ onImpersonate }) {
       />
       {tab === 'overview' ? (
         <>
+          <StudioProgramAccess programKey="spinout-lab" superAdmin={superAdmin} snapshot={licenceSnapshot} />
           <Overview reads={reads} reload={reload} />
           <Modules modules={shellModules(LAB_KEY, detail.read)} />
         </>
@@ -324,5 +326,5 @@ function AdminLabBody({ onImpersonate }) {
 
 /** D1123: branch tools mount only after the dated grant copy is readable. */
 export default function AdminLab(props) {
-  return <LabGrantBoundary><AdminLabBody {...props} /></LabGrantBoundary>;
+  return <LabGrantBoundary>{(licenceSnapshot) => <AdminLabBody {...props} licenceSnapshot={licenceSnapshot} />}</LabGrantBoundary>;
 }

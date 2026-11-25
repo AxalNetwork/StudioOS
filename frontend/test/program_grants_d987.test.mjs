@@ -311,6 +311,27 @@ test('mounted grid: the tabs at their addresses, the tiles, both charts and a ce
   } finally { await m.unmount(); }
 });
 
+test('a Programs deep link keeps the selected program on the HQ grid', async () => {
+  const view = await mount('/admin/licences/programs?program=learning#grants-grid');
+  try {
+    assert.match(view.of('grants-grid'), /Grants by studio · Learning/);
+    assert.ok(view.has('grants-cell-AXL-002-learning'));
+    assert.ok(!view.has('grants-cell-AXL-002-perks'));
+  } finally { await view.unmount(); }
+  const custom = await mount('/admin/licences/programs?program=custom-program#grants-grid');
+  try {
+    assert.match(custom.of('grants-grid'), /no recorded studio grants for this program/);
+    assert.ok(!custom.has('grants-grant-AXL-002-perks'));
+  } finally { await custom.unmount(); }
+  const recorded = { program_key: 'custom-program', state: 'paused' };
+  const grid = { ...GRID, licences: GRID.licences.map((l, index) => index ? l : { ...l, grants: { ...l.grants, 'custom-program': recorded } }) };
+  const mobile = await mount('/admin/licences/programs?program=custom-program', { phone: true, grid });
+  try {
+    assert.match(mobile.of('grants-grid'), /Paused/);
+    assert.ok(!mobile.has('grants-grant-AXL-002-custom-program'));
+  } finally { await mobile.unmount(); }
+});
+
 test('mounted grid: a failed grid read is Unreadable with Try again and the requests count still reads; failed requests say so', async (t) => {
   pin(t);
   let m = await mount('/admin/licences/programs', { fail: ['GET /api/admin/program-grants'] });

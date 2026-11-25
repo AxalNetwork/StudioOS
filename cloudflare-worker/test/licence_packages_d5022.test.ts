@@ -242,3 +242,36 @@ test('Super Admin only; writes need the write bar (TOTP session and recent step-
 
   assert.equal(packages, (Array.isArray(mount) ? mount[0] : mount).router);
 });
+
+test('HQ service terms are explicit, draft-only and preserved by earlier package clients', async () => {
+  const { call } = fixture();
+  const path = `${P}/service_fixture/versions`;
+  const items = [{ program_key: 'influencer', metadata: { audience: 'studio' } }, { program_key: 'learning' }];
+  const terms = { kind: 'hq_service', description: 'One HQ-led briefing for the studio.' };
+  assert.equal((await call(SUPER, 'POST', P, { package_key: 'service_fixture', ...INPUT({ items }) })).status, 201);
+  const change = (who: number, program: string, expected: string | null, delivery: unknown, version = 1) =>
+    call(who, 'PATCH', `${path}/${version}/items/${program}/delivery`, { expected_description: expected, delivery });
+  assert.equal((await change(ADMIN, 'influencer', null, terms)).status, 403);
+  assert.equal((await change(SUPER_PW, 'influencer', null, terms)).status, 403);
+  assert.equal((await change(SUPER, 'learning', null, terms)).status, 400);
+  assert.equal((await change(SUPER, 'influencer', null, { ...terms, description: ' ' })).status, 400);
+  assert.equal((await change(SUPER, 'influencer', null, { ...terms, description: 'x'.repeat(501) })).status, 400);
+  const first = await change(SUPER, 'influencer', null, terms);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.deepEqual(first.body.delivery, terms);
+  assert.equal((await change(SUPER, 'influencer', null, { kind: 'studio_operation' })).status, 409);
+  const legacy = await call(SUPER, 'PUT', `${path}/1`, INPUT({ items }));
+  assert.equal(legacy.status, 200, JSON.stringify(legacy.body));
+  assert.deepEqual(legacy.body.package.items[0].delivery, terms);
+  assert.deepEqual(legacy.body.package.items[0].metadata, items[0].metadata);
+  assert.equal((await call(SUPER, 'POST', `${path}/1/publish`, { reason: 'Publish fixture terms' })).status, 200);
+  assert.equal((await change(SUPER, 'influencer', terms.description, { kind: 'studio_operation' })).status, 409);
+  const copy = await call(SUPER, 'POST', path, INPUT({ items }));
+  assert.equal(copy.status, 201, JSON.stringify(copy.body));
+  assert.deepEqual(copy.body.package.items[0].delivery, terms);
+  assert.equal((await change(SUPER, 'influencer', terms.description, { kind: 'studio_operation' }, 2)).status, 200);
+  const draft = await call(SUPER, 'GET', `${path}/2`);
+  assert.equal(draft.body.package.items[0].delivery, undefined);
+  const published = await call(SUPER, 'GET', `${path}/1`);
+  assert.deepEqual(published.body.package.items[0].delivery, terms);
+});

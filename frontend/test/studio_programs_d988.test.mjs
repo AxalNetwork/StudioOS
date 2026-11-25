@@ -17,7 +17,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
   NOT_ENTERED, NOT_RECORDED, buildProgramRequest, copyStamp, programTiles, statusOf, summaryLine, termRows,
-  termsSummary, answerSentence, asksFor, programRequestKind,
+  termsSummary, answerSentence, asksFor, programRequestKind, requestablePrograms, studioProgramAccess, studioProgramAccessPath,
 } from '../src/lib/studioPrograms.js';
 import ProgramsTab, { ProgramsUnlinked } from '../src/pages/subsidiary/licence/ProgramsTab.jsx';
 import { RequestsView } from '../src/pages/subsidiary/licence/RequestsTab.jsx';
@@ -112,7 +112,7 @@ function stub(answers) {
     const u = new URL(String(url), 'http://x');
     seen.push(`${init.method || 'GET'} ${u.pathname}`);
     if ((init.method || 'GET') === 'POST' && u.pathname !== '/api/client-error') posts.push({ path: u.pathname, body: JSON.parse(init.body || '{}') });
-    const a = answers[`${init.method || 'GET'} ${u.pathname}`] ?? answers[u.pathname];
+    const a = answers[`${init.method || 'GET'} ${u.pathname}`] ?? answers[u.pathname + u.search] ?? answers[u.pathname];
     if (typeof a === 'function') return a(init);
     if (a === undefined) return json({});
     return json(a);
@@ -184,6 +184,53 @@ test('the model: tiles, statuses, terms and a request body, never a guessed valu
   assert.equal(copyStamp({ source: 'copy', as_of: '2026-10-18T10:42:00Z' }), 'As of 10:42 UTC, 18 Oct 2026. This is HQ’s copy of your grants. It updates when HQ changes them.');
   assert.equal(requestKind(REQUESTS.items[0]), 'Program · Learning');
   assert.equal(programRequestKind({ kind: 'program_end', request: { program: 'perks' } }), 'End program · Perks');
+});
+
+test('a studio grant, the latest HQ decision and incomplete history produce distinct actions', () => {
+  const p = PROGRAMS.find((row) => row.program_key === 'learning');
+  const asked = REQUESTS.items[0];
+  const approved = { ...asked, status: 'answered', answer: 'HQ reviewed the plan.' };
+  for (const requests of [undefined, null, { available: false, items: [] }]) {
+    assert.equal(studioProgramAccess(p, requests).action, null);
+  }
+  assert.equal(studioProgramAccess(p, { items: [], complete: false }).action.kind, 'check_history');
+  assert.equal(studioProgramAccess(p, { items: [asked] }).action.kind, 'view_request');
+  const decision = studioProgramAccess(p, { items: [approved] });
+  assert.equal(decision.action.kind, 'view_request');
+  assert.equal(decision.status.word, 'Approved · awaiting grant');
+  const fromBranch = (r) => studioProgramAccess(p, { branch: 'fr', items: [{ ...approved, ...r }] });
+  assert.equal(fromBranch({ hq_decision: 'answered' }).status.word, 'Approved · awaiting grant');
+  assert.equal(fromBranch({ hq_decision: 'declined' }).action.kind, 'request');
+  assert.equal(fromBranch({}).status.word, 'Answered by HQ');
+  assert.equal(fromBranch({ status: 'undelivered' }).status.word, 'Not delivered');
+  assert.equal(studioProgramAccess(p, { items: [{ ...asked, status: 'declined' }, approved] }).action.kind, 'request');
+  assert.equal(studioProgramAccess(PROGRAMS[0], null).action.kind, 'open', 'terms survive a request read failure');
+  assert.equal(studioProgramAccess(PROGRAMS.at(-1), { items: [] }).action, null, 'HQ-only');
+  assert.match(studioProgramAccess({ ...PROGRAMS[5], grant: { ...PROGRAMS[5].grant, waiting_on: ['agreement_executed'] } }, { items: [] }).status.line, /required agreement to be signed/);
+});
+
+test('a program link opens its own sheet or terms and rechecks pending and approved decisions without writing', async () => {
+  const oldApproval = { ...REQUESTS.items[0], status: 'answered', answer: 'HQ reviewed the plan.' };
+  const cases = [
+    ['referral-partners', 'request', {}, 'program-request-sheet'],
+    ['refer-and-earn', 'open', {}, 'program-terms-dialog'],
+    ['learning', 'request', {}, 'licence-program-focused'],
+    ['learning', 'request', { '/api/licence/mine/requests?program=learning': { items: [oldApproval] } }, 'licence-program-focused'],
+    ['product-testing', 'request', {}, 'licence-program-focused'],
+    ['unknown-program', 'request', {}, null],
+  ];
+  for (const [key, kind, overrides, shown] of cases) {
+    const s = stub({ ...ANSWERS, ...overrides });
+    const v = await render(h(ProgramsTab), studioProgramAccessPath(key, kind));
+    try {
+      if (shown) assert.ok(v.has(shown), key + ' ' + shown);
+      else assert.match(v.text(), /no recorded entry on your studio licence/);
+      assert.equal(v.has('program-request-sheet'), shown === 'program-request-sheet');
+      if (shown === 'program-request-sheet') assert.equal(v.props('program-request-program').value, key);
+      if (overrides['/api/licence/mine/requests?program=learning']) assert.match(v.of(shown), /Approved · awaiting grant.*HQ reviewed the plan/);
+      assert.deepEqual(s.posts, []);
+    } finally { await v.unmount(); s.restore(); }
+  }
 });
 
 // ─────────────────────────────────────────────────────────────── the tab, mounted
@@ -406,4 +453,39 @@ test('the source: the module clients, the tab\'s one write is the request, and t
   assert.doesNotMatch(tab + terms, /method: ['"](POST|PUT|PATCH|DELETE)|\.raise\(/, 'the tab and the terms write nothing');
   assert.match(sheet, /api\.raise\(built\.body\)/, 'the sheet sends through D799\'s module');
   assert.ok(read('frontend/src/pages/subsidiary/licence/RequestsTab.jsx').includes("{ id: 'program', t: 'Request a program', kind: 'program_grant' }"));
+});
+
+
+test('the studio reads issued custom terms and accepted HQ-delivered services separately', async () => {
+  const custom = { ...PROGRAMS[0], custom: true, name: 'North pilot', program_key: 'north-pilot' };
+  const read = { ...READ, programs: [...PROGRAMS, custom], hq_services: [{
+    program_key: 'investor-cohorts', description: 'HQ arranges investor meetings', package_name: 'Venture',
+    package_version: 3, starts_on: '2026-09-01', ends_on: '2027-08-31',
+  }] };
+  const s = stub({ ...ANSWERS, '/api/licence/mine/programs': read });
+  const v = await render(h(ProgramsTab), studioProgramAccessPath('north-pilot', 'open'));
+  try {
+    assert.match(v.of('licence-hq-services'), /HQ arranges investor meetings.*Venture · version 3.*1 Sep 2026.*31 Aug 2027.*View licence contract/);
+    assert.doesNotMatch(v.of('licence-hq-services'), /Request|Manage|Join/);
+    assert.match(v.of('licence-programs-tile-granted'), /4of 6 HQ offers/);
+    assert.match(v.of('program-terms-dialog'), /North pilot/);
+    assert.equal(v.has('program-terms-change'), false);
+    assert.deepEqual(studioProgramAccess(custom, null).action, { kind: 'open', page: '/admin/programs/north-pilot', change: false, end: false });
+    assert.equal(requestablePrograms([custom]).length, 0);
+    assert.deepEqual(s.posts, []);
+  } finally { await v.unmount(); s.restore(); }
+});
+
+
+test('an undelivered branch request opens the existing retry queue', async () => {
+  const s = stub({ ...ANSWERS, 'POST /api/licence/mine/requests': () => json({ id: 7, status: 'undelivered' }, 201) });
+  const v = await render(h(ProgramsTab), studioProgramAccessPath('referral-partners', 'request'));
+  try {
+    await v.change('program-request-why', 'Partners are ready.');
+    const props = Object.entries(v.form('program-request-why')).find(([key]) => key.startsWith('__reactProps$'))[1];
+    await act(async () => { await props.onSubmit({ preventDefault() {} }); });
+    await v.settle();
+    assert.match(v.of('licence-programs-sent'), /Saved at your studio.*HQ has yet to receive this request.*retry delivery/);
+    assert.equal(s.posts.length, 1);
+  } finally { await v.unmount(); s.restore(); }
 });
