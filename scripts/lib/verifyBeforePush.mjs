@@ -30,7 +30,7 @@ const EVERYTHING = [
   /^eslint\.config\.mjs$/,
   /^(?:frontend|cloudflare-worker)\/test\/_/,
   /(?:^|\/)_(?:deck|ts)-loader[^/]*\.mjs$/,
-  /^scripts\/(?:build-generated|build-route-registry|build-api-index|build-skill-library|build-frontend|test-drift-parts)\.mjs$/,
+  /^scripts\/(?:build-generated|build-route-registry|build-api-index|build-skill-library|build-model-inventory|build-frontend|test-drift-parts)\.mjs$/,
 ];
 
 /** First match wins. `everything` is decided before these. */

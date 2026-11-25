@@ -110,3 +110,10 @@ jobs:
         env:
           SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
         run: node scripts/check-ai-credits-live.mjs
+      # D8512 (#8512): the Stripe webhook's reconciliation line, read only (no
+      # charge, no test event, no setting). A warning step: it always exits 0
+      # and prints the state, or "not read" while the smoke holds no read
+      # credential; failing a release on it waits for the owner (#8512).
+      - name: Stripe reconciliation (warning)
+        continue-on-error: true
+        run: node scripts/check-stripe-reconciliation.mjs

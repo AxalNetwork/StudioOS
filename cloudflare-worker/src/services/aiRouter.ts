@@ -50,6 +50,7 @@ import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, namedModelChec
 import { RAIL_KIND_JOBS, jobStep } from './ai/modelUseCases';
 import { runSchemaBootstrap } from '../util/schemaBootstrap';
 import { inferenceBinding } from './ai/inferenceStub';
+import { contractProblems, usageContract } from './aiUsageContract';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -261,6 +262,8 @@ export interface RunOptions {
   // recorded". Re-validated in `recordUsage` against SURFACE_RE, so a caller
   // that forwards a request field cannot put anything else into the column.
   surface?: string;
+  // D8522: the id of the request this call serves, written to `ai_usage_logs.request_id`; absent reads 'not reported'.
+  requestId?: string;
   // D762 (#2019): the AI rail's page, option and record the run was asked
   // from, written to `ai_usage_logs.rail_page`, `rail_option` and `record_ref`
   // (migration 493). D765's run path passes them; every other caller leaves
@@ -451,6 +454,9 @@ export interface UsageMeta {
   fallback_used: boolean;
   cached: boolean;
   safety_score: number | null;
+  // D8522: the provider and whether the token counts are the provider's; absent, `recordUsage` derives them.
+  provider?: string;
+  tokens_reported?: boolean;
 }
 
 /**
@@ -1340,11 +1346,17 @@ const LOG_COLUMNS_493: readonly string[] = [
   'ALTER TABLE ai_usage_logs ADD COLUMN guard_for INTEGER',
   'ALTER TABLE ai_usage_logs ADD COLUMN units_json TEXT',
 ];
+/** Migration 202611250054's columns (D8522): the usage-row contract. */
+const LOG_COLUMNS_8522: readonly string[] = [
+  'ALTER TABLE ai_usage_logs ADD COLUMN provider TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN request_id TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN tokens_reported INTEGER CHECK (tokens_reported IS NULL OR tokens_reported IN (0, 1))',
+];
 async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER, skill_id INTEGER, skill_version INTEGER, licence_uid TEXT)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER, skill_id INTEGER, skill_version INTEGER, licence_uid TEXT, provider TEXT, request_id TEXT, tokens_reported INTEGER CHECK (tokens_reported IS NULL OR tokens_reported IN (0, 1)))",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -1372,11 +1384,12 @@ async function addLogColumns493(env: Env): Promise<void> {
     'ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER',
     // D5948 (#5948), migration 202611150131: the licence the run is for.
     'ALTER TABLE ai_usage_logs ADD COLUMN licence_uid TEXT',
+    ...LOG_COLUMNS_8522,
     LOG_PAGE_INDEX_493,
   ]);
 }
 
-export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef' | 'agentId'>;
+export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef' | 'agentId' | 'requestId'>;
 /** D1278: a hold names its run's task; D1496 part 2: an agent's run names its role instead, on the same 'ai' surface. */
 export const holdOperation = (o: Pick<RunOptions, 'task' | 'agentId' | 'agentRole'>): string =>
   agentIdOf(o.agentId) && typeof o.agentRole === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(o.agentRole) ? `agent.${o.agentRole}` : `ai.${String(o.task)}`;
@@ -1391,7 +1404,7 @@ export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, ref
   // the statement it always had. Both are literal, so the schema guards read them.
   const agentId = agentIdOf(who.agentId);
   const values = [
-    who.userId,
+    who.userId ?? null,
     usage.task,
     usage.model,
     Math.max(0, Math.round(usage.latency_ms)),
@@ -1411,17 +1424,32 @@ export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, ref
     charge.guardFor ?? null,
     normaliseSurface(who.surface),
   ];
+  // D8522: the contract. `recordUsage` is the one function that inserts into the table; a field the
+  // caller did not supply is written as 'not reported', never left out.
+  const reported = usage.tokens_reported ?? (typeof charge.units?.usage_reported === 'boolean' ? charge.units.usage_reported
+    : usage.prompt_tokens + usage.completion_tokens > 0 || refusal !== null || usage.cached);
+  const contract = usageContract({
+    surface: normaliseSurface(who.surface), model: usage.model,
+    provider: usage.provider ?? charge.units?.provider,
+    prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens, tokens_reported: reported,
+    user_id: who.userId, agent_id: agentId, request_id: who.requestId,
+  });
+  const problems = contractProblems(contract);
+  if (problems.length) console.warn('[aiRouter] usage row breaks the contract:', problems.join(','));
+  const contractValues = [contract.provider, contract.request_id, contract.tokens_reported ? 1 : 0];
   const insert = () => (agentId
     ? env.DB.prepare(
       `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
-         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface, agent_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(...values, agentId)
+         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface, agent_id,
+         provider, request_id, tokens_reported)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, agentId, ...contractValues)
     : env.DB.prepare(
       `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
-         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(...values)
+         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface,
+         provider, request_id, tokens_reported)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, ...contractValues)
   ).run();
   // The row's id, which a guard row names in `guard_for` (D763); null when it could not be written.
   const idOf = (r: unknown): number | null => {

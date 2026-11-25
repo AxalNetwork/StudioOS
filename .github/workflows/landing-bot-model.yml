@@ -8,6 +8,10 @@ name: Landing bot model runner
 # scripts/landing-bot/model/README.md has the design and the caps.
 # #6475: a task with `merge_sha` runs in merge mode: each round merges that
 # commit into the branch first (stage.mjs) and edits the conflicted tree.
+# #8506: `prepare` resolves the controller (scripts/landing-bot from main) to
+# ONE commit; every round's edit and verify check out that commit, never a
+# branch name, and the caller's publish step must run the same one (the
+# `controller` output). The patch carries a record of it (model/record.mjs).
 
 on:
   workflow_call:
@@ -27,6 +31,12 @@ on:
       round:
         description: The round whose patch passed, if any
         value: ${{ jobs.result.outputs.round }}
+      controller:
+        description: The controller commit every job of this attempt ran (#8506); the publish step must run it too
+        value: ${{ jobs.prepare.outputs.controller }}
+      head:
+        description: The commit the rounds edited and verified (#8506)
+        value: ${{ jobs.prepare.outputs.sha }}
   workflow_dispatch:
     inputs:
       ref:
@@ -50,12 +60,27 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.ref.outputs.sha }}
+      controller: ${{ steps.controller.outputs.sha }}
       rounds: ${{ steps.task.outputs.rounds }}
       merge: ${{ steps.task.outputs.merge }}
     steps:
+      # #8506: once per attempt. A caller runs on main, so its own commit is the controller and its publish step
+      # (checked out at github.sha) runs the same code; a dispatch from elsewhere takes main's head, read once here.
+      - name: Resolve the controller to one commit
+        id: controller
+        env:
+          RUN_REF: ${{ github.ref }}
+          RUN_SHA: ${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          if [ "$RUN_REF" = refs/heads/main ]; then sha="$RUN_SHA"; else sha=$(git ls-remote --heads "$REPO_URL" refs/heads/main | cut -f1); fi
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::the controller commit could not be resolved"; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Controller: $sha" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: main
+          ref: ${{ steps.controller.outputs.sha }}
           path: runner
           persist-credentials: false
           sparse-checkout: |
@@ -98,6 +123,7 @@ jobs:
       round: 1
       previous: 0
       sha: ${{ needs.prepare.outputs.sha }}
+      controller: ${{ needs.prepare.outputs.controller }}
       merge: ${{ needs.prepare.outputs.merge == 'true' }}
 
   round2:
@@ -112,6 +138,7 @@ jobs:
       round: 2
       previous: 1
       sha: ${{ needs.prepare.outputs.sha }}
+      controller: ${{ needs.prepare.outputs.controller }}
       merge: ${{ needs.prepare.outputs.merge == 'true' }}
 
   round3:
@@ -126,6 +153,7 @@ jobs:
       round: 3
       previous: 2
       sha: ${{ needs.prepare.outputs.sha }}
+      controller: ${{ needs.prepare.outputs.controller }}
       merge: ${{ needs.prepare.outputs.merge == 'true' }}
 
   result:
@@ -163,4 +191,5 @@ jobs:
           path: |
             patch/patch.json
             patch/manifest.json
+            patch/record.json
           retention-days: 7

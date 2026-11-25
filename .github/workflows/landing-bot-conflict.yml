@@ -123,6 +123,9 @@ jobs:
     env:
       LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
       MODEL_OUTCOME: ${{ needs.resolve.outputs.outcome }}
+      # #8506: the controller commit the model runner's jobs ran; this job runs github.sha and refuses a patch unless
+      # they are one commit and the patch's record names it.
+      CONTROLLER_SHA: ${{ needs.resolve.outputs.controller }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
