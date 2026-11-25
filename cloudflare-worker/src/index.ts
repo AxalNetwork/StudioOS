@@ -2752,6 +2752,16 @@ const studioos = {
             }
           } catch (e) { taskFailed('scheduled posts sweep', e); }
         }
+        // #8516 (D8516) — THE REPLAY OF A SIGNATURE'S EFFECTS. A completed
+        // envelope leaves a record per required effect (esign_effects); one
+        // that is pending or failed is retried here, EVERY MINUTE and on every
+        // deployment (a branch signs its own envelopes), until the attempt cap.
+        // Never throws past this.
+        try {
+          const { sweepEffects } = await import('./services/esignEffects');
+          const p = await sweepEffects(env, env.APP_URL || 'https://axal.vc');
+          if (p.due || p.at_cap) console.info(`[cron] esign effects due=${p.due} done=${p.done} failed=${p.failed} at_cap=${p.at_cap}`);
+        } catch (e) { taskFailed('esign effects sweep', e); }
         // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
         // `unknown`: not known whether it arrived. Never re-sent, never
         // `failed`. Every fifth minute, on every deployment (a founder's
