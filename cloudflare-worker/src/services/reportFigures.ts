@@ -85,32 +85,13 @@ for (const f of REPORT_FIGURES) { BY_KEY.set(f.key, f); for (const a of f.aliase
 /** The registry's figure for a key or any of its aliases, or null. */
 export const figureFor = (key: string): FigureDef | null => BY_KEY.get(String(key)) ?? null;
 
-/**
- * Migration 168's firm-wide KPI rules (`portfolio_kpi_definitions`, fund_id
- * NULL), the ones marked required, by cadence. A test holds this list to the
- * migration's seed rows.
- */
-export const KPI_RULES_REQUIRED: Readonly<Record<'monthly' | 'quarterly', readonly string[]>> = Object.freeze({
-  monthly: ['cash_balance', 'net_burn', 'runway_months', 'revenue'],
-  quarterly: ['arr', 'headcount'],
-});
-
-/**
- * The figures a duty requires. A duty whose signed paper names figures keeps
- * them (D1058 stores them in `required_figures`). None names one yet, so the
- * financial and KPI duties take migration 168's required KPI rules, mapped to
- * this registry's keys; the other kinds require none. The stored duty row is
- * never rewritten.
- */
-export function requiredFiguresOf(duty: { kind: string; required_figures?: string | null }): string[] {
+/** A signed figure list wins; otherwise the route supplies the period's recorded rule keys (D6214). */
+export function requiredFiguresOf(duty: { kind: string; required_figures?: string | null; kpi_rules_required?: string[] }): string[] {
   let stored: unknown = [];
   try { stored = JSON.parse(String(duty.required_figures ?? '[]')); } catch { stored = []; }
   const named = Array.isArray(stored) ? stored.map((k) => figureFor(String(k))?.key).filter((k): k is string => !!k) : [];
-  const keys = named.length ? named
-    : duty.kind === 'monthly_financials' ? KPI_RULES_REQUIRED.monthly
-      : duty.kind === 'quarterly_kpi' ? [...KPI_RULES_REQUIRED.monthly, ...KPI_RULES_REQUIRED.quarterly]
-        : [];
-  return [...new Set(keys.map((k) => figureFor(k)!.key))];
+  const keys = named.length ? named : ['monthly_financials','quarterly_kpi'].includes(duty.kind) ? duty.kpi_rules_required || [] : [];
+  return [...new Set(keys.map(k => figureFor(k)?.key).filter((k): k is string => !!k))];
 }
 
 // ── The figures as read ─────────────────────────────────────────────────────

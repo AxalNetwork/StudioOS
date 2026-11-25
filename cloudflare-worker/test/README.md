@@ -419,6 +419,7 @@ catalogue version only in the fixture.
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
 | `fund_lp_maintenance_6237.test.ts` | D6237: mounted gates, contact identity, commitment floor, deletion history and rollback. |
 
+| `portfolio_reporting_settings_6214.test.ts` | Rule history, inherited defaults, GP ownership, attributed writes, stale revisions and period/stage rules. |
 | `work_graph_media_storage_5583.test.ts` | D5583 part 2: bounded admission, scoped classes, immutable snapshots, existing blob readback, class-specific reconciliation, cross-project refusal and cost/audit. |
 | `work_graph_media_quota_5583.test.ts` | D5583 part 2: actual migrated cumulative owner quota, dedup, owner transfer and legacy blob migration integrity, synthetic data only. |
 | `portfolio_saved_views_6209.test.ts` | Private Portfolio views: SQLite ownership, page isolation, optimistic writes, access refusals, validation and unreadable reads. |

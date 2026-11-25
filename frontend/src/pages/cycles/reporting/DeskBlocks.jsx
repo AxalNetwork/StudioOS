@@ -302,7 +302,7 @@ export function DutyDrawer({ desk, duty, onClose, raiseHref }) {
         <dl className="m-0 grid grid-cols-[160px_1fr] gap-x-3 gap-y-1.5">
           <dt className={EYE}>Cadence</dt><dd className="m-0">{CADENCE_WORDS[duty.cadence] || duty.cadence}</dd>
           <dt className={EYE}>Due rule</dt><dd className="m-0">{dueRuleWords(duty)}</dd>
-          <dt className={EYE}>Required figures</dt><dd className="m-0" data-testid="reporting-duty-figures">{req.labels.length ? req.labels.join(' · ') : 'None'}{req.from === 'kpi_rules' ? ' · the studio’s KPI rules, as the document names none' : ''}</dd>
+          <dt className={EYE}>Required figures</dt><dd className="m-0" data-testid="reporting-duty-figures">{req.from === 'unreadable' ? 'Unavailable: reporting rules could not be read' : req.labels.length ? req.labels.join(' · ') : 'None'}{req.tracked?.length ? ` · Tracked in company updates: ${req.tracked.join(', ')}` : ''}{req.from === 'kpi_rules' ? ' · the studio’s KPI rules, as the document names none' : ''}</dd>
           <dt className={EYE}>Required documents</dt><dd className="m-0">{documentsLine(duty)}</dd>
           <dt className={EYE}>Holder</dt><dd className="m-0">{duty.holder?.name || 'Not named'}</dd>
           <dt className={EYE}>Starts</dt><dd className="m-0">{duty.starts_on || 'Not recorded'}</dd>

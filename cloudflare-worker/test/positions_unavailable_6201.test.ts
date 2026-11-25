@@ -70,7 +70,7 @@ async function call(db: DatabaseSync, path: string, failedTable = '', failure = 
 
 for (const [path, table, reason] of [
   ['/positions/analytics', 'portfolio_distributions', 'Portfolio distributions could not be read.'],
-  ['/positions/kpi-compliance', 'portfolio_kpi_definitions', 'Required KPIs could not be read.'],
+  ['/positions/kpi-compliance', 'portfolio_reporting_rule_sets', 'Required KPIs could not be read.'],
   ['/positions/kpi-compliance', 'portfolio_updates', 'Submitted portfolio updates could not be read.'],
 ]) {
   for (const failure of ['throw', 'unsuccessful', 'malformed', 'missing']) {
