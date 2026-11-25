@@ -747,3 +747,24 @@ test('8375 an active coordinator and history publisher share one token, includin
   assert.ok(net.calls.some(c=>c.path.includes('/runs/103')));
   assert.equal(run.alarms.at(-1),f.state.now+15_000);
 });
+
+test('8401 a new failure behind history reaches its check on the first alarm past 100 mode-conflicted correction hints',async t=>{
+ // S21 review C1 on #8367: blocked hints must advance the due cursor, or a later correction waits one alarm per hint.
+ const f=fixture(t),net=network(),queue=new SqlCapacityCorrections(f.storage);
+ for(let n=2;n<402;n++){await f.settled(n,'success',START+n);f.sent(n,'success');}
+ const conflicted=Array.from({length:100},(_,i)=>uuid(600+i));
+ for(let i=0;i<100;i++){await f.place(600+i,START+600+i,'full-suite');queue.enqueue(conflicted[i]);}
+ const box=new CapacityOutbox(f.storage,net.api,config),publish=()=>box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ await publish();
+ assert.equal(net.calls.some(c=>c.method==='PATCH'&&/\/1006\d\d$/.test(c.path)),false,'a hint compacted under the other mode is never published');
+ f.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)','pilot:history',uuid(200));
+ const late=f.store.get(uuid(200))!;late.shards[0].attempts[0].verifiedTestFailure=true;f.store.save(late);
+ net.calls.length=0;await publish();
+ const patch=net.calls.find(c=>c.method==='PATCH'&&c.path.endsWith('/100200'));
+ assert.ok(patch,'the first alarm after the new failure updates its existing check');assert.equal(patch!.body.conclusion,'failure');
+ assert.equal(net.calls.some(c=>c.method==='POST'),false,'no replacement check is created');
+ const held=f.storage.sql.exec<{request_id:string}>('SELECT request_id FROM capacity_publication_corrections').toArray().map(r=>r.request_id);
+ assert.deepEqual(conflicted.filter(id=>held.includes(id)),conflicted,'every mode-conflicted hint stays blocked');
+ for(const id of conflicted)assert.equal(f.store.compact(id)!.publicationMode,'full-suite');
+ assert.equal(net.calls.some(c=>/\/1006\d\d$/.test(c.path)),false);
+});
