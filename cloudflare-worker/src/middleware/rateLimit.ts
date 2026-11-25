@@ -69,6 +69,8 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 export const DECK_SHARE_WALKTHROUGH = /^\/api\/decks\/share\/[^/]+\/walkthrough(?:\/[0-9a-f-]{36}\/media)?$/;
 // D6864 (#6864): the public evidence-pack read, and D6897's readiness snapshot read on the same link store. Each open
 // consumes one of the link's views, so a tight per-IP bucket.
+// D5585 part 9 (#5585): the public read of a published release's site record (routes/release_sites_public.ts).
+export const RELEASE_SITE_READ = /^\/api\/public\/release-sites\/[^/]+\/[^/]+\/[^/]+\/?$/;
 export const EVIDENCE_SHARE_READ = /^\/api\/share\/(?:evidence|readiness|status)\/[^/]+$/;
 // D1502 part 2 (#3753): starting a deck generation run. A run holds the
 // member's allowance for its whole quote, so a script starting runs in a loop
@@ -355,6 +357,16 @@ const BUCKETS: Bucket[] = [
     limit: 30,
     windowSec: 60,
     test: (p, m) => m === 'GET' && EVIDENCE_SHARE_READ.test(p),
+    scope: 'ip',
+  },
+  // D5585 part 9 (#5585) — the public site-record read: per IP and fail-open like the other public reads (a site
+  // must not go dark with KV). It is never cached (a takedown must stop it on the next request), so every request reads
+  // D1 and R2; 60 a minute is far above a website's server reading it and keeps a sweep of tenant and site names slow.
+  {
+    name: 'release_site_read',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && RELEASE_SITE_READ.test(p),
     scope: 'ip',
   },
   // 60 requests/min per user — default
