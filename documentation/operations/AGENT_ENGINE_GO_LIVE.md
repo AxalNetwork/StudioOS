@@ -33,6 +33,30 @@ isolated preview, behind a fail-closed preflight:
 - Full CI passes, including `agent_engine_bindings_d1528`, runtime contracts
   for both `do` and `sdk`, Wrangler parity, branch config, cron and migration guards.
 
+## Precondition: CFO and General Counsel fixture cases (#8518, D8518)
+
+Before step 2 (`AGENT_ENGINE="canary"`) is proposed, `cloudflare-worker/test/agent_go_live_cases_8518.test.ts` passes
+on the commit that proposes it. It runs the CFO (`cfo`, Orrin) and the General Counsel (`general_counsel`, Vesta)
+through the real `agentRun`, skill pin, evidence preflight, readers, tool grants and connection checks, on two
+invented companies (a ledger, a cap table and two contracts each; `example.test` and `example.invalid` only). Only
+inference is stubbed, so there is no model call and no network. Assertions are on the tool calls made, the records
+read, the refusal code and the disclaimer, never on model wording. The suite runs in the Worker test shards.
+
+| # | Case | What must hold |
+| --- | --- | --- |
+| CFO 1 | Budget versus actual | Only the company's own ledger server is called, once per declared tool (`grow.read`, `mercury.read`); its figures are in the turn and none of the other company's |
+| CFO 2 | A figure not recorded | A budget line with no spend reaches the model with no actual for it, under the skill's "Not recorded" step and the platform's no-invented-figure rule |
+| CFO 2b | A runway with no recorded burn | Refused `skill_not_ready` before any model call, hold or usage row |
+| CFO 3 | Another company's records | Another company's ledger connection is refused (`tool_not_granted`; a forged grant still finds no connection), and its cap table, balances and burn are `withheld`; no call, no model call |
+| GC 4 | A contract question | The exact disclaimer (`disclaimers.ts`) is an instruction of the run, only for this role; the selected contract's passages are the evidence |
+| GC 5 | Another company's contract | Refused `skill_not_ready` by the reader (file not found in this room, room withheld) with no model call; the prompt is never the guard |
+
+- [ ] **Fixture cases:** all six pass on the commit proposed, and the counsel wording in `disclaimers.ts` is still the
+  one the cases follow (the case holds the constant, so counsel's change (#3727) needs no test edit).
+
+Mutation record (2026-11-25, D8518): a reader or connection that reads across companies, and a prompt without the
+disclaimer, each fail these cases. The list is in D8518.
+
 ## Staged rollout: separate PRs
 
 1. **Team surface:** propose `TEAM_AGENTS_ENABLED="true"` alone. Keep the engine
@@ -158,6 +182,7 @@ Each figure is labelled:
 ### Gates (all must hold before each step's PR is proposed)
 
 - [ ] **Recovery:** in the period, no run with two proposals or two holds, no `mismatch`, and no `held_expired` older than the sweep interval. Each `unrecorded` is explained.
+- [ ] **Fixture cases:** the CFO and General Counsel cases above pass on the commit proposed.
 - [ ] **Isolation:** no cross-tenant read in the period's sampled runs, and #4572's suite is green.
 - [ ] **Approval:** no write landed without a person's Accept. Every agent effect is a proposal.
 - [ ] **Halt:** a drill on a synthetic scope stopped every run at its next step. The result is recorded with its timestamp and step.
