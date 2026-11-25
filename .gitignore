@@ -138,6 +138,8 @@ documentation/architecture/PAGE_INVENTORY.md
 # #4570: the authorization inventory is build output. `node scripts/build-auth-inventory.mjs`
 # writes it; CI keeps it in the `routing-docs` artifact; `--check` in test:guards checks the ledger.
 documentation/architecture/AUTH_INVENTORY.json
+documentation/architecture/STRIPE_IDEMPOTENCY_INVENTORY.json
+
 # D8526: the company-scope inventory is build output; `--check` in test:guards checks its ledger.
 documentation/architecture/COMPANY_SCOPE_INVENTORY.json
 

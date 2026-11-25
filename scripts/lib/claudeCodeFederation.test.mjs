@@ -50,7 +50,9 @@ test('D5530: the preflight exits 1 with a remediation, and 0 without printing an
 
 test('D5530: claude-code.yml stores no API key and passes its own federation variables', () => {
   assert.doesNotMatch(code, /ANTHROPIC_API_KEY|anthropic_api_key|claude_code_oauth_token|secrets\./, 'no long-lived credential');
-  assert.match(code, /^permissions:\n(?: {2}\S.*\n)*? {2}id-token: write$/m, 'the exchange needs id-token: write');
+  // D8505: the workflow holds no token by default; the model job asks for id-token: write itself.
+  assert.match(code, /^permissions: \{\}$/m, 'no token at the top');
+  assert.match(code, /^ {2}claude:\n(?: {4}.*\n)*? {4}permissions:\n(?: {6}\S.*\n)*? {6}id-token: write$/m, 'the exchange needs id-token: write');
   for (const [ours, theirs] of Object.entries(CLAUDE_CODE_VARIABLES)) {
     const input = theirs.toLowerCase();
     assert.match(code, new RegExp(`^ {10}${input}: \\$\\{\\{ vars\\.${ours} \\}\\}$`, 'm'), input);

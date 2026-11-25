@@ -150,6 +150,14 @@
     ]
   },
   {
+    "id": "stripe-idempotency",
+    "command": [
+      "node",
+      "scripts/build-stripe-inventory.mjs",
+      "--check"
+    ]
+  },
+  {
     "id": "check-regulated-wording",
     "command": [
       "node",
@@ -190,6 +198,13 @@
       "node",
       "scripts/check-preview-isolation.mjs",
       "--static"
+    ]
+  },
+  {
+    "id": "check-ai-gateways",
+    "command": [
+      "node",
+      "scripts/check-ai-gateways.mjs"
     ]
   },
   {

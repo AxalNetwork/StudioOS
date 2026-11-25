@@ -266,6 +266,28 @@ whichever environment you didn't edit. `scripts/check-wrangler-binding-parity.mj
 enforces this and runs inside `npm run test:guards`, so a green `test:drift`
 already covers it.
 
+### 2.3 AI gateways and agent settings agree across the tables (D8508, #8508)
+
+The AI Gateway slugs (`CF_AI_GATEWAY_SLUG_*`) and the agent settings
+(`AGENT_*`, `OPENAI_MODEL`, `TEAM_AGENTS_ENABLED`) are plain variables, so they
+appear in `[vars]`, `[env.production.vars]` and `[env.preview.vars]`.
+`scripts/check-ai-gateways.mjs` reads the three tables and the Worker's source,
+and fails, naming the file, the table and the key, when:
+
+- a value differs from `[env.production.vars]` and the script's `ALLOWED` list
+  does not name that table, key and exact value with a reason;
+- a path the code refuses without a gateway is switched on with an empty or
+  malformed slug (an engine run without `AGENT_AI_GATEWAY`; the provider
+  gateway without its own `CF_AI_GATEWAY_SLUG_PROVIDERS`);
+- an agent account's model has no price (`PROVIDER_MODELS`,
+  `GATEWAY_TEXT_MODELS` or `AGENT_OPENAI_RATES`).
+
+It runs in `npm run test:guards` and as the release preflight step "Check AI
+gateway and agent settings". It reads files only: whether each gateway exists
+on the account and whether `AGENT_AI_GATEWAY_TOKEN` is bound is the live layer,
+which waits for the owner's decision on read access in #8508. To accept a new
+difference, add an `ALLOWED` entry with its reason in the same PR.
+
 ---
 
 ## 3. Capture a rollback point first
@@ -304,6 +326,50 @@ column, or touches only a table the same release creates) or **`manual`**
 (anything else, each reason with its file and line; anything it cannot read is
 manual). It is report-only: today the operator still decides, and a `manual`
 release needs the compatibility check above before any rollback.
+
+### 3.1 The window between the two writes is rehearsed on the pull request (D8532)
+
+The release applies the D1 migrations and then publishes. If the publish
+fails, the previous Worker serves the migrated schema until a retry or a
+forward fix lands; a rollback puts it in the same place. The `release-window`
+job of `release-rehearsal.yml` runs that window before merge, on every pull
+request that changes a migration, the Worker, `wrangler.toml` or the deploy
+workflow: locally, over synthetic data, with no Cloudflare account.
+
+```bash
+node scripts/release-window-rehearsal.mjs --base origin/main --out /tmp/release-window
+# locally, reusing this checkout's Worker dependencies for the base tree:
+node scripts/release-window-rehearsal.mjs --base origin/main --out /tmp/release-window --base-deps link
+```
+
+1. The **base** commit's schema (its baseline and migrations, every file in the
+   ledger), seeded by the base Worker: an account on a paid plan with a TOTP
+   sign-in, a free account holding an access grant to a project, an outsider,
+   and a hashed SPA asset in the ASSETS stub.
+2. The candidate's pending migrations, planned and recorded as `migrate-d1.mjs`
+   does, each file as one transaction (§4c).
+3. **Publish stopped.** The base commit's Worker answers a fixed set of
+   requests on the migrated database (sign-in and `/api/auth/me`, the paid
+   and free answers of the plan gate, the granted and refused project read,
+   a hashed asset and a missing one), and each must equal its answer before
+   the migration. A difference means the release needs manual recovery.
+4. **Retry.** The ledger-driven re-run must plan nothing. Each pending file is
+   replayed once as if its ledger row had been lost: it must refuse and roll
+   back (the runner then stops and names it, §4) or change nothing; a file
+   that changes rows or schema a second time fails. Then the candidate Worker
+   on that database must answer exactly as it does on a clean build of the
+   candidate schema, and both ledgers must hold the same files and checksums.
+5. A migration the rollback classifier calls `manual`, or any release whose
+   step 3 differed, must name its forward fix in the file
+   (`-- forward-fix: <path>.sql`, a SQL file in the repository or another
+   pending migration), and step 4 runs it.
+
+Durable Object migrations are reported **not rehearsed**, with the reason
+(they need workerd with Durable Objects bound), and do not fail the run. The
+report (JSON and Markdown in the job's artifact and summary) names the base
+SHA, the candidate SHA and every pending file with its checksum, so a
+release's evidence can cite the rehearsal of the commit it ships. It
+rehearses; it does not gate the deploy.
 
 ---
 
