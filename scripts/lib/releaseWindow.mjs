@@ -363,7 +363,7 @@ export function rehearse(opts) {
     return r;
   }
 }
-const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+const cell = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 
 /** The report as the job summary shows it. */
 export function renderReport(r) {

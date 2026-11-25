@@ -44,7 +44,9 @@ function sh(cmd, args, opts = {}) {
 
 function main() {
   const baseRef = opt('--base');
-  const out = resolve(opt('--out', join(tmpdir(), 'release-window')));
+  // No predictable default in the shared temp dir: without --out the report goes to a fresh private directory.
+  const outArg = opt('--out');
+  const out = outArg ? resolve(outArg) : mkdtempSync(join(tmpdir(), 'release-window-out-'));
   const deps = opt('--base-deps', 'install');
   if (!baseRef || !['install', 'link'].includes(deps)) {
     console.error('usage: release-window-rehearsal.mjs --base <sha> --out <dir> [--base-deps install|link] [--keep]');
