@@ -282,7 +282,7 @@ test('admin: a mapped program\'s name opens its presentation and Open reads Mana
   assert.equal((cat.match(/<PresentationName programKey=\{p\.key\}/g) || []).length, 3, 'card, desktop row and phone row');
   assert.equal((cat.match(/manageDoor\(/g) || []).length, 3, 'card, desktop row and phone row');
   assert.match(codeOnly(read('frontend/src/pages/admin/lab/AdminLab.jsx')), /<ViewPresentationLink programKey=\{LAB_KEY\} \/>\s*<Link to="\/admin\/programs\/spinout-lab\/preview"/);
-  assert.match(codeOnly(read('frontend/src/pages/admin/programs/ProgramFrame.jsx')), /<ViewPresentationLink programKey=\{program\} \/>/);
+  assert.match(codeOnly(read('frontend/src/pages/admin/programs/ProgramFrame.jsx')), /<ViewPresentationLink programKey=\{program\} registryRow=\{detailRow\(detail\) \|\| \(meta \? \{\} : null\)\} \/>/);
 });
 
 test('/events: "See all programs →" goes to the index, beside the Programs heading', () => {
