@@ -316,7 +316,14 @@ export async function transition(
   if (packSeedToken) statements.push(...await registrationPackStatements(env, c.id, nextRevision, packSeedToken, typeof payload.orderSet?.filed_on === 'string' ? payload.orderSet.filed_on : null));
   if (c.track === 'v2' && (to === 'activating' || to === 'handed_off')) statements.push(handoffPackEvidenceStatement(env, c.id, to, nextRevision));
 
-  const results = await caseWriteBatch(env, actor, statements, caseIndex);
+  let results: D1Result[];
+  try {
+    results = await caseWriteBatch(env, actor, statements, caseIndex);
+  } catch (error) {
+    if (String(error).includes('formation_checkpoint_held'))
+      return { ok: false, status: 409, error: 'formation_review_required' };
+    throw error;
+  }
   if (!(Number(results[caseIndex]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'case_moved' };
 
   if (!actor.hqWrite && actor.party === 'hq' && actor.userId && actor.email) {

@@ -40,3 +40,13 @@ AND (SELECT coalesce(sum(ownership_bps),0) FROM formation_case_people WHERE case
 BEGIN
   SELECT RAISE(ABORT, 'formation_ownership_incomplete');
 END;
+
+-- HQ can place a hold without advancing revision. Check again in the stage
+-- transaction, after the potentially asynchronous lists read.
+CREATE TRIGGER IF NOT EXISTS formation_checkpoint_hold
+BEFORE UPDATE OF stage ON formation_cases
+WHEN OLD.track = 'v2' AND NEW.stage <> OLD.stage AND NEW.stage IN ('paid','submitted')
+AND (OLD.hold_reason IS NOT NULL OR OLD.closed_at IS NOT NULL)
+BEGIN
+  SELECT RAISE(ABORT, 'formation_checkpoint_held');
+END;

@@ -250,3 +250,23 @@ test('only approved wording for this country and exact body can be sent', async 
   db.prepare("UPDATE legal_templates SET body_md=? WHERE slug='fixture_notice'").run(body+' Modified.');
   assert.equal(await caseNoticeCopy(env,801),null);
 });
+
+test('a hold placed after a clear screening rolls back the paid transition', async () => {
+  const { db, env } = setup();
+  db.exec("UPDATE formation_case_people SET ownership_bps=10000 WHERE id=801;UPDATE formation_cases SET stage='quoted' WHERE id=801");
+  env.TOKENS={get:async(key:string)=>[{source:key.split(':').at(-1),name:'unrelated list subject',aliases:[],dob:null,nationality:null,ref:'offline'}]};
+  const inner=env.DB;
+  let cleared=false;
+  env.DB={...inner,batch:async(statements:any[])=>{
+    const results=await inner.batch(statements);
+    if(!cleared && db.prepare('SELECT id FROM formation_case_screenings WHERE person_id=801').get()) {
+      cleared=true;
+      db.exec("UPDATE formation_cases SET hold_reason='private HQ hold',waiting_on='hq' WHERE id=801");
+    }
+    return results;
+  }};
+  const {transition}=await import('../src/services/formationCase.ts');
+  assert.deepEqual(await transition(env,801,'paid',{party:'system'}),{ok:false,status:409,error:'formation_review_required'});
+  assert.equal(db.prepare('SELECT stage FROM formation_cases WHERE id=801').get()!.stage,'quoted');
+  assert.equal(db.prepare("SELECT count(*) n FROM formation_case_events WHERE case_id=801 AND to_stage='paid'").get()!.n,0);
+});
