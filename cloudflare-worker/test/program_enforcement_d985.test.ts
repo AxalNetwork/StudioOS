@@ -15,13 +15,14 @@
  */
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { SignJWT } from 'jose';
-import { freshSchema } from './_schema_once.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { loadSchema } from './_schema_once.mjs';
 
 const STUB = 'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
   + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
@@ -74,13 +75,8 @@ const HQ_VARS = {
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-type DB = ReturnType<typeof freshSchema>;
-
-// D8354: each test gets its own in-memory copy of the D4133 cached schema (the baseline and every later
-// migration, with their rows), loaded by SQLite rather than replayed row by row from a template.
-function schemaCopy(): DB {
-  return freshSchema({ dqs: true });
-}
+type DB = InstanceType<typeof DatabaseSync>;
+const DB_OPTIONS = { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true } as const;
 function makeD1(db: DB) {
   return {
     prepare(sql: string) {
@@ -119,9 +115,17 @@ const NONE_HELD = copyOf([]);
  * absent. `programs` is `program_grants_json`: undefined or null leaves it SQL
  * NULL (HQ has not pushed programs yet).
  */
-function freshDb(licence: 'suspended' | 'active' | null, programs?: Copy): DB {
-  const db = schemaCopy();
-  db.exec('PRAGMA foreign_keys = OFF;');
+/**
+ * #8587: the D4133 cached schema with this file's fixed rows, built ONCE into a file. Each database below is
+ * a byte copy of that file opened on its own (a copy is milliseconds; loading the schema into a fresh handle
+ * was about a second, and this file opens ~120 databases). Rows that read the clock are still written per
+ * database, so every test starts from the same state as before.
+ */
+const SEED_DIR = mkdtempSync(join(tmpdir(), 'd985-db-'));
+const SEED = join(SEED_DIR, 'seed.sqlite');
+{
+  const db = new DatabaseSync(SEED, DB_OPTIONS);
+  loadSchema(db);
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)')
     .run(ADMIN, 'admin', 'Aline Admin', 'aline@fr.example');
   db.prepare(
@@ -133,14 +137,6 @@ function freshDb(licence: 'suspended' | 'active' | null, programs?: Copy): DB {
      VALUES (?, 'founder', 'Maud Member', 'maud@fr.example', 1, 'approved', 'studio', 'active')`,
   ).run(MEMBER);
   db.prepare(
-    `INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at)
-     VALUES ('totp-9', ?, 'totp', datetime('now'), datetime('now'))`,
-  ).run(MEMBER);
-  db.prepare(
-    `INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at)
-     VALUES ('totp-1', ?, 'totp', datetime('now'), datetime('now'))`,
-  ).run(ADMIN);
-  db.prepare(
     `INSERT INTO spinout_applications (id, user_id, company_name, idea, cohort, status)
      VALUES (?, ?, 'Fleur Labs', 'Soil sensors for vineyards', 'Cohort 5', 'pending')`,
   ).run(APP_ID, FOUNDER);
@@ -150,6 +146,27 @@ function freshDb(licence: 'suspended' | 'active' | null, programs?: Copy): DB {
     `INSERT INTO perks (uid, partner_name, category, offer, status, created_at, updated_at)
      VALUES (?, 'Acme Cloud', 'infrastructure', '$5,000 in credits', 'in_review', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')`,
   ).run(PERK);
+  db.close();
+}
+/** Open copies, oldest first. Only the last few can still be in use; older ones are closed and removed. */
+const open: Array<{ db: DB; file: string }> = [];
+let copies = 0;
+test.after(() => { for (const o of open) { try { o.db.close(); } catch { /* already closed */ } } rmSync(SEED_DIR, { recursive: true, force: true }); });
+
+function freshDb(licence: 'suspended' | 'active' | null, programs?: Copy): DB {
+  while (open.length >= 4) { const o = open.shift()!; try { o.db.close(); } catch { /* already closed */ } rmSync(o.file, { force: true }); }
+  const file = join(SEED_DIR, `db-${(copies += 1)}.sqlite`);
+  copyFileSync(SEED, file);
+  const db = new DatabaseSync(file, DB_OPTIONS);
+  open.push({ db, file });
+  db.prepare(
+    `INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at)
+     VALUES ('totp-9', ?, 'totp', datetime('now'), datetime('now'))`,
+  ).run(MEMBER);
+  db.prepare(
+    `INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at)
+     VALUES ('totp-1', ?, 'totp', datetime('now'), datetime('now'))`,
+  ).run(ADMIN);
   if (licence) {
     db.prepare(
       `INSERT INTO branch_licence (id, licence_uid, territory, status, pushed_at, program_grants_json)
