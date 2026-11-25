@@ -4,7 +4,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
 import { addProspect, addSuppression, importProspects, marketingSummary, outreachSettings, prospectDetail, prospectPipeline,
-  ProspectsRefused, removeSuppression, saveOutreachSettings, saveProspectConsent, setProspectStatus, suppressionList } from '../services/growProspects';
+  ProspectsRefused, removeSuppression, saveOutreachSettings, saveProspectConsent, setProspectCountry, setProspectStatus, suppressionList } from '../services/growProspects';
 
 const router = new Hono<{ Bindings: Env }>();
 type C = Context<{Bindings:Env}>;
@@ -41,6 +41,7 @@ router.post('/import',handle(true,(c,u,p,b)=>importProspects(c.env,p,u,b)));
 router.post('/',handle(true,(c,u,p,b)=>addProspect(c.env,p,u,b),true));
 router.put('/:contactUid/consent/:channel',handle(true,(c,u,p,b)=>saveProspectConsent(c.env,p,u,(c.req.param('contactUid') || ''),(c.req.param('channel') || ''),b)));
 router.patch('/:contactUid/status',handle(true,(c,u,p,b)=>setProspectStatus(c.env,p,u,(c.req.param('contactUid') || ''),b)));
+router.patch('/:contactUid/country',handle(true,(c,u,p,b)=>setProspectCountry(c.env,p,u,(c.req.param('contactUid') || ''),b)));
 router.get('/:contactUid',handle(false,(c,_u,p)=>prospectDetail(c.env,p,(c.req.param('contactUid') || ''))));
 export const mount = { path: '/api/grow/prospects', router: router };
 export default router;

@@ -141,6 +141,7 @@ export const CONTACT_STRENGTHS = ['strong', 'warm', 'cool'] as const;
 const CONTACT_D551_COLUMNS = [
   ['strength', `TEXT CHECK (strength IS NULL OR strength IN ('strong', 'warm', 'cool'))`],
   ['organization', 'TEXT'],
+  ['country', 'TEXT'], // D8253: ISO 3166-1 alpha-2 of a prospect or customer; null = not tagged
 ] as const;
 
 const ENSURED = new WeakMap<object, boolean>();
@@ -167,6 +168,7 @@ async function ensureSchema(env: Env): Promise<void> {
        -- Strength and organisation (migration 386, D551).
        strength TEXT CHECK (strength IS NULL OR strength IN ('strong', 'warm', 'cool')),
        organization TEXT,
+       country TEXT,
        last_activity_at TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
