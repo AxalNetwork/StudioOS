@@ -22,17 +22,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { loadSchema } from './_schema_once.mjs';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import calendar from '../src/routes/calendar.ts';
 import { FEED_KINDS, PERSONAL_ONLY_KINDS, fetchUserEvents } from '../src/services/calendar.ts';
 import { ExternalReadError, MAX_PAGES, PAGE_SIZE, dedupeExternal, googleEvents, microsoftEvents } from '../src/services/calendar/externalReaders.ts';
 import { onAxalSessionCreated } from '../src/services/calendar/sync.ts';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const SECRET = 'synthetic-calendar-external-1485-'.repeat(3);
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
 const TITLE = 'Synthetic private board dinner';
@@ -41,8 +37,7 @@ const ICAL = 'ical-shared-uid@example.test';
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   db.exec(`INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES
     (1,'founder','Fixture founder','one@example.test',101,1),(2,'admin','Fixture admin','two@example.test',NULL,1);
    INSERT INTO calendar_events(id,uid,user_id,source,kind,external_uri,title,start_at,end_at,status) VALUES

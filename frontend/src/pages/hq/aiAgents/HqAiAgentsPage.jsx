@@ -13,6 +13,7 @@ import { AgentRadar } from '../../team/SkillParts';
 import { radarVector } from '../../team/skillsModel';
 import { DefinitionEditor } from './DefinitionEditor.jsx';
 import { ReleaseEvidence } from './ReleaseEvidence.jsx';
+import Registry, { RosterSwitch } from './Registry.jsx';
 import { definitionEditable } from './definitionModel';
 import {
   COMPANY_COLUMNS, FROM_AXAL_VC, lineageLine, NOT_RECORDED, REASON_MIN,
@@ -351,7 +352,14 @@ function RosterAgent({ agentKey }) {
 }
 
 function Roster({ view }) {
-  return view.sub === 'agent' ? <RosterAgent key={view.agent} agentKey={view.agent} /> : <RosterList />;
+  if (view.sub === 'agent') return <RosterAgent key={view.agent} agentKey={view.agent} />;
+  // D8080 part 2: Roster › Personas | Registry (owner Q1 = A on D4137-p4).
+  return (
+    <div className="space-y-4">
+      <RosterSwitch />
+      {view.sub === 'registry' || view.sub === 'registry-agent' ? <Registry view={view} /> : <RosterList />}
+    </div>
+  );
 }
 
 // ─── SA3 / SA4 / SA5 · Skills library ───────────────────────────────────────
