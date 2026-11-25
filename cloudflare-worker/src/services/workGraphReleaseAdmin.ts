@@ -34,6 +34,7 @@ import { drainReleaseEffects, releaseDeliveryEnabled, type ReleaseDrainResult } 
 import type { ReleaseDistributionChannels } from './workGraphReleaseDistribution';
 import type { DeliveryStatus } from './workGraphEffects';
 import { releaseAuthoritiesForScope, revokedReleaseUsers } from './workGraphReleaseAuthorities';
+import type { SwarmState } from './agents/swarmAdmission';
 
 /** The value of `WORK_GRAPH_RELEASE_ADMIN` that turns the routes on. Unset, or anything else, is off. */
 export const RELEASE_ADMIN_ON = 'on';
@@ -60,6 +61,7 @@ export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Objec
   queue_full: 'The tenant’s release outbox is full. Wait for the drain to catch up.',
   taken_down: 'A takedown covers this release or one of its pieces, so it cannot go out again.',
   not_published: 'Only a manifest this line has published can be re-pinned.',
+  render_unadmitted: 'A pinned render was not admitted and settled within its render budget by swarm admission, so this release cannot be approved or published. The release status names the reason.',
   is_head: 'That manifest is already what the line’s pointer names.',
   tombstoned: 'A pinned piece was tombstoned and cannot be re-pinned.',
   person_required: 'Only a person can do this.',
@@ -103,6 +105,13 @@ export const RELEASE_ADMIN_DEPS = {
    */
   revokedUsers: (env: Pick<Env, 'DB'>, scope: Scope): Promise<ReadonlySet<number>> =>
     revokedReleaseUsers(env, { tenantId: scope.tenantId, companyId: scope.companyId }),
+  /**
+   * Part 12 (D5585-p12): #5586's swarm admission state, which says whether each pinned render was admitted and settled
+   * within its reserve. No binding reaches the swarm's Durable Object yet (#5586 part 1 is unmounted), so this answers
+   * null, "not read": a manifest that pins a render is refused `render_unadmitted` (`admission_unverified`) until the
+   * swarm is wired. Replaceable in tests.
+   */
+  renderAdmissions: async (_env: Pick<Env, 'DB'>, _scope: Scope): Promise<SwarmState | null> => null,
 };
 
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
@@ -116,8 +125,9 @@ export function scopeFrom(tenant: unknown, company: unknown): Scope | null {
 
 /** The context a Super Admin acts in: the named scope, the authorities resolved for it and its revoked people. */
 export async function releaseAdminContext(env: Pick<Env, 'DB'>, scope: Scope): Promise<ReleaseContext> {
-  const [authorities, revokedUserIds] = await Promise.all([RELEASE_ADMIN_DEPS.authorities(env, scope), RELEASE_ADMIN_DEPS.revokedUsers(env, scope)]);
-  return { scope, authorities, revokedUserIds };
+  const [authorities, revokedUserIds, renderAdmissions] = await Promise.all([RELEASE_ADMIN_DEPS.authorities(env, scope),
+    RELEASE_ADMIN_DEPS.revokedUsers(env, scope), RELEASE_ADMIN_DEPS.renderAdmissions(env, scope)]);
+  return { scope, authorities, revokedUserIds, renderAdmissions };
 }
 
 export const listLimit = (v: unknown) => {
