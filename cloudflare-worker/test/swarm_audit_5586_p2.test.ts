@@ -66,7 +66,12 @@ test('the CHECK lists are swarmAdmission.ts\'s vocabulary', () => {
   const written = new Set([...SOURCE.matchAll(/no\('([a-z_]+)'/g), ...SOURCE.matchAll(/reasons\.push\('([a-z_]+)'\)/g), ...SOURCE.matchAll(/'revoke', 'applied', '([a-z_]+)'/g)].map(m => m[1]));
   for (const c of ['budget_unverified', 'budget_exhausted', 'storage_unverified', 'storage_quota_exhausted']) assert.ok(SOURCE.includes(`refuse('${c}'`), c);
   for (const c of written) assert.ok((SWARM_AUDIT_CODES as readonly string[]).includes(c), `${c} is missing from SWARM_AUDIT_CODES`);
-  const listed = (col: string) => [...(SQL.match(new RegExp(`${col} TEXT[^,]*?IN \\(([^)]*)\\)`, 's'))?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
+  const CHECK_LISTS = {
+    code: /code TEXT[^,]*?IN \(([^)]*)\)/s,
+    action: /action TEXT[^,]*?IN \(([^)]*)\)/s,
+    outcome: /outcome TEXT[^,]*?IN \(([^)]*)\)/s,
+  } as const;
+  const listed = (col: keyof typeof CHECK_LISTS) => [...(SQL.match(CHECK_LISTS[col])?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
   assert.deepEqual(listed('code'), [...SWARM_AUDIT_CODES]);
   assert.deepEqual(listed('action'), [...SWARM_AUDIT_ACTIONS]);
   assert.deepEqual(listed('outcome'), [...SWARM_AUDIT_OUTCOMES]);
