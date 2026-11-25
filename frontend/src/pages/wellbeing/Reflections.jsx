@@ -8,6 +8,8 @@
  *   ReflectionView  one period: the editor (every question optional, the draft kept on a failed save, a changed
  *                   copy refused and reloadable), its private history with Edit reflection and Delete, the month's
  *                   own summary of what was recorded, earlier check-ins, Export and the retention line.
+ *   FourWeeks       D7118 part 3 (WLM-03W): "Your last four weeks, in words" on This week, the member's own numbers
+ *                   for the four weeks ending this one; a blank week or question reads "no entry", never 0.
  *
  * Nothing here is scored, counted against the member or sent to a model. Days without an entry are left out.
  */
@@ -17,8 +19,8 @@ import { Lock } from 'lucide-react';
 import { wellbeingReflectionsApi } from '../../lib/api/wellbeingReflections';
 import { BTN, FIELD, ScoreDots } from './WellbeingParts';
 import {
-  LEFT_OUT, MONTH_PROMPTS, PRIVATE_LINE, QUESTIONS, RETENTION_LINE, SAVES_ONLY, TAB_WORDS, TEXT_MAX, WEEK_TOPICS,
-  deviceTimezone, draftEmpty, draftFrom, historyLabel, historyLine, historyNote, isChanged, monthName,
+  FOUR_WEEKS_FOOT, LEFT_OUT, MONTH_PROMPTS, PRIVATE_LINE, QUESTIONS, RETENTION_LINE, SAVES_ONLY, TAB_WORDS, TEXT_MAX,
+  WEEK_TOPICS, deviceTimezone, draftEmpty, draftFrom, fourWeekTable, historyLabel, historyLine, historyNote, isChanged, monthName,
   newRequestId, periodHref, periodLabel, periodState, saveBody, saveRefusal, summaryLines, toggleTopic,
 } from './reflectionsModel';
 
@@ -247,6 +249,59 @@ function ReflectionHistory({ cadence, timezone, version, onEdit, onDeleted }) {
   );
 }
 
+/** WLM-03W: the four weeks ending this one, in the member's own numbers. `table` is `fourWeekTable`'s. */
+export function FourWeeksTable({ table }) {
+  if (!table) return <p className="text-sm text-stone-600 dark:text-gray-400" data-testid="four-weeks-none">Nothing answered in the last four weeks.</p>;
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm" data-testid="four-weeks-table">
+          <thead>
+            <tr className="text-xs text-stone-500 dark:text-gray-400">
+              <th scope="col" className="py-1 pr-3 font-semibold">Question</th>
+              {table.columns.map((c) => <th key={c.start} scope="col" className="py-1 pr-3 font-semibold">{c.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((r) => (
+              <tr key={r.key} className="border-t border-stone-200 dark:border-gray-800" data-testid={`four-weeks-row-${r.key}`}>
+                <th scope="row" className="py-1.5 pr-3 font-semibold text-stone-900 dark:text-gray-100">{r.label}</th>
+                {r.cells.map((c, i) => (
+                  <td key={table.columns[i].start} className={`py-1.5 pr-3 ${c.empty ? 'text-xs text-stone-500 dark:text-gray-400' : 'font-mono text-stone-900 dark:text-gray-100'}`}>{c.text}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className={`${FIELD.note} mt-2`}>{FOUR_WEEKS_FOOT}</p>
+    </>
+  );
+}
+
+/** WLM-03W: one more read, the saved weeks, laid on the four week starts ending this one. A failed read says so. */
+function FourWeeks({ currentStart, version }) {
+  const [read, setRead] = useState({ state: 'loading' });
+  const load = useCallback(async () => {
+    setRead({ state: 'loading' });
+    try {
+      const v = await wellbeingReflectionsApi.history('week', 8);
+      setRead(Array.isArray(v?.reflections) ? { state: 'ok', value: v.reflections } : { state: 'unreadable' });
+    } catch { setRead({ state: 'unreadable' }); }
+  }, []);
+  useEffect(() => { load(); }, [load, version]);
+  return (
+    <section className={CARD} aria-labelledby="four-weeks" data-testid="four-weeks">
+      <h2 id="four-weeks" className="mb-2 text-[15px] font-bold text-stone-900 dark:text-gray-100">Your last four weeks, in words</h2>
+      {read.state === 'loading' ? <div className="h-16 animate-pulse rounded bg-stone-200 dark:bg-gray-800" /> : read.state !== 'ok' ? (
+        <div className="text-sm text-stone-700 dark:text-gray-300" role="alert" data-testid="four-weeks-unreadable">
+          Your last four weeks couldn’t be read. They are unchanged. <button type="button" className={BTN.ghost} onClick={load}>Retry</button>
+        </div>
+      ) : <FourWeeksTable table={fourWeekTable(currentStart, read.value)} />}
+    </section>
+  );
+}
+
 /** WLM-03M: what the member recorded in the month, counted only from what was written. */
 function MonthSummary({ month, version }) {
   const [read, setRead] = useState({ state: 'loading' });
@@ -387,6 +442,7 @@ export function ReflectionView({ cadence, read, timezone, onRetry, onChanged }) 
           {cadence === 'month' ? <MonthSummary month={slot.period_start.slice(0, 7)} version={version} /> : null}
           <ReflectionHistory cadence={cadence} timezone={timezone} version={version} onEdit={(r) => setEditing(r)}
             onDeleted={(r) => { if (editing?.uid === r.uid) setEditing(null); onChanged?.(); }} />
+          {cadence === 'week' ? <FourWeeks currentStart={slot.period_start} version={version} /> : null}
           {cadence === 'week' ? <EarlierCheckins /> : null}
           <section className={CARD} aria-labelledby="reflection-keep" data-testid="reflection-retention">
             <h2 id="reflection-keep" className="mb-1 text-[15px] font-bold text-stone-900 dark:text-gray-100">Keeping and removing</h2>
