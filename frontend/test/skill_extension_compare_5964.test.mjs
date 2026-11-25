@@ -71,7 +71,7 @@ const lineage = (over = {}) => ({
 });
 const extCard = (over = {}) => ({
   uid: EXT, scope: 'company', slug: 'sizing-ours', status: 'published', version: 2, author: '[Fixture Co]', ...MINE,
-  used_by: 1, updated_at: '2026-11-14T00:00:00Z', can_write: true, based_on: { skill_uid: HQ, version: 3 }, ...over,
+  used_by: 1, updated_at: '2026-11-14T00:00:00Z', can_write: true, based_on: { skill_uid: HQ, version: 3 }, draft_hash: 'd'.repeat(64), ...over,
 });
 const card = (raw) => fromWorkerSkill(raw);
 
@@ -136,7 +136,8 @@ test('tools narrow, never widen: a tool new in Axal\'s newest says it is not ava
 test('who acts: editors extend again (disabled with its reason while suspended); members and HQ read only', () => {
   const v = compareView(card(extCard()), lineage());
   assert.deepEqual(actionsFor(v, card(extCard())).extendAgain, { version: 5, disabled: false, why: null });
-  assert.deepEqual(actionsFor(v, card(extCard({ can_write: false }))), { editor: false, readOnly: 'member', extendAgain: null });
+  // #4538: a reader also gets no rebase.
+  assert.deepEqual(actionsFor(v, card(extCard({ can_write: false }))), { editor: false, readOnly: 'member', extendAgain: null, rebase: null });
   assert.equal(actionsFor(v, card(extCard({ can_write: false })), { hqAdmin: true }).readOnly, 'hq');
   const susp = compareView(card(extCard()), lineage({ base: { ...lineage().base, suspended: true } }));
   const a = actionsFor(susp, card(extCard()));
@@ -221,8 +222,9 @@ test('the page: conflicts first in a real table, markers in words, + / − lines
     assert.deepEqual(rows, ['compare-row-steps', 'compare-row-tools', 'compare-row-name', 'compare-row-purpose', 'compare-row-output_kind', 'compare-row-tags', 'compare-row-roles']);
     assert.equal(m.byTestId('compare-extend-again').length, 1);
     assert.match(m.text(), /Extend Axal v5 again…/);
-    assert.equal(m.props(m.byTestId('compare-rebase')[0])['aria-disabled'], 'true', 'rebase waits on #5965');
-    assert.match(t, /Not built yet · #5965/);
+    // #4538 (SK-20): Rebase is built; it opens the rebase sheet (skill_rebase_dialog_4538.test.mjs covers it).
+    assert.equal(m.props(m.byTestId('compare-rebase')[0])['aria-disabled'], undefined, 'rebase is offered to an editor');
+    assert.doesNotMatch(t, /Not built yet · #5965/);
     assert.match(t, /built on Axal v3/);
     assert.ok(m.net.seen.every((s) => s.key.startsWith('GET ')), 'reading the page writes nothing');
   } finally { await m.done(); }
