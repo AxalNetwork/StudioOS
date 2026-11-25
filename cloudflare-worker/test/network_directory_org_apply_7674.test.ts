@@ -13,7 +13,8 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 
 test.after(removeMigratedDatabases);
-const SECRET = 'synthetic-7674-apply-secret-'.repeat(3);
+// A fresh per-run signing key for the synthetic JWTs: no literal secret sits in the file.
+const SECRET = `${crypto.randomUUID()}${crypto.randomUUID()}`;
 const PATH = '/admin/organisation-apply';
 const T1 = '2026-11-20T10:00:00.000Z';
 const T2 = '2026-11-21T10:00:00.000Z';
