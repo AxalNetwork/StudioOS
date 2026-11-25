@@ -9,7 +9,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import decks from '../src/routes/decks.ts';
 import deckInvestorLinks from '../src/routes/deck_investor_links.ts';
@@ -18,12 +17,8 @@ import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts'
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { REVISIT_AFTER_HOURS, afterViewDraft, proposedStage, signalKinds, signalsForLinks } from '../src/services/raiseSignals.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
-  .sort((a, b) => migrationNumber(a) - migrationNumber(b) || a.localeCompare(b)).map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1568-only-not-a-real-credential'.repeat(2);
 const ASK_DECK = JSON.stringify([{ title: 'Problem' }, { title: 'Solution' }, { title: 'The ask', spec_id: 'ask' }]);
 const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 3_600_000).toISOString().slice(0, 19).replace('T', ' ');
@@ -39,8 +34,8 @@ async function shareToken(deckId: number): Promise<string> {
 }
 
 async function fixture(o: { prospect?: boolean; stage?: string } = {}) {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  // #8437: the schema is built once per run (_schema_once.mjs) and copied into a fresh database for each test.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true }));
   db.exec("INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (2, 'founder', 100, 'Synthetic founder', 'synthetic-2@example.invalid', 1, 'studio')");
   db.exec("INSERT INTO projects(id, name, founder_id) VALUES (1, 'Synthetic venture', 100)");
   db.prepare("INSERT INTO raise_prospects (id, uid, project_id, name, firm, stage, created_at, updated_at) VALUES (9, 'p9', 1, 'Ada Synthetic', 'Fund Synthetic', ?, datetime('now'), datetime('now'))").run(o.stage ?? 'to_contact');
