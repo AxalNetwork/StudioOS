@@ -19,7 +19,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
