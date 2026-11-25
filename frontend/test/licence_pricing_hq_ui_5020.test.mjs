@@ -268,7 +268,8 @@ async function mount(path, routePath, element) {
 const ok = (v) => () => Promise.resolve(v);
 const fail = (status) => () => Promise.reject(Object.assign(new Error('nope'), { status }));
 
-test('the catalogue screen: every market with its model, freshness and fees; Incomplete data filters', async () => {
+test('the catalogue screen: every market with its model, freshness and fees; Incomplete data filters', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse(TODAY) });
   // Mutations checked: the model line dropped; an unpriced market drawn as a fee; the filter not applied.
   const v = await mount('/admin/licences/pricing', '/admin/licences/pricing', h(PricingCatalogue, { api: { catalogue: ok(CATALOGUE), modelVersions: ok(VERSIONS) } }));
   try {
