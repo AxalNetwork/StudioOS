@@ -302,7 +302,8 @@ test('ensureLogSchema creates migration 493\'s columns on a fresh database, and 
     // In the CREATE's own order: columns added by the pre-493 path would land after `surface` in another order.
     // D1612 part D (#3954, migration 202611022313): the skill and pinned version a run used, last.
     // D5948: migration 202611150131's licence_uid follows skill_version.
-    assert.deepEqual(cols(fresh.db).slice(-12), ['surface', ...want, 'agent_id', 'skill_id', 'skill_version', 'licence_uid'], 'the fresh table did not get 493\'s, 712\'s, 202611022313\'s and 202611150131\'s columns from the CREATE');
+    // D8522: migration 202611250054's provider, request_id and tokens_reported follow licence_uid.
+    assert.deepEqual(cols(fresh.db).slice(-15), ['surface', ...want, 'agent_id', 'skill_id', 'skill_version', 'licence_uid', 'provider', 'request_id', 'tokens_reported'], 'the fresh table did not get 493\'s, 712\'s, 202611022313\'s, 202611150131\'s and 202611250054\'s columns from the CREATE');
     assert.ok(idx(fresh.db).includes('idx_ai_usage_user_page_created'));
     assert.equal(rows(fresh.db).length, 1);
   } finally { fresh.db.close(); }
@@ -312,7 +313,7 @@ test('ensureLogSchema creates migration 493\'s columns on a fresh database, and 
     old.db.exec('DROP TABLE ai_usage_logs');
     old.db.exec("CREATE TABLE ai_usage_logs(id INTEGER PRIMARY KEY,user_id INTEGER,task TEXT NOT NULL,model TEXT NOT NULL,latency_ms INTEGER DEFAULT 0,prompt_tokens INTEGER DEFAULT 0,completion_tokens INTEGER DEFAULT 0,est_cost_usd REAL DEFAULT 0,safety_score REAL,fallback_used INTEGER DEFAULT 0,cached INTEGER DEFAULT 0,refusal TEXT,surface TEXT,created_at TEXT DEFAULT(datetime('now')))");
     await run(old.env, { task: 'advisor_turn', userId: 0, text: 'x' });
-    for (const c of [...want, 'agent_id', 'skill_id', 'skill_version', 'licence_uid']) assert.ok(cols(old.db).includes(c), `the pre-493 table did not gain ${c}`);
+    for (const c of [...want, 'agent_id', 'skill_id', 'skill_version', 'licence_uid', 'provider', 'request_id', 'tokens_reported']) assert.ok(cols(old.db).includes(c), `the pre-493 table did not gain ${c}`);
     assert.ok(idx(old.db).includes('idx_ai_usage_user_page_created'));
     assert.equal(rows(old.db).length, 1, 'a run on a pre-493 table was not logged');
     assert.equal(rows(old.db)[0].charged_microusd, 0);

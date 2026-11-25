@@ -331,6 +331,14 @@ import { withGuard } from './_guard_stub.mjs';
 const usageInserts = (sql: string[], binds: unknown[][]) => sql
   .map((q, i) => ({ q, b: binds[i] }))
   .filter(({ q, b }) => /INSERT INTO ai_usage_logs/i.test(q) && Array.isArray(b) && b[1] === 'workspace_explain');
+// The value bound to the INSERT's `surface` column, found by its place in the column list
+// (D8522 added columns after it, so it is no longer the last bind).
+const surfaceOf = (row: { q: string; b: unknown[] }) => {
+  const names = (/INSERT INTO ai_usage_logs\s*\(([^)]*)\)/i.exec(row.q)?.[1] ?? '').split(',').map((c) => c.trim());
+  const at = names.indexOf('surface');
+  assert.ok(at >= 0, 'the INSERT does not name the surface column');
+  return row.b[at];
+};
 
 test('D404: the rail\'s page reaches the usage row as its surface', async () => {
   const { env, sql, binds } = envThatRecordsWrites();
@@ -342,7 +350,7 @@ test('D404: the rail\'s page reaches the usage row as its surface', async () => 
   const rows = usageInserts(sql, binds);
   assert.ok(rows.length >= 1, 'the run wrote no usage row at all — the fixture is not reaching recordUsage');
   assert.match(rows[0].q, /\bsurface\b/, 'the INSERT does not name the surface column');
-  assert.equal(rows[0].b.at(-1), '/validate/interviews', 'the page was not bound as the surface');
+  assert.equal(surfaceOf(rows[0]), '/validate/interviews', 'the page was not bound as the surface');
 });
 
 test('D404: a run with no page records NULL, never a guess', async () => {
@@ -350,7 +358,7 @@ test('D404: a run with no page records NULL, never a guess', async () => {
   await post({ workspace: 'Validate', coverage: ['4 interviews'] }, env, await bearer(env));
   const rows = usageInserts(sql, binds);
   assert.ok(rows.length >= 1);
-  assert.equal(rows[0].b.at(-1), null);
+  assert.equal(surfaceOf(rows[0]), null);
 });
 
 test('D404: only a plain app path is recorded', () => {
