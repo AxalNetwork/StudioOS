@@ -27,6 +27,7 @@
  */
 import type { Env } from '../types';
 import type { Scope } from './workGraphContracts';
+import { swarmSnapshotFor } from './agents/workspaceAdmissionClient';
 import type { Cost } from './workGraphRevisions';
 import { EFFECT_TARGETS, Meter, type ReleaseContext } from './workGraphReleases';
 import { RELEASE_RETRACT_KIND } from './workGraphReleaseDelivery';
@@ -91,6 +92,9 @@ export const RELEASE_DRAIN_LIMITS = Object.freeze({
 /** The effect kinds a release drain handles: one publish kind per target, and the retraction. */
 export const RELEASE_EFFECT_KINDS: readonly string[] = Object.freeze([...EFFECT_TARGETS.map((t) => `release_${t}`), RELEASE_RETRACT_KIND]);
 
+/** What the admin and reviewer contexts read: D1, and (part 13) the admission coordinator's binding, which may be absent. */
+export type ReleaseAdminEnv = Pick<Env, 'DB' | 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>;
+
 export const RELEASE_ADMIN_DEPS = {
   /**
    * Each person's release authorities in this scope, from the part 8 store (D5585-p8): the grants whose latest row is
@@ -107,11 +111,15 @@ export const RELEASE_ADMIN_DEPS = {
     revokedReleaseUsers(env, { tenantId: scope.tenantId, companyId: scope.companyId }),
   /**
    * Part 12 (D5585-p12): #5586's swarm admission state, which says whether each pinned render was admitted and settled
-   * within its reserve. No binding reaches the swarm's Durable Object yet (#5586 part 1 is unmounted), so this answers
-   * null, "not read": a manifest that pins a render is refused `render_unadmitted` (`admission_unverified`) until the
-   * swarm is wired. Replaceable in tests.
+   * within its reserve. Part 13 (D5585-p13) reads it from the `WorkspaceAdmission` coordinator (#5586 part 3) through
+   * `swarmSnapshotFor`, for the scope's own venture only. Any refusal (no binding, the object unreachable, a scope it
+   * cannot name) answers null, "not read", so a manifest that pins a render is refused `render_unadmitted`
+   * (`admission_unverified`), never treated as admitted. Replaceable in tests.
    */
-  renderAdmissions: async (_env: Pick<Env, 'DB'>, _scope: Scope): Promise<SwarmState | null> => null,
+  renderAdmissions: async (env: ReleaseAdminEnv, scope: Scope): Promise<SwarmState | null> => {
+    const r = await swarmSnapshotFor(env, scope);
+    return r.ok ? r.value : null;
+  },
 };
 
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
@@ -124,7 +132,7 @@ export function scopeFrom(tenant: unknown, company: unknown): Scope | null {
 }
 
 /** The context a Super Admin acts in: the named scope, the authorities resolved for it and its revoked people. */
-export async function releaseAdminContext(env: Pick<Env, 'DB'>, scope: Scope): Promise<ReleaseContext> {
+export async function releaseAdminContext(env: ReleaseAdminEnv, scope: Scope): Promise<ReleaseContext> {
   const [authorities, revokedUserIds, renderAdmissions] = await Promise.all([RELEASE_ADMIN_DEPS.authorities(env, scope),
     RELEASE_ADMIN_DEPS.revokedUsers(env, scope), RELEASE_ADMIN_DEPS.renderAdmissions(env, scope)]);
   return { scope, authorities, revokedUserIds, renderAdmissions };
