@@ -1,3 +1,6 @@
+// D5610: conservative affected-test selection, honest shadow scoring and
+// aggregate reporting; tests in `selectTests.test.mjs`.
+//
 // D5610: conservative affected-test selection and shadow scoring; no test is skipped by CI.
 export const FAN_IN_MAX = 500;
 export const STALE_COMMITS = 20;

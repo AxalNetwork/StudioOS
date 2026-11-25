@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * D6466 (#6466): a change that appends a section to a decision file already on
+ * its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a
+ * `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to
+ * write instead (D5615). Typo and link fixes pass; a file the change creates
+ * passes. On a pull request it reads the merge commit's first parent, which a
+ * shallow checkout still names; a base it cannot resolve exits 2, never a pass;
+ * a push says it skipped.
+ *
  * D6466 (#6466): a change may not append a section to a decision file that is
  * already on its base. D5615 says a later part of a multi-part issue writes its
  * own file, `decisions/D<n>-p<k>.md`, and `check-decision-ids.mjs` accepts that

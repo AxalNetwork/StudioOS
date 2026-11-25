@@ -1,4 +1,12 @@
 /**
+ * Which catalogue OAuth connectors have no client, read off `/api/health`'s
+ * `connectors_oauth` block (D751 T9): a false or null key is one WARN line and
+ * a run-summary row, a missing or malformed block fails, and strict mode
+ * (`SMOKE_CONNECTORS_STRICT=1`) fails on any WARN. Keys only: a value, or a key
+ * that is not a provider key, is never printed. Owned by
+ * `../check-spa-live.mjs`; tested in `frontend/test/spa_live_routes.test.mjs`
+ * beside the script's wiring.
+ *
  * D751 T9 (#1921) — which catalogue OAuth connectors have no client.
  *
  * `GET /api/health` carries `connectors_oauth: { <key>: true | false | null }`

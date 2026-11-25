@@ -1,4 +1,9 @@
 /**
+ * D5612 (#5612): what sound means for a generated module that is not committed
+ * — two renders of the same sources (one from each listing reversed) give the
+ * same bytes, and `git ls-files` does not list the output. Read by
+ * `routeRegistry.mjs`, `apiModules.mjs` and `../build-skill-library.mjs`.
+ *
  * D5612 (#5612) — what "sound" means for a generated module that is NOT
  * committed: the route registry, the API index and the skill library.
  *

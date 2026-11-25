@@ -1,3 +1,6 @@
+// D5613: validate and merge per-entry JSON maps and rewrite only changed files;
+// tested in `splitLedger.test.mjs`.
+//
 // D5613: stable per-entry ledger files; duplicate keys and misplaced entries fail closed.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';

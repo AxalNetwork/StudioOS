@@ -82,6 +82,21 @@ export function stripePathOf(path: string): string {
   return bare.length > 1 ? bare.replace(/\/+$/, '') : bare;
 }
 
+/**
+ * D8510 (#8510): the Stripe API version every platform call names. Unset
+ * (null) until the owner reads the account's default version in Stripe
+ * Workbench and posts it on #8510; while unset no `Stripe-Version` header is
+ * sent, which is the behaviour before D8510. Never set to a guess: the
+ * value, the invoice fixtures (`test/stripe_api_version_8510.test.ts`) and
+ * the webhook destination's version move together in one reviewed change.
+ */
+export const STRIPE_API_VERSION: string | null = null;
+
+/** The version header for `version`, or none when it is unset. Pure. */
+export function stripeVersionHeaders(version: string | null = STRIPE_API_VERSION): Record<string, string> {
+  return version ? { 'Stripe-Version': version } : {};
+}
+
 export async function stripeCall<T>(
   env: Env,
   path: string,
@@ -108,6 +123,7 @@ export async function stripeCall<T>(
   const params = new URLSearchParams(body);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${key}`,
+    ...stripeVersionHeaders(),
   };
   // Stripe replays the original response for 24h when the same Idempotency-Key
   // recurs — protects money-movement calls (e.g. /refunds) from double-submits
@@ -2240,7 +2256,9 @@ async function handleStripeEvent(
         // invoice's subscription takes Stripe's status when Stripe says it is
         // live. Never fails the webhook.
         const { repairIncompleteFromStripe } = await import('../services/planSubscription');
-        await repairIncompleteFromStripe(env, obj.subscription);
+        // D8510: the subscription from either invoice shape (pre-Basil or Basil).
+        const { invoiceSubscriptionId } = await import('../services/stripeInvoiceShape');
+        await repairIncompleteFromStripe(env, invoiceSubscriptionId(obj));
         // D1274: a subscription's promo redemption, from its first paid invoice.
         const { recordInvoiceRedemption } = await import('../services/promoUsage');
         await recordInvoiceRedemption(env, obj);

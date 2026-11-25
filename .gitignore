@@ -140,6 +140,9 @@ documentation/architecture/PAGE_INVENTORY.md
 documentation/architecture/AUTH_INVENTORY.json
 documentation/architecture/STRIPE_IDEMPOTENCY_INVENTORY.json
 
+# D8526: the company-scope inventory is build output; `--check` in test:guards checks its ledger.
+documentation/architecture/COMPANY_SCOPE_INVENTORY.json
+
 # D5612 (#5612): three generated modules are build output, never committed.
 # `node scripts/build-generated.mjs` writes them; every build, typecheck and
 # test runs it first. Each generator's `--check` fails if one is tracked again.

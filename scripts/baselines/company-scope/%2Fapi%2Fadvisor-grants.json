@@ -1,0 +1,23 @@
+{
+  "DELETE /api/advisor-grants/:projectUid/:grantUid": {
+    "kind": "target"
+  },
+  "DELETE /api/advisor-grants/:projectUid/documents/:shareUid": {
+    "kind": "target"
+  },
+  "GET /api/advisor-grants/:projectUid": {
+    "kind": "target"
+  },
+  "GET /api/advisor-grants/:projectUid/access-log": {
+    "kind": "target"
+  },
+  "GET /api/advisor-grants/:projectUid/documents": {
+    "kind": "target"
+  },
+  "POST /api/advisor-grants/:projectUid": {
+    "kind": "target"
+  },
+  "POST /api/advisor-grants/:projectUid/documents": {
+    "kind": "target"
+  }
+}

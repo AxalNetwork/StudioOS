@@ -195,6 +195,8 @@ function FilterCard({ filter, onFilter, people, shown, total, row }) {
   );
 }
 
+const SECTION_HEADING_HEIGHT = 26;
+const DEFAULT_SECTION = 'Main deck';
 export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move, onAdd, onCardAction, orientation = 'column', theme = null, people = null }) {
   // D1571 (#3818): each card's title is the deck's words, so its thumbnail carries the deck's language and direction.
   const words = langAttrs(theme);
@@ -226,6 +228,8 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
   const shown = visible.slice(0, limit);
   // D1545 (#3788): the column strip virtualises past VIRTUALIZE_AT cards; the row stays one scrolling row.
   const virtual = !row && shown.length >= VIRTUALIZE_AT;
+  const sectionHeads = new Set(shown.filter((v,n)=>n===0 || (shown[n-1].card?.section||DEFAULT_SECTION)!==(v.card?.section||DEFAULT_SECTION)).map(v=>v.index));
+  const sectionHeight = (v)=>!row&&sectionHeads.has(v.index)?SECTION_HEADING_HEIGHT:0;
   const Tag = virtual ? 'div' : 'li';
   const renderCard = ({ card: c, index: i }, at = null) => (
       // D1500: keyed on the card's uid, so React keeps each card's own row through a reorder.
@@ -236,6 +240,7 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
         onDragStart={() => setDrag(i)}
         onDragOver={(e) => { if (drag != null) e.preventDefault(); }}
         onDrop={() => { if (drag != null && drag !== i) move(drag, i); setDrag(null); }}>
+        {!row && sectionHeads.has(i) ? <h3 style={{height:SECTION_HEADING_HEIGHT}} className="m-0 flex items-center px-1 font-mono text-[10px] font-bold uppercase text-axal-muted dark:text-gray-400" data-testid="pitch-card-section">{c?.section || DEFAULT_SECTION}</h3> : null}
         <button type="button"
           className={`flex w-full flex-col gap-1 rounded-[9px] border p-1.5 text-start text-[12px] ${i === sel ? 'border-axal-violet bg-axal-lavender font-bold text-axal-violet dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-300' : 'border-transparent text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
           aria-current={i === sel ? 'true' : undefined}
@@ -286,8 +291,8 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
       aria-label="Cards" data-orientation={orientation} data-testid="pitch-editor-cards">
       {showFilter ? <FilterCard filter={filter} onFilter={setFilter} people={people} shown={visible.length} total={cards.length} row={row} /> : null}
       {virtual ? (
-        <VirtualList items={shown} threshold={0} height={Math.min(720, shown.reduce((h, v) => h + cardHeight(v.card, tracked) + 6, 0))}
-          itemHeight={(n) => cardHeight(shown[n]?.card, tracked) + 6} ariaLabel="Cards" className="min-w-0" testId="pitch-editor-cards-list"
+        <VirtualList items={shown} threshold={0} height={Math.min(720, shown.reduce((h, v) => h + cardHeight(v.card, tracked) + sectionHeight(v) + 6, 0))}
+          itemHeight={(n) => cardHeight(shown[n]?.card, tracked) + sectionHeight(shown[n]) + 6} ariaLabel="Cards" className="min-w-0" testId="pitch-editor-cards-list"
           virtualRow={(v, n, style, aria) => renderCard(v, { style, aria })}>
           {() => null}
         </VirtualList>

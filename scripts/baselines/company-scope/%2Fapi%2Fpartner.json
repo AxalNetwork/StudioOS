@@ -1,0 +1,68 @@
+{
+  "DELETE /api/partner/pipeline/leads/:needId/draft": {
+    "kind": "target"
+  },
+  "DELETE /api/partner/pipeline/leads/:needId/pass": {
+    "kind": "target"
+  },
+  "DELETE /api/partner/pipeline/negotiation-terms/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/partner/pipeline/retainers/:engagementId": {
+    "kind": "target"
+  },
+  "DELETE /api/partner/pipeline/retainers/:engagementId/usage/:period": {
+    "kind": "target"
+  },
+  "GET /api/partner/pipeline/activity": {
+    "kind": "filter"
+  },
+  "GET /api/partner/pipeline/leads": {
+    "kind": "filter"
+  },
+  "GET /api/partner/pipeline/leads/:needId/draft": {
+    "kind": "target"
+  },
+  "GET /api/partner/pipeline/negotiations": {
+    "kind": "filter"
+  },
+  "GET /api/partner/pipeline/proposals": {
+    "kind": "filter"
+  },
+  "GET /api/partner/pipeline/retainers": {
+    "kind": "filter"
+  },
+  "PATCH /api/partner/pipeline/negotiation-terms/:id": {
+    "kind": "target"
+  },
+  "POST /api/partner/pipeline/leads/:needId/pass": {
+    "kind": "target"
+  },
+  "POST /api/partner/pipeline/leads/rank": {
+    "kind": "target"
+  },
+  "POST /api/partner/pipeline/negotiations/:quoteId/terms": {
+    "kind": "target"
+  },
+  "POST /api/partner/pipeline/proposals/:quoteId/versions": {
+    "kind": "target"
+  },
+  "PUT /api/partner/pipeline/leads/:needId/draft": {
+    "kind": "target"
+  },
+  "PUT /api/partner/pipeline/negotiations/:quoteId": {
+    "kind": "target"
+  },
+  "PUT /api/partner/pipeline/negotiations/wip-limits/:stage": {
+    "kind": "target"
+  },
+  "PUT /api/partner/pipeline/proposals/:quoteId/outcome": {
+    "kind": "target"
+  },
+  "PUT /api/partner/pipeline/retainers/:engagementId": {
+    "kind": "target"
+  },
+  "PUT /api/partner/pipeline/retainers/:engagementId/usage/:period": {
+    "kind": "target"
+  }
+}

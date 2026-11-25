@@ -1,4 +1,12 @@
 /**
+ * The RPC surface between HQ and a branch, read off the source (D207, D209):
+ * which methods each entrypoint class declares and takes, and which of them
+ * anything in the Worker calls across the tier boundary. Read as text, because
+ * `cloudflare-worker/src/rpc/index.ts` imports a module only the Workers
+ * runtime has. Two readers: `rpcEntrypoints.test.mjs` and
+ * `cloudflare-worker/test/topology_d209.test.ts`, which holds HQ's Topology
+ * page and a branch's S14 to the same facts.
+ *
  * The RPC surface between HQ and a branch, read off the source (D207, D209).
  *
  * WHAT THIS DECIDES. Which methods each entrypoint class DECLARES, what each
