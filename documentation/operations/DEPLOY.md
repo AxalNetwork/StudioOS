@@ -327,6 +327,50 @@ column, or touches only a table the same release creates) or **`manual`**
 manual). It is report-only: today the operator still decides, and a `manual`
 release needs the compatibility check above before any rollback.
 
+### 3.1 The window between the two writes is rehearsed on the pull request (D8532)
+
+The release applies the D1 migrations and then publishes. If the publish
+fails, the previous Worker serves the migrated schema until a retry or a
+forward fix lands; a rollback puts it in the same place. The `release-window`
+job of `release-rehearsal.yml` runs that window before merge, on every pull
+request that changes a migration, the Worker, `wrangler.toml` or the deploy
+workflow: locally, over synthetic data, with no Cloudflare account.
+
+```bash
+node scripts/release-window-rehearsal.mjs --base origin/main --out /tmp/release-window
+# locally, reusing this checkout's Worker dependencies for the base tree:
+node scripts/release-window-rehearsal.mjs --base origin/main --out /tmp/release-window --base-deps link
+```
+
+1. The **base** commit's schema (its baseline and migrations, every file in the
+   ledger), seeded by the base Worker: an account on a paid plan with a TOTP
+   sign-in, a free account holding an access grant to a project, an outsider,
+   and a hashed SPA asset in the ASSETS stub.
+2. The candidate's pending migrations, planned and recorded as `migrate-d1.mjs`
+   does, each file as one transaction (§4c).
+3. **Publish stopped.** The base commit's Worker answers a fixed set of
+   requests on the migrated database (sign-in and `/api/auth/me`, the paid
+   and free answers of the plan gate, the granted and refused project read,
+   a hashed asset and a missing one), and each must equal its answer before
+   the migration. A difference means the release needs manual recovery.
+4. **Retry.** The ledger-driven re-run must plan nothing. Each pending file is
+   replayed once as if its ledger row had been lost: it must refuse and roll
+   back (the runner then stops and names it, §4) or change nothing; a file
+   that changes rows or schema a second time fails. Then the candidate Worker
+   on that database must answer exactly as it does on a clean build of the
+   candidate schema, and both ledgers must hold the same files and checksums.
+5. A migration the rollback classifier calls `manual`, or any release whose
+   step 3 differed, must name its forward fix in the file
+   (`-- forward-fix: <path>.sql`, a SQL file in the repository or another
+   pending migration), and step 4 runs it.
+
+Durable Object migrations are reported **not rehearsed**, with the reason
+(they need workerd with Durable Objects bound), and do not fail the run. The
+report (JSON and Markdown in the job's artifact and summary) names the base
+SHA, the candidate SHA and every pending file with its checksum, so a
+release's evidence can cite the rehearsal of the commit it ships. It
+rehearses; it does not gate the deploy.
+
 ---
 
 ## 4. If a migration fails
