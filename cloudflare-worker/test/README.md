@@ -424,3 +424,4 @@ catalogue version only in the fixture.
 `research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
 
 `formation_hq_actions_6698.test.ts` exercises HQ authorization, evidence gates, atomic conflict refusal, case ownership, audit attribution and the Formation Approvals lane against the migrated schema.
+| `formation_rules_6704.test.ts` | D6704: deterministic fixture comparisons, append-only suggestions/choices/memos, flag and structure gates. |

@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * Migration 403: Research directory companies from Wikidata's SPARQL endpoint,
+ * chosen by the crosswalk's industries (D533) and by country, round-robin
+ * across industries to a cap, figures left NULL (D537). Its functions are pure
+ * and exported, tested on fixtures in
+ * `cloudflare-worker/test/research_wikidata_companies_d537.test.mjs`. Run it
+ * with `node --experimental-strip-types`, because it imports the crosswalk's
+ * TypeScript.
+ *
  * Wikidata → migration 403: thousands more companies for the Research
  * directory, by sector and country (D537, issue #1229).
  *

@@ -1,5 +1,18 @@
 #!/usr/bin/env node
 /**
+ * D1518 (#3770): the element eval and the deck benchmark, on
+ * `lib/deckEval.mjs`. Run through `cloudflare-worker/test/_ts-loader.mjs`,
+ * since it reads the Worker's TypeScript. `--plan` (default) lists each golden
+ * brief with its element's job and the models the rail suggests, calling
+ * nothing. `--benchmark [--write]` runs the zero-edit acceptance arm on the
+ * three sample ventures and refreshes
+ * `documentation/product/DECK_BENCHMARK.md`; it exits 1 while any venture fails
+ * the gate (#3768's). `--live` is refused (exit 2) until the owner sets the
+ * evaluation cap (decision N) and a staging URL, and it never targets
+ * production. Not in `test:guards`:
+ * `cloudflare-worker/test/deck_eval_d1518.test.ts` covers its helpers and holds
+ * the benchmark table to the arm.
+ *
  * D1518 (#3770, deck v2 A7) — the element eval and the deck benchmark, one
  * harness (`scripts/lib/deckEval.mjs`). It reads the Worker's TypeScript, so
  * run it through the test loader:

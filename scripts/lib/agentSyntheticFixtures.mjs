@@ -1,4 +1,9 @@
 /**
+ * #4566: synthetic-only seed, cleanup and residual statements for agent
+ * execution validation, inside fixed ceilings. Owned by
+ * `../agent-validation-fixtures.mjs` and
+ * `cloudflare-worker/test/agent_execution_validation_4566.test.ts`.
+ *
  * #4566 (Agent capacity A0) — synthetic-only fixtures for agent execution
  * validation: seed and clean up founders, users, companies, projects,
  * agents and tasks for ONE run id, with nothing of any real tenant in them.

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// D1364: stamp the latest retention entry only after successful deployment,
+// before caching it.
+//
 // D1364: invoked only after a successful deploy, before its assets are cached.
 import fs from 'node:fs';
 import { recordAssetDeployment } from './lib/assetRetention.mjs';

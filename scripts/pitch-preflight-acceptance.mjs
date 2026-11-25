@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #3661 (D1370): "Check before you send" on the defective synthetic deck in a
+ * real browser (the pre-installed Playwright Chromium, the built stylesheet):
+ * measured clipping, PF3's overlays, the export gate, keyboard order and
+ * accessible names, at desktop and phone widths, light and dark. Bundles
+ * `pitch-preflight-acceptance.entry.jsx` (the product's own preflight code)
+ * with esbuild. Writes screenshots, a results file and a pass / fail matrix.
+ * **Exits 2 and verifies nothing without a build or a browser.** See
+ * `documentation/operations/PITCH_ACCEPTANCE.md`.
+ *
  * #3661 (D1370) — the preflight acceptance run, in a real browser. It bundles
  * `scripts/pitch-preflight-acceptance.entry.jsx` (the product's own preflight
  * code on the deliberately defective synthetic deck,

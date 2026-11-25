@@ -1,3 +1,7 @@
+/**
+ * D1364: the 72-hour window, protected floor, whole-generation cap, legacy
+ * grace and post-deploy timestamp CLI.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

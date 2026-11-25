@@ -1,3 +1,7 @@
+/**
+ * D5339's import-graph, reference-allowlist and assistant-mount rules, shared
+ * by the guard and its synthetic-tree tests.
+ */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 

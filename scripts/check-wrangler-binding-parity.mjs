@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * A binding added to one `wrangler.toml` table but not the other — the worker
+ * then boots without it in production only.
+ *
  * Fails the build when a binding exists at wrangler.toml's top level but not
  * under `[env.production]`.
  *

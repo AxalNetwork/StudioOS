@@ -1,0 +1,17 @@
+{
+  "GET /api/advisory/advisors": {
+    "kind": "filter"
+  },
+  "POST /api/advisory/advisors/:id/archive": {
+    "kind": "target"
+  },
+  "POST /api/advisory/advisors/:id/restore": {
+    "kind": "target"
+  },
+  "PUT /api/advisory/advisors/:id": {
+    "kind": "target"
+  },
+  "PUT /api/advisory/advisors/:id/assignments": {
+    "kind": "target"
+  }
+}

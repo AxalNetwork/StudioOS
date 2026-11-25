@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * Opens the PR carrying the new registry entry and HQ's `BRANCH_<CODE>` service
+ * binding, written into **both** tables of `wrangler.toml` (Wrangler v2 does
+ * not inherit into `[env.production]`). A PR rather than a push because the
+ * committed toml is the deployed truth the apex guards read. Idempotent: a
+ * config already naming the binding is returned unchanged.
+ *
  * Open the PR that gives HQ its binding to a freshly provisioned branch (D.7).
  *
  * WHY A PR AND NOT A PUSH. The committed `wrangler.toml` is the deployed

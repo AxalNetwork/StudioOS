@@ -1,0 +1,5 @@
+{
+  "POST /api/capital/calls/:id/pay": {
+    "kind": "target"
+  }
+}
