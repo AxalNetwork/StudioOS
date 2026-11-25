@@ -232,7 +232,10 @@ funds.get('/lp-portal', async (c) => {
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {
     const lpDists = distRows.filter((d: any) => d.fund_id === lp.fund_id);
-    const distSumDollars = lpDists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
+    // D8534: only a paid distribution counts. A pending row is the split the
+    // job computed, not money that reached the LP, so DPI and TVPI leave it out.
+    const distSumDollars = lpDists.filter((d: any) => d.status === 'paid')
+      .reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
     const invested = Number(lp.invested_amount || 0);
     const returns = Number(lp.returns || 0);
     // Nothing paid in, no multiple: null, not 0 (D372). A TVPI of 0.00× says
@@ -972,7 +975,9 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 
   // Same arithmetic as /lp-portal — kept identical on purpose so the GP's copy
   // of a statement and the LP's own copy can never disagree.
-  const distSumDollars = dists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
+  // D8534: paid distributions only, as on the LP's portal.
+  const distSumDollars = dists.filter((d: any) => d.status === 'paid')
+    .reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
   const invested = Number(lp.invested_amount || 0);
   const returns = Number(lp.returns || 0);
   // Null with nothing paid in, as the LP's own portal says (D372).
@@ -1646,9 +1651,8 @@ funds.post('/:id/distributions/preview', async (c) => {
 
 funds.post('/distributions/:id/mark-paid', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  // Atomic: only credit the LP if we successfully transitioned pending → paid.
-  // We fetch the row first to know the LP/amount, then run both writes in a batch
-  // gated on a conditional UPDATE so a concurrent caller can't double-credit.
+  // Only one caller moves the row from pending to paid: the UPDATE is conditional on
+  // `status = 'pending'`, so a concurrent caller gets 409.
   const row = await c.env.DB.prepare(
     // fund_id joins the projection so ownership can be resolved: the path
     // parameter here identifies a DISTRIBUTION, not a fund, and marking one
@@ -1663,22 +1667,15 @@ funds.post('/distributions/:id/mark-paid', async (c) => {
   await assertFundAct(c, gp, 'distribution.mark_paid');
   if (row.status !== 'pending') return c.json({ error: 'already settled' }, 409);
 
-  const dollars = row.amount_cents / 100;
-  const [updRes, _lpRes] = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `UPDATE fund_distributions
-          SET status = 'paid', distributed_at = datetime('now')
-        WHERE id = ? AND status = 'pending'`
-    ).bind(id),
-    c.env.DB.prepare(
-      `UPDATE limited_partners
-          SET returns = returns + ?, updated_at = datetime('now')
-        WHERE id = ?
-          AND EXISTS (SELECT 1 FROM fund_distributions WHERE id = ? AND status = 'pending')`
-    ).bind(dollars, row.lp_id, id),
-  ]);
-  // If the conditional UPDATE didn't fire, no LP credit happened either.
-  // @ts-ignore — D1 result shape: meta.changes
+  // D8534 (owner answer, 2026-11-25): one conditional write. A second statement here once credited
+  // `limited_partners.returns`, but it was gated on the row still being pending after this UPDATE had made it paid,
+  // so it never fired; making it fire would count the payout twice, because DPI and TVPI already add paid
+  // distributions to `returns`. The paid row is the record of the payout.
+  const updRes = await c.env.DB.prepare(
+    `UPDATE fund_distributions
+        SET status = 'paid', distributed_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`
+  ).bind(id).run();
   const changed = (updRes as any)?.meta?.changes ?? 0;
   if (!changed) return c.json({ error: 'lost race; already settled' }, 409);
   // D714 decision 4: mark-paid had no activity row, for any caller.
