@@ -739,3 +739,282 @@ test('D7909 Linux receipts reserve result delivery inside the existing 26-minute
  f.state.now=accepted+1_589_999;f.outcomes.set(a.childRunId!,f.observation(a,{startedAt:accepted+1,completedAt:f.state.now,cleanupConfirmed:true,exportComplete:true,executionOutcome:'completed'}));
  await c.tick();assert.notEqual(f.attempt(a.logicalShard).phase,'passed');assert.notEqual(c.status(input().requestId)?.status,'success');
 });
+
+// #8626: cross-candidate pickup. A merge candidate keeps at most maxExternalWorkerShards first-attempt Worker
+// shards unstarted for a busy Linux runner, for at most mergePickupHoldMs; hosted dispatch is never limited.
+const HOLD = 4 * 60_000;
+const merge = (n: number): CiSubmission => ({ ...input(), event: 'merge_group', planArtifactId: null, queueBaseSha: 'd'.repeat(40),
+  requestId: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, parentRunId: 100 + n, sourceSha: n.toString(16).padStart(40, '0') });
+type Fixture = ReturnType<typeof fixture>;
+function linuxPool(f: Fixture, ids = [2, 3]) {
+  const runners = ids.map(id => ({ id, profile: 'linux-x64' as const, groupId: 77, online: true, busy: false, draining: false }));
+  const pool = { runners, reads: 0, down: false, stale: false };
+  f.ports.inventory = async () => {
+    pool.reads++; if (pool.down) throw new Error('unavailable');
+    return { observedAt: pool.stale ? f.state.now - CI_CAPACITY_BUDGETS.inventoryMaxAgeMs - 1 : f.state.now, complete: true, runners: structuredClone(runners) };
+  };
+  return pool;
+}
+const actives = (f: Fixture, s: CiSubmission) => f.get(s.requestId).shards.map(activeAttempt);
+const sent = (f: Fixture, s: CiSubmission) => f.dispatched.filter(a => a.requestId === s.requestId);
+const started = (f: Fixture, a: CiAttempt) => f.outcomes.set(a.childRunId!, f.observation(a, { status: 'in_progress', conclusion: null,
+  jobConclusion: null, testStep: 'unknown', completedAt: null, cleanupConfirmed: false, startedAt: f.state.now }));
+const passed = (f: Fixture, a: CiAttempt) => f.outcomes.set(a.childRunId!, f.observation(a, { startedAt: Math.min(f.state.now, a.startDeadline), completedAt: f.state.now }));
+/** A is admitted on idle runners, takes both, and is seen running; the inventory then shows both runners busy. */
+async function linuxBusyWithA(f: Fixture, pool: ReturnType<typeof linuxPool>, c: CiCapacity) {
+  const a = merge(1);
+  await c.submit(a); await c.tick();
+  assert.deepEqual(sent(f, a).map(x => x.profile).sort(), ['hosted', 'hosted', 'hosted', 'hosted', 'linux-x64', 'linux-x64']);
+  for (const x of actives(f, a)) started(f, x);
+  for (const r of pool.runners) r.busy = true;
+  await c.tick();
+  assert.equal(actives(f, a).every(x => x.phase === 'running'), true);
+  return a;
+}
+/** Everything that was sent passes; a Linux runner is idle again once its attempt has ended. */
+async function finishAll(f: Fixture, pool: ReturnType<typeof linuxPool>, c: CiCapacity, rounds = 6) {
+  f.state.prerequisites = input().prerequisites.map(name => ({ name, conclusion: 'success' as const }));
+  for (let round = 0; round < rounds; round++) {
+    for (const request of f.store.list()) for (const x of request.shards.map(activeAttempt)) {
+      if (x.childRunId !== null && !['passed', 'failed', 'cancelled'].includes(x.phase)) passed(f, x);
+    }
+    for (const r of pool.runners) r.busy = false;
+    f.state.now += 1000; await c.tick();
+  }
+}
+
+test('#8626 a freed Linux runner starts a waiting shard of an already-admitted candidate, after a restart, with no new submission', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const first = f.create(), a = await linuxBusyWithA(f, pool, first), b = merge(2);
+  await first.submit(b); await first.tick();
+  // B starts its hosted work at once and keeps two shards unstarted for the two busy runners.
+  assert.deepEqual(sent(f, b).map(x => `${x.logicalShard}:${x.profile}`), ['worker-3-of-6:hosted', 'worker-4-of-6:hosted', 'worker-5-of-6:hosted', 'worker-6-of-6:hosted']);
+  assert.deepEqual(actives(f, b).filter(x => x.phase === 'reserved').map(x => x.logicalShard), ['worker-1-of-6', 'worker-2-of-6']);
+  const submissions = f.store.list().length;
+  // One of A's Linux shards finishes: its runner is idle.
+  const done = actives(f, a).find(x => x.profile === 'linux-x64')!;
+  passed(f, done); pool.runners[0].busy = false;
+  await first.reconcileChild(a.requestId, done.childRunId!);
+  const restarted = f.create();
+  await restarted.tick();
+  assert.deepEqual(sent(f, b).slice(4).map(x => `${x.logicalShard}:${x.profile}`), ['worker-1-of-6:linux-x64']);
+  assert.equal(sent(f, b)[4].sourceSha, b.sourceSha);
+  assert.equal(sent(f, b)[4].queueBaseSha, b.queueBaseSha);
+  assert.equal(f.store.list().length, submissions, 'no new submission');
+  // The other runner is still busy: the same tick repeated sends nothing more and cancels nothing.
+  await restarted.tick(); await f.create().tick();
+  assert.equal(sent(f, b).length, 5);
+  assert.equal(f.cancelled.length, 0);
+  await finishAll(f, pool, restarted);
+  for (const s of [a, b]) {
+    assert.equal(restarted.status(s.requestId)?.status, 'success');
+    // One authoritative result per logical shard, on the candidate's own SHA.
+    assert.deepEqual(sent(f, s).map(x => x.logicalShard).sort(), [...s.shards].sort());
+    assert.equal(sent(f, s).every(x => x.sourceSha === s.sourceSha && x.generation === 1), true);
+    assert.equal(actives(f, s).every(x => x.phase === 'passed' && x.sourceSha === s.sourceSha), true);
+  }
+  assert.equal(actives(f, b).filter(x => x.profile === 'linux-x64').length, 2);
+});
+
+test('#8626 a waiting shard goes to hosted with a fresh lease when its hold ends, and a coordinator outage cannot cancel it', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const c = f.create(); await linuxBusyWithA(f, pool, c);
+  const b = merge(2); await c.submit(b); await c.tick();
+  const accepted = f.get(b.requestId).acceptedAt;
+  for (const x of actives(f, b).filter(x => x.childRunId !== null)) started(f, x);
+  f.state.now = accepted + HOLD - 1; await c.tick();
+  assert.equal(sent(f, b).length, 4, 'still inside the hold: Linux stays busy and the two shards wait');
+  f.state.now = accepted + HOLD; await c.tick();
+  const late = sent(f, b).slice(4);
+  assert.deepEqual(late.map(x => `${x.logicalShard}:${x.profile}`), ['worker-1-of-6:hosted', 'worker-2-of-6:hosted']);
+  // The lease is issued when the shard is sent, so it has the whole hosted start budget, not what the wait left.
+  assert.equal(late.every(x => x.startDeadline === accepted + HOLD + CI_CAPACITY_BUDGETS.hostedStartMs), true);
+  assert.equal(actives(f, b).every(x => x.phase !== 'cancelled'), true);
+  // A second candidate whose coordinator is away for longer than the hosted start budget while it waits.
+  const d = merge(3); await c.submit(d); await c.tick();
+  assert.equal(actives(f, d).filter(x => x.phase === 'reserved').length, 2);
+  f.state.now = f.get(d.requestId).acceptedAt + CI_CAPACITY_BUDGETS.hostedStartMs + 60_000;
+  await f.create().tick();
+  const afterOutage = actives(f, d).filter(x => ['worker-1-of-6', 'worker-2-of-6'].includes(x.logicalShard));
+  assert.deepEqual(afterOutage.map(x => `${x.profile}:${x.phase}`), ['hosted:queued', 'hosted:queued']);
+  assert.equal(afterOutage.every(x => x.startDeadline === f.state.now + CI_CAPACITY_BUDGETS.hostedStartMs), true);
+});
+
+test('#8626 hosted work is never held when Linux is offline, draining, unreadable, stale or absent', async t => {
+  const cases: [string, (pool: ReturnType<typeof linuxPool>) => void][] = [
+    ['offline', pool => { for (const r of pool.runners) r.online = false; }],
+    ['draining', pool => { for (const r of pool.runners) r.draining = true; }],
+    ['unreadable', pool => { pool.down = true; }],
+    ['stale', pool => { pool.stale = true; }],
+    ['absent', pool => { pool.runners.length = 0; }],
+  ];
+  for (const [name, change] of cases) {
+    const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f); change(pool);
+    const c = f.create();
+    for (const n of [1, 2, 3]) { await c.submit(merge(n)); await c.tick(); }
+    assert.equal(f.dispatched.length, 18, `${name}: every shard of three candidates is sent on its first tick`);
+    assert.equal(f.dispatched.every(x => x.profile === 'hosted'), true, name);
+  }
+});
+
+test('#8626 a slow Linux pool delays at most two shards per candidate, and at most one per runner across candidates', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const c = f.create(); await linuxBusyWithA(f, pool, c);
+  // Admitted a second apart, oldest first; the oldest has the highest request id, so age decides, not the id.
+  const later = [4, 3, 2].map(merge);
+  for (const s of later) { f.state.now += 1000; await c.submit(s); }
+  await c.tick();
+  // Two busy runners: the oldest waiting candidate keeps two shards back, the others send everything.
+  assert.deepEqual(later.map(s => sent(f, s).length), [4, 6, 6]);
+  assert.equal(f.dispatched.filter(x => x.requestId !== merge(1).requestId).every(x => x.profile === 'hosted'), true);
+  // One runner frees: exactly one waiting shard starts there, the oldest candidate's first.
+  pool.runners[1].busy = false;
+  passed(f, actives(f, merge(1)).filter(x => x.profile === 'linux-x64')[1]);
+  await c.tick(); await c.tick();
+  const linux = f.dispatched.filter(x => x.profile === 'linux-x64' && x.requestId !== merge(1).requestId);
+  assert.deepEqual(linux.map(x => `${x.requestId.slice(-1)}:${x.logicalShard}`), ['4:worker-1-of-6']);
+});
+
+test('#8626 work whose dispatch outcome is unknown is never reassigned, and its runner stays reserved', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const c = f.create(), a = await linuxBusyWithA(f, pool, c), b = merge(2);
+  await c.submit(b); await c.tick();
+  // Both runners free at once, but the first Linux dispatch for B is sent with an unknown outcome.
+  for (const r of pool.runners) r.busy = false;
+  for (const x of actives(f, a).filter(x => x.profile === 'linux-x64')) passed(f, x);
+  f.state.dispatchDown = true; await c.tick(); f.state.dispatchDown = false;
+  const unknown = actives(f, b).filter(x => x.phase === 'dispatch_unknown');
+  assert.deepEqual(unknown.map(x => `${x.logicalShard}:${x.profile}`), ['worker-1-of-6:linux-x64', 'worker-2-of-6:linux-x64']);
+  const before = f.dispatched.length;
+  await c.tick(); await f.create().tick();
+  assert.equal(f.dispatched.length, before, 'neither shard is sent again, to Linux or to hosted');
+  // A third candidate finds both runners still reserved by the unknown dispatches: it waits or runs hosted, never Linux.
+  const d = merge(3); await c.submit(d); await c.tick();
+  assert.equal(sent(f, d).every(x => x.profile === 'hosted'), true);
+  // A hosted dispatch with an unknown outcome is not moved to an idle runner either.
+  const g = fixture(t, { mergePickupHoldMs: HOLD }), poolG = linuxPool(g);
+  for (const r of poolG.runners) r.busy = true;
+  const cg = g.create(), e = merge(4);
+  g.state.dispatchDown = true; await cg.submit(e); await cg.tick(); g.state.dispatchDown = false;
+  for (const r of poolG.runners) r.busy = false;
+  const sentBefore = g.dispatched.length; await cg.tick(); await cg.tick();
+  assert.equal(g.dispatched.slice(sentBefore).some(x => ['worker-3-of-6', 'worker-4-of-6', 'worker-5-of-6', 'worker-6-of-6'].includes(x.logicalShard)), false);
+  assert.equal(actives(g, e).filter(x => x.phase === 'dispatch_unknown').every(x => x.profile === 'hosted'), true);
+});
+
+test('#8626 a removed candidate gives up its waiting shards, and a Linux pickup that never starts falls back to hosted', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const c = f.create(), a = await linuxBusyWithA(f, pool, c), b = merge(2);
+  await c.submit(b); await c.tick();
+  // B's merge group is replaced by a newer attempt of the same parent run: B is superseded.
+  const b2 = { ...b, requestId: '00000000-0000-4000-8000-000000000022', parentAttempt: 2 };
+  await c.submit(b2); await c.tick();
+  assert.deepEqual(actives(f, b).filter(x => x.childRunId === null).map(x => `${x.phase}:${x.reason}`), ['cancelled:request_stopped', 'cancelled:request_stopped']);
+  pool.runners[0].busy = false; passed(f, actives(f, a).find(x => x.profile === 'linux-x64')!);
+  await c.tick();
+  assert.equal(f.dispatched.some(x => x.requestId === b.requestId && x.profile === 'linux-x64'), false, 'a stale candidate never reaches a runner');
+  const picked = actives(f, b2).find(x => x.profile === 'linux-x64')!;
+  assert.equal(picked.logicalShard, 'worker-1-of-6');
+  // The runner never starts it: fenced, observed cancelled, then one hosted attempt of a new generation.
+  f.state.now = picked.startDeadline; await c.tick();
+  assert.equal(f.cancelled.some(x => x.childRunId === picked.childRunId), true);
+  f.outcomes.set(picked.childRunId!, f.observation(picked, { conclusion: 'cancelled', jobConclusion: 'cancelled', testStep: 'not_run', startedAt: null }));
+  // The parent is unreadable just as the fallback is about to be sent, so the fallback waits a tick unsent.
+  const parent = f.ports.parent; let calls = 0;
+  f.ports.parent = async s => { if (s.requestId === b2.requestId && ++calls > 1) throw new Error('unavailable'); return true; };
+  await c.tick(); f.ports.parent = parent;
+  let fallback = actives(f, b2).find(x => x.logicalShard === 'worker-1-of-6')!;
+  assert.deepEqual([fallback.profile, fallback.generation, fallback.phase], ['hosted', 2, 'reserved']);
+  // The runner is idle again, but a fallback is never sent back to Linux and never waits for it.
+  await c.tick();
+  fallback = actives(f, b2).find(x => x.logicalShard === 'worker-1-of-6')!;
+  assert.deepEqual([fallback.profile, fallback.generation, fallback.phase], ['hosted', 2, 'queued']);
+  await finishAll(f, pool, c);
+  assert.equal(c.status(b2.requestId)?.status, 'success');
+  assert.equal(c.status(b.requestId)?.status, 'cancelled');
+});
+
+test('#8626 a genuine test failure on a picked-up shard fails its candidate and no other', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const c = f.create(), a = await linuxBusyWithA(f, pool, c), b = merge(2);
+  await c.submit(b); await c.tick();
+  pool.runners[0].busy = false; passed(f, actives(f, a).find(x => x.profile === 'linux-x64')!);
+  await c.tick();
+  const picked = actives(f, b).find(x => x.profile === 'linux-x64')!;
+  f.outcomes.set(picked.childRunId!, f.observation(picked, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'failure', completedAt: f.state.now }));
+  await c.tick();
+  assert.deepEqual(c.status(b.requestId), { status: 'failure', reason: 'verified_failure' });
+  await finishAll(f, pool, c);
+  assert.equal(c.status(a.requestId)?.status, 'success');
+  assert.equal(c.status(b.requestId)?.status, 'failure');
+  assert.equal(f.dispatched.filter(x => x.requestId === b.requestId && x.logicalShard === picked.logicalShard).length, 1, 'a failed shard is not rerun elsewhere');
+});
+
+test('#8626 the hold reads the inventory at most once per tick, applies to trusted merge candidates only, and is off unless configured', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f);
+  const c = f.create(); await linuxBusyWithA(f, pool, c);
+  for (const n of [2, 3]) await c.submit(merge(n));
+  pool.reads = 0; await c.tick();
+  assert.equal(pool.reads, 1);
+  pool.reads = 0; await c.tick();
+  assert.equal(pool.reads, 1, 'one read while a shard is waiting');
+  f.state.now += HOLD; await c.tick(); pool.reads = 0; await c.tick();
+  assert.equal(pool.reads, 0, 'none when nothing is waiting');
+  // A push request and an untrusted merge candidate send everything at once.
+  const g = fixture(t, { mergePickupHoldMs: HOLD }), poolG = linuxPool(g);
+  for (const r of poolG.runners) r.busy = true;
+  const cg = g.create();
+  await cg.submit({ ...input(), requestId: '00000000-0000-4000-8000-000000000031', parentRunId: 131 }); await cg.tick();
+  assert.equal(g.dispatched.length, 6);
+  g.state.trusted = false; await cg.submit(merge(5)); await cg.tick();
+  assert.equal(g.dispatched.length, 12);
+  // Unset, the coordinator behaves as before: B is sent whole on its first tick, and a freed runner changes nothing.
+  const h = fixture(t), poolH = linuxPool(h);
+  const ch = h.create(), a = await linuxBusyWithA(h, poolH, ch), b = merge(2);
+  await ch.submit(b); await ch.tick();
+  assert.equal(sent(h, b).length, 6);
+  poolH.runners[0].busy = false; passed(h, actives(h, a).find(x => x.profile === 'linux-x64')!);
+  await ch.tick();
+  assert.equal(sent(h, b).every(x => x.profile === 'hosted'), true);
+});
+
+test('#8626 the hold must be a positive whole number that leaves the fenced Linux attempt and a hosted fallback inside the queue budget', () => {
+  const b = CI_CAPACITY_BUDGETS;
+  const most = b.queueMs - (b.externalStartMs + b.externalExecutionMs + b.cancellationMs + b.hostedStartMs + b.hostedExecutionMs + b.controlMarginMs);
+  assert.equal(most, 6.5 * 60_000);
+  validateCapacityPolicy({ ...policy(), mergePickupHoldMs: most });
+  validateCapacityPolicy({ ...policy(), mergePickupHoldMs: 1 });
+  for (const mergePickupHoldMs of [0, -1, 1.5, Infinity, most + 1]) {
+    assert.throws(() => validateCapacityPolicy({ ...policy(), mergePickupHoldMs }), /capacity_budget_refused/);
+  }
+});
+
+test('#8626 per-candidate limits hold with a larger pool: two waiting shards at most, one hosted shard always, and no late Linux start', async t => {
+  // Four busy runners: each candidate still keeps at most two shards back, oldest first, four in all.
+  const f = fixture(t, { mergePickupHoldMs: HOLD }), pool = linuxPool(f, [2, 3, 4, 5]);
+  for (const r of pool.runners) r.busy = true;
+  const c = f.create(), three = [1, 2, 3].map(merge);
+  for (const s of three) { await c.submit(s); await c.tick(); }
+  assert.deepEqual(three.map(s => actives(f, s).filter(x => x.phase === 'reserved').length), [2, 2, 0]);
+  // A two-shard candidate keeps one on hosted whatever the pool offers.
+  const g = fixture(t, { mergePickupHoldMs: HOLD }), poolG = linuxPool(g, [2, 3, 4, 5]);
+  for (const r of poolG.runners) r.busy = true;
+  const cg = g.create(), small = { ...merge(4), shards: ['worker-1-of-6', 'worker-2-of-6'] };
+  await cg.submit(small); await cg.tick();
+  assert.deepEqual(actives(g, small).map(x => `${x.logicalShard}:${x.phase}`), ['worker-1-of-6:reserved', 'worker-2-of-6:queued']);
+  for (const r of poolG.runners) r.busy = false;
+  await cg.tick(); await cg.tick();
+  assert.deepEqual(actives(g, small).map(x => x.profile), ['linux-x64', 'hosted']);
+  // After an outage longer than the hold, an idle runner is no longer used: a fenced Linux attempt plus a
+  // full hosted fallback would not fit the candidate's deadline, so the shard goes to hosted.
+  const h = fixture(t, { mergePickupHoldMs: HOLD }), poolH = linuxPool(h);
+  for (const r of poolH.runners) r.busy = true;
+  const ch = h.create(), late = merge(5);
+  await ch.submit(late); await ch.tick();
+  const b = CI_CAPACITY_BUDGETS;
+  h.state.now = h.get(late.requestId).deadline - (b.externalStartMs + b.externalExecutionMs + b.cancellationMs + b.hostedStartMs + b.hostedExecutionMs + b.controlMarginMs) + 1;
+  for (const r of poolH.runners) r.busy = false;
+  await h.create().tick();
+  assert.equal(sent(h, late).every(x => x.profile === 'hosted'), true);
+  assert.equal(sent(h, late).length, 6);
+});

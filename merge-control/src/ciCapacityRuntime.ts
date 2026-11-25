@@ -23,7 +23,7 @@ export type CapacityEnv = Pick<Env,'REPOSITORY'|'GITHUB_APP_ID'|'GITHUB_INSTALLA
   CAPACITY_PUBLICATION?: string;
   CAPACITY_INVENTORY_TOKEN?: string;
 };
-type Settings = CapacityConfig & { maxExternalWorkerShards: number; maxIncludedWorkerShards: number; appId: number; publication: 'pilot'|'full-suite' };
+type Settings = CapacityConfig & { mergePickupHoldMs?: number; maxExternalWorkerShards: number; maxIncludedWorkerShards: number; appId: number; publication: 'pilot'|'full-suite' };
 /** D8011: one canonical window, committed atomically before accepting any reservation. */
 export class SqlCapacityBudgetStore implements CapacityBudgetStore {
   private storage: Pick<DurableObjectStorage, 'sql'|'transactionSync'>;
@@ -79,6 +79,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   }
   private policy(config:Settings){return {version:1 as const,maxExternalWorkerShards:config.maxExternalWorkerShards,
     maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,
+    ...(config.mergePickupHoldMs===undefined?{}:{mergePickupHoldMs:config.mergePickupHoldMs}),
     maxActiveRequests:config.publication==='pilot'?1:8,budgets:{...CI_CAPACITY_BUDGETS}};}
   private async components(sharedApi?: CapacityApi) {
     const config=this.settings();

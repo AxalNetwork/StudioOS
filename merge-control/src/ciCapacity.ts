@@ -1,6 +1,6 @@
 /** D7887: durable CI coordinator core; no production adapter or result producer is enabled here. */
 import {
-  activeAttempt, admitReceipt, aggregateCapacity, applyObservation, selectPools, submissionMatches,
+  activeAttempt, admitReceipt, aggregateCapacity, applyObservation, linuxPickupPool, selectPools, submissionMatches,
   validateCapacityPolicy, HOSTED_JOB_CEILING_MS, EXTERNAL_RUN_CEILING_MS, RESULT_DELIVERY_RESERVE_MS, receiptMatches, CapacityDispatchRefused,
 } from './lib/ciCapacityPolicy.ts';
 import { CAPACITY_COMPACT_LIMIT, CapacityCompactTable, compactProject, compactReceipt, compactAggregate } from './ciCapacityCompact.ts';
@@ -393,7 +393,21 @@ export class CiCapacity {
     return this.ordered(async () => {
       let pending = false;
       // Bounded accepted population. The future adapter must also cap API calls per tick.
-      for (const request of this.store.pending()) {
+      const pendingRequests = this.store.pending();
+      // #8626: a merge candidate may keep a few first-attempt Worker shards unstarted for a busy Linux runner.
+      // Oldest candidate first, so several candidates competing for one freed runner resolve the same way every tick.
+      const holdMs = this.policy.mergePickupHoldMs;
+      if (holdMs !== undefined) pendingRequests.sort((a, b) => a.acceptedAt - b.acceptedAt
+        || a.submission.requestId.localeCompare(b.submission.requestId));
+      const b = this.policy.budgets;
+      // A Linux attempt holds a runner until it is seen running (the inventory then shows that runner busy) or
+      // ended. Unobserved dispatches and uncertain cancellations therefore keep their runner reserved.
+      const linuxPending = () => pendingRequests.reduce((n, r) => n + r.shards.reduce((m, s) =>
+        m + s.attempts.filter(x => x.profile === 'linux-x64' && !terminal(x) && x.phase !== 'running').length, 0), 0);
+      let inventory: CapacityInventory | null | undefined; // One read per tick, and only when a shard could use it.
+      let holds = 0;
+      for (const request of pendingRequests) {
+        let held = 0;
         request.superseded = this.superseded(request);
         if (aggregateCapacity(request, this.now()).status === 'success') continue;
         if (aggregateCapacity(request, this.now()).status !== 'pending'
@@ -449,7 +463,12 @@ export class CiCapacity {
           const now = this.now();
           const aggregate = aggregateCapacity(request, now);
           const stopped = aggregate.status === 'failure' || aggregate.status === 'cancelled';
-          if (a.phase === 'reserved' && (stopped || now >= a.startDeadline)) {
+          // #8626: only known-unstarted work is reassigned: a first attempt that was never sent anywhere.
+          const waiting = holdMs !== undefined && a.phase === 'reserved' && a.childRunId === null
+            && a.event === 'merge_group' && a.profile === 'hosted' && shard.generation === 1 && shard.name.startsWith('worker-');
+          // Its hosted lease starts when it is sent, so a wait can never cancel it while a full hosted run still fits.
+          const leaseFits = now + b.hostedStartMs + b.hostedExecutionMs + b.controlMarginMs <= request.deadline;
+          if (a.phase === 'reserved' && (stopped || (now >= a.startDeadline && !(waiting && leaseFits)))) {
             a.phase = 'cancelled'; a.reason = stopped ? 'request_stopped' : 'not_dispatched';
           }
           if (a.childRunId !== null && !terminal(a) && (stopped
@@ -473,6 +492,29 @@ export class CiCapacity {
             let live = false;
             try { live = await this.ports.parent(request.submission); } catch { continue; }
             if (!live) { request.parentLive = false; this.store.save(request); continue; }
+            if (waiting) {
+              const at = this.now();
+              let to: 'hosted' | 'linux-x64' | 'hold' = 'hosted';
+              const workers = request.shards.filter(s => s.name.startsWith('worker-')).map(activeAttempt);
+              const external = workers.filter(x => x.profile === 'linux-x64' || x.profile === 'macos-arm64').length;
+              // A Linux attempt must leave its own fence and a full hosted fallback inside the request deadline.
+              const fallbackFits = at + b.externalStartMs + b.externalExecutionMs + b.cancellationMs
+                + b.hostedStartMs + b.hostedExecutionMs + b.controlMarginMs <= request.deadline;
+              if (request.trustedSource && fallbackFits && external + held < this.policy.maxExternalWorkerShards
+                  && workers.filter(x => x.profile === 'hosted').length - held > this.policy.minimumHostedWorkerShards) {
+                if (inventory === undefined) {
+                  try { inventory = await this.ports.inventory(); } catch { inventory = null; }
+                }
+                const pool = linuxPickupPool(inventory, this.policy, at);
+                if (pool.idle > linuxPending()) to = 'linux-x64';
+                // One waiting shard per approved Linux runner, and never past the hold. Offline, draining or
+                // unreadable runners give no reason to wait, so the shard goes to hosted now.
+                else if (at < request.acceptedAt + holdMs! && holds < pool.total) to = 'hold';
+              }
+              if (to === 'hold') { held++; holds++; continue; }
+              a = this.attempt(request, shard.name, to, shard.generation, at);
+              shard.attempts[shard.attempts.length - 1] = a;
+            }
             a.phase = 'dispatching';
             this.store.save(request); // Durable reservation and dispatch intent precede the remote effect.
             try {
