@@ -8,7 +8,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import decks from '../src/routes/decks.ts';
@@ -18,20 +17,16 @@ import { themeProblems, themeTokens } from '../src/services/decks/designSystem.t
 import { sanitizeTheme } from '../src/services/decks/slideModel.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
-  .sort((a, b) => migrationNumber(a) - migrationNumber(b) || a.localeCompare(b)).map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1562-only-not-a-real-credential'.repeat(2);
 const UID = (n: number) => `0b6a2c1e-3f4d-4a5b-8c9d-${String(n).padStart(12, '0')}`;
 const TWELVE = JSON.stringify(Array.from({ length: 12 }, (_, i) => ({ title: `Card ${i + 1}`, blocks: [{ id: 't', kind: 'text', grid: { c1: 1, c2: 12, r1: 1, r2: 2 }, style: 'heading', text: `Heading ${i + 1}` }] })));
 
 async function fixture(o: { landing?: Record<string, string | null> | null } = {}) {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  // #8437: the schema is built once per run (_schema_once.mjs) and copied into a fresh database for each test.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true }));
   db.exec("INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (2, 'founder', 100, 'Synthetic founder', 'synthetic-2@example.invalid', 1, 'studio'), (3, 'founder', 300, 'Other founder', 'synthetic-3@example.invalid', 1, 'studio')");
   db.exec("INSERT INTO projects(id, name, founder_id) VALUES (1, 'Synthetic venture', 100), (2, 'Other synthetic venture', 300)");
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, theme_json) VALUES (7, 1, 3, ?, ?, 1, ?)')

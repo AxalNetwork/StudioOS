@@ -178,26 +178,6 @@ export default function PhoneModulePage({
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
   const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href)); // D6010: `tool` may be several
-  if (typeof home === 'function') {
-    const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
-    return (
-      <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">
-        {bar}
-        {tabs}
-        {/* D5078 (#5078): a home that `placesSources` draws the Sources region itself (Operating systems › Tools). */}
-        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true, query, onQuery,
-          sources: sources ? <Sources phone action={sourcesAction}>{sources}</Sources> : null })}
-        {toolLinks.map((item) => (
-          <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
-            {item.label || `Open ${name}`}
-          </Link>
-        ))}
-        {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
-        {sources && !home.placesSources && <Sources phone action={sourcesAction}>{sources}</Sources>}
-      </div>
-    );
-  }
-
   const group = {
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
     testid: 'phone-module-records',
@@ -212,6 +192,28 @@ export default function PhoneModulePage({
       };
     }),
   };
+  if (typeof home === 'function') {
+    const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
+    return (
+      <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">
+        {bar}
+        {tabs}
+        {/* D6038: the same extras as the desktop home; a `drawsTools` home draws the doors itself.
+            D5078 (#5078): a home that `placesSources` draws the Sources region itself (Operating systems › Tools). */}
+        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true,
+          query, onQuery, rowAction, onExport, tools: toolLinks, phoneRows: group,
+          sources: sources ? <Sources phone action={sourcesAction}>{sources}</Sources> : null })}
+        {!home.drawsTools && toolLinks.map((item) => (
+          <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
+            {item.label || `Open ${name}`}
+          </Link>
+        ))}
+        {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+        {sources && !home.placesSources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+      </div>
+    );
+  }
+
 
   return (
     <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-stage={progressive ? stage : undefined}>

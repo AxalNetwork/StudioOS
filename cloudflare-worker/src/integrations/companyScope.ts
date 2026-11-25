@@ -5,7 +5,7 @@ import { scheduledSyncDue } from './connectorRules';
 /** These providers write into project-backed stores; other connections are personal. */
 export function writesProjectData(providerKey: string): boolean {
   if (providerKey === 'facebook') return true;
-  return providerKey === 'hubspot' || providerKey === 'salesforce' || providerKey === 'stripe' || providerKey === 'github' || providerKey === 'google_workspace' || providerKey === 'notion' || providerKey === 'vercel' || providerKey === 'posthog' || providerKey === 'beehiiv' || providerKey === 'tiktok' || providerKey === 'x' || providerKey === 'google_search_console' || providerKey === 'typeform';
+  return providerKey === 'hubspot' || providerKey === 'salesforce' || providerKey === 'stripe' || providerKey === 'github' || providerKey === 'google_workspace' || providerKey === 'notion' || providerKey === 'vercel' || providerKey === 'posthog' || providerKey === 'beehiiv' || providerKey === 'tiktok' || providerKey === 'x' || providerKey === 'google_search_console' || providerKey === 'typeform' || providerKey === 'quickbooks';
 }
 
 /** A missing scope row denies the write; joining another company grants nothing. */

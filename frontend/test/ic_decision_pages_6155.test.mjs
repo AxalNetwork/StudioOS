@@ -62,8 +62,8 @@ test('a member who recused is told so and offered no further vote', () => {
 });
 
 test('tallies are words and numbers, recused beside them, Not recorded never 0', () => {
-  assert.equal(tallyText({ yes: 3, no: 1, abstain: 0, recused: 2 }), 'Yes 3 · No 1 · Abstain 0 · Recused 2');
-  assert.equal(tallyText({ yes: 2, no: 0, abstain: 1 }), 'Yes 2 · No 0 · Abstain 1 · Recused Not recorded');
+  assert.equal(tallyText({ yes: 3, no: 1, abstain: 0, recused: 2 }), 'Invest 3 · Pass 1 · Abstain 0 · Recused 2');
+  assert.equal(tallyText({ yes: 2, no: 0, abstain: 1 }), 'Invest 2 · Pass 0 · Abstain 1 · Recused Not recorded');
   assert.equal(tallyText(null), 'Votes not recorded');
   for (const file of ['pages/ICDecisionPage.jsx', 'pages/ICDecisionsPage.jsx']) {
     const src = read(file);

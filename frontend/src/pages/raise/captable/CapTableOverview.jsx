@@ -189,7 +189,7 @@ function NeedsYou({ need, role, onReview }) {
 
 // ─────────────────────────────────────────────────────────── Who owns
 
-function WhoOwns({ record, search, view, setView, basis, setBasis }) {
+function WhoOwns({ record, search, view, setView, basis, setBasis, bare = false }) {
   const owns = whoOwns(record, basis, search);
   const classes = byClass(record);
   const toggles = (
@@ -227,7 +227,7 @@ function WhoOwns({ record, search, view, setView, basis, setBasis }) {
     );
   }
   return (
-    <Block title="Who owns the company" tag={<Tag kind="record" />} aside={toggles} testId="captable-who-owns">
+    <Block title="Who owns the company" tag={<Tag kind="record" />} aside={bare ? null : toggles} testId="captable-who-owns">
       {!owns.available ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-who-owns-unavailable">{owns.sentence || 'Who owns cannot be counted from the record.'}</p> : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
@@ -345,7 +345,7 @@ function Side({ record, compare, harbourRead, search, retry, withBars = true }) 
 // ─────────────────────────────────────────────────────────── the phone (D1028, CT23a)
 
 /** Who owns as cards: one holder a card, its share by the switch, six before "Show more". */
-function HolderCards({ record, basis, search }) {
+function HolderCards({ record, basis, search, table = false, onTable = null }) {
   const [all, setAll] = useState(false);
   const v = holderCards(whoOwns(record, basis, search), basis, all ? Infinity : PHONE_HOLDERS);
   return (
@@ -378,6 +378,9 @@ function HolderCards({ record, basis, search }) {
               {v.more ? <button type="button" className={GHOST} onClick={() => setAll(true)} data-testid="captable-holder-cards-more">Show more</button> : null}
             </p>
           ) : null}
+          {onTable && v.cards.length ? (
+            <button type="button" className={`${GHOST} mt-2 w-full`} aria-expanded={table} aria-controls="captable-who-owns-table-box" onClick={onTable} data-testid="captable-holder-view-table">{table ? 'Hide table' : 'View table'}</button>
+          ) : null}
         </>
       )}
     </Block>
@@ -386,6 +389,8 @@ function HolderCards({ record, basis, search }) {
 
 /** CT23a below the tool bar: the switch, the group bar, the cards (or By class), then the side column without its bars. */
 function PhoneOverview({ record, compare, harbourRead, search, retry, view, setView, basis, setBasis }) {
+  // D5075 (RA-26 B): the holders' table, with its source and last change, one press away; it scrolls inside its own box.
+  const [table, setTable] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="captable-phone-overview">
       <div className="flex flex-col gap-2" data-testid="captable-show">
@@ -398,7 +403,12 @@ function PhoneOverview({ record, compare, harbourRead, search, retry, view, setV
       <Bars list={bars(record.data, compare.status === 'ready' ? compare.data : null)} />
       {view === 'class'
         ? <WhoOwns record={record.data} search={tabSearch(search)} view={view} setView={setView} basis={basis} setBasis={setBasis} />
-        : <HolderCards record={record.data} basis={basis} search={tabSearch(search)} />}
+        : (
+          <>
+            <HolderCards record={record.data} basis={basis} search={tabSearch(search)} table={table} onTable={() => setTable((t) => !t)} />
+            {table ? <div id="captable-who-owns-table-box"><WhoOwns record={record.data} search={tabSearch(search)} view={view} setView={setView} basis={basis} setBasis={setBasis} bare /></div> : null}
+          </>
+        )}
       <Side record={record} compare={compare} harbourRead={harbourRead} search={search} retry={retry} withBars={false} />
     </div>
   );

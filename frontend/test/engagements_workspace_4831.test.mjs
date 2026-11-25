@@ -99,7 +99,7 @@ test('#4831 a card says its price, scope and activity, and never prints a zero i
   assert.equal(activityLine(eng(), null, null), 'Sessions could not be read · Deliverables could not be read');
 
   const zone = read('frontend/src/pages/advisor/practice/EngagementsZone.jsx');
-  assert.match(zone, /activity=\{activityLine\(e, bookings, deliverables\)\} onOpen=\{\(\) => setOpenId\(e\.id\)\}/);
+  assert.match(zone, /activity=\{(?:activityLoading \? 'Reading activity…' : )?activityLine\(e, bookings, deliverables\)\} onOpen=\{\(\) => setOpenId\(e\.id\)\}/);
   assert.match(zone, /setBookings\(held \? held\.items : null\);/, 'a failed bookings read is null, never []');
   assert.match(zone, /setDeliverables\(work \? work\.items : null\);/);
   assert.match(zone, /Open engagement →/);

@@ -621,6 +621,7 @@ export const PROVIDER_LABEL = {
   x: 'X (founders app)',
   google_search_console: 'Google Search Console',
   typeform: 'Typeform',
+  quickbooks: 'QuickBooks Online',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

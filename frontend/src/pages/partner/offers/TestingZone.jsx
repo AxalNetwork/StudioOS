@@ -5,14 +5,13 @@ import { makeZoneFilters } from '../../../workspaces/zoneFilterBuilder';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import {
   ZoneBody, StatedLimit, SlideOver, NoPartnerProfile, isNoPartnerProfile,
-  buttonClass, inputClass,
   // D4844: the Offers type scale, actions, empty state and status chip.
-  OfferEmpty, OfferHeading, OfferStatus, offerButtonClass, offerGhostButtonClass,
+  OfferEmpty, OfferHeading, OfferStatus, offerButtonClass, offerGhostButtonClass, offerInputClass,
 } from '../kit';
-import { WriteNote, writeFailureText } from './useGuardedWrite';
+import { WriteNote, writeFailureText, zoneReadError } from './useGuardedWrite';
 import ProgrammeForm from '../../testing/ProgrammeForm';
 import ProgrammeApplicants from '../../testing/ProgrammeApplicants';
-import { datesLine, isEditable, placesLine, refusalText, statusLabel } from '../../testing/programmeModel';
+import { datesLine, isEditable, placesLine, statusLabel } from '../../testing/programmeModel';
 import ProgrammeLogo from '../../admin/productTesting/ProgrammeLogo';
 import { lifecycleCells, nextStep, programmeOrder, stageLabel } from './testingLifecycle';
 
@@ -29,7 +28,8 @@ import { lifecycleCells, nextStep, programmeOrder, stageLabel } from './testingL
  * The data is D812's partner routes (`partnerTestingApi`): the Worker scopes
  * every read and write to this firm, and holds picks to the places.
  */
-const FORM_CLASSES = { input: inputClass, button: buttonClass };
+// #4845: the Offers field and primary (14px, a 44px field and a 48px primary on a phone, a focus ring).
+const FORM_CLASSES = { input: offerInputClass, button: offerButtonClass };
 const CLOSED = { mode: null, programme: null };
 
 /*
@@ -99,7 +99,8 @@ export default function TestingZone({ api = partnerTestingApi }) {
     return Promise.resolve()
       .then(() => api.programmes())
       .then((r) => setState({ loading: false, error: null, items: Array.isArray(r?.items) ? r.items : [] }))
-      .catch((e) => setState({ loading: false, error: refusalText(e, 'Your programmes could not be read.'), items: [] }));
+      // #4845: a written sentence (`zoneReadError`), never the response's text (#4844's follow-up).
+      .catch((e) => setState({ loading: false, error: zoneReadError(e), items: [] }));
   }, [api]);
   useEffect(() => { load(); }, [load]);
 
@@ -156,7 +157,8 @@ export default function TestingZone({ api = partnerTestingApi }) {
       setNote(`${p.product_name} is waiting for HQ. You will hear in the bell when HQ approves it or sends it back.`);
       await load();
     } catch (e) {
-      setNote(refusalText(e, 'Axal could not send this programme to HQ. Try again.'));
+      // #4845: a fixed sentence for the failure, never the response's text.
+      setNote(`${p.product_name} was not sent to HQ. ${writeFailureText(e, 'Try again.')}`);
     } finally {
       setBusy(null);
     }

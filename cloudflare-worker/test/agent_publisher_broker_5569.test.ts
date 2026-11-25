@@ -27,6 +27,10 @@ async function fixture(t: TestContext) {
     const sql = readFileSync(new URL('../sql/migrations/' + path, import.meta.url), 'utf8');
     db.exec(sql); db.exec(sql);
   }
+  // D8071: the broker reads the agent's PR budget; the tables the budget migration alters stand in as stubs.
+  db.exec('CREATE TABLE team_agents(id INTEGER PRIMARY KEY); CREATE TABLE scope_tasks(id INTEGER PRIMARY KEY); ' +
+    'CREATE TABLE agent_scope_settings(id INTEGER PRIMARY KEY); CREATE TABLE ai_agent_policy(id INTEGER PRIMARY KEY);');
+  db.exec(readFileSync(new URL('../sql/migrations/202611221909_8071_agent_budgets.sql', import.meta.url), 'utf8'));
   const uid = db.prepare(`INSERT INTO venture_git_installations(tenant_id,company_id,project_id,app_id,installation_id,
     repository_id,repository_full_name,base_ref,approved_at,approved_by_user_id)
     VALUES(1,2,3,20,30,40,'venture/example','refs/heads/main','2026-11-19',5) RETURNING uid`).get()!.uid as string;
@@ -329,4 +333,19 @@ test('different concurrent attempts of one task cannot reserve two branch writes
   const placeholders = columns.map(() => '?').join(',');
   assert.throws(() => f.db.prepare('INSERT INTO agent_publish_requests (' + columns.join(',') + ') VALUES (' + placeholders + ')')
     .run(...columns.map(column => column === 'idempotency_key' ? 'another-key-for-the-same-task' : stored[column])), /UNIQUE/);
+});
+
+test('D8071: an agent at its PRs-per-day cap is refused before any reservation or GitHub call; an open PR counts once', async t => {
+  // Mutations checked: the broker's reservePublish removed → the capped agent opens a PR; settlePublish removed → the day reads 0.
+  const f = await fixture(t);
+  f.db.exec("INSERT INTO team_agents (id) VALUES (1); INSERT INTO agent_budgets (agent_id, prs_per_day_cap) VALUES (1, 1)");
+  const first = await f.run();
+  assert.equal(first.ok, true);
+  const day = new Date(NOW).toISOString().slice(0, 10);
+  assert.equal(f.db.prepare('SELECT prs_opened n FROM agent_budget_usage WHERE agent_id = 1 AND period_key = ?').get(day)!.n, 1);
+  const calls = f.calls.length;
+  const second = await f.run('on', { idempotency_key: 'publish:task-2:1', provenance: { ...f.intent.provenance, task_id: 'task-2' } });
+  assert.deepEqual(second, { ok: false, code: 'budget_exhausted', retryable: false, cap: 'prs_per_day' });
+  assert.equal(f.calls.length, calls, 'no GitHub call');
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM agent_publish_requests WHERE task_id = 'task-2'").get()!.n, 0, 'nothing reserved');
 });
