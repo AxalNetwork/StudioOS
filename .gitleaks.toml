@@ -71,6 +71,10 @@ regexes = [
   # every Stripe call in that suite goes to an in-test fake. Pinned as the
   # literal, as D1135 is, rather than rewriting the PR branch's history.
   '''\bsk_test_d4570_fixture\b''',
+  # D8523 (#8523): the Stripe key in stripe_keys_d8523.test.ts is a fixture;
+  # every Stripe call in that suite goes to the test's captured fetch. Pinned
+  # as the literal, as D4570-p6 is, rather than rewriting the PR's history.
+  '''\bsk_test_synthetic_d8523\b''',
   # D7127 (#7127): the D1 backup upload test's synthetic Cloudflare token id,
   # '0123456789abcdef'.repeat(2): sequential hex, because the script under test
   # accepts only a 32-hex id. Anchored to the exact literal; pinned rather than
