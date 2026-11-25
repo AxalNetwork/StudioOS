@@ -104,3 +104,11 @@ test('the helpers refuse a lane the registry does not describe', () => {
   assert.throws(() => unrecordedLane('lp'), /lp records its decisions/);
   assert.equal(laneLabel('not_a_lane'), 'not_a_lane');
 });
+
+test('D6698 registers the read-and-assign Formation lane on HQ only', () => {
+  const lane = laneFacts('formation_cases');
+  assert.equal(lane.label, 'Formation cases waiting on HQ');
+  assert.equal(lane.scope, 'hq');
+  assert.equal(lane.decidedOn, null);
+  assert.equal(lane.decisions.recorded, false);
+});

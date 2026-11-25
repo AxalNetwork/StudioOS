@@ -17,7 +17,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
@@ -216,7 +216,9 @@ const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admi
   + '\n' + migration('434_contract_template_publications.sql')
   + '\n' + migration('475_legal_document_files.sql')
   + '\n' + migration('479_template_kind_party.sql')
-  + '\n' + migration('633_staged_signing.sql');
+  + '\n' + migration('633_staged_signing.sql')
+  // #8516: the next stage is sent from its esign_effects record.
+  + '\n' + readdirSync(new URL('../sql/migrations/', import.meta.url)).filter((f) => /^\d{12}_8516_esign_effects\.sql$/.test(f)).map(migration).join('\n');
 const SECRET = ['d6197', 'staged', 'fixture', 'secret'].join('-');
 const S_ADMIN = 1, S_FOUNDER = 2, S_INVESTOR = 3, S_STRANGER = 4;
 const DEAL = 30, LINE = 40;
