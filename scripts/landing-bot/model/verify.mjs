@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // #6473: the `verify` job's entry point: re-check the patch with main's code, apply it, run the verify commands.
 /**
- *   node verify.mjs --task task.json --work <checkout> --patch <dir> --out <dir>
+ *   node verify.mjs --task task.json --work <checkout> --patch <dir> --out <dir> --round <n> --base <sha> --controller <sha>
  *
  * Runs with no environment, no secret and no write token. Repository code
  * (the PR's tests) runs here, so each command also gets a scrubbed
  * environment: PATH, HOME and a few runner basics, never a token or a key.
  * Writes `<out>/verify.json`: { passed, problems?, failure_text? }.
+ *
+ * #8506: before anything is applied, the patch's `record.json` must match this
+ * job's own inputs: the same repository, run and attempt, task, round, head
+ * and controller revision, and the patch's exact bytes. A patch any other
+ * controller revision made is not verified by this one.
  */
 import { spawnSync } from 'node:child_process';
 import { closeSync, constants, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
@@ -15,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { parseTask, HARD, stageProblems } from './task.mjs';
 import { checkPatch } from './patch.mjs';
 import { args } from './edit.mjs';
+import { checkRecord, identityFrom } from './record.mjs';
 
 const FAILURE_MAX = 20_000;
 const PASS_ENV = ['PATH', 'HOME', 'LANG', 'TMPDIR', 'RUNNER_TEMP', 'TZ'];
@@ -37,12 +43,17 @@ export function redact(text) {
     .slice(-FAILURE_MAX);
 }
 
-export function verifyMain({ task: taskPath, work, patch: patchDir, out, stage }, { env = process.env, spawn = spawnSync, now = Date.now } = {}) {
+export function verifyMain({ task: taskPath, work, patch: patchDir, out, stage, round, base, controller }, { env = process.env, spawn = spawnSync, now = Date.now, identity = identityFrom(env) } = {}) {
   mkdirSync(out, { recursive: true });
   const finish = (v) => { writeFileSync(join(out, 'verify.json'), `${JSON.stringify(v, null, 2)}\n`); return v; };
   const { task, errors } = parseTask(readFileSync(taskPath, 'utf8'));
   if (!task) return finish({ passed: false, problems: errors });
-  const patch = JSON.parse(readFileSync(join(patchDir, 'patch.json'), 'utf8'));
+  const patchText = readFileSync(join(patchDir, 'patch.json'), 'utf8');
+  let record = null;
+  try { record = JSON.parse(readFileSync(join(patchDir, 'record.json'), 'utf8')); } catch { /* null: refused below */ }
+  const mismatch = checkRecord(record, { identity, task, controller, head: base, round: Number(round), patchText });
+  if (mismatch.length) return finish({ passed: false, problems: mismatch });
+  const patch = JSON.parse(patchText);
   const manifest = JSON.parse(readFileSync(join(patchDir, 'manifest.json'), 'utf8'));
   // #6475: merge mode. Verify the same conflicted tree the edit was made on, with the patch applied over it.
   const resolving = !!task.merge_sha;

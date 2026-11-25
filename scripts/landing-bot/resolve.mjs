@@ -19,12 +19,14 @@ import { oneLine } from './ejection.mjs';
 import { sameFiles, sidesOf, stageMerge } from './model/stage.mjs';
 import { checkPatch } from './model/patch.mjs';
 import { parseTask } from './model/task.mjs';
+import { publishRecordProblems, readPatchRecord } from './model/record.mjs';
 import {
   KIND, afterStage, checkResolution, conflictLines, gate, instructions, reservationName, reservedToday, testsFor, verifyCommands,
 } from './resolve-rules.mjs';
 
 const DATA_BUDGET = 180_000;
 const DIFF_MAX = 50_000;
+const HEAD_MOVED = 'its head moved';
 
 // Values come from the API (a branch name, file paths, reasons). A line break in one would start a second
 // `key=value` line in GITHUB_OUTPUT, an output the next job trusts, so each is written on one line under a
@@ -138,7 +140,7 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
     const task = {
       version: 1, instructions: instructions(files), allowed_files: files,
       verify: verifyCommands(files, testsFor(files, testSources(c.dir))),
-      data, merge_sha: c.main, head_sha: pr.head.sha, max_rounds: 3,
+      data, merge_sha: c.main, head_sha: pr.head.sha, pr: n, max_rounds: 3,
     };
     const parsed = parseTask(task);
     if (!parsed.task) return finish({ ...plan, decision: 'handback', reasons: parsed.errors });
@@ -177,26 +179,36 @@ export async function applyStage(env, {
   const fresh = async () => {
     const now = await gh.get(`pulls/${plan.pr}`);
     if (now.state !== 'open') return 'the pull request is closed';
-    if (now.head?.sha !== plan.head) return 'its head moved';
+    if (now.head?.sha !== plan.head) return HEAD_MOVED;
     if (mode(env) === 'off') return 'the landing bot is off';
     if ((now.labels || []).some((l) => l.name === LABELS.off)) return `it is labelled ${LABELS.off}`;
     if ((await readBreakers(gh, env)).open) return 'a breaker is open';
     return null;
   };
+  // #8506: a head that moved after the resolution was verified is a definitive hand-back, as an exhausted keeper is
+  // (D8077): what was verified is no longer what would be pushed, and nothing re-runs the model on its own.
+  const stop = (why) => (why === HEAD_MOVED
+    ? handBack(env, app, gh, pr, 'its head moved after the resolution was verified, so the verified merge is not the one a push would make', plan.files)
+    : quiet(why));
   const before = await fresh();
-  if (before) return quiet(before);
+  if (before) return stop(before);
 
   const c = clone(`https://github.com/${env.GITHUB_REPOSITORY}.git`, plan.head, env.RUNNER_TEMP);
   try {
     const stage = stageMerge(c.dir, { mainSha: plan.main, headSha: plan.head, git: c.git, fetch: true });
     if (!stage.ok || !sameFiles(stage.conflicted, plan.files)) return handBack(env, app, gh, pr, `the merge is not the one the model resolved (${stage.reason || 'different files'})`, plan.files);
-    const patch = JSON.parse(readFileSync(join(env.PATCH_DIR, 'patch.json'), 'utf8'));
+    const { patchText, record } = readPatchRecord(env.PATCH_DIR, (p) => readFileSync(p, 'utf8'));
+    const patch = JSON.parse(patchText);
     const manifest = JSON.parse(readFileSync(join(env.PATCH_DIR, 'manifest.json'), 'utf8'));
     const problems = [];
     if (manifest?.base_sha !== plan.head) problems.push('the patch was made from another head');
+    // #8506: the record names this run, attempt, task, head and controller revision, and these patch bytes.
+    problems.push(...publishRecordProblems({ env, task: parseTask(plan.task ?? null).task, head: plan.head, patchText, record }));
     const readBefore = (p) => (existsSync(join(c.dir, p)) ? readFileSync(join(c.dir, p), 'utf8') : null);
     problems.push(...checkPatch(patch, manifest, plan.files, readBefore, { resolving: true }));
-    const guard = pathGuard(plan.files.map((path) => ({ path })));
+    // #8506: the paths the patch changes are read again against the protected-path list (#8067), not only the plan's.
+    const changed = (Array.isArray(patch?.files) ? patch.files : []).map((f) => f?.path).filter((p) => typeof p === 'string');
+    const guard = pathGuard([...new Set([...plan.files, ...changed])].map((path) => ({ path })));
     if (!guard.ok) problems.push(...guard.refused.map((r) => `${r.path}: ${r.reason}`));
     if (!problems.length) {
       const resolved = patch.files.map((f) => ({ path: f.path, ...sidesOf(c.dir, f.path, { git: c.git }), result: f.content }));
@@ -224,10 +236,10 @@ export async function applyStage(env, {
     if (parents[0] !== plan.head || parents[1] !== plan.main) return handBack(env, app, gh, pr, 'the commit is not a merge of the planned head and main', plan.files);
 
     const last = await fresh();
-    if (last) return quiet(last);
+    if (last) return stop(last);
     if (!pushImpl(c.dir, env.GITHUB_REPOSITORY, env.RESOLVER_APP_TOKEN, plan.ref)) {
       const moved = await fresh();
-      return moved ? quiet(moved) : handBack(env, app, gh, pr, 'GitHub refused the push', plan.files);
+      return moved ? stop(moved) : handBack(env, app, gh, pr, 'GitHub refused the push', plan.files);
     }
     try { await app.del(`issues/${plan.pr}/labels/${encodeURIComponent(LABELS.conflict)}`); } catch { /* not labelled */ }
     await app.post(`issues/${plan.pr}/labels`, { labels: [LABELS.resolved] });

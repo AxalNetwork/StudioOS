@@ -4,6 +4,9 @@ name: Landing bot model round
 # landing-bot-model.yml. `edit` holds the model credentials and runs no
 # repository code; `verify` runs the repository's code and holds no secret.
 # scripts/landing-bot/model/README.md explains the design.
+# #8506: both jobs check out the controller commit the caller resolved once
+# (`controller`), never a branch name, and verify refuses a patch whose
+# record names another controller, head, task, run, attempt or round.
 
 on:
   workflow_call:
@@ -17,6 +20,10 @@ on:
         required: true
       sha:
         description: The commit to edit, resolved by the caller from a branch of this repository
+        type: string
+        required: true
+      controller:
+        description: The controller commit (scripts/landing-bot) every job of the attempt runs, resolved once by the caller (#8506)
         type: string
         required: true
       merge:
@@ -44,10 +51,10 @@ jobs:
     outputs:
       outcome: ${{ steps.edit.outputs.outcome }}
     steps:
-      - name: Check out the runner from main
+      - name: Check out the runner at the controller commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: main
+          ref: ${{ inputs.controller }}
           path: runner
           persist-credentials: false
           sparse-checkout: |
@@ -100,13 +107,14 @@ jobs:
           LANDING_BOT_GEMINI_MODEL: ${{ vars.LANDING_BOT_GEMINI_MODEL || vars.GEMINI_MODEL }}
           ROUND: ${{ inputs.round }}
           BASE_SHA: ${{ inputs.sha }}
+          CONTROLLER_SHA: ${{ inputs.controller }}
         run: |
           set -euo pipefail
           feedback=()
           if [ "$ROUND" -gt 1 ]; then feedback=(--feedback feedback/verify.json); fi
           if [ -f stage.json ]; then feedback+=(--stage stage.json); fi
           node runner/scripts/landing-bot/model/edit.mjs --task in/task.json --work work --out out \
-            --round "$ROUND" --base "$BASE_SHA" "${feedback[@]}"
+            --round "$ROUND" --base "$BASE_SHA" --controller "$CONTROLLER_SHA" "${feedback[@]}"
           outcome=$(node -e 'process.stdout.write(require("./out/result.json").outcome === "patched" ? "patched" : "no_patch")')
           echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
       - name: Upload the round's result
@@ -129,10 +137,10 @@ jobs:
     outputs:
       outcome: ${{ steps.verify.outputs.outcome }}
     steps:
-      - name: Check out the runner from main
+      - name: Check out the runner at the controller commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: main
+          ref: ${{ inputs.controller }}
           path: runner
           persist-credentials: false
           sparse-checkout: |
@@ -164,11 +172,16 @@ jobs:
         run: node runner/scripts/landing-bot/model/stage.mjs --task in/task.json --work work --out stage.json
       - name: Re-check, apply and verify
         id: verify
+        env:
+          ROUND: ${{ inputs.round }}
+          BASE_SHA: ${{ inputs.sha }}
+          CONTROLLER_SHA: ${{ inputs.controller }}
         run: |
           set -euo pipefail
           stage=()
           if [ -f stage.json ]; then stage=(--stage stage.json); fi
-          node runner/scripts/landing-bot/model/verify.mjs --task in/task.json --work work --patch patch --out out "${stage[@]}"
+          node runner/scripts/landing-bot/model/verify.mjs --task in/task.json --work work --patch patch --out out \
+            --round "$ROUND" --base "$BASE_SHA" --controller "$CONTROLLER_SHA" "${stage[@]}"
           outcome=$(node -e 'process.stdout.write(require("./out/verify.json").passed === true ? "passed" : "verify_failed")')
           echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
       - name: Upload the verify result

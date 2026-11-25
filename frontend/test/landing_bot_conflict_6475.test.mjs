@@ -18,6 +18,9 @@ import {
 import { applyStage, output, runsOf } from '../../scripts/landing-bot/resolve.mjs';
 import { gitIn } from '../../scripts/landing-bot/keeper-merge.mjs';
 import { assertWorkflow, parseJobs } from '../../scripts/landing-bot/workflowGuard.mjs';
+// #8506: the run every edit and verify call in this file belongs to, and the controller commit it ran.
+const IDENT = { repository: 'AxalNetwork/StudioOS', run_id: '7001', run_attempt: '1' };
+const CTRL = 'c'.repeat(40);
 import { pathGuard, STICKY_MARKER } from '../../scripts/landing-bot/rules.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -195,12 +198,12 @@ test('#6475: the runner in merge mode edits and verifies the conflicted tree, an
   // Without the stage report, merge mode refuses before any model call.
   let calls = 0;
   const counting = stub(() => { calls += 1; });
-  const r0 = await editMain({ task: join(out, 'task.json'), work: f.dir, out: join(out, 'z'), round: '1', base: f.head }, { env: {}, providers: { claude: counting } });
+  const r0 = await editMain({ task: join(out, 'task.json'), work: f.dir, out: join(out, 'z'), round: '1', base: f.head, controller: CTRL }, { identity: IDENT, env: {}, providers: { claude: counting } });
   assert.deepEqual([r0.outcome, calls], ['no_patch', 0]);
   assert.match(r0.reason, /the merge was not staged/);
   // The stage step, in its own process in the workflow, writes the report the edit checks.
   stageMain({ task: join(out, 'task.json'), work: f.dir, out: join(out, 'stage-f.json') });
-  const r1 = await editMain({ task: join(out, 'task.json'), work: f.dir, out: join(out, 'a'), round: '1', base: f.head, stage: join(out, 'stage-f.json') }, { env: {}, providers: { claude: lazy } });
+  const r1 = await editMain({ task: join(out, 'task.json'), work: f.dir, out: join(out, 'a'), round: '1', base: f.head, controller: CTRL, stage: join(out, 'stage-f.json') }, { identity: IDENT, env: {}, providers: { claude: lazy } });
   assert.equal(r1.outcome, 'no_patch');
   assert.match(r1.problems.join(), /leaves conflict markers/);
 
@@ -208,7 +211,7 @@ test('#6475: the runner in merge mode edits and verifies the conflicted tree, an
   writeFileSync(join(out, 'task2.json'), JSON.stringify({ ...taskOf(), merge_sha: g.mainSha, head_sha: g.head }));
   const good = stub((call) => call.tool('write_file', { path: FILE, content: BOTH }));
   stageMain({ task: join(out, 'task2.json'), work: g.dir, out: join(out, 'stage-g.json') });
-  const r2 = await editMain({ task: join(out, 'task2.json'), work: g.dir, out: join(out, 'b'), round: '1', base: g.head, stage: join(out, 'stage-g.json') }, { env: {}, providers: { claude: good } });
+  const r2 = await editMain({ task: join(out, 'task2.json'), work: g.dir, out: join(out, 'b'), round: '1', base: g.head, controller: CTRL, stage: join(out, 'stage-g.json') }, { identity: IDENT, env: {}, providers: { claude: good } });
   assert.deepEqual([r2.outcome, r2.files], ['patched', [FILE]]);
   // Verify stages the same merge in a fresh checkout, re-checks the before-hash, applies the patch and runs.
   const h = fixture();
@@ -220,16 +223,20 @@ test('#6475: the runner in merge mode edits and verifies the conflicted tree, an
   const relabel = (s) => s.replaceAll(g.head, h.head);
   mkdirSync(join(out, 'c'), { recursive: true });
   writeFileSync(join(out, 'c', 'patch.json'), relabel(JSON.stringify(patch)));
+  // #8506: the record the edit job would have written for this head, run and controller.
+  const { recordFor } = await import('../../scripts/landing-bot/model/record.mjs');
+  const relabelled = relabel(JSON.stringify(patch));
+  writeFileSync(join(out, 'c', 'record.json'), JSON.stringify(recordFor({ identity: IDENT, task: parseTask(readFileSync(join(out, 'task3.json'), 'utf8')).task, controller: CTRL, head: h.head, round: 1, patchText: relabelled })));
   // The before-hash covers the marker line naming main's SHA, so the fixture's own main must match: recompute it.
   const { sha256 } = await import('../../scripts/landing-bot/model/workspace.mjs');
   stageMain({ task: join(out, 'task3.json'), work: h.dir, out: join(out, 'stage-h.json') });
   const before = readFileSync(join(h.dir, FILE), 'utf8');
   writeFileSync(join(out, 'c', 'manifest.json'), relabel(JSON.stringify({ ...manifest, files: manifest.files.map((x) => ({ ...x, before_sha256: sha256(before) })) })));
-  const v = verifyMain({ task: join(out, 'task3.json'), work: h.dir, patch: join(out, 'c'), out: join(out, 'v'), stage: join(out, 'stage-h.json') }, { env: process.env });
+  const v = verifyMain({ task: join(out, 'task3.json'), work: h.dir, patch: join(out, 'c'), out: join(out, 'v'), stage: join(out, 'stage-h.json'), round: '1', base: h.head, controller: CTRL }, { identity: IDENT, env: process.env });
   assert.equal(v.passed, true, JSON.stringify(v));
   // A stage report of another merge is refused.
   writeFileSync(join(out, 'stage-bad.json'), JSON.stringify({ ok: true, head: h.head, main: 'e'.repeat(40), conflicted: [FILE] }));
-  const bad = verifyMain({ task: join(out, 'task3.json'), work: h.dir, patch: join(out, 'c'), out: join(out, 'v2'), stage: join(out, 'stage-bad.json') }, { env: process.env });
+  const bad = verifyMain({ task: join(out, 'task3.json'), work: h.dir, patch: join(out, 'c'), out: join(out, 'v2'), stage: join(out, 'stage-bad.json'), round: '1', base: h.head, controller: CTRL }, { identity: IDENT, env: process.env });
   assert.match(bad.problems.join(), /another main commit/);
   // The keyed job's modules still start no process: staging is its own step, never imported by edit.mjs.
   for (const m of ['edit.mjs', 'task.mjs', 'patch.mjs']) assert.doesNotMatch(readFileSync(new URL(`scripts/landing-bot/model/${m}`, ROOT), 'utf8'), /from '\.\/stage\.mjs'|child_process/, m);
@@ -257,10 +264,11 @@ function apiFakes({ pr, heads = [] }) {
 }
 
 /** The apply job's inputs on disk: the plan, and the model runner's patch for the fixture's merge. */
-function applyInputs(f, { content = BOTH, extra = [], decision = 'resolve', reasons = [] } = {}) {
+function applyInputs(f, { content = BOTH, extra = [], decision = 'resolve', reasons = [], record = {} } = {}) {
   const tmp = mkdtempSync(join(tmpdir(), 'resolver-apply-'));
   mkdirSync(join(tmp, 'plan')); mkdirSync(join(tmp, 'patch'));
-  const plan = { pr: 77, head: f.head, ref: 'agent/x/66-field', main: f.mainSha, files: [FILE], decision, reasons, day: '2026-11-17' };
+  const plan = { pr: 77, head: f.head, ref: 'agent/x/66-field', main: f.mainSha, files: [FILE], decision, reasons, day: '2026-11-17',
+    task: { version: 1, instructions: 'resolve', allowed_files: [FILE], verify: [['node', '-e', '0']], merge_sha: f.mainSha, head_sha: f.head, pr: 77 } };
   writeFileSync(join(tmp, 'plan', 'plan.json'), JSON.stringify(plan));
   return { tmp, plan, write: async () => {
     const { sha256 } = await import('../../scripts/landing-bot/model/workspace.mjs');
@@ -268,12 +276,16 @@ function applyInputs(f, { content = BOTH, extra = [], decision = 'resolve', reas
     stageMerge(probe.dir, { mainSha: probe.mainSha, headSha: probe.head });
     const before = readFileSync(join(probe.dir, FILE), 'utf8').replace(probe.mainSha, f.mainSha);
     const files = [{ path: FILE, content }, ...extra];
-    writeFileSync(join(tmp, 'patch', 'patch.json'), JSON.stringify({ version: 1, base_sha: f.head, files }));
+    const patchText = JSON.stringify({ version: 1, base_sha: f.head, files });
+    writeFileSync(join(tmp, 'patch', 'patch.json'), patchText);
+    // #8506: the record this run's edit job would have written; `record` overrides a field to test a refusal.
+    const { recordFor } = await import('../../scripts/landing-bot/model/record.mjs');
+    writeFileSync(join(tmp, 'patch', 'record.json'), JSON.stringify({ ...recordFor({ identity: IDENT, task: parseTask(plan.task).task, controller: CTRL, head: f.head, round: 1, patchText }), ...record }));
     writeFileSync(join(tmp, 'patch', 'manifest.json'), JSON.stringify({ version: 1, base_sha: f.head, round: 1, provider: 'claude', model: 'claude-stub',
       files: files.map((x) => ({ path: x.path, before_sha256: x.path === FILE ? sha256(before) : null, after_sha256: sha256(x.content) })) }));
   } };
 }
-const envFor = (tmp, over = {}) => ({ GITHUB_REPOSITORY: REPO, RUNNER_TEMP: tmp, PLAN_DIR: join(tmp, 'plan'), PATCH_DIR: join(tmp, 'patch'),
+const envFor = (tmp, over = {}) => ({ GITHUB_REPOSITORY: REPO, GITHUB_RUN_ID: IDENT.run_id, GITHUB_RUN_ATTEMPT: IDENT.run_attempt, GITHUB_SHA: CTRL, CONTROLLER_SHA: CTRL, RUNNER_TEMP: tmp, PLAN_DIR: join(tmp, 'plan'), PATCH_DIR: join(tmp, 'patch'),
   MODEL_OUTCOME: 'passed', LANDING_BOT_ENABLED: 'true', LANDING_BOT_LOGIN: 'landing-bot[bot]', RESOLVER_APP_TOKEN: 'test-token', ...over });
 /** The apply job's clone, from the fixture instead of GitHub. */
 const cloneFrom = (f) => (_url, headSha, root) => {
@@ -309,7 +321,7 @@ test('#6475: apply pushes one normal merge commit of the planned head and main, 
   assert.match(writes[2][2].body, /owner lands a model-resolved pull request/);
 });
 
-test('#6475: a head that moved between the jobs means no push and no comment', async () => {
+test('#6475/#8506: a head that moved after verification means no push and a definitive hand-back', async () => {
   const f = fixture();
   const inputs = applyInputs(f);
   await inputs.write();
@@ -317,14 +329,17 @@ test('#6475: a head that moved between the jobs means no push and no comment', a
   const { gh, app, writes } = apiFakes({ pr: prOf({ head: { ...prOf().head, sha: f.head } }), heads: [f.head, 'b'.repeat(40)] });
   let pushes = 0;
   const r = await applyStage(envFor(inputs.tmp), { gh, app, clone: cloneFrom(f), pushImpl: () => { pushes += 1; return true; } });
-  assert.deepEqual([r.outcome, r.why, pushes, writes.length], ['skipped', 'its head moved', 0, 0]);
+  // #8506: no longer a quiet skip. The verified merge is not the one a push would make: one label, one comment.
+  assert.deepEqual([r.outcome, pushes], ['handed_back', 0]);
+  assert.match(r.cause, /head moved after the resolution was verified/);
+  assert.deepEqual(writes.map((w) => w.slice(0, 2)), [['post', 'issues/77/labels'], ['post', 'issues/77/comments']]);
   // Moved after the commit, just before the push: still no push.
   const g = fixture();
   const late = applyInputs(g);
   await late.write();
   const fk = apiFakes({ pr: prOf({ head: { ...prOf().head, sha: g.head } }), heads: [g.head, g.head, 'c'.repeat(40)] });
   const r2 = await applyStage(envFor(late.tmp), { gh: fk.gh, app: fk.app, clone: cloneFrom(g), pushImpl: () => { pushes += 1; return true; } });
-  assert.deepEqual([r2.outcome, pushes], ['skipped', 0]);
+  assert.deepEqual([r2.outcome, pushes], ['handed_back', 0]);
 });
 
 test('#6475: apply hands back, with one label and one comment, a one-sided, extra-file or failed resolution', async () => {
@@ -380,5 +395,26 @@ test('#6475: an output value from the API is one line, so it cannot add a second
     assert.throws(() => output('ref\nx', 'y'), /bad output name/);
   } finally {
     if (before === undefined) delete process.env.GITHUB_OUTPUT; else process.env.GITHUB_OUTPUT = before;
+  }
+});
+
+test('#8506: apply refuses, and hands back without pushing, a patch from another attempt, controller or head', async () => {
+  // Mutation checked: removing the publishRecordProblems call from applyStage lets each case push.
+  for (const [name, opts, env, cause] of [
+    ['a second attempt reusing the first attempt\'s patch', {}, { GITHUB_RUN_ATTEMPT: '2' }, /another attempt of this run/],
+    ['the publish step runs another controller', {}, { GITHUB_SHA: 'e'.repeat(40) }, /does not run the controller revision/],
+    ['a record naming another head', { record: { head_sha: 'b'.repeat(40) } }, {}, /another head/],
+    ['no record', { record: { version: 0 } }, {}, /no record, or a malformed one/],
+  ]) {
+    const f = fixture();
+    const inputs = applyInputs(f, opts);
+    await inputs.write();
+    const { gh, app, writes } = apiFakes({ pr: prOf({ head: { ...prOf().head, sha: f.head } }) });
+    let pushes = 0;
+    const r = await applyStage(envFor(inputs.tmp, env), { gh, app, clone: cloneFrom(f), pushImpl: () => { pushes += 1; return true; } });
+    assert.equal(r.outcome, 'handed_back', name);
+    assert.match(r.cause, cause, name);
+    assert.equal(pushes, 0, name);
+    assert.deepEqual(writes.map((w) => w.slice(0, 2)), [['post', 'issues/77/labels'], ['post', 'issues/77/comments']], name);
   }
 });
