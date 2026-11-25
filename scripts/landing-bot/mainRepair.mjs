@@ -30,6 +30,7 @@ import { cloneFor, output } from './resolve.mjs';
 import { checkPatch } from './model/patch.mjs';
 import { HARD, parseTask, VERIFY_PROGRAMS } from './model/task.mjs';
 import { sha256 } from './model/workspace.mjs';
+import { publishRecordProblems, readPatchRecord } from './model/record.mjs';
 
 export const KIND = 'main-repair';
 export const BRANCH_PREFIX = `${REPAIR_BRANCH_PREFIX}main-`;
@@ -555,10 +556,17 @@ export async function applyStage(env, {
     let provider = null;
     const refusals = [];
     if (plan.decision === 'repair' && env.MODEL_OUTCOME === 'passed') {
-      const patch = JSON.parse(readFileSync(join(env.PATCH_DIR, 'patch.json'), 'utf8'));
+      const { patchText, record } = readPatchRecord(env.PATCH_DIR, (p) => readFileSync(p, 'utf8'));
+      const patch = JSON.parse(patchText);
       const manifest = JSON.parse(readFileSync(join(env.PATCH_DIR, 'manifest.json'), 'utf8'));
       const readBefore = (p) => (existsSync(join(c.dir, p)) ? readFileSync(join(c.dir, p), 'utf8') : null);
-      let problems = checkRepairPatch({ patch, manifest, allowed: plan.allowed || [], readBefore, failingTests: plan.failingTests || [] });
+      // #8506: the record names this run, attempt, task and controller revision, the main commit the model runner
+      // edited (its `head` output, MODEL_HEAD_SHA), and these patch bytes. Main itself moves; the manifest's before
+      // hashes, checked against main's head here, are what keep a moved file from being overwritten.
+      let problems = [
+        ...publishRecordProblems({ env, task: parseTask(plan.task ?? null).task, head: env.MODEL_HEAD_SHA, patchText, record }),
+        ...checkRepairPatch({ patch, manifest, allowed: plan.allowed || [], readBefore, failingTests: plan.failingTests || [] }),
+      ];
       if (!problems.length) {
         // Only now, with every path checked, is anything written; the committed diff then goes through merge-policy.mjs.
         for (const f of patch.files) writeFileSync(join(c.dir, f.path), f.content);
