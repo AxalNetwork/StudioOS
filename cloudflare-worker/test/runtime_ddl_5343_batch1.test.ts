@@ -103,11 +103,11 @@ test('#5343 batch 1: a database missing the columns gets them once; the next iso
     const first = isolate(db);
     await all(first.env);
     const added = (t: string) => first.log.alters.filter((a) => a.includes(` ${t} `)).length;
-    assert.deepEqual([added('users'), added('notifications'), added('notifications_inbox'), added('ai_usage_logs')], [1, 1, 4, 11]);
+    assert.deepEqual([added('users'), added('notifications'), added('notifications_inbox'), added('ai_usage_logs')], [1, 1, 4, 14]);
     assert.ok(columns(db, 'users').includes('last_active_at'));
     assert.ok(columns(db, 'notifications').includes('dedupe_key'));
     for (const c of ['category', 'severity', 'cta_url', 'template_key']) assert.ok(columns(db, 'notifications_inbox').includes(c), c);
-    for (const c of ['charged_microusd', 'rail_page', 'units_json', 'agent_id', 'skill_id', 'skill_version']) assert.ok(columns(db, 'ai_usage_logs').includes(c), c);
+    for (const c of ['charged_microusd', 'rail_page', 'units_json', 'agent_id', 'skill_id', 'skill_version', 'provider', 'request_id', 'tokens_reported']) assert.ok(columns(db, 'ai_usage_logs').includes(c), c);
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_users_last_active'").get());
     resetAiRouter();
     const next = isolate(db);

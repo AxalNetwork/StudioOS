@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { buildDirectoryPlan } from './lib/networkDirectoryPlan.mjs';
+import { recordsDigest } from './lib/networkDirectoryDigest.mjs';
 
 // One descriptor per input: the size check, the snapshot hash and the parse all see the same bytes.
 function readInput(path) {
@@ -39,8 +40,10 @@ try {
   });
   const plan=buildDirectoryPlan({records,manifest});
   writeFileSync(out,JSON.stringify(plan,null,2)+'\n',{mode:0o600,flag:'wx'});
-  if(report)writeFileSync(report,JSON.stringify(plan.summary,null,2)+'\n',{mode:0o600,flag:'wx'});
-  process.stdout.write(JSON.stringify(plan.summary,null,2)+'\n');
+  // D7674 part 2: the snapshot an organisation apply upload names, digested as the Worker digests it.
+  const summary={...plan.summary,snapshot:{record_count:records.length,records_sha256:await recordsDigest(records)}};
+  if(report)writeFileSync(report,JSON.stringify(summary,null,2)+'\n',{mode:0o600,flag:'wx'});
+  process.stdout.write(JSON.stringify(summary,null,2)+'\n');
 } catch(error) {
   // Parser errors can quote a raw input/email; never print their message.
   process.stderr.write('Directory planning failed. Check input shape, review manifest and unused output paths outside the repository. No database was contacted.\n');

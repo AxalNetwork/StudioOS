@@ -367,6 +367,10 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # SAME_WRITE, a plain constant, so no later commit carries it. Scoped to the
 # one finding.
 4e9cfd8335c37678ad99e0f6e236abb6d2d6c508:frontend/test/company_suggested_filings_8259.test.mjs:generic-api-key:87
+# D8532 (#8532): not a secret. RFC 6238's published TOTP test seed, base32-encoded, in the release-window
+# probe's first commit; it signs one-time codes for a local fixture account only and was never a credential.
+# The next commit encodes the seed at run time, so no later commit carries the literal. Scoped to the one finding.
+27ff21365eea4c01f4b04ebe147358b6d817b58f:scripts/release-window-probe.mjs:generic-api-key:40
 # D8530 (#8530): not a secret. The synthetic signing seed for locally minted test tokens in the VentureSpace
 # store helper's first commit; it signs tokens for an in-memory test database only and was never a credential.
 # The next commit joins the seed from plain words at run time, so no later commit carries the literal.
@@ -377,3 +381,9 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # first commit; it lives in an in-memory test database only. The next commit joins it at run time, so no
 # later commit carries the literal. Scoped to the one finding.
 4fc894d823fb758e40b911aa26d83357a2e91917:cloudflare-worker/test/email_delivery_contract_8536_part3.test.ts:generic-api-key:390
+# D7674-p2 (#7674): the synthetic JWT signing string in the organisation-apply
+# test's first commit. It signed test tokens for an in-memory database only and
+# was never a credential. The next commit generates the key at run time from
+# random UUIDs, so no later commit carries a literal. Scoped to the one finding,
+# as D334's entry is.
+194a9814bd9bd54d24d92867ac77833b0a1086ad:cloudflare-worker/test/network_directory_org_apply_7674.test.ts:generic-api-key:16

@@ -15,6 +15,8 @@ import {
 import { gitIn } from '../../scripts/landing-bot/keeper-merge.mjs';
 import { manifestFor, patchFor } from '../../scripts/landing-bot/model/patch.mjs';
 import { assertWorkflow, parseJobs } from '../../scripts/landing-bot/workflowGuard.mjs';
+import { recordFor } from '../../scripts/landing-bot/model/record.mjs';
+import { parseTask } from '../../scripts/landing-bot/model/task.mjs';
 import { STICKY_MARKER } from '../../scripts/landing-bot/rules.mjs';
 
 // The stages write job outputs and a summary when these are set; a test run inside Actions must not add to its own.
@@ -210,6 +212,9 @@ const cloneFrom = (f) => (url, sha, root) => {
   execFileSync('git', ['checkout', '-q', '--detach', sha], { cwd: dir });
   return { dir, git: gitIn(dir), main: sha };
 };
+// #8506: the model runner's controller commit and the task a repair plan carries into the patch's record.
+const CONTROLLER = 'c'.repeat(40);
+const REPAIR_TASK = { version: 1, instructions: 'fix main', allowed_files: [SRC], verify: [['node', '-e', '0']] };
 async function inputs(plan, patchFiles = null) {
   const tmp = mkdtempSync(join(tmpdir(), 'main-repair-io-'));
   const planDir = join(tmp, 'plan');
@@ -217,14 +222,18 @@ async function inputs(plan, patchFiles = null) {
   mkdirSync(planDir); mkdirSync(patchDir);
   writeFileSync(join(planDir, 'plan.json'), JSON.stringify({
     repo: REPO, issue: 900, run: { id: 2, head_sha: 'a'.repeat(40) }, allowed: [SRC], failingTests: [TEST_FILE],
+    task: REPAIR_TASK,
     rows: [{ job: 'suite (frontend-1-of-2)', kind: 'test', file: TEST_FILE, what: 'validates a stage @someone', reproduce: `node --test ${TEST_FILE}` }], ...plan,
   }));
   if (patchFiles) {
     const changes = patchFiles.map(([path, before, after]) => ({ path, before, after }));
-    writeFileSync(join(patchDir, 'patch.json'), JSON.stringify(patchFor({ baseSha: plan.base, changes })));
+    const patchText = JSON.stringify(patchFor({ baseSha: plan.base, changes }));
+    writeFileSync(join(patchDir, 'patch.json'), patchText);
+    // #8506: the record this run's edit job would have written for main at plan.base.
+    writeFileSync(join(patchDir, 'record.json'), JSON.stringify({ ...recordFor({ identity: { repository: REPO, run_id: '4242', run_attempt: '1' }, task: parseTask(plan.task ?? REPAIR_TASK).task, controller: CONTROLLER, head: plan.base, round: 1, patchText }), ...(plan.record ?? {}) }));
     writeFileSync(join(patchDir, 'manifest.json'), JSON.stringify(manifestFor({ baseSha: plan.base, round: 1, result: { provider: 'claude', model: 'claude-opus-5-5', turns: 3, attempts: [] }, changes })));
   }
-  return { env: { GITHUB_REPOSITORY: REPO, GITHUB_RUN_ID: '4242', RUNNER_TEMP: tmp, PLAN_DIR: planDir, PATCH_DIR: patchDir, LANDING_BOT_ENABLED: 'true', LANDING_BOT_LOGIN: BOT, MAIN_REPAIR_APP_TOKEN: 't', MODEL_OUTCOME: patchFiles ? 'passed' : '' } };
+  return { env: { GITHUB_REPOSITORY: REPO, GITHUB_RUN_ID: '4242', GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: CONTROLLER, CONTROLLER_SHA: CONTROLLER, MODEL_HEAD_SHA: plan.base, RUNNER_TEMP: tmp, PLAN_DIR: planDir, PATCH_DIR: patchDir, LANDING_BOT_ENABLED: 'true', LANDING_BOT_LOGIN: BOT, MAIN_REPAIR_APP_TOKEN: 't', MODEL_OUTCOME: patchFiles ? 'passed' : '' } };
 }
 function apiFakes({ mainSha, runs = [run(2, 'failure', 20), run(1, 'success', 10)], openPrs = [] }) {
   const writes = [];
@@ -456,4 +465,20 @@ test('#6477: claim posts the one diagnosis comment and stops, or claims the issu
   assert.equal(lost.r.go, false, 'someone claimed it first: the bot steps aside');
   assert.ok(!lost.writes.some((w) => w[1] === 'issues/900/labels'));
   assert.equal((await stage({ decision: 'skip', reasons: [] })).r.go, false);
+});
+
+test('#8506: a good patch whose record names another attempt or controller is refused, and main repair falls back to the revert', async () => {
+  // Mutation checked: removing publishRecordProblems from mainRepair's apply opens the model's patch instead.
+  for (const [name, plan, env] of [
+    ['a second attempt reusing the first attempt\'s patch', { record: { run_attempt: '1' } }, { GITHUB_RUN_ATTEMPT: '2' }],
+    ['the publish step runs another controller', {}, { GITHUB_SHA: 'e'.repeat(40) }],
+    ['a record naming another edited main', { record: { head_sha: 'b'.repeat(40) } }, {}],
+  ]) {
+    const f = fixture();
+    const io = await inputs({ decision: 'repair', base: f.red, firstRed: { head_sha: f.red, complete: true, pr: 5001 }, ...plan },
+      [[SRC, 'export const a = 2;\n', 'export const a = 1;\n']]);
+    const fakes = apiFakes({ mainSha: f.red });
+    const out = await applyStage({ ...io.env, ...env }, { gh: fakes.gh, app: fakes.app, clone: cloneFrom(f), claim: fakes.claim, pushImpl: () => true });
+    assert.deepEqual([out.outcome, out.how], ['opened', 'revert'], name);
+  }
 });

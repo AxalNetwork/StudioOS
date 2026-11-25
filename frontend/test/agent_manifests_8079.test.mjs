@@ -79,7 +79,7 @@ function check(files) {
 function refuses(text, code, file = 'market-research.agent.yml') {
   const r = check({ [file]: text });
   assert.equal(r.status, 1, `exit 1 expected for ${code}; stdout: ${r.stdout}`);
-  assert.match(r.stderr, new RegExp(`${file.replace(/\./g, '\\.')}: ${code}: `), r.stderr);
+  assert.ok(r.stderr.includes(`${file}: ${code}: `), r.stderr);
   return r.stderr;
 }
 
@@ -90,7 +90,7 @@ test('every seed manifest in agents/ validates, and each named agent is declared
   for (const seed of ['coordinator', 'keeper', 'landing-bot', 'model-runner', 'scan-remediation', 'sessions']) {
     assert.ok(files.includes(`${seed}.agent.yml`), `agents/${seed}.agent.yml`);
   }
-  assert.match(r.stdout, new RegExp(`${files.length} manifest\\(s\\)`));
+  assert.ok(r.stdout.includes(`check-agent-manifests: ${files.length} manifest(s) in `), r.stdout);
 });
 
 test('the slot sessions are one platform manifest with the session identity', () => {
@@ -102,6 +102,14 @@ test('the slot sessions are one platform manifest with the session identity', ()
 test('the valid venture fixture passes, so each refusal below is caused by its one change', () => {
   const r = check({ 'market-research.agent.yml': VENTURE });
   assert.equal(r.status, 0, r.stderr);
+});
+
+test('refusal diagnostics require the exact literal code', () => {
+  const invalid = swap('status: live\n', '');
+  refuses(invalid, 'schema');
+  for (const nearMiss of ['schem.', 'schema|other']) {
+    assert.throws(() => refuses(invalid, nearMiss), assert.AssertionError, nearMiss);
+  }
 });
 
 test('prod_deploy: prod:deploy, deploy.production and a wildcard covering it are refused', () => {
@@ -127,9 +135,9 @@ test('capability_unknown: a name outside the catalogue, or a wildcard that match
 test('privileged_path: a venture agent cannot list a path on #8067\'s list', () => {
   for (const glob of ['.github/workflows/ci.yml', 'ventures/acme/**', '**/package.json', 'ventures/acme/wrangler.toml',
     'cloudflare-worker/sql/**', 'Scripts/deploy.mjs', 'ventures/acme/src/**/*.ts', 'AGENTS.md', 'ventures/acme/yarn.lock',
-    'cloudflare-worker/src/middleware/*.ts']) {
+    'cloudflare-worker/src/middleware/*.ts', 'ventures/acme+ops/scripts/*.mjs']) {
     const err = refuses(swap('  - ventures/acme/src/*.ts', `  - '${glob}'`), 'privileged_path');
-    assert.match(err, new RegExp(glob.replace(/[.*?]/g, '\\$&')));
+    assert.ok(err.includes(glob), err);
   }
 });
 
@@ -160,6 +168,7 @@ test('schema: missing and unknown keys, bad values, a name that is not the file,
   refuses(swap('  - ventures/acme/src/*.ts', '  - ventures/{a,b}/*.ts'), 'schema');
   refuses(swap('  route: gateway', '  route: none'), 'schema');
   refuses(VENTURE, 'schema', 'other-name.agent.yml');
+  refuses(VENTURE, 'schema', 'market+research.agent.yml');
   assert.match(refuses(`${VENTURE}name: twice\n`, 'schema'), /unreadable YAML/);
   assert.match(refuses(VENTURE, 'schema', 'market-research.agent.yaml'), /holds README\.md and `<name>\.agent\.yml` files only/);
   const empty = check({});

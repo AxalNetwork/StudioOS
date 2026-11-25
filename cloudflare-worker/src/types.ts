@@ -613,6 +613,8 @@ export interface Env {
   WORK_GRAPH_LEASE?: DurableObjectNamespace;
   /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
   WORK_GRAPH_LEASES?: string;
+  // D5586 part 3 (#5586): #5570's admission coordinator (`services/agents/workspaceAdmissionClient.ts`). Optional: without it every client call answers `admission_unbound`.
+  WORKSPACE_ADMISSION?: DurableObjectNamespace;
   /** D5582 part 3: Super Admin drafting routes, only "preview" on a preview deployment enables them. */
   WORK_GRAPH_DRAFTING?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.

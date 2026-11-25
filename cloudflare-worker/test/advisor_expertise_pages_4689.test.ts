@@ -119,7 +119,7 @@ test('proof: 201 claims, the only confirmed one on page 2, still counted on page
   const [one, two] = await allPages(get, '/me/proof');
   assert.equal(one.items.length, 200);
   assert.equal(one.items.filter((x: any) => x.status === 'attested').length, 0, 'no confirmed claim on page 1');
-  assert.deepEqual(one.counts, { total: 201, attested: 1, self_stated: 200, awaiting: 1 }, 'the confirmed claim on page 2 is counted; item 3 awaits an answer');
+  assert.deepEqual(one.counts, { total: 201, attested: 1, self_stated: 200, awaiting: 1, needs_reconfirmation: 0 }, 'the confirmed claim on page 2 is counted; item 3 awaits an answer');
   assert.deepEqual(two.items.map((x: any) => [x.uid, x.status]), [['pr-1', 'attested']]);
   assert.deepEqual(one.page, { offset: 0, limit: 200, total: 201, next_offset: 200 });
   assert.deepEqual(two.page, { offset: 200, limit: 200, total: 201, next_offset: null });

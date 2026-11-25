@@ -124,7 +124,8 @@ export const DIMENSIONS = Object.freeze([
       const facts = [];
       if (attested != null) facts.push(`${attested} confirmed`);
       if (awaiting != null) facts.push(`${awaiting} awaiting`);
-      const reconfirm = wholePage(proof?.page) ? reconfirmations(proof).length : null;
+      // D7807 (#7807): the Worker's whole-list figure, on any page size; never a count of the page.
+      const reconfirm = num(c.needs_reconfirmation);
       const subs = [];
       if (selfStated != null) subs.push(`${selfStated} self-stated`);
       if (reconfirm) subs.push(`${reconfirm} ${reconfirm === 1 ? 'needs' : 'need'} reconfirmation`);

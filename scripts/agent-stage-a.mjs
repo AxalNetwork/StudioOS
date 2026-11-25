@@ -4,7 +4,7 @@
  * throwaway Worker, with STUBBED INFERENCE. Owner decisions 1 = A and 2 = A
  * (2026-11-12). Run by `.github/workflows/agent-stage-a.yml` (dispatch only).
  *
- *   node scripts/agent-stage-a.mjs --run <id> [--summary out.json]
+ *   node scripts/agent-stage-a.mjs --run <id> [--summary out.json] [--receipt receipt.jsonl]
  *
  * THE STEPS, each in the summary's ledger. Everything created is deleted in
  * `finally`, pass or fail:
@@ -37,12 +37,17 @@
  * redeployed without it. Each run must show one usage row on version 1 and the
  * runtime it asked for, or a recorded fallback (`skillRunVerdict`).
  *
+ * THE RECEIPT (D8507). With `--receipt <file>`, one JSON line is appended
+ * for each resource the moment it exists (the Worker's before its first
+ * deploy), so the workflow's `if: always()` sweep job can find what a killed
+ * job's `finally` never deleted. The summary names the harness commit.
+ *
  * The log, the step summary and the artifact hold names, counts, states and
  * timings only. Wrangler output that could quote SQL or a secret is withheld.
  */
 import { spawnSync } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -50,6 +55,7 @@ import {
   CEILINGS, RECONCILE, STAGE_A_ENV, STAGE_A_VARS, checkFlat, envView, extraSeed, fixtureIds, reconcile, renderFlat,
   skillRunVerdict, skillSeed, stageANames, stageASections, toCreate,
 } from './lib/stageARun.mjs';
+import { receiptLine } from './lib/stageASweep.mjs';
 import { createdDatabaseId, rehearsalConfig } from './lib/schemaRehearsal.mjs';
 import { rehearsalConfigPath } from './lib/migrationTargets.mjs';
 import { seedStatements, toSqlFile, SYNTHETIC_MODULE, SYNTHETIC_OPTION } from './lib/agentSyntheticFixtures.mjs';
@@ -60,6 +66,7 @@ const WORKER_DIR = resolve(ROOT, 'cloudflare-worker');
 const args = process.argv.slice(2);
 const value = (f) => { const i = args.indexOf(f); return i === -1 ? null : args[i + 1]; };
 const SUMMARY = value('--summary');
+const RECEIPT = value('--receipt');
 const STARTED = Date.now();
 const TOML = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
 
@@ -68,8 +75,11 @@ const FLAT_PATH = resolve(ROOT, `wrangler.s4594.${n.run}.toml`);
 const TMP = mkdtempSync(join(tmpdir(), `stage-a-${n.run}-`));
 const log = (m) => console.log(`[stage-a] ${m}`);
 const created = { d1: null, kv: [], queues: [], buckets: [], worker: false, workflows: [] };
+/** D8507: one receipt line per resource, written as it is created; a write failure stops the run before anything else is made. */
+const receipt = (kind, name, id = null) => { if (RECEIPT) appendFileSync(RECEIPT, receiptLine(n.run, { kind, name, id })); };
+const HARNESS = (() => { const r = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; })();
 const summary = {
-  issue: 4594, label: 'HOSTED PLATFORM WITH STUB', run: n.run, worker: n.worker, commit: process.env.GITHUB_SHA || null,
+  issue: 4594, label: 'HOSTED PLATFORM WITH STUB', run: n.run, worker: n.worker, commit: process.env.GITHUB_SHA || null, harness: HARNESS,
   started_at: new Date(STARTED).toISOString(), ceilings: CEILINGS, steps: {}, paths: {}, verdict: 'fail', reason: null,
 };
 
@@ -195,16 +205,20 @@ try {
     const r = wrangler(['d1', 'create', n.d1.name, '--jurisdiction', 'eu']);
     ids.d1 = createdDatabaseId(r.stdout);
     created.d1 = ids.d1;
+    receipt('d1', n.d1.name, ids.d1);
     writeFileSync(resolve(ROOT, `wrangler.rehearsal.${n.d1.id}.toml`), rehearsalConfig({ dbName: n.d1.name, databaseId: ids.d1 }));
     for (const k of n.kv) {
       const out = wrangler(['kv', 'namespace', 'create', k.title]);
       const id = (`${out.stdout}`.match(/"?id"?\s*[:=]\s*"([0-9a-f]{32})"/) || [])[1];
       if (!id) throw new Error(`kv namespace create printed no id for ${k.binding}`);
       created.kv.push({ title: k.title, id }); ids.kv[k.binding] = id;
+      receipt('kv', k.title, id);
     }
     const plan = toCreate(stageASections(TOML, n.run, ids));
-    for (const q of plan.queues) { wrangler(['queues', 'create', q]); created.queues.push(q); }
-    for (const b of plan.buckets) { wrangler(['r2', 'bucket', 'create', b]); created.buckets.push(b); }
+    for (const q of plan.queues) { wrangler(['queues', 'create', q]); created.queues.push(q); receipt('queue', q); }
+    for (const b of plan.buckets) { wrangler(['r2', 'bucket', 'create', b]); created.buckets.push(b); receipt('bucket', b); }
+    // A Workflow is created by the deploy; its name is recorded now so a killed deploy is still swept.
+    for (const w of plan.workflows) receipt('workflow', w);
     created.workflows.push(...plan.workflows);
     return { d1: 1, kv: created.kv.length, queues: created.queues.length, buckets: created.buckets.length };
   });
@@ -238,6 +252,7 @@ try {
     const flat = renderFlat(rendered);
     checkFlat(flat, TOML);
     writeFileSync(FLAT_PATH, flat);
+    receipt('worker', n.worker);
     const gen = spawnSync('node', ['scripts/build-generated.mjs'], { cwd: ROOT, encoding: 'utf8' });
     if (gen.status !== 0) throw new Error('could not write the generated modules');
     const out = wrangler(['deploy', '--config', FLAT_PATH]);

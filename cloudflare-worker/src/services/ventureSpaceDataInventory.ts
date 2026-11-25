@@ -396,6 +396,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['spinout_lab_enrollment_events', 'p', 'left'],
   ['spinout_lab_enrollments', 'p', 'left'],
   ['stage_norms', 'p', 'cascade'],
+  ['swarm_admission_events', 'c', 'company'],
   ['task_comments', 'p', 'refuses'],
   ['task_labels', 'p', 'refuses'],
   ['task_milestones', 'p', 'refuses'],

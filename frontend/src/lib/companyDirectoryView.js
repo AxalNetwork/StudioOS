@@ -181,6 +181,9 @@ export const INDEX_DIMENSIONS = [
 /**
  * One row per dimension from `GET /research/markets/:slug`'s `index.series`:
  * the latest point and its change, or Not recorded with the API's reason.
+ * D7710: a point is keyed by month but holds the score over the window the
+ * Worker stored (D7708), so the row carries that window as given; a point
+ * with none carries nulls, never a window derived from its month.
  */
 export function indexRows(index) {
   return INDEX_DIMENSIONS.map(({ key, label: name }) => {
@@ -191,6 +194,7 @@ export function indexRows(index) {
     return {
       key, label: name, state: 'recorded', value: last.value, change: signedPct(last.change),
       period: last.period, month_to_date: !!last.month_to_date, points: pts.map((p) => p.value),
+      window_start: last.window_start ?? null, window_end: last.window_end ?? null,
     };
   });
 }

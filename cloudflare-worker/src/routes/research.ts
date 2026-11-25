@@ -93,7 +93,7 @@ import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldE
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
-import { reconcileRoomRefs, roomFileStillThere } from '../services/roomLibrary';
+import { reconcileRoomRefs, roomFileStillThere, roomRefAccess } from '../services/roomLibrary';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
@@ -189,16 +189,27 @@ interface DocRow {
  * `moved`, `library_off`). It is read only, and it is never downloaded from here: the room's own download, with its
  * log and its NDA gate, is the one path to its bytes.
  */
-type RoomRef = { project_uid: string | null; project_name: string | null; added_at: string; lost_at: string | null; lost_reason: string | null };
+type RoomRef = {
+  project_uid: string | null; project_name: string | null; added_at: string; lost_at: string | null; lost_reason: string | null;
+  access?: { until: string | null } | null;
+};
+/**
+ * D6913 part 3 (RS-15): a live reference also carries its access (`roomRefAccess`), so an Ask citation can say how long
+ * the room stays open: `until` is the grant's end, null when the founder set none. A lapsed reference, or one read
+ * without its grant (`roomRefOfDoc`), carries no access at all rather than a guessed one.
+ */
 const roomDto = (ref: RoomRef | null | undefined) => (ref ? {
   project_uid: ref.project_uid, project_name: ref.project_name, added_at: ref.added_at, lost_at: ref.lost_at, lost_reason: ref.lost_reason,
+  access: ref.access ? { until: ref.access.until ?? null } : null,
 } : null);
 async function roomRefsOf(env: Env, userId: number): Promise<Map<number, RoomRef>> {
   const rows = await env.DB.prepare(
     `SELECT r.document_id, r.added_at, r.lost_at, r.lost_reason, p.uid AS project_uid, p.name AS project_name
        FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.owner_user_id = ?`,
   ).bind(userId).all<any>().catch(() => ({ results: [] as any[] }));
-  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), x as RoomRef]));
+  // D6913 part 3: each live reference's grant end, read by the room-library service (it owns the grant rule).
+  const access = await roomRefAccess(env, userId).catch(() => new Map<number, { until: string | null }>());
+  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), { ...x, access: access.get(Number(x.document_id)) ?? null } as RoomRef]));
 }
 async function roomRefOfDoc(env: Env, documentId: number): Promise<RoomRef & { project_id: number; file_id: number } | null> {
   return env.DB.prepare(

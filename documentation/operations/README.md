@@ -8,12 +8,14 @@ files say how to act on it.
 | File | Use it to |
 | --- | --- |
 | `STRIPE_RENEWAL_GRACE.md` | Configure failed-payment termination and verify the bounded grace and webhook payload version (D1100). |
+| `STRIPE_WEBHOOK_RECONCILIATION.md` | Tell "no webhook event expected" from a broken delivery path with the read-only reconciliation, and read the post-deploy smoke's Stripe line (D8512). |
 | `USAGE_RETENTION.md` | Retention tiers for the AI usage, reservation, ledger, run and proposal tables, what blocks moving a row today, and the counsel and owner gates before anything is archived or deleted (D4568). |
 | `D1_BENCHMARK.md` | Measure whether the one D1 database limits mixed agent and financial load: the local benchmark (`npm run bench:d1`), the owner's read-only production baseline, the hosted preview run behind #4566's preflight, and what each result may claim (D4567). |
 | `AGENT_EXECUTION_VALIDATION.md` | Test agent execution outside production: the preview isolation matrix, the fail-closed preflight, synthetic fixtures and their cleanup, the owner-only actions and teardown, and how evidence is classed (D4566). |
 | `STAGING.md` | Provision, rebuild and tear down staging, the isolated `studioos-preview` Worker over synthetic data: the resource inventory, the cost estimate awaiting the owner's approval, the isolation rules and the runbook (D7147). |
 | `AGENT_ENGINE_GO_LIVE.md` | Prepare and stage agent rollout, verify the $100 gateway limit, cohort membership, halt and breaker controls (D4423). |
 | `DEPLOY.md` | Ship the Worker and the SPA to production, and roll a deploy back. |
+| `MERGE_CONTROL_POLICY.md` | Read the `merge-control/policy` check: the events that post it, what T0, T1 and T2 mean, what `action_required` asks of a person, sign-off (not built yet), break-glass (D5605 row 1), fail-closed behaviour and the kill switch (#5991). |
 | `DATA_RETENTION.md` | Look up how long each deck store keeps its rows and R2 objects, what removes them, and the known gaps (D1508). |
 | `PROCESSING_AND_RETENTION_5510.md` | Trace Axal VC data collection, tentative processor/vendor inventory, erasure/retention evidence and pending legal/production verification without publishing secret or user data (#5510). |
 | `DECK_GRID.md` | Run deck builder v2, the Grid (D1547, #3792): switch off a model, refund a batch, unstick a batch, purge an image including a DMCA takedown. Says which steps have a route, which are SQL, and that none is tested on staging yet; `deck_grid_runbook_3792` keeps the names true to the code and `deck_grid_runbook_d1547` runs the SQL. |
