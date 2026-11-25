@@ -246,6 +246,11 @@ export const APPROVAL_LANES: Readonly<Record<ApprovalLaneKey, LaneFacts>> = {
     notifies: 'The studio', decidedOn: 'Licences › Program grants › Requests',
     decisions: { recorded: true, since: null },
   },
+  formation_cases: {
+    label: 'Formation cases waiting on HQ', group: 'hq', scope: 'hq', notifies: 'Nobody yet',
+    decidedOn: null, undecidedReason: 'Read and assign here. Case actions are recorded in Formation.',
+    decisions: { recorded: false, reason: 'This lane assigns HQ owners. The case timeline records formation actions.' },
+  },
 };
 
 /** Every lane key, in the canvas's order. */

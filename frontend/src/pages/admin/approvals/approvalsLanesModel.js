@@ -60,6 +60,7 @@ export const HQ_LANES = [
   // D5302: HQ's proposal queue is built (D964), and the Worker's lane is decided there and keeps its history.
   { key: 'proposals', label: 'Program proposals', door: 'Programs › Proposals' },
   { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program access by licence › Requests' },
+  { key: 'formation_cases', label: 'Formation cases waiting on HQ', note: 'Read and assign here. Case actions are recorded in Formation.' },
 ];
 
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);

@@ -103,6 +103,8 @@ function seed(db: DatabaseSync) {
 /** One waiting row and one decided row, per HQ lane. */
 function seedHq(db: DatabaseSync) {
   db.exec(`
+    INSERT INTO formation_cases (uid, user_id, intent, track, stage, waiting_on, created_at)
+      VALUES ('fixture-case', 3, 'new_company', 'v2', 'preparing', 'hq', '${at(88)}');
     INSERT INTO testing_programmes (uid, owner_kind, owner_partner_id, created_by, product_name, places, status, created_at, updated_at) VALUES
       ('t1', 'partner', 1, 3, 'Fixture App', 10, 'submitted', '${at(90)}', '${at(60)}'),
       ('t2', 'hq', NULL, 1, 'HQ App', 10, 'submitted', '${at(90)}', '${at(60)}'),
@@ -228,7 +230,7 @@ test('each HQ lane counts only its queue\'s own open items', async () => {
   assert.deepEqual(Object.fromEntries(Object.entries(hq).map(([k, v]) => [k, v.count])), {
     testing_programs: 1, learning: 1, tickets: 2, payouts: 2, ai_runs: 1, notices: 1, support: 1, proposals: 1,
     // D1132: the open program grant, and not the answered end; Support keeps only its own question.
-    grants: 1,
+    grants: 1, formation_cases: 1,
   });
   assert.equal(hq.grants.oldest_at, at(25));
   // Features and tasks: the oldest is the unreviewed feature (70 h), not the reviewed one.
@@ -351,7 +353,7 @@ test('the glance: HQ decides for a Super Admin only, with notifies and decided_o
   assert.equal(lane('kyb').undecided_reason, undefined);
   assert.deepEqual(ap.not_counted.map((n: any) => n.key), []);
   assert.equal(ap.hq_decides.lanes.length, HQ_APPROVAL_SOURCES.length);
-  assert.equal(ap.hq_decides.pending_total, 11, 'D1132: the open program grant is counted once, in its own lane');
+  assert.equal(ap.hq_decides.pending_total, 12, 'the open grant and formation case each count once');
   assert.deepEqual(ap.hq_decides.not_counted.map((n: any) => n.key), []);
   // HQ's total stays apart from the studios' lanes.
   assert.equal(ap.pending_total, ap.lanes.reduce((t: number, l: any) => t + l.count, 0));
@@ -398,7 +400,7 @@ test('HQ\'s inbox (D1040) carries HQ\'s lanes for a Super Admin only: read, assi
   assert.equal(plain.body.items.some((it: any) => HQ_KEYS.includes(it.lane)), false, 'an Admin saw an HQ item');
   assert.equal(plain.body.lanes.some((l: any) => HQ_KEYS.includes(l.key)), false);
   assert.ok(plain.body.items.some((it: any) => it.lane === 'articles'), 'an Admin still sees the studio lanes');
-  assert.equal(sup.body.total, plain.body.total + 11, 'HQ\'s eleven open items (D1132: with the program grant) are the whole difference');
+  assert.equal(sup.body.total, plain.body.total + 12, 'HQ’s open items, including the formation case, are the whole difference');
 
   const support = sup.body.items.find((it: any) => it.lane === 'support');
   const item = [{ lane: 'support', item_id: support.id }];

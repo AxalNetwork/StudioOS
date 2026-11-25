@@ -29,6 +29,7 @@ function expected(a: Answer): Observed[] | null {
   switch (a.is) {
     case 'follows': case 'not_applicable': return ['unchanged'];
     case 'removed': return ['gone'];
+    case 'changed': return ['changed'];
     case 'kept': return ['unchanged', 'unlinked'];
     case 'unspecified':
       return a.today === 'untouched' ? ['unchanged'] : a.today === 'unlinked' ? ['unlinked'] : a.today === 'changed' ? ['changed'] : null;

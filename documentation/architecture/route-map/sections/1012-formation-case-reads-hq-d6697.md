@@ -1,6 +1,6 @@
 ### Formation cases, HQ's reads (#6697, H1 of #6680)
 
-No page or canvas is implemented here. Mounted by `cloudflare-worker/src/routes/admin_formation_cases.ts`; every route is `requireHqAdmin` (a branch gets `hq_only`). Read only; the writes are #6698's. Client: `frontend/src/lib/api/adminFormationCases.js`.
+No page or canvas is implemented here. Mounted by `cloudflare-worker/src/routes/admin_formation_cases.ts`; every route is `requireHqAdmin` (a branch gets `hq_only`). D6698 documents the HQ case actions on the same mount. Client: `frontend/src/lib/api/adminFormationCases.js`.
 
 | Route | Purpose |
 | --- | --- |
