@@ -692,7 +692,7 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
       <div className="md:col-span-12" data-testid="deal-mercury"><FromMercury section="commit" /></div>
       <section className="flex flex-col gap-2 md:col-span-12" data-testid="deal-syndicates">
         <p className={`m-0 ${SUB}`}>{SYNDICATES_LINE}</p>
-        <DealSyndicates projectId={deal.project_id} user={user} />
+        <DealSyndicates projectId={deal.project_id} dealId={deal.id} user={user} />
       </section>
       {withdrawing && c.state === 'ready' && (
         <ConfirmDialog testId="deal-withdraw-dialog" title={`Withdraw your ${c.amount} commitment?`} danger act="Withdraw"
