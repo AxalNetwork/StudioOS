@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 /**
+ * A lazy schema bootstrap remembering "already done" in a module-level `let
+ * ready = false` — which is once per ISOLATE, not once per DATABASE, so the
+ * second binding an isolate serves never gets its DDL and then reads a table
+ * nothing created (#203, then 115 more in #204). Bans that shape and the shared
+ * `Promise<void> | null` in-flight latch, and fails a `WeakMap<object, …>` in a
+ * file that never names the binding. That third rule is what earned it: on its
+ * first run it found `cloudflare-worker/src/services/projectAccess.ts` keyed on
+ * `env` while its own comment claimed to mirror
+ * `cloudflare-worker/src/routes/projects.ts`, which keys on `env.DB`.
+ * Behaviour, as opposed to shape, is pinned by
+ * `cloudflare-worker/test/schema_readiness.test.ts`.
+ *
  * Fails the build when a lazy schema bootstrap remembers "already done" in
  * module state instead of per D1 binding.
  *

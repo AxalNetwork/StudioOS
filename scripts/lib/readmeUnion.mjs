@@ -1,4 +1,9 @@
 /**
+ * What a `merge=union` README merge can leave behind (`.gitattributes`): a
+ * conflict marker, or the same substantial line twice within a few lines, which
+ * is union keeping both versions of a line two branches rewrote. Owned by
+ * `../check-folder-docs.mjs` (rule 4).
+ *
  * What `merge=union` can leave in a README.md (`.gitattributes`), and so what
  * `../check-folder-docs.mjs` refuses (its rule 4).
  *

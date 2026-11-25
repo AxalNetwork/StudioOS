@@ -1,3 +1,4 @@
+# D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats.
 """D6653: synthetic independent snapshots, integrity, isolated credentials and heartbeat fixtures."""
 import base64
 import importlib.util

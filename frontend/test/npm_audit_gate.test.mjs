@@ -27,6 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -34,6 +35,8 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CI = read('.github/workflows/ci.yml');
 const GATE = read('scripts/npm-audit-gate.mjs');
 const SCRIPTS_README = read('scripts/README.md');
+// #6470: scripts/README.md's file list is generated from each script's header comment.
+const GATE_HEADER = headerComment('npm-audit-gate.mjs', GATE);
 
 test('both npm audit jobs run through the gate, not npm audit directly', () => {
   const calls = CI.match(/node \.\.\/scripts\/npm-audit-gate\.mjs --level=critical/g) || [];
@@ -155,5 +158,7 @@ test('every transport failure is retried, and the mix of them is reported', () =
 });
 
 test('the gate is listed with the other guards', () => {
-  assert.match(SCRIPTS_README, /\| `npm-audit-gate\.mjs` \|/);
+  // #6470: listed through its header comment, which scripts/README.md's generated list reads.
+  assert.equal(indexMode(SCRIPTS_README), 'generated');
+  assert.match(GATE_HEADER, /\S/, 'npm-audit-gate.mjs has no header comment, so the generated list cannot describe it');
 });

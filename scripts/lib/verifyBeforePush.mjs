@@ -1,4 +1,12 @@
 /**
+ * #6326: which areas changed paths touch and which local checks they need, in
+ * order; the test runner for a test file; the tests a change reaches through
+ * static imports; the environment failures that are not the PR's (missing deps,
+ * docs/ not built, workerd version, age, network, disk); module paths that
+ * differ only by case; how results from several runs combine; the STATUS
+ * `tests:` line. Owned by `../verify-before-push.mjs`; tested in
+ * `verifyBeforePush.test.mjs`.
+ *
  * #6326: the `verify-before-push` skill's decisions, apart from git and the
  * shell. Which areas a set of changed paths touches, which local checks those
  * areas need and in what order (mirroring `.github/workflows/ci.yml`: the

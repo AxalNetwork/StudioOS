@@ -6,7 +6,7 @@ import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES, supportOperatorOf } from '../auth';
 import { branchOf } from '../util/branch';
 import { sendVerificationEmail } from '../services/email';
-import { send as sendEmail } from '../services/email/send';
+import { sendBound } from '../services/email/send';
 import { insertCanaryRows } from '../services/magicLinkInsertCanary';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { verifyTurnstile } from '../services/turnstile';
@@ -1289,10 +1289,12 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   const expires = new Date(Date.now() + MAGIC_LINK_TTL_MIN * 60 * 1000).toISOString();
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
   const canary = insertCanaryRows(c.req.raw);
+  let tokenId = 0;
   try {
     const inserted = await c.env.DB.prepare(
       `INSERT INTO magic_link_tokens (email, token_hash, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
     ).bind(email, tokenHash, expires, ip || null, ua || null).run();
+    tokenId = Number(inserted?.meta?.last_row_id || 0);
     if (canary) canary.tokenId = inserted?.meta?.last_row_id ?? null;
   } catch (e) {
     console.error('[AUTH:magic-start] token insert failed', e);
@@ -1322,14 +1324,29 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   // that second press was the first time a message was actually queued.
   // #4578 (D4578): /register asks for `purpose: 'signup'` right after it created the account, and gets the same link
   // worded as "finish creating your account". The answer below is identical either way, so nothing is enumerated.
+  //
+  // D8536 (#8536): the send goes under the delivery contract. Its reference
+  // is this token row (one row, one issuance), and the address is the one the
+  // row names, so a queue retry reconciles instead of mailing the link twice.
   const signup = parsed.body?.purpose === 'signup';
-  const queued = signup
-    ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
-    : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  const ref = { flow: 'sign_in' as const, subject: { kind: 'magic_link_token' as const, id: tokenId }, attempt: 1 };
+  const queued = await sendBound(c.env, signup ? 'auth_signup_link' : 'auth_magic_link', ref, { name, magic_url: magicUrl });
   if (canary) canary.sendId = queued.log_id;
   if (!queued.ok) {
     console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
+  }
+  // The replacement makes every earlier unused link for this address invalid,
+  // once the new one is on its way (not before: a refused send leaves the
+  // person the link they already have). The verify claim then answers
+  // `expired` for the old one.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE magic_link_tokens SET expires_at = datetime('now')
+        WHERE email = ? AND id < ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')`,
+    ).bind(email, tokenId).run();
+  } catch (e) {
+    console.error('[AUTH:magic-start] earlier links not retired', (e as Error)?.name || 'Error');
   }
   return c.json({ ok: true, message: 'If that email is valid, a sign-in link is on its way. It expires in 15 minutes.' }, 202);
 }));

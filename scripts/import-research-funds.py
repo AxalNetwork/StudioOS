@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# Migration 378: the fund directory and its reports, rebuilt from the two public
+# spreadsheets in `attached_assets/` (D535). `parse_shai` reads the third list
+# from a CSV with that sheet's shape; `fixtures/shai-goldman-sample.csv` is the
+# fixture. Those rows are US cents under the list's own name (1A) and are not
+# written into migration 378. Since D7166 (#7166) the EuroTech list is keyed by
+# vehicle (manager plus fund number) and `eurotech-migration STEM` writes its
+# re-import as a new migration; run with no argument it refuses, because 378 is
+# applied.
 """Rebuild `research_fund_directory`/`research_fund_directory_reports` from the
 two public spreadsheets in `attached_assets/`, as migration 378.
 

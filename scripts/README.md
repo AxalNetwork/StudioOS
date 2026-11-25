@@ -4,53 +4,19 @@
 
 | Command | What it does |
 | --- | --- |
-| `build-workflow-slack-registry.mjs` | Generates the private channel-ID routing configuration from the approved Slack bot's actual memberships. See [workflow Slack rollout](../documentation/operations/WORKFLOW_SLACK_6370.md). |
 | `npm run build` | `build-frontend.mjs` — compiles the SPA into `docs/`, prerenders public routes, and prunes old hashed assets on a retention window. **Always build through this, never a bare `vite build`**: that empties `docs/` and deletes the retained assets and the hand-maintained changelogs living there. |
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
-| `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
-| `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. D5973: also writes one classified row per merge-group candidate to `$CI_SCORECARD_ROWS`. D6479: the landing section's reads, under their own cap. |
-| `actions-concurrency.mjs` | #6462: read-only report of effective Actions concurrency. Rebuilds jobs executing per minute over a window (default 24 h) from every run's job timestamps: the effective ceiling (the level executing sat at while jobs queued), peak, the highest level held for 10 minutes, share of time at the ceiling, queued jobs per minute, slot-minutes per workflow and per event (draft vs ready PRs from each PR's timeline), whether phantom queued runs ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches. #6676: also a merge-candidate table (`merge_group` runs of `ci.yml`: minutes from run creation to the first job with a runner and to the first `landing gate` result, p50/p90 by UTC hour). GET requests only, capped (`--cap`, `--reserve`); prints how much of the window it covered. `--save`/`--load` re-render without the API. Logic in `lib/actionsConcurrency.mjs`. |
-| `dr-drill-cleanup.sh` | D7917: bounded workflow fallback deletes only the database recorded for this Actions run/attempt, retaining ownership on failure. |
-| `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
-| `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
-| `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
-| `test-clock-allowlist.txt` | D5614: reviewed starting inventory of test real-clock dependencies; the follow-up guard permits only removals. |
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
 | `baselines/` | D5613: split auth-inventory and SQL-prepare ledgers, each directory with its own README. |
-| `coordinator.mjs` | D6312: Session 1's audit writes for the `coordinator-audit` skill: `snapshot`, weekly `delta`, `plan` from verified findings, then `apply` (notes, labels, closes) and `file` (new tasks, one list per parent). Dry run unless `--go`; re-reads each issue before changing it and skips one that moved; every write carries a run marker so a re-run never repeats it. |
-| `land-canvas.mjs` | D6312: lands an owner-approved Claude Design canvas for the `land-canvas` skill: checks each file's SHA-256 against the digests on the issue, copies it into `design/incoming/` with the `· Boards` name, prints the board list, and `--waiting N` lists the blocked issues to release. |
-| `red-ci-triage.mjs` | #6326: the `red-ci-triage` skill's reader. `node scripts/red-ci-triage.mjs <pr> [--run <id>] [--logs DIR] [--no-main] [--json]` prints the CI failure digest's verdict (and whether it is stale), `ciClassify`'s verdict now, the open `[alert]` issues with what each forbids, and every failing test, tsc error, eslint error or guard in the failed jobs' logs with the command that reproduces it locally; for a part also red on main it reads main's log and marks each failure as shared or not. GET requests only: never comments, re-runs, merges, pushes or dispatches |
-| `verify-before-push.mjs` | #6326: the local checks before a push for the `verify-before-push` skill. `plan` lists the steps for the changed files in CI's order (generated, build, guards, static checks, migration and LFS gates, affected tests, `test:drift` parts); `run --only/--from` runs them with a timeout per step and one log each, killing the process group on timeout; `summary` prints the results so far, marks those from an older tree STALE, and gives a STATUS `tests:` line. Advisory (D5610); `--full` is everything `test:drift` runs. Never pushes, merges or calls GitHub. |
-| `task-lifecycle.mjs` | #6326: the read side of the slot protocol for the `task-lifecycle` skill, GET only: `next` (the slot's oldest `state:ready` task and who holds its claim ref), `answers` (owner comments after the last STATUS on the slot's `needs-decision` / `state:blocked` issues, plus `S1:` relays), `claims` (the slot's claim refs as ok, renew, expired or release, with the `claim.mjs` command to run) and `status` (the STATUS block in its `text` fence plus the label change). Never claims, labels, comments, pushes or merges. |
-| `add-worker-endpoint.mjs` | #6326: preflight for the `add-worker-endpoint` skill. It reads the branch diff against `origin/main`, reports the endpoint house rules the diff trips and the tests that name each changed file, and prints (or, with `--run`, runs) the guards in order. Its rules are in `lib/addWorkerEndpoint.mjs`, tested by `lib/addWorkerEndpoint.test.mjs`. |
-| `build-screen-to-canvas.mjs` | #6326: the build checklist for a landed canvas, for the `build-screen-to-canvas` skill: one row per board with its frames, widths, phone and dark, then the route-map row, decision files and frontend files that already name it; `--departures` prints the PR's departures table. Reads local files only and never runs the canvas. |
-| `mutation-check.mjs` | #6326: the `mutation-check` skill. `list` prints the test files the branch adds or changes and the command that runs each alone. `run --spec <json>` runs each test unmutated, applies each `{file, find, replace, test, expect?, equivalent?}` mutation alone, expects a failure, restores the file byte for byte (SHA-256 checked) and reruns every test. Ends with the fixed `N mutations, N caught, N equivalent (why)` line. Restores on error, Ctrl-C and exit; `restore` undoes a killed run from its backup outside the repository. Never commits, pushes or calls GitHub. |
-| `land-pr.mjs` | #6326: the `land-pr` skill's reader. `node scripts/land-pr.mjs <pr> [--summary FILE] [--no-classify] [--json]` reads, with GET requests only, the settings behind #5605 rows 3 and 6, #5500, main's merge-queue and required-check rules, the PR's files and check runs, the `landing policy` job log (tier recomputed with the base's `merge-policy.mjs`, or taken from a pasted summary) and the open `[alert]` issues; prints each gate and, only when all hold, the queue commands. Never marks ready, enables auto-merge, merges, approves, pushes or dispatches. |
-| `lib/landPr.mjs` | #6326: the landing gates of AGENTS.md step 5 as pure functions (`decide`, `agentsMayQueue`, `requiredChecks`, `landingReport`) plus parsers for the `landing policy` job log and step summary; tests in `lib/landPr.test.mjs`. |
-| `schema-change.mjs` | #6326: the `schema-change` skill's helper. `name --issue N --slug s` prints the new migration's path by the current UTC minute (D4106, D5398); `preflight [--base origin/main] [--issue N]` checks the branch's new migrations (name, identity, stamp, SQL) and the runtime DDL it adds; `checks` runs every schema guard in `test:guards` order plus `migration-immutability-gate.mjs` and prints pass or FAIL per guard. Reads git and the disk only. |
-| `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
-| `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
-| `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
-| `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
-| `flaky-tests.mjs` | D6464: builds the known-flaky test list from the last days of merge-queue CI runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci` issue per listed test). Logic in `lib/flakyTests.mjs`. |
-| `flaky-tests.json` | D6464: the tracked flaky list. `test-drift-parts.mjs` reads it under merge_group to retry a listed test's file once; only a PR committing `flaky-tests.mjs` output changes it. |
-| `d1-backup-upload.sh` | Uploads the nightly D1 SQL export to the primary R2 bucket over its S3-compatible multipart API. |
 
 ## The guards
-
-| File | Purpose |
-| --- | --- |
-| `plan-network-directory.mjs` | D7672: offline planner for reviewed Airtable/Folk source snapshots; creates a restricted parameterized import plan outside the repository and reports aggregate counts; never contacts a database. |
 
 `npm run test:guards` runs every `check-*.mjs`. They exist because each one
 represents a bug that reached production once:
 
 | Guard | What it catches |
 | --- | --- |
-| `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the mounted routers (index.ts and the self-mounting modules in `cloudflare-worker/src/routes/_registry.ts`, #4105), including a local factory’s returned Hono instance (D696). Unmounted alternate factories do not count. |
 | `ci/no-anthropic-in-prod.mjs` | D5339: the production Personal Advisor import graph cannot reach D851's provider runner or adapters; Anthropic references stay in an explicit reviewed allowlist; `/api/assistant` stays behind its non-production, exact-flag mount gate. Runs in `test:guards`; fixture and mutation coverage lives in `lib/noAnthropicInProd.test.mjs`. |
-| `lib/noAnthropicInProd.mjs` | D5339's import-graph, reference-allowlist and assistant-mount rules, shared by the guard and its synthetic-tree tests. |
-| `pip_audit_gate.py` | #5526: audits the pinned Python requirements, retries transient PyPI advisory lookup failures, and preserves strict scan findings. |
 | `ci/test-tracer.mjs` | D5608: opt-in Node test dependency and timing preload. Set `TEST_TRACE_DIR` when invoking a suite part to record repo-relative paths, probes, subprocess visibility and wall time. |
 | `ci/test-tracer-hooks.mjs` | D5608: the tracer's off-thread module hooks — report each resolved repo module over a MessagePort and send `node:sqlite` through the shim. Off-thread because a synchronous `registerHooks` hook changed what `_deck-loader.mjs` tests rendered. |
 | `ci/test-tracer-sqlite.mjs` | D5608: `node:sqlite` with a `DatabaseSync` that records each file database a traced test opens. |
@@ -176,49 +142,34 @@ their own — three on a schedule, `check-baseline-drift.mjs` as the deploy
 workflow's last step; `pitch-acceptance-live.mjs` is run by hand — and each has
 unit tests over its pure helpers that *are* in the suite.
 
-| File | What it proves |
-| --- | --- |
-| `check-spa-live.mjs` | Every SPA shell route on both hosts returns the rendered shell (200 + `<div id="root">` + a hashed `/assets/*.js`) with the static security headers `docs/_headers` sets. Run as `npm run deploy`'s `postdeploy` hook and 6-hourly by `.github/workflows/post-deploy-smoke.yml`. Of the API it probes `/api/health`, `/api/auth/google/config`, and (D754) an unsigned `POST /api/channels/whatsapp/webhook`, which must never answer 2xx (`lib/webhookGuard.mjs`; the owner's side is `documentation/operations/WHATSAPP.md`) — nothing that signs anyone in, which is why it stayed green straight through the magic-link outage below. |
-| `check-magic-link-canary.mjs` | Reads the latest scheduled HQ check from `platform_settings` and verifies its exact token and send-log rows, mailbox, template and timing in D1. Exit 0 requires four successful application checks. |
-| `check-magic-link-insert.mjs` | The manual public-edge check requests a production magic link and reads D1. Reports `start_latency`, `endpoint_accepted`, `token_row_written`, and `mail_send_recorded`. A refusal skips the downstream checks. A `sent` row in `email_send_log` records provider acceptance. The scheduled Actions check reads the private HQ Worker run separately. Inbox arrival and sign-in require the round-trip probe. |
-| `check-magic-link-live.mjs` | A **real magic-link sign-in**, end to end: POST `/api/auth/magic/start`, read the link out of a real inbox, follow it, assert a session. Three verdicts reported separately, because D74 moved the email send to `waitUntil` and so `/magic/start` can answer `202` in 200ms while the mail never arrives — a fast endpoint is necessary and nowhere near sufficient. Needs a dedicated production test account and read access to its mailbox (`MAGIC_PROBE_EMAIL`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`); **exits 2 and verifies nothing without them, never 0**. Cannot run from an agent sandbox — that proxy answers `403 CONNECT` for `axal.vc` — so its home is `.github/workflows/magic-link-probe.yml`. Guarded by `frontend/test/magic_link_probe.test.mjs`; see `documentation/architecture/DECISIONS.md` D78. |
-| `check-baseline-drift.mjs` | That the repo can still rebuild the database it operates: `schema_baseline.sql` plus every migration ABOVE `BASELINE_CUTOFF`, built in the same SQLite engine D1 is, against production's own object names — set difference taken in BOTH directions, because the first gate anyone wrote for the baseline counted tables and a dump that loses two real ones while gaining back two the engine creates itself still counts 399. The invariant is deliberately not "baseline == production": that would go red on the first migration anyone ships, get switched off, and let the drift back. It exists because its predecessor `schema.sql` drifted — five `project_id` clauses hand-edited to add an `ON DELETE CASCADE` no migration ever applied — and a new database disagreed with production about five foreign keys for four months with nothing able to notice (D60). Compares object names and, since D359, the columns and declared types of every table both sides have (production's read from the `sql` the same query returns, executed into a scratch database; a table whose DDL will not execute fails the step as unreadable), and prints each missing column as the `ALTER TABLE … ADD COLUMN` that declares it. Whether a migration's declared columns reach a fresh build is `check-migration-declarations.mjs`'s question, above. Needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and **exits 2 without them, never 0**, so an unreadable database is never reported as a clean one. Runs in `.github/workflows/cloudflare-worker-deploy.yml` AFTER the deploy step and is not `continue-on-error`: a disagreement is worth a red workflow but does not make the worker that just shipped unsafe, so it must not stand between a good build and production. `DRIFT_D1_NAME` and `DRIFT_D1_CONFIG` point it at a branch database instead. Guarded by `cloudflare-worker/test/baseline_drift_guard.test.mjs`. |
-| `pitch-preflight-acceptance.mjs` | #3661 (D1370): "Check before you send" on the defective synthetic deck in a real browser (the pre-installed Playwright Chromium, the built stylesheet): measured clipping, PF3's overlays, the export gate, keyboard order and accessible names, at desktop and phone widths, light and dark. Bundles `pitch-preflight-acceptance.entry.jsx` (the product's own preflight code) with esbuild. Writes screenshots, a results file and a pass / fail matrix. **Exits 2 and verifies nothing without a build or a browser.** See `documentation/operations/PITCH_ACCEPTANCE.md`. |
-| `pitch-preflight-acceptance.entry.jsx` | #3661: the page `pitch-preflight-acceptance.mjs` opens: `usePreflight`, `PreflightMeasure`, `PreflightPanel`, `FindingStrip`, `PreflightOverlay` and `PreflightGate` on the defective deck. Reads and draws only. |
-| `pitch-acceptance-live.mjs` | #3662: the Pitch deck studio's live acceptance run. Signs in with a test account's session the owner confirms is synthetic (`PITCH_TEST_ACCOUNT=synthetic`), screenshots the five studio pages at desktop and phone widths and, with `PITCH_EXPORTS=1`, checks the test deck's PDF, PowerPoint and HTML exports are the files they claim. Writes a pass / fail / not-tested matrix with the revision. Creates no share, sends nothing, accepts no terms. **Exits 2 and verifies nothing when not configured, never 0.** Run by hand, not by a workflow; see `documentation/operations/PITCH_ACCEPTANCE.md`. Guarded by `frontend/test/pitch_acceptance_live_3662.test.mjs`. |
-| `capture-spa-previous.mjs` | Captures the restored previous deploy's lazy entry before a build, or generation 1 of the deployed cache for scheduled smoke. Writes an entry-path manifest outside `docs/`; `check-spa-live.mjs` uses it to check both generations on both hosts (#3590). |
+The probes: `check-spa-live.mjs`, `check-magic-link-canary.mjs`,
+`check-magic-link-insert.mjs`, `check-magic-link-live.mjs`,
+`check-baseline-drift.mjs`, `pitch-preflight-acceptance.mjs` (with its page,
+`pitch-preflight-acceptance.entry.jsx`), `pitch-acceptance-live.mjs`, and
+`capture-spa-previous.mjs`; each describes itself in [the generated list](#the-files) below.
 
 ## The deck harness
 
-| File | What it does |
-| --- | --- |
-| `eval-elements.mjs` | D1518 (#3770): the element eval and the deck benchmark, on `lib/deckEval.mjs`. Run through `cloudflare-worker/test/_ts-loader.mjs`, since it reads the Worker's TypeScript. `--plan` (default) lists each golden brief with its element's job and the models the rail suggests, calling nothing. `--benchmark [--write]` runs the zero-edit acceptance arm on the three sample ventures and refreshes `documentation/product/DECK_BENCHMARK.md`; it exits 1 while any venture fails the gate (#3768's). `--live` is refused (exit 2) until the owner sets the evaluation cap (decision N) and a staging URL, and it never targets production. Not in `test:guards`: `cloudflare-worker/test/deck_eval_d1518.test.ts` covers its helpers and holds the benchmark table to the arm. |
-| `check-prompt-eval.mjs` | D1519 (#3771): a changed deck prompt (`cloudflare-worker/src/services/decks/prompts/`) fails unless `documentation/product/ELEMENT_EVAL.md` records the new prompts hash, or the PR carries the owner's `prompt-eval-waiver` label (`PROMPT_EVAL_WAIVER=true`). `--write` records the hash after the eval is re-run. Run by `.github/workflows/prompt-eval-gate.yml` (label-aware, so it re-runs when the label changes), not by `test:guards`. Its rules are tested in `cloudflare-worker/test/deck_prompts_d1519.test.ts`. |
+`eval-elements.mjs` and `check-prompt-eval.mjs`; each describes itself in [the generated list](#the-files) below.
 
 ## The pull-request preview
 
-| File | What it does |
-| --- | --- |
-| `pr-preview-worker.mjs` | The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull request with no bindings, serving the PR's `docs/` build on workers.dev. Two jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a missing hashed `/assets/*` file is a plain 404, never the SPA shell, and `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by `.github/workflows/pr-preview-deploy.yml` from main (D7146) after `.github/workflows/pr-preview.yml` builds without credentials; guarded by `frontend/test/pr_preview.test.mjs`. |
-| `check-preview-artifact.mjs` | D7146 (#7146): checks a pull request's `pr-preview-docs` artifact zip as untrusted data and unpacks it into an empty `docs/` for the trusted preview deploy, all or nothing: static file types only, file-count and size caps, no symlink, path traversal or configuration file. Run by `.github/workflows/pr-preview-deploy.yml`; rules in `lib/previewArtifact.mjs`, tested by `lib/previewArtifact.test.mjs`. |
+`pr-preview-worker.mjs` and `check-preview-artifact.mjs`; each describes itself in [the generated list](#the-files) below.
 
 ## Deploying a branch
 
 | File | What it does |
 | --- | --- |
 | `migrate-d1.mjs --branch <code>` | Migrates one subsidiary's database (`studioos-<code>`) instead of production, through the generated config that declares it. `--bootstrap` is allowed here and refused for production: a freshly created branch database is empty, which is what `branch-provision.yml` builds from the baseline. Target selection is `lib/migrationTargets.mjs`. |
-| `write-branch-registry.mjs` | Writes `infra/branches/<code>.json` from what `branch-provision.yml` just created, reading every value from the environment rather than from arguments — a `run:` block building JSON from dispatched values would have to interpolate them, which is the shell-injection shape Semgrep caught on PR 3. Validates the entry with the same `validateBranch` the guard uses, so one definition of a valid entry exists rather than two. Status is `provisioning`, never `live`: the Worker is not deployed when this runs. |
-| `seed-branch-principal.mjs` | Inserts the ONE account a new branch starts with (D.3). The API refuses to mint an admin, so the licence principal is direct SQL; `INSERT OR IGNORE` keeps provisioning resumable, and no password is written — the principal signs in the way everyone else does, so the workflow log is never a credential. A missing `PRINCIPAL_EMAIL` warns rather than failing a run that has already created every resource. |
-| `open-branch-link-pr.mjs` | Opens the PR carrying the new registry entry and HQ's `BRANCH_<CODE>` service binding, written into **both** tables of `wrangler.toml` (Wrangler v2 does not inherit into `[env.production]`). A PR rather than a push because the committed toml is the deployed truth the apex guards read. Idempotent: a config already naming the binding is returned unchanged. |
-| `gen-branch-wrangler.mjs` | Writes `wrangler.branch.<code>.toml` at the repo root from `infra/branches/<code>.json`. The config is **derived** from `wrangler.toml`'s `[env.production]` table rather than templated, so a binding added to HQ reaches every branch with no edit here; the rules live in `lib/branchConfig.mjs`. It is gitignored: `[assets] directory` resolves against the config's own location, so it has to sit beside `docs/`, and a committed copy would be a second place a binding could go stale. `node scripts/gen-branch-wrangler.mjs fr` (add `--stdout` to render without writing). |
-| `gen-deck-icon-set.mjs` | D1541 (#3779): writes the deck icon set from the installed `lucide-react` (ISC), sorted, so a second run writes the same bytes. No network. D4574 H3 (#4574): TWO files — `cloudflare-worker/src/services/decks/iconNames.json` (the set's licence record, the asset path and the names, imported by `elements.ts`) and `frontend/public/deck-icons/lucide-<version>.json` (the nodes and the licence text, a static asset the Worker reads). `node scripts/gen-deck-icon-set.mjs`. |
-| `list-deployable-branches.mjs` | Prints the codes the push-to-main deploy redeploys after HQ (D253): every `infra/branches/<code>.json` with status `provisioning` or `live`, skipping `_`-prefixed fixtures, `example` and `suspended`. The filter is `deployableBranches`, tested in `frontend/test/branch_redeploy_d253.test.mjs`. |
+
+The scripts: `write-branch-registry.mjs`, `seed-branch-principal.mjs`,
+`open-branch-link-pr.mjs`, `gen-branch-wrangler.mjs`,
+`list-deployable-branches.mjs`; each describes itself in [the generated
+list](#the-files) below.
 
 ## Reading a design artifact
 
-| File | What it does |
-| --- | --- |
-| `read-canvas.mjs` | Turns a published Claude Design artifact back into the `.dc.html` canvas `design/canvases/` is already full of. An artifact looks like it needs a browser and does not: it is a bundler shell with gzip+base64 assets in `<script type="__bundler/manifest">` and the design itself in `<script type="__bundler/template">`, and decoded, that template is exactly the `<x-dc>` / `DCLogic` format 124 files under `design/` already use. So a design arriving as a URL can land in `design/incoming/` where the intake pipeline handles it — reviewable in a diff, greppable, diffable against the next revision. It points the runtime at the one shared copy in `design/canvases/shared/support.js` (which every canvas references as a relative `support.js`, rather than inlining 69KB of runtime into each file), replaces the ~35 inlined `@font-face` rules with the Google Fonts link every other canvas uses (families and weights read **out of the block**, never assumed — a hard-coded Inter link silently dropped Roboto Mono from a canvas that sets its code samples in it), strips the publisher's watermark, and un-mangles the camelCase attributes a DOM round-trip flattened (`dangerouslySetInnerHTML` comes back as `sc-camel-dangerously-set-inner-h-t-m-l`, and leaving it renders the canvas without its inline SVG icons). It never substitutes an unrecognised asset uuid with a `data:` URI — it names the uuid and exits 1, because a canvas that silently drops an asset is worse than one that says which asset it could not place. `node scripts/read-canvas.mjs <artifact.html> <out.dc.html>`, then follow `design/incoming/README.md`. |
+`read-canvas.mjs`; each describes itself in [the generated list](#the-files) below.
 
 ## Data importers
 
@@ -227,19 +178,12 @@ database (D537). The rows reach D1 through `migrate-d1` after review, and every
 row carries its source, the record's own URL, the licence and the date of the
 pull.
 
-| File | What it writes |
-| --- | --- |
-| `import-wikidata-companies.mjs` | Migration 403: Research directory companies from Wikidata's SPARQL endpoint, chosen by the crosswalk's industries (D533) and by country, round-robin across industries to a cap, figures left NULL (D537). Its functions are pure and exported, tested on fixtures in `cloudflare-worker/test/research_wikidata_companies_d537.test.mjs`. Run it with `node --experimental-strip-types`, because it imports the crosswalk's TypeScript. |
-| `import-sec-edgar.mjs` | SEC EDGAR's public company list (the company tickers exchange file on sec.gov), one row per CIK with its name, ticker and exchange, each citing EDGAR, its URL, its licence and the date read (D595). The header number is the leading digits of `--out`. Migration 404 created the empty table; the rows are migration 412. It never writes to a database. The SEC requires a descriptive User-Agent, and this one names `SECURITY.md`'s public contact. `node scripts/import-sec-edgar.mjs --out cloudflare-worker/sql/migrations/412_research_public_companies_edgar.sql`, or `--from` a saved copy with `--as-of YYYY-MM-DD`. The default path is still 404's applied file, so a run passes `--out`. The rules live in `lib/secEdgarCompanies.mjs`. |
-| `import-companies-house.mjs` | Migration 405: UK companies from Companies House's free bulk company data (D596). Active, UK-origin, non-dormant limited companies in a SIC code its reviewed table maps to the crosswalk, oldest first and round-robin across sectors to a cap; every row cites the register, the company's page and the OGL line. It reads no address column and takes no officer or person with significant control. Tested on fixtures in `cloudflare-worker/test/research_companies_house_d596.test.mjs`. Run it with `node --experimental-strip-types`, on the unzipped month's file. |
-| `build-api-index.mjs` | Not an importer: #4105. Writes `frontend/src/lib/apiModules.generated.js`, the re-export line of every module under `frontend/src/lib/api/`, so a new API domain is one file and no edit to `api.js`. The index is gitignored, never committed (D5612); `build-generated.mjs` runs this. `--check` exits 1 when the generator is not deterministic or git tracks the index; `check-api-drift.mjs` fails on the same. Rules in `lib/apiModules.mjs`. |
-| `build-route-registry.mjs` | Not an importer: #4105. Checks every `mount` export under `cloudflare-worker/src/routes/` and writes `cloudflare-worker/src/routes/_registry.ts`, the list `index.ts` mounts without a line per router. The registry is gitignored, never committed (D5612); `build-generated.mjs` runs this. `--check` exits 1 when a descriptor is unsound, the generator is not deterministic, or git tracks the registry; `route_registry_4105.test.ts` runs the same checks. Rules in `lib/routeRegistry.mjs`. |
-| `build-generated.mjs` | Not an importer: D5612 (#5612). Runs `build-route-registry.mjs`, `build-api-index.mjs` and `build-skill-library.mjs`, which write the three generated modules that are gitignored and never committed (and, since D4574 H3, the skill library's entries asset, `frontend/public/skill-library/`, gitignored too). Node built-ins only, so it runs before `npm ci`; `build-frontend.mjs`, the `pre*` npm hooks, `test-drift-parts.mjs` and each CI job that runs `tsc`, `node --test`, `wrangler` or `vite` run it first (`frontend/test/generated_before_build_5612.test.mjs`). `--check` runs each generator's `--check`. |
-| `build-rail-matrix.mjs` | Not an importer: D764 (#2089). Writes `cloudflare-worker/src/services/ai/railMatrix.json`, one row per canvas page (its kind and router task; since #4313 part 3 no model list, as each page lists its kind's job), from the owner's canvas tables (`design/incoming/airail-every-page-data/canvas.json`) and `lib/railMatrixOverrides.json`. Since D764 PR 3 it also writes one row per option registered in `frontend/src/lib/railOptions/`, with its kind's models. It refuses inputs that break D720 §5's rules, held on each canvas kind's list and every option row. `--check` exits 1 when the committed file is not its output; `rail_matrix_d764.test.ts` runs the same comparison. |
-| `import-fund-facts.mjs` | D7843 (#7843): compiles a reviewed manifest of fund statements into SQL for the fund statement store of D7743 (`research_fund_observations` and its terms), deterministically, with `--check`. It imports `normaliseStage`, `normaliseGeography` and `readAmount` from `cloudflare-worker/src/services/researchFundObservations.ts` and `SERVED_FUNDS` from `cloudflare-worker/src/services/researchFundDirectory.ts` (it re-runs itself under the Worker tests' TypeScript loader). It never writes `research_fund_vehicle_facts`, creates no table, and refuses at compile time a row with no source link or dates, a fact outside D7743's list, a list with no review row, or a contact-shaped value. Tested on an invented fixture in `cloudflare-worker/test/fixtures/fund_facts_7843/`. |
-| `import-global-research-funds.py` | D7326: deterministic additive worldwide manager import from the dated primary-source evidence manifest. `--check` verifies the committed migration; served manager aliases/hosts, explicitly recorded vehicle-number suffixes and retired UIDs suppress duplicates, while existing data and source verdicts remain intact. |
-| `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). `parse_shai` reads the third list from a CSV with that sheet's shape; `fixtures/shai-goldman-sample.csv` is the fixture. Those rows are US cents under the list's own name (1A) and are not written into migration 378. Since D7166 (#7166) the EuroTech list is keyed by vehicle (manager plus fund number) and `eurotech-migration STEM` writes its re-import as a new migration; run with no argument it refuses, because 378 is applied. |
-| `import-register-companies.mjs` | D7316 part 2: offline BRREG/PRH/RIK company compiler. Pins native primary-record projections and source manifests, requires the retained quality-hold ledger and a fresh identity baseline, holds ambiguous identities, and emits only additive SQL/statements plus an audit. Exact admitted objects own SQL and evidence emission; financial metrics stay unknown. Reports the original worldwide gate separately. See `documentation/architecture/decisions/D7316-p2.md`. |
+The importers: `import-wikidata-companies.mjs`, `import-sec-edgar.mjs`,
+`import-companies-house.mjs`, `import-research-funds.py` and
+`import-global-research-funds.py`. The generators
+once listed here (`build-api-index.mjs`, `build-route-registry.mjs`,
+`build-generated.mjs`, `build-rail-matrix.mjs`) are not importers. Each
+describes itself in [the generated list](#the-files) below.
 
 ## Subfolders
 
@@ -248,15 +192,35 @@ pull.
 | `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`, `branchConfig.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
 | `perf/` | #4573's performance baselines, all local and read-only: `bundle-baseline.mjs` (the built shell's critical path and each lazy chunk's cost beyond it, raw/gzip/brotli), `vitals-local.mjs` (lab LCP/FCP/CLS for the anonymous pages in a local Chromium, `/api` stubbed) `api-bench.mjs` (D1 statements per API flow through the whole Worker; run under the Worker's TS loader) `community-bench.mjs` (the Community overview at 4, 12 and 52 weeks and Recent activity on a large synthetic community, #4717 package 5; same loader) and `security-bench.mjs` (HQ Security's ledger and Overview on a large synthetic ledger, with and without the evidence indexes, #4708 part 2; same loader). The baseline they produced is `documentation/audits/PERFORMANCE_BASELINE_2026-11-06.md`. |
 | `fixtures/` | Small inputs for the importers. `shai-goldman-sample.csv` has the third fund list's shape and no real row from that list. |
-| `ci/` | CI-only entry points. |
+| `ci/` | CI evidence, provider boundaries and verified tool acquisition; see its README. |
+| `deploy/` | D8073: deploy provenance. `record-deployment.mjs` writes one row to D1 `deployments` through `POST /api/internal/deployments` for the deploy a run just shipped and appends the same line to the deploy summary; its rules and tests are `lib/deployProvenance.mjs` and `lib/deployProvenance.test.mjs`. |
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
 | `ops/` | D8082: read-only checks of console settings no pull request can make. `check-github-admin.mjs` diffs the live GitHub admin settings against `documentation/operations/GITHUB_ADMIN_BASELINE.md` for `admin-drift.yml`. |
 | `landing-bot/` | #6467: the landing bot's shared rules (`rules.mjs`: mode, eligibility, breakers, attempts, budgets, the path guard, give-up text) and `workflowGuard.mjs`, the helper each bot workflow's test calls. No workflow; tests in `frontend/test/landing_bot_core_6467.test.mjs`. |
-| `deploy/` | D8073: deploy provenance. `record-deployment.mjs` writes one row to D1 `deployments` through `POST /api/internal/deployments` for the deploy a run just shipped and appends the same line to the deploy summary; its rules and tests are `lib/deployProvenance.mjs` and `lib/deployProvenance.test.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
-| `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
+| `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |
+
+## The files
+
+<!-- index: generated -->
+
+Every script here describes itself in its own header comment: a leading
+`/** … */` or `//` block for a module, a leading `#` block (after the shebang)
+or a module docstring for a shell or Python file. The list below is generated
+from those headers (#6470, as #4104 does for routes and services): `node
+scripts/check-folder-docs.mjs --write` fills it in your working tree and
+`--clean` empties it; it is never committed. So a new script needs a header
+comment and no edit here, and a script without one fails the build. A data
+file here (`*.json`, `*.txt`) takes no comment and is not listed: the script
+that reads or writes it describes it in its header (`flaky-tests.mjs` for
+`flaky-tests.json`, `check-runtime-ddl.mjs` for `runtime-ddl-baseline.json`,
+`check-test-clock.mjs` for `test-clock-allowlist.txt`, `lib/hubFreeze.mjs`
+for `hub-freeze.json`).
+
+<!-- files:begin -->
+<!-- files:end -->
 
 ## Adding a guard
 
@@ -330,53 +294,12 @@ each row on its own mutation.
 
 ## Review harnesses
 
-| Script | What it does |
-| --- | --- |
-| `pitch-reference-preview.mjs` | D898 §8.6 (#3658): draws the synthetic reference decks (`cloudflare-worker/test/fixtures/pitchReferenceDecks.ts`) in the three themes at 16:9 and as the phone card list, and screenshots them, for design review. Not the product renderer; run with the TypeScript loader, `node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs scripts/pitch-reference-preview.mjs <out-dir>`. |
-| `remote-latency.mjs` | D1581 (#3828): the staging test that the phone remote advances Present within 300 ms. It pairs a deck, joins as the phone, and times each step from the request to the frame on Present's socket. It needs `STUDIOOS_BASE`, `STUDIOOS_TOKEN` and a deck id; exits 1 at 300 ms or more. Not in CI. |
-| `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
-| `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
-| `landing-list.mjs` | D6469: the owner's landing list. Default: open non-draft PRs with every required check green on the head, tiered by `merge-policy.mjs`, T2 and model-changed (`bot:resolved`, `main-repair`) first, in the overlap report's order; `--history[=N]` reports the T0/T1/T2 share over the last N (300) merged PRs and the T2 rules matched most; `--sticky [--dry-run]` edits one sticky issue body in place (the hourly `pr-overlap.yml` step). Never labels, merges or queues. |
+Each harness describes itself in [the generated list](#the-files) below.
 
 D5676: `check-tail-archive.mjs` is an external authenticated metadata-only observer check; query/process fallback belongs to the shared independent monitor owner.
 
 D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt before normal production promotion, retaining sanitized stage evidence.
-| `scan-fingerprints.py` | D5602: bounded opaque Semgrep fingerprints using its existing Python runtime; parity-checked against the Node contract. |
-| `notification-routing-context.mjs` | D5666: GET-only GitHub PR/ruleset/linked-issue/claim metadata adapter. |
-| `future-clock-producer.mjs` | D5663: attempt-bound future-clock TAP and exit manifests. |
 
-| `future-clock-report.mjs` | D5663: trusted same-attempt producer evidence verification. |
 
-| `future-clock-changed.mjs` | D7124: a PR's added or edited test files under libfaketime at +7d and +9d 11h (ci.yml, `suite (rest)` on non-draft PRs); fails on a test that fails ahead and passes today. `--offset +7d <file>` reproduces one. |
 
-| `health-alert-episodes.mjs` | D5663: paginated health episodes with persistent transition delivery intents. |
-
-| `health-alert-transport.mjs` | D5663: explicit legacy webhook receipts, retries and uncertain delivery. |
-| `cloudflare-heartbeat-5671.mjs` | D5671: fixed-message read-only independent GitHub heartbeat check. |
-| `build-agent-compute-types.mjs` | D4557: generate ignored module-scoped host binding types. |
-| `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
-| `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
-| `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
-| `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
-| `check-record-writes.mjs` | D6651: fails on a put or delete of a `record` R2 prefix outside `cloudflare-worker/src/services/recordStore.ts` (writes) and `cloudflare-worker/src/services/recordErasure.ts` (deletes); baseline `record-writes-baseline.json` started empty. |
-
-| `file-recovery.py` | D6428: approved-class-only, lock-verified R2 snapshots and suppression-required restore primitive; live activation waits for counsel/#6650/#6654. |
-| `file-recovery-drill.py` | D6428: synthetic-only archive/source-loss/restore/suppression drill, with no provider access. |
-| `file_recovery_6428_test.py` | D6428: synthetic registry, lock duration, archive immutability, corruption, copy failure and suppression regressions. |
-| `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |
-| `check-production-credentials.mjs` | D7145 checks each workflow job against the production credential inventory and enforces its environment. |
-| `verify-production-environment.mjs` | D7145 release preflight that requires the exact main-only production deployment policy before credentials are used. |
-| `import-global-funds.py` | D7325: offline validator and duplicate-safe SQL generator for primary-source fund-manager research; `--check` verifies the committed migration. |
-
-| `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |
-| `import-global-research-funds-7585.py` | D7585: deterministically render the next worldwide manager import with its own source, original evidence dates and additive identity guards. |
-
-| `file-recovery-independent.py` | D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof. |
-| `file_recovery_6653_test.py` | D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats. |
-
-| File | Role |
-| --- | --- |
-| `guard-commands.json` | D5505: the single ordered guard command/flag catalog, preflight selection and prerequisite metadata. |
-| `run-guards.mjs` | D5505: full `npm run test:guards`, advisory `npm run test:guards:preflight`, and `--guard <id>` reproduction; emits bounded guard results. |
-| `queue-timeout-report.mjs` | D5975: read archived per-SHA scorecards and report observed latency, coverage and missing healthy-outcome evidence without changing settings. |
