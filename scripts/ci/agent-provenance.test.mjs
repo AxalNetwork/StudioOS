@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, branchIssue, checkCommit, checkRange, classifyPr, gitResolvePr, main, parseTrailers, readPrMerges, renderShadow, shadowMain, shadowRows, shown,
+  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, bindCandidate, bindMain, branchIssue, checkCommit, checkRange, classifyPr, gitResolvePr, main, parseTrailers, readPrMerges, renderShadow, shadowMain, shadowRows, shown,
 } from './agent-provenance.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -396,4 +396,131 @@ test('shadow: the summary file receives the report, and the CLI exits 0 even whe
     { cwd: f.dir, encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '' } });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /shadow report unavailable/);
+});
+
+// ---- D8692 (#8692): the merge-queue range is bound to its candidate -----------------------------
+
+/**
+ * The queue's candidate for a pull request head: one squash commit on `base` (main, or the candidate
+ * ahead of it), built by `git merge --squash` as the queue's SQUASH method does. Leaves HEAD where it was.
+ */
+function candidateOf({ git }, base, head, n) {
+  const back = git('rev-parse', '--abbrev-ref', 'HEAD');
+  git('checkout', '--quiet', '--detach', base);
+  git('merge', '--quiet', '--squash', head);
+  git('commit', '--quiet', '-m', `squash of the pull request (#${n})`);
+  const sha = git('rev-parse', 'HEAD');
+  git('checkout', '--quiet', back);
+  return sha;
+}
+
+const bind = (dir, base, head, candidate) => {
+  const lines = [];
+  const status = bindMain(['--bind', '--base', base, '--head', head, '--candidate', candidate], { cwd: dir, log: (l) => lines.push(l) });
+  return { status, lines };
+};
+const BRANCH = 'agent/claude/8068-identity-chain';
+
+test('bind: a candidate built from head A refuses the pull request once it moves to head B, naming both commits', (t) => {
+  const f = fixture(t);
+  const main0 = f.git('rev-parse', 'main');
+  f.put(`feat: one\n\n${CHAIN}`);
+  const a = f.put('feat: two, with no trailers'); // head A: what the queue squashed
+  const candidate = candidateOf(f, main0, a, 1);
+  assert.equal(bind(f.dir, main0, a, candidate).status, 0, 'head A is the head the candidate was built from');
+  // The branch is rewritten to a fully chained head B after the candidate was built.
+  f.git('reset', '--quiet', '--hard', 'HEAD~1');
+  const b = f.put(`feat: two, now chained\n\n${CHAIN}`);
+  assert.equal(run(f.dir, ['--base', main0, '--head', b, '--branch', BRANCH]).status, 0, 'B on its own would pass');
+  const r = bind(f.dir, main0, b, candidate);
+  assert.equal(r.status, 1, r.lines.join('\n'));
+  assert.equal(r.lines.length, 1);
+  assert.match(r.lines[0], new RegExp(`^agent-provenance: REFUSED pull request head ${b} is not the one candidate ${candidate} was built from: base ${main0} merged with it gives tree [0-9a-f]{40}, the candidate's tree is ${f.git('rev-parse', `${candidate}^{tree}`)}$`));
+  // A push on top of A moves the head as well.
+  f.git('checkout', '--quiet', '-B', BRANCH, a);
+  const c = f.put(`feat: three\n\n${CHAIN}`);
+  assert.equal(bind(f.dir, main0, c, candidate).status, 1, 'a head that grew after the candidate is refused');
+  assert.deepEqual(bindCandidate({ base: main0, head: a, candidate, cwd: f.dir }).problems, []);
+});
+
+test('bind: an unchanged head passes for a lone pull request and for one stacked behind another candidate', (t) => {
+  const f = fixture(t);
+  const main0 = f.git('rev-parse', 'main');
+  const a1 = f.put(`feat: first pull request\n\n${CHAIN}`);
+  f.git('checkout', '--quiet', '-b', 'agent/claude/8069-second', main0);
+  const a2 = f.put(`feat: second pull request\n\n${CHAIN.replace('#8068', '#8069')}`);
+  const c1 = candidateOf(f, main0, a1, 1);
+  const c2 = candidateOf(f, c1, a2, 2); // queued behind the first: its base is the first candidate
+  let r = bind(f.dir, main0, a1, c1);
+  assert.equal(r.status, 0, r.lines.join('\n'));
+  assert.equal(r.lines[0], `agent-provenance: bound head=${a1} to candidate=${c1} over base=${main0} tree=${f.git('rev-parse', `${c1}^{tree}`)}`);
+  r = bind(f.dir, c1, a2, c2);
+  assert.equal(r.status, 0, r.lines.join('\n'));
+  // The range the job then checks is the stacked pull request's own commit, not the one ahead of it.
+  r = run(f.dir, ['--base', c1, '--head', a2, '--branch', 'agent/claude/8069-second']);
+  assert.equal(r.status, 0, r.lines.join('\n'));
+  assert.match(r.lines.at(-1), new RegExp(`^agent-provenance: verdict=pass head=${a2} commits=1 `));
+  // The base binds too: the stacked candidate is not one commit on main, and the first candidate is not the second's.
+  r = bind(f.dir, main0, a2, c2);
+  assert.equal(r.status, 1);
+  assert.ok(r.lines.includes(`agent-provenance: REFUSED candidate ${c2} is not one commit on the merge group base ${main0} (its parents: ${c1})`), r.lines.join('\n'));
+  assert.equal(bind(f.dir, c1, a2, c1).status, 1, 'a candidate is not bound to a head it does not contain');
+  // A merge commit on the base with the same tree is not the squash the queue writes.
+  f.git('checkout', '--quiet', '--detach', c1);
+  f.git('merge', '--quiet', '--no-ff', '--no-edit', a2);
+  const merge = f.git('rev-parse', 'HEAD');
+  f.git('checkout', '--quiet', 'agent/claude/8069-second');
+  r = bind(f.dir, c1, a2, merge);
+  assert.equal(r.status, 1, r.lines.join('\n'));
+  assert.deepEqual(r.lines, [`agent-provenance: REFUSED candidate ${merge} is not one commit on the merge group base ${c1} (its parents: ${c1}, ${a2})`]);
+});
+
+test('bind (#8606): a branch with another pull request merged into it stays bound and keeps its exemption', (t) => {
+  const f = fixture(t);
+  const main0 = f.git('rev-parse', 'main');
+  f.put(`feat: one\n\n${CHAIN}`);
+  const merged = f.put('feat: another task (#8270)\n\nCo-authored-by: A <a@example.invalid>');
+  const head = f.put(`feat: two\n\n${CHAIN}`);
+  const candidate = candidateOf(f, main0, head, 1);
+  assert.equal(bind(f.dir, main0, head, candidate).status, 0);
+  const list = join(f.dir, 'pr-merges.txt');
+  writeFileSync(list, `${merged}\n`);
+  const r = run(f.dir, ['--base', main0, '--head', head, '--branch', BRANCH, '--pr-merges', list]);
+  assert.equal(r.status, 0, r.lines.join('\n'));
+  assert.ok(r.lines.includes(`agent-provenance: ${merged.slice(0, 12)} pull request merged into this branch, exempt`));
+});
+
+test('bind: a head that conflicts with the base is refused; a bad argument or an unknown commit exits 2', (t) => {
+  const f = fixture(t);
+  const main0 = f.git('rev-parse', 'main');
+  writeFileSync(join(f.dir, 'f0.txt'), 'the branch says\n');
+  f.git('commit', '--quiet', '-am', `feat: edit\n\n${CHAIN}`);
+  const head = f.git('rev-parse', 'HEAD');
+  const candidate = candidateOf(f, main0, head, 1);
+  f.git('checkout', '--quiet', 'main');
+  writeFileSync(join(f.dir, 'f0.txt'), 'main says\n');
+  f.git('commit', '--quiet', '-am', 'main: edit');
+  const main1 = f.git('rev-parse', 'HEAD');
+  const r = bind(f.dir, main1, head, candidate);
+  assert.equal(r.status, 1);
+  assert.ok(r.lines.includes(`agent-provenance: REFUSED pull request head ${head} conflicts with base ${main1}, so candidate ${candidate} was not built from it`), r.lines.join('\n'));
+  assert.equal(bind(f.dir, 'main', head, candidate).status, 2, 'a branch name is not a full sha');
+  assert.equal(bind(f.dir, main0, 'f'.repeat(40), candidate).status, 2, 'an unknown commit is a git error');
+  assert.equal(bindMain(['--bind', '--base', main0, '--head', head], { cwd: f.dir, log: () => {} }), 2, '--candidate is required');
+  assert.equal(bindMain(['--bind', '--base', main0, '--head', head, '--candidate', candidate, '--branch', 'x'], { cwd: f.dir, log: () => {} }), 2);
+});
+
+test('bind: the merge_group path binds the fetched head to merge_group.head_sha and reads only the branch name from the API', () => {
+  const wf = read('.github/workflows/agent-provenance.yml');
+  assert.match(wf, /^ {10}MG_HEAD_SHA: \$\{\{ github\.event\.merge_group\.head_sha \}\}$/m);
+  assert.equal((wf.match(/gh api "repos\/\$REPO\/pulls\/\$number"/g) || []).length, 1, 'one API read of the pull request');
+  assert.match(wf, /branch=\$\(gh api "repos\/\$REPO\/pulls\/\$number" --jq \.head\.ref\)/);
+  assert.doesNotMatch(wf, /--jq \.head\.sha/, 'the head is never the API\'s current one');
+  assert.match(wf, /if \[\[ "\$EVENT" != pull_request \]\]; then head=\$\(git rev-parse FETCH_HEAD\); fi/);
+  assert.match(wf, /grep -q -- "'--bind'" "\$bind" \|\| bind=scripts\/ci\/agent-provenance\.mjs\n {12}node "\$bind" --bind --base "\$base" --head "\$head" --candidate "\$MG_HEAD_SHA" \\\n {14}\|\| \{ echo "::error::pull request head \$head is not bound to merge group candidate \$MG_HEAD_SHA"; exit 1; \}/);
+  // The bind runs before the range is handed to the later steps.
+  assert.ok(wf.indexOf('--bind --base') < wf.indexOf('echo "head=$head"'));
+  // The pull_request path still takes the event's head and refuses a moved one.
+  assert.match(wf, /number="\$PR_NUMBER"; branch="\$PR_HEAD_REF"; base="\$PR_BASE_SHA"; head="\$PR_HEAD_SHA"/);
+  assert.match(wf, /\[\[ "\$\(git rev-parse FETCH_HEAD\)" == "\$head" \]\] \|\| \{ echo "::error::the pull request head moved"; exit 1; \}/);
 });
