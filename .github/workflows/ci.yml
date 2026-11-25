@@ -229,9 +229,10 @@ jobs:
       actions: read
       id-token: write
     # Exact local preparation pin; publication and activation remain held under #5719.
-    # D8335: the pin must be a commit on main. cb63d3997d is #8234's merge commit and carries the reviewed planner
-    # (blob 4f7dfaca) byte for byte. The first pin, 19927c89, became unreachable when its branch was deleted.
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    # D8335: the pin must be a commit on main. 3d41671dfe is #8658's merge commit and carries the reviewed D8626
+    # planner (blob 40b0b0fa) byte for byte. The previous pin, cb63d3997d (#8234, blob 4f7dfaca), submitted on main
+    # pushes only. The first pin, 19927c89, became unreachable when its branch was deleted.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
     with:
       submission: ${{ needs.plan.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
@@ -285,7 +286,7 @@ jobs:
       contents: read
       actions: read
       id-token: write
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
     with:
       submission: ${{ needs.route.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
