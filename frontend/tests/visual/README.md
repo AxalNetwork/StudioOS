@@ -61,6 +61,9 @@ and StudioHome at `/raise/pitch`).
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 | `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
 
+| `venturespace_stale_access_8527.spec.mjs` | D8527 (#8527): a co-founder's VentureSpace settings while A revokes the seat, archives the company, moves the venture, a late read is released, B signs out for C, and Back — at 1440 and 390, two browser contexts on the real Worker |
+| `_venturespace_seed.ts` | What `server.ts` seeds for that spec: per scenario and width, an owner of two companies, a member with a co-founder seat and a data-room file, and a stranger; made-up names |
+
 | `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
 
 | `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
