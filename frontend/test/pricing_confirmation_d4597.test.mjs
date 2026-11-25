@@ -119,7 +119,7 @@ async function mount(url, over = {}) {
   })));
   stub(newDeckApi, 'keepSlides', over.keepSlides || (async (_id, b) => (b.save ? { deck: { id: 12, version: 4, title: 'Pitch deck', slides: BUILT_SLIDES.slice(0, 3), theme: null } } : { proposal: { id: 77, slides: BUILT_SLIDES } })));
   stub(newDeckApi, 'regenerateCard', over.regenerateCard || (async () => { throw new Error('not stubbed'); }));
-  stub(deckSourcesApi, 'list', async () => ({ project_id: 1, items: ITEMS, coverage: COVERAGE }));
+  stub(deckSourcesApi, 'list', over.sources || (async () => ({ project_id: 1, items: ITEMS, coverage: COVERAGE })));
   stub(deckEditorApi, 'brandKit', over.kit || (async () => ({ project_id: 1, kit: null })));
   stub(deckImagesApi, 'plan', async () => ({ capability: { available: false, reason: 'Image generation is not available on this deployment.' }, cards: [] }));
   const restore = installDocument();
@@ -224,7 +224,7 @@ test('4. a confirmed no-cost answer is the only "at no cost", and it may run wit
   const m = await mount(`${NEW_PATH}?project_id=1`, { quote: async (b) => ({ step: b.step, ai: false, reason: 'assist_off', message: 'AI is off on this page.' }) });
   try {
     await m.press(m.by('pitch-new-build'));
-    assert.match(m.text(m.by('pitch-new-dialog')), /AI is off on this page, so the cards carry their titles, at no cost/);
+    assert.match(m.text(m.by('pitch-new-price')), /AI is off on this page, so the cards carry their titles, at no cost/);
     assert.ok(!m.pr(m.by('pitch-new-confirm')).disabled);
     await m.press(m.by('pitch-new-confirm'));
     const [, body] = m.calls.filter(([n]) => n === 'build').at(-1);
@@ -274,7 +274,11 @@ test('6. a stale quote is refused by the Worker, the price is read again, and th
     await m.press(m.by('pitch-new-build'));
     await m.press(m.by('pitch-new-confirm'));
     assert.equal(m.calls.filter(([c]) => c === 'build').length, 1, 'one attempt');
-    assert.ok(!m.by('pitch-new-dialog'), 'the dialog is closed: the person confirms again');
+    assert.equal(m.pr(m.by('pitch-new-price'))['data-price-state'], 'stale');
+    assert.equal(m.pr(m.by('pitch-new-confirm')).disabled, true);
+    assert.match(m.text(m.by('pitch-new-price')), /Quote expired/);
+    assert.equal(m.calls.filter(([n]) => n === 'build').length, 1, 'no automatic retry');
+    await m.press(m.by('pitch-new-reprice'));
     await m.press(m.by('pitch-new-build'));
     assert.equal(m.calls.filter(([c]) => c === 'build').length, 1, 'nothing was re-sent by itself');
     await m.press(m.by('pitch-new-confirm'));
@@ -293,17 +297,114 @@ test('7. one-click Build sends the exact quote_uid, will not run on an unread or
   const m = await mount(`${NEW_PATH}?project_id=1`, { quote: async (b) => live(b) });
   try {
     await m.press(m.by('pitch-new-fast-build'));
-    assert.ok(!m.pr(m.by('pitch-new-fast-run')).disabled);
-    await m.press(m.by('pitch-new-fast-run'));
+    assert.ok(!m.pr(m.by('pitch-new-confirm')).disabled);
+    await m.press(m.by('pitch-new-confirm'));
     const [, body] = m.calls.filter(([n]) => n === 'build').at(-1);
-    assert.equal(body.one_click, true);
+    assert.ok(Array.isArray(body.outline), 'the shortcut uses the same standard outline and confirmation as the guided flow');
     assert.match(body.quote_uid, /^dq_build_/, 'the one-click names the build quote it was shown');
   } finally { await m.unmount(); }
   const off = await mount(`${NEW_PATH}?project_id=1`, { quote: async () => { throw new Error('network'); } });
   try {
     await off.press(off.by('pitch-new-fast-build'));
-    assert.equal(off.pr(off.by('pitch-new-fast-run')).disabled, true, 'a failed read cannot be confirmed');
-    assert.doesNotMatch(off.text(off.by('pitch-new-fast-dialog')), /no cost|free\b/i);
-    assert.ok(off.by('pitch-new-fast-reprice'));
+    assert.equal(off.pr(off.by('pitch-new-confirm')).disabled, true, 'a failed read cannot be confirmed');
+    assert.doesNotMatch(off.text(off.by('pitch-new-price')), /no cost|free\b/i);
+    assert.ok(off.by('pitch-new-reprice'));
   } finally { await off.unmount(); }
+});
+
+
+test('#6056: back and forward retain audience, length, sources and outline edits', async () => {
+  const m = await mount(`${NEW_PATH}?project_id=1`);
+  try {
+    await m.press(m.by('pitch-new-audience-angel'));
+    await m.press(m.by('pitch-new-step-2'));
+    const source = m.all().find((n) => m.pr(n)['aria-label'] === 'Use Paying customers');
+    assert.ok(source);
+    await m.change(source, false);
+    await m.press(m.by('pitch-new-step-3'));
+    const title = m.all().find((n) => m.pr(n)['aria-label'] === 'Title of card 1');
+    await m.change(title, 'Our venture');
+    await m.press(m.by('pitch-new-build'));
+    assert.equal(m.pr(m.by('pitch-new-price'))['data-price-state'], 'metered');
+    assert.match(m.text(m.by('pitch-new-price')), /Confirmed · metered/);
+    await m.press(m.by('pitch-new-back'));
+    assert.equal(m.pr(title).value, 'Our venture');
+    await m.press(m.by('pitch-new-step-1'));
+    assert.equal(m.pr(m.by('pitch-new-audience-angel'))['aria-checked'], true);
+    await m.press(m.by('pitch-new-step-2'));
+    assert.equal(m.pr(source).checked, false);
+    await m.press(m.by('pitch-new-step-4'));
+    assert.equal(m.pr(m.by('pitch-new-step-4'))['aria-current'], 'step');
+    await m.press(m.by('pitch-new-confirm'));
+    const body = m.calls.filter(([n]) => n === 'build').at(-1)[1];
+    assert.equal(body.audience, 'angel');
+    assert.equal(body.length, 'standard');
+    assert.equal(body.outline[0].title, 'Our venture');
+    assert.deepEqual(body.exclude, ['grow.paying_customers']);
+  } finally { await m.unmount(); }
+});
+
+test('#6056: price step draws all five price states from the existing model', async () => {
+  for (const [kind, quote, line] of [
+    ['loading', () => new Promise(() => {}), /Reading the price/],
+    ['unavailable', async () => ({ ai: null }), /Price unavailable/],
+    ['free', async () => ({ ai: false, reason: 'assist_off' }), /Confirmed · no charge/],
+    ['metered', async (b) => live(b), /Confirmed · metered/],
+  ]) {
+    const m = await mount(`${NEW_PATH}?project_id=1`, { quote });
+    try {
+      await m.press(m.by('pitch-new-step-4'));
+      assert.equal(m.pr(m.by('pitch-new-price'))['data-price-state'], kind);
+      assert.match(m.text(m.by('pitch-new-price')), line);
+      assert.equal(m.pr(m.by('pitch-new-confirm')).disabled, !['free', 'metered'].includes(kind));
+      assert.equal(m.calls.filter(([n]) => n === 'build').length, 0, 'navigation never generates');
+    } finally { await m.unmount(); }
+  }
+});
+
+test('#6056: a superseded quote cannot replace the current audience price', async () => {
+  let resolveOld;
+  const m = await mount(`${NEW_PATH}?project_id=1`, { quote: async (b) => b.step === 'build' && b.audience === 'seed_fund'
+    ? new Promise((resolve) => { resolveOld = resolve; }) : live(b) });
+  try {
+    await m.press(m.by('pitch-new-audience-angel'));
+    await act(async () => { resolveOld({ ...live({ step: 'build', audience: 'seed_fund', length: 'standard' }), hold_microusd: 9000000 }); });
+    await m.press(m.by('pitch-new-step-4'));
+    assert.match(m.text(m.by('pitch-new-dialog-hold')), /\$0\.0060/);
+    await m.press(m.by('pitch-new-confirm'));
+    assert.equal(m.calls.filter(([n]) => n === 'build').at(-1)[1].quote_uid, 'dq_build_angel_standard');
+  } finally { await m.unmount(); }
+});
+
+test('#6056: generating blocks navigation and duplicate confirmations', async () => {
+  let finish;
+  const m = await mount(`${NEW_PATH}?project_id=1`, { build: () => new Promise((resolve) => { finish = resolve; }) });
+  try {
+    await m.press(m.by('pitch-new-step-4'));
+    const confirm = m.pr(m.by('pitch-new-confirm')).onClick;
+    let first;
+    await act(async () => { first = confirm(); confirm(); });
+    assert.equal(m.calls.filter(([n]) => n === 'build').length, 1);
+    assert.equal(m.pr(m.by('pitch-new-step-5'))['aria-current'], 'step');
+    assert.equal(m.pr(m.by('pitch-new-step-1')).disabled, true);
+    assert.ok(!m.by('pitch-new-confirm'));
+    await act(async () => { finish({ proposal: { id: 77, slides: BUILT_SLIDES } }); await first; });
+    assert.equal(m.pr(m.by('pitch-new-step-6'))['aria-current'], 'step');
+  } finally { await m.unmount(); }
+});
+
+test('#6056: price summary distinguishes unreadable, pending and a recorded zero source count', async () => {
+  for (const [sources, expected] of [
+    [async () => { throw new Error('Synthetic sources unavailable'); }, /Sources unavailable/],
+    [() => new Promise(() => {}), /Reading sources/],
+    [async () => ({ project_id: 1, items: [], coverage: { slots: 0, filled: 0, by_grade: { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0 }, not_recorded: 0, unreadable: 0 } }), /0 recorded sources selected/],
+  ]) {
+    const m = await mount(`${NEW_PATH}?project_id=1`, { sources });
+    try {
+      await m.press(m.by('pitch-new-step-4'));
+      const price = m.text(m.by('pitch-new-price'));
+      assert.match(price, expected);
+      if (!expected.source.startsWith('0')) assert.doesNotMatch(price, /0 recorded sources selected/);
+    } finally { await m.unmount(); }
+  }
 });

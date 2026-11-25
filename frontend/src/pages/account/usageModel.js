@@ -329,6 +329,7 @@ export const STORAGE_AREAS = [
   // D5332 (#5332): Distribution sequence voice notes; D4557: an agent's staged inputs and results (#5507 found both counted but unlisted).
   ['grow_voice_notes', 'Distribution voice notes'],
   ['agent_compute', 'Agent results'],
+  ['work_graph_media', 'Creative media'],
 ];
 
 /**

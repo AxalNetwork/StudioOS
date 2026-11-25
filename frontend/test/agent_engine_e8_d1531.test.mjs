@@ -214,13 +214,16 @@ test('TM10c/d: the quote first, then the draft; Accept sends what was kept and r
 test('TM13: chains with indents and “task created”; refused loops in words; a read that fails says so', async () => {
   const m = await mount(h(HandoffTrail, { scope: 'project', id: 7, team: TEAM }), [[/handoffs$/, () => json({ chains: [{ uid: 'c1', steps: [
     { uid: 's1', depth: 0, from: { role_key: 'general_counsel' }, to: { role_key: 'investor_relations' }, title: 'check the pro-rata figures', status: 'accepted', decided_by: { uid: 'u1', name: 'Synthetic Person' }, task_created: true },
-    { uid: 's2', depth: 1, from: { role_key: 'investor_relations' }, to: { role_key: 'cfo' }, title: 'draft the closing note', status: 'proposed', decided_by: null, task_created: false },
+    { uid: 's2', depth: 1, hierarchy_role: 'reviewer', from: { role_key: 'investor_relations' }, to: { role_key: 'cfo' }, title: 'draft the closing note', status: 'proposed', decided_by: null, task_created: false },
   ], refused: [{ reason: 'depth' }] }] })]]);
   try {
     const steps = m.all('handoff-step');
     assert.equal(steps.length, 2);
     assert.match(m.text(steps[0]), /Vesta.*Aurel: check the pro-rata figures.*Accepted.*accepted by Synthetic Person.*task created/);
     assert.match(m.text(steps[1]), /No agent/, 'a role nobody on the team holds');
+    // D8081: the role word, and none for a step read without one.
+    assert.match(m.text(steps[1]), /No agent\s*as reviewer\s*: draft the closing note/);
+    assert.equal(m.all('handoff-role').length, 1);
     assert.match(m.text(m.by('handoffs-refused')), /Stopped: the chain is already three steps deep\./);
   } finally { await m.unmount(); }
   const bad = await mount(h(HandoffTrail, { scope: 'project', id: 7 }), [[/handoffs$/, () => json({ code: 'x', message: 'boom' }, 500)]]);

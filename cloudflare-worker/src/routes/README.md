@@ -646,5 +646,6 @@ D1456 (#4014): the existing creator-only session bot read adds pattern-filtered 
 #4420: `work_board.ts` also reads `GET /api/teams/project/:id/work/summary`, the project-only open/closed and column counts under the board’s flags and read gate.
 
 `grow_ads.ts` (D4490) mounts `GET /api/grow/ads?project=&campaign=`: venture-gated campaign budget plans, monthly manual/Mercury spend and seven-day contact leads. Mercury remains team-only; no ad actions.
+| `fund_lp_maintenance.ts` | D6237: GP-gated LP correction/removal; mounted before funds. |
 
 D6703: `formation_cases.ts` mounts the HQ-only founder intake at `/api/formation/cases`: create/resume, read and append immutable answers. Project ownership or company edit access is checked on every call; live restricted-country matches hold the case with a generic founder message.

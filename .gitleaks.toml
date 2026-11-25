@@ -157,6 +157,13 @@ regexes = [
   # the commit that added this one stays in the pull request's scan range, so
   # it is pinned here rather than rewritten.
   '''\btest-secret-for-practice-earnings-4834\b''',
+  # D6237 (#6237): the synthetic JWT signing seed first committed in
+  # cloudflare-worker/test/fund_lp_maintenance_6237.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The test now imports the shared harness seed, but
+  # the commit that added this one stays in the pull request's scan range, so
+  # it is pinned here rather than rewritten.
+  '''\bsynthetic-lp-maintenance-6237-secret\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

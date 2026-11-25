@@ -261,6 +261,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `verdict_v10_6018.test.mjs` | Unselected form, evidence gaps, Stop policy and recorded-decision separation. |
+| `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
 | `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
 | `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
@@ -284,6 +286,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
 
 | `portfolio_reporting_settings_6214.test.mjs` | Reporting settings loading, partial reads, read-only defaults and GP save states. |
+| `fund_report_reader_6250.test.mjs` | Issued report prose, frozen figures, attribution, correction links, absence and Print. |
 | `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |

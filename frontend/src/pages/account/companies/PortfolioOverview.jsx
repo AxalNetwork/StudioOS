@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { Pill } from '../../../ui';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
 import {
-  ACTIVE_HERE, canCreate, companyPathFor, companySettingsPathFor, incorporatePath, portfolioSections, projectPagePath,
+  ACTIVE_HERE, canCreate, companyPathFor, companySettingsPathFor, portfolioSections, projectPagePath,
 } from './companiesModel';
 import { CARD, CompanyMark, EYEBROW, Fact, Failed, INK, LINK, MUTED, ProjectMark, Reading, SlugChip, TypeBadge } from './portfolioUi.jsx';
+import FormationEntry from './FormationEntry';
 
 /**
  * D1413 (#3696, PF1, PF7a–c2, PF7d) — Portfolio's overview: every company as
@@ -51,7 +52,7 @@ function CompanyCard({ c, onAddProject, onRetry, profile, counts }) {
           <span className="flex flex-wrap items-center gap-2">
             <Link to={companyPathFor(c.uid)} className={`text-[16px] font-extrabold tracking-[-.01em] ${INK} hover:underline`} data-testid={`company-name-${c.uid}`}>{c.name}</Link>
             <TypeBadge kind="company" />
-            {c.status ? <Pill tone={c.status.tone} data-testid="company-status">{c.status.label}</Pill> : null}
+            {c.formationEntry?.state === 'in_formation' && c.formationEntry.href ? <Link to={c.formationEntry.href}><Pill tone="warn" data-testid="company-status">In formation · Open</Pill></Link> : c.status ? <Pill tone={c.status.tone} data-testid="company-status">{c.status.label}</Pill> : null}
             {c.statusUnread ? <span className={MUTED} data-testid="company-status-unread">Status could not be read</span> : null}
             <SlugChip path={c.path} />
             {c.active ? <Pill tone="info" data-testid="company-active">{ACTIVE_HERE}</Pill> : null}
@@ -72,6 +73,7 @@ function CompanyCard({ c, onAddProject, onRetry, profile, counts }) {
         ))}
       </dl>
       {counts ? <p className={`m-0 px-[18px] ${MUTED}`} data-testid="company-extra">{counts}</p> : null}
+      <div className="px-[18px]"><FormationEntry entry={c.formationEntry} name={c.name} uid={c.uid} onRetry={onRetry} onSaved={onRetry} /></div>
       <div className="rounded-b-axal-lg border-t border-axal-hairline bg-axal-ground/60 px-[18px] py-3 dark:border-gray-800 dark:bg-gray-950/40" data-testid="company-projects">
         <div className="flex items-center justify-between gap-2">
           <span className={EYEBROW}>Projects in this company{projects.available && !projects.loading ? ` · ${projects.value.length}` : ''}</span>
@@ -99,11 +101,11 @@ function StandaloneCard({ p }) {
         <SlugChip path={p.path} />
         <span className={MUTED}>{p.stage || 'Stage not recorded'}</span>
         <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{p.teamUnread ? 'Team could not be read' : p.team != null ? `Team ${p.team}` : 'Team not recorded'}</span>
-        <Pill tone="neutral" data-testid="not-a-company">Not a company yet</Pill>
+        {p.formationEntry?.state === 'not_incorporated' && <Pill tone="neutral" data-testid="not-a-company">Not a company yet</Pill>}
       </span>
       <span className="flex flex-wrap items-center gap-2">
         <Link to={projectPagePath(p.id)} className={BTN_SECONDARY} data-testid={`standalone-open-${p.id}`}>Open project</Link>
-        {p.owner ? <Link to={incorporatePath(p.id)} className={BTN_TEXT} data-testid={`standalone-incorporate-${p.id}`}>Make it a company</Link> : null}
+        <FormationEntry entry={p.formationEntry} name={p.name} project testId={`standalone-incorporate-${p.id}`} />
       </span>
     </article>
   );
@@ -138,6 +140,7 @@ export default function PortfolioOverview({ companies, projects, switcher, activ
           <span className="flex flex-wrap justify-center gap-2">
             <button type="button" className={BTN_SECONDARY} onClick={() => onNew('project')} data-testid="portfolio-empty-project">New project</button>
             <button type="button" className={BTN_PRIMARY} onClick={() => onNew('company')} data-testid="portfolio-empty-company">New company</button>
+            <Link to="/incorporate?start=new" className={BTN_TEXT}>Incorporate a new company</Link>
           </span>
         ) : null}
       </div>

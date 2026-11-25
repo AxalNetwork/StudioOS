@@ -1,7 +1,11 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Pill from '../../ui/Pill.jsx';
-import { Unrecorded } from '../../ui/Honesty.jsx';
+import { Unrecorded, Unreadable } from '../../ui/Honesty.jsx';
+import IncorporateStart from './IncorporateStart';
+import FormationEntry, { useCompanyFormation } from '../account/companies/FormationEntry';
+import { formationEntry } from '../account/companies/companiesModel';
+import { orderSubject } from './incorporateAdapter';
 import { api } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
 import { incorporationQuoteApi } from '../../lib/api/incorporationQuote.js';
@@ -122,6 +126,7 @@ const GOALS = [
 function PickCard({ projects, pick, setPick, freshName, setFreshName, prefilled, refused, onRetry }) {
   return (
     <Card title="Which project becomes the company?" testId="incorporate-pick">
+      {projects.formationUnread && <Unreadable what="Some project incorporation statuses" onRetry={onRetry} />}
       {refused ? <p role="alert" className="m-0 mb-3 rounded-axal-md bg-axal-ground px-3 py-2.5 text-[13px] text-axal-ink dark:bg-gray-800 dark:text-gray-100" data-testid="incorporate-not-yours">{NOT_YOURS}</p> : null}
       {projects.status === 'loading' ? <p className={MUTED}>Reading…</p>
         : projects.status === 'error' ? <Failed what="Your projects" onRetry={onRetry} testId="incorporate-projects-unread" />
@@ -318,10 +323,23 @@ export default function IncorporateFlow({ embedded = false }) {
   if (orderId && /^\d{1,12}$/.test(orderId) && user?.role === 'admin') {
     return <IncorporateHqRead orderId={orderId} viewer={isSuperAdminUser(user) ? 'super_admin' : 'admin'} />;
   }
-  return <MemberIncorporateFlow embedded={embedded} user={user} />;
+  const companyUid = params.get('company');
+  if (companyUid) return <CompanySubjectFlow key={companyUid} uid={companyUid} embedded={embedded} user={user} />;
+  if (!params.has('project') && !params.has('new') && !orderId) return <IncorporateStart initialPick={params.get('start') === 'new' ? 'fresh' : null} />;
+  return <MemberIncorporateFlow key={params.get('project') || 'fresh'} embedded={embedded} user={user} />;
 }
 
-function MemberIncorporateFlow({ embedded = false, user }) {
+function CompanySubjectFlow({ uid, embedded, user }) {
+  const [tick, setTick] = useState(0);
+  const entry = useCompanyFormation(uid, tick);
+  if (entry.state === 'loading') return <div className={CARD} aria-busy="true">Reading company incorporation status…</div>;
+  if (entry.state !== 'not_incorporated' || !entry.allowed) return <div className={CARD}>
+    {entry.state === 'incorporated' ? <p>This company is already incorporated.</p> : <FormationEntry entry={entry} name={entry.row?.company_name || 'this company'} uid={uid} onRetry={() => setTick(n => n + 1)} showRefusal />}
+  </div>;
+  return <MemberIncorporateFlow embedded={embedded} user={user} subjectCompany={entry.row} />;
+}
+
+function MemberIncorporateFlow({ embedded = false, user, subjectCompany = null }) {
   const [params] = useSearchParams();
   const phone = usePhoneWidth();
   const asked = params.get('project');
@@ -331,11 +349,11 @@ function MemberIncorporateFlow({ embedded = false, user }) {
   const [jurisdictions, setJurisdictions] = useState({ status: 'loading', list: [] });
   const [projects, setProjects] = useState({ status: 'loading', own: [] });
   const [answers, setAnswers] = useState({ raisingVc: '', region: '', minimalCost: '', entityPref: '' });
-  const [pick, setPick] = useState(null);
+  const [pick, setPick] = useState(() => params.has('new') ? 'fresh' : null);
   const [freshName, setFreshName] = useState('');
   const [prefilled, setPrefilled] = useState({ id: null, refused: false });
   const [selectedId, setSelectedId] = useState('');
-  const [form, setForm] = useState({ company_name: '', registered_agent_name: '', registered_agent_address: '' });
+  const [form, setForm] = useState({ company_name: subjectCompany?.company_name || '', registered_agent_name: '', registered_agent_address: '' });
   const [nameCheck, setNameCheck] = useState(null);
   const [checking, setChecking] = useState(false);
   const [skip, setSkip] = useState(false);
@@ -348,7 +366,7 @@ function MemberIncorporateFlow({ embedded = false, user }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [declined, setDeclined] = useState(false);
-  const [draft, setDraft] = useState(() => (asked ? null : loadDraft()));
+  const [draft, setDraft] = useState(() => (asked || subjectCompany ? null : loadDraft()));
   const seq = useRef(0);
   const { data: status } = useIncorporationStatus(paid ? order?.incorporation_id : null);
 
@@ -359,15 +377,18 @@ function MemberIncorporateFlow({ embedded = false, user }) {
     api.legalJurisdictions().then((r) => { if (alive) setJurisdictions({ status: 'ready', list: r?.jurisdictions || [] }); })
       .catch(() => { if (alive) setJurisdictions({ status: 'error', list: [] }); });
     setProjects((s) => ({ ...s, status: 'loading' }));
-    accountCompaniesApi.projects().then((r) => { if (alive) setProjects({ status: 'ready', own: ownProjects(r) }); })
-      .catch(() => { if (alive) setProjects({ status: 'error', own: [] }); });
+    if (subjectCompany) setProjects({ status: 'ready', own: [] });
+    else accountCompaniesApi.projects().then((r) => {
+      if (!Array.isArray(r?.projects)) throw Error('Projects unreadable');
+      if (alive) setProjects({ status: 'ready', requested: r.projects.find(p => p.my_seat === 'owner' && String(p.id) === String(asked)) || null, own: ownProjects({ projects: r.projects.filter(p => p.formation_state === 'not_incorporated') }), formationUnread: r.projects.some(p => p.my_seat === 'owner' && !['not_incorporated', 'in_formation', 'incorporated'].includes(p.formation_state)) });
+    }).catch(() => { if (alive) setProjects({ status: 'error', own: [] }); });
     return () => { alive = false; };
-  }, [tick]);
+  }, [tick, subjectCompany, asked]);
 
   // `?project=<id>` prefills once your projects are read; one that is not yours says so.
   useEffect(() => {
     if (projects.status !== 'ready') return;
-    const p = prefill(projects.own, asked);
+    const p = projects.requested && projects.requested.formation_state !== 'not_incorporated' ? { id: null, refused: false } : prefill(projects.own, asked);
     setPrefilled(p);
     if (p.id != null) setPick((x) => (x == null ? p.id : x));
   }, [projects, asked]);
@@ -421,9 +442,9 @@ function MemberIncorporateFlow({ embedded = false, user }) {
 
   // The answers stay on this device until the order is paid (INC5a).
   useEffect(() => {
-    if (paid || draft) return;
+    if (paid || draft || subjectCompany) return;
     if (step > 0 || pick != null) saveDraft({ step: Math.min(step, 3), answers, pick, freshName, selectedId, form });
-  }, [step, answers, pick, freshName, selectedId, form, paid, draft]);
+  }, [step, answers, pick, freshName, selectedId, form, paid, draft, subjectCompany]);
 
   const resume = () => {
     const d = draft;
@@ -433,7 +454,7 @@ function MemberIncorporateFlow({ embedded = false, user }) {
     setForm({ ...form, ...(d.form || {}) }); setStep(Math.min(Math.max(0, d.step || 0), 3));
   };
 
-  const pickReady = pick === 'fresh' ? freshName.trim().length > 0 : pickedProject != null;
+  const pickReady = subjectCompany != null || (pick === 'fresh' ? freshName.trim().length > 0 : pickedProject != null);
   const canContinue = [
     pickReady,
     !!selected,
@@ -448,14 +469,14 @@ function MemberIncorporateFlow({ embedded = false, user }) {
     setBusy(true); setErr(''); setDeclined(false);
     try {
       let pid = pickedProject?.id ?? projectId;
-      if (pick === 'fresh' && pid == null) {
+      if (!subjectCompany && pick === 'fresh' && pid == null) {
         // Start fresh: the project first, standalone; then the order for it.
         const created = await api.createProject({ name: freshName.trim(), company_id: null });
         pid = created?.id;
         setProjectId(pid);
       }
       const res = await api.legalIncorporationOrder({
-        project_id: pid, jurisdiction_id: selectedId, company_name: form.company_name.trim(),
+        ...orderSubject(subjectCompany?.uid, pid), jurisdiction_id: selectedId, company_name: form.company_name.trim(),
         registered_agent_name: form.registered_agent_name.trim() || null, registered_agent_address: form.registered_agent_address.trim() || null,
       });
       setProjectId(pid);
@@ -474,7 +495,7 @@ function MemberIncorporateFlow({ embedded = false, user }) {
         : step === 3 ? { label: 'Continue to payment', go: () => setStep(4), disabled: !canContinue } : null;
 
   const review = [
-    ['Project', projectName || <Unrecorded key="p" />, 0],
+    [subjectCompany ? 'Company' : 'Project', subjectCompany?.company_name || projectName || <Unrecorded key="p" />, 0],
     ['Jurisdiction', selected?.label || <Unrecorded key="j" />, 1],
     ['Company name', form.company_name.trim() ? `${form.company_name.trim()}${nameCheck?.status === 'available' ? ' · available' : ''}` : <Unrecorded key="n" />, 2],
     ['Registered agent', form.registered_agent_name.trim() || <Unrecorded key="a" />, 2],
@@ -482,6 +503,14 @@ function MemberIncorporateFlow({ embedded = false, user }) {
     ['Founders and equity split', cofounder.kind === 'signed' ? `From your Co-founder Agreement · signed${cofounder.on ? ` ${shortDay(cofounder.on)}` : ''}` : cofounder.kind === 'drafted' ? 'Co-founder Agreement drafted, not signed' : cofounder.kind === 'unread' ? 'Could not be read' : 'No Co-founder Agreement yet', 2],
     ['Officers and directors', 'Recorded on the company once it exists', null],
   ];
+
+  // Ownership and formation eligibility are different facts. Never call an owned project ‘not yours’.
+  if (projects.status === 'ready' && projects.requested && projects.requested.formation_state !== 'not_incorporated') {
+    const entry = formationEntry(projects.requested, 'project');
+    return <div className={CARD} data-testid="incorporate-project-state">
+      {entry.state === 'incorporated' ? <p>This project is already incorporated.</p> : <FormationEntry entry={entry} name={projects.requested.name || 'this project'} project onRetry={retry} />}
+    </div>;
+  }
 
   return (
     <div className={`mx-auto flex w-full max-w-5xl flex-col gap-4 ${embedded ? '' : 'px-4 pb-24 pt-6 md:px-7 md:pb-8'}`} data-testid="incorporate-flow" data-step={STEPS[step].id}>
@@ -511,8 +540,8 @@ function MemberIncorporateFlow({ embedded = false, user }) {
 
       {step === 0 ? (
         <>
-          <PickCard projects={projects} pick={pick} setPick={setPick} freshName={freshName} setFreshName={setFreshName}
-            prefilled={prefilled.id} refused={prefilled.refused} onRetry={retry} />
+          {subjectCompany ? <Card title="Company" testId="incorporate-company-subject"><p>{subjectCompany.company_name}</p></Card> : <PickCard projects={projects} pick={pick} setPick={setPick} freshName={freshName} setFreshName={setFreshName}
+            prefilled={prefilled.id} refused={prefilled.refused} onRetry={retry} />}
           <Card title="Your goals" testId="incorporate-goals">
             <div className="flex flex-col gap-4">
               {GOALS.map(([k, q, opts]) => (

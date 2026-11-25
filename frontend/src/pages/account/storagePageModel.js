@@ -292,6 +292,7 @@ export const AREA_PLACE = Object.freeze({
   csv_imports: ['your imports', null],
   articles: ['your articles', '/articles/draft'],
   agent_compute: ['your agent results', null],
+  work_graph_media: ['Creative media', null],
 });
 
 function day(iso) {

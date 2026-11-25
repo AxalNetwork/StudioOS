@@ -120,7 +120,9 @@ test('HQ reading a member\'s project: the pill and the line, no settings, Edit, 
     assert.equal(view.textOf('project-read-only'), `${READ_ONLY_LINE} ${ADMIN_LINE}`);
     for (const id of ['project-page-settings', 'project-edit', 'project-make-company', 'project-move-under']) assert.ok(!view.has(id), id);
   } finally { await view.close(); }
-  const owner = await mounted(h(ProjectPage, { id: 42, profile: 'founder' }), worker({ projectMembers: { members: [], my_role: 'owner', can_manage: true } }));
+  // D6688 (#6688): Make it a company reads the project's formation state from the list its caller passes.
+  const projects = { projects: [{ id: 42, name: 'Orbit Notes', my_seat: 'owner', formation_state: 'not_incorporated' }] };
+  const owner = await mounted(h(ProjectPage, { id: 42, profile: 'founder', projects }), worker({ projectMembers: { members: [], my_role: 'owner', can_manage: true } }));
   try {
     assert.ok(!owner.has('project-access-pill') && !owner.has('project-read-only'));
     for (const id of ['project-page-settings', 'project-edit', 'project-make-company', 'project-move-under']) assert.ok(owner.has(id), id);
@@ -158,7 +160,8 @@ test('INC5g: HQ reads one order read only — the pill, the timeline, the line, 
 test('the wiring: an admin with ?order reads HQ\'s view; a member never does; Lab › Formation opens it', () => {
   const flow = read('pages/incorporate/IncorporateFlow.jsx');
   assert.match(flow, /if \(orderId && \/\^\\d\{1,12\}\$\/\.test\(orderId\) && user\?\.role === 'admin'\) \{\n\s+return <IncorporateHqRead orderId=\{orderId\} viewer=\{isSuperAdminUser\(user\) \? 'super_admin' : 'admin'\} \/>;/);
-  assert.match(flow, /return <MemberIncorporateFlow embedded=\{embedded\} user=\{user\} \/>;/);
+  // D6688 (#6688): a member's flow is keyed by its subject; no subject opens the start board first.
+  assert.match(flow, /return <MemberIncorporateFlow key=\{params\.get\('project'\) \|\| 'fresh'\} embedded=\{embedded\} user=\{user\} \/>;/);
   assert.match(read('pages/admin/lab/LabFormation.jsx'), /to=\{`\/incorporate\?order=\$\{encodeURIComponent\(r\.id\)\}`\}/);
   assert.match(read('pages/account/companies/CompaniesProjects.jsx'), /paths=\{paths\} profile=\{profile\} \/>/, 'the project page is told who is looking');
   for (const f of ['pages/account/companies/CompanyPage.jsx', 'pages/account/companies/ProjectPage.jsx', 'pages/incorporate/IncorporateHqRead.jsx']) {

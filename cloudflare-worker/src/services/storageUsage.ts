@@ -25,6 +25,8 @@
  * records their sizes, so this one area is read from R2: one `list` of each of
  * the member's articles' prefixes, cached for a minute per article in the
  * isolate and forgotten by the routes that write there (`forgetArticleStorage`).
+ * D5583 part 2: creative media uses the same current company-owner/project-founder rule.
+ * Each live physical media-class/project/digest row counts once; admission-owner snapshots are audit metadata only.
  */
 import type { Env, User } from '../types';
 import { storagePlan, storagePlanKey } from './storagePlans';
@@ -32,7 +34,7 @@ import { storagePlan, storagePlanKey } from './storagePlans';
 export type StorageAreaKey =
   | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
   | 'data_room_versions' | 'session_audio' | 'grow_voice_notes' | 'deck_reviews' | 'deck_rehearsals' | 'deck_recordings' | 'validate_evidence' | 'build_proofs'
-  | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles' | 'agent_compute';
+  | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles' | 'agent_compute' | 'work_graph_media';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
 export type StorageState = 'ok' | 'near_80' | 'near_95' | 'full' | 'over' | 'no_allowance';
 export type StorageArea = {
@@ -48,7 +50,7 @@ export type StorageArea = {
 /** The canvas's six kinds, in palette order. */
 export const STORAGE_KINDS: ReadonlyArray<StorageKindKey> = ['data_room', 'documents', 'recordings', 'decks_exports', 'brand', 'other'];
 
-type Scope = 'company' | 'personal' | 'deck';
+type Scope = 'company' | 'personal' | 'deck' | 'work_graph';
 type Def = { key: StorageAreaKey; kind: StorageKindKey; scope: Scope; groups: string; largest: string; owners: string };
 
 /**
@@ -61,6 +63,13 @@ const VENTURE_OWNERS = `(SELECT p.id AS project_id, COALESCE(
       ORDER BY l2.created_at, l2.id LIMIT 1),
     (SELECT MIN(u.id) FROM users u WHERE u.founder_id = p.founder_id)) AS user_id
   FROM projects p) vo`;
+
+// The same primary-company-owner / project-founder fallback as VENTURE_OWNERS.
+// Company-wide media has no project founder, so its company owner must be recorded.
+const WORK_GRAPH_OWNERS = `(SELECT b.*, COALESCE(
+    (SELECT l.user_id FROM user_company_links l WHERE l.company_id = b.company_id AND l.is_primary_admin = 1 ORDER BY l.created_at, l.id LIMIT 1),
+    (SELECT MIN(u.id) FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = b.project_id AND p.company_id = b.company_id)) AS quota_owner_user_id
+  FROM work_graph_blobs b) wg`;
 
 // Every statement is static and bound. A company area binds the caller's own
 // ventures as one JSON array (`json_each(?)`); a personal area binds their id.
@@ -294,6 +303,27 @@ const AREAS: ReadonlyArray<Def> = [
       FROM agent_compute_objects WHERE owner_user_id = ? ORDER BY size_bytes DESC, uid LIMIT 10`,
     owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
       FROM agent_compute_objects GROUP BY owner_user_id` },
+  // D5583 part 2: current owner; use company-index lookups over owned projects/company-wide scopes.
+  { key: 'work_graph_media', kind: 'other', scope: 'work_graph',
+    groups: `SELECT NULLIF(b.project_id, 0) AS project_id, COUNT(*) AS files, SUM(b.byte_length) AS bytes, 0 AS unknown_size_files
+      FROM work_graph_blobs b WHERE b.object_class <> 'generic' AND b.deleted_at IS NULL AND (
+        (b.company_id IN (SELECT p.company_id FROM projects p WHERE p.id IN (SELECT value FROM json_each(?)))
+         AND b.project_id IN (SELECT value FROM json_each(?)))
+        OR (b.project_id = 0 AND b.company_id IN (
+          SELECT l.company_id FROM user_company_links l WHERE l.user_id = ? AND l.is_primary_admin = 1
+            AND l.id = (SELECT l2.id FROM user_company_links l2 WHERE l2.company_id = l.company_id AND l2.is_primary_admin = 1 ORDER BY l2.created_at, l2.id LIMIT 1))))
+      GROUP BY b.project_id`,
+    largest: `SELECT b.object_class AS name, NULL AS version, b.byte_length AS bytes, b.created_at AS added_at, NULLIF(b.project_id, 0) AS project_id, b.digest AS ref
+      FROM work_graph_blobs b WHERE b.object_class <> 'generic' AND b.deleted_at IS NULL AND (
+        (b.company_id IN (SELECT p.company_id FROM projects p WHERE p.id IN (SELECT value FROM json_each(?)))
+         AND b.project_id IN (SELECT value FROM json_each(?)))
+        OR (b.project_id = 0 AND b.company_id IN (
+          SELECT l.company_id FROM user_company_links l WHERE l.user_id = ? AND l.is_primary_admin = 1
+            AND l.id = (SELECT l2.id FROM user_company_links l2 WHERE l2.company_id = l.company_id AND l2.is_primary_admin = 1 ORDER BY l2.created_at, l2.id LIMIT 1))))
+      ORDER BY b.byte_length DESC, b.digest LIMIT 10`,
+    owners: `SELECT quota_owner_user_id AS user_id, COUNT(*) AS files, SUM(byte_length) AS bytes, 0 AS unknown_size_files
+      FROM ` + WORK_GRAPH_OWNERS + ` WHERE object_class <> 'generic' AND deleted_at IS NULL GROUP BY quota_owner_user_id` },
+
 ];
 
 /**
@@ -344,6 +374,7 @@ function largestRow(def: Def, row: any): Largest {
 
 function binds(def: Def, userId: number, owned: string): unknown[] {
   if (def.scope === 'personal') return [userId];
+  if (def.scope === 'work_graph') return [owned, owned, userId];
   if (def.scope === 'deck') return [owned, userId];
   return def.key === 'build_proofs' ? [owned, owned] : [owned];
 }
@@ -351,7 +382,7 @@ function binds(def: Def, userId: number, owned: string): unknown[] {
 async function readArea(db: D1Database, def: Def, userId: number, ventures: Venture[] | null, withLargest = true): Promise<AreaRead> {
   const blank: StorageArea = { key: def.key, kind: def.kind, files: null, bytes: null, measured_bytes: null, unknown_size_files: null, recorded: false };
   // A company area cannot be read without knowing whose ventures they are.
-  if (ventures === null && def.scope === 'company') return { area: blank, groups: [], largest: null };
+  if (ventures === null && (def.scope === 'company' || def.scope === 'work_graph')) return { area: blank, groups: [], largest: null };
   const owned = new Set((ventures ?? []).map((v) => v.id));
   const list = JSON.stringify([...owned]);
   try {

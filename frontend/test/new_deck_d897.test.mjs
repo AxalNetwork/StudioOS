@@ -234,11 +234,15 @@ async function mount(url, over = {}) {
   };
 }
 
-test('pd2, one page: Audience and stage, Sources and Outline together, the brief from the read, and no prompt', async () => {
+test('PS-03: six steps retain the record-derived brief and no prompt', async () => {
   const m = await mount(`${NEW_PATH}?project_id=1`);
   try {
     for (const id of ['pitch-new-page', 'pitch-new-fast', 'pitch-new-audience', 'pitch-new-sources', 'pitch-new-outline', 'sources-step']) assert.ok(m.by(id), id);
-    assert.ok(!m.by('pitch-new-step-1') && !m.all().some((n) => m.pr(n)['aria-label'] === 'Steps'), 'no step bar: one page');
+    assert.equal(m.pr(m.by('pitch-new-step-1'))['aria-current'], 'step');
+    assert.equal(m.pr(m.by('pitch-new-sources'))['aria-hidden'], true);
+    await m.press(m.by('pitch-new-step-2'));
+    assert.equal(m.pr(m.by('pitch-new-sources'))['aria-hidden'], false);
+    assert.equal(m.pr(m.by('pitch-new-audience'))['aria-hidden'], true);
     const t = m.text();
     for (const a of CONTEXT.audiences) assert.ok(t.includes(a.label), a.label);
     assert.match(t, /Synthetic seed · SAFE · \$1,500,000 · close 15 Dec 2026/);
@@ -480,9 +484,9 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   for (const f of ['StudioHome.jsx', 'PitchStudio.jsx', 'newDeckModel.js', 'NewDeck.jsx', 'OneClickBuild.jsx', 'oneClickModel.js']) {
     assert.doesNotMatch(read(`frontend/src/pages/raise/pitch/${f}`), /seed_fund|'standard'/, `${f}: no hard-coded audience or length`);
   }
-  // pd2 (owner rule): no prompt field and no step bar on New deck.
+  // pd2 (owner rule): no prompt field on New deck. PS-03 adds the six-step navigation.
   const nd = read('frontend/src/pages/raise/pitch/NewDeck.jsx');
-  assert.doesNotMatch(nd, /<textarea|PROMPT_HINT|STEPS|setPrompt/);
+  assert.doesNotMatch(nd, /<textarea|PROMPT_HINT|setPrompt/);
   for (const f of ['frontend/src/pages/raise/pitch/NewDeck.jsx', 'frontend/src/pages/raise/pitch/newDeckModel.js']) {
     const src = read(f);
     assert.doesNotMatch(src, /\[\$[\d.,]+\]|\[Northwind|\[Seed\]|\[\d+\] runs/, `${f}: no canvas sample reaches the page`);
