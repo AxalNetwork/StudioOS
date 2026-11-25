@@ -64,28 +64,53 @@ async function reserveAiBudget(env: Env, jobType: string): Promise<boolean> {
 }
 
 /**
- * Atomic idempotency claim. Returns true if this consumer instance owns the
- * delivery (proceed with side effects); false if a previous delivery already
- * claimed it (ack-skip without re-execution).
+ * D8533 (#8533): how long a delivery's claim belongs to the delivery that took
+ * it. A consumer invocation runs for at most 15 minutes (Cloudflare's limit),
+ * and dispatch lags by up to a minute, so a claim older than this with no
+ * result is one whose delivery died: the isolate was stopped after the claim
+ * landed and before the job finished (or before its failure released the
+ * claim). Until D8533 the redelivery found that claim and ack-skipped the
+ * message as a duplicate, so the job never ran: a paid incorporation stayed at
+ * `paid` and an email stayed `queued`, with nothing recorded anywhere.
+ */
+export const CLAIM_LEASE_SECONDS = 16 * 60;
+
+/**
+ * Atomic idempotency claim. `owned`: this delivery runs the job. `done`: an
+ * earlier delivery completed it (ack-skip). `in_flight`: an earlier delivery
+ * holds a claim younger than the lease, so it may still be running; the
+ * message comes back after the lease, when the claim is either done or taken
+ * over (D8533).
  *
  * Implementation note: previous code used `RATE_LIMITS.get` then `.put`,
  * which is NOT atomic — two concurrent CF Queue redeliveries of the same
  * message both pass the `get` check before either writes, so both run the
  * job and we double-charge LPs. SQL `INSERT OR IGNORE` is atomic by
  * construction: SQLite's PRIMARY KEY constraint serialises the writes and
- * exactly one INSERT reports `meta.changes === 1`.
+ * exactly one INSERT reports `meta.changes === 1`. The takeover of a stale
+ * claim is one conditional UPDATE, so two redeliveries cannot both take it.
  *
- * `result_json` is updated by the consumer on successful completion (see
- * queueConsumer below) so a future sync-poll API can return the cached
- * outcome instead of replaying.
+ * `result_json` is set by the consumer on successful completion (see
+ * queueConsumer below); it is what tells a finished job from a dead one.
+ * It is best-effort, so a job whose result write failed can run again after
+ * the lease: each handler's own state guards against a second effect (a
+ * formation case not at `paid` does not move, a `sent` email is not resent).
  */
-async function claimDelivery(env: Env, idempotencyKey: string): Promise<boolean> {
-  if (!idempotencyKey) return true; // see queueConsumer — missing key short-circuits to ack.
+async function claimDelivery(env: Env, idempotencyKey: string): Promise<'owned' | 'done' | 'in_flight'> {
+  if (!idempotencyKey) return 'owned'; // see queueConsumer — missing key short-circuits to ack.
   const r = await env.DB.prepare(
     `INSERT OR IGNORE INTO job_idempotency (idempotency_key) VALUES (?)`,
   ).bind(idempotencyKey).run();
   // D1 exposes meta.changes for INSERT OR IGNORE — 1 means we owned the row.
-  return (r.meta?.changes ?? 0) > 0;
+  if ((r.meta?.changes ?? 0) > 0) return 'owned';
+  const stale = await env.DB.prepare(
+    `UPDATE job_idempotency SET first_seen_at = datetime('now')
+      WHERE idempotency_key = ? AND result_json IS NULL AND datetime(first_seen_at) <= datetime('now', ?)`,
+  ).bind(idempotencyKey, `-${CLAIM_LEASE_SECONDS} seconds`).run();
+  if ((stale.meta?.changes ?? 0) > 0) return 'owned';
+  const row = await env.DB.prepare(`SELECT result_json FROM job_idempotency WHERE idempotency_key = ?`)
+    .bind(idempotencyKey).first<{ result_json: string | null }>();
+  return row && row.result_json === null ? 'in_flight' : 'done';
 }
 
 async function recordResult(env: Env, idempotencyKey: string, result: unknown): Promise<void> {
@@ -115,6 +140,11 @@ export async function dlqConsumer(
         message.attempts ?? 0,
         `CF DLQ message; timestamp=${message.timestamp}`,
       ).run();
+      // D8533 — an email whose job ran out of retries reads `dlq` until it is replayed.
+      if (body.job_type === 'email_send') {
+        const { markEmailDeadLettered } = await import('./services/email/send');
+        await markEmailDeadLettered(env, body.payload ?? {});
+      }
       // D1490 — a listing whose job ran out of retries reads `failed`, keeping its last reason.
       if (body.job_type === 'event_syndication') {
         const { markSyndicationDead } = await import('./services/eventSyndication/jobs');
@@ -191,8 +221,17 @@ export async function queueConsumer(
 
     // Atomic dedup BEFORE side effects (SQL PRIMARY KEY race-free, unlike
     // the previous KV get-then-put).
-    const owned = await claimDelivery(env, body.idempotency_key);
-    if (!owned) {
+    const claim = await claimDelivery(env, body.idempotency_key);
+    if (claim === 'in_flight') {
+      // D8533: an earlier delivery holds the claim and has not finished. Come
+      // back once its lease has passed: the job is then done (ack-skip) or the
+      // claim is stale and this delivery takes it over.
+      console.info(`[queue-consumer] claim in flight, deferring job_type=${body.job_type} key=${body.idempotency_key}`);
+      message.retry({ delaySeconds: CLAIM_LEASE_SECONDS });
+      await meter(env, body.job_type, 'deferred', Date.now() - t0);
+      continue;
+    }
+    if (claim === 'done') {
       // Epic 11 — `console.info` (vs `console.log`) keeps the CI grep that
       // bans `console.log` from worker source happy. Wrangler tail surfaces
       // both at the same level.

@@ -418,6 +418,7 @@ catalogue version only in the fixture.
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
 | `fund_lp_maintenance_6237.test.ts` | D6237: mounted gates, contact identity, commitment floor, deletion history and rollback. |
+| `csv_safe_parity_7811.test.ts` | D7811: shared formula-safe CSV cases without changing legacy exports. |
 
 | `portfolio_reporting_settings_6214.test.ts` | Rule history, inherited defaults, GP ownership, attributed writes, stale revisions and period/stage rules. |
 | `work_graph_media_storage_5583.test.ts` | D5583 part 2: bounded admission, scoped classes, immutable snapshots, existing blob readback, class-specific reconciliation, cross-project refusal and cost/audit. |

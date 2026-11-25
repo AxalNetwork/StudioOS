@@ -208,6 +208,53 @@ right (the hold and the ledger carry it), the attribution is missing.
   statement, over every hold, as its `settled_without_usage` invariant, and
   `d1_benchmark_4567.test.ts` breaks it on purpose.
 
+## 5.3 Queue consumers and the tasks inside a cron tick (D8533, #8533)
+
+**Queue delivery is at-least-once.** `cloudflare-worker/test/_queue_scenarios.ts`
+plays the Cloudflare Queues platform as `wrangler.toml` configures it and runs
+four scenarios against one message of a consumer: a **duplicate**, an
+**interruption** right after a durable write (the isolate dies, then the
+message is delivered again), **exhausted** retries ending in the dead letter,
+and a **replay** of that dead letter through `POST /api/infra/dlq/:id/retry`.
+After each it asserts one business outcome and the status a person sees.
+`queue_consumer_scenarios_8533.test.ts` applies it to the job queue's payment
+fulfillment (`incorporation_packet_start`) and notifications (`email_send`).
+
+| Consumer | Outcome counted | Done | Dead-lettered |
+| --- | --- | --- | --- |
+| `incorporation_packet_start` (after the Stripe paid recorder) | `stage_change` to `preparing` on the order's formation case | order `packet_processing`, case `preparing` | order and case stay `paid`; a `cf_dlq_mirror` row |
+| `email_send` (after `send()`) | messages the provider accepted | `email_send_log.status = 'sent'` | `email_send_log.status = 'dlq'`; a `cf_dlq_mirror` row |
+
+What the scenarios changed in the consumer (D8533):
+
+- **A claim whose delivery died is taken over.** `job_idempotency` is claimed
+  before the job runs. A delivery that died after the claim left a row with no
+  result, and the redelivery ack-skipped it as a duplicate: the job never ran
+  and nothing said so. A claim with no result is now `in_flight` for
+  `CLAIM_LEASE_SECONDS` (16 minutes, the longest a consumer invocation can
+  live plus dispatch lag): a delivery that meets one is retried after the lease
+  (metered `deferred`), and once it has passed the claim is taken over and the
+  job runs. A claim with a result is a `duplicate`, acked as before.
+- **An email already sent is not sent again**, whatever delivers its message
+  (a takeover, a replay): `deliverNow` reads the log row first.
+- **A dead-lettered email reads `dlq`** on its log row until a replay sends it.
+
+Where to look: an in-flight deferral and a duplicate are `system_metrics` rows
+(`metric_name = 'job'`, `labels.status` `deferred` / `duplicate`,
+`transport: cf_queue`); a dead letter is a `cf_dlq_mirror` row (§7.3).
+
+**Each task inside a cron tick.** `cron_run_history.task_outcomes` (migration
+`202611250106_8533_cron_task_outcomes.sql`) holds a JSON array, one entry per
+task the tick reported: `done` (with a note of how much), `skipped` (ran and
+did nothing, with why) or `failed` (with an `error_class`: the error's name,
+the code the call site passed, or `unclassified`). A failed task still makes
+the row `partial` (D4703). Every task that fails is recorded with its class;
+`done` and `skipped` are reported today by the queue drain, the subprocessor
+notice sweep and the analytics snapshot, and another task joins with one call
+at its site. The Admin Console's Cron tab returns the column with each row
+(`GET /api/infra/cron-history`); no screen draws it yet. Rows written before
+the migration, and lease-held ticks (D201), have `NULL`.
+
 ## 6. What is not built yet
 
 - **Account analytics** (Workers, D1 query volume and latency, Workflows, R2):
@@ -275,6 +322,9 @@ Steps:
    ones it did (`DEPLOY.md`).
 3. A repeated failure is a code or data fault. Fix it and deploy; the incident
    clears at the first successful run.
+4. A `partial` row names its failed tasks in `error`; `task_outcomes` gives
+   each one's `error_class`, and shows the tasks that ran and did nothing
+   (§5.3).
 
 ### 7.2 The Stripe webhook is refusing or silent
 
@@ -306,6 +356,10 @@ Steps:
 1. Read the backlog on the Monitoring zone, split into the legacy table and
    the queue mirror (`services/deadLetters.ts`).
 2. Fix the cause before replaying.
+3. Replay with `POST /api/infra/dlq/:id/retry?source=cf`. For the payment
+   fulfillment and notification jobs a replay produces the outcome once even
+   if part of the job had already happened (§5.3); a dead-lettered email's
+   log row reads `dlq` until then.
 
 ### 7.4 Telemetry cannot be read
 

@@ -3,7 +3,7 @@ import FormationEntry from '../account/companies/FormationEntry';
 import { formationEntry } from '../account/companies/companiesModel';
 import { Link, useParams } from 'react-router-dom';
 import { Sheet, Unrecorded } from '../../ui';
-import { api } from '../../lib/api';
+import { api, getActiveCompanyId } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
 import { companyActionsApi } from '../../lib/api/companyActions.js';
 import { teamsApi } from '../../lib/api/teams.js';
@@ -87,26 +87,64 @@ export default function ProjectSettingsPage() {
   const [notice, setNotice] = useState('');
   const known = useRef(companies);
   known.current = companies;
+  // D8527 (#8527): each read carries the scope it was asked for (its number, and the company selected when it left).
+  // Only the latest read, answering for the scope still selected, is drawn: a response that left before a change
+  // (a revoked seat, an archive, a move, another account) and arrives after it never repaints the old view.
+  const asked = useRef(0);
   const load = useCallback(async () => {
+    const ask = { n: ++asked.current, company: getActiveCompanyId() };
+    const current = () => ask.n === asked.current && ask.company === getActiveCompanyId();
     try {
       const [project, members, mine] = await Promise.all([
         api.getProject(id), teamsApi.listProjectMembers(id).catch(() => null), accountCompaniesApi.projects().catch(() => null),
       ]);
+      if (!current()) { reask(); return; }
       const row = (mine?.projects || []).find((p) => String(p.id) === String(id));
       const company = projectCompany(project, { row, companies: known.current });
       setState({ status: 'ready', project, row, manage: !!members?.can_manage, company, projects: projectsOfCompany(mine?.projects, company?.uid) });
     } catch (e) {
+      if (!current()) { reask(); return; }
       setState({ status: 'error', error: e });
     }
+    // An answer for a selection that changed while it was out is not drawn, and the page asks again under the
+    // selection now held, so it never stays on "Reading…". A newer read or a page that has gone asks nothing.
+    function reask() { if (ask.n === asked.current) loadRef.current?.(); }
   }, [id]);
-  useEffect(() => { load(); }, [load]);
+  const loadRef = useRef(null);
+  loadRef.current = load;
+  useEffect(() => {
+    load();
+    // D8527: access can change while the page is open. Coming back to the tab reads again, so a revoked member's
+    // next look shows that they no longer have access rather than the settings they last saw.
+    const again = () => { if (document.visibilityState !== 'hidden') load(); };
+    // Browser Back can restore this page whole from the back-forward cache, with its last answer and no remount:
+    // a restored page reads again, so it never shows settings its member may no longer open.
+    const restored = (e) => { if (e.persisted) load(); };
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('pageshow', restored);
+    return () => {
+      window.removeEventListener('focus', again);
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('pageshow', restored);
+      asked.current += 1; // an answer for a page that has gone is never drawn
+    };
+  }, [load]);
   const p = state.project;
   const ready = state.status === 'ready';
   const scope = scopeFor({ project: { id, name: p?.name, company: state.company }, projects: state.projects });
   usePublishScope(ready ? scope : null);
 
   if (state.status === 'error') {
-    return <div className="p-6"><p className={MUTED} role="alert">This project could not be read. {state.error?.status === 403 ? 'Only its members see its settings.' : 'Try again.'}</p></div>;
+    // D8527: a refusal (403) and a project not found for this account (404) are both "no access" here; the Worker
+    // answers someone with no relation to a venture as if it did not exist, so the page does not offer a retry.
+    const noAccess = state.error?.status === 403 || state.error?.status === 404;
+    return (
+      <div className="p-6" data-testid="project-settings-no-access" data-no-access={noAccess ? 'true' : 'false'}>
+        <p className={MUTED} role="alert">This project could not be read. {noAccess ? 'You do not have access to it: only its members see its settings.' : 'Try again.'}</p>
+        {noAccess ? <Link to="/account/portfolio" className={`mt-3 ${BTN_TEXT}`}>Back to Portfolio</Link> : null}
+      </div>
+    );
   }
   const name = scope.project.name;
   return (
