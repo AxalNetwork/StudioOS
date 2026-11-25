@@ -10,7 +10,8 @@
  *   5. The pure read: rows by place before 714, uids the link does not send,
  *      zero seconds, ties.
  *
- * In-memory SQLite: the baseline and every post-cutoff migration. Synthetic names only.
+ * In-memory SQLite: a copy of the schema built once per run (baseline and every post-cutoff
+ * migration, `_schema_once.mjs`). Synthetic names only.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_visit_reads_d8249.test.ts
@@ -18,10 +19,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckSlideAnalytics from '../src/routes/deck_slide_analytics.ts';
@@ -30,9 +30,6 @@ import decks from '../src/routes/decks.ts';
 import { VISIT_READS_LIMIT, visitReads } from '../src/services/decks/visitReads.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d8249-visit-reads-0123456789';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const ADMIN = 1, FOUNDER = 3, OTHER = 4, PLAIN_ADMIN = 9;
 const P = 5, OTHER_P = 6, DECK = 6, PAT = 7, SAM = 8;
 
@@ -43,10 +40,14 @@ const SLIDES = [
   { uid: 'ask', title: 'The Ask', fields: [{ key: 'ask_amount_usd', label: 'Ask', kind: 'paragraph', value: 'Synthetic ask', source: 'data' }] },
 ];
 
+/**
+ * #8592: the schema (baseline plus every post-cutoff migration) is built once per run by
+ * `_schema_once.mjs` (D4133); each test loads its own in-memory copy of it, rows included,
+ * and seeds its own rows on top.
+ */
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', null);
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

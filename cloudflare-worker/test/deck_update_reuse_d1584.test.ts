@@ -17,20 +17,17 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import reuseRoutes, { NO_UPDATE } from '../src/routes/deck_update_reuse.ts';
 import { UPDATE_SLOTS, changesSince, deriveFromUpdate, updateText, type LatestUpdate } from '../src/services/decks/updateReuse.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
 const JWT_SECRET = 'synthetic-update-reuse-only-not-a-real-credential'.repeat(2);
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const FOUNDER = 10, OTHER = 20, P = 1, Q = 2;
 
 const bound = (key: string) => ({ source_key: key, record_ref: 'project_metrics:1', as_of: '2026-09-30', grade: 'Stated', snapshot_hash: 'h1' });
@@ -104,10 +101,14 @@ test('changesSince: changed, added and removed tiles, and the card count', () =>
 
 const V2 = [{ blocks: [{ id: 'mrr', kind: 'metric', label: 'MRR', value: '$11,000', binding: bound('grow.mrr') }] }];
 
+/**
+ * #8593: the schema (baseline plus every post-cutoff migration) is built once per run by
+ * `_schema_once.mjs` (D4133); each test loads its own in-memory copy of it, rows included,
+ * and seeds its own rows on top.
+ */
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   const add = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   add.run(FOUNDER, 'founder', 'Synthetic Founder', 'founder@example.test', 1001);
   add.run(OTHER, 'founder', 'Synthetic Other', 'other@example.test', 1002);
