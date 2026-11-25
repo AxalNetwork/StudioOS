@@ -10,7 +10,7 @@
  *   · the rail renders no action or prompt control (frontend case, in
  *     `frontend/test/deck_usage_d1524.test.mjs`).
  *
- * The real migrated schema in memory (no file copies); `fetch` throws.
+ * The real migrated schema in memory (built once per run, copied per test); `fetch` throws.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_usage_d1524.test.ts
@@ -18,7 +18,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckUsage from '../src/routes/deck_usage.ts';
@@ -28,17 +28,13 @@ import { estimateDeck } from '../src/services/decks/elementModels.ts';
 import { deckCounts, deckEstimate } from '../src/services/decks/usage.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 
 const PAGE = 'Founder · Raise · Pitch deck';
 const LLAMA = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1524-only-not-a-real-credential'.repeat(2);
 
 /** A Balanced 12-card deck: a title band and a body on every card, a picture on three. */
@@ -52,8 +48,9 @@ function balanced(): any[] {
 
 async function fixture(slides: any[] = balanced()) {
   __resetForTest();
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  // #8437: the baseline plus every migration is built once per run by _schema_once.mjs and copied in here,
+  // so each test still starts from its own fresh database.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true }));
   const insert = db.prepare('INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (?, ?, ?, ?, ?, 1, ?)');
   for (const [id, role, fid, tier] of [[2, 'founder', 100, 'studio'], [4, 'founder', 400, 'studio']] as const) insert.run(id, role, fid, `Synthetic member ${id}`, `synthetic-${id}@example.invalid`, tier);
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100),(4,'Synthetic other venture',400)");
