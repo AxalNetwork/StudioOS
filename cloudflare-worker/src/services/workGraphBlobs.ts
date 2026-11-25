@@ -1,6 +1,7 @@
 /**
  * D5581 part 3 (#5581, WorkGraph under the #5577 epic) — content-addressed WorkGraph bytes in the existing R2 `FILES`
- * bucket, under their own prefix `wg/v1/t<tenant>/c<company>/sha256/<digest>`, with read-back verification, the
+ * bucket. Generic keys retain `wg/v1/t<tenant>/c<company>/sha256/<digest>`; D5583 part 2 adds project-scoped
+ * media classes under `wg/v1/t<tenant>/c<company>/media/p<project-or-0>/<class>/sha256/<digest>`. Read-back verification, the
  * offline state and the per-tenant byte limit. Decision: `documentation/architecture/decisions/D5581-p3.md`.
  *
  *   putVerified          hashes the bytes (SHA-256), writes them under their digest with R2's own `sha256` check, so
@@ -31,6 +32,8 @@ import { putContentAddressedRecord } from './recordStore';
 
 export const BLOB_BINDING = 'FILES' as const;
 export const BLOB_PREFIX = 'wg/v1';
+export const BLOB_CLASSES = ['generic', 'master', 'snapshot', 'rendition', 'thumbnail'] as const;
+export type BlobClass = (typeof BLOB_CLASSES)[number];
 
 /** R2's jurisdictions (`scripts/lib/branchConfig.mjs` R2_JURISDICTIONS). */
 export const R2_JURISDICTIONS = ['eu', 'fedramp'] as const;
@@ -72,16 +75,17 @@ type BlobEnv = Pick<Env, 'DB'> & { FILES?: R2Bucket };
 
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
 
-export function blobKey(scope: Pick<Scope, 'tenantId' | 'companyId'>, digest: string): string {
-  return `${BLOB_PREFIX}/t${scope.tenantId}/c${scope.companyId}/sha256/${digest}`;
+export function blobKey(scope: Pick<Scope, 'tenantId' | 'companyId'> & { projectId?: number | null }, digest: string, objectClass: BlobClass = 'generic'): string {
+  const part = objectClass === 'generic' ? '' : `media/p${scope.projectId ?? 0}/${objectClass}/`;
+  return `${BLOB_PREFIX}/t${scope.tenantId}/c${scope.companyId}/${part}sha256/${digest}`;
 }
 export function blobPrefix(scope: Pick<Scope, 'tenantId' | 'companyId'>): string {
-  return `${BLOB_PREFIX}/t${scope.tenantId}/c${scope.companyId}/sha256/`;
+  return `${BLOB_PREFIX}/t${scope.tenantId}/c${scope.companyId}/`;
 }
-const KEY_RE = /^wg\/v1\/t([1-9][0-9]{0,15})\/c([1-9][0-9]{0,15})\/sha256\/([0-9a-f]{64})$/;
-export function parseBlobKey(key: string): { tenantId: number; companyId: number; digest: string } | null {
+const KEY_RE = /^wg\/v1\/t([1-9][0-9]{0,15})\/c([1-9][0-9]{0,15})\/(?:media\/p(0|[1-9][0-9]{0,15})\/(master|snapshot|rendition|thumbnail)\/)?sha256\/([0-9a-f]{64})$/;
+export function parseBlobKey(key: string): { tenantId: number; companyId: number; digest: string; objectClass?: BlobClass; projectId?: number | null } | null {
   const m = KEY_RE.exec(key);
-  return m ? { tenantId: Number(m[1]), companyId: Number(m[2]), digest: m[3] } : null;
+  return m ? { tenantId: Number(m[1]), companyId: Number(m[2]), digest: m[5], ...(m[4] ? { objectClass: m[4] as BlobClass, projectId: Number(m[3]) || null } : {}) } : null;
 }
 
 /** Whether a SourceRef names WorkGraph-held bytes (as opposed to bytes a domain holds and verifies itself). */
@@ -89,8 +93,8 @@ export function isWorkGraphBlobSource(src: Pick<SourceRef, 'store' | 'locator' |
   return src.store === 'r2_object' && src.locator === BLOB_BINDING && src.id.startsWith(`${BLOB_PREFIX}/`);
 }
 /** The SourceRef a revision of WorkGraph-held bytes carries: the bucket binding, the object key, the digest. */
-export function blobSourceRef(scope: Pick<Scope, 'tenantId' | 'companyId'>, digest: string): SourceRef {
-  return { store: 'r2_object', locator: BLOB_BINDING, id: blobKey(scope, digest), revision: digest };
+export function blobSourceRef(scope: Pick<Scope, 'tenantId' | 'companyId'> & { projectId?: number | null }, digest: string, objectClass: BlobClass = 'generic'): SourceRef {
+  return { store: 'r2_object', locator: BLOB_BINDING, id: blobKey(scope, digest, objectClass), revision: digest };
 }
 
 /**
@@ -189,13 +193,13 @@ export type VerifyResult =
  * caller's to check: the key itself carries the tenant and company.
  */
 export async function verifyBlob(
-  env: { FILES?: R2Bucket }, scope: Pick<Scope, 'tenantId' | 'companyId'>, digest: string, expectedSize: number,
-  limits: WorkGraphBlobLimits = WORK_GRAPH_BLOB_LIMITS,
+  env: { FILES?: R2Bucket }, scope: Pick<Scope, 'tenantId' | 'companyId'> & { projectId?: number | null }, digest: string, expectedSize: number,
+  limits: WorkGraphBlobLimits = WORK_GRAPH_BLOB_LIMITS, objectClass: BlobClass = 'generic',
 ): Promise<VerifyResult> {
   let r2ClassB = 0;
   const bucket = env.FILES;
   if (!bucket) return { ok: false, code: 'no_binding', detail: BLOB_BINDING, r2ClassB };
-  const key = blobKey(scope, digest);
+  const key = blobKey(scope, digest, objectClass);
   const head = await bucket.head(key);
   r2ClassB++;
   if (!head) return { ok: false, code: 'missing_bytes', detail: 'absent', r2ClassB };
@@ -218,6 +222,10 @@ export async function verifyBlob(
 
 export interface PutVerifiedInput {
   scope: Scope;
+  objectClass?: BlobClass;
+  /** Media writes record the resolved admission owner, or null for the existing unowned/unreadable pass; never a request field. */
+  storageOwnerUserId?: number | null;
+  storageProjectId?: number | null;
   bytes: Uint8Array | ArrayBuffer;
   accessClass: AccessClass;
   /** The residency the bytes must keep (an R2 jurisdiction), or null for none. */
@@ -235,8 +243,14 @@ export async function putVerified(
   env: BlobEnv, ctx: ValidationContext, input: PutVerifiedInput, limits: WorkGraphBlobLimits = WORK_GRAPH_BLOB_LIMITS,
 ): Promise<PutVerifiedResult> {
   const s = new Spend(env);
+  const objectClass = input?.objectClass ?? 'generic';
+  const projectKey = objectClass === 'generic' ? 0 : input?.scope?.projectId ?? 0;
   const bytes = input?.bytes instanceof Uint8Array ? input.bytes : input?.bytes instanceof ArrayBuffer ? new Uint8Array(input.bytes) : null;
   if (!scopeOk(input?.scope) || !bytes || !actorOk(input.actor)
+    || !(BLOB_CLASSES as readonly string[]).includes(objectClass)
+    || (input.storageOwnerUserId != null && !posInt(input.storageOwnerUserId))
+    || (objectClass !== 'generic' && (input.storageProjectId ?? null) !== input.scope.projectId)
+    || (input.storageProjectId != null && !posInt(input.storageProjectId))
     || !(ACCESS_CLASSES as readonly string[]).includes(input.accessClass)
     || (input.preview != null && (typeof input.preview !== 'string' || input.preview.length > limits.maxPreviewChars))
     || (input.assetUid != null && (typeof input.assetUid !== 'string' || input.assetUid.length > 80))) {
@@ -253,7 +267,7 @@ export async function putVerified(
   if (!bucket) return s.refuse('no_binding', [BLOB_BINDING], ev);
 
   const digest = await sha256Hex(bytes);
-  const key = blobKey(input.scope, digest);
+  const key = blobKey(input.scope, digest, objectClass);
   const evd = { ...ev, digest };
   const at = WORK_GRAPH_BLOB_DEPS.now().toISOString();
   const metadata: Record<string, string> = {
@@ -263,13 +277,13 @@ export async function putVerified(
   if (input.preview != null) metadata.preview = input.preview;
   const recordRow = (action: 'blob_put' | 'blob_reused', detail: Record<string, unknown> | null) => [
     env.DB.prepare(
-      `INSERT INTO work_graph_blobs (tenant_id, company_id, digest, byte_length, residency, created_at)
-       SELECT ?, ?, ?, ?, ?, ?
+      `INSERT INTO work_graph_blobs (tenant_id, company_id, object_class, digest, byte_length, residency, created_at, admitted_owner_user_id, project_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE (SELECT COALESCE(SUM(byte_length), 0) FROM work_graph_blobs WHERE tenant_id = ? AND deleted_at IS NULL) + ? <= ?
-       ON CONFLICT (tenant_id, company_id, digest) DO UPDATE SET deleted_at = NULL WHERE work_graph_blobs.deleted_at IS NOT NULL`,
-    ).bind(input.scope.tenantId, input.scope.companyId, digest, bytes.byteLength, input.residency ?? null, at,
+       ON CONFLICT (tenant_id, company_id, project_id, object_class, digest) DO UPDATE SET deleted_at = NULL WHERE work_graph_blobs.deleted_at IS NOT NULL`,
+    ).bind(input.scope.tenantId, input.scope.companyId, objectClass, digest, bytes.byteLength, input.residency ?? null, at, input.storageOwnerUserId ?? null, projectKey,
       input.scope.tenantId, bytes.byteLength, limits.maxBytesPerTenant),
-    integrityEventStatement(env.DB, { ...evd, action, outcome: 'applied', detail, cost: { ...s.cost, d1Statements: s.cost.d1Statements + 2, d1Batches: s.cost.d1Batches + 1 }, at }, action === 'blob_put'),
+    integrityEventStatement(env.DB, { ...evd, action, outcome: 'applied', detail: objectClass === 'generic' ? detail : { ...detail, object_class: objectClass, project_id: projectKey }, cost: { ...s.cost, d1Statements: s.cost.d1Statements + 2, d1Batches: s.cost.d1Batches + 1 }, at }, action === 'blob_put'),
   ];
 
   // Already there: reuse it when R2's size and checksum agree. A preview left on it for a record that may not carry
@@ -281,15 +295,16 @@ export async function putVerified(
   const strayPreview = intact && existing!.customMetadata?.preview !== undefined && !PREVIEW_CLASSES.has(input.accessClass);
   if (intact && !strayPreview) {
     const known = await s.first<{ n: number }>(env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND digest = ? AND deleted_at IS NULL',
-    ).bind(input.scope.tenantId, input.scope.companyId, digest));
+      'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND project_id = ? AND object_class = ? AND digest = ? AND deleted_at IS NULL',
+    ).bind(input.scope.tenantId, input.scope.companyId, projectKey, objectClass, digest));
     if (Number(known?.n ?? 0) === 0) {
       // The object outlived its row (a crash between put and record): the row is what the byte limit counts.
       const used = await tenantBytes(env, s, input.scope.tenantId);
       if (used + bytes.byteLength > limits.maxBytesPerTenant) return s.refuse('tenant_limit', [String(limits.maxBytesPerTenant)], { ...evd, action: 'limit_refused' });
     }
     await s.batch(recordRow('blob_reused', null));
-    return { ok: true, digest, size: bytes.byteLength, key, source: blobSourceRef(input.scope, digest), reused: true, cost: { ...s.cost } };
+    if (objectClass !== 'generic' && !(await mediaRowRecorded())) return s.refuse('tenant_limit', [], evd);
+    return { ok: true, digest, size: bytes.byteLength, key, source: blobSourceRef(input.scope, digest, objectClass), reused: true, cost: { ...s.cost } };
   }
   if (!intact) {
     const used = await tenantBytes(env, s, input.scope.tenantId);
@@ -312,8 +327,8 @@ export async function putVerified(
   const res = await s.batch(recordRow('blob_put', existing ? { replaced: strayPreview ? 'preview' : 'corrupt' } : null));
   if (Number(res[0]?.meta?.changes ?? 0) === 0) {
     const row = await s.first<{ n: number }>(env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND digest = ? AND deleted_at IS NULL',
-    ).bind(input.scope.tenantId, input.scope.companyId, digest));
+      'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND project_id = ? AND object_class = ? AND digest = ? AND deleted_at IS NULL',
+    ).bind(input.scope.tenantId, input.scope.companyId, projectKey, objectClass, digest));
     if (Number(row?.n ?? 0) === 0) {
       // Another put of this tenant took the last bytes between the read and the record. D6651: the object is a
       // record and is not deleted here; with no row and no revision naming it, reconciliation collects it as an orphan.
@@ -323,7 +338,13 @@ export async function putVerified(
     s.cost.d1Statements++;
     await integrityEventStatement(env.DB, { ...evd, action: 'blob_reused', outcome: 'applied', detail: { raced: true }, cost: { ...s.cost }, at }).run();
   }
-  return { ok: true, digest, size: bytes.byteLength, key, source: blobSourceRef(input.scope, digest), reused: false, cost: { ...s.cost } };
+  if (objectClass !== 'generic' && !(await mediaRowRecorded())) return s.refuse('tenant_limit', [], evd);
+  return { ok: true, digest, size: bytes.byteLength, key, source: blobSourceRef(input.scope, digest, objectClass), reused: false, cost: { ...s.cost } };
+
+  async function mediaRowRecorded() {
+    const row = await s.first<{ n: number }>(env.DB.prepare('SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND project_id = ? AND object_class = ? AND digest = ? AND deleted_at IS NULL').bind(input.scope.tenantId, input.scope.companyId, projectKey, objectClass, digest));
+    return Number(row?.n ?? 0) > 0;
+  }
 }
 
 async function tenantBytes(env: BlobEnv, s: Spend, tenantId: number): Promise<number> {
@@ -369,7 +390,7 @@ export async function readRevisionBytes(env: BlobEnv, ctx: ValidationContext, in
   if (!isWorkGraphBlobSource({ store: r.source_store as SourceRef['store'], locator: r.source_locator, id: r.source_id })) {
     return s.refuse('domain_held', [r.revision_uid, r.source_store, r.source_locator], ev);
   }
-  if (r.source_id !== blobKey({ tenantId: r.tenant_id, companyId: r.company_id }, r.digest)) return s.refuse('digest_mismatch', [r.revision_uid, 'key'], ev);
+  if (r.source_id !== blobKey({ tenantId: r.tenant_id, companyId: r.company_id, projectId: r.project_id }, r.digest, parseBlobKey(r.source_id)?.objectClass)) return s.refuse('digest_mismatch', [r.revision_uid, 'key'], ev);
   const bucket = env.FILES;
   if (!bucket) return s.refuse('no_binding', [BLOB_BINDING], ev);
   const body = await bucket.get(r.source_id);

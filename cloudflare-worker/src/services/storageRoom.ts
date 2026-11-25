@@ -41,7 +41,7 @@ export const STORAGE_THRESHOLDS = [80, 95, 100] as const;
 export type StorageThreshold = typeof STORAGE_THRESHOLDS[number];
 
 /** Whose plan a file counts to: a member, or a venture (its owner, by D1169's rule). */
-export type StorageOwner = { userId: number } | { projectId: number };
+export type StorageOwner = { userId: number } | { projectId: number } | { companyId: number };
 
 export type StorageTicket = {
   /** The member the file counts to, or null when the upload passed unweighed. */
@@ -61,6 +61,14 @@ export async function ventureStorageOwner(env: Env, projectId: number): Promise<
        (SELECT MIN(u.id) FROM users u WHERE u.founder_id = p.founder_id)) AS user_id
      FROM projects p WHERE p.id = ?`,
   ).bind(projectId).first<{ user_id: number | null }>();
+  const id = Number(row?.user_id);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/** D5583 part 2: a company-wide file has no project founder fallback. */
+export async function companyStorageOwner(env: Env, companyId: number): Promise<number | null> {
+  const row = await env.DB.prepare('SELECT user_id FROM user_company_links WHERE company_id = ? AND is_primary_admin = 1 ORDER BY created_at, id LIMIT 1')
+    .bind(companyId).first<{ user_id: number }>();
   const id = Number(row?.user_id);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
@@ -111,7 +119,8 @@ export async function assertStorageRoom(
   if (String(role ?? '').toLowerCase() === 'admin') return pass('staff', incoming);
   let ownerId: number | null;
   try {
-    ownerId = 'userId' in owner ? owner.userId : await ventureStorageOwner(env, owner.projectId);
+    ownerId = 'userId' in owner ? owner.userId : 'projectId' in owner
+      ? await ventureStorageOwner(env, owner.projectId) : await companyStorageOwner(env, owner.companyId);
   } catch {
     console.warn('[storage-room] pass: owner unreadable');
     return pass('unreadable', incoming);
