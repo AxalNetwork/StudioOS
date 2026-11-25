@@ -35,6 +35,7 @@ export const PENDING = new Set([
   "frontend/src/pages/closing/deskModel.js",
   "frontend/src/pages/deal/dealInsightsModel.js",
   "frontend/src/pages/founder/FounderTeamPage.jsx",
+  "frontend/src/pages/hq/aiAgents/registryModel.js",
   "frontend/src/pages/investor/dealflow/compareModel.js",
   "frontend/src/pages/investor/portfolioReportsModel.js",
   "frontend/src/pages/raise/caprel/capRelTabsModel.js"
