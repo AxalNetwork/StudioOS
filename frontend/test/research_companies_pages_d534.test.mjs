@@ -177,14 +177,22 @@ test('sector peers print the API total beyond the eight shown', () => {
 });
 
 test('market context: a dimension with no live point is Not recorded with the reason, never 50', () => {
-  const index = { series: { demand: { status: 'recorded', points: [{ period: '2026-09', value: 61, change: 2.5 }, { period: '2026-10', value: 64, change: 3, month_to_date: true }] },
-    supply: { status: 'not_recorded', reason: 'No live source', points: [] } } };
+  const index = { series: { demand: { status: 'recorded', points: [{ period: '2026-09', value: 61, change: 2.5 }, { period: '2026-10', value: 64, change: 3, month_to_date: true, window_start: '2026-09-26T08:00:00.000Z', window_end: '2026-10-26T08:00:00.000Z' }] },
+    supply: { status: 'not_recorded', reason: 'No live source', points: [] },
+    capital: { status: 'recorded', points: [{ period: '2026-10', value: 40, change: null, window_start: null, window_end: null }] } } };
   const rows = indexRows(index);
   assert.deepEqual([rows[0].value, rows[0].change, rows[0].month_to_date], [64, '+3%', true]);
+  // D7710: the row carries the window the Worker stored, and none is derived from the month.
+  assert.deepEqual([rows[0].window_start, rows[0].window_end], ['2026-09-26T08:00:00.000Z', '2026-10-26T08:00:00.000Z']);
+  assert.deepEqual([rows[2].window_start, rows[2].window_end], [null, null]);
   assert.deepEqual([rows[1].state, rows[1].reason], ['not_recorded', 'No live source']);
   const t = render(MarketContext, { tracked: { status: 'ok', slug: 'autotech', name: 'AutoTech', method: 'rule' }, market: { loading: false, error: null, data: { index } } });
   assert.match(t, /Market context: AutoTech/);
   assert.match(t, /Open AutoTech →/);
+  // D7710: each score prints its window, a point without one says so, and nothing calls a point a month.
+  assert.match(t, /64\s*26 Sep 2026 to 26 Oct 2026/);
+  assert.match(t, /40\s*Window not recorded/);
+  assert.doesNotMatch(t, /2026-10|month to date|by month|monthly/);
   const none = render(MarketContext, { tracked: { status: 'not_recorded', reason: 'Not recorded: the crosswalk maps no market to this sector label' }, market: {} });
   assert.match(none, /Not recorded\. the crosswalk maps no market/);
 });

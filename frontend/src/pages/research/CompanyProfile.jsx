@@ -30,6 +30,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { Card, DataState } from '../../ui';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
+import { windowText } from './indexWindow.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
   NOT_RECORDED, UNREADABLE, analysisHref, indexRows, latestOnly, relatedSignals,
@@ -94,7 +95,7 @@ export function MarketContext({ tracked, market }) {
   return (
     <section id="market" className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>{head}<p className={lede}>The six indexes for the tracked sector this company’s label maps to. Each runs 0 to 100, worldwide, by month.</p></div>
+        <div>{head}<p className={lede}>The six indexes for the tracked sector this company’s label maps to. Each runs 0 to 100, worldwide; each score covers the window printed under it.</p></div>
         <Link to={`/research/markets/sector/${encodeURIComponent(tracked.slug)}`} className="text-[12px] font-semibold text-axal-violet underline">Open {tracked.name || tracked.slug} →</Link>
       </div>
       {market.loading ? <Loading what="the market indexes" /> : market.error ? <Unreadable what="The market read" onRetry={market.retry} /> : (
@@ -103,13 +104,13 @@ export function MarketContext({ tracked, market }) {
             <Card key={r.key} padding="sm">
               <div className="flex items-baseline justify-between"><span className="text-[12px] font-bold text-axal-muted">{r.label}</span>{r.state === 'recorded' && r.change ? <span className="text-[11px] text-axal-faint">{r.change}</span> : null}</div>
               {r.state === 'recorded'
-                ? <div className="mt-1 text-lg font-extrabold text-axal-ink dark:text-gray-100">{r.value}<span className="ml-1 text-[11px] font-normal text-axal-faint">{r.period}{r.month_to_date ? ' · month to date' : ''}</span></div>
+                ? <div className="mt-1 text-lg font-extrabold text-axal-ink dark:text-gray-100">{r.value}<span className="ml-1 text-[11px] font-normal text-axal-faint">{windowText(r)}</span></div>
                 : <div className="mt-1"><div className="text-[13px] font-bold text-axal-faint">{NOT_RECORDED}</div><p className={faint}>{r.reason}</p></div>}
             </Card>
           ))}
         </div>
       )}
-      <p className={faint}>Mapped by sector label to {tracked.name || tracked.slug} ({tracked.method === 'manual' ? 'by hand' : 'by rule'}). market_intel_indexes · global · monthly.</p>
+      <p className={faint}>Mapped by sector label to {tracked.name || tracked.slug} ({tracked.method === 'manual' ? 'by hand' : 'by rule'}). market_intel_indexes · global.</p>
     </section>
   );
 }
