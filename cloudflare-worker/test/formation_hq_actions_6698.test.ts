@@ -10,6 +10,7 @@ import { HQ_ACTIONS } from '../src/services/formationHqActions.ts';
 import { hqLanes, HQ_APPROVAL_SOURCES } from '../src/services/hqApprovalSources.ts';
 import { assignFromBody } from '../src/services/approvalAssignments.ts';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
+import { formationScreeningFixture } from './_formation_screening_fixture.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { grantWriteBar } from './_write_bar_session.mjs';
 
@@ -41,7 +42,7 @@ function fixture(legacy = false) {
   if (!legacy) db.prepare(`INSERT INTO formation_filings (id, uid, case_id, kind, state, pack_document_id, pack_sha256)
     VALUES (1, 'filing', 1, 'incorporation', 'prepared', 51, ?)`).run('a'.repeat(64));
   const jti = grantWriteBar(db, admin);
-  const env = { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any;
+  const env = { TOKENS: formationScreeningFixture(db, 1), DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any;
   const one = (sql: string, ...args: any[]) => ({ ...db.prepare(sql).get(...args) }) as any;
   async function post(action: string, body: any, who: number | null = admin, target = env, strong = true) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
