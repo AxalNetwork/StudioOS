@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { SignJWT } from 'jose';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import router from '../src/routes/formation_case_people.ts';
-import { sharingAllowed, deliverPersonNotice, personRequirements } from '../src/services/formationPeople.ts';
+import { caseNoticeCopy, sharingAllowed, deliverPersonNotice, personRequirements } from '../src/services/formationPeople.ts';
 import { screenFormationCase, decideScreening } from '../src/services/formationScreening.ts';
 
 function setup() {
@@ -100,6 +100,13 @@ test('delivery and partner-specific consent both gate access and withdrawal is i
   assert.equal(await can(), true);
   db.exec('UPDATE formation_cases SET partner_id=802 WHERE id=801');
   assert.equal(await can(802), false);
+  // The new firm now has its own notice, but still has no consent.
+  assert.equal(await deliverPersonNotice(env,801,801,802,copy,async()=>true),'sent');
+  assert.equal(await can(802),false);
+  db.exec('UPDATE formation_cases SET partner_id=801 WHERE id=801');
+  assert.equal(await can(),false);
+  await deliverPersonNotice(env,801,801,801,copy,async()=>true);
+  assert.equal(await can(),true);
   db.exec(
     'UPDATE formation_cases SET partner_id=801 WHERE id=801; UPDATE formation_case_consents SET withdrawn_at=CURRENT_TIMESTAMP WHERE case_id=801',
   );
@@ -133,10 +140,12 @@ test('founder endpoint confines records to their owner and omits the screening r
     roles: ['director', 'shareholder'],
   });
   assert.equal(add.status, 200, await add.text());
+  db.exec("INSERT INTO formation_case_screenings(person_id,person_revision,checkpoint,provider_lists,severity,matches,hq_reason) VALUES(801,1,'offer','[]','review','[]','private-review-sentinel');UPDATE formation_cases SET waiting_on='hq',hold_reason='screening' WHERE id=801");
   const list = await call(801, 'people');
   const text = await list.text();
   assert.equal(list.status, 200, text);
-  assert.equal(/notice@example.test|new@example.test|hq_reason/.test(text), false);
+  assert.equal(/notice@example.test|new@example.test|hq_reason|private-review-sentinel/.test(text), false);
+  assert.equal(JSON.parse(text).message,'We are checking your details');
   assert.deepEqual(JSON.parse(text).people[1].roles, ['director', 'shareholder']);
   assert.equal(
     db
@@ -219,4 +228,25 @@ test('owner may grant and withdraw consent after payment, but cannot edit partic
   const id = db.prepare('SELECT id FROM formation_case_consents WHERE case_id=801').get()!.id;
   assert.equal((await post('withdraw', { revision: 1, id })).status, 200);
   assert.ok(db.prepare('SELECT withdrawn_at FROM formation_case_consents WHERE id=?').get(id)!.withdrawn_at);
+});
+
+test('only approved wording for this country and exact body can be sent', async () => {
+  const { db, env } = setup();
+  const body='Axal synthetic fixture notice for {{partner}}.';
+  db.exec(`INSERT INTO formation_catalogue_versions(id,version) VALUES(801,801);
+    INSERT INTO formation_jurisdictions(id,version_id,country) VALUES(801,801,'DE');
+    INSERT INTO formation_entity_forms(id,version_id,jurisdiction_id,form_key,label) VALUES(801,801,801,'fixture','Fixture');
+    INSERT INTO formation_sources(id,kind,title) VALUES(801,'counsel','Fixture');
+    INSERT INTO formation_form_facts(version_id,form_id,fact_key,value,status,source_id,checked_on)
+    VALUES(801,801,'named_person_notice_template','fixture_notice','recorded',801,'2026-11-01');
+    UPDATE formation_cases SET form_key='fixture',catalogue_version_id=801 WHERE id=801`);
+  db.prepare("INSERT INTO legal_templates(slug,title,category,body_md,version,is_active,is_stub) VALUES('fixture_notice','Synthetic notice','formation',?,1,1,0)").run(body);
+  const approve=db.prepare("INSERT INTO legal_reviews(object_kind,object_ref,version,version_sha256,review_type,jurisdiction,reviewer_id,requested_by,decision,decided_by,decided_at) VALUES('template','fixture_notice',?,?,'initial',?,802,802,'approved',802,'2026-11-25')");
+  const hash=createHash('sha256').update(body).digest('hex');
+  approve.run(1,hash,'GB');
+  assert.equal(await caseNoticeCopy(env,801),null);
+  approve.run(2,hash,'DE');
+  assert.equal((await caseNoticeCopy(env,801))?.('Test firm'),'Axal synthetic fixture notice for Test firm.');
+  db.prepare("UPDATE legal_templates SET body_md=? WHERE slug='fixture_notice'").run(body+' Modified.');
+  assert.equal(await caseNoticeCopy(env,801),null);
 });
