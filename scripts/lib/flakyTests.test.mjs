@@ -1,3 +1,6 @@
+// D6464: classification, expiry, the one-retry rule and the runner's reporter
+// wiring.
+//
 // D6464 (#6464): the flaky list, its classification and expiry, and the suite
 // runner's one retry under merge_group.
 //   node --test scripts/lib/flakyTests.test.mjs

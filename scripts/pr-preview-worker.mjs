@@ -1,4 +1,13 @@
 /**
+ * The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull
+ * request with no bindings, serving the PR's `docs/` build on workers.dev. Two
+ * jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a
+ * missing hashed `/assets/*` file is a plain 404, never the SPA shell, and
+ * `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by
+ * `.github/workflows/pr-preview-deploy.yml` from main (D7146) after
+ * `.github/workflows/pr-preview.yml` builds without credentials; guarded by
+ * `frontend/test/pr_preview.test.mjs`.
+ *
  * Pull-request preview Worker — the script behind wrangler.pr-preview.toml.
  *
  * Two jobs, and only the two `run_worker_first` prefixes reach it; everything

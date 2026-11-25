@@ -63,12 +63,14 @@ test('a write takes a reason of at least 10 characters; without one nothing is w
   // Mutation checked: the reason check removed → the short and missing cases write a row.
   const f = fixture();
   try {
+    const readFlags = f.db.prepare('SELECT * FROM feature_flags ORDER BY key, scope, scope_id');
+    const initialFlags = readFlags.all();
     for (const reason of [undefined, '', 'too short', '   short   ']) {
       const r = await PUT(f, { key: 'deck:rehearsal', scope: 'global', enabled: false, ...(reason === undefined ? {} : { reason }) });
       assert.deepEqual([r.status, r.body.error], [400, 'reason_required'], String(reason));
       assert.match(r.body.message, /at least 10 characters/);
     }
-    assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM feature_flags').get() as any).n, 0);
+    assert.deepEqual(readFlags.all(), initialFlags);
     assert.equal(audits(f).length, 0);
     assert.equal((await PUT(f, { key: 'deck:rehearsal', scope: 'global', enabled: false, reason: REASON }, 2)).status, 403, 'only an admin');
   } finally { f.close(); }

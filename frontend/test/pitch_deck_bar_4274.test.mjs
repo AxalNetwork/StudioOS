@@ -69,7 +69,11 @@ test('the editor draws the deck bar in place of the crumb', async () => {
     assert.equal(m.text(m.by('pitch-back')), '‹ Pitch');
     assert.equal(m.pr(m.by('pitch-back')).href, '/raise/pitch?project_id=7');
     assert.ok(m.walk(bar).includes(m.by('pitch-heading')), 'the deck\'s h1 is in the bar');
-    assert.ok(m.walk(bar).includes(m.by('deck-toolbar')) && m.walk(bar).includes(m.by('pitch-header-ask')));
+    assert.ok(m.walk(bar).includes(m.by('deck-toolbar')));
+    assert.ok(!m.by('pitch-header-ask'));
+    const asks = m.walk(m.container).filter(n => /^Ask Eadwyn/.test(String(m.pr(n)['aria-label'] || '')));
+    assert.equal(asks.length, 1);
+    assert.ok(m.walk(m.by('pitch-inspector-eadwyn')).includes(asks[0]), 'Ask lives with Eadwyn in the inspector');
     // The section menu lists the six tabs, Decks current.
     assert.equal(m.pr(m.by('pitch-deck-bar-section'))['aria-expanded'], false);
     await m.press(m.by('pitch-deck-bar-section'));

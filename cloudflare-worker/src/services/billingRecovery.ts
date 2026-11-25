@@ -5,6 +5,7 @@
 import type { Env } from '../types';
 import { StripeApiError } from '../util/stripeError';
 import { subscriptionOwner } from './planSubscription';
+import { invoiceSubscriptionId } from './stripeInvoiceShape';
 
 const invoiceId = /^in_[A-Za-z0-9]+$/;
 const subscriptionId = /^sub_[A-Za-z0-9]+$/;
@@ -29,7 +30,7 @@ export async function prepareRenewal(env: Env, userId: number, alertId: number, 
     env, `/invoices/${row.invoice_id}`, { 'expand[]': 'payment_intent' }, { method: 'GET' },
   );
   const customer = ref(invoice.customer);
-  if (invoice.id !== row.invoice_id || ref(invoice.subscription) !== row.subscription_id || !customer || !customerId.test(customer)
+  if (invoice.id !== row.invoice_id || invoiceSubscriptionId(invoice) !== row.subscription_id || !customer || !customerId.test(customer)
     || ![user?.stripe_customer_id, user?.investor_stripe_customer_id].includes(customer)) return { ok: false, status: 404, error: 'alert_not_found' };
   if (invoice.paid || invoice.status !== 'open') return { ok: false, status: 409, error: 'payment_not_needed' };
   const scope = user?.stripe_customer_id !== user?.investor_stripe_customer_id
@@ -78,7 +79,7 @@ export async function recordCheckoutRefusal(env: Env, eventId: unknown, pi: Reco
   const invoice = await auditRead<{ subscription?: unknown; customer?: unknown; billing_reason?: string }>(env, `/invoices/${id}`);
   if (!invoice) return;
   if (invoice.billing_reason !== 'subscription_create') return;
-  const sub = ref(invoice.subscription);
+  const sub = invoiceSubscriptionId(invoice);
   if (!sub || !subscriptionId.test(sub)) return;
   let owner = await subscriptionOwner(env, sub);
   // The first decline can precede subscription.created. Read the trusted Stripe

@@ -1,3 +1,5 @@
+// D5663: complete TAP and producer provenance before health recovery.
+//
 // D5663: validate complete, attempt-bound future-clock artifacts before any recovery decision.
 import { createHash } from 'node:crypto';
 

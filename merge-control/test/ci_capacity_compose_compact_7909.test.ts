@@ -418,6 +418,70 @@ test('8376 drained owner adopts a landed check after two lost creates through th
   assert.ok(run.store.get(id));
 });
 
+async function drainedOwner(t: Parameters<typeof fixture>[0], creates: number) {
+  const f=fixture(t),run=runtime(f),id=uuid(2);
+  await f.settled(2,'failure',START);
+  const publisher=new CapacityOutbox(f.storage,async(method)=>{
+    if(method==='POST')throw Error('fixture lost check-create acknowledgement');
+    return {total_count:0,check_runs:[]};
+  },config);
+  const publish=()=>publisher.publish(run.store,()=>({status:'failure',reason:'verified_failure'}),'pilot');
+  await publish();
+  // As the 8376 route test: the second create follows the first after its retry interval.
+  if(creates>1){f.advance(1_000);await publish();f.advance(60_000);await publish();}
+  const env={...run.env,CAPACITY_CONTROL:{getByName:()=>run.control},CAPACITY_OWNER_TOKEN:'fixture'};
+  Object.assign(run.env,{CAPACITY_OWNER_TOKEN:env.CAPACITY_OWNER_TOKEN});
+  const headers={authorization:'Bearer fixture'};
+  const item=await (await worker.fetch(new Request('https://fixture.invalid/capacity/publications?requestId='+id,{headers}),env as any)).json() as any;
+  const calls={tokens:0,gets:[] as string[]};
+  t.mock.method(globalThis,'fetch',async(input:any)=>{
+    const path=new URL(String(input)).pathname;
+    if(path.includes('/app/installations/')){calls.tokens++;return Response.json({token:'fixture'});}
+    calls.gets.push(path);
+    return Response.json(path.includes('/actions/runs/')?{id:102,run_attempt:1,head_sha:item.source,repository:{id:7,full_name:repository}}
+      :{total_count:1,check_runs:[{id:19,external_id:item.key,head_sha:item.source,app:{id:23},name:'ci-capacity/worker-pilot'}]});
+  });
+  const intent=()=>f.db.prepare('SELECT state FROM capacity_publications WHERE id=?').get(item.key)!.state;
+  const reconcile=(fingerprint:string,requestId=id)=>worker.fetch(new Request('https://fixture.invalid/capacity/reconcile',{method:'POST',headers,
+    body:JSON.stringify({requestId,mode:'pilot',checkId:19,fingerprint})}),env as any);
+  return {f,run,item,calls,intent,reconcile};
+}
+
+test('8417 a stale fingerprint on an adoptable intent, or an unreadable request identity, is refused before any token request, GitHub read or alarm write',async t=>{
+  const o=await drainedOwner(t,2);
+  assert.equal(o.item.adoptable,true);
+  const before=o.intent(),alarms=o.run.alarms.length;
+  const res=await o.reconcile('0'.repeat(64));
+  assert.equal(res.status,409);assert.deepEqual(await res.json(),{adopted:false});
+  assert.equal(o.calls.tokens,0);assert.deepEqual(o.calls.gets,[]);
+  assert.equal(o.run.alarms.length,alarms,'no alarm write');
+  assert.equal(o.intent(),before,'the publication intent is unchanged');
+  const unreadable=await o.reconcile(o.item.fingerprint,'not-a-request-identity');
+  assert.equal(unreadable.status,409);assert.deepEqual(await unreadable.json(),{adopted:false});
+  assert.equal(o.calls.tokens,0);assert.deepEqual(o.calls.gets,[]);assert.equal(o.run.alarms.length,alarms);
+});
+
+test('8417 a current fingerprint on an ineligible intent is refused before any token request, GitHub read or alarm write',async t=>{
+  const o=await drainedOwner(t,1);
+  assert.equal(o.item.adoptable,false,'one create consumed: a second attempt is still available');
+  const before=o.intent(),alarms=o.run.alarms.length;
+  const res=await o.reconcile(o.item.fingerprint);
+  assert.equal(res.status,409);assert.deepEqual(await res.json(),{adopted:false});
+  assert.equal(o.calls.tokens,0);assert.deepEqual(o.calls.gets,[]);
+  assert.equal(o.run.alarms.length,alarms,'no alarm write');
+  assert.equal(o.intent(),before,'the publication intent is unchanged');
+});
+
+test('8417 a current eligible request still adopts the unique match with recovery prearmed',async t=>{
+  const o=await drainedOwner(t,2);
+  const alarms=o.run.alarms.length;
+  const res=await o.reconcile(o.item.fingerprint);
+  assert.equal(res.status,200);assert.deepEqual(await res.json(),{adopted:true});
+  assert.equal(o.calls.tokens,1);assert.equal(o.calls.gets.length,2);
+  assert.equal(o.run.alarms.length,alarms+1);assert.equal(o.run.alarms.at(-1),o.f.state.now+1000);
+  assert.equal(JSON.parse(o.intent()).checkId,19);
+});
+
 test('D7909 actual runtime composes only validated modes and preserves unknown/changed configurations on restart',async t=>{
  const f=fixture(t);for(let n=2;n<=CAPACITY_REQUEST_LIMIT+1;n++){await f.settled(n,'success',START+n);f.sent(n,'success');}
  const run=runtime(f);f.advance(LEASES_OVER);run.store.prune(f.state.now-CAPACITY_RETENTION_MS);assert.notEqual(run.store.compact(uuid(2)),null);
@@ -682,4 +746,25 @@ test('8375 an active coordinator and history publisher share one token, includin
   assert.ok(net.calls.some(c=>c.path.includes('/runs/102')));
   assert.ok(net.calls.some(c=>c.path.includes('/runs/103')));
   assert.equal(run.alarms.at(-1),f.state.now+15_000);
+});
+
+test('8401 a new failure behind history reaches its check on the first alarm past 100 mode-conflicted correction hints',async t=>{
+ // S21 review C1 on #8367: blocked hints must advance the due cursor, or a later correction waits one alarm per hint.
+ const f=fixture(t),net=network(),queue=new SqlCapacityCorrections(f.storage);
+ for(let n=2;n<402;n++){await f.settled(n,'success',START+n);f.sent(n,'success');}
+ const conflicted=Array.from({length:100},(_,i)=>uuid(600+i));
+ for(let i=0;i<100;i++){await f.place(600+i,START+600+i,'full-suite');queue.enqueue(conflicted[i]);}
+ const box=new CapacityOutbox(f.storage,net.api,config),publish=()=>box.publish(f.store,id=>f.capacity().status(id),'pilot');
+ await publish();
+ assert.equal(net.calls.some(c=>c.method==='PATCH'&&/\/1006\d\d$/.test(c.path)),false,'a hint compacted under the other mode is never published');
+ f.storage.sql.exec('INSERT OR REPLACE INTO capacity_publication_cursor(mode,last) VALUES(?,?)','pilot:history',uuid(200));
+ const late=f.store.get(uuid(200))!;late.shards[0].attempts[0].verifiedTestFailure=true;f.store.save(late);
+ net.calls.length=0;await publish();
+ const patch=net.calls.find(c=>c.method==='PATCH'&&c.path.endsWith('/100200'));
+ assert.ok(patch,'the first alarm after the new failure updates its existing check');assert.equal(patch!.body.conclusion,'failure');
+ assert.equal(net.calls.some(c=>c.method==='POST'),false,'no replacement check is created');
+ const held=f.storage.sql.exec<{request_id:string}>('SELECT request_id FROM capacity_publication_corrections').toArray().map(r=>r.request_id);
+ assert.deepEqual(conflicted.filter(id=>held.includes(id)),conflicted,'every mode-conflicted hint stays blocked');
+ for(const id of conflicted)assert.equal(f.store.compact(id)!.publicationMode,'full-suite');
+ assert.equal(net.calls.some(c=>/\/1006\d\d$/.test(c.path)),false);
 });

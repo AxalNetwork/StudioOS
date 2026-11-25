@@ -1,5 +1,39 @@
 #!/usr/bin/env node
 /**
+ * A migration that DECLARES a table or column a freshly provisioned database
+ * does not have. A file at or below `BASELINE_CUTOFF` is MARKED applied by
+ * `migrate-d1.mjs --bootstrap` without a statement of it ever running, so its
+ * effect reaches a database only if `schema_baseline.sql` already carries it —
+ * and the baseline is a dump of production, so what the baseline lacks,
+ * production lacks, while the ledger row says the migration was applied. It has
+ * happened four times, and TWO of the four were found by hand and repaired with
+ * a comment instead of a check: `028_partner_deals.sql` lost eighteen
+ * `partner_profiles` columns and told twenty-six partners to accept an
+ * invitation that did not exist (D187); `042_advisor_field_sources.sql` lost
+ * eleven that `cloudflare-worker/src/services/advisor/writeRouter.ts` reads and
+ * that reach deck autofill, scoring and four routes besides (D188);
+ * `182_advisor_topics_calendar.sql` quotes 042's three `mentors` ALTERs, states
+ * that no `CREATE TABLE mentors` exists anywhere, repairs them onto `advisors`
+ * and leaves prose; and `auth.ts` prefers a session-scoped deadline in a
+ * comment because `users.recovery_step_up_due_at` is "unapplied/broken in prod
+ * (060)" — which is exactly why 042's other eleven went on missing for months.
+ * The question is **static**, never a replay: replaying the numbered set from
+ * empty fails 385 statements, because `CREATE TABLE users`, `projects`, `deals`
+ * and `documents` live only in `cloudflare-worker/sql/historical/schema.sql`,
+ * and it reports 114 tables "missing" that only the replay failed to create. So
+ * each file is parsed for what it declares and compared against a real
+ * `node:sqlite` build of baseline + post-cutoff. Three finding kinds, the third
+ * being the one a table-and-column comparison silently drops: an `ALTER` whose
+ * table exists NOWHERE — the category that hid 042's `mentors` trio from the
+ * first prototype. Excludes `sql/historical/`, on the same precedent as its
+ * three siblings. Exceptions live in `migration-declarations-baseline.json`,
+ * each with a reviewed prose reason, and the gate fails on a stale entry as
+ * well as a new one — a ledger of known gaps is only worth reading if every
+ * line in it is still true. One of its entries is a declaration that can never
+ * land at all: 042 declares `users.advisor_extras_json`, and D1 caps a table at
+ * 100 columns while `users` sits at exactly 100 — so the fact lives in a side
+ * table and the ledger says so.
+ *
  * Fails the build when a migration DECLARES a table or column that a freshly
  * provisioned database does not have.
  *

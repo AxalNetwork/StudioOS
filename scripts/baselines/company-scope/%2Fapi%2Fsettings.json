@@ -1,0 +1,11 @@
+{
+  "GET /api/settings/privacy": {
+    "kind": "filter"
+  },
+  "POST /api/settings/founder/invites": {
+    "kind": "target"
+  },
+  "PUT /api/settings/privacy": {
+    "kind": "target"
+  }
+}

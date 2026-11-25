@@ -437,6 +437,7 @@ test('restore drill: malformed or contradictory markers are invalid, never a pas
 test('the writers stamp the schema version the reader knows', () => {
   assert.equal(EVIDENCE_SCHEMA_VERSION, 1);
   assert.match(read('.github/workflows/backup-d1.yml'), /"schema_version": 1,/);
-  assert.match(read('scripts/dr-drill.sh'), /'\{schema_version: 1, at: \$at,/);
+  // D8531: the marker's jq program binds its derived values first, so the object may follow `| ` rather than the quote.
+  assert.match(read('scripts/dr-drill.sh'), /(?:'|\| )\{schema_version: 1, at: \$at,/);
   assert.match(read('cloudflare-worker/src/services/backup.ts'), /schema_version: EVIDENCE_SCHEMA_VERSION,\n\s+at: new Date\(\)\.toISOString\(\)/);
 });

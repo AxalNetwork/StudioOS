@@ -143,7 +143,8 @@ test('an investor, unrelated partner, other founder and Super Admin are refused;
     assert.equal(read.body?.capabilities, undefined, `${who}: no map on a refusal`);
     for (const writes of Object.values(WRITES)) for (const [method, path] of writes) {
       const r = await call(f, who, path, method, { reason: REASON });
-      assert.ok(refusedForWho(r.status), `${who} ${path}: ${r.status}`);
+      // D8526: a stranger to the venture (the partner, the other founder) is answered as for a missing venture.
+      assert.ok(refusedForWho(r.status) || ([PARTNER, OTHER].includes(who) && r.status === 404), `${who} ${path}: ${r.status}`);
     }
   }
   // An ordinary admin reads nothing here (D1130), and writes only as a reasoned correction.

@@ -1,3 +1,4 @@
+/** D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. */
 /** D5502: exact-base failure evidence regression cases. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

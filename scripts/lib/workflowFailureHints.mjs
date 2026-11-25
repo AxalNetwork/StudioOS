@@ -1,3 +1,5 @@
+// D6387: match verified failures to existing repairs and release supersession.
+//
 // D6387: positive evidence for benign release supersession and failures already owned by an open issue.
 import catalog from '../../engineering-notifications/workflow-channels.json' with { type: 'json' };
 import { recoveredOperatorMain } from '../health-alert-episodes.mjs';

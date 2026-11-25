@@ -1,5 +1,19 @@
 #!/usr/bin/env node
 /**
+ * An in-body startup picker, of which there are now none. #181's product
+ * question is answered — one company, one startup, measured against production
+ * D1 (5 projects, 5 founders, one project each), so every picker's
+ * `projects.length > 1` guard was false for every live account — and all 25 are
+ * gone. `inline-project-pickers-baseline.json` stays, empty: the gate fails on
+ * a new picker AND on an entry with nothing behind it, and task #84 removed
+ * these once already and they came back because nothing counted them. TWO
+ * sweeps, because one was blind: the original keyed on
+ * `data-testid="select-*-project"` and found 21, while FOUR pickers carried no
+ * test attribute at all, so a ledger claiming "all on record" was short by
+ * four. It now also sweeps the `projects.length > 1` render guard — the
+ * property that defines the control rather than an attribute an author can
+ * omit.
+ *
  * NO PAGE CARRIES ITS OWN STARTUP PICKER. The sidebar decides scope; a body does
  * not get a second opinion.
  *

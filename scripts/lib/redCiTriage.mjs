@@ -1,5 +1,15 @@
 import { guardChain } from './guardCatalog.mjs';
 /**
+ * #6326: the red-ci-triage rules apart from GitHub: which digest comment is the
+ * bot's, which open `[alert]` issues block a red PR and what each forbids
+ * (D5398, D5604), which failed jobs are leaves rather than summary gates, what
+ * a raw Actions log names as failing (TAP `not ok` with `location:`, tsc
+ * `TSxxxx`, eslint stylish, guard `✖` lines, the `test-drift-parts` failed
+ * command, a crashed step), the reproduce command derived from `package.json`'s
+ * test scripts and `test:guards`, whether a failure also shows in main's log,
+ * and the next step. Owned by `../red-ci-triage.mjs`; tested in
+ * `redCiTriage.test.mjs`.
+ *
  * #6326: the `red-ci-triage` skill's decisions, apart from GitHub. Which CI
  * failure digest comment on a PR is the current one, which open `[alert]`
  * issues hold the PR back (AGENTS.md § Red main, D5398, D5604), which failed

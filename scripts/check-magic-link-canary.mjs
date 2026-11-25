@@ -1,3 +1,7 @@
+// Reads the latest scheduled HQ check from `platform_settings` and verifies its
+// exact token and send-log rows, mailbox, template and timing in D1. Exit 0
+// requires four successful application checks.
+//
 // Read the scheduled Worker's magic-link result and its exact production D1 rows.
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';

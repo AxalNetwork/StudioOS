@@ -1,3 +1,8 @@
+/**
+ * `assetRetention.mjs`: the seed on a first run, the union of the last N
+ * builds, ageing out, a rebuilt source replacing its own entry, and D252/D529's
+ * restored-tree seed flag, passed only by the production deploy workflow.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG } from './assetRetention.mjs';
