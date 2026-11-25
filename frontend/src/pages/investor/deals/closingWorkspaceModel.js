@@ -346,6 +346,31 @@ export function closeRules(closing) {
 // After close (DX23 A) — Record in Portfolio: each received line, In Portfolio or not.
 // ---------------------------------------------------------------------------
 
+/**
+ * D6889 part 2 (#7938): what Record position hands the Portfolio form for one
+ * received line that is not in Portfolio: the venture, the closing's round,
+ * the amount received, the day it was received and the line's own uid, which
+ * the saved position stores as `closing_line_uid`. Only recorded values: the
+ * form's amount is in dollars, so a line in another currency hands no amount
+ * (its amount and currency travel as a label instead), and a missing round or
+ * day stays empty for the Admin to fill. No venture on the closing, no prefill.
+ */
+export function positionPrefill(closing, line) {
+  if (!closing || !line || line.status !== 'received' || closing.project_id == null) return null;
+  const cents = Number(line.amount_cents);
+  const currency = String(line.currency || closing.currency || '').toUpperCase() || null;
+  return {
+    project_id: closing.project_id,
+    round_name: String(closing.round_label ?? '').trim().slice(0, 64),
+    invested_amount: currency === 'USD' && Number.isInteger(cents) && cents > 0 ? (cents / 100).toFixed(2) : '',
+    position_date: receivedOn(line) || '',
+    closing_line_uid: String(line.uid),
+    line_label: String(line.investor_name ?? '').trim() || null,
+    amount_cents: Number.isInteger(cents) ? cents : null,
+    currency,
+  };
+}
+
 /** When a line's money was received: its live receiving evidence, accepted or recorded. */
 function receivedOn(line) {
   const ev = (Array.isArray(line?.evidence) ? line.evidence : [])
@@ -372,6 +397,7 @@ export function portfolioRows(closing) {
   const rows = lines.map((l) => {
     const position = l.in_portfolio === true ? (String(l.portfolio_position_uid ?? '').trim() || null) : null;
     return {
+      prefill: l.in_portfolio === true ? null : positionPrefill(closing, l),
       uid: l.uid,
       name: text(l.investor_name),
       route: l.route || null,
