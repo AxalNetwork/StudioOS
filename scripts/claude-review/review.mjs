@@ -302,7 +302,7 @@ export function geminiClient({ apiKey, baseURL, timeoutSeconds, sdk = GoogleGenA
       let streamStarted = false;
       try {
         // Per-attempt client keeps the connection marker local to this reservation.
-        const client = new sdk({ apiKey, vertexai: false, httpOptions: {
+        const client = new sdk({ apiKey, vertexai: false, apiVersion: 'v1beta', httpOptions: {
           baseUrl: baseURL, timeout: options.timeout ?? timeoutSeconds * 1000,
           retryOptions: { attempts: 1 }, fetch: geminiFetch(fetchImpl, apiKey, () => { streamStarted = true; }),
         } });

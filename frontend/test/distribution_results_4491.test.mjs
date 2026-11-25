@@ -84,7 +84,11 @@ test('loading is a skeleton; a failed read is the read-error card with Try again
 
 async function mounted(respond) {
   const before = globalThis.fetch; const calls = [];
-  globalThis.fetch = async (url) => { calls.push(String(url)); return respond(String(url), calls.length); };
+  globalThis.fetch = async (url) => {
+    // #5841 adds independent Search Console reads; the campaign contract still counts only its own read.
+    if (String(url).includes('/search-console/')) return json({ error: 'search_console_unavailable' }, 503);
+    calls.push(String(url)); return respond(String(url), calls.length);
+  };
   const m = await mountContracts(h(ResultsTab, { projectId: 7 }), '/grow/distribution/results?project_id=7', { id: 1, role: 'founder' });
   await m.flush(); await m.flush();
   return { m, calls, restore: () => { globalThis.fetch = before; } };

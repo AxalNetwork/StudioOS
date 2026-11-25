@@ -8,6 +8,7 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/connectors_page_d651.test.mjs
  */
 import test from 'node:test';
+import { pilotReturn } from '../../cloudflare-worker/src/integrations/pilotReturn.ts';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -219,15 +220,18 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on its c
   // Every place a provider's sign-in returns to, as the Worker writes it.
   // D686 (#1592): the connector callback returns through one destination,
   // read from the signed state. It is still /integrations unless that state
-  // says build, so every legacy return below keeps landing here.
+  // says build or names a valid provider-bound pilot task; legacy returns stay here.
   const integrations = read('cloudflare-worker/src/routes/integrations.ts');
   const base = integrations.match(/export function returnBase\(extra: [^)]*\): string \{\n([\s\S]*?)\n\}/);
   assert.ok(base, 'integrations.ts defines returnBase(extra)');
-  const returnBase = new Function('extra', base[1]);
+  const returnBase = new Function('pilotReturn', 'extra', base[1]).bind(null, pilotReturn);
   for (const extra of [undefined, null, {}, { return_to: 'integrations' }, { return_to: 'https://evil.example' }, { return_to: '/x' }, { return_to: 'BUILD' }]) {
     assert.equal(returnBase(extra), '/integrations', `${JSON.stringify(extra)} returns to /integrations`);
   }
   assert.equal(returnBase({ return_to: 'build' }), '/build/connect');
+  assert.equal(returnBase({ return_to: 'validate_research', pilot_provider: 'typeform', project_id: 41 }), '/validate/customer-research');
+  assert.equal(returnBase({ return_to: 'grow_results', pilot_provider: 'google_search_console', project_id: 41 }), '/grow/distribution/results');
+  assert.equal(returnBase({ return_to: 'grow_results', pilot_provider: 'typeform', project_id: 41 }), '/integrations');
   // #1597: each redirect goes through returnQuery(consumed?.extra, …), which adds Build's venture from the same signed state.
   assert.match(integrations, /c\.redirect\(returnQuery\(consumed\?\.extra, `oauth=ok&provider=\$\{encodeURIComponent\(provider\)\}`\)\)/);
   assert.match(integrations, /return `\$\{returnBase\(extra\)\}\?\$\{outcome\}\$\{venture\}`;/);
