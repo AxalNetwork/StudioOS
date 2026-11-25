@@ -165,3 +165,41 @@ Each figure is labelled:
 - [ ] **Privacy:** no prompt, payload, token-bearing URL or customer identifier in the period's telemetry or in this scorecard.
 
 **Rollback** for any step is the previous switch value, in its own PR. Halt first if runs are live (see Halt and breaker recovery). Pending human decisions remain available after a halt.
+
+## Hosted Stage A: receipt, sweep and environment (#8507, D8507)
+
+`.github/workflows/agent-stage-a.yml` is #4594's hosted lifecycle run. Since
+D8507 it has two jobs:
+
+1. **`stage-a`** creates, exercises and deletes the throwaway Worker and its
+   resources, as before. It also writes a **receipt**
+   (`agent-stage-a-receipt` artifact, kept 90 days even when the job fails):
+   one JSON line per resource, written the moment it exists. The Worker's
+   line is written before its first deploy.
+2. **`sweep`** runs `if: always()`, after a pass, a failure, a cancellation
+   or a timeout. It lists the account's Workers, D1 databases, KV
+   namespaces, queues, R2 buckets and Workflows. It deletes only that run's
+   own Stage A names (`scripts/lib/stageASweep.mjs`: `studioos-s4594-<run>`,
+   `studioos-<kind>-s4594-<run>[-dlq]`, `studioos-rehearsal-<run>-src`),
+   then lists again. The summary ends with **Resources left: N**, and any N
+   but zero fails the workflow. A list it could not read counts as one left.
+   The receipt can never widen the selection: a receipt line that is not
+   the run's own name is refused and reported.
+
+**Sweeping an earlier run.** Dispatch the workflow with `sweep_run_id` set
+to that run's GitHub run id (digits). Only the sweep job runs; it fetches
+that run's receipt and sweeps `a<run id>`.
+
+**Harness revision.** Both jobs check out `github.sha`, and each summary
+starts with `Harness: <sha>`. The Stage A JSON summary carries it as
+`harness`.
+
+**Environment (open).** Both jobs still run in `production-ops`. The
+preview environment (proposed: `agent-preview`) and a token scoped to what
+Stage A creates are console work for the admin slot under #8063 and #8064.
+Once they exist, the switch is the two `environment:` lines in the workflow
+and the two `production-credential-inventory.json` rows. Until then, a
+dispatch is the owner's decision, as before.
+
+**Still to record (owner-dispatched):** three runs, one success, one
+cancelled and one timed out, each ending with `Resources left: 0`.

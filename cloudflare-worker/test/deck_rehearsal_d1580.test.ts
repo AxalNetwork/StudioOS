@@ -14,10 +14,11 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_rehearsal_d1580.test.ts
  */
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -34,6 +35,7 @@ import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchemaFile } from './_schema_once.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -109,12 +111,28 @@ test('2. a figure that agrees, an unlinked deck and a Not recorded binding are n
 
 // ── 3. The route ──────────────────────────────────────────────────────────
 
+// #8585: the schema is built once per run, exactly as before (foreign keys on, the default), into a private
+// file; every fixture loads its own fresh copy, rows included, and turns foreign keys on.
+const scratch = mkdtempSync(join(tmpdir(), 'deck-rehearsal-d1580-'));
+after(() => rmSync(scratch, { recursive: true, force: true }));
+let built: string | null = null;
+function schemaFile() {
+  if (built) return built;
+  const file = join(scratch, 'schema.sqlite');
+  const seed = new DatabaseSync(file);
+  try {
+    seed.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
+    for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
+      seed.exec(readFileSync(resolve(M, name), 'utf8'));
+    }
+  } finally { seed.close(); }
+  return (built = file);
+}
+
 function fixture() {
-  const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  loadSchemaFile(db, schemaFile());
+  db.exec('PRAGMA foreign_keys = ON;');
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Founder A', 'fa@example.test'), (20, 'Founder B', 'fb@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES (${FOUNDER}, 'founder@example.test', 'Fay Founder', 'founder', 10), (${OTHER}, 'other@example.test', 'Oz Other', 'founder', 20);
     INSERT INTO projects (id, name, founder_id) VALUES (${PID}, 'Kestrel Labs', 10);
