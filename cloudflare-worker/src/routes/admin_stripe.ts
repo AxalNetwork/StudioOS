@@ -9,6 +9,7 @@
  *   PUT  /config         set/update the publishable key (stored in KV)
  *   GET  /cutover        D1434: what a move to the other Stripe mode would clear
  *   POST /cutover        D1434: the owner-run move from test to live (or back)
+ *   GET  /reconciliation D8512: the webhook's read-only three-state reconciliation
  *
  * The STRIPE_WEBHOOK_SECRET Worker secret is pushed via cloudflareSecrets.setSecret
  * on successful webhook registration so it takes effect on the next isolate boot.
@@ -45,6 +46,7 @@ import { notify } from '../services/notify';
 import { setSecret } from '../services/cloudflareSecrets';
 import { logAdminAction } from '../services/adminAudit';
 import { refuse } from '../util/refusal';
+import { classifyStripeReconciliation, readLocalSide, readStripeSide } from '../services/stripeReconciliation';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -118,6 +120,25 @@ r.get('/webhook', async (c) => {
   } catch (e) {
     return refuse(c, 502, { code: 'stripe_call_failed', message: 'Stripe did not accept the call. Nothing changed; check the Stripe settings and try again.', raw: e, audience: 'admin' });
   }
+});
+
+// GET /api/admin/stripe/reconciliation
+// D8512 (#8512): the webhook's three-state reconciliation, read only. Stripe's
+// events of the subscribed types in the window against the receipts in
+// stripe_webhook_events (services/stripeReconciliation.ts). The answer is a
+// state and counts: never an event id, customer, payload or key. An unset key
+// or an unreadable side is `unreadable`, never a clean state.
+r.get('/reconciliation', async (c) => {
+  await requireSuperAdmin(c);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const mode = stripeMode(c.env);
+  const [stripeSide, localSide] = await Promise.all([
+    mode === 'unconfigured'
+      ? Promise.resolve({ available: false } as const)
+      : readStripeSide((path, query) => stripeCall(c.env, path, query, { method: 'GET' }), REQUIRED_EVENTS, nowSec),
+    readLocalSide(c.env, mode === 'live'),
+  ]);
+  return c.json({ mode, ...classifyStripeReconciliation(stripeSide, localSide, nowSec) });
 });
 
 // POST /api/admin/stripe/webhook
