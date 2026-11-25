@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { isSuppressed } from './newsletter';
 import { plainStripeAmount } from '../../../frontend/src/lib/money.js';
 import { sendRawEmailOutcome, type RawEmailOpts } from './email/gmail';
-import { deliverWithReference, type DeliveryResult, type SendReference } from './email/deliveryContract';
+import { deliverWithReference, issuanceOf, type DeliveryResult, type SendReference } from './email/deliveryContract';
 
 // D8536 (#8536) — the delivery contract for critical flows lives in
 // `email/deliveryContract.ts`; its types are re-exported here so a caller
@@ -524,22 +524,10 @@ export async function sendPartnerInvitationEmail(
   return (await sendPartnerInvitationEmailResult(env, to, recipientName, adminName, link, personalMessage)).ok;
 }
 
-export async function sendPartnerInvitationEmailResult(
-  env: Env,
-  to: string,
-  recipientName: string,
-  adminName: string,
-  link: string,
-  personalMessage: string,
-): Promise<EmailSendResult> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
-    return { ok: false, reason: 'not_configured' };
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
+/** The partner invitation's subject, HTML and text. Pure, so a test reads exactly what is sent (D8536 part 3). */
+export function partnerInvitationEmailContent(
+  recipientName: string, adminName: string, link: string, personalMessage: string,
+): { subject: string; html: string; text: string } {
     const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
     const noteBlock = personalMessage
       ? `<tr><td style="padding:0 32px 8px;"><div style="background:#faf5ff;border-left:3px solid #7c3aed;border-radius:8px;padding:14px 16px;color:#4b5563;font-size:14px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(personalMessage)}</div></td></tr>`
@@ -591,6 +579,26 @@ ${noteBlock}
     const noteText = personalMessage ? `\n\n${personalMessage}\n\n` : '\n\n';
     const text = `${greet}\n\n${adminName} has invited you to join the Axal VC partner network.${noteText}Open the partner onboarding chatbot here: ${link}\n\nThis link expires in 14 days.\n\n— Axal VC`;
     const subject = `You're invited to partner with Axal VC`;
+    return { subject, html, text };
+}
+
+export async function sendPartnerInvitationEmailResult(
+  env: Env,
+  to: string,
+  recipientName: string,
+  adminName: string,
+  link: string,
+  personalMessage: string,
+): Promise<EmailSendResult> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = partnerInvitationEmailContent(recipientName, adminName, link, personalMessage);
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal VC <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -629,8 +637,8 @@ ${noteBlock}
  *
  * D8536: the subject, text and HTML are built here, pure, so a test reads
  * exactly what is sent. The company settings page sends it under the delivery
- * contract (`sendCompanyInvitationEmailBound` below); the HQ move invitation
- * (`rpc/branchOps.ts`) still uses the unreferenced sender.
+ * contract (`sendCompanyInvitationEmailBound` below), and so does the HQ move
+ * invitation (`rpc/branchOps.ts`, subject `branch_invitation`, part 3).
  */
 export function companyInvitationEmailContent(
   companyName: string, inviterName: string, link: string,
@@ -839,6 +847,52 @@ export async function sendFlaggedScoreEmailBound(
 ): Promise<DeliveryResult> {
   const { subject, html, text } = flaggedScoreEmailContent(recipientName, payload);
   return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal Alerts <noreply@axal.vc>', mailClass: 'transactional' }));
+}
+
+// ---------------------------------------------------------------------------
+// D8536 part 3 (#8536) — the rest of sign-in and invitations under the
+// delivery contract. As in part 2, each sender takes a send reference instead
+// of an address, and the content is the function the unreferenced sender uses,
+// so the message a person receives is unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * The verification email (`verificationEmailContent`), to the address its
+ * subject record names: an account holding a verification token
+ * (`user_verification`), either side of an email change
+ * (`email_change_confirm`, `email_change_revoke`) or a co-founder invitation
+ * (`founder_invite`), which has always been sent with this body. It is
+ * account-security mail for the suppression list, as before.
+ */
+export async function sendVerificationEmailBound(
+  env: Env, ref: SendReference, name: string, verificationUrl: string,
+): Promise<DeliveryResult> {
+  const { subject, html, text } = verificationEmailContent(name, verificationUrl);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal VC <noreply@axal.vc>', mailClass: 'security' }));
+}
+
+/**
+ * D8536 part 3 — the send reference of one partner invitation email. The
+ * subject is the `partner_invitations` row. D923 re-sends the SAME link on
+ * purpose (the token never changes; a resend extends its expiry), so, as for a
+ * signing email, the attempt is the token's issuance plus the occasion: `send`
+ * for the email at creation, `resend-YYYYMMDDHH` for an admin's resend. A
+ * second click within the same hour after an accepted send is answered from
+ * the ledger; a resend the next hour is its own send.
+ */
+export async function partnerInvitationRef(invitationId: number, token: string, occasion: 'send' | 'resend', now = new Date()): Promise<SendReference> {
+  const iso = now.toISOString();
+  const when = occasion === 'resend' ? `-${iso.slice(0, 10).replace(/-/g, '')}${iso.slice(11, 13)}` : '';
+  return { flow: 'invitation', subject: { kind: 'partner_invitation', id: invitationId }, attempt: `${await issuanceOf(token)}.${occasion}${when}` };
+}
+
+/** The partner invitation (`partnerInvitationEmailContent`), to the address its row names. */
+export async function sendPartnerInvitationEmailBound(
+  env: Env, ref: SendReference,
+  c: { recipientName: string; adminName: string; link: string; personalMessage: string },
+): Promise<DeliveryResult> {
+  const { subject, html, text } = partnerInvitationEmailContent(c.recipientName, c.adminName, c.link, c.personalMessage);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal VC <noreply@axal.vc>', mailClass: 'transactional' }));
 }
 
 /**
@@ -1171,6 +1225,11 @@ export async function sendNotificationEmail(
   }
 }
 
+/** The verification email's subject, HTML and text (D8536 part 3: pure, so a test reads exactly what is sent). */
+export function verificationEmailContent(name: string, verificationUrl: string): { subject: string; html: string; text: string } {
+  return { subject: 'Verify your email — Axal VC', html: buildEmailHTML(name, verificationUrl), text: `Verify your email: ${verificationUrl}` };
+}
+
 export async function sendVerificationEmail(env: Env, to: string, name: string, verificationUrl: string): Promise<boolean> {
   // D810 — the suppression list, by reason (security).
   if (await isSuppressed(env, to, 'security')) return false;
@@ -1180,9 +1239,8 @@ export async function sendVerificationEmail(env: Env, to: string, name: string, 
   }
   try {
     const accessToken = await getGmailAccessToken(env);
-    const html = buildEmailHTML(name, verificationUrl);
-    const text = `Verify your email: ${verificationUrl}`;
-    const rawEmail = buildRawEmail(to, 'Verify your email — Axal VC', html, text);
+    const { subject, html, text } = verificationEmailContent(name, verificationUrl);
+    const rawEmail = buildRawEmail(to, subject, html, text);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),

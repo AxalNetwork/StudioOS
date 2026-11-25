@@ -2487,10 +2487,18 @@ async function sendInvitation(
   let sent = false;
   let emailReason: string | undefined;
   try {
-    const { sendCompanyInvitationEmail } = await import('../services/email');
-    sent = await sendCompanyInvitationEmail(
-      env, email, String(env.BRANCH_NAME || branch), actor, link,
+    // D8536 part 3: under the delivery contract. The subject is this
+    // invitation row, the attempt is its token's issuance (a re-sent move
+    // mints a new token, so it is a new attempt), and the address is the one
+    // the pending row names, never the parameter.
+    const { sendCompanyInvitationEmailBound } = await import('../services/email');
+    const { issuanceOf } = await import('../services/email/deliveryContract');
+    const r = await sendCompanyInvitationEmailBound(
+      env,
+      { flow: 'invitation', subject: { kind: 'branch_invitation', id: uid }, attempt: await issuanceOf(rawToken) },
+      { companyName: String(env.BRANCH_NAME || branch), inviterName: actor, link },
     );
+    sent = r.state === 'accepted';
     if (!sent) {
       emailReason = 'This branch has no mail sender configured, so the invitation exists and '
         + 'nobody has been told about it. Pass the link on by hand, or set the mail credentials.';

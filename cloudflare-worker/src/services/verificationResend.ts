@@ -33,9 +33,17 @@ export async function resendVerification(env: Env, admin: { id: number; email: s
 
   let emailed = false;
   try {
-    const { sendVerificationEmail } = await import('./email');
+    // D8536 part 3: under the delivery contract. The subject is the account,
+    // which names its own address while it holds a token; the attempt is this
+    // token's issuance, so the rotation above is a new attempt and the old
+    // link (its hash overwritten) no longer verifies.
+    const { sendVerificationEmailBound } = await import('./email');
+    const { issuanceOf } = await import('./email/deliveryContract');
     const verifyUrl = `${env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
-    emailed = await sendVerificationEmail(env, target.email, target.name || '', verifyUrl);
+    const r = await sendVerificationEmailBound(env,
+      { flow: 'sign_in', subject: { kind: 'user_verification', id: target.id }, attempt: await issuanceOf(rawToken) },
+      target.name || '', verifyUrl);
+    emailed = r.state === 'accepted';
   } catch (e) {
     console.error('[resend-verification] email send failed', (e as Error)?.name || 'error');
   }
