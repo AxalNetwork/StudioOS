@@ -145,6 +145,8 @@ documentation/architecture/AUTH_INVENTORY.json
 cloudflare-worker/src/routes/_registry.ts
 frontend/src/lib/apiModules.generated.js
 cloudflare-worker/src/services/agents/skillLibrary.generated.ts
+# D8519 (#8519): the model inventory is build output too; `node scripts/build-model-inventory.mjs` writes it, `--check` gates it.
+documentation/architecture/MODEL_INVENTORY.json
 # D4574 H3 (#4574): the skill library's entries, the static asset the same generator writes beside it.
 frontend/public/skill-library/
 

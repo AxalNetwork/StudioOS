@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * D5612 (#5612) — build the three generated modules that are not committed:
+ * D5612 (#5612) — build the generated files that are not committed (three modules; D8519 added the model inventory):
  *
  *   cloudflare-worker/src/routes/_registry.ts                       scripts/build-route-registry.mjs
  *   frontend/src/lib/apiModules.generated.js                        scripts/build-api-index.mjs
  *   cloudflare-worker/src/services/agents/skillLibrary.generated.ts scripts/build-skill-library.mjs
+ *   documentation/architecture/MODEL_INVENTORY.json                  scripts/build-model-inventory.mjs (D8519)
  *
  * They were committed until D5612, and every PR that added a route, an API
  * module or a skill rewrote a sorted list in one of them, so neighbouring PRs
@@ -20,7 +21,7 @@
  * Node built-ins only, and so are the three generators: it runs before
  * `npm ci`.
  *
- *   node scripts/build-generated.mjs           write all three
+ *   node scripts/build-generated.mjs           write all of them
  *   node scripts/build-generated.mjs --check   each generator's --check: deterministic, untracked
  */
 import { spawnSync } from 'node:child_process';
@@ -34,6 +35,7 @@ export const GENERATORS = Object.freeze([
   { script: 'scripts/build-route-registry.mjs', output: 'cloudflare-worker/src/routes/_registry.ts' },
   { script: 'scripts/build-api-index.mjs', output: 'frontend/src/lib/apiModules.generated.js' },
   { script: 'scripts/build-skill-library.mjs', output: 'cloudflare-worker/src/services/agents/skillLibrary.generated.ts' },
+  { script: 'scripts/build-model-inventory.mjs', output: 'documentation/architecture/MODEL_INVENTORY.json' },
 ]);
 
 /** Run every generator (with `--check` when `check`); the first non-zero exit status, else 0. */

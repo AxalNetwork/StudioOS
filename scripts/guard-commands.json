@@ -445,6 +445,17 @@
     ]
   },
   {
+    "id": "check-model-inventory",
+    "command": [
+      "node",
+      "scripts/build-model-inventory.mjs",
+      "--check"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
     "id": "check-test-clock",
     "command": [
       "node",
