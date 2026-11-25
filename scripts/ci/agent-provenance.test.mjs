@@ -5,13 +5,14 @@
 //   node --test scripts/ci/agent-provenance.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, branchIssue, checkCommit, checkRange, main, parseTrailers, shown,
+  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, branchIssue, checkCommit, checkRange, classifyPr, gitResolvePr, main, parseTrailers, renderShadow, shadowMain, shadowRows, shown,
 } from './agent-provenance.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -255,4 +256,103 @@ test('the workflow is advisory, runs on pull_request and merge_group, judges age
   // The branch name is outsider text: it reaches the script through env only, never inside run:.
   assert.match(wf, /^ {10}PR_HEAD_REF: \$\{\{ github\.event\.pull_request\.head\.ref \}\}$/m);
   assert.equal((wf.match(/github\.(?:head_ref|event\.pull_request\.head\.ref)/g) || []).length, 1);
+});
+
+// ---- D8517 (#8517): the shadow report ------------------------------------------------------
+
+/**
+ * A fixture release range: `main` carries the previous deploy, then three squash commits that name
+ * pull requests 11 (full chain), 12 (a partial chain) and 13 (no trailers: a human). Each pull
+ * request's head lives on a local branch pr-N, and the stubbed fetch points FETCH_HEAD at it, so no
+ * network and no GitHub API is touched.
+ */
+function releaseFixture(t, { legacyOn11 = false } = {}) {
+  const { dir, git, put } = fixture(t);
+  git('checkout', '--quiet', 'main');
+  const previous = git('rev-parse', 'HEAD');
+  const heads = {
+    11: `feat: eleven\n\n${legacyOn11 ? CHAIN.replace('Agent-Session', LEGACY_SESSION) : CHAIN}`,
+    12: 'feat: twelve\n\nAgent-Slot: S09\nAgent-Task: #8012',
+    13: 'fix: thirteen, by a person',
+  };
+  for (const n of [11, 12, 13]) {
+    git('checkout', '--quiet', '-b', `pr-${n}`, 'main');
+    put(heads[n]);
+    git('checkout', '--quiet', 'main');
+    put(`squash of ${n} (#${n})`); // GitHub's squash carries no trailers of its own
+  }
+  const candidate = git('rev-parse', 'HEAD');
+  const resolvePr = (n, sha) => {
+    const fetchRef = (num) => git('fetch', '--quiet', '.', `pr-${num}`);
+    return gitResolvePr({ cwd: dir, fetchRef })(n, sha);
+  };
+  return { dir, previous, candidate, resolvePr };
+}
+
+const shadow = (f, extra = []) => {
+  const lines = [];
+  const status = shadowMain(['--shadow', '--candidate', f.candidate, '--previous', f.previous, ...extra],
+    { cwd: f.dir, log: (l) => lines.push(l), resolvePr: f.resolvePr, summaryFile: '' });
+  return { status, text: lines.join('\n') };
+};
+
+test('shadow: a range with one passing, one failing and one human pull request prints three rows', (t) => {
+  const f = releaseFixture(t);
+  const { status, text } = shadow(f);
+  assert.equal(status, 0);
+  const rows = text.split('\n').filter((l) => /^\| #\d+ /.test(l));
+  assert.equal(rows.length, 3, text);
+  assert.match(rows[0], /^\| #11 \| S08 \| #8068 \| pass \| Agent-Session \| - \|$/);
+  assert.match(rows[1], /^\| #12 \| S09 \| #8012 \| fail \| none \| .*missing Agent-Run/);
+  assert.match(rows[2], /^\| #13 \| - \| - \| human \| - \| - \|$/);
+  assert.match(text, /pass 1, fail 1, human 1, unavailable 0\./);
+  assert.match(text, /this report never fails the release/);
+});
+
+test('shadow: the row says which session trailer form each commit used', (t) => {
+  const { text } = shadow(releaseFixture(t, { legacyOn11: true }));
+  assert.match(text, /^\| #11 \| S08 \| #8068 \| pass \| Claude-Session \| - \|$/m);
+  // After the cutover the legacy form is a failure, and the row says so.
+  const late = classifyPr({ number: 5, commits: [commit(`fix: a\n\n${CHAIN.replace('Agent-Session', LEGACY_SESSION)}`, { committedAt: CUTOVER })] });
+  assert.equal(late.status, 'fail');
+  assert.match(late.problems.join(';'), /accepted as Agent-Session only before/);
+  const mixed = classifyPr({ number: 6, commits: [commit(`a\n\n${CHAIN}`), commit(`b\n\n${CHAIN.replace('Agent-Session', LEGACY_SESSION)}`, { sha: 'c'.repeat(40) })] });
+  assert.deepEqual(mixed.forms, ['Agent-Session', 'Claude-Session']);
+});
+
+test('shadow: an unreadable pull request, a direct push and an unreadable range are printed as such, never thrown', (t) => {
+  const rows = shadowRows({
+    changes: [{ sha: 'a'.repeat(40), subject: 'feat: x (#7)' }, { sha: 'b'.repeat(40), subject: 'direct push, no number' },
+      { sha: 'c'.repeat(40), subject: 'Merge pull request #9 from o/agent/x' }],
+    resolvePr: (n) => { if (n === 7) throw new Error('fetch failed\nsecond line'); return []; },
+  });
+  assert.deepEqual(rows.map((r) => [r.pr, r.status]), [[7, 'unavailable'], [null, 'no-pr'], [9, 'unavailable']]);
+  assert.match(rows[0].problems[0], /not readable \("fetch failed"\)/);
+  const md = renderShadow({ candidate: 'a'.repeat(40), previous: '', rows });
+  assert.match(md, /previous production deploy not found/);
+  assert.match(md, /unavailable 3\./);
+  const { dir } = fixture(t);
+  const lines = [];
+  assert.equal(shadowMain(['--shadow', '--candidate', 'nope'], { cwd: dir, log: (l) => lines.push(l) }), 0);
+  assert.match(lines.join('\n'), /shadow report unavailable/);
+  assert.equal(shadowMain(['--shadow', '--bogus', 'x'], { cwd: dir, log: () => {} }), 0);
+});
+
+test('shadow: a value from a commit message cannot break out of a summary table cell', () => {
+  const row = classifyPr({ number: 1, commits: [commit('fix\n\nAgent-Slot: a|b`<x>\nAgent-Task: #1\nAgent-Run: manual\nAgent-Session: https://e.org')] });
+  const md = renderShadow({ candidate: 'a'.repeat(40), previous: 'b'.repeat(40), rows: [{ sha: 'a', ...row }] });
+  const line = md.split('\n').find((l) => l.startsWith('| #1 '));
+  assert.equal(line.split('|').length, 8, line);
+  assert.doesNotMatch(line, /[`<>]/);
+});
+
+test('shadow: the summary file receives the report, and the CLI exits 0 even when the range is unreadable', (t) => {
+  const f = releaseFixture(t);
+  const out = join(f.dir, 'summary.md');
+  shadow(f, ['--summary', out]);
+  assert.match(readFileSync(out, 'utf8'), /### Agent provenance \(shadow mode\)/);
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('./agent-provenance.mjs', import.meta.url)), '--shadow', '--candidate', 'deadbeef'],
+    { cwd: f.dir, encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '' } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /shadow report unavailable/);
 });
