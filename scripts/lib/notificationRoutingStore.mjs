@@ -1,3 +1,5 @@
+// D5666: serialized atomic local routing history/checkpoint store.
+//
 // D5666: atomic local routing decision/checkpoint store; writes metadata only, with an injected SQLite transaction.
 export class SqliteRoutingStore {
   constructor(sql, transaction) {

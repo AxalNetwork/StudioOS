@@ -23,15 +23,25 @@ const schema = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
 loadSchema(schema, { below: 547 });
 schema.close();
 after(() => rmSync(scratch, { recursive: true, force: true }));
+const USERS = "INSERT INTO users(id,role,name,email,is_active) VALUES(5,'admin','Synthetic inviter','inviter@example.invalid',1),(8,'admin','Synthetic resender','resender@example.invalid',1),(9,'founder','Synthetic outsider','outsider@example.invalid',1)";
+// #8437: the upgraded variant (the seed, its users, then 547 and every later migration, as each test
+// built it before) is built once per run, on first use; each test still opens its own fresh copy.
+let upgraded = '';
+function upgradedSeed() {
+  if (upgraded) return upgraded;
+  const file = join(scratch, 'upgraded.sqlite'); copyFileSync(seed, file);
+  const db = new DatabaseSync(file, { enableForeignKeyConstraints: false });
+  db.exec(USERS);
+  db.exec(migration);
+  for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort(compareMigrations)) db.exec(read('cloudflare-worker/sql/migrations/'+name));
+  db.close();
+  return upgraded = file;
+}
 let serial = 0;
 function fixture(upgrade = true) {
-  const file = join(scratch, `${++serial}.sqlite`); copyFileSync(seed, file);
+  const file = join(scratch, `${++serial}.sqlite`); copyFileSync(upgrade ? upgradedSeed() : seed, file);
   const db = new DatabaseSync(file, { enableForeignKeyConstraints: false });
-  db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(5,'admin','Synthetic inviter','inviter@example.invalid',1),(8,'admin','Synthetic resender','resender@example.invalid',1),(9,'founder','Synthetic outsider','outsider@example.invalid',1)");
-  if (upgrade) {
-    db.exec(migration);
-    for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort(compareMigrations)) db.exec(read('cloudflare-worker/sql/migrations/'+name));
-  }
+  if (!upgrade) db.exec(USERS);
   const env: any = envFor(db);
   const app = new Hono<any>().route('/', adminPartners);
   app.onError((err,c) => c.json({error:err.message}, (AUTH_ERROR_STATUSES[err.message] || 500) as any));

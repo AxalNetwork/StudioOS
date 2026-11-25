@@ -157,6 +157,12 @@ if (a[0] === 'd1' && a[1] === 'execute' && has('--command')) {
     for (const x of sql.matchAll(/FROM "([^"]+)"\\) AS c([0-9]+)/g)) row['c'+x[2]]=(m.tables.find(t=>t.name===x[1])?.rows??0)+(e.COUNT_OFF===x[1]?1:0);
     console.log(JSON.stringify([{results:[row]}])); process.exit(0);
   }
+  if (sql.startsWith('SELECT type, name')) {
+    // D8531: the restored table set. The manifest's own tables unless a test names others.
+    const m = JSON.parse(e.MANIFEST_JSON || '{"tables":[]}');
+    const rows = e.RESTORED_TABLES ? JSON.parse(e.RESTORED_TABLES) : m.tables.map((t) => ({ type: 'table', name: t.name, virtual: 0 }));
+    console.log(JSON.stringify([{ results: rows }])); process.exit(0);
+  }
   if (/COUNT/.test(sql)) { console.log(JSON.stringify([{ results: [{ users: e.ZERO_USERS ? 0 : 3, projects: 2 }] }])); process.exit(0); }
   const names = ['users', 'projects', 'deals', 'score_snapshots', 'activity_logs', 'documents'];
   console.log(JSON.stringify([{ results: names.map((name) => ({ name })) }]));
@@ -567,4 +573,72 @@ test('D7917 drill records its exact database before create, removes the record o
  const env={DR_DRILL_DB_FILE:'AUTO',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'2'};
  const ok=drill(env);assert.equal(ok.status,0,ok.out);assert.equal(ok.ownership,null);assert.match(ok.calls.find(c=>c[1]==='create')[2],/^dr-drill-[0-9]{12}-123-2-db$/);
  const failed=drill({...env,DR_DRILL_DB_FILE:'AUTO',FAIL_DELETE:'1'});assert.equal(failed.status,0,failed.out);assert.match(failed.ownership,/^dr-drill-[0-9]{12}-123-2-db$/);
+});
+
+// ── D8531: three results apart, and "proven" needs the file restore ─────────
+
+test('D8531 drill: a passing D1 restore with the file drill not run is correct, timed, and "D1 only: not proven"', () => {
+  const summary = join(mkdtempSync(join(tmpdir(), 'd8531-')), 'summary.md');
+  const r = drill({ BACKUP_SQL: SQL_OK, GITHUB_STEP_SUMMARY: summary });
+  assert.equal(r.status, 0, r.out);
+  assert.deepEqual(r.marker.correctness, { result: 'passed', code: null, step: 'teardown', table_set: { missing: [], extra: [], unreadable: [], mismatched: [] } });
+  assert.equal(r.marker.recovery_point_age.target_s, 86400);
+  assert.equal(r.marker.recovery_point_age.met, true);
+  assert.ok(r.marker.recovery_point_age.age_s >= 7000 && r.marker.recovery_point_age.age_s <= 7400, `age ${r.marker.recovery_point_age.age_s}`);
+  assert.deepEqual([r.marker.recovery_time.target_s, r.marker.recovery_time.met, typeof r.marker.recovery_time.duration_s], [14400, true, 'number']);
+  assert.deepEqual([r.marker.file_drill, r.marker.recovery_proven, r.marker.verdict], ['not run', false, 'D1 only: not proven']);
+  const md = readFileSync(summary, 'utf8');
+  assert.match(md, /\| Restore correctness \| passed \|/);
+  assert.match(md, /\| Recovery point age \(RPO\) \| \d+ s, target 86400 s: met \|/);
+  assert.match(md, /\| Recovery time \(RTO\) \| \d+ s, target 14400 s: met \|/);
+  assert.match(md, /\| File drill \| not run \|/);
+  assert.match(md, /\| Verdict \| \*\*D1 only: not proven\*\* \|/);
+});
+
+test('D8531 drill: recovery is proven only when the file drill passed in the same run', () => {
+  const ok = drill({ BACKUP_SQL: SQL_OK, FILE_DRILL_RESULT: 'success' });
+  assert.deepEqual([ok.status, ok.marker.file_drill, ok.marker.recovery_proven, ok.marker.verdict], [0, 'passed', true, 'proven: the D1 restore and the file drill both passed']);
+  const bad = drill({ BACKUP_SQL: SQL_OK, FILE_DRILL_RESULT: 'failure' });
+  assert.deepEqual([bad.status, bad.marker.file_drill, bad.marker.recovery_proven, bad.marker.verdict], [0, 'failed', false, 'not proven: the file drill failed']);
+  for (const result of ['skipped', 'cancelled', '']) {
+    const r = drill({ BACKUP_SQL: SQL_OK, FILE_DRILL_RESULT: result });
+    assert.deepEqual([r.marker.file_drill, r.marker.recovery_proven], ['not run', false], result);
+  }
+  // A passed file drill never proves a failed D1 restore.
+  const failed = drill({ BACKUP_SQL: SQL_OK, FILE_DRILL_RESULT: 'success', COUNT_OFF: 'users' });
+  assert.deepEqual([failed.status, failed.marker.recovery_proven], [3, false]);
+  assert.equal(failed.marker.verdict, 'not proven: the D1 restore failed (row_counts_differ)');
+});
+
+test('D8531 drill: a failed correctness check stays failed however fast the run was, and names the mismatched table', () => {
+  const r = drill({ BACKUP_SQL: SQL_OK, COUNT_OFF: 'users' });
+  assert.equal(r.status, 3, r.out);
+  assert.deepEqual([r.marker.correctness.result, r.marker.correctness.code, r.marker.correctness.table_set.mismatched], ['failed', 'row_counts_differ', ['users']]);
+  // The run was well inside 4 h, and that is not a recovery time: no restore passed.
+  assert.ok(r.marker.duration_s < 14400);
+  assert.deepEqual([r.marker.recovery_time.duration_s, r.marker.recovery_time.met], [null, null]);
+  assert.equal(r.marker.recovery_point_age.met, true, 'the RPO is its own result');
+  // A failure with no named reason still carries a code.
+  const z = drill({ ZERO_USERS: '1' });
+  assert.equal(z.marker.correctness.code, 'smoke_zero_users');
+  const early = drill({ FAIL_HEARTBEAT: '1' });
+  assert.deepEqual([early.marker.correctness.result, early.marker.correctness.code, early.marker.recovery_point_age.met], ['failed', 'exit_1_at_find_backup', null]);
+});
+
+test('D8531 drill: a restore whose table set differs fails table_set_differs, by name and kind, before any count', () => {
+  const r = drill({ BACKUP_SQL: SQL_OK, RESTORED_TABLES: JSON.stringify([{ type: 'table', name: 'stray', virtual: 0 }, { type: 'table', name: '_cf_KV', virtual: 0 }]) });
+  assert.equal(r.status, 3, r.out);
+  assert.deepEqual([r.marker.step, r.marker.reason, r.marker.correctness.code], ['smoke', 'table_set_differs', 'table_set_differs']);
+  assert.deepEqual(r.marker.correctness.table_set.missing, ['users (table)']);
+  assert.deepEqual(r.marker.correctness.table_set.extra, ['stray (in neither the manifest nor the export)'], 'D1\'s own _cf_KV is never extra');
+  assert.match(r.out, /missing: users \(kind: table\)/);
+  const counted = r.calls.filter((c) => c[1] === 'execute' && c.includes('--command') && /COUNT\(\*\)/.test(c[c.indexOf('--command') + 1]));
+  assert.deepEqual(counted, [], 'a row was counted before the table sets were compared');
+});
+
+test('D8531 workflow: the D1 drill runs after the file drill, skipped or not, and is told its result', () => {
+  const job = WF.slice(WF.indexOf('\n  drill:'), WF.indexOf('\n  independent-file-drill:'));
+  assert.match(job, /^\s+needs: independent-file-drill$/m);
+  assert.match(job, /^\s+if: \$\{\{ !cancelled\(\) \}\}$/m);
+  assert.match(job, /^\s+FILE_DRILL_RESULT: \$\{\{ needs\.independent-file-drill\.result \}\}$/m);
 });

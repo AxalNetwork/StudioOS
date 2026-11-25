@@ -32,6 +32,19 @@
  *   chunk-tables <chunk.sql> [<manifest.json>]
  *           the tables a failed import chunk writes, and each one's parents
  *           (from the manifest): names only, for the drill's failure line.
+ *   describe <sql>
+ *           D8531: the tables the export CREATEs (plain and virtual), as JSON
+ *           names. Schema only: no row is read into it.
+ *   tables  <manifest.json> <sql> <restored.json> [--out FILE]
+ *           D8531: the three table sets, compared BEFORE any row is counted:
+ *           the manifest's tables, the tables the export creates, and the
+ *           restored database's sqlite_master (`restored.json` is wrangler's
+ *           --json answer to RESTORED_TABLES_SQL). Exit 1, reason
+ *           table_set_differs, when a table is missing from the restore or the
+ *           restore holds one the manifest does not list; each is named with
+ *           its kind. Engine-owned tables (sqlite_*, _cf_*) are never missing
+ *           or extra: sqlite_sequence is counted wherever the manifest lists
+ *           it, and statistics (sqlite_stat*) are never restored or counted.
  */
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -57,6 +70,119 @@ const unquote = (s) => {
   return s;
 };
 const internal = (t) => t.startsWith('_cf_');
+const RE_CREATE_VIRTUAL = new RegExp(String.raw`^CREATE\s+VIRTUAL\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?${QNAME}`, 'i');
+
+/**
+ * D8531 — tables SQLite or D1 own, never the application's. `sqlite_sequence`
+ * (AUTOINCREMENT's counters), `sqlite_stat1`..`sqlite_stat4` (ANALYZE and
+ * `PRAGMA optimize` statistics) and D1's `_cf_*`. An export never CREATEs one:
+ * `wrangler d1 export` writes `DELETE FROM sqlite_sequence;` or
+ * `ANALYZE sqlite_schema;` and then their rows, so the manifest (which lists
+ * every table that has a CREATE or an INSERT) lists them as tables.
+ */
+export const engineOwned = (t) => /^sqlite_/i.test(t) || /^_cf_/i.test(t);
+/** Statistics: derived from the data, never restored (dr-drill-split.mjs drops them) and never counted. */
+export const statisticsTable = (t) => /^sqlite_stat\d/i.test(t);
+/** The manifest's tables whose rows a restore carries, and so whose rows the drill counts. */
+export function countedTables(manifest) {
+  return (manifest?.tables ?? []).filter((t) => !statisticsTable(t.name) && !internal(t.name));
+}
+
+/**
+ * The restored database's tables and views, schema only: a name, its type and
+ * whether it is a virtual table. Never `sql` itself, never a row.
+ */
+export const RESTORED_TABLES_SQL = "SELECT type, name, CASE WHEN sql LIKE 'CREATE VIRTUAL TABLE%' THEN 1 ELSE 0 END AS virtual FROM sqlite_master WHERE type IN ('table','view') ORDER BY name;";
+
+/** D8531 — the tables one export CREATEs, fed one statement at a time: { tables, virtual }. */
+export function createCreatedTables() {
+  const tables = new Set();
+  const virtual = new Set();
+  const add = (s) => {
+    const c = RE_CREATE_TABLE.exec(s);
+    if (c) { tables.add(unquote(c[1])); return; }
+    const v = RE_CREATE_VIRTUAL.exec(s);
+    if (v) virtual.add(unquote(v[1]));
+  };
+  return { add, result: () => ({ tables: [...tables].sort(), virtual: [...virtual].sort() }) };
+}
+
+/** The tables the export at `path` CREATEs, read as a stream. Resolves to { tables, virtual } or { error }. */
+export async function createdTablesFile(path, { readBytes = 1 << 16 } = {}) {
+  const c = createCreatedTables();
+  const splitter = new StatementSplitter(c.add);
+  const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+  for await (const piece of createReadStream(path, { highWaterMark: readBytes })) splitter.push(decoder.decode(piece, { stream: true }));
+  splitter.push(decoder.decode());
+  const { error } = splitter.end();
+  return error ? { error } : c.result();
+}
+
+/** The tables one export held as a string CREATEs. */
+export function createdTables(sql) {
+  const c = createCreatedTables();
+  const { error } = new StatementSplitter(c.add).push(sql).end();
+  return error ? { error } : c.result();
+}
+
+// The shadow tables SQLite creates for a virtual table, by module: FTS5, FTS3/4, R*Tree.
+const SHADOW = /_(?:data|idx|content|docsize|config|segments|segdir|stat|node|rowid|parent)$/i;
+
+/**
+ * D8531 — the three table sets, before any count. `created` is
+ * createdTables()'s answer for the export, `restored` the rows of
+ * RESTORED_TABLES_SQL. Names (schema) and kinds only. SQLite compares names
+ * without case, so the sets do too.
+ *
+ *   missing  a table the manifest lists that the restore does not hold as a
+ *            table, with its kind: `table` (the export creates it), `virtual
+ *            table`, `rows only` (the export inserts rows but never creates
+ *            it), or `restored as a view`.
+ *   extra    a table the restore holds that the manifest does not list, other
+ *            than an engine-owned one or a virtual table's shadow table.
+ *   engine   each engine-owned name the manifest lists, and what the drill does
+ *            with it: `counted` (sqlite_sequence) or `not restored (statistics)`.
+ *   not_created  manifest tables the export never creates (informational: a
+ *            name here fails only when it is also missing).
+ */
+export function compareTableSets(manifest, created, restored) {
+  const key = (n) => String(n).toLowerCase();
+  const made = new Set([...(created?.tables ?? [])].map(key));
+  const madeVirtual = new Set([...(created?.virtual ?? [])].map(key));
+  const rows = Array.isArray(restored) ? restored : [];
+  const tables = new Map();
+  const views = new Set();
+  const virtualRestored = [];
+  for (const r of rows) {
+    const name = String(r?.name ?? '');
+    if (!name) continue;
+    if (r.type === 'view') { views.add(key(name)); continue; }
+    if (r.type !== 'table') continue;
+    tables.set(key(name), name);
+    if (Number(r.virtual) === 1) virtualRestored.push(key(name));
+  }
+  const listed = new Map();
+  const engine = [];
+  for (const t of manifest?.tables ?? []) {
+    if (engineOwned(t.name)) {
+      engine.push({ name: t.name, handled: statisticsTable(t.name) ? 'not restored (statistics)' : internal(t.name) ? 'not restored (D1 internal)' : 'counted' });
+      continue;
+    }
+    listed.set(key(t.name), t.name);
+  }
+  const kindOf = (k) => {
+    if (views.has(k)) return 'restored as a view';
+    if (madeVirtual.has(k)) return 'virtual table';
+    if (made.has(k)) return 'table';
+    return 'rows only';
+  };
+  const missing = [...listed].filter(([k]) => !tables.has(k)).map(([k, name]) => ({ name, kind: kindOf(k) }));
+  const shadow = (k) => virtualRestored.some((v) => k !== v && k.startsWith(`${v}_`) && SHADOW.test(k.slice(v.length)));
+  const extra = [...tables].filter(([k, name]) => !listed.has(k) && !engineOwned(name) && !shadow(k))
+    .map(([k, name]) => ({ name, kind: made.has(k) || madeVirtual.has(k) ? 'created by the export, not in the manifest' : 'in neither the manifest nor the export' }));
+  const notCreated = [...listed].filter(([k]) => !made.has(k) && !madeVirtual.has(k)).map(([, name]) => name);
+  return { missing, extra, engine, not_created: notCreated, differs: missing.length > 0 || extra.length > 0 };
+}
 
 /** Streamed, so a 270 MB export is never hashed from one string. verify uses it; build hashes in describeFile's pass. */
 export function sha256File(path) {
@@ -191,7 +317,7 @@ export async function verifyBackup(sqlPath, manifest, { key, migrationsDir, maxA
 /** The tables whose restored count differs from the manifest's, or that were not counted at all. */
 export function compareCounts(manifest, counts) {
   const got = new Map((Array.isArray(counts) ? counts : []).map((c) => [String(c?.t), Number(c?.n)]));
-  return manifest.tables.filter((t) => got.get(t.name) !== t.rows).map((t) => t.name);
+  return countedTables(manifest).filter((t) => got.get(t.name) !== t.rows).map((t) => t.name);
 }
 
 /** The tables one import chunk writes. */
@@ -233,8 +359,36 @@ async function main(argv) {
     if (cmd === 'compare') {
       const manifest = JSON.parse(readFileSync(a, 'utf8'));
       const differ = compareCounts(manifest, JSON.parse(readFileSync(b, 'utf8')));
-      if (differ.length) { console.log(`row counts differ in ${differ.length} of ${manifest.tables.length} tables: ${differ.join(', ')}`); return 1; }
-      console.log(`row counts match in all ${manifest.tables.length} tables`);
+      const n = countedTables(manifest).length;
+      const out = flag(argv, '--names-out');
+      if (out) writeFileSync(out, `${JSON.stringify(differ)}\n`);
+      if (differ.length) { console.log(`row counts differ in ${differ.length} of ${n} tables: ${differ.join(', ')}`); return 1; }
+      console.log(`row counts match in all ${n} tables`);
+      return 0;
+    }
+    if (cmd === 'describe') {
+      const c = await createdTablesFile(a);
+      if (c.error) { console.error(`d1-backup-manifest: the export could not be read as SQL at offset ${c.error.offset}`); return 1; }
+      console.log(JSON.stringify(c));
+      return 0;
+    }
+    if (cmd === 'tables') {
+      const manifest = JSON.parse(readFileSync(a, 'utf8'));
+      const created = await createdTablesFile(b);
+      if (created.error) { console.log('reason=export_unreadable'); return 1; }
+      const answer = JSON.parse(readFileSync(argv[3], 'utf8'));
+      const restored = Array.isArray(answer) ? answer.flatMap((r) => r?.results ?? []) : [];
+      const r = compareTableSets(manifest, created, restored);
+      const out = flag(argv, '--out');
+      if (out) writeFileSync(out, `${JSON.stringify(r)}\n`);
+      const tableCount = restored.filter((x) => x?.type === 'table').length;
+      console.log(`table sets: manifest ${manifest.tables.length} (${r.engine.length} engine-owned), export creates ${created.tables.length + created.virtual.length}, restore holds ${tableCount}`);
+      for (const e of r.engine) console.log(`engine-owned: ${e.name} (${e.handled})`);
+      if (r.not_created.length) console.log(`manifest tables the export never creates: ${r.not_created.join(', ')}`);
+      for (const m of r.missing) console.log(`missing: ${m.name} (kind: ${m.kind})`);
+      for (const x of r.extra) console.log(`extra: ${x.name} (kind: ${x.kind})`);
+      if (r.differs) { console.log('reason=table_set_differs'); return 1; }
+      console.log('table sets agree');
       return 0;
     }
     if (cmd === 'chunk-tables') {
@@ -254,7 +408,7 @@ async function main(argv) {
     console.error(`d1-backup-manifest: ${e?.message ?? e}`);
     return 1;
   }
-  console.error('usage: d1-backup-manifest.mjs build|verify|compare|chunk-tables …');
+  console.error('usage: d1-backup-manifest.mjs build|verify|compare|chunk-tables|describe|tables …');
   return 64;
 }
 

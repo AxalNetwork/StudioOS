@@ -109,6 +109,7 @@ if (a[0] === 'd1' && a[1] === 'execute' && a.includes('--command')) {
   if (/UNION ALL/i.test(sql)) { console.error('✘ [ERROR] SQLITE_ERROR too many terms in compound SELECT'); process.exit(1); }
   if(e.BAD_BATCH && / AS c0/.test(sql)){ console.log(JSON.stringify([{results:[{c0:999}]}]));process.exit(0); }
   if (e.FAIL_BATCH && / AS c0/.test(sql)) { console.error('✘ [ERROR] D1_ERROR: the batched query was refused'); process.exit(1); }
+  if (e.UNREADABLE_TABLE && sql.includes('FROM "' + e.UNREADABLE_TABLE + '"')) { console.error('✘ [ERROR] not authorized: SQLITE_AUTH'); process.exit(1); }
   try {
     const db = new DatabaseSync(dbPath);
     console.log(JSON.stringify([{ results: db.prepare(a[a.indexOf('--command') + 1]).all() }])); process.exit(0);
@@ -290,14 +291,20 @@ test('the compare: restored row counts that differ from the manifest fail, namin
   const r = restore(R2, { MANIFEST_JSON: JSON.stringify({ ...m, tables: off }) });
   assert.deepEqual([r.status, r.reason], [3, 'row_counts_differ'], r.out);
   assert.match(r.out, /row counts differ in 1 of 5 tables: users/);
-  // A table the manifest names and the restore lacks.
+  // D8531: a table the manifest names and the restore lacks is a table-set
+  // failure, named with its kind, before any row is counted.
   const ghost = restore(R2, { MANIFEST_JSON: JSON.stringify({ ...m, tables: [...m.tables, { name: 'ghost', rows: 0, parents: [] }] }) });
-  assert.deepEqual([ghost.status, ghost.reason], [3, 'row_counts_unreadable'], ghost.out);
-  // The failure names the table and SQLite's reason, and the batch's other tables were still read.
-  assert.match(ghost.out, /row-count batch 1 failed \(wrangler's error codes: no such table\); counting its tables one at a time/);
-  assert.match(ghost.out, /row count unreadable: ghost \(wrangler's error codes: no such table\)/);
-  assert.match(ghost.out, /a row-count query failed for 1 table\(s\) in the manifest: ghost/);
-  assert.doesNotMatch(ghost.out, /row count unreadable: (users|projects|vc_funds|legal_documents|fund_lps)\b/);
+  assert.deepEqual([ghost.status, ghost.reason], [3, 'table_set_differs'], ghost.out);
+  assert.match(ghost.out, /missing: ghost \(kind: rows only\)/);
+  assert.ok(!ghost.wcalls.some((c) => c.includes('--command') && /COUNT\(\*\)/.test(c[c.indexOf('--command') + 1])), 'a row was counted before the table sets were compared');
+  // A table that is there but cannot be counted: the failure names the table
+  // and SQLite's reason, and the batch's other tables were still read.
+  const locked = restore(R2, { UNREADABLE_TABLE: 'vc_funds' });
+  assert.deepEqual([locked.status, locked.reason], [3, 'row_counts_unreadable'], locked.out);
+  assert.match(locked.out, /row-count batch 1 failed \(wrangler's error codes: SQLITE_AUTH not authorized\); counting its tables one at a time/);
+  assert.match(locked.out, /row count unreadable: vc_funds \(wrangler's error codes: SQLITE_AUTH not authorized\)/);
+  assert.match(locked.out, /a row-count query failed for 1 table\(s\) in the manifest: vc_funds/);
+  assert.doesNotMatch(locked.out, /row count unreadable: (users|projects|legal_documents|fund_lps)\b/);
 });
 
 test('the compare: a refused batched count falls back to one query per table and still compares every table', () => {

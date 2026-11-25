@@ -1,0 +1,20 @@
+{
+  "GET /api/positions": {
+    "kind": "filter"
+  },
+  "GET /api/positions/:projectUid": {
+    "kind": "target"
+  },
+  "GET /api/positions/:projectUid/activity": {
+    "kind": "target"
+  },
+  "GET /api/positions/analytics": {
+    "kind": "filter"
+  },
+  "GET /api/positions/kpi-compliance": {
+    "kind": "filter"
+  },
+  "GET /api/positions/marks": {
+    "kind": "filter"
+  }
+}

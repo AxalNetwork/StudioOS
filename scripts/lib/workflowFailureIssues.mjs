@@ -1,3 +1,5 @@
+// D6387: identify and update actionable workflow repair episodes.
+//
 // D6387: route verified GitHub Actions failures to repair issues, with one occurrence per run attempt.
 import { createHash } from 'node:crypto';
 import { ALERT_KINDS, mainState } from './githubAlerts.mjs';

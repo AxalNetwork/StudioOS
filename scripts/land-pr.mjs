@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #6326: the `land-pr` skill's reader. `node scripts/land-pr.mjs <pr>
+ * [--summary FILE] [--no-classify] [--json]` reads, with GET requests only, the
+ * settings behind #5605 rows 3 and 6, #5500, main's merge-queue and
+ * required-check rules, the PR's files and check runs, the `landing policy` job
+ * log (tier recomputed with the base's `merge-policy.mjs`, or taken from a
+ * pasted summary) and the open `[alert]` issues; prints each gate and, only
+ * when all hold, the queue commands. Never marks ready, enables auto-merge,
+ * merges, approves, pushes or dispatches.
+ *
  * #6326: the `land-pr` skill's reader. Given a PR, it reads every fact that
  * AGENTS.md § Task protocol step 5 needs before an agent may queue a T0/T1 PR,
  * and prints each gate with its verdict and, only when all hold, the two

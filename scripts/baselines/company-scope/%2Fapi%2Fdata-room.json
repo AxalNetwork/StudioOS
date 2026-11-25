@@ -1,0 +1,101 @@
+{
+  "DELETE /api/data-room/:projectUid/files/:uid": {
+    "kind": "target"
+  },
+  "DELETE /api/data-room/:projectUid/folders/:uid": {
+    "kind": "target"
+  },
+  "DELETE /api/data-room/:projectUid/grants/:uid": {
+    "kind": "target"
+  },
+  "DELETE /api/data-room/:projectUid/trash/:uid": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/activity": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/activity.csv": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/checklist": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/files/:uid/versions": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/preview": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/proposals": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/requests": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/share-candidates": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/support-reads": {
+    "kind": "target"
+  },
+  "GET /api/data-room/:projectUid/trash": {
+    "kind": "target"
+  },
+  "PATCH /api/data-room/:projectUid/files/:uid": {
+    "kind": "target"
+  },
+  "PATCH /api/data-room/:projectUid/folders/:uid": {
+    "kind": "target"
+  },
+  "PATCH /api/data-room/:projectUid/grants/:uid": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/files": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/files/:uid/download": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/files/:uid/versions/:n/current": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/files/:uid/versions/:n/download": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/folders": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/grants": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/grants/:uid/nda": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/proposals/quote": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/proposals/run": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/requests/:uid/accept": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/requests/:uid/decline": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/search": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/search/index": {
+    "kind": "target"
+  },
+  "POST /api/data-room/:projectUid/trash/:uid/restore": {
+    "kind": "target"
+  },
+  "PUT /api/data-room/:projectUid/files/:uid/deck-source": {
+    "kind": "target"
+  }
+}

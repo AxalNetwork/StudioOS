@@ -1,0 +1,11 @@
+{
+  "GET /api/scoring/cohort-benchmark/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/scoring/scores/:projectId": {
+    "kind": "target"
+  },
+  "POST /api/scoring/score": {
+    "kind": "target"
+  }
+}

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// D6387: verify completed attempts and report actionable failures to GitHub.
+//
 // D6387: report exact GitHub attempts from trusted events and reconcile missed completions on a schedule.
 import { appendFile, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';

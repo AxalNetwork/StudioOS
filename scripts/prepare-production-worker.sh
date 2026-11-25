@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# D5501: make and profile the production-shaped Worker bundle before writes.
+#
 # D5501: package and profile the production Worker without publishing it.
 set -euo pipefail
 

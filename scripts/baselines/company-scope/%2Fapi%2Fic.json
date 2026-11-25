@@ -1,0 +1,5 @@
+{
+  "POST /api/ic": {
+    "kind": "target"
+  }
+}

@@ -71,9 +71,11 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // grant is recorded with its schedule, tied by `issuance_id`, deletes it only
   // by that id when the grant is voided, and reads Carta's rows only to refuse
   // a schedule while Carta is the record — pinned below.
+  // D8530 (#8530): the VentureSpace data inventory names the cap-table stores so CI can say what each
+  // lifecycle event does to them; like the never-fill registry it holds no SQL and reads nothing — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/buildRecordDrafts.ts', 'services/capTableRecord.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/fills/neverFill.ts', 'services/raiseClaims.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/buildRecordDrafts.ts', 'services/capTableRecord.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/fills/neverFill.ts', 'services/raiseClaims.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts', 'services/ventureSpaceDataInventory.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const claims = read('cloudflare-worker/src/services/raiseClaims.ts');
@@ -83,6 +85,8 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   assert.doesNotMatch(claims, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'the claim check reads, never writes');
   const neverFill = read('cloudflare-worker/src/services/fills/neverFill.ts');
   assert.doesNotMatch(neverFill, /\b(SELECT|INSERT INTO|UPDATE|DELETE FROM)\b|\.prepare\(/, 'the never-fill registry names tables; it never reads one');
+  const inventory = read('cloudflare-worker/src/services/ventureSpaceDataInventory.ts');
+  assert.doesNotMatch(inventory, /\.(prepare|exec|batch)\(/, 'the data inventory names tables; it never queries one');
   const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
   assert.match(raise, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
     'Raise reads vesting through the requested project’s holders and their own users');

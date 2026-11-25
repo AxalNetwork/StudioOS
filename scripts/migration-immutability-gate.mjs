@@ -1,5 +1,30 @@
 #!/usr/bin/env node
 /**
+ * An applied migration edited after the fact. The runner records each migration
+ * it applies by filename and never runs that file again, so an edit changes no
+ * database that already has it — only every database built from the files
+ * afterwards, which then disagrees with production. It happened eight times:
+ * seven comment edits across migrations 022, 035, 049, 109, 196, 200 and 205,
+ * and a rewrite of 039 (55 lines in, 214 out). Production's own ledger shows
+ * each drifted checksum is the file as it stood before exactly one later
+ * commit. `migrate-d1.mjs` noticed each at deploy time and only warned, by
+ * which point the edit was on main. Six of the eight came in one commit pushed
+ * straight to main (1563f0aa8), which no pull-request check sees, so this gate
+ * runs twice: on every pull request, against its base branch, and on every push
+ * to main, against the commit main pointed at before that push. Either way it
+ * allows only additions under `cloudflare-worker/sql/migrations/`: an edit,
+ * deletion, rename or type change of a file already on the base fails, and so
+ * does a status letter it does not recognise. It reads `git diff -z`, because
+ * git quotes a non-ASCII path and a quoted path would slip past the folder
+ * prefix. A base that does not fetch, does not resolve, shares no history, or
+ * holds no migration is a failure with its own sentence, never a pass — and a
+ * push with no usable before-commit is refused rather than judged as a pull
+ * request, where the diff is always empty. There is no bypass flag. CI-only, in
+ * its own workflow (`migration-immutability.yml`, `fetch-depth: 0`) rather than
+ * a `ci.yml` job, because `ci.yml` cancels a run on main when the next push
+ * lands and a cancelled push's range would never be checked; so it is not a
+ * `check-*.mjs`. The rule lives in `lib/migrationImmutability.mjs` (D269).
+ *
  * A migration already on main is never edited, deleted or renamed (D269).
  *
  * The rule and the reasons for it live in lib/migrationImmutability.mjs, so a
