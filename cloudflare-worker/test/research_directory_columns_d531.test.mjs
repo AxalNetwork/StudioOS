@@ -184,7 +184,8 @@ test('D531: the decision\'s command records 375 under its real checksum', () => 
 // columns too, and its tests (research_company_directory_d534.test.ts,
 // research_companies_pages_d534.test.mjs) pin an absent value as Not recorded,
 // never zero. Every other template is still held to reading none of the 24.
-const FIRST_READER = 'cloudflare-worker/src/routes/research_markets.ts';
+// D7713 splits that geography read into member headcount keys and the capped UID page.
+const FIRST_READER = 'cloudflare-worker/src/services/researchDirectoryReads.ts';
 const FIRST_READER_PIN = 'frontend/test/research_markets_pages_d533.test.mjs';
 const D534_READER = 'cloudflare-worker/src/services/researchCompanyDirectory.ts';
 
@@ -211,17 +212,25 @@ test('D531: only the D533 and D534 readers read the 24 columns, and they show an
     }
   }
   assert.ok(templates.length >= 2, 'the two directory reads in routes/research.ts were not found');
-  let readers = 0;
+  let sortReaders = 0;
+  let pageReaders = 0;
   for (const { f, sql } of templates) {
     if (f === resolve(ROOT, D534_READER)) continue;
-    if (f.endsWith(FIRST_READER) && /FROM research_company_directory/.test(sql) && /\bemployee_count\b/.test(sql)) {
-      readers += 1;
-      continue;
+    let allowed = [];
+    if (f.endsWith(FIRST_READER) && /CROSS JOIN research_company_directory AS d/.test(sql) && /\bemployee_count\b/.test(sql)) {
+      if (/SELECT uid, name, employee_count, labels\.key AS group_index/.test(sql)) {
+        sortReaders += 1;
+        allowed = ['employee_count'];
+      } else if (/d\.uid = page\.value/.test(sql)) {
+        pageReaders += 1;
+        allowed = ['employee_count', 'employee_as_of', 'last_funding_amount', 'last_funding_currency', 'last_funding_date', 'last_funding_type'];
+      }
     }
-    for (const c of NAMES) {
+    for (const c of NAMES.filter((c) => !allowed.includes(c))) {
       assert.doesNotMatch(sql, new RegExp(`\\b${c}\\b`),
         `${f} reads ${TABLE}.${c}. A reader must render an absent value as "Not recorded", never zero; re-aim this pin with it`);
     }
   }
-  assert.equal(readers, 1, 'exactly one template in the first reader may read the 24 columns');
+  assert.equal(sortReaders, 1, 'only the headcount sort key may read a metric before paging');
+  assert.equal(pageReaders, 1, 'only the UID page may read the headcount and last-round fields');
 });

@@ -63,7 +63,7 @@ export const MODULES = [
 ] as const;
 export type ModuleSlug = (typeof MODULES)[number]['slug'];
 
-export type Ctx = { env: Env; projectId: number; today: string };
+export type Ctx = { env: Env; projectId: number; today: string; /** D8258: the clock freshness is read against; `Date.now()` when absent. */ now?: number };
 
 // #4853: the deck's module page IS the Pitch Studio, so its address is the Studio's (see `pitchHref`).
 const href = (ctx: Ctx, slug: string) => (slug === 'pitch-deck' ? pitchHref(ctx) : `/raise/${slug}?project=${ctx.projectId}`);
@@ -2105,7 +2105,34 @@ export async function nextSteps(ctx: Ctx): Promise<NextSteps> {
 // D1610 W3: the connected tools Raise reads, and when each was last read
 // ---------------------------------------------------------------------------
 
-export type Connector = { key: 'mercury' | 'github' | 'google'; label: string; fact: string | null; as_of: string | null; state: 'connected' | 'not_connected' | 'unreadable' };
+/**
+ * D8258 (#8258): a connected source also says whether its last read is inside its freshness window.
+ *   state        connected · not_connected · disconnected (the connection itself is lost: Reconnect) ·
+ *                unreadable (the source could not be read just now: Try again)
+ *   freshness    fresh · stale (older than `fresh_within_hours`) · not_recorded (no last read stored);
+ *                null for a source that is not connected or could not be read
+ */
+export type ConnectorState = 'connected' | 'not_connected' | 'disconnected' | 'unreadable';
+export type SourceFreshness = 'fresh' | 'stale' | 'not_recorded';
+export type Connector = {
+  key: 'mercury' | 'github' | 'google'; label: string; fact: string | null; as_of: string | null; state: ConnectorState;
+  fresh_within_hours: number; freshness: SourceFreshness | null;
+};
+
+/**
+ * D8258: how long a source's last read stays Fresh. Mercury's balances sync daily, so a read older than
+ * two days missed a sync; GitHub contributors and the chosen Google files change slowly and are synced on
+ * use, so a week.
+ */
+export const FRESH_WITHIN_HOURS: Record<Connector['key'], number> = { mercury: 48, github: 168, google: 168 };
+
+/** D8258: Fresh, Stale or Not recorded, from a stored timestamp (read as UTC) and the source's window. */
+export function sourceFreshness(asOf: string | null, withinHours: number, now: number): SourceFreshness {
+  if (!asOf) return 'not_recorded';
+  const t = Date.parse(/[zZ]$/.test(asOf) ? asOf.replace(' ', 'T') : `${asOf.replace(' ', 'T')}${asOf.length > 10 ? 'Z' : 'T00:00:00Z'}`);
+  if (!Number.isFinite(t)) return 'not_recorded';
+  return now - t > withinHours * 3_600_000 ? 'stale' : 'fresh';
+}
 
 /*
  * An integration counts for the venture when its member is active and is the
@@ -2128,15 +2155,36 @@ async function connectedTo(ctx: Ctx, provider: 'mercury' | 'github' | 'google_wo
   return row != null;
 }
 
-async function connectorRow(key: Connector['key'], label: string, read: () => Promise<Omit<Connector, 'key' | 'label'>>): Promise<Connector> {
-  try { return { key, label, ...await read() }; }
-  catch (e) {
+/**
+ * D8258: a venture's connection to the provider that is no longer active because it was lost: the
+ * provider refused its token (`error`) or it was disconnected (`disconnected`). A paused connection is
+ * the member's choice, not a loss. Read only when no active connection serves the venture.
+ */
+async function connectionLost(ctx: Ctx, provider: 'mercury' | 'github' | 'google_workspace'): Promise<boolean> {
+  const row = await ctx.env.DB.prepare(`SELECT 1 AS x FROM integrations i WHERE i.provider_key = ?2 AND i.status IN ('error', 'disconnected')
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted'))) LIMIT 1`)
+    .bind(ctx.projectId, provider).first<{ x: number }>();
+  return row != null;
+}
+
+type RowRead = { fact: string | null; as_of: string | null; state: ConnectorState };
+async function connectorRow(ctx: Ctx, key: Connector['key'], label: string, read: () => Promise<RowRead>): Promise<Connector> {
+  const within = FRESH_WITHIN_HOURS[key];
+  try {
+    const r = await read();
+    return { key, label, ...r, fresh_within_hours: within, freshness: r.state === 'connected' ? sourceFreshness(r.as_of, within, ctx.now ?? Date.now()) : null };
+  } catch (e) {
     console.warn('[raiseCycle] connector unreadable:', key, (e as Error)?.message);
-    return { key, label, fact: null, as_of: null, state: 'unreadable' };
+    return { key, label, fact: null, as_of: null, state: 'unreadable', fresh_within_hours: within, freshness: null };
   }
 }
 
 const notConnected = { fact: null, as_of: null, state: 'not_connected' } as const;
+/** D8258: no active connection: Disconnected when one was lost, else Not connected. */
+const notActive = async (ctx: Ctx, provider: 'mercury' | 'github' | 'google_workspace'): Promise<RowRead> =>
+  (await connectionLost(ctx, provider) ? { fact: null, as_of: null, state: 'disconnected' } : notConnected);
 
 /**
  * Mercury, GitHub and Google Workspace: the tools Raise reads (D840, D1094,
@@ -2148,15 +2196,15 @@ const notConnected = { fact: null, as_of: null, state: 'not_connected' } as cons
 export async function connectors(ctx: Ctx): Promise<Connector[] | { state: 'unreadable' }> {
   try {
     const rows = await Promise.all([
-      connectorRow('mercury', 'Mercury', async () => {
-        if (!await connectedTo(ctx, 'mercury')) return notConnected;
+      connectorRow(ctx, 'mercury', 'Mercury', async () => {
+        if (!await connectedTo(ctx, 'mercury')) return notActive(ctx, 'mercury');
         const fact = await mercuryRunway(ctx.env, ctx.projectId);
         const months = fact ? runwayMonths(fact.amount_cents, fact.burn_cents) : null;
         return { state: 'connected', as_of: stamp(fact?.as_of),
           fact: !fact ? 'No runway read yet' : months == null ? 'Cash read · no positive net burn' : `${months} months of runway · cash and net burn` };
       }),
-      connectorRow('github', 'GitHub', async () => {
-        if (!await connectedTo(ctx, 'github')) return notConnected;
+      connectorRow(ctx, 'github', 'GitHub', async () => {
+        if (!await connectedTo(ctx, 'github')) return notActive(ctx, 'github');
         const row = await ctx.env.DB.prepare(`SELECT COUNT(DISTINCT g.repository) AS repos, MAX(g.updated_at) AS as_of
           FROM github_contributors g JOIN integrations i ON i.id = g.integration_id
           WHERE g.project_id = ?1 AND i.provider_key = 'github' AND i.status = 'active'
@@ -2167,8 +2215,8 @@ export async function connectors(ctx: Ctx): Promise<Connector[] | { state: 'unre
         const repos = Number(row?.repos ?? 0);
         return { state: 'connected', as_of: stamp(row?.as_of), fact: repos ? `Contributors to ${plural(repos, 'repository', 'repositories')}` : 'No repository read yet' };
       }),
-      connectorRow('google', 'Google Workspace', async () => {
-        if (!await connectedTo(ctx, 'google_workspace')) return notConnected;
+      connectorRow(ctx, 'google', 'Google Workspace', async () => {
+        if (!await connectedTo(ctx, 'google_workspace')) return notActive(ctx, 'google_workspace');
         const row = await ctx.env.DB.prepare(`SELECT COUNT(*) AS files, MAX(f.last_synced_at) AS as_of
           FROM google_workspace_files f JOIN integrations i ON i.id = f.integration_id
           WHERE f.project_id = ?1 AND f.status <> 'stopped' AND f.module IN ('pitch_deck', 'data_room', 'capital_relationships')
