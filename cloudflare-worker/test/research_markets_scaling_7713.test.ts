@@ -22,7 +22,8 @@ const sqlFile = (name: string) => readFileSync(new URL(`../sql/migrations/${name
 function database() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const file of ['228_research_company_directory', '229_research_market_directory', '365_research_eurotech_fund_directory',
-    '136_signals', '037_market_intel_v2', '103_mi_pro_subscriptions', '277_user_recovery_state']) {
+    '136_signals', '037_market_intel_v2', '103_mi_pro_subscriptions', '277_user_recovery_state',
+    '202611041822_account_licences', '202611090932_shared_licences']) {
     for (const sql of splitStatements(sqlFile(file))) if (/^CREATE (TABLE|(?:UNIQUE )?INDEX)/i.test(sql)) db.exec(sql);
   }
   for (const file of ['375_research_company_directory_columns', '376_research_taxonomy', '379_market_intel_index_basis',
@@ -74,8 +75,22 @@ function spy(db: DatabaseSync, reads: Read[]) {
     let args: SQLInputValue[] = [];
     return {
       bind(...values: SQLInputValue[]) { args = values; statement.bind(...args); return this; },
-      async all() { const r = await statement.all(); reads.push({ sql, args, count: r.results.length, columns: Object.keys(r.results[0] ?? {}) }); return r; },
-      async first() { const r = await statement.first(); reads.push({ sql, args, count: r == null ? 0 : 1, columns: Object.keys(r ?? {}) }); return r; },
+      async all() {
+        const read: Read = { sql, args, count: -1, columns: [] };
+        reads.push(read);
+        const result = await statement.all();
+        read.count = result.results.length;
+        read.columns = Object.keys(result.results[0] ?? {});
+        return result;
+      },
+      async first() {
+        const read: Read = { sql, args, count: -1, columns: [] };
+        reads.push(read);
+        const result = await statement.first();
+        read.count = result == null ? 0 : 1;
+        read.columns = Object.keys(result ?? {});
+        return result;
+      },
     };
   } };
 }
@@ -85,6 +100,7 @@ async function get(db: DatabaseSync, path: string, token: string, reads: Read[] 
     JWT_SECRET: secret, ENVIRONMENT: 'development', DB: spy(db, reads),
   });
   const body = await res.json() as any;
+  assert.deepEqual(reads.filter((r) => r.count < 0).map((r) => r.sql), [], 'every attempted fixture read must succeed');
   assert.equal(res.status, 200, `${path}: ${JSON.stringify(body)}`);
   return body;
 }
