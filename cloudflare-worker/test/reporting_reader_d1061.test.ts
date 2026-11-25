@@ -17,6 +17,8 @@
  */
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const read = (path: string) => readFileSync(new URL('../../'+path,import.meta.url),'utf8');
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -59,6 +61,8 @@ const PERIOD_A = 'a'.repeat(32), PERIOD_B = 'b'.repeat(32), PERIOD_B2 = 'c'.repe
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   DDL.forEach((s) => db.exec(s));
+  db.exec(read('cloudflare-worker/sql/migrations/168_portfolio_marks_distributions.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/202611220339_6214_portfolio_reporting_rule_history.sql'));
   db.exec(`
     INSERT INTO founders (id, name, email) VALUES (31, 'Fay Founder', 'fay@example.test'), (32, 'Otis Other', 'otis@example.test');
     INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES

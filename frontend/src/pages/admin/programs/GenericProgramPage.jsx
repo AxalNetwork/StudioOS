@@ -149,6 +149,7 @@ function Body() {
     );
   }
   const program = read.data?.program;
+  const personalWellbeing = moduleRows(programKey, program).rows.some((m) => m.key === 'wellbeing' && m.path);
   const meta = {
     title: program?.name || programKey,
     line: program?.purpose || null,
@@ -157,6 +158,7 @@ function Body() {
   };
   return (
     <ProgramFrame program={programKey} meta={meta} superAdmin={superAdmin} status={STATUS_WORD[program?.status] || NOT_RECORDED} detail={detail}
+      actions={personalWellbeing ? <Link to="/wellbeing" className={actionPrimary} data-testid="programs-wellness-open">Open My Wellbeing</Link> : null}
       tabs={<Tabs programKey={programKey} modules={moduleRows(programKey, program)} />}>
       {tab === 'overview' && isReady(read) ? <Overview programKey={programKey} detail={detail} /> : null}
       {tab === 'how' ? <PlaybookEditor program={programKey} superAdmin={superAdmin} detail={detail} testId="programs-generic-how" /> : null}

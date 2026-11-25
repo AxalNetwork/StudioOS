@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import FormationEntry from '../account/companies/FormationEntry';
+import { formationEntry } from '../account/companies/companiesModel';
 import { Link, useParams } from 'react-router-dom';
 import { Sheet, Unrecorded } from '../../ui';
 import { api, getActiveCompanyId } from '../../lib/api';
@@ -9,7 +11,7 @@ import { reportError } from '../../lib/log';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { projectCompany, projectsOfCompany, scopeFor, usePublishScope } from '../../lib/settingsScope.js';
 import { ActionDialog } from '../account/companies/LifecycleDialogs.jsx';
-import { day, incorporatePath, lifecycleRefusal, stageWord } from '../account/companies/companiesModel.js';
+import { day, lifecycleRefusal, stageWord } from '../account/companies/companiesModel.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, MUTED, TeamCard } from './teamUi.jsx';
 import WorkSettings from '../work/WorkSettings.jsx';
 import { initials, moveOutCopy, moveTarget, moveUnderLines } from './teamModel.js';
@@ -99,7 +101,7 @@ export default function ProjectSettingsPage() {
       if (!current()) { reask(); return; }
       const row = (mine?.projects || []).find((p) => String(p.id) === String(id));
       const company = projectCompany(project, { row, companies: known.current });
-      setState({ status: 'ready', project, manage: !!members?.can_manage, company, projects: projectsOfCompany(mine?.projects, company?.uid) });
+      setState({ status: 'ready', project, row, manage: !!members?.can_manage, company, projects: projectsOfCompany(mine?.projects, company?.uid) });
     } catch (e) {
       if (!current()) { reask(); return; }
       setState({ status: 'error', error: e });
@@ -177,7 +179,7 @@ export default function ProjectSettingsPage() {
             {/* D1413 (#3696, PF6b): Make it a company opens Incorporate with this project (D1414); or move it under one you belong to. */}
             {state.manage ? (
               <span className="mt-3 flex flex-wrap gap-2">
-                <Link to={incorporatePath(id)} className={BTN_PRIMARY} data-testid="project-settings-incorporate">Make it a company</Link>
+                <FormationEntry entry={formationEntry(state.row, 'project')} name={name} project onRetry={load} testId="project-settings-incorporate" />
                 <button type="button" className={BTN_SECONDARY} onClick={() => setOpen('under')} data-testid="move-under-open">Move under a company</button>
               </span>
             ) : null}

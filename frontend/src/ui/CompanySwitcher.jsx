@@ -6,6 +6,7 @@ import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
 import { companyActionsApi } from '../lib/api/companyActions';
 import { clearActiveProject, getActiveProject, selectProject, useActiveProject } from '../lib/activeProject.js';
 import { switcher as readPortfolioSwitcher } from '../pages/account/companies/portfolioAdapter.js';
+import { accountCompaniesApi } from '../lib/api/accountCompanies';
 
 /**
  * CompanySwitcher — the ONLY way the active company changes.
@@ -192,13 +193,13 @@ export function useCompanySwitch() {
 }
 
 /** PF5: a project row in the list, with its dashed mark and "Project" badge; a violet check when it is the one picked. */
-function ProjectRow({ p, picked, onPick, indent = false }) {
+function ProjectRow({ p, picked, onPick, indent = false, formationState }) {
   const mark = String(p.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?';
   return (
     <button type="button" onClick={onPick} data-testid={`switcher-project-${p.id}`}
       className={`w-full flex items-center gap-2 ${indent ? 'pl-8' : 'pl-3'} pr-3 py-2 text-xs text-left transition-colors ${picked ? 'text-violet-700 dark:text-violet-300 font-semibold bg-violet-50 dark:bg-violet-900/30' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
       <span aria-hidden="true" className="w-5 h-5 rounded border border-dashed border-gray-300 dark:border-gray-600 text-[8.5px] font-bold flex items-center justify-center flex-none">{mark}</span>
-      <span className="truncate flex-1">{p.name}</span>
+      <span className="truncate flex-1">{p.name}{!indent && ['in_formation', 'not_incorporated'].includes(formationState) && <span className="block text-[10px] font-normal text-gray-500 dark:text-gray-400">{formationState === 'in_formation' ? 'In formation' : 'Not a company yet'}</span>}</span>
       <span className="flex-none rounded-full border border-gray-200 px-1.5 text-[9.5px] font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-400">Project</span>
       {picked && <span className="flex-none">✓</span>}
     </button>
@@ -309,13 +310,13 @@ function CompanySwitcher({ collapsed, role }) {
     if (!open) return undefined;
     let alive = true;
     setProjectsRead((s) => ({ ...s, status: 'loading' }));
-    readPortfolioSwitcher().then((out) => {
+    Promise.all([readPortfolioSwitcher(), accountCompaniesApi.projects().catch(() => null)]).then(([out, projects]) => {
       if (!alive) return;
       const parts = out.available ? switcherProjects(out.value) : { byCompany: null, standalone: null };
       // A block that failed is said, never drawn as no projects: `switcherProjects`
       // answers null for it even when the read itself answered.
       const whole = out.available && parts.byCompany != null && parts.standalone != null;
-      setProjectsRead({ status: whole ? 'ready' : 'error', ...parts });
+      setProjectsRead({ status: whole ? 'ready' : 'error', ...parts, formation: new Map((Array.isArray(out.value?.companies) ? out.value.companies : []).map(co => [co.uid, co.formation_state])), projectFormation: new Map((Array.isArray(projects?.projects) ? projects.projects : []).map(p => [p.id, p.formation_state])) });
     });
     return () => { alive = false; };
   }, [open, projectsTick]);
@@ -388,6 +389,7 @@ function CompanySwitcher({ collapsed, role }) {
             </div>
             <span className="truncate flex-1">
               {co.company_name}
+              {projectsRead.formation?.get(co.uid) === 'in_formation' && <span className="block text-[10px] font-normal text-gray-500 dark:text-gray-400" data-testid={`switcher-formation-${co.uid}`}>In formation</span>}
               {ambiguous && (
                 <span className="block text-[10px] font-normal text-gray-500 dark:text-gray-400">
                   created {createdOn(co.created_at)}
@@ -415,6 +417,7 @@ function CompanySwitcher({ collapsed, role }) {
           <div className="px-3 pt-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[.11em] text-gray-500 dark:text-gray-400">Standalone projects</div>
           {projectsRead.standalone.map((p) => (
             <ProjectRow key={p.id} p={p} picked={String(activeProject?.id) === String(p.id)}
+              formationState={projectsRead.projectFormation?.get(p.id)}
               onPick={() => { selectProject({ id: p.id, name: p.name, company: null }, { companies, switchTo }); setOpen(false); }} />
           ))}
         </div>
@@ -437,6 +440,7 @@ function CompanySwitcher({ collapsed, role }) {
             Create project
           </Link>
         )}
+        {role !== 'exploring' && !adding && <Link to="/incorporate" onClick={() => setOpen(false)} className="flex min-h-11 w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="switcher-incorporate">Incorporate a company</Link>}
         {role !== 'exploring' && adding && (
           <form onSubmit={submitNew} className="px-3 py-2.5 space-y-2">
             <input

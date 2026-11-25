@@ -15,7 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
@@ -40,6 +40,7 @@ function fixture() {
   for (const [id, name] of [[1, 'Monthly in Q3'], [2, 'Quarter Q3'], [3, 'Month in Q2'], [4, 'Draft in Q3'], [5, 'Free text']] as const) p.run(id, `p-${id}`, name);
   const pos = db.prepare("INSERT INTO portfolio_positions (uid, project_id, round_name, invested_amount) VALUES (?, ?, 'Seed', 100)");
   for (const id of [1, 2, 3, 4, 5]) pos.run(`pos-${id}`, id);
+  db.exec(readFileSync(new URL('../sql/migrations/'+readdirSync(new URL('../sql/migrations/',import.meta.url)).find(n=>n.endsWith('_6214_portfolio_reporting_rule_history.sql')),import.meta.url),'utf8'));
   return db;
 }
 

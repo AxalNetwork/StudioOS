@@ -258,6 +258,23 @@ export async function extendSkill(uid, body) {
     return { available: false, unreadable: true, reason: 'could not be read' };
   }
 }
+/**
+ * #4538 (D4538 part 5, SK-20): `POST /api/teams/skills/:uid/rebase` (`:uid` the company extension) → `{ skill, base }`,
+ * a new company draft on Axal's newest version; nothing is published or attached. A refusal keeps the Worker's code and
+ * the conflicting `part` it names, so the dialog can show it on that part; an answer with no code is unreadable.
+ */
+export async function rebaseSkill(uid, body) {
+  try {
+    return { available: true, value: await teamAgentsApi.rebaseSkill(uid, body) };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    const part = typeof e?.data?.part === 'string' ? e.data.part : null;
+    if (code && [400, 403, 404, 409, 422].includes(status)) return { available: false, refused: true, code, part, reason: e?.message || null };
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
 export const coverage = (scope, id) =>throughSkill(() => teamAgentsApi.coverage(scope, id));
 /** D4121 (#4121): the agent's cost per run with `add` skills added and `remove` taken off; `{ available: false }` when pricing cannot be read. */
 export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));

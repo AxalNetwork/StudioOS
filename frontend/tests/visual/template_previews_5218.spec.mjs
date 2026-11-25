@@ -81,7 +81,10 @@ for (const width of [1440, 390]) {
     await page.getByTestId('pitch-new-option-template-unknown').scrollIntoViewIfNeeded();
     await expect(page.getByTestId('pitch-new-option-template-unknown')).toContainText('Preview unavailable');
     await page.getByTestId('pitch-new-option-blank-blank').click();
+    // D6056 (#6056): Blank brings the outline back as the stepper's third step; the start choice is on the first.
+    await page.getByTestId('pitch-new-step-3').click();
     await expect(page.getByTestId('pitch-new-outline')).toBeVisible();
+    await page.getByTestId('pitch-new-step-1').click();
     await yc.scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`new-deck-${width}.png`), fullPage: true });

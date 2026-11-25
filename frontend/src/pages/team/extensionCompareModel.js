@@ -141,6 +141,9 @@ export function compareView(card, lineage) {
     field,
     label: PART_LABELS[field],
     marker: markerOf(flags.get(field)),
+    // #4538 (SK-20): which side changed it, as the Worker's `threeWay()` says; the rebase's result lines read these.
+    companyChanged: !!flags.get(field)?.company_changed,
+    baseChanged: !!flags.get(field)?.base_changed,
     base: partValue(b.version, field),
     mine: partValue(card, field),
     newest: update ? partValue(b.newest, field) : null,
@@ -194,11 +197,18 @@ export function bannerWords(view) {
  */
 export function actionsFor(view, card, { hqAdmin = false } = {}) {
   const editor = !!card?.can_write;
-  if (!editor) return { editor: false, readOnly: hqAdmin ? 'hq' : 'member', extendAgain: null };
+  if (!editor) return { editor: false, readOnly: hqAdmin ? 'hq' : 'member', extendAgain: null, rebase: null };
   const extendAgain = view.kind === 'compare' && view.update && !view.retired
     ? { version: view.newestVersion, disabled: view.suspended, why: view.suspended ? `Axal has paused v${view.newestVersion}, so it cannot be extended right now.` : null }
     : null;
-  return { editor: true, readOnly: null, extendAgain };
+  // #4538 (SK-20): Rebase rides with Extend again. It needs the draft version the card was read at (the Worker refuses
+  // a rebase without it), so a card without `draft_hash` offers Reload instead of guessing.
+  const rebase = extendAgain
+    ? (view.suspended ? { disabled: true, why: `Axal has paused v${view.newestVersion}, so it cannot be rebased onto right now.` }
+      : !card?.draft_hash ? { disabled: true, why: 'Your draft’s version could not be read. Reload the page to rebase.' }
+        : { disabled: false, why: null })
+    : null;
+  return { editor: true, readOnly: null, extendAgain, rebase };
 }
 
 /** Each refusal of `POST /extend`, in SK-21's words, tied to the field it is about. */
@@ -248,6 +258,97 @@ export function reasonProblem(reason) {
 export function versionChoices(current) {
   const n = num(current);
   return n ? Array.from({ length: n }, (_, i) => n - i) : [];
+}
+
+// ---------------------------------------------------------------- SK-20: Rebase onto Axal vN (D4538 part 5, #4538)
+
+/** The parts a person can write by hand in the dialog. Output, Skill tags and Roles are kept or taken here, and edited in the new draft. */
+export const HAND_EDITABLE = ['name', 'purpose', 'steps', 'tools'];
+
+/**
+ * What the new draft keeps, part by part, before any choice: each conflict needs one; every other part follows the
+ * Worker's rule (D4538 part 5): changed only by Axal → taken from Axal vN; changed by you → kept from yours (the same
+ * change on both sides stays); changed by neither → unchanged. Only offered with an update and a readable comparison.
+ */
+export function rebasePlan(view) {
+  if (view?.kind !== 'compare' || !view.update) return null;
+  const conflicts = view.rows.filter((r) => r.marker === 'c');
+  const others = view.rows.filter((r) => r.marker !== 'c');
+  const group = (pick) => others.filter(pick).map((r) => r.label);
+  return {
+    version: view.newestVersion,
+    conflicts: conflicts.map((r) => ({ field: r.field, label: r.label, editable: HAND_EDITABLE.includes(r.field) })),
+    taken: group((r) => r.baseChanged && !r.companyChanged),
+    kept: group((r) => r.companyChanged),
+    unchanged: group((r) => !r.baseChanged && !r.companyChanged),
+  };
+}
+
+/** The tools new in Axal's newest version and not in yours: only a rebase that takes Axal's (or a new extension) carries them. */
+export function newToolsOnly(view) {
+  const row = view?.rows?.find((r) => r.field === 'tools');
+  if (!row || !Array.isArray(row.newest)) return [];
+  const mine = Array.isArray(row.mine) ? row.mine : [];
+  return row.newest.filter((t) => !mine.includes(t));
+}
+
+/** Tools a list keeps that Axal's newest version does not have: the Worker refuses them (`tool_not_in_base`). */
+export function toolsOutsideNewest(view, tools) {
+  const row = view?.rows?.find((r) => r.field === 'tools');
+  const newest = Array.isArray(row?.newest) ? row.newest : null;
+  if (!newest) return [];
+  return (Array.isArray(tools) ? tools : []).filter((t) => !newest.includes(t));
+}
+
+/** A hand-written part as the Worker's draft takes it: text trimmed; steps one per line, blank lines dropped; tools as keys. */
+export function handValue(field, raw) {
+  if (field === 'steps') return String(raw ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (field === 'tools') return (Array.isArray(raw) ? raw : []).map(String);
+  return String(raw ?? '').replace(/\r\n?/g, '\n').trim();
+}
+
+/** The conflicts still without a choice, in the dialog's order. */
+export function unresolved(plan, choices) {
+  return (plan?.conflicts || []).filter((c) => !['mine', 'axal', 'edit'].includes(choices?.[c.field]?.choice)).map((c) => c.field);
+}
+
+/**
+ * `POST /skills/:uid/rebase`'s body: the exact Axal version the page shows, the draft version the page read, and one
+ * choice per conflicting part. "Edit by hand" sends the part's draft value; the others send no value.
+ */
+export function rebaseBody({ version, draftHash, choices, plan }) {
+  const resolutions = {};
+  for (const c of plan?.conflicts || []) {
+    const pick = choices?.[c.field];
+    if (!pick) continue;
+    resolutions[c.field] = pick.choice === 'edit' ? { choice: 'edit', value: handValue(c.field, pick.value) } : { choice: pick.choice };
+  }
+  return { version, expected_draft_hash: draftHash, resolutions };
+}
+
+/** Each refusal of `POST /rebase`, in the dialog's words. `reload` asks for the page to be read again; `part` ties it to a conflict. */
+const REBASE_REFUSALS = {
+  draft_conflict: ['Your draft changed since this page was read. Nothing was saved. Reload, then choose again.', true],
+  rebase_conflict: ['Axal’s versions changed since this page was read. Nothing was saved. Reload, then choose again.', true],
+  no_base_update: ['There is no newer Axal version to rebase onto any more. Nothing was saved. Reload the comparison.', true],
+  base_suspended: ['Axal has paused this version, so it cannot be rebased onto right now. Nothing was saved.', false],
+  base_retired: ['This Axal skill is retired, so it cannot be rebased onto. Nothing was saved.', false],
+  base_unreadable: ['Axal’s version could not be read. Nothing was saved.', true],
+  company_version_unreadable: ['Your published version could not be read. Nothing was saved.', true],
+  company_archived: ['This company is archived, so its skills are read only. Nothing was saved.', false],
+  retired: ['This skill is retired, so it cannot be rebased. Nothing was saved.', false],
+  not_editor: ['Only your company’s editors can rebase its skills.', false],
+  not_found: ['There is no such skill.', false],
+  not_extension: ['This skill is not based on an Axal skill, so there is nothing to rebase.', false],
+  conflict_unresolved: ['Choose what the new draft keeps for this part.', false],
+  tool_not_in_base: [null, false],
+};
+
+/** `{ part, text, reload }` for a refusal; a code tied to a part (the Worker's `part`) shows on that part. */
+export function rebaseRefusal(code, message, part = null) {
+  const hit = REBASE_REFUSALS[code];
+  const text = (hit && hit[0]) || message || 'The draft wasn’t created. Your choices are still here. Nothing was saved.';
+  return { part: part && PART_ORDER.includes(part) ? part : null, text, reload: !!hit?.[1] };
 }
 
 const enc = encodeURIComponent;

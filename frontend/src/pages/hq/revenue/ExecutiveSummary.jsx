@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Figure, When, Why, BTN } from './RevenueStates.jsx';
 import {
-  LEDGER_FIGURES, currencyPosition, isReady, ledgerPosition, pendingState, summaryCurrencies, summaryTemporal, tokenMarginView,
+  LEDGER_FIGURES, subscriptionLines, currencyPosition, isReady, ledgerPosition, pendingState, summaryCurrencies, summaryTemporal, tokenMarginView,
 } from './revenueModel.js';
 
 /**
@@ -197,9 +197,11 @@ export function ExecutiveSummary({ summary, refunds, disputes, period, onWhy, on
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="font-mono text-[12px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">Streams without a full ledger</div>
+        <div className="font-mono text-[12px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">Subscription receipts and AI margin</div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Kpi label="Subscription revenue" figure={isReady(summary) ? { state: 'not_recorded', text: null } : { state: pendingState(summary), text: null }} when={<When kind="period" period={period} />} note="No local subscription ledger" why="subscriptions" onWhy={onWhy} />
+          {subscriptionLines(summary, period).rows.length
+            ? subscriptionLines(summary, period).rows.map((r) => <Kpi key={r.currency} label={`Subscription revenue · ${r.currency}`} figure={r.net} when={<When kind="period" period={period} />} note="Net receipts after refunds" why="subscriptions" onWhy={onWhy} />)
+            : <Kpi label="Subscription revenue" figure={{ state: subscriptionLines(summary, period).metric.state === 'recorded' ? 'not_recorded' : subscriptionLines(summary, period).metric.state, text: null }} when={<When kind="period" period={period} />} why="subscriptions" onWhy={onWhy} />}
           <Kpi label="AI margin · USD" figure={marginFigure} when={<When kind="period" period={period} />} note={v.cost ? `cost ${v.cost}` : null} why="ai_margin" onWhy={onWhy} />
         </div>
       </div>

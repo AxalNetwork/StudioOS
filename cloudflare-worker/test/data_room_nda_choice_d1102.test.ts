@@ -9,11 +9,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchema, schemaPath } from './_schema_once.mjs';
 import { JWT_SECRET, token } from './_esign_harness.ts';
 import { fillAxalSpinoutDemoDay } from '../src/services/decks/axalSpinoutDemoDay.ts';
 import { mapToSpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
@@ -23,27 +26,44 @@ import decks from '../src/routes/decks.ts';
 
 const MIGRATIONS = new URL('../sql/migrations/', import.meta.url);
 const sql = (name: string) => readFileSync(new URL(name, MIGRATIONS), 'utf8');
-const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M608 = '608_data_room_nda_choice.sql';
+const OPTS = { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true };
+const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const above = readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations);
 
-/** A database as a fresh D1 gets it, or (without 608) as production stood before 608. */
+/**
+ * A database as a fresh D1 gets it, or (without 608) as production stood before 608. #8596 (#8437): the full
+ * build is the run's cached one (`_schema_once.mjs`: the same baseline and migrations, built once per run and
+ * shared). The build without 608 is still built here, the only one of its kind, by the same loop as before.
+ */
 function build(skip608 = false) {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  const db = new DatabaseSync(':memory:', OPTS);
+  if (!skip608) return loadSchema(db);
   db.exec(baseline);
-  for (const name of above) if (!(skip608 && name === M608)) db.exec(sql(name));
+  for (const name of above) if (name !== M608) db.exec(sql(name));
   return db;
 }
+/**
+ * The fixture's schema: the current build's tables, indexes, views and triggers, without its rows, as before.
+ * #8596: written once to a file, which each fixture copies, instead of replaying the DDL per test.
+ */
+const scratch = mkdtempSync(join(tmpdir(), 'nda-choice-d1102-'));
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const fresh = (() => {
-  const db = build();
-  const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map((r) => r.sql).join(';\n');
-  db.close(); return ddl;
+  const src = new DatabaseSync(schemaPath(), { ...OPTS, readOnly: true });
+  const ddl = (src.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map((r) => r.sql).join(';\n');
+  src.close();
+  const file = join(scratch, 'fresh.sqlite');
+  const db = new DatabaseSync(file, OPTS); db.exec(ddl); db.close();
+  return file;
 })();
+let serial = 0;
 
 const FOUNDER = 1, OTHER = 3, ADMIN = 900;
 const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [OTHER]: 'founder', [ADMIN]: 'admin' };
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true }); db.exec(fresh);
+  const copy = join(scratch, `${++serial}.sqlite`); copyFileSync(fresh, copy);
+  const db = new DatabaseSync(copy, OPTS);
   db.exec(`INSERT INTO users(id,role,name,email,founder_id,is_active,subscription_tier) VALUES
       (1,'founder','Synthetic founder','founder@example.com',11,1,'studio'),(3,'founder','Other founder','other@example.com',33,1,'studio'),
       (900,'admin','Synthetic admin','admin@example.com',NULL,1,'studio');

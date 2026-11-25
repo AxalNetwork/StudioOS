@@ -4,6 +4,9 @@
 
 Both screens are built to the Usage canvas (`Ops · Boards.dc.html`, set `usage`; `us-*` and `hq-allowances` in `Ops Page.dc.html` and `ops-data.js`, committed by #1456). Their figures come from D640 (`ai_budget.ts`), D641 (`ai.ts`: `by_model`, `days`, task labels, `GET /ai/rates`) and the storage read above, never from the canvas's bracketed placeholders.
 
+
+D5583 part 2 adds `work_graph_media` under Other: each physical media class/project/digest object counts once to the current company owner (project-founder fallback for project files), with dated admission attribution kept for audit. The preview-only media service has no public Open route. Generic pre-existing WorkGraph blobs are not reclassified or backfilled.
+
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
 | `integrated/ops-data.js` · `us-allowance`, `us-days`, `us-where`, `us-models`, `us-receipt`, `us-storage` (U1–U6) | `/account/usage/cost` (`#days`, `#where`, `#models`, `#last-run`; old `/account/usage` hashes forward here). U6 storage moved to `/account/usage/storage` on 2026-10-25 (D1166, #2449), and `#storage` forwards there · every signed-in role; "Usage" in the user menu, under Account | `pages/account/AccountUsage.jsx` (in `SettingsPage.jsx`, after Billing and orders); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | CURRENT |

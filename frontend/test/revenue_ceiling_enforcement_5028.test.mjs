@@ -41,8 +41,8 @@ test('the copy states the D4855 contract, point by point', () => {
   assert.match(all, /neither 0 nor unlimited/);
   assert.match(all, /ceiling it cannot read, the discount is refused/, 'an unreadable configured ceiling refuses');
   assert.match(all, /two facts, and the push can fail on its own/, 'saved and pushed stay separate');
-  assert.match(all, /does not receive that figure automatically/, 'HQ depends on branch reporting');
-  assert.match(all, /Not recorded until it does/);
+  assert.match(all, /branch reports what it issues automatically/, 'HQ depends on the automatic branch report');
+  assert.match(all, /stay unknown until it arrives/);
 });
 
 test('saved, pushed, enforced, issued and remaining are five separate facts', () => {

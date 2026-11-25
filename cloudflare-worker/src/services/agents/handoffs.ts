@@ -32,9 +32,15 @@
  * task's title or detail; the target's run reads them only inside the
  * untrusted-data wrapper (`handoffBlockFor`).
  *
+ * D8081 (#8081): the line may also carry `"role":"planner"|"worker"|"reviewer"` (default worker) and, for a
+ * reviewer, `"reviews":"<run uid>"`. The role rules and the parent's share are `services/agentHierarchy.ts`'s:
+ * checked on propose (`planner_not_allowed`, `too_many_workers`, `review_target_missing`, `self_review`) and
+ * again on Accept, where the share is reserved (`share_exhausted`, `budget_exhausted`, `budget_unreadable`).
+ *
  * Bound SQL only. Codes in logs, never a title, a note or a prompt.
  */
 import type { Env } from '../../types';
+import { askedRole, checkRole, reserveShare, roleOf, shareStillFits, taskRoleOf, type HierarchyRole } from '../agentHierarchy';
 import { proposeRail } from '../railProposals';
 import { optionsIn } from './catalogue';
 import { insertTask, taskEvent, type TaskRow } from './tasks';
@@ -80,11 +86,12 @@ export async function handsOffTo(env: Env, a: Pick<AgentRow, 'role_key' | 'scope
   }
 }
 
-export type HandoffAsk = { to_role: string; title: string; why: string | null; note: string | null };
+export type HandoffAsk = { to_role: string; title: string; why: string | null; note: string | null; role?: HierarchyRole; reviews?: string | null };
 export type HandoffRow = {
   id: number; uid: string; chain_uid: string; depth: number; from_agent_id: number; to_role_key: string; to_agent_id: number | null;
   from_task_id: number | null; created_task_id: number | null; proposal_uid: string | null; title: string; why: string | null; note: string | null;
   status: 'proposed' | 'accepted' | 'discarded' | 'refused'; refusal: string | null; decided_by: number | null; decided_at: string | null; created_at: string;
+  hierarchy_role: HierarchyRole | null; reviews_run_uid: string | null;
 };
 
 const textOf = (v: unknown, max: number): string | null | undefined => {
@@ -116,8 +123,9 @@ export function parseHandoff(output: string): HandoffAsk | null {
   const title = textOf(h.title, TITLE_MAX);
   const why = textOf(h.why, NOTE_MAX);
   const note = textOf(h.note, NOTE_MAX);
-  if (!to || !title || why === undefined || note === undefined) return null;
-  return { to_role: to, title, why, note };
+  const asked = askedRole(h);
+  if (!to || !title || why === undefined || note === undefined || !asked) return null;
+  return { to_role: to, title, why, note, role: asked.role, reviews: asked.reviews };
 }
 
 /** The live target: an active or paused agent of that role in the scope, else (a project agent) in the project's company. */
@@ -170,6 +178,12 @@ export async function proposeHandoff(env: Env, i: { from: AgentRow; task: TaskRo
       if (seen || target.id === i.from.id) code = 'handoff_loop';
     }
   }
+  // D8081: the role rules (a worker plans nothing, a planner's workers are counted, a reviewer is never the author).
+  const role = i.ask.role ?? 'worker';
+  const reviews = role === 'reviewer' ? i.ask.reviews ?? null : null;
+  if (!code && depth <= DEPTH_MAX) {
+    code = await checkRole(env, { from: i.from, fromTaskId: i.task.id, fromRole: taskRoleOf(parent), role, reviews, targetAgentId: target?.id ?? null });
+  }
   // One step per depth of a chain: a step already taken there (a discarded or refused one) ended it.
   const taken = !code && await env.DB.prepare('SELECT 1 AS ok FROM agent_handoffs WHERE chain_uid = ? AND depth = ?').bind(chainUid, depth).first<{ ok: number }>();
   if (taken) code = 'chain_ended';
@@ -177,17 +191,18 @@ export async function proposeHandoff(env: Env, i: { from: AgentRow; task: TaskRo
   const own = code === 'depth_exceeded' || code === 'chain_ended';
   const write = (status: 'proposed' | 'refused', proposalUid: string | null) => env.DB.prepare(
     `INSERT OR IGNORE INTO agent_handoffs
-       (uid, chain_uid, depth, from_agent_id, to_role_key, to_agent_id, from_task_id, proposal_uid, title, why, note, status, refusal)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (uid, chain_uid, depth, from_agent_id, to_role_key, to_agent_id, from_task_id, proposal_uid, title, why, note, status, refusal,
+        hierarchy_role, reviews_run_uid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(uid, own ? uid : chainUid, own ? 1 : depth, i.from.id, i.ask.to_role, target?.id ?? null, i.task.id, proposalUid,
-    i.ask.title, i.ask.why, i.ask.note, status, status === 'refused' ? code : null).run();
+    i.ask.title, i.ask.why, i.ask.note, status, status === 'refused' ? code : null, role, reviews).run();
   if (code) {
     await write('refused', null);
     return { status: 'refused', code, handoff: await env.DB.prepare('SELECT * FROM agent_handoffs WHERE uid = ?').bind(uid).first<HandoffRow>() };
   }
   const p = await proposeRail(env, {
     userId: i.from.sponsor_user_id, page: HANDOFF_PAGE, option: HANDOFF_OPTION, record: null, kind: 'proposal',
-    payload: { handoff: uid, to_role: i.ask.to_role, title: i.ask.title, why: i.ask.why, note: i.ask.note },
+    payload: { handoff: uid, to_role: i.ask.to_role, role, title: i.ask.title, why: i.ask.why, note: i.ask.note },
     agentId: i.from.id, taskId: i.task.id, runKey: `agent:${uid}`,
   });
   await write('proposed', p.uid);
@@ -222,25 +237,50 @@ export async function decideHandoff(env: Env, proposalUid: string, status: strin
   const from = await env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(h.from_agent_id).first<AgentRow>();
   const target = from ? await targetFor(env, from, h.to_role_key) : null;
   const s = target ? await scopeOfAgent(env, target) : null;
-  if (!from || !target || !s) {
+  const refuse = async (code: string) => {
     await env.DB.prepare(
-      "UPDATE agent_handoffs SET status = 'refused', refusal = 'no_target', decided_by = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'proposed'",
-    ).bind(deciderId, h.id).run();
+      "UPDATE agent_handoffs SET status = 'refused', refusal = ?, decided_by = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'proposed'",
+    ).bind(code, deciderId, h.id).run();
     return env.DB.prepare('SELECT * FROM agent_handoffs WHERE id = ?').bind(h.id).first<HandoffRow>();
+  };
+  if (!from || !target || !s) return refuse('no_target');
+  // D8081: the role rules again against the target read now, then the parent reserves the child's share.
+  const fromTask = h.from_task_id ? await env.DB.prepare('SELECT module, source_kind, source_ref FROM scope_tasks WHERE id = ?').bind(h.from_task_id)
+    .first<{ module: string | null; source_kind: string; source_ref: string | null }>() : null;
+  const fromRole = taskRoleOf(fromTask ? await parentOf(env, fromTask as Pick<TaskRow, 'source_kind' | 'source_ref'>) : null);
+  if (h.from_task_id != null) {
+    const roleCode = await checkRole(env, {
+      from, fromTaskId: h.from_task_id, fromRole, role: roleOf(h.hierarchy_role), reviews: h.reviews_run_uid, targetAgentId: target.id, self: h.uid,
+    });
+    if (roleCode) return refuse(roleCode);
   }
+  const share = await reserveShare(env, h, fromRole, from);
+  if (!share.ok) return refuse(share.code);
   // An edit may retitle the task; the why and the note stay the model's, read only as data.
   const title = typeof edited?.title === 'string' && edited.title.trim() && edited.title.length <= TITLE_MAX ? edited.title.trim() : h.title;
   const claimed = await env.DB.prepare(
     "UPDATE agent_handoffs SET status = 'accepted', to_agent_id = ?, decided_by = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'proposed'",
   ).bind(target.id, deciderId, h.id).run();
   if (!claimed.meta?.changes) return env.DB.prepare('SELECT * FROM agent_handoffs WHERE id = ?').bind(h.id).first<HandoffRow>();
-  const fromTask = h.from_task_id ? await env.DB.prepare('SELECT module FROM scope_tasks WHERE id = ?').bind(h.from_task_id).first<{ module: string | null }>() : null;
   const work = await workFor(env, target, s, fromTask?.module ?? null);
   const task = await insertTask(env, s, {
     title, module: work.module, option: work.option, kind: 'handoff', assignee_kind: 'agent', assignee_agent_id: target.id,
     status: 'open', source_kind: 'handoff', source_ref: h.uid,
   }, deciderId ?? target.sponsor_user_id);
-  await env.DB.prepare('UPDATE agent_handoffs SET created_task_id = ? WHERE id = ?').bind(task.id, h.id).run();
+  // D8081: the child's share is its task's token cap (D8071's task_tokens halts it past that), set with the link
+  // in one batch; the tree is checked after, and a step that no longer fits (a second Accept at the same moment)
+  // gives its task back.
+  await env.DB.batch([
+    env.DB.prepare('UPDATE scope_tasks SET budget_tokens_cap = ? WHERE id = ?').bind(share.tokens, task.id),
+    env.DB.prepare('UPDATE agent_handoffs SET created_task_id = ? WHERE id = ?').bind(task.id, h.id),
+  ]);
+  if (share.tokens != null && h.from_task_id != null && !(await shareStillFits(env, from.id, h.from_task_id))) {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE scope_tasks SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(task.id),
+      env.DB.prepare("UPDATE agent_handoffs SET status = 'refused', refusal = 'share_exhausted' WHERE id = ? AND status = 'accepted'").bind(h.id),
+    ]);
+    return env.DB.prepare('SELECT * FROM agent_handoffs WHERE id = ?').bind(h.id).first<HandoffRow>();
+  }
   if (h.from_task_id) await taskEvent(env, h.from_task_id, deciderId, 'handoff', { to_role: h.to_role_key, task: task.uid });
   if (deps.admit) {
     try { await deps.admit(env, target, task); } catch { console.warn('[agents] handoff_admit_failed'); }
@@ -282,7 +322,7 @@ export async function chainsOf(env: Env, s: Scope) {
     const c = chains.get(h.chain_uid) ?? { uid: h.chain_uid, started_at: h.created_at, at: h.created_at, steps: [], refused: [] };
     if (h.status === 'refused') c.refused.push({ reason: h.refusal ?? 'refused' });
     c.steps.push({
-      uid: h.uid, depth: h.depth, from: { role_key: await roleOfAgent(h.from_agent_id) }, to: { role_key: h.to_role_key },
+      uid: h.uid, depth: h.depth, hierarchy_role: roleOf(h.hierarchy_role), from: { role_key: await roleOfAgent(h.from_agent_id) }, to: { role_key: h.to_role_key },
       title: h.title, status: h.status, refusal: h.refusal, decided_by: await person(h.decided_by),
       task_created: h.created_task_id != null,
     });

@@ -32,9 +32,43 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { programFor } from '../src/pages/programs/registry.jsx';
+import { ProgramCard } from '../src/pages/programs/ProgramsIndexPage.jsx';
+import { PresentationName, ViewPresentationLink, manageDoor } from '../src/pages/programs/AdminPresentationLinks.jsx';
 
 const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
+
+test('PGW07: the shared catalog exposes the approved public page and PDF, with separate admin presentation links', () => {
+  const entry = programFor('wellness');
+  assert.ok(entry);
+  assert.equal(entry.canonical, '/programs/wellness');
+  assert.equal(entry.pdf, '/program-briefs/axal-vc-wellness-v1.pdf');
+  assert.equal(entry.avail, 'proposed');
+  assert.equal(entry.edition, 'Edition 1 · November 2026');
+  const html = renderToStaticMarkup(React.createElement(MemoryRouter, null,
+    React.createElement(ProgramCard, { p: entry }),
+    React.createElement(PresentationName, { programKey: 'wellness', name: 'Wellness' }),
+    React.createElement(ViewPresentationLink, { programKey: 'wellness' })));
+  assert.match(html, /data-testid="programs-index-card-wellness"/);
+  assert.match(html, /href="\/programs\/wellness"/);
+  assert.match(html, /href="\/program-briefs\/axal-vc-wellness-v1.pdf"/);
+  assert.match(html, /Proposed · not open/);
+  assert.doesNotMatch(html, /href="\/wellbeing"/);
+});
+
+test('PGW07: a global fallback key gets the Wellness presentation; a studio collision keeps its own identity', () => {
+  for (const [key, studioOnly] of [['axal-wellness-2', null], ['wellness', 'lic-private']]) {
+    const row = { key, name: 'Wellness', studio_only: studioOnly };
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, null,
+      React.createElement(PresentationName, { programKey: key, name: row.name, registryRow: row }),
+      React.createElement(ViewPresentationLink, { programKey: key, registryRow: row })));
+    if (studioOnly === null) assert.match(html, /href="\/programs\/wellness"/);
+    else assert.doesNotMatch(html, /href=/);
+    const door = manageDoor(React.createElement('a', { href: `/admin/programs/${key}` }, 'Open'), key, row.name, undefined, row);
+    assert.equal(door.props.children, studioOnly === null ? 'Manage program' : 'Open');
+  }
+});
 
 const model = await import('../src/pages/wellbeing/wellnessPresentation.js');
 const deck = await import('../src/pages/wellbeing/wellnessDeck.js');

@@ -156,7 +156,9 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
       const [method, full] = route.replace(/\s*\(.*\)$/, '').split(' ');
       const prefix = Object.keys(ROUTERS).find((p) => full === p || full.startsWith(`${p}/`));
       assert.ok(prefix, `${route}: no router owns this prefix`);
-      const { file, name } = ROUTERS[prefix!];
+      const lpMaintenance = full === '/api/funds/:id/lps/:lpId';
+      const { file, name } = lpMaintenance ? { file: 'routes/fund_lp_maintenance.ts', name: 'r' } : ROUTERS[prefix!];
+      if (lpMaintenance) assert.match(src(file), /export const mount: RouteMount = \{ path: '\/api\/funds', router: r, before: \[funds\] \}/);
       const body = handler(file, name, method, full.slice(prefix!.length) || '/');
       assert.ok(body, `${route} (${row.act}) is not a route in ${file}`);
       if (OWN_GATES[row.act]) {
@@ -166,7 +168,7 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
       } else if (file === 'routes/fund_ledger.ts') {
         const expected = row.act === 'fund_ledger.administrator' ? "access(c,'fund_ledger.administrator')" : 'access(c,true)';
         assert.ok(body!.includes(expected), `${route} does not assert ${row.act}`);
-      } else if (method === 'PATCH') {
+      } else if (method === 'PATCH' && !lpMaintenance) {
         assert.ok(body!.includes('fundPatchAct(gp.fund, body)') && body!.includes('assertFundAct(c, gp, act)'), route);
         assert.ok(patchAct.includes(`'${row.act}'`), `fundPatchAct never answers ${row.act}`);
       } else {

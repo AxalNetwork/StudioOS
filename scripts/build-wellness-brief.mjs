@@ -5,7 +5,7 @@
  * The same pipeline as `scripts/build-program-briefs.mjs` (D6966): Playwright's Chromium prints
  * the deck's HTML to `frontend/public/program-briefs/axal-vc-wellness-v1.pdf` — 16:9,
  * 13.333 × 7.5 in, one slide per page, text kept as selectable text, the legal paper's faces
- * embedded and subset, links live, tagged, with a document outline. Wellness is not in the kit's
+ * embedded and subset, links live, tagged, with a document outline. Wellness is registered in
  * `programs/catalog/` (its page is `pages/wellbeing/WellnessPresentationPage.jsx`, D7121 part 1)
  * and its slides draw the private bracket and the planned box the kit's blocks have no type for,
  * so the deck is `frontend/src/pages/wellbeing/wellnessDeck.js` and this script prints it.

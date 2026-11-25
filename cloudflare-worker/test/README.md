@@ -417,10 +417,14 @@ catalogue version only in the fixture.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+| `fund_lp_maintenance_6237.test.ts` | D6237: mounted gates, contact identity, commitment floor, deletion history and rollback. |
 | `csv_safe_parity_7811.test.ts` | D7811: shared formula-safe CSV cases without changing legacy exports. |
 
 | `market_figure_writers_7705.test.ts` | D7705: real-SQLite create/answer actor history, zero preservation, refused-answer fallback, atomic rollback and literal/dynamic writer inventory. |
 | `research_comparison_members_7815.test.ts` | D7815: overlapping mounted add-member requests in all arrival orders preserve the live limit, distinct positions and duplicate response. |
+| `portfolio_reporting_settings_6214.test.ts` | Rule history, inherited defaults, GP ownership, attributed writes, stale revisions and period/stage rules. |
+| `work_graph_media_storage_5583.test.ts` | D5583 part 2: bounded admission, scoped classes, immutable snapshots, existing blob readback, class-specific reconciliation, cross-project refusal and cost/audit. |
+| `work_graph_media_quota_5583.test.ts` | D5583 part 2: actual migrated cumulative owner quota, dedup, owner transfer and legacy blob migration integrity, synthetic data only. |
 | `portfolio_saved_views_6209.test.ts` | Private Portfolio views: SQLite ownership, page isolation, optimistic writes, access refusals, validation and unreadable reads. |
 | `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
 
