@@ -52,6 +52,8 @@ import {
 import { canAddToResearch } from './researchComparisons.js';
 import { ReviewSelection, SelectionBar, SelectionHint } from './CompanySelection.jsx';
 
+import { CompanyPublisherProvider, SourceDetails, PublisherBoundary } from './CompanySource.jsx';
+
 const CompetitorAnalysis = lazy(() => import('../../components/CompetitorAnalysis'));
 const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
 
@@ -89,7 +91,7 @@ export function CoverageCard({ coverage }) {
         })}
       </div>
       <p className="text-[11px] text-axal-faint dark:text-gray-400">
-        Source: research_company_directory · Wikidata (CC0) and Companies House (OGL v3.0). Last refreshed: not reported by the directory today.
+        Source: research_company_directory · <PublisherBoundary />. Last refreshed: not reported by the directory today.
       </p>
     </div>
   );
@@ -305,7 +307,7 @@ export function DirectoryTable({ items, coverage, pick = null, sort = 'name', of
         <td className="px-4 py-3">
           <CompanyLink row={row} onOpen={onOpen} links={links} />
           {row.website ? <div className="mt-0.5 max-w-[320px] truncate text-[11px] text-axal-faint dark:text-gray-500">{row.website}</div> : null}
-          {row.source_name && row.source_name !== 'Wikidata' ? <div data-testid="directory-row-source" className="mt-0.5 text-[11px] text-axal-faint dark:text-gray-500">{row.source_name}</div> : null}
+          <SourceDetails record={row} testId="directory-row-source" />
         </td>
         <td className="px-4 py-3 text-axal-muted dark:text-gray-300">{row.sector || muted}</td>
         <td className="px-4 py-3 text-axal-muted dark:text-gray-300">{row.country || muted}</td>
@@ -381,6 +383,7 @@ export function DirectoryCards({ items, pick = null, sort = 'name', offset = 0, 
                 <div className="min-w-0 flex-1 py-2 sm:flex sm:items-baseline sm:gap-3">
                   <div className="min-w-0 sm:flex-1">
                     <CompanyLink row={row} onOpen={onOpen} links={links} />
+                    <SourceDetails record={row} testId="directory-card-source" />
                     <span className="block truncate text-[12px] text-axal-muted dark:text-gray-400">
                       {row.sector || 'Sector not recorded'} · {row.country || 'Country not recorded'} · <span className="font-mono">{row.founded_year ?? 'Founded not recorded'}</span>
                     </span>
@@ -793,7 +796,7 @@ export function CopyResultsLink({ search }) {
   );
 }
 
-export default function CompanyDirectoryZone({ role = 'founder', zoneActions = null }) {
+function CompanyDirectoryZoneBody({ role = 'founder', zoneActions = null }) {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'analyses' ? 'analyses' : 'directory';
   const [total, setTotal] = useState(null);
@@ -819,7 +822,7 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
         <div className="min-w-0">
           <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Companies</h1>
           <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">
-            Find companies in a market, open a profile and come back to the same results. A public discovery baseline of companies from Wikidata and Companies House.
+            Find companies in a market, open a profile and come back to the same results. A public discovery baseline: <PublisherBoundary />.
           </p>
         </div>
         {tab === 'directory' ? <CopyResultsLink search={resultsSearch(filtersFromSearch(params))} /> : null}
@@ -839,7 +842,7 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
         <>
           <Directory role={role} zoneActions={zoneActions} onTotal={onTotal} />
           <p className="text-[11px] leading-relaxed text-axal-faint dark:text-gray-500">
-            <strong>Source boundary:</strong> each company record names its source: Wikidata (CC0) or, for UK companies, Companies House, which contains public sector information licensed under the Open Government Licence v3.0. Website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
+            <strong>Source boundary:</strong> <PublisherBoundary attribution />. Website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
           </p>
         </>
       ) : (
@@ -850,3 +853,5 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
     </div>
   );
 }
+
+export default function CompanyDirectoryZone(props) { return <CompanyPublisherProvider><CompanyDirectoryZoneBody {...props} /></CompanyPublisherProvider>; }

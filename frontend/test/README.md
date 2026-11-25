@@ -288,4 +288,5 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
+`company_attribution_7812.test.mjs` walks the canonical publisher reference across company table, responsive cards, profile and analysis subject attribution, including missing/unreviewed provenance and field-read failure.
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
