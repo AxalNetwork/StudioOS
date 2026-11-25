@@ -85,7 +85,8 @@ export interface RawEmailOpts {
   text: string;
   html: string;
   from: string;
-  replyTo: string;
+  /** Empty or absent: no Reply-To header. */
+  replyTo?: string;
   /** Extra headers — e.g. `List-Unsubscribe`. Values are header-injection
    *  scrubbed (CR/LF collapsed to space) before emission. */
   extraHeaders?: Record<string, string>;
@@ -166,14 +167,16 @@ export function buildRawMimeMessage(opts: RawEmailOpts): string {
   const altBoundary = `alt_${crypto.randomUUID().replace(/-/g, '')}`;
   const safeTo      = stripHeaderInjection(opts.to);
   const safeFrom    = stripHeaderInjection(opts.from);
-  const safeReply   = stripHeaderInjection(opts.replyTo);
+  const safeReply   = stripHeaderInjection(opts.replyTo || '');
   const safeSubject = stripHeaderInjection(opts.subject);
   const subjectEnc  = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(safeSubject)))}?=`;
 
   const headers: string[] = [
     `To: ${safeTo}`,
     `From: ${safeFrom}`,
-    `Reply-To: ${safeReply}`,
+    // Omitted when empty (D8536): the legacy senders in services/email.ts that
+    // now deliver through here never set one, and an empty header is malformed.
+    ...(safeReply ? [`Reply-To: ${safeReply}`] : []),
     `Subject: ${subjectEnc}`,
     `MIME-Version: 1.0`,
   ];
@@ -234,6 +237,61 @@ export function buildRawMimeMessage(opts: RawEmailOpts): string {
   }
   parts.push(`--${mixedBoundary}--`);
   return parts.join('\r\n');
+}
+
+/**
+ * D8536 (#8536) — what the provider did with one send, in the delivery
+ * contract's terms (`deliveryContract.ts`).
+ *
+ *   accepted   Gmail answered 2xx; `providerId` is its message id.
+ *   refused    nothing was accepted: suppressed, no credentials, the token
+ *              call failed (the send request never left), or Gmail answered
+ *              non-2xx. A retry is safe.
+ *   timed_out  the send request left and no answer came (the deadline fired,
+ *              or the connection dropped). Gmail may have accepted it, so a
+ *              retry of the same reference must not send again.
+ *
+ * Nothing logged here carries the message: an error names the stage only.
+ */
+export type ProviderOutcome =
+  | { state: 'accepted'; providerId: string | null; reason: null }
+  | { state: 'refused'; reason: 'suppressed' | 'not_configured' | 'provider_auth' | 'provider_refused' }
+  | { state: 'timed_out'; reason: 'no_answer' };
+
+export async function sendRawEmailOutcome(env: Env, opts: RawEmailOpts): Promise<ProviderOutcome> {
+  if (await isSuppressed(env, opts.to, opts.mailClass || 'transactional')) return { state: 'refused', reason: 'suppressed' };
+  if (!(env as any).GMAIL_CLIENT_ID || !(env as any).GMAIL_CLIENT_SECRET || !(env as any).GMAIL_REFRESH_TOKEN) {
+    return { state: 'refused', reason: 'not_configured' };
+  }
+  let accessToken: string;
+  try {
+    accessToken = await getGmailAccessToken(env);
+  } catch (e: any) {
+    console.error('[email/gmail] token call failed', e?.name || 'Error');
+    return { state: 'refused', reason: 'provider_auth' };
+  }
+  const rawEmail = buildRawMimeMessage(opts);
+  const raw = btoa(unescape(encodeURIComponent(rawEmail)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  let res: Response;
+  try {
+    res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+  } catch (e: any) {
+    // The request left. Whether Gmail took it is unknown.
+    console.error('[email/gmail] send got no answer', e?.name || 'Error');
+    return { state: 'timed_out', reason: 'no_answer' };
+  }
+  if (!res.ok) {
+    console.error('[email/gmail] send refused', res.status);
+    return { state: 'refused', reason: 'provider_refused' };
+  }
+  const body: any = await res.json().catch(() => ({}));
+  return { state: 'accepted', providerId: typeof body?.id === 'string' ? body.id : null, reason: null };
 }
 
 export async function sendRawEmail(env: Env, opts: RawEmailOpts): Promise<boolean> {

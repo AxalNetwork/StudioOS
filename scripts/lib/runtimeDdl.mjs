@@ -1,4 +1,10 @@
 /**
+ * #4568 R2-04: the inventory of runtime `ADD COLUMN` in the Worker (file,
+ * table, column, whether the file asks the table first, whether a migration
+ * declares the column) and the no-growth ratchet over it. Owned by
+ * `../check-runtime-ddl.mjs` and
+ * `cloudflare-worker/test/runtime_ddl_4568.test.ts`.
+ *
  * #4568 R2-04 — the inventory of runtime `ALTER TABLE … ADD COLUMN` in the
  * Worker: which file issues which, whether that file asks the table first
  * (`runSchemaBootstrap` / `tableColumns`, `util/schemaBootstrap.ts`) or ALTERs

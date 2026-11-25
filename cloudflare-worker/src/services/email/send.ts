@@ -37,6 +37,10 @@ import type { EmailTemplate } from '../../templates/email/layout';
 import { wrap } from '../../templates/email/layout';
 import { stripTrailingSlashes } from '../../util/url';
 import { isSuppressed, type MailClass } from '../newsletter';
+import {
+  deliverWithReference, isSettled, recipientOf, recordQueued, refKey,
+  type DeliveryState, type SendReference,
+} from './deliveryContract';
 
 /** D810 — what a template's mail is, for the suppression list. */
 export function mailClassOf(tmpl: Pick<EmailTemplate, 'category' | 'marketing'>): MailClass {
@@ -61,6 +65,9 @@ export interface SendOpts {
   /** Skip writing to `notifications_inbox`. The digest cron uses this
    *  to avoid mirroring a roll-up email of items already in the bell. */
   skipMirror?: boolean;
+  /** D8536 — the send reference of a critical-flow email. Set by `sendBound`,
+   *  which also resolved `to` from the reference's subject record. */
+  sendRef?: SendReference;
 }
 
 export interface SendResult {
@@ -74,6 +81,9 @@ export interface SendResult {
   /** Reason for non-ok (e.g. `unknown_template`, `suppressed_unsubscribed`,
    *  `gmail_creds_missing`, `enqueue_failed`). */
   reason?: string;
+  /** D8536 — set for a send under a reference: its contract state and key. */
+  state?: DeliveryState;
+  ref?: string;
 }
 
 async function ensureSendLog(env: Env): Promise<boolean> {
@@ -213,6 +223,17 @@ export async function send(
     return { ok: false, log_id: null, notification_id: null, reason: 'suppressed' };
   }
 
+  // D8536 — a send under a reference that an earlier attempt already settled
+  // (accepted, or left without an answer) is answered from the ledger: no
+  // second log row, bell row or queue message.
+  const ref = opts.sendRef ? refKey(opts.sendRef) : undefined;
+  if (opts.sendRef) {
+    const prior = await recordQueued(env, opts.sendRef);
+    if (isSettled(prior)) {
+      return { ok: true, log_id: null, notification_id: null, reason: 'reconciled', state: prior!, ref };
+    }
+  }
+
   const appUrl = String((env as any).APP_URL || 'https://axal.vc');
   const unsubscribeUrl = tmpl.marketing
     ? await buildUnsubscribeUrl(env, opts.userId, appUrl)
@@ -247,12 +268,13 @@ export async function send(
     list_unsubscribe: rendered.unsubscribeUrl ?? null,
     user_id: opts.userId ?? null,
     log_id: logId,
+    send_ref: opts.sendRef ?? null,
   };
 
   // Immediate path — called by the queue consumer itself.
   if (opts.immediate) {
-    const delivered = await deliverNow(env, payload);
-    return { ok: delivered, log_id: logId, notification_id: notificationId, delivered };
+    const d = await deliver(env, payload);
+    return { ok: d.delivered, log_id: logId, notification_id: notificationId, delivered: d.delivered, ...(ref ? { state: d.state, ref } : {}) };
   }
 
   // Normal path — enqueue. Falls back to immediate when JOB_QUEUE
@@ -267,18 +289,39 @@ export async function send(
   // might not run before the person gave up and pressed Resend.
   const hasQueue = !!(env as any).JOB_QUEUE;
   if (!hasQueue) {
-    const delivered = await deliverNow(env, payload);
-    return { ok: delivered, log_id: logId, notification_id: notificationId, delivered };
+    const d = await deliver(env, payload);
+    return { ok: d.delivered, log_id: logId, notification_id: notificationId, delivered: d.delivered, ...(ref ? { state: d.state, ref } : {}) };
   }
 
   try {
     await enqueueJob(env, 'email_send', payload, { max_retries: 5 });
-    return { ok: true, log_id: logId, notification_id: notificationId };
+    return { ok: true, log_id: logId, notification_id: notificationId, ...(ref ? { state: 'queued' as const, ref } : {}) };
   } catch (e) {
-    console.error('[email/send] enqueue failed, falling back to immediate', e);
-    const delivered = await deliverNow(env, payload);
-    return { ok: delivered, log_id: logId, notification_id: notificationId, delivered, reason: 'enqueue_failed' };
+    // The error names the stage only: the payload carries the message, and a
+    // critical-flow message carries a usable link (D8536).
+    console.error('[email/send] enqueue failed, falling back to immediate', (e as any)?.name || 'Error');
+    const d = await deliver(env, payload);
+    return { ok: d.delivered, log_id: logId, notification_id: notificationId, delivered: d.delivered, reason: 'enqueue_failed', ...(ref ? { state: d.state, ref } : {}) };
   }
+}
+
+/**
+ * D8536 — send a registry template in a critical flow. The recipient is the
+ * address `ref`'s subject record names (`deliveryContract.ts`), never a
+ * parameter, and the answer carries the contract state and the reference.
+ */
+export async function sendBound(
+  env: Env,
+  templateKey: string,
+  ref: SendReference,
+  vars: Record<string, unknown> = {},
+  opts: Omit<SendOpts, 'sendRef'> = {},
+): Promise<SendResult & { state: DeliveryState; ref: string }> {
+  const key = refKey(ref);
+  const to = await recipientOf(env, ref);
+  if (!to) return { ok: false, log_id: null, notification_id: null, reason: 'no_recipient', state: 'refused', ref: key };
+  const r = await send(env, templateKey, to, vars, { ...opts, sendRef: ref });
+  return { ...r, state: r.state ?? 'refused', ref: key };
 }
 
 /**
@@ -293,18 +336,72 @@ export async function send(
  * wrap the raw envelope here, since List-Unsubscribe is only relevant
  * to the new send() pipeline.
  */
-export async function deliverNow(
-  env: Env,
-  payload: {
-    template_key: string; to: string; subject: string;
-    text: string; html: string; from: string; reply_to: string;
-    category: string; list_unsubscribe: string | null;
-    user_id: number | null; log_id: number | null;
-  },
-): Promise<boolean> {
+type DeliveryPayload = {
+  template_key: string; to: string; subject: string;
+  text: string; html: string; from: string; reply_to: string;
+  category: string; list_unsubscribe: string | null;
+  user_id: number | null; log_id: number | null;
+  /** D8536 — present for a critical-flow email; see `deliveryContract.ts`. */
+  send_ref?: SendReference | null;
+};
+
+/**
+ * True when the message needs no further try: it was delivered, or (under a
+ * send reference) it is settled — accepted, or left without an answer, which
+ * a retry must not send again. The queue consumer throws on false, so
+ * Cloudflare Queues retries; a retry of a referenced send reconciles.
+ */
+export async function deliverNow(env: Env, payload: DeliveryPayload): Promise<boolean> {
+  const d = await deliver(env, payload);
+  return d.delivered || isSettled(d.state ?? null);
+}
+
+async function deliver(env: Env, payload: DeliveryPayload): Promise<{ delivered: boolean; state?: DeliveryState }> {
+  if (payload.send_ref) return deliverReferenced(env, payload, payload.send_ref);
+  return { delivered: await deliverUnreferenced(env, payload) };
+}
+
+function mimeOf(payload: DeliveryPayload) {
+  return {
+    subject: payload.subject,
+    text: payload.text,
+    html: payload.html,
+    from: payload.from,
+    replyTo: payload.reply_to,
+    mailClass: (payload.category === 'security' ? 'security' : payload.list_unsubscribe ? 'marketing' : 'transactional') as MailClass,
+    extraHeaders: payload.list_unsubscribe
+      ? {
+          'List-Unsubscribe': `<${payload.list_unsubscribe}>, <mailto:unsubscribe@axal.vc?subject=unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }
+      : undefined,
+  };
+}
+
+/** D8536 — one send under its reference. The address is re-read from the subject record here, not taken from the payload. */
+async function deliverReferenced(env: Env, payload: DeliveryPayload, ref: SendReference): Promise<{ delivered: boolean; state: DeliveryState }> {
+  const { sendRawEmailOutcome } = await import('./gmail');
+  let r;
+  try {
+    r = await deliverWithReference(env, ref, (to) => sendRawEmailOutcome(env, { ...mimeOf(payload), to }));
+  } catch (e: any) {
+    // An unreadable subject record, say. Refused, so the queue retries; a
+    // row left `sending` answers `timed_out` on that retry and is not re-sent.
+    console.error('[email/send] referenced delivery threw', e?.name || 'Error');
+    await markLog(env, payload.log_id, 'failed', 'deliver_threw');
+    return { delivered: false, state: 'refused' };
+  }
+  if (!r.reconciled) {
+    await markLog(env, payload.log_id, r.state === 'accepted' ? 'sent' : r.state === 'timed_out' ? 'timed_out' : 'failed', r.reason);
+  }
+  return { delivered: r.state === 'accepted', state: r.state };
+}
+
+async function deliverUnreferenced(env: Env, payload: DeliveryPayload): Promise<boolean> {
   // D8533: a delivery whose log row already reads `sent` went out; a redelivery
   // of its message (a claim taken over after the isolate died, a replay) does
-  // not send it again. Unreadable reads as not sent.
+  // not send it again. Unreadable reads as not sent. A referenced send (D8536)
+  // reconciles through its own reference instead.
   if (payload.log_id && (await logStatus(env, payload.log_id)) === 'sent') return true;
   const creds = !!(env as any).GMAIL_CLIENT_ID && !!(env as any).GMAIL_CLIENT_SECRET && !!(env as any).GMAIL_REFRESH_TOKEN;
   if (!creds) {
@@ -313,21 +410,7 @@ export async function deliverNow(
   }
   try {
     const { sendRawEmail } = await import('./gmail');
-    const ok = await sendRawEmail(env, {
-      to: payload.to,
-      subject: payload.subject,
-      text: payload.text,
-      html: payload.html,
-      from: payload.from,
-      replyTo: payload.reply_to,
-      mailClass: payload.category === 'security' ? 'security' : payload.list_unsubscribe ? 'marketing' : 'transactional',
-      extraHeaders: payload.list_unsubscribe
-        ? {
-            'List-Unsubscribe': `<${payload.list_unsubscribe}>, <mailto:unsubscribe@axal.vc?subject=unsubscribe>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-          }
-        : undefined,
-    });
+    const ok = await sendRawEmail(env, { ...mimeOf(payload), to: payload.to });
     await markLog(env, payload.log_id, ok ? 'sent' : 'failed', ok ? null : 'gmail_send_failed');
     return ok;
   } catch (e: any) {
@@ -361,7 +444,7 @@ export async function markEmailDeadLettered(env: Env, payload: { log_id?: unknow
   }
 }
 
-async function markLog(env: Env, logId: number | null, status: 'sent' | 'failed' | 'dlq', err: string | null): Promise<void> {
+async function markLog(env: Env, logId: number | null, status: 'sent' | 'failed' | 'dlq' | 'timed_out', err: string | null): Promise<void> {
   if (!logId) return;
   try {
     if (status === 'sent') {

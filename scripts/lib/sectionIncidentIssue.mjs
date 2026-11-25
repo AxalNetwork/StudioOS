@@ -1,3 +1,10 @@
+// D5984 (#5984): the one public template for a section-incident GitHub bug: the
+// fixed cases, the marker, the title, body and labels, the power-of-two count
+// milestone and its receipt comment. No episode, Slack or customer field
+// reaches it. Owned by `../section-triage.mjs` and
+// `cloudflare-worker/src/services/sectionIncidentIssue.ts` (typed by
+// `sectionIncidentIssue.d.mts`).
+//
 // D5984 (#5984): the one public template for a section-incident GitHub bug,
 // shared by the operator CLI (`../section-triage.mjs`, D5681) and the Worker
 // (`cloudflare-worker/src/services/sectionIncidentIssue.ts`). Pure: no hashing,

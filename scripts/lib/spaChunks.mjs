@@ -1,4 +1,11 @@
-/** The emitted Vite dependency map is data, never code to execute. */
+/**
+ * Parses Vite's dependency list as JSON, validates JS/CSS paths and types, and
+ * selects the cached previous entry (#3590). `spaChunks.test.mjs` uses the
+ * actual built `../fixtures/vite-lazy-entry.js` plus stubbed capture/live CLI
+ * runs.
+ *
+ * The emitted Vite dependency map is data, never code to execute.
+ */
 export function assetPath(value) {
   if (typeof value !== 'string' || !/^(?:\/|\.\/)?assets\/[A-Za-z0-9_.-]+\.(?:js|css)$/.test(value)) {
     throw new Error('Invalid JS/CSS asset path');

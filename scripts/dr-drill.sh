@@ -64,6 +64,21 @@
 # stays here is the drill's own: the heartbeat, the throwaway database, the
 # smoke checks, the marker and the pager. A stale backup pages `rpo_breach`
 # from the EXIT trap.
+#
+# D8531 — THREE RESULTS, AND "PROVEN" NEEDS THE FILE RESTORE. No drill run
+# had ever passed: run 7 (2026-11-20) imported every chunk and then stopped
+# on a row-count query whose failure was blamed on "a table missing from the
+# restore" without looking. Now the restored table set is compared with the
+# manifest's and the export's BEFORE any count (dr_compare_tables:
+# table_set_differs names each missing or extra table and its kind), and the
+# marker and the job summary keep three results apart: `correctness` (pass or
+# fail, with its code), `recovery_point_age` (RPO) and `recovery_time` (RTO,
+# measured only when the restore passed). A met timing target never turns a
+# failed correctness check into a pass. `file_drill` is `passed`, `failed` or
+# `not run` (FILE_DRILL_RESULT, the workflow's independent-file-drill job
+# result), and recovery counts as proven only when the D1 restore and the
+# file drill both passed in the same run; otherwise the verdict says
+# "D1 only: not proven" or why not.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -91,6 +106,12 @@ BACKUP_SHA=""
 MIGRATION=""
 TABLES=0
 FAIL_REASON=
+# D8531: the independent-file-drill job's result, as GitHub reports it.
+case "${FILE_DRILL_RESULT:-}" in
+  success) FILE_DRILL="passed" ;;
+  failure) FILE_DRILL="failed" ;;
+  *) FILE_DRILL="not run" ;;
+esac
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # D5337: fetch, verify, chunked import and row-count comparison are shared
 # with scripts/restore-d1.sh, the operator's restore, so the drill proves it.
@@ -166,7 +187,14 @@ write_marker() {
       --arg copy "${SOURCE}" \
       --argjson rpo_target_s "${RPO_TARGET_S}" \
       --argjson rto_target_s "${RTO_TARGET_S}" \
-      '{schema_version: 1, at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
+      --argjson table_set "${TABLE_SET}" \
+      --arg file_drill "${FILE_DRILL}" \
+      '($recovery_point != "") as $has_point
+      | (if $has_point then ($started - ($recovery_point | fromdateiso8601)) else null end) as $age
+      | ($exit_code == 0) as $correct
+      | (if $correct then null elif $reason != "" then $reason else "exit_\($exit_code)_at_\($step)" end) as $code
+      | ($correct and $file_drill == "passed") as $proven
+      | {schema_version: 1, at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
         exit_code: $exit_code,
         backup_key: (if $backup_key == "" then null else $backup_key end),
         run_id: (if $run_id == "" then null else $run_id end),
@@ -178,7 +206,18 @@ write_marker() {
         reason: (if $reason == "" then null else $reason end),
         copy: $copy, rpo_target_s: $rpo_target_s, rto_target_s: $rto_target_s,
         rpo_met: (if $recovery_point == "" then null else (($started - ($recovery_point | fromdateiso8601)) <= $rpo_target_s) end),
-        rto_met: ($duration_s <= $rto_target_s)}' > "${marker}"; then
+        rto_met: ($duration_s <= $rto_target_s),
+        correctness: {result: (if $correct then "passed" else "failed" end), code: $code, step: $step, table_set: $table_set},
+        recovery_point_age: {age_s: $age, target_s: $rpo_target_s, met: (if $has_point then ($age <= $rpo_target_s) else null end)},
+        recovery_time: {duration_s: (if $correct then $duration_s else null end), target_s: $rto_target_s,
+          met: (if $correct then ($duration_s <= $rto_target_s) else null end)},
+        file_drill: $file_drill,
+        recovery_proven: $proven,
+        verdict: (if ($correct | not) then "not proven: the D1 restore failed (\($code))"
+          elif $proven then "proven: the D1 restore and the file drill both passed"
+          elif $file_drill == "failed" then "not proven: the file drill failed"
+          else "D1 only: not proven" end)}' > "${marker}"; then
+    write_summary "${marker}"
     wrangler r2 object put "${BUCKET}/drill-d1.json" --file "${marker}" --content-type application/json --remote \
       || log "WARN: could not write the drill marker (r2://${BUCKET}/drill-d1.json)"
     write_history "$marker"
@@ -186,6 +225,25 @@ write_marker() {
     log "WARN: could not build the drill marker"
   fi
   rm -f "${marker}" || true
+}
+
+# D8531 — the job summary: the three results apart, then the file drill and
+# the verdict. Names, codes and times only. Skipped when not in Actions.
+write_summary() {
+  local marker="$1"
+  [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] || return 0
+  jq -r '
+    def or_na: if . == null then "not recorded" else tostring end;
+    def met: if . == null then "not measured" elif . then "met" else "missed" end;
+    "## DR drill\n",
+    "| Result | Value |", "|---|---|",
+    "| Restore correctness | \(.correctness.result)\(if .correctness.code then " (`\(.correctness.code)`)" else "" end) |",
+    "| Recovery point age (RPO) | \(.recovery_point_age.age_s | or_na) s, target \(.recovery_point_age.target_s) s: \(.recovery_point_age.met | met) |",
+    "| Recovery time (RTO) | \(.recovery_time.duration_s | or_na) s, target \(.recovery_time.target_s) s: \(.recovery_time.met | met) |",
+    "| File drill | \(.file_drill) |",
+    "| Verdict | **\(.verdict)** |",
+    (.correctness.table_set | to_entries[] | select(.value | length > 0) | "\n**\(.key)**: \(.value | join(", "))")
+  ' "${marker}" >> "${GITHUB_STEP_SUMMARY}" 2>/dev/null || log "WARN: could not write the job summary"
 }
 
 # Single EXIT trap, set once and never cleared: it runs on success too, which
@@ -325,6 +383,11 @@ dr_import_chunks "${TARGET_DB}" "${TMP}/backup.sql" "${TMP}/manifest.json" "${TM
 STEP="smoke"
 log "running smoke checks against restored DB"
 
+# 4-. D8531: the table sets before any count. A table missing from the
+# restore, or one the manifest does not list, fails here as
+# table_set_differs, named with its kind.
+dr_compare_tables "${TARGET_DB}" "${TMP}/manifest.json" "${TMP}/backup.sql" "${TMP}"
+
 # 4a. Row-count smoke — every backup must have these tables non-empty.
 # This catches catastrophic data loss (empty restore, wrong DB).
 SMOKE_SQL="SELECT
@@ -336,6 +399,7 @@ PROJECTS=$(echo "${SMOKE_OUT}" | jq -r '.[] .results[0].projects // 0')
 log "smoke counts: users=${USERS} projects=${PROJECTS}"
 
 if [[ "${USERS}" -lt 1 ]]; then
+  FAIL_REASON="smoke_zero_users"
   log "FATAL: restored DB has zero users"
   exit 3
 fi
@@ -347,6 +411,7 @@ TABLE_SQL="SELECT name FROM sqlite_master WHERE type='table';"
 TABLES_OUT=$(wrangler d1 execute "${TARGET_DB}" --remote --command "${TABLE_SQL}" --json)
 for t in "${REQUIRED_TABLES[@]}"; do
   if ! echo "${TABLES_OUT}" | jq -e --arg t "$t" '.[] .results[] | select(.name==$t)' >/dev/null; then
+    FAIL_REASON="smoke_required_table_missing"
     log "FATAL: restored DB missing required table: $t"
     exit 3
   fi
@@ -354,8 +419,9 @@ done
 log "schema smoke ok (${#REQUIRED_TABLES[@]} required tables present)"
 
 # 4b'. D4558 — every table's row count against the manifest. The counts are
-# read 40 tables to a query; a table missing from the restore counts as a
-# mismatch. Only table names and the number that differ are logged.
+# read 40 tables to a query; one that cannot be read is `unreadable`, one
+# that differs `mismatched` (D8531). Only table names and the number that
+# differ are logged.
 dr_compare_counts "${TARGET_DB}" "${TMP}/manifest.json" "${TMP}"
 
 # 4c. (removed, D263) This ran `npm run test:drift` from the checkout. That

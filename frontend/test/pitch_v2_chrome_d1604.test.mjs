@@ -123,22 +123,23 @@ const controls = (m, root) => m.walk(root)
   .filter((n) => (n.tagName === 'BUTTON' || n.tagName === 'A') && !m.walk(root).some((p) => p !== n && m.pr(p)['data-testid'] === 'deck-more-menu' && m.walk(p).includes(n)))
   .map((n) => String(m.pr(n)['aria-label'] || m.text(n)).replace(/ \d+ waiting$/, ''));
 
-test('the header holds the save state, ⋯, Present, Share and Ask, and nothing else; Save version only while dirty', async () => {
+test('PS04 header holds document actions; editing tools and Ask stay in the inspector; Save version only while dirty', async () => {
   const m = await mountEditor();
   try {
     const tools = m.by('pitch-header-tools');
     // D1515 (#3767): Undo and Redo, with "100 steps", sit before the save state.
-    assert.deepEqual(controls(m, tools), ['Undo', 'Redo', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
+    assert.deepEqual(controls(m, tools), ['Undo', 'Redo', 'Present', 'Review', 'Export', 'Share']);
     assert.match(m.text(m.by('pitch-editor-save-state')), /^✓ Saved$/);
     assert.match(m.pr(m.by('pitch-editor-save-state')).title, /^All changes saved · \d+ d ago$/, 'the version\'s own time, in the title');
     assert.equal(m.pr(m.by('deck-more-open'))['aria-haspopup'], 'menu');
+    assert.ok(m.walk(m.by('pitch-inspector-design')).includes(m.by('deck-more-open')), 'More deck actions moved to Design');
     assert.equal(m.pr(m.by('deck-toolbar-present')).href, presentHref(7, 31));
     assert.ok(!m.by('pitch-editor-save'), 'nothing to save: no Save version');
     await m.press(m.by('pitch-editor-block-b2'));
     await m.type(m.by('pitch-editor-notes'), 'Synthetic changed note');
     // These synthetic cards carry no uid, so the autosave has nothing it can send (D1515): the line stays as on main.
     assert.match(m.text(m.by('pitch-editor-save-state')), /^● Unsaved changes$/);
-    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Undo, 1 step', 'Redo', 'Save version', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
+    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Undo, 1 step', 'Redo', 'Save version', 'Present', 'Review', 'Export', 'Share']);
     await m.press(m.by('pitch-editor-save'));
     assert.match(m.text(m.by('pitch-editor-save-changes')), /the speaker notes change/);
   } finally { await m.close(); }
@@ -230,7 +231,7 @@ test('a reader keeps Present and has no Share and no Save version', async () => 
     assert.ok(!m.by('deck-toolbar-share'));
     assert.ok(!m.by('pitch-editor-save'));
     assert.match(m.text(m.by('pitch-editor-save-state')), /^Read only · v3$/);
-    assert.deepEqual(controls(m, m.by('pitch-header-tools')), [MORE_NAME, 'Present'], 'a reader gets no Ask either');
+    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Present', 'Review'], 'a reader gets no Ask either');
   } finally { await m.close(); }
 });
 
@@ -238,7 +239,7 @@ test('the model read fails: Present and Share stay in the header, and Export sti
   const m = await mountEditor({ answers: { 'editor.model': async () => { throw new Error('Synthetic model failure'); } } });
   try {
     assert.ok(m.by('pitch-editor-model-error'), 'the editor says it could not open');
-    assert.deepEqual(controls(m, m.by('pitch-header-tools')), [MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
+    assert.deepEqual(controls(m, m.by('pitch-header-tools')), [MORE_NAME, 'Present', 'Review', 'Export', 'Share', 'Ask Eadwyn']);
     assert.equal(m.pr(m.by('deck-toolbar-present')).href, presentHref(7, 31));
     assert.ok(!m.by('pitch-editor-save-state'), 'no save state until the editor reports one');
     await m.press(m.by('deck-more-open'));
@@ -409,7 +410,7 @@ test('a tablet (768–1023 px) keeps the Grid with the strip as one scrolling ro
     assert.ok(m.by('pitch-editor-stage'), 'The Grid is the centre');
     assert.equal(m.pr(m.by('pitch-editor-cards'))['data-orientation'], 'row');
     assert.doesNotMatch(m.pr(m.by('pitch-editor-body')).className, /grid-cols/, 'the strip sits above the stage, the stage full width');
-    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Undo', 'Redo', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn'], 'the desktop header');
+    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Undo', 'Redo', 'Present', 'Review', 'Export', 'Share'], 'the desktop header');
   } finally { await m.close(); globalThis.matchMedia = before; }
   // A phone (below 768 px) keeps the phone editor.
   globalThis.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });

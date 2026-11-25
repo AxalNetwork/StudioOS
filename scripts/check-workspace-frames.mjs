@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * A workspace route that crashes, renders nothing, or draws two headings or two
+ * AI rails. Renders the built `docs/` in Chromium with `/api/*` stubbed, so it
+ * sees what the source-reading suite cannot: it caught `/expertise/profile`
+ * throwing into the error boundary on every visit. Needs a browser, so it is
+ * **not** in `test:guards` — run it by hand after `npm run build`.
+ *
  * Render every workspace route and MEASURE the frame, instead of reading the
  * source and believing it.
  *

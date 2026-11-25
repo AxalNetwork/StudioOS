@@ -1,4 +1,8 @@
 /**
+ * D5580: hunk-level risk classes per overlapping PR pair, the four per-PR
+ * evidence fields and the dated advisory snapshot; `prRisk.test.mjs` holds the
+ * Delivery-cluster fixture.
+ *
  * D5580 (#5580 part 1): hunk-level risk classes for each overlapping PR pair, the four per-PR evidence fields
  * (merge status, required checks, CI queue delay, base age) and the dated advisory snapshot. Pure: no network, no
  * git; the CLI `../pr-overlap.mjs` reads GitHub and hands the rows in. Advisory only: nothing here blocks a merge.

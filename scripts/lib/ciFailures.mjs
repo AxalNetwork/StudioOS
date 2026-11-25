@@ -1,3 +1,4 @@
+/** D5502: bounded test identities, safe reproductions and exact-base evidence attribution. */
 /** D5502 (#5502): bounded test identities and conservative exact-base attribution, independent of shards and log tails. */
 import { createHash } from 'node:crypto';
 export const safeFile = value => typeof value === 'string' && value.length <= 240 && /^[\w./-]+\.(?:test\.(?:mjs|ts|js)|mjs|ts|js)$/.test(value) && !value.split('/').some(p => p === '..' || !p) && !value.startsWith('/') ? value : null;

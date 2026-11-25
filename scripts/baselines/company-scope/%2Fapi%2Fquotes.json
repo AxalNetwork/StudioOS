@@ -1,0 +1,8 @@
+{
+  "GET /api/quotes/analytics": {
+    "kind": "filter"
+  },
+  "GET /api/quotes/me": {
+    "kind": "filter"
+  }
+}

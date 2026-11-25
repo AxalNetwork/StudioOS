@@ -1,0 +1,20 @@
+{
+  "GET /api/perks/partner": {
+    "kind": "filter"
+  },
+  "GET /api/perks/partner/:uid/claims": {
+    "kind": "target"
+  },
+  "GET /api/perks/partner/:uid/stats": {
+    "kind": "target"
+  },
+  "PATCH /api/perks/partner/:uid": {
+    "kind": "target"
+  },
+  "POST /api/perks/partner": {
+    "kind": "target"
+  },
+  "POST /api/perks/partner/:uid/redeem": {
+    "kind": "target"
+  }
+}

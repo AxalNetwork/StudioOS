@@ -1,0 +1,8 @@
+{
+  "GET /api/portfolio-notes/companies/:projectUid": {
+    "kind": "target"
+  },
+  "POST /api/portfolio-notes/companies/:projectUid": {
+    "kind": "target"
+  }
+}

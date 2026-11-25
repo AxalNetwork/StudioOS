@@ -227,8 +227,8 @@ r.post('/drafts', async (c) => {
   try {
     await ensureAdminAuditLogTable(c.env);
     await db.batch([
-      db.prepare(`INSERT INTO formation_catalogue_versions (version, status, notes, created_by) VALUES (?, 'draft', ?, ?)`)
-        .bind(next, `Draft from version ${from.version}: ${reason}`, Number(admin.id)),
+      db.prepare(`INSERT INTO formation_catalogue_versions (version, status, notes, created_by, draft_base_id) VALUES (?, 'draft', ?, ?, ?)`)
+        .bind(next, `Draft from version ${from.version}: ${reason}`, Number(admin.id), from.id),
       db.prepare(
         `INSERT INTO formation_jurisdictions (version_id, country, subdivision, registry_name, vocabulary_json)
          SELECT (SELECT id FROM formation_catalogue_versions WHERE version = ?), country, subdivision, registry_name, vocabulary_json
@@ -258,8 +258,10 @@ r.post('/drafts', async (c) => {
           WHERE x.version_id = ? ORDER BY x.id`,
       ).bind(next, from.id),
       db.prepare(
-        `INSERT INTO formation_pack_items (version_id, form_id, item_key, phase, kind, acting_party, title, template_key, counsel_required, position)
-         SELECT nf.version_id, nf.id, x.item_key, x.phase, x.kind, x.acting_party, x.title, x.template_key, x.counsel_required, x.position
+        `INSERT INTO formation_pack_items (version_id, form_id, item_key, phase, kind, acting_party, title, template_key, counsel_required, position,
+                                          obligation_phase, source_id, checked_on, due_rule_json, event_kind, recurrence)
+         SELECT nf.version_id, nf.id, x.item_key, x.phase, x.kind, x.acting_party, x.title, x.template_key, x.counsel_required, x.position,
+                x.obligation_phase, x.source_id, x.checked_on, x.due_rule_json, x.event_kind, x.recurrence
            FROM formation_pack_items x JOIN formation_entity_forms ofm ON ofm.id = x.form_id
            JOIN formation_entity_forms nf ON nf.version_id = (SELECT id FROM formation_catalogue_versions WHERE version = ?) AND nf.form_key = ofm.form_key
           WHERE x.version_id = ? ORDER BY x.id`,
@@ -286,6 +288,7 @@ r.post('/drafts', async (c) => {
       adminAuditStatement(c.env, Number(admin.id), 'formation_catalogue_draft_created', { version: next, from_version: from.version, reason }),
     ]);
   } catch (e) {
+    if (/clone conflict/i.test(String(e))) return refuse(c, 409, { code: 'clone_conflict', message: 'The current version or open draft changed during the copy. Read the catalogue again.' });
     if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e))) {
       return refuse(c, 409, { code: 'draft_open', message: 'Another draft was started meanwhile. Nothing was created.', raw: e });
     }
@@ -376,6 +379,12 @@ r.put('/drafts/:version/:entity', async (c) => {
   if (row.source_id != null && Object.hasOwn(parsed.values, 'source_id')) {
     const s = await c.env.DB.prepare('SELECT 1 FROM formation_sources WHERE id = ?').bind(row.source_id).first();
     if (!s) return refuse(c, 404, { code: 'source_not_found', message: 'There is no recorded source with that id. Record the source first.' });
+  }
+  // A save with the same canonical content is a successful read-back, not a
+  // change of editor. Parent IDs are resolved separately from the returned keys.
+  if (existing && row.jurisdiction_id === existing.jurisdiction_id && row.form_id === existing.form_id
+      && await rowRevision(spec, row) === body.revision) {
+    return c.json({ ok: true, version: v.version, entity: spec.entity, row: canonicalRow(spec, existing), revision: body.revision });
   }
   const db = c.env.DB;
   const write = existing

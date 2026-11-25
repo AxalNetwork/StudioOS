@@ -1,4 +1,10 @@
-/** D5616: advisory path overlap, classification, landing order and safe Markdown; D5580 adds risk classes and evidence. */
+/**
+ * D5616: pure path classes, overlapping pairs, migration stamps, landing order
+ * and escaped Markdown.
+ *
+ * D5616: advisory path overlap, classification, landing order and safe
+ * Markdown; D5580 adds risk classes and evidence.
+ */
 import { RISK, UNMEASURED } from './prRisk.mjs';
 const HUBS = new Set(['frontend/src/lib/api.js', 'cloudflare-worker/src/index.ts', 'frontend/src/App.jsx', 'frontend/src/pages/learning/CycleRoute.jsx', 'cloudflare-worker/src/routes/advisors.ts', 'package.json', 'scripts/check-folder-docs.mjs']);
 export const MARKER = '<!-- studioos-pr-overlap:v1 -->';

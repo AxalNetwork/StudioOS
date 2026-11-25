@@ -1,5 +1,32 @@
 #!/usr/bin/env node
 /**
+ * That the repo can still rebuild the database it operates:
+ * `schema_baseline.sql` plus every migration ABOVE `BASELINE_CUTOFF`, built in
+ * the same SQLite engine D1 is, against production's own object names — set
+ * difference taken in BOTH directions, because the first gate anyone wrote for
+ * the baseline counted tables and a dump that loses two real ones while gaining
+ * back two the engine creates itself still counts 399. The invariant is
+ * deliberately not "baseline == production": that would go red on the first
+ * migration anyone ships, get switched off, and let the drift back. It exists
+ * because its predecessor `schema.sql` drifted — five `project_id` clauses
+ * hand-edited to add an `ON DELETE CASCADE` no migration ever applied — and a
+ * new database disagreed with production about five foreign keys for four
+ * months with nothing able to notice (D60). Compares object names and, since
+ * D359, the columns and declared types of every table both sides have
+ * (production's read from the `sql` the same query returns, executed into a
+ * scratch database; a table whose DDL will not execute fails the step as
+ * unreadable), and prints each missing column as the `ALTER TABLE … ADD COLUMN`
+ * that declares it. Whether a migration's declared columns reach a fresh build
+ * is `check-migration-declarations.mjs`'s question, above. Needs
+ * `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and **exits 2 without
+ * them, never 0**, so an unreadable database is never reported as a clean one.
+ * Runs in `.github/workflows/cloudflare-worker-deploy.yml` AFTER the deploy
+ * step and is not `continue-on-error`: a disagreement is worth a red workflow
+ * but does not make the worker that just shipped unsafe, so it must not stand
+ * between a good build and production. `DRIFT_D1_NAME` and `DRIFT_D1_CONFIG`
+ * point it at a branch database instead. Guarded by
+ * `cloudflare-worker/test/baseline_drift_guard.test.mjs`.
+ *
  * `schema_baseline.sql` still describes the database it was dumped from.
  *
  * WHY THIS EXISTS, AND WHY IT IS THE POINT OF THE WHOLE EXERCISE.

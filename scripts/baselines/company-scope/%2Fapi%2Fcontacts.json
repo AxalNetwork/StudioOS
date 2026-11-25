@@ -1,0 +1,77 @@
+{
+  "GET /api/contacts": {
+    "kind": "filter"
+  },
+  "GET /api/contacts/:uid": {
+    "kind": "target"
+  },
+  "GET /api/contacts/raise-closes": {
+    "kind": "filter"
+  },
+  "GET /api/contacts/raise-pro-rata": {
+    "kind": "filter"
+  },
+  "GET /api/contacts/raise-prospects": {
+    "kind": "filter"
+  },
+  "GET /api/contacts/raise-prospects/:id": {
+    "kind": "target"
+  },
+  "GET /api/contacts/raise-prospects/invites": {
+    "kind": "filter"
+  },
+  "GET /api/contacts/raise-round": {
+    "kind": "filter"
+  },
+  "GET /api/contacts/raise-updates": {
+    "kind": "filter"
+  },
+  "POST /api/contacts": {
+    "kind": "target"
+  },
+  "POST /api/contacts/:uid/promote": {
+    "kind": "target"
+  },
+  "POST /api/contacts/:uid/reply": {
+    "kind": "target"
+  },
+  "POST /api/contacts/:uid/tasks": {
+    "kind": "target"
+  },
+  "POST /api/contacts/:uid/tasks/:taskId/toggle": {
+    "kind": "target"
+  },
+  "POST /api/contacts/invite": {
+    "kind": "target"
+  },
+  "POST /api/contacts/raise-closes": {
+    "kind": "target"
+  },
+  "POST /api/contacts/raise-pro-rata": {
+    "kind": "target"
+  },
+  "POST /api/contacts/raise-prospects": {
+    "kind": "target"
+  },
+  "POST /api/contacts/raise-prospects/import": {
+    "kind": "target"
+  },
+  "POST /api/contacts/raise-updates": {
+    "kind": "target"
+  },
+  "PUT /api/contacts/:uid": {
+    "kind": "target"
+  },
+  "PUT /api/contacts/raise-closes/:id": {
+    "kind": "target"
+  },
+  "PUT /api/contacts/raise-pro-rata/:id": {
+    "kind": "target"
+  },
+  "PUT /api/contacts/raise-prospects/:id": {
+    "kind": "target"
+  },
+  "PUT /api/contacts/raise-round": {
+    "kind": "target"
+  }
+}
