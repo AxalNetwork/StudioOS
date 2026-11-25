@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { decide, headStillAdmitted, parseAllowlist, requestOf, safeLine } from '../../scripts/lib/claudeCodeAdmission.mjs';
+import { SUMMARY_LINES, decide, headStillAdmitted, parseAllowlist, requestOf, safeLine, summaryLine } from '../../scripts/lib/claudeCodeAdmission.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
 const WF = parse(readFileSync(new URL('.github/workflows/claude-code.yml', ROOT), 'utf8'));
@@ -160,4 +160,16 @@ test('nothing the API answers reaches the summary or the outputs unchecked', asy
   assert.match(d.summary, /outsider has none permission/, 'an undefined permission reads as none');
   assert.equal(safeLine('a\nb <x> `c` |d| [e](f) **g** →'), 'a b x c d e(f) g to ');
   assert.equal(safeLine('x'.repeat(400)).length, 300);
+});
+
+test('the job summary carries fixed text only: one line per outcome, never what the API answered', () => {
+  // Mutation checked: summary(d.summary) put back in the CLI → the source check fails.
+  const cli = readFileSync(CLI, 'utf8');
+  const calls = [...cli.matchAll(/\bsummary\((.*)\);/g)].map((m) => m[1]).filter((a) => a !== 'fixed');
+  assert.ok(calls.length >= 3);
+  for (const a of calls) assert.match(a, /^(summaryLine\('?[a-z_.]+'?\)|summaryLine\(d\.reason\)|r\.ok \? HEAD_LINES\.ok : HEAD_LINES\.stopped)$/, a);
+  const reasons = ['unsupported_event', 'repository_mismatch', 'no_mention', 'dispatch_not_main', 'malformed_event', 'permission_unavailable', 'not_permitted', 'not_on_allowlist', 'head_unavailable', 'head_moved', 'admitted', 'admission_error'];
+  assert.deepEqual(Object.keys(SUMMARY_LINES).sort(), [...reasons].sort(), 'every outcome has its line');
+  for (const line of Object.values(SUMMARY_LINES)) assert.equal(safeLine(line), line, 'each line is plain text already');
+  assert.equal(summaryLine('something else'), SUMMARY_LINES.admission_error);
 });

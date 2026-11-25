@@ -12,7 +12,7 @@
  * A refusal exits 0 (the run ends there, with its reason in the summary); an internal error exits 1, admitting nothing.
  */
 import { appendFileSync, readFileSync } from 'node:fs';
-import { decide, headStillAdmitted, outputLines, parseAllowlist, safeLine } from './lib/claudeCodeAdmission.mjs';
+import { HEAD_LINES, decide, headStillAdmitted, outputLines, parseAllowlist, summaryLine } from './lib/claudeCodeAdmission.mjs';
 
 const args = process.argv.slice(2);
 const env = process.env;
@@ -41,9 +41,9 @@ function fixtureApi(f) {
   };
 }
 
-// Each summary line passes safeLine: the head SHA and the permission come from the API, so nothing but checked
-// printable text reaches the file.
-const summary = (line) => { if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${safeLine(line)}\n`); };
+// The job summary carries fixed text only (SUMMARY_LINES, HEAD_LINES); the detail, with what the API answered,
+// goes to the log.
+const summary = (fixed) => { if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${fixed}\n`); };
 
 async function main() {
   if (args[0] === '--fixture') {
@@ -59,21 +59,21 @@ async function main() {
     if (env.ADMITTED_KIND !== 'pull_request') { console.log('Not a pull request: nothing to compare.'); return 0; }
     const head = await api.pullHead(env.ADMITTED_NUMBER);
     const r = headStillAdmitted(env.ADMITTED_HEAD_SHA, head?.sha);
-    summary(`${r.ok ? 'Head unchanged' : 'Stopped'}: ${r.line}`);
+    summary(r.ok ? HEAD_LINES.ok : HEAD_LINES.stopped);
     console[r.ok ? 'log' : 'error'](r.line);
     return r.ok ? 0 : 1;
   }
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
   const d = await decide({ eventName: env.GITHUB_EVENT_NAME, event, repository, ref: env.GITHUB_REF, sha: env.GITHUB_SHA, allowlist: parseAllowlist(env.CLAUDE_CODE_ALLOWED_ACTORS) }, api);
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `${outputLines(d).join('\n')}\n`);
-  summary(d.summary);
+  summary(summaryLine(d.reason));
   console.log(d.summary);
   return 0;
 }
 
 main().then((code) => process.exit(code), (err) => {
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, 'admitted=false\nreason=admission_error\n');
-  summary('Refused: the admission check failed, so nothing was admitted.');
+  summary(summaryLine('admission_error'));
   console.error(`admission error: ${err?.message ?? err}`);
   process.exit(1);
 });

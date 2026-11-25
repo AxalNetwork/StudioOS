@@ -57,6 +57,28 @@ export function requestOf(eventName, event) {
   }
 }
 
+/**
+ * What the job summary says for each outcome: fixed text only. The detailed line (`summary` on the decision, with
+ * the login, the permission and the SHAs) goes to the job log; nothing the API answered is written to a file but
+ * the validated outputs the next job is bound by.
+ */
+export const SUMMARY_LINES = Object.freeze({
+  admitted: 'Admitted: the requester has write or admin, and the run is bound to its issue or pull request and head commit.',
+  unsupported_event: 'Refused: this event does not start a run.',
+  repository_mismatch: 'Refused: the event names another repository.',
+  no_mention: 'Refused: the text does not mention @claude.',
+  dispatch_not_main: 'Refused: a manual run starts from main only.',
+  malformed_event: 'Refused: the event does not say who asked, or for which issue or pull request.',
+  permission_unavailable: 'Refused: the requester\'s permission could not be read.',
+  not_permitted: 'Refused: the requester does not have write or admin permission on this repository.',
+  not_on_allowlist: 'Refused: the requester is not on the owner\'s list (CLAUDE_CODE_ALLOWED_ACTORS).',
+  head_unavailable: 'Refused: the pull request\'s head could not be read.',
+  head_moved: 'Refused: the pull request moved after the review was written.',
+  admission_error: 'Refused: the admission check failed, so nothing was admitted.',
+});
+export const HEAD_LINES = Object.freeze({ ok: 'Head unchanged since admission.', stopped: 'Stopped: the pull request\'s head is not the admitted one.' });
+export const summaryLine = (reason) => SUMMARY_LINES[reason] ?? SUMMARY_LINES.admission_error;
+
 const refuse = (reason, line, extra = {}) => ({ admitted: false, reason, summary: `Refused: ${line}`, ...extra });
 
 /**
