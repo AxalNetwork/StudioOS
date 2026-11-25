@@ -89,8 +89,8 @@ export const STALE = 'project_conflict';
 export const isStale = (e: unknown) => /malformed JSON|project_conflict/i.test(String((e as Error)?.message ?? e));
 
 /**
- * D8525: the move's guard. It aborts the batch (an invalid `json()`, the
- * repository's idiom, `team_skills.ts`) unless the venture still sits in
+ * D8525: the move's guard. It aborts the batch (`json()` over the bound marker,
+ * which is not JSON: the repository's idiom, `team_skills.ts`) unless the venture still sits in
  * `from` with the slug the route read, the company it leaves is not archived,
  * and the company it goes to exists, is not archived and, when the caller
  * names the owner it checked (the move route always does), still has them.
@@ -102,14 +102,14 @@ function moveGuard(env: Pick<Env, 'DB'>, m: { projectId: number; from: number | 
         AND (? IS NULL OR EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND COALESCE(archived_at, '') = ''))
         AND (? IS NULL OR (EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND COALESCE(archived_at, '') = '')
                            AND (? IS NULL OR EXISTS (SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?))))
-      THEN 1 ELSE json('${STALE}') END AS current`,
-  ).bind(m.projectId, m.from, m.slug ?? null, m.from, m.from, m.to, m.to, m.owner ?? null, m.owner ?? null, m.to);
+      THEN 1 ELSE json(?) END AS current`,
+  ).bind(m.projectId, m.from, m.slug ?? null, m.from, m.from, m.to, m.to, m.owner ?? null, m.owner ?? null, m.to, STALE);
 }
 
 /** D8525: the rename's guard: the venture still sits in `scope` with the slug the route read. */
 export function renameGuard(env: Pick<Env, 'DB'>, projectId: number, scope: number | null, previous: string | null) {
   return env.DB.prepare(
     `SELECT CASE WHEN EXISTS (SELECT 1 FROM projects WHERE id = ? AND deleted_at IS NULL AND company_id IS ? AND slug IS ?)
-      THEN 1 ELSE json('${STALE}') END AS current`,
-  ).bind(projectId, scope, previous);
+      THEN 1 ELSE json(?) END AS current`,
+  ).bind(projectId, scope, previous, STALE);
 }
