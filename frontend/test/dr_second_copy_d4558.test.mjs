@@ -172,6 +172,7 @@ if (a[0] === 'd1' && a[1] === 'execute') {
     const asked = [...sqlq.matchAll(/SELECT '((?:[^']|'')*)' AS t/g)].map((x) => x[1]);
     console.log(JSON.stringify([{ results: asked.map((t) => ({ t, n: m.tables.find((x) => x.name === t)?.rows ?? 0 })) }])); process.exit(0);
   }
+  if (sqlq.startsWith('SELECT type, name')) { console.log(JSON.stringify([{ results: m.tables.map((t) => ({ type: 'table', name: t.name, virtual: 0 })) }])); process.exit(0); }
   if (/COUNT/.test(sqlq)) { console.log(JSON.stringify([{ results: [{ users: 2, projects: 1 }] }])); process.exit(0); }
   console.log(JSON.stringify([{ results: ['users', 'projects', 'deals', 'score_snapshots', 'activity_logs', 'documents'].map((name) => ({ name })) }])); process.exit(0);
 }
