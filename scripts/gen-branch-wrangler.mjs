@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 /**
+ * Writes `wrangler.branch.<code>.toml` at the repo root from
+ * `infra/branches/<code>.json`. The config is **derived** from
+ * `wrangler.toml`'s `[env.production]` table rather than templated, so a
+ * binding added to HQ reaches every branch with no edit here; the rules live in
+ * `lib/branchConfig.mjs`. It is gitignored: `[assets] directory` resolves
+ * against the config's own location, so it has to sit beside `docs/`, and a
+ * committed copy would be a second place a binding could go stale. `node
+ * scripts/gen-branch-wrangler.mjs fr` (add `--stdout` to render without
+ * writing).
+ *
  * Write a branch Worker's `wrangler.branch.<code>.toml` from its registry entry.
  *
  *   node scripts/gen-branch-wrangler.mjs fr

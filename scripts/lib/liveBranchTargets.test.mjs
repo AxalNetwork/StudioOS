@@ -1,3 +1,8 @@
+/**
+ * `../check-branch-live.mjs`'s targets: an example-only registry blocks, only
+ * declared branch hosts are planned, bad selections and shared storage are
+ * refused before any request.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

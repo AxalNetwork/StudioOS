@@ -1,0 +1,5 @@
+{
+  "POST /api/needs/:id/quotes": {
+    "kind": "target"
+  }
+}

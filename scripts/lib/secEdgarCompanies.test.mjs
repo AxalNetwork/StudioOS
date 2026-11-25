@@ -1,3 +1,8 @@
+/**
+ * `secEdgarCompanies.mjs`: one row per CIK, a changed EDGAR format refused,
+ * `padCik`, the migration applying twice to unique cited rows in D1-sized
+ * batches, and migration 412's rows.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

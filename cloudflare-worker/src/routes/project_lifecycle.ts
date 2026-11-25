@@ -27,6 +27,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isProjectManager, ensureProjectMembershipSchema } from '../services/projectAccess';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { runDecision, decisionGuard, clearGuard } from '../services/decisionBatch';
 import { runFollowup, sponsorsLeft } from '../services/agents/transfer';
 import { isStale, ownerUserId, projectMoveStatements, renameGuard } from '../services/projectMove';
 import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
@@ -183,8 +184,14 @@ r.post('/:id/transfer', async (c) => {
     }, 409);
   }
   const previousOwner = await ownerUserId(c.env, g.project.founder_id);
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE projects SET founder_id = ? WHERE id = ?').bind(seat.founder_id, g.project.id),
+  // D8528: the owner change is the decision, guarded on what was read: the same owner and company, and the new
+  // owner still belonging to that company. If either changed in another request, nothing below is written.
+  const outcome = await runDecision(c.env, [
+    c.env.DB.prepare(
+      `UPDATE projects SET founder_id = ? WHERE id = ? AND founder_id IS ? AND company_id IS ?
+         AND (company_id IS NULL OR EXISTS (SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = projects.company_id))`,
+    ).bind(seat.founder_id, g.project.id, g.project.founder_id, companyId, targetId),
+    decisionGuard(c.env),
     // The previous owner keeps a seat, as a co-founder.
     ...(previousOwner != null ? [c.env.DB.prepare(
       `INSERT INTO project_members (project_id, user_id, role, status, source, accepted_at)
@@ -197,7 +204,17 @@ r.post('/:id/transfer', async (c) => {
       kind: 'project_transfer', projectId: g.project.id, companyId, actorUserId: user.id, targetUserId: targetId,
       before: { owner_user_id: previousOwner }, after: { owner_user_id: targetId },
     }),
+    clearGuard(c.env),
   ]);
+  if (outcome.lost) {
+    if (companyId != null && !(await belongs(c.env, targetId, companyId))) {
+      return c.json({
+        detail: 'The new owner does not belong to this venture\'s company. Move the venture to a company they belong to, or out of its company, first.',
+        code: 'owner_not_in_company',
+      }, 409);
+    }
+    return c.json({ detail: 'The venture changed while this was being sent. Reload it and try again.', code: 'venture_changed' }, 409);
+  }
   // #3850 (E6): the project's agents the previous owner sponsored pause `sponsor_left` when they can no longer manage the team.
   try {
     const { pauseAgent } = await import('../agents/engine');

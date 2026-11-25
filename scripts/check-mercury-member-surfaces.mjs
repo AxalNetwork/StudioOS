@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 /**
+ * D883 (#2556): Axal VC's own Mercury accounts back on a member surface. Fails
+ * when a member page (`frontend/src/pages/account/**`) names an Axal entity,
+ * `mercury_entity_connections`, the admin Mercury API or the entity sheet; when
+ * the `mercury` registry row gets `entity_roles` again or its description or
+ * `CONNECTOR_METADATA.mercury` names the entity accounts; when the registry
+ * routes a connector to `mercury_entity_connections`; when Mercury's connector
+ * pages get an `entity` variant; or when the member connect routes answer with
+ * `entity_connection_only`. Code only: comments and READMEs are not swept, and
+ * HQ's own files (`frontend/src/pages/admin/**`,
+ * `cloudflare-worker/src/routes/admin_mercury.ts`) are never read.
+ *
  * D883 (#2556) — AXAL VC'S OWN MERCURY ACCOUNTS STAY OFF MEMBER SURFACES.
  *
  * The owner, 2026-10-22: "Mercury connector is for users, you put the Mercury

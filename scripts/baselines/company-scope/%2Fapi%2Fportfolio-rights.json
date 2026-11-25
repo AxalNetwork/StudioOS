@@ -1,0 +1,8 @@
+{
+  "GET /api/portfolio-rights/:projectUid": {
+    "kind": "target"
+  },
+  "POST /api/portfolio-rights/requests": {
+    "kind": "target"
+  }
+}

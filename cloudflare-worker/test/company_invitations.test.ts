@@ -23,7 +23,7 @@ import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 
 import company from '../src/routes/company.ts';
-import { addComplianceStore } from './_baseline.mjs';
+import { addComplianceStore, tableFromBaseline } from './_baseline.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const OWNER = 501;      // primary admin of the company
@@ -75,6 +75,8 @@ function freshDb() {
     enableDoubleQuotedStringLiterals: true,
   });
   addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
+  // D8528: accepting is a guarded decision (services/decisionBatch.ts), which needs the production guard table.
+  db.exec(tableFromBaseline(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611071200_program_grant_revisions.sql'), 'utf8'), 'decision_guard'));
   db.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT, is_active INTEGER DEFAULT 1,
       jwt_min_iat INTEGER, founder_id INTEGER, partner_id INTEGER, name TEXT, email TEXT);

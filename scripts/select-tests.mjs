@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// D5610: write one advisory PR selection record, aggregate `--report <dir>`, or
+// replay `--backtest`; never skips CI execution.
+//
 // D5610: advisory selection records only. CI still executes the full suite.
 import { readFileSync, writeFileSync, readdirSync, existsSync, globSync } from 'node:fs';
 import { resolve, dirname, posix } from 'node:path';

@@ -190,7 +190,7 @@ test('inbox: each lane carries its group and its split by age band; a failed lan
 });
 
 test('inbox: the groups are the page model\'s, lane by lane', () => {
-  const model = readFileSync(resolve(ROOT, 'frontend/src/pages/admin/approvals/approvalsModel.js'), 'utf8');
+  const model = readFileSync(resolve(ROOT, 'frontend/src/pages/admin/approvals/approvalsLanesModel.js'), 'utf8');
   const fromModel: Record<string, string> = {};
   for (const m of model.matchAll(/\{ key: '([a-z_]+)', group: '([a-z]+)'/g)) fromModel[m[1]] = m[2];
   const hqBlock = model.slice(model.indexOf('export const HQ_LANES'), model.indexOf('export const isHqLane'));
