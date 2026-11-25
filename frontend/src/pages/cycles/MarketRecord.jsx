@@ -162,7 +162,7 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
       .catch(() => { if (live) setGeo({ code, state: 'unreadable', data: null }); });
     return () => { live = false; };
   }, [code, tries]);
-  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners) : null;
+  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners, m.customers) : null;
   const geoState = !code ? null : geo.code === code ? geo.state : 'loading';
 
   // The entry plan's rows carry the declared actions; the steps themselves come from `parts.market.steps`.

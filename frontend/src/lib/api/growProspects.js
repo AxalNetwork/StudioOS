@@ -9,6 +9,7 @@ export const growProspectsApi={
   add:body=>write('','POST',body),
   consent:(uid,channel,body)=>write(`/${encodeURIComponent(uid)}/consent/${encodeURIComponent(channel)}`,'PUT',body),
   status:(uid,body)=>write(`/${encodeURIComponent(uid)}/status`,'PATCH',body),
+  country:(uid,body)=>write(`/${encodeURIComponent(uid)}/country`,'PATCH',body),
   settings:project=>request(`${base}/settings${qs({project})}`),
   saveSettings:body=>write('/settings','PUT',body),
   suppressions:project=>request(`${base}/suppressions/count${qs({project})}`),
