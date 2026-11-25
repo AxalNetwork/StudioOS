@@ -107,7 +107,7 @@ const DOCUMENTED = new Map([
   ['frontend/test',                   'what the frontend guarantees'],
   ['cloudflare-worker/src',           'the production worker'],
   ['cloudflare-worker/src/routes',    'the production API surface'],
-  ['cloudflare-worker/src/durable-objects', 'the Durable Object classes index.ts re-exports, one per binding in wrangler.toml (D5581 part 2 made it eight)'],
+  ['cloudflare-worker/src/durable-objects', 'the Durable Object classes index.ts re-exports, one per binding in wrangler.toml (D5586 part 3 made it nine)'],
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
   ['cloudflare-worker/src/services/useOfFunds', 'Use of funds scenarios, projections and cap-table links'],
   ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
