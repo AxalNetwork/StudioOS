@@ -202,6 +202,10 @@ for (const width of [1440, 390]) {
         await openSettings(B.page, c);
         await B.page.getByTestId('project-settings-open-work').click();
         await expect(B.page).toHaveURL(new RegExp(`/projects/${c.projectId}/work`));
+        // Work is a lazy route: React keeps the settings on screen until its chunk is in. Only once Work is drawn has
+        // B really left the settings, which is what Back must not bring back unread.
+        await expect(B.page.getByTestId('work-page')).toBeVisible({ timeout: 60_000 });
+        await expect(settings(B.page)).toHaveCount(0);
         await revoke(A.context, c);
         await B.page.goBack();
         await expect(B.page).toHaveURL(new RegExp(`/projects/${c.projectId}/settings`));

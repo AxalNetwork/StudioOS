@@ -96,25 +96,35 @@ export default function ProjectSettingsPage() {
       const [project, members, mine] = await Promise.all([
         api.getProject(id), teamsApi.listProjectMembers(id).catch(() => null), accountCompaniesApi.projects().catch(() => null),
       ]);
-      if (!current()) return;
+      if (!current()) { reask(); return; }
       const row = (mine?.projects || []).find((p) => String(p.id) === String(id));
       const company = projectCompany(project, { row, companies: known.current });
       setState({ status: 'ready', project, manage: !!members?.can_manage, company, projects: projectsOfCompany(mine?.projects, company?.uid) });
     } catch (e) {
-      if (!current()) return;
+      if (!current()) { reask(); return; }
       setState({ status: 'error', error: e });
     }
+    // An answer for a selection that changed while it was out is not drawn, and the page asks again under the
+    // selection now held, so it never stays on "Reading…". A newer read or a page that has gone asks nothing.
+    function reask() { if (ask.n === asked.current) loadRef.current?.(); }
   }, [id]);
+  const loadRef = useRef(null);
+  loadRef.current = load;
   useEffect(() => {
     load();
     // D8527: access can change while the page is open. Coming back to the tab reads again, so a revoked member's
     // next look shows that they no longer have access rather than the settings they last saw.
     const again = () => { if (document.visibilityState !== 'hidden') load(); };
+    // Browser Back can restore this page whole from the back-forward cache, with its last answer and no remount:
+    // a restored page reads again, so it never shows settings its member may no longer open.
+    const restored = (e) => { if (e.persisted) load(); };
     window.addEventListener('focus', again);
     document.addEventListener('visibilitychange', again);
+    window.addEventListener('pageshow', restored);
     return () => {
       window.removeEventListener('focus', again);
       document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('pageshow', restored);
       asked.current += 1; // an answer for a page that has gone is never drawn
     };
   }, [load]);
