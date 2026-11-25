@@ -39,12 +39,14 @@ export interface ReviewerContext {
 
 /** One reviewer's context: their own authorities in the scope (nobody else's), and the scope's revoked people. */
 export async function reviewerContext(env: Pick<Env, 'DB'>, scope: Scope, userId: number): Promise<ReviewerContext> {
-  const [held, revokedUserIds] = await Promise.all([
+  const [held, revokedUserIds, renderAdmissions] = await Promise.all([
     resolveReleaseAuthorities(env, { tenantId: scope.tenantId, companyId: scope.companyId, userId }),
     RELEASE_ADMIN_DEPS.revokedUsers(env, scope),
+    // Part 12 (D5585-p12): the swarm state behind `render_unadmitted`; null (not read) until the swarm is wired.
+    RELEASE_ADMIN_DEPS.renderAdmissions(env, scope),
   ]);
   return {
-    ctx: { scope, authorities: new Map([[userId, held]]), revokedUserIds },
+    ctx: { scope, authorities: new Map([[userId, held]]), revokedUserIds, renderAdmissions },
     held,
     revoked: revokedUserIds.has(userId),
   };
