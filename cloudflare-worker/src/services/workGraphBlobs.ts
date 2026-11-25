@@ -29,6 +29,7 @@ import {
   type AccessClass, type Actor, type Scope, type SourceRef, type ValidationContext,
 } from './workGraphContracts';
 import { putContentAddressedRecord } from './recordStore';
+import { sha256OfStream } from './sha256Incremental';
 
 export const BLOB_BINDING = 'FILES' as const;
 export const BLOB_PREFIX = 'wg/v1';
@@ -55,6 +56,11 @@ export const WORK_GRAPH_BLOB_LIMITS = Object.freeze({
   maxBytesPerTenant: 100 * 1024 * 1024 * 1024,
   /** Objects up to this size are re-hashed on verify; larger ones rely on R2's own SHA-256 checksum. */
   deepVerifyMaxBytes: 8 * 1024 * 1024,
+  /**
+   * D5583 part 3: a media-class object with no R2 checksum (a completed multipart upload) above `deepVerifyMaxBytes`
+   * is re-hashed as a stream, in bounded memory, up to the largest media class. Generic objects keep `unverifiable`.
+   */
+  streamVerifyMaxBytes: 2 * 1024 * 1024 * 1024,
   maxPreviewChars: 200,
 });
 export type WorkGraphBlobLimits = typeof WORK_GRAPH_BLOB_LIMITS;
@@ -183,7 +189,7 @@ export class Spend {
 // ── verify ───────────────────────────────────────────────────────────────────
 
 export type VerifyResult =
-  | { ok: true; method: 'checksum' | 'rehash'; size: number; r2ClassB: number }
+  | { ok: true; method: 'checksum' | 'rehash' | 'stream'; size: number; r2ClassB: number }
   | { ok: false; code: 'missing_bytes' | 'digest_mismatch' | 'no_binding'; detail: string; r2ClassB: number };
 
 /**
@@ -209,7 +215,18 @@ export async function verifyBlob(
   const meta = head.customMetadata?.digest;
   if (meta !== undefined && meta !== digest) return { ok: false, code: 'digest_mismatch', detail: 'metadata', r2ClassB };
   if (checksum !== null && head.size > limits.deepVerifyMaxBytes) return { ok: true, method: 'checksum', size: head.size, r2ClassB };
-  if (checksum === null && head.size > limits.deepVerifyMaxBytes) return { ok: false, code: 'digest_mismatch', detail: 'unverifiable', r2ClassB };
+  if (checksum === null && head.size > limits.deepVerifyMaxBytes) {
+    // D5583 part 3: a multipart media object carries no R2 checksum. Stream the bytes through SHA-256 rather than
+    // trusting the metadata digest or buffering the object; a generic object, or one past the stream bound, stays
+    // unverifiable.
+    if (objectClass === 'generic' || head.size > limits.streamVerifyMaxBytes) return { ok: false, code: 'digest_mismatch', detail: 'unverifiable', r2ClassB };
+    const streamed = await bucket.get(key);
+    r2ClassB++;
+    if (!streamed?.body) return { ok: false, code: 'missing_bytes', detail: 'absent_on_read', r2ClassB };
+    const h = await sha256OfStream(streamed.body);
+    if (h.bytes !== expectedSize || h.hex !== digest) return { ok: false, code: 'digest_mismatch', detail: 'stream', r2ClassB };
+    return { ok: true, method: 'stream', size: h.bytes, r2ClassB };
+  }
   const body = await bucket.get(key);
   r2ClassB++;
   if (!body) return { ok: false, code: 'missing_bytes', detail: 'absent_on_read', r2ClassB };
@@ -276,13 +293,8 @@ export async function putVerified(
   };
   if (input.preview != null) metadata.preview = input.preview;
   const recordRow = (action: 'blob_put' | 'blob_reused', detail: Record<string, unknown> | null) => [
-    env.DB.prepare(
-      `INSERT INTO work_graph_blobs (tenant_id, company_id, object_class, digest, byte_length, residency, created_at, admitted_owner_user_id, project_id)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE (SELECT COALESCE(SUM(byte_length), 0) FROM work_graph_blobs WHERE tenant_id = ? AND deleted_at IS NULL) + ? <= ?
-       ON CONFLICT (tenant_id, company_id, project_id, object_class, digest) DO UPDATE SET deleted_at = NULL WHERE work_graph_blobs.deleted_at IS NOT NULL`,
-    ).bind(input.scope.tenantId, input.scope.companyId, objectClass, digest, bytes.byteLength, input.residency ?? null, at, input.storageOwnerUserId ?? null, projectKey,
-      input.scope.tenantId, bytes.byteLength, limits.maxBytesPerTenant),
+    blobRowStatement(env.DB, { scope: input.scope, objectClass, projectKey, digest, size: bytes.byteLength, residency: input.residency ?? null,
+      at, ownerUserId: input.storageOwnerUserId ?? null }, limits),
     integrityEventStatement(env.DB, { ...evd, action, outcome: 'applied', detail: objectClass === 'generic' ? detail : { ...detail, object_class: objectClass, project_id: projectKey }, cost: { ...s.cost, d1Statements: s.cost.d1Statements + 2, d1Batches: s.cost.d1Batches + 1 }, at }, action === 'blob_put'),
   ];
 
@@ -345,6 +357,93 @@ export async function putVerified(
     const row = await s.first<{ n: number }>(env.DB.prepare('SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND project_id = ? AND object_class = ? AND digest = ? AND deleted_at IS NULL').bind(input.scope.tenantId, input.scope.companyId, projectKey, objectClass, digest));
     return Number(row?.n ?? 0) > 0;
   }
+}
+
+/**
+ * The one ledger write for a stored object: insert its row (or revive a deleted one) only while the tenant's live
+ * bytes plus this object stay within the per-tenant limit. Shared by `putVerified` and `recordFinishedBlob`.
+ */
+function blobRowStatement(db: D1Database, r: { scope: Scope; objectClass: BlobClass; projectKey: number; digest: string; size: number;
+  residency: string | null; at: string; ownerUserId: number | null }, limits: WorkGraphBlobLimits): D1PreparedStatement {
+  return db.prepare(
+    `INSERT INTO work_graph_blobs (tenant_id, company_id, object_class, digest, byte_length, residency, created_at, admitted_owner_user_id, project_id)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE (SELECT COALESCE(SUM(byte_length), 0) FROM work_graph_blobs WHERE tenant_id = ? AND deleted_at IS NULL) + ? <= ?
+     ON CONFLICT (tenant_id, company_id, project_id, object_class, digest) DO UPDATE SET deleted_at = NULL WHERE work_graph_blobs.deleted_at IS NOT NULL`,
+  ).bind(r.scope.tenantId, r.scope.companyId, r.objectClass, r.digest, r.size, r.residency, r.at, r.ownerUserId, r.projectKey,
+    r.scope.tenantId, r.size, limits.maxBytesPerTenant);
+}
+
+export interface RecordFinishedInput {
+  scope: Scope;
+  objectClass: Exclude<BlobClass, 'generic'>;
+  digest: string;
+  size: number;
+  /** As `putVerified`: the resolved admission owner, or null for the existing unowned/unreadable pass. */
+  storageOwnerUserId: number | null;
+  accessClass: AccessClass;
+  residency?: string | null;
+  actor: Actor;
+  assetUid?: string | null;
+  /** True when the object was already intact at its key and this upload's bytes were not completed over it. */
+  reused: boolean;
+  /** Ids only, for the audit row (the upload session, its part count). */
+  detail?: Record<string, unknown> | null;
+}
+
+/**
+ * D5583 part 3: record an object that reached its content-addressed media key without passing through this Worker's
+ * memory whole (a completed multipart upload). Verifies what R2 holds against the digest and size first (`verifyBlob`,
+ * which streams an object R2 has no checksum for), then writes the same ledger row and audit event `putVerified`
+ * writes, under the same per-tenant limit. Never writes or deletes bytes.
+ */
+export async function recordFinishedBlob(
+  env: BlobEnv, ctx: ValidationContext, input: RecordFinishedInput, limits: WorkGraphBlobLimits = WORK_GRAPH_BLOB_LIMITS,
+): Promise<PutVerifiedResult> {
+  const s = new Spend(env);
+  if (!scopeOk(input?.scope) || !actorOk(input.actor) || input.objectClass === ('generic' as BlobClass)
+    || !(BLOB_CLASSES as readonly string[]).includes(input.objectClass)
+    || typeof input.digest !== 'string' || !/^[0-9a-f]{64}$/.test(input.digest) || !posInt(input.size)
+    || (input.storageOwnerUserId != null && !posInt(input.storageOwnerUserId))
+    || !(ACCESS_CLASSES as readonly string[]).includes(input.accessClass)
+    || (input.assetUid != null && (typeof input.assetUid !== 'string' || input.assetUid.length > 80))) {
+    return s.refuse('malformed', [], null);
+  }
+  const { scope, objectClass, digest, size } = input;
+  const projectKey = scope.projectId ?? 0;
+  const evd = { tenantId: scope.tenantId, companyId: scope.companyId, assetUid: input.assetUid ?? null, actor: input.actor, digest };
+  if (outOfScope(ctx, scope, input.accessClass)) return s.refuse('wrong_tenant', [], evd);
+  if (!residencyAllowed(input.residency ?? null, WORK_GRAPH_BLOB_DEPS.jurisdiction)) {
+    return s.refuse('residency_mismatch', [String(input.residency), String(WORK_GRAPH_BLOB_DEPS.jurisdiction)], evd);
+  }
+  if (!env.FILES) return s.refuse('no_binding', [BLOB_BINDING], evd);
+  const v = await verifyBlob(env, scope, digest, size, limits, objectClass);
+  s.cost.r2ClassB += v.r2ClassB;
+  if (!v.ok) return s.refuse(v.code, [digest, v.detail], evd);
+  const known = await s.first<{ n: number }>(env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND project_id = ? AND object_class = ? AND digest = ? AND deleted_at IS NULL',
+  ).bind(scope.tenantId, scope.companyId, projectKey, objectClass, digest));
+  if (Number(known?.n ?? 0) > 0) {
+    s.cost.d1Statements++;
+    await integrityEventStatement(env.DB, { ...evd, action: 'blob_reused', outcome: 'applied', detail: { ...input.detail, object_class: objectClass, project_id: projectKey, multipart: true }, cost: { ...s.cost }, at: WORK_GRAPH_BLOB_DEPS.now().toISOString() }).run();
+    return { ok: true, digest, size, key: blobKey(scope, digest, objectClass), source: blobSourceRef(scope, digest, objectClass), reused: true, cost: { ...s.cost } };
+  }
+  const used = await tenantBytes(env, s, scope.tenantId);
+  if (used + size > limits.maxBytesPerTenant) return s.refuse('tenant_limit', [String(limits.maxBytesPerTenant)], { ...evd, action: 'limit_refused' });
+  const at = WORK_GRAPH_BLOB_DEPS.now().toISOString();
+  const action = input.reused ? 'blob_reused' : 'blob_put';
+  await s.batch([
+    blobRowStatement(env.DB, { scope, objectClass, projectKey, digest, size, residency: input.residency ?? null, at, ownerUserId: input.storageOwnerUserId }, limits),
+    integrityEventStatement(env.DB, { ...evd, action, outcome: 'applied', detail: { ...input.detail, object_class: objectClass, project_id: projectKey, multipart: true },
+      cost: { ...s.cost, d1Statements: s.cost.d1Statements + 2, d1Batches: s.cost.d1Batches + 1 }, at }, true),
+  ]);
+  const row = await s.first<{ n: number }>(env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND project_id = ? AND object_class = ? AND digest = ? AND deleted_at IS NULL',
+  ).bind(scope.tenantId, scope.companyId, projectKey, objectClass, digest));
+  // Another put of this tenant took the last bytes between the read and the record. The object is a record and is
+  // not deleted here; with no row and no revision naming it, reconciliation collects it as an orphan.
+  if (Number(row?.n ?? 0) === 0) return s.refuse('tenant_limit', [String(limits.maxBytesPerTenant)], { ...evd, action: 'limit_refused' });
+  return { ok: true, digest, size, key: blobKey(scope, digest, objectClass), source: blobSourceRef(scope, digest, objectClass), reused: input.reused, cost: { ...s.cost } };
 }
 
 async function tenantBytes(env: BlobEnv, s: Spend, tenantId: number): Promise<number> {
