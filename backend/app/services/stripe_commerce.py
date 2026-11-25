@@ -3,8 +3,15 @@ page cart + one-time checkout.
 
 Talks to the live Stripe REST API over httpx (we intentionally DO NOT use the
 `stripe` SDK). Base https://api.stripe.com/v1, header `Stripe-Version:
-2023-10-16`, Bearer auth from env `STRIPE_TEST_SECRET_KEY` (falls back to
-`STRIPE_SECRET_KEY` with a logged warning if the test key is missing).
+2023-10-16`, Bearer auth from env `STRIPE_TEST_SECRET_KEY` only.
+
+Test mode is enforced, not assumed (D8511): the secret key must be set and
+start with `sk_test_` (or `rk_test_` for a restricted test key), and the
+publishable key, `STRIPE_TEST_PUBLISHABLE_KEY`, must start with `pk_test_`.
+Anything else is refused before any request leaves the process, with an error
+that names the variable and never its value. There is no fallback to
+`STRIPE_SECRET_KEY` or `STRIPE_PUBLISHABLE_KEY`: a developer environment that
+holds the live key must not be able to create real Stripe objects.
 
 All request bodies are form-encoded (application/x-www-form-urlencoded) with
 nested params flattened per Stripe's convention (metadata[key],
@@ -66,24 +73,35 @@ class StripeError(Exception):
         self.code = code
 
 
-def _secret_key() -> str:
-    key = os.environ.get("STRIPE_TEST_SECRET_KEY")
-    if key:
-        return key
-    fallback = os.environ.get("STRIPE_SECRET_KEY")
-    if fallback:
-        logger.warning(
-            "stripe_commerce: STRIPE_TEST_SECRET_KEY missing; falling back to "
-            "STRIPE_SECRET_KEY (this may NOT be a test-mode key)"
+SECRET_KEY_ENV = "STRIPE_TEST_SECRET_KEY"
+PUBLISHABLE_KEY_ENV = "STRIPE_TEST_PUBLISHABLE_KEY"
+_TEST_SECRET_PREFIXES = ("sk_test_", "rk_test_")
+_TEST_PUBLISHABLE_PREFIXES = ("pk_test_",)
+
+
+def _test_mode_key(env_name: str, prefixes: Tuple[str, ...]) -> str:
+    """Read a test-mode key from `env_name` alone, or refuse.
+
+    The error names the variable and the expected prefix, never the value.
+    """
+    key = (os.environ.get(env_name) or "").strip()
+    if not key:
+        raise StripeError(500, f"{env_name} is not set; the dev commerce client runs in Stripe test mode only", "no_key")
+    if not key.startswith(prefixes):
+        raise StripeError(
+            500,
+            f"{env_name} is not a test-mode key (expected {' or '.join(prefixes)}); refusing to call Stripe",
+            "not_test_mode",
         )
-        return fallback
-    raise StripeError(500, "Stripe secret key not configured", "no_key")
+    return key
+
+
+def _secret_key() -> str:
+    return _test_mode_key(SECRET_KEY_ENV, _TEST_SECRET_PREFIXES)
 
 
 def publishable_key() -> str:
-    return os.environ.get("STRIPE_TEST_PUBLISHABLE_KEY", "") or os.environ.get(
-        "STRIPE_PUBLISHABLE_KEY", ""
-    )
+    return _test_mode_key(PUBLISHABLE_KEY_ENV, _TEST_PUBLISHABLE_PREFIXES)
 
 
 def webhook_secret() -> str:

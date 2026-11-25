@@ -7,7 +7,10 @@ Idempotent: test products/prices are tagged with metadata `live_product_id` /
 
 Also creates a couple of TEST coupons + promotion codes for promo testing.
 
-Requires env: STRIPE_SECRET_KEY (live, read-only here), STRIPE_TEST_SECRET_KEY.
+Requires env: STRIPE_SECRET_KEY (live, read-only here: GETs only),
+STRIPE_TEST_SECRET_KEY (must start with sk_test_ or rk_test_; every write uses
+it). The script refuses before any request if the test key is missing or is
+not a test-mode key (D8511); it never writes with STRIPE_SECRET_KEY.
 Run: UV_PROJECT_ENVIRONMENT=.venv uv run python scripts/seed_stripe_test_catalog.py
 """
 import json
@@ -17,7 +20,9 @@ import urllib.parse
 import urllib.request
 
 LIVE = os.environ["STRIPE_SECRET_KEY"]
-TEST = os.environ["STRIPE_TEST_SECRET_KEY"]
+TEST = os.environ.get("STRIPE_TEST_SECRET_KEY", "").strip()
+if not TEST.startswith(("sk_test_", "rk_test_")):
+    sys.exit("STRIPE_TEST_SECRET_KEY is missing or not a test-mode key (expected sk_test_ or rk_test_); refusing to call Stripe")
 API = "https://api.stripe.com/v1"
 
 

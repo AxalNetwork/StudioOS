@@ -104,7 +104,10 @@ def catalog_products(kind: Optional[str] = None, audience: Optional[str] = None)
 
 @router.get("/payments/config")
 def payments_config():
-    return {"publishable_key": sc.publishable_key()}
+    try:
+        return {"publishable_key": sc.publishable_key()}
+    except sc.StripeError as exc:
+        return _stripe_error_response(exc)
 
 
 # ---------------------------------------------------------------------------
