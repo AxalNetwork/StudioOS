@@ -549,7 +549,7 @@ def bridge_statements(with_moves: bool) -> list[str]:
         lines.append(
             f"UPDATE {b} SET fund_directory_uid = {target}, "
             f"status = CASE status WHEN 'withdrawn' THEN 'withdrawn' ELSE 'needs_review' END "
-            f'WHERE fund_directory_uid IS NOT NULL AND {gone} AND {target} IS NOT NULL '
+            f'WHERE {gone} '
             f'AND NOT EXISTS (SELECT 1 FROM {b} o WHERE o.fund_directory_uid = {target}) '
             f'AND (SELECT COUNT(*) FROM {b} l JOIN {MOVES_TABLE} m2 ON m2.old_uid = l.fund_directory_uid '
             f'WHERE m2.new_uid = {target}) = 1;'
