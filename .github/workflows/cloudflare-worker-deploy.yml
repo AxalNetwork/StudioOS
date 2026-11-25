@@ -51,6 +51,28 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      # D8517 (#8517) - SHADOW MODE. Report the slot, task and provenance verdict of every pull
+      # request merged since the last successful production deploy. It reads with the token this
+      # job already holds (contents and actions read, nothing widened), writes only the job
+      # summary, and can never change the release: continue-on-error here, `|| true` on each
+      # command and the script's own exit 0. Turning it into a gate is the owner's decision.
+      - name: Report commit provenance (shadow)
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          previous=$(gh api "repos/$REPO/actions/workflows/cloudflare-worker-deploy.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null || true)
+          [[ "$previous" =~ ^[0-9a-f]{40}$ ]] || previous=""
+          # Checkout keeps no credential, so give git the job's own read token for these fetches only.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --no-tags --quiet --unshallow origin 2>/dev/null || true
+          node scripts/ci/agent-provenance.mjs --shadow --candidate "$GITHUB_SHA" --previous "$previous" || true
+          exit 0
+
       - name: Wait for all six required checks
         id: candidate
         env:
