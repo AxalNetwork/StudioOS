@@ -17,7 +17,7 @@ r.onError((e, c) => {
   return c.json({ error: 'typeform_review_refused', detail: e.sentence }, e.status as 400);
 });
 
-async function scope(c: Context<{ Bindings: Env }>, raw: unknown) {
+export async function scope(c: Context<{ Bindings: Env }>, raw: unknown) {
   const user = await requireAuth(c);
   if (await isSupportSession(c)) throw new WriterError(403, 'A support session cannot review survey answers');
   const pid = Number(raw);
@@ -32,6 +32,7 @@ async function scope(c: Context<{ Bindings: Env }>, raw: unknown) {
   c.header('Cache-Control', 'no-store');
   return { projectId: pid, integrationId: Number(binding.id), userId: Number(user.id) };
 }
+
 
 r.get('/reviews', async c => {
   const s = await scope(c, c.req.query('project')); const raw = c.req.query('before');
