@@ -331,6 +331,16 @@ test('7. tenant limits on assets, versions and bytes; an offline revision is met
   const race = await (async () => {
     const r = world();
     const cap = { ...WORK_GRAPH_BLOB_LIMITS, maxBytesPerTenant: 10 };
+    // Reaching R2 means the tenant byte pre-check passed. Hold both writers here
+    // so neither can claim the ledger allowance before the other passes that check.
+    const bothAtR2 = Promise.withResolvers<void>();
+    const writeObject = r.r2.put.bind(r.r2);
+    let arrivals = 0;
+    r.r2.put = async (...args) => {
+      if (++arrivals === 2) bothAtR2.resolve();
+      await bothAtR2.promise;
+      return writeObject(...args);
+    };
     const [x, y] = await Promise.all([put(r, bytesOf('sixsix'), {}, CTX, cap), put(r, bytesOf('sevenxx'), {}, CTX, cap)]);
     return { r, codes: [x.ok ? 'ok' : x.code, y.ok ? 'ok' : y.code].sort() };
   })();

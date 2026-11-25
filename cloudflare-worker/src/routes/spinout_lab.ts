@@ -120,17 +120,27 @@ type ApplicationRow = {
   status: string;
   created_at: string;
   decided_at: string | null;
+  /** D6989: form | fit | line, or null ("Not recorded") for an application made without one. */
+  track: string | null;
 };
 
+const LATEST_APPLICATION = `SELECT id, company_name, incorporated, stage, jurisdiction, cohort, status, created_at, decided_at
+  FROM spinout_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1`;
+const LATEST_APPLICATION_WITH_TRACK = `SELECT id, company_name, incorporated, stage, jurisdiction, cohort, status, created_at, decided_at, track
+  FROM spinout_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1`;
+
 async function latestApplication(env: Env, userId: number): Promise<ApplicationRow | null> {
+  const read = (sql: string) => env.DB.prepare(sql).bind(userId).first<ApplicationRow>();
   try {
-    const row = await env.DB.prepare(
-      `SELECT id, company_name, incorporated, stage, jurisdiction, cohort, status, created_at, decided_at
-       FROM spinout_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
-    ).bind(userId).first<ApplicationRow>();
-    return row ?? null;
+    return (await read(LATEST_APPLICATION_WITH_TRACK)) ?? null;
   } catch {
-    return null; // table not yet migrated
+    // D6989: a database without the track migration still answers, with the track not recorded.
+    try {
+      const row = await read(LATEST_APPLICATION);
+      return row ? { ...row, track: null } : null;
+    } catch {
+      return null; // table not yet migrated
+    }
   }
 }
 
@@ -322,7 +332,32 @@ type ApplyBody = {
   cohort?: unknown;
   target_cycle?: unknown; // Task #5 — optional {year, month} the applicant is targeting
   answers?: unknown; // D383 — steps 2–5; required when present, see missingForSubmit
+  track?: unknown; // D6989 — the starting point chosen on the Lab page: form | fit | line, or absent
 };
+
+/** D6989 (#6989): the Lab's three starting points (`LAB_TRACKS` in frontend/src/lib/spinoutLabArsenal.js). */
+export const LAB_TRACK_IDS = ['form', 'fit', 'line'] as const;
+
+/** The stored track: a known id, null when none was sent, or `invalid` for anything else (refused, never coerced). */
+export function applicationTrack(raw: unknown): string | null | 'invalid' {
+  if (raw === undefined || raw === null || raw === '') return null;
+  return typeof raw === 'string' && (LAB_TRACK_IDS as readonly string[]).includes(raw) ? raw : 'invalid';
+}
+
+/**
+ * The application inserts. D6989: the track column is named only when a track was sent, so an application without one
+ * inserts exactly as before (the column stays NULL), and a database the track migration has not reached still takes
+ * it. The NOT EXISTS guard makes "one pending application per user" atomic.
+ */
+const PENDING_GUARD = `WHERE NOT EXISTS (SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending')`;
+const INSERT_BASICS = `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort)
+  SELECT ?, ?, ?, ?, ?, ?, ? ${PENDING_GUARD}`;
+const INSERT_BASICS_AND_TRACK = `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort, track)
+  SELECT ?, ?, ?, ?, ?, ?, ?, ? ${PENDING_GUARD}`;
+const INSERT_WITH_ANSWERS = `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort, answers_json)
+  SELECT ?, ?, ?, ?, ?, ?, ?, ? ${PENDING_GUARD}`;
+const INSERT_WITH_ANSWERS_AND_TRACK = `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort, answers_json, track)
+  SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? ${PENDING_GUARD}`;
 
 spinoutLab.post('/apply', async (c) => {
   const user = await requireAuth(c);
@@ -336,6 +371,10 @@ spinoutLab.post('/apply', async (c) => {
   const idea = (typeof body.idea === 'string' ? body.idea : '').trim().slice(0, 4000);
   if (!company) return c.json({ error: 'Company / working name is required' }, 400);
   if (!idea) return c.json({ error: 'Please describe your idea or project' }, 400);
+  const track = applicationTrack(body.track);
+  if (track === 'invalid') {
+    return refusal(c, 400, 'track_unknown', 'Choose a starting point from the Lab page: Form, Fit or Line.');
+  }
   // D383 — the wizard sends steps 2–5 as `answers`. An older client that
   // sends none still submits (its application simply records no answers);
   // one that sends answers must send the required ones.
@@ -401,13 +440,9 @@ spinoutLab.post('/apply', async (c) => {
   // without the answers it was submitted with.
   const withAnswers = async () => {
     try {
-      return await c.env.DB.prepare(
-        `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort, answers_json)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?
-         WHERE NOT EXISTS (
-           SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending'
-         )`,
-      ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, answersJson, user.id).run();
+      return await (track
+        ? c.env.DB.prepare(INSERT_WITH_ANSWERS_AND_TRACK).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, answersJson, track, user.id)
+        : c.env.DB.prepare(INSERT_WITH_ANSWERS).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, answersJson, user.id)).run();
     } catch (err) {
       console.error('[spinout-lab/apply] insert with answers failed', err);
       return null;
@@ -415,13 +450,9 @@ spinoutLab.post('/apply', async (c) => {
   };
   const ins = answersJson
     ? await withAnswers()
-    : await c.env.DB.prepare(
-      `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort)
-       SELECT ?, ?, ?, ?, ?, ?, ?
-       WHERE NOT EXISTS (
-         SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending'
-       )`,
-    ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id).run();
+    : await (track
+      ? c.env.DB.prepare(INSERT_BASICS_AND_TRACK).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, track, user.id)
+      : c.env.DB.prepare(INSERT_BASICS).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id)).run();
   if (!ins) {
     return refusal(c, 503, 'application_not_saved', 'Your application could not be saved just now. Your answers are still on this page; try again in a moment.');
   }

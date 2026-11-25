@@ -5,7 +5,7 @@
  *   Fund brief    a one-paragraph description of this fund from its recorded facts.
  *   Letter draft  the letter's opening paragraph from this period's recorded capital movements.
  *
- * Pure: the route reads the rows and passes them in. Each builder returns the material the model is given, as
+ * The builders are pure: the route reads the rows (the period's through `periodMovements`) and passes them in. Each builder returns the material the model is given, as
  * numbered lines, and the sources those numbers name, so the draft cites [n] and the page lists what [n] is. A
  * builder with nothing recorded returns null, and the route refuses before any model is called.
  *
@@ -15,6 +15,7 @@
  * the skill's rules rather than its prompt.
  */
 
+import type { Env } from '../types';
 import { formatMinor } from '../../../frontend/src/lib/money.js';
 
 export interface DraftSource { n: number; kind: string; ref: string; label: string; date: string | null }
@@ -68,6 +69,23 @@ export function briefMaterial(page: any): DraftMaterial | null {
   if (!facts.length) return null;
   const sources = facts.map(([kind, ref, label, date], i) => ({ n: i + 1, kind, ref, label, date }));
   return { lines: [`Fund: ${f.name}`, ...sources.map((s) => `[${s.n}] ${s.label}${s.date ? ` (${s.date})` : ''}`)], sources };
+}
+
+/**
+ * The period's recorded capital calls and paid distributions, the rows `letterMaterial` reads. D6242 (#6242) reads
+ * the same rows for the whole letter's draft on the `funds/reporting` surface, so both drafts speak of one set.
+ */
+export async function periodMovements(env: Env, fundId: number, start: string, end: string) {
+  const calls = await env.DB.prepare(
+    `SELECT id, call_number, amount_cents, purpose, due_date, created_at FROM fund_capital_calls
+      WHERE fund_id = ? AND date(created_at) BETWEEN date(?) AND date(?) ORDER BY created_at, id LIMIT 50`,
+  ).bind(fundId, start, end).all<any>();
+  const dists = await env.DB.prepare(
+    `SELECT id, amount_cents, distribution_type, distributed_at, created_at FROM fund_distributions
+      WHERE fund_id = ? AND status = 'paid' AND date(COALESCE(distributed_at, created_at)) BETWEEN date(?) AND date(?)
+      ORDER BY COALESCE(distributed_at, created_at), id LIMIT 500`,
+  ).bind(fundId, start, end).all<any>();
+  return { calls: calls.results || [], distributions: dists.results || [] };
 }
 
 /**

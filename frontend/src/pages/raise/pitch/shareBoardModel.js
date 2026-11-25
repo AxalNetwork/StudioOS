@@ -102,6 +102,11 @@ export const OVERVIEW_ZERO = 'Measured: your investor links exist and nobody ope
 export const NO_TIMED_CARD = 'No card on this version has counted reading time in this period.';
 export const NO_ASK_FUNNEL = 'No link here sends an ask card and counts time per slide, so reaching the ask cannot be counted.';
 export const ASK_ZERO = 'Measured: no link that times its cards reached the ask in this period.';
+// D8250 (#8250): readers are counted by link, the only identity a share link has.
+export const NO_READERS = 'No investor link was opened in this period, so there is no reader to count.';
+export const READERS_UNSENT = 'This read did not count readers.';
+export const NO_PER_READER = 'No card counted reading time on a link in this period, so there is no average per reader.';
+export const PER_READER_UNSENT = 'This read did not count readers on this card.';
 export const ZERO_DAY_NOTE = 'A grey line is a day with no views, counted: a measured zero, not missing data.';
 
 /**
@@ -114,7 +119,7 @@ export const ZERO_DAY_NOTE = 'A grey line is a day with no views, counted: a mea
 export function overviewFigures(data) {
   if (!data || typeof data !== 'object') {
     const u = { kind: 'unreadable', why: ABSENCE.unreadable.line };
-    return { visits: u, mostRead: u, ask: u };
+    return { visits: u, mostRead: u, ask: u, investors: u, perReader: u };
   }
   const days = Array.isArray(data.days) ? data.days : [];
   const views = days.reduce((s, d) => s + (Number(d.nda) || 0) + (Number(d.open) || 0), 0);
@@ -141,7 +146,35 @@ export function overviewFigures(data) {
     const sub = `of ${opened} opened ${opened === 1 ? 'link' : 'links'} · counted on links with Time per slide on`;
     ask = n === 0 ? { kind: 'measured_zero', value: '0', why: ASK_ZERO, sub } : { kind: 'value', value: String(n), sub };
   }
-  return { visits, mostRead, ask };
+  return { visits, mostRead, ask, ...readerFigures(data, views, top) };
+}
+
+/**
+ * D8250 (#8250): PS07's "N investors" under Visits and the most-read card's
+ * average per reader. Both count share links, the only identity a link has:
+ * one investor with two links is two, two people on one link are one, and the
+ * words say "link". With no view, no timed card or no count from the read,
+ * each is Not recorded, never 0.
+ */
+export function readerFigures(data, views, top) {
+  if (!data || typeof data !== 'object') {
+    const u = { kind: 'unreadable', why: ABSENCE.unreadable.line };
+    return { investors: u, perReader: u };
+  }
+  const raw = data.readers?.count;
+  const n = raw == null ? null : Number(raw);
+  let investors;
+  if (!views) investors = { kind: 'not_recorded', why: NO_READERS };
+  else if (!(n > 0)) investors = { kind: 'not_recorded', why: READERS_UNSENT };
+  else investors = { kind: 'value', value: `${n} investor ${n === 1 ? 'link' : 'links'} opened` };
+
+  let perReader;
+  const per = top ? Number(top.seconds_per_reader) : NaN;
+  const readers = top ? Number(top.readers) : NaN;
+  if (!top) perReader = { kind: 'not_recorded', why: NO_PER_READER };
+  else if (!(per > 0) || !(readers > 0)) perReader = { kind: 'not_recorded', why: PER_READER_UNSENT };
+  else perReader = { kind: 'value', value: `${durationWords(per)} per link on average · ${readers} ${readers === 1 ? 'link' : 'links'} read it` };
+  return { investors, perReader };
 }
 
 /** The period the daily read answered, as the board heads it: "1 Oct to 30 Oct 2026". */

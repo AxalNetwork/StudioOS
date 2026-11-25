@@ -14,6 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, matchRoutes } from 'react-router-dom';
 import { readRoutesSource } from './_routesSource.mjs';
@@ -25,7 +26,7 @@ import MarketsHome, { ComparePanel } from '../src/pages/cycles/MarketsHome.jsx';
 import MarketRecord from '../src/pages/cycles/MarketRecord.jsx';
 import { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import {
-  compareSummary, diffWords, evidenceFor, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
+  compareSummary, diffWords, evidenceFor, partnerLine, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
 } from '../src/pages/cycles/marketsModel.js';
 
 const h = React.createElement;
@@ -277,4 +278,60 @@ test('Markets owns its page and its record in Grow’s def, and the old addresse
   assert.equal(matched('/grow/market-expansion'), '/grow/:slug');
   assert.equal(matched('/grow/market-expansion/mka1'), '/grow/:slug/:id');
   assert.equal(matched('/grow/market-expansion/new'), '/grow/:slug/new');
+});
+
+// D8251 (#8251). Mutation checked: a reader given the buttons (fails); the empty state dropped (fails); Unavailable shown as
+// none (fails); the source dropped from a card (fails); the current score dropped from a score card (fails).
+test('proposals: cards with their sources, buttons only for a writer, an empty state, Unavailable when the read failed', () => {
+  const proposals = [
+    { uid: 'p1', kind: 'score', payload: { part: 'partners', score: 6 }, sources: [{ label: 'Two resellers', url: 'https://example.test/r' }, { label: 'Interview notes' }] },
+    { uid: 'p2', kind: 'plan', payload: { steps: [{ text: 'Register the entity', due_on: '2027-02-01' }, { text: 'Open a bank account', due_on: null }] }, sources: [] },
+    { uid: 'p3', kind: 'comparison', payload: { text: 'Spain is cheaper to enter.' }, sources: [{ label: 'Budget v3' }] }];
+  const decl = [{ key: 'accept-proposal', label: 'Accept', kind: 'write', row_only: true }, { key: 'dismiss-proposal', label: 'Dismiss', kind: 'write', row_only: true }];
+  const writer = { ...RECORD({ proposals, proposals_state: 'ok' }) }; writer.actions = [...writer.actions, ...decl];
+  const html = ssr(h(MarketRecord, { record: writer, activity: [], ...handlers }));
+  const t = text(html);
+  assert.match(t, /Eadwyn proposes Nothing is written until a founder accepts/);
+  assert.match(t, /Score partners Proposed 6 \/ 10 · now Not recorded/);
+  assert.match(t, /Source: Two resellers ; Interview notes/);
+  assert.match(html, /<a href="https:\/\/example\.test\/r"[^>]*>Two resellers<\/a>/);
+  assert.match(t, /Drafted entry plan Register the entity due 1 Feb Open a bank account/);
+  assert.match(t, /Written comparison Spain is cheaper to enter\./);
+  assert.match(t, /Source not recorded/);
+  assert.equal((html.match(/data-testid="market-proposal-accept"/g) || []).length, 3);
+  assert.equal((html.match(/data-testid="market-proposal-dismiss"/g) || []).length, 3);
+  const scored = ssr(h(MarketRecord, { record: { ...writer, parts: { market: { ...writer.parts.market, scores: writer.parts.market.scores.map((x) => (x.key === 'partners' ? { ...x, score: 3, source: 'Old' } : x)) } } }, activity: [], ...handlers }));
+  assert.match(text(scored), /Proposed 6 \/ 10 · now 3 \/ 10/);
+  const reader = ssr(h(MarketRecord, { record: RECORD({ proposals, proposals_state: 'ok' }), activity: [], ...handlers }));
+  assert.match(text(reader), /Score partners/);
+  assert.doesNotMatch(reader, /market-proposal-accept|market-proposal-dismiss/);
+  assert.match(text(ssr(h(MarketRecord, { record: RECORD({ proposals: [], proposals_state: 'ok' }), activity: [], ...handlers }))), /Eadwyn has no open proposal for this market/);
+  const down = text(ssr(h(MarketRecord, { record: RECORD({ proposals: null, proposals_state: 'unreadable' }), activity: [], ...handlers })));
+  assert.match(down, /not a claim that there are none/);
+  assert.doesNotMatch(down, /no open proposal/);
+});
+
+// D8254 (#8254). Mutation checked: a failed read (null) shown as none linked (fails); the empty state dropped (fails);
+// the record not passing its partners to the evidence strip (fails); a linked partner not linking to its record (fails).
+test('partners: the record lists the linked partners, an empty state when none, Unavailable when the read failed', () => {
+  const linked = [{ uid: 'pta', name: 'Harbour Resellers', type: 'reseller', stage: 'signed' }, { uid: 'ptb', name: 'Anchor Agency', type: 'co_marketing', stage: 'talking' }];
+  const t = text(ssr(h(MarketRecord, { record: RECORD({ partners: linked, partners_state: 'ok' }), activity: [], ...handlers })));
+  const phone = text(ssr(h(RecordPhoneProvider, { phone: true }, h(MarketRecord, { record: RECORD({ partners: linked, partners_state: 'ok' }), activity: [], ...handlers }))));
+  assert.match(phone, /Partners 2 linked/);
+  assert.match(t, /Harbour Resellers reseller · signed/);
+  assert.match(t, /Anchor Agency co marketing · talking/);
+  const html = ssr(h(MarketRecord, { record: RECORD({ partners: linked, partners_state: 'ok' }), activity: [], ...handlers }), '/grow/market-expansion/mka?project_id=7');
+  assert.match(html, /href="\/grow\/partner-network\/pta\?project_id=7"/);
+  const none = text(ssr(h(MarketRecord, { record: RECORD({ partners: [], partners_state: 'ok' }), activity: [], ...handlers })));
+  assert.match(none, /No partner is linked to this market yet/);
+  assert.match(none, /Link one in Partnerships/);
+  const down = text(ssr(h(MarketRecord, { record: RECORD({ partners: null, partners_state: 'unreadable' }), activity: [], ...handlers })));
+  assert.match(down, /Linked partners/);
+  assert.match(down, /not a claim that none is linked/);
+  assert.doesNotMatch(down, /No partner is linked/);
+  assert.deepEqual(partnerLine('Portugal', linked), { state: 'value', label: 'Partners linked to Portugal: 2', asOf: null });
+  assert.equal(partnerLine('Portugal', []).state, 'not_recorded');
+  assert.equal(partnerLine('Portugal', null).state, 'unavailable');
+  assert.equal(partnerLine('Portugal', undefined).state, 'not_recorded');
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners\)/, 'the record hands its partners to the evidence strip');
 });

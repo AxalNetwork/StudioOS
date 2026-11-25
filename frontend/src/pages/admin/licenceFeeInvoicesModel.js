@@ -80,3 +80,140 @@ export function voidLine(inv) {
  * never one already issued.
  */
 export const FEE_CHANGE_NOTE = 'Voiding needs a reason, which is kept with the invoice and in HQ’s audit log (licence History does not list invoices yet). An issued invoice keeps the fee it was issued at; an amended fee applies to the next invoice issued.';
+
+/* ------------------------------------------------------------------ *
+ * D5956 (#5956) — the one-off initial invoice (D5954, boards L41 to L45). One per licence, ever; a void one keeps the
+ * slot. Its figures come from the latest pricing decision's accepted initial fee and regulatory surcharge, frozen at
+ * issue. Not recorded, Unavailable and €0 are never drawn alike.
+ * ------------------------------------------------------------------ */
+
+/** The initial invoice (`kind: 'initial'`) apart from the annual licence-year list. */
+export function splitInvoices(invoices) {
+  const list = Array.isArray(invoices) ? invoices : [];
+  return { initial: list.find((i) => i?.kind === 'initial') || null, annual: list.filter((i) => i?.kind !== 'initial') };
+}
+
+/** Only an active or suspended licence is invoiced (the Worker's BILLABLE_STATUSES). */
+export const INITIAL_BILLABLE = Object.freeze(['active', 'suspended']);
+
+/** "1 Dec 2026" from "2026-12-01"; anything else is returned as given. */
+export function dayLabel(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return String(iso || '');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${Number(m[3])} ${months[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/** The surcharge's class from the pricing read's countries: one class, each country's for a basket, Not recorded when unknown. */
+export function regulatoryClassLabel(countries) {
+  const list = Array.isArray(countries) ? countries.filter((c) => c && c.country_code) : [];
+  if (!list.length) return 'class Not recorded';
+  const cls = (c) => (c.recorded && c.regulatory_class ? c.regulatory_class : 'Not recorded');
+  if (list.length === 1) return `class ${cls(list[0])}`;
+  return `class ${list.map((c) => `${c.country_code} ${cls(c)}`).join(' · ')}`;
+}
+
+const NR = 'Not recorded';
+const posInt = (v) => Number.isSafeInteger(v) && v >= 0;
+
+/**
+ * What the initial invoice card draws. `invoicesRead` and `pricingRead` are `{ status: 'loading'|'ready'|'unreadable',
+ * data }` (the two reads load apart). Returns the state, its chip, the lines, the total, the metadata, whether Issue is
+ * offered (`canIssue`; the Worker still decides) and, when it is off, the sentence why.
+ */
+export function initialInvoiceCard({ licence, invoicesRead, pricingRead, today }) {
+  const lic = licence || {};
+  const pricing = pricingRead?.status === 'ready' ? pricingRead.data : null;
+  const classLabel = regulatoryClassLabel(pricing?.countries);
+  const base = { lines: [], total: null, nrSurcharge: false, meta: [], canIssue: false, issueShown: false, why: '', invoice: null, decisionUid: null, currency: null, record: false, voidable: false };
+
+  if (invoicesRead?.status === 'loading') return { ...base, state: 'loading', chip: { word: 'Loading', tone: 'neutral' } };
+  if (invoicesRead?.status !== 'ready') {
+    return { ...base, state: 'invunread', chip: { word: 'Unavailable', tone: 'neutral' }, issueShown: true,
+      why: 'Issue is off until the invoices are read: one may already be issued, and a second can never be.' };
+  }
+  const { initial } = splitInvoices(invoicesRead.data?.invoices);
+  if (initial) return issuedCard(initial, classLabel, today, base);
+
+  if (pricingRead?.status === 'loading') return { ...base, state: 'loading', chip: { word: 'Loading', tone: 'neutral' } };
+  if (pricingRead?.status !== 'ready') {
+    return { ...base, state: 'decunread', chip: { word: 'Unavailable', tone: 'neutral' },
+      why: 'The pricing decision could not be read. Its figures are unknown, not zero. Issue stays off.' };
+  }
+  const decision = pricing?.latest_decision || null;
+  if (!decision) {
+    return { ...base, state: 'nodecision', chip: { word: 'None', tone: 'neutral' },
+      why: 'No pricing has been accepted for this licence, so there is no initial fee to invoice.' };
+  }
+  const accepted = decision.accepted || {};
+  const currency = decision.currency || pricing?.terms?.currency || null;
+  const fee = posInt(accepted.initial_fee_cents) ? accepted.initial_fee_cents : null;
+  const surcharge = posInt(accepted.regulatory_surcharge_cents) ? accepted.regulatory_surcharge_cents : null;
+  const lines = draftLines(fee, surcharge, currency, classLabel);
+  const out = {
+    ...base, chip: { word: 'Not issued', tone: 'neutral' }, decisionUid: decision.uid || null, currency,
+    lines, nrSurcharge: surcharge === null, total: fee === null ? null : money(fee + (surcharge ?? 0), currency),
+    meta: [['Reference', 'Given at issue'], ['Issued', 'Not issued'], ['Due', 'From the licence’s payment terms (30 days when none is recorded)'], ['Payee', 'The licence’s licensor (Terms schedule)']],
+  };
+  if (!INITIAL_BILLABLE.includes(lic.status)) return { ...out, state: 'notbill', why: 'Only an active or suspended licence is invoiced.' };
+  const starts = /^\d{4}-\d{2}-\d{2}$/.test(String(lic.starts_on || '')) ? lic.starts_on : null;
+  if (!starts) {
+    return { ...out, state: 'nostart', issueShown: true, meta: out.meta.map(([k, v]) => (k === 'Due' ? [k, '—'] : [k, v])),
+      why: 'Start date Not recorded · set it on Terms. The licence year and the due date cannot be told without it.' };
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(today || '')) && starts > today) {
+    return { ...out, state: 'notstarted', issueShown: true, why: `Can be issued from ${dayLabel(starts)}, the licence’s start date.` };
+  }
+  if (fee === null || fee === 0) {
+    return { ...out, state: 'nrfee', issueShown: true, total: null,
+      why: 'The accepted pricing has no initial fee, so nothing can be invoiced. Record it by applying or overriding on Pricing & Market.' };
+  }
+  return { ...out, state: surcharge === null ? 'nrsur' : 'ready', issueShown: true, canIssue: true };
+}
+
+function draftLines(fee, surcharge, currency, classLabel) {
+  const lines = [{ key: 'fee', label: 'Initial licence fee', note: 'one-off · at licence start', amount: fee === null ? NR : money(fee, currency) }];
+  // D5954: a surcharge that is not recorded prints no line (never €0); one recorded as zero prints none either.
+  if (surcharge !== null && surcharge > 0) lines.push({ key: 'surcharge', label: `Regulatory surcharge · ${classLabel}`, note: 'one-off · billed once with the initial fee', amount: money(surcharge, currency) });
+  return lines;
+}
+
+function issuedCard(inv, classLabel, today, base) {
+  const status = invoiceStatus(inv, today);
+  const paid = Number(inv.paid_cents) || 0;
+  const amount = Number(inv.amount_cents);
+  const voided = inv.status === 'void';
+  const state = voided ? 'void' : inv.status === 'paid' ? 'paid' : status.overdue ? 'overdue' : paid > 0 ? 'part' : 'issued';
+  const chip = voided ? { word: 'Void', tone: 'neutral' }
+    : state === 'paid' ? { word: 'Paid', tone: 'ok' }
+      : state === 'overdue' ? { word: `Overdue · ${status.days} ${status.days === 1 ? 'day' : 'days'}`, tone: 'danger' }
+        : state === 'part' ? { word: 'Part paid', tone: 'warn' } : { word: 'Issued', tone: 'warn' };
+  const fee = posInt(inv.initial_fee_cents) ? inv.initial_fee_cents : null;
+  const surcharge = posInt(inv.regulatory_surcharge_cents) ? inv.regulatory_surcharge_cents : null;
+  const lines = draftLines(fee, surcharge, inv.currency, classLabel);
+  const day = (v) => (v ? dayLabel(String(v).slice(0, 10)) : NR);
+  const meta = [
+    ['Reference', inv.reference || NR],
+    ['Issued', day(inv.issued_at)],
+    ['Due', day(inv.due_at)],
+    ['Paid so far', voided ? '—' : `${money(paid, inv.currency)} of ${money(amount, inv.currency)}`],
+    ['PDF', voided ? 'Hidden · a void invoice prints nothing' : inv.pdf_url ? `${inv.reference || 'invoice'}.pdf` : NR],
+  ];
+  const why = voided ? `${voidLine(inv)}. An initial invoice has been issued for this licence; no second one can be issued.`
+    : state === 'paid' ? 'Paid in full. Nothing more is recorded; Void is not offered.'
+      : state === 'part' || (state === 'overdue' && paid > 0) ? 'Void is not offered: only an invoice with nothing paid can be voided.' : '';
+  return {
+    ...base, state, chip, invoice: inv, lines, nrSurcharge: surcharge === null, currency: inv.currency,
+    total: Number.isSafeInteger(amount) ? money(amount, inv.currency) : NR, meta, why,
+    decisionUid: inv.pricing_decision_uid || null,
+    record: !voided && state !== 'paid', voidable: !voided && paid === 0,
+  };
+}
+
+/** The card's foot: where the figures come from, and that they freeze at issue. */
+export function initialFoot(card) {
+  const from = card.decisionUid ? 'From the latest pricing decision · Terms › Pricing & Market' : 'From the pricing decision · Terms › Pricing & Market';
+  return card.invoice
+    ? `${from} · frozen at issue: later applies or market updates never change it.`
+    : `${from} · the figures are frozen when the invoice is issued.`;
+}

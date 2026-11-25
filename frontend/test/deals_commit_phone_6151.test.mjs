@@ -61,7 +61,7 @@ test('DE27: Vote is offered on the Worker’s own rules — role, an open decisi
 // Mutation checked: the recusal counted in the voted line (fails as 2 of 4); no roster drawn as a count (fails).
 test('DE27: who has voted is read against the roster, a recusal counted beside the votes, and whether you have', () => {
   assert.equal(votedLine(ME, OPEN()), '3 of 4 eligible have voted. You have not voted.');
-  assert.equal(votedLine({ id: 1, role: 'partner' }, OPEN()), '3 of 4 eligible have voted. You voted Yes.');
+  assert.equal(votedLine({ id: 1, role: 'partner' }, OPEN()), '3 of 4 eligible have voted. You voted Invest.');
   assert.equal(votedLine({ id: 3, role: 'partner' }, OPEN()), '3 of 4 eligible have voted. You recused.');
   assert.equal(votedLine(ME, OPEN({ roster: { available: false } })), 'No voting roster is set, so eligible voters are not recorded. You have not voted.');
 });
@@ -121,7 +121,7 @@ test('DE27 C: on the page, the phone and desktop halves split at md, and Vote as
     await press(v, 'commit-phone-vote');
     assert.ok(by(v, 'commit-vote-sheet') || v.text().includes('Your vote · Example Copperline'), 'the Vote sheet opens');
     await press(v, 'commit-vote-submit');
-    assert.match(v.text(), /Choose Yes, No, Abstain or Recuse/);
+    assert.match(v.text(), /Choose Invest, Pass, Abstain or Recuse/);
     await change(v, 'commit-vote-choice-yes');
     await change(v, 'commit-vote-rationale', '   ');
     await press(v, 'commit-vote-submit');

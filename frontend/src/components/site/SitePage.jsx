@@ -18,10 +18,15 @@ import './site.css';
  * D813 (#2259): the newsletter block (board W1) sits above the footer on every
  * page. The newsletter's own pages pass `signup={false}`, since each is that
  * form or follows from it.
+ *
+ * D6996 (#6996): `path` names the route the head describes. A page that serves
+ * several routes from one mounted component (the trust center's tabs) passes it,
+ * so moving between them rewrites the head; without it the hook reads the
+ * address once, when the page mounts.
  */
-export default function SitePage({ title, description, children, className = '', signup = true }) {
+export default function SitePage({ title, description, path, children, className = '', signup = true }) {
   useForcedLightTheme();
-  usePageMeta({ title, description });
+  usePageMeta({ title, description, path });
   return (
     <div className="ax-site">
       <PublicNav />

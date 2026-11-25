@@ -52,6 +52,7 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  db.exec(sqlOf('202611220319_6007_segment_primary_profile.sql')); // D6007: the primary ICP columns the segment readers select.
   applyAcceptRetryKeys(db); // D5352
   // D690 decision 9: an interview's state reads its latest session. 447's
   // `validate_proposals` column is left out: the tests that read proposals
@@ -408,6 +409,7 @@ async function growFixture() {
   db.exec(migFile('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(migFile('462'));
   db.exec(migFile('202611161128_6865')); // D6865: the feedback's contact link and origin
+  db.exec(migFile('202611220349_6891')); // D6865 part 2 (#6891): the feedback's reply link, which POST /feedback writes
   db.exec(sqlOf('202611041912_growth_channel_details.sql'));
   db.exec(migFile('507'));
   // D6107: PostHog's link and tracked metrics, so the Visit stage reads its real store (no link here: not connected).

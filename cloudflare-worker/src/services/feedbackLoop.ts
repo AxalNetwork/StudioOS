@@ -196,3 +196,16 @@ export async function markFeedbackToldMany(env: Env, pid: number, user: User, b:
     refused,
   };
 }
+
+/**
+ * D6865 part 2 (#6891, GR-24): the replies in one Inbox thread already saved as
+ * feedback, by their message key, with the item each became. Read inside the
+ * thread's own contact and venture, so a key can only match its own thread.
+ */
+export async function repliesSavedAsFeedback(env: Env, pid: number, contactUid: string): Promise<Record<string, { uid: string; status: string }>> {
+  const q = await env.DB.prepare(
+    'SELECT uid, status, reply_key FROM product_feedback WHERE project_id = ? AND contact_uid = ? AND reply_key IS NOT NULL',
+  ).bind(pid, contactUid).all<{ uid: string; status: string; reply_key: string }>();
+  if (!q.success || !Array.isArray(q.results)) throw new Error('Saved replies unreadable');
+  return Object.fromEntries(q.results.map((r) => [String(r.reply_key), { uid: String(r.uid), status: String(r.status) }]));
+}

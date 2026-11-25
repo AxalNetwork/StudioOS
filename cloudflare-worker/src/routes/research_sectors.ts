@@ -14,7 +14,8 @@ import { liveIndexSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/li
 import { storedWindow, WINDOW_NOT_RECORDED, type ScoreMix } from '../services/market_intel/scoring';
 import { getSource } from '../services/market_intel/registry';
 import '../services/market_intel/sources/index';
-import { listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector, mapFundFocus, mapSignalTags } from '../services/researchTaxonomy';
+import { listCountries, listMarketSectors, mapCompanyCountry, mapFundFocus, mapSignalTags } from '../services/researchTaxonomy';
+import { companyGroups, companyPage, type CompanyGroup } from '../services/researchDirectoryReads';
 import { presentFund, SERVED_FUNDS, type DirectoryRow } from '../services/researchFundDirectory';
 
 const researchSectors = new Hono<{ Bindings: Env }>();
@@ -27,7 +28,6 @@ interface IndexRow {
   sector: string; period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number; computed_at: string;
   window_start?: string | null; window_end?: string | null; source_mix_json?: string | null;
 }
-interface Company { uid: string; name: string; country: string | null; sector: string | null; founded_year: number | null; employee_count: number | null; as_of: string; source_url: string }
 interface Signal { id: string; title: string; type: string; thesis: string; why_now: string; build_opportunity: string; region: string; country: string; confidence_score: number; tags: string; updated_at: string }
 
 /** Calendar months, including this month. Missing months remain explicit null points. */
@@ -89,18 +89,27 @@ export function sectorSeries(indexes: IndexRow[], periods: string[]) {
 }
 
 async function directory(env: Env) {
-  const [marketRows, mappings, overrides, companyRows, fundRows, countries] = await Promise.all([
+  const [marketRows, mappings, { groups, overrides }, fundRows, countries] = await Promise.all([
     env.DB.prepare('SELECT slug, name, company_count AS supplied_count, as_of FROM research_market_directory').all<{ slug: string; name: string; supplied_count: number; as_of: string }>(),
-    listMarketSectors(env), loadOverrides(env),
-    env.DB.prepare('SELECT uid, name, country, sector, founded_year, employee_count, as_of, source_url FROM research_company_directory').all<Company>(),
+    listMarketSectors(env), companyGroups(env),
     env.DB.prepare(`SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
       fund_date, quarter, fund_year, sector_focus, notable_lps, eif_flag, eifo_flag,
       source_name, source_url, as_of FROM ${SERVED_FUNDS} AS f`).all<DirectoryRow>(),
     listCountries(env),
   ]);
   const marketSector = new Map(mappings.map((m) => [m.market_slug, m.mi_sector]));
-  return { markets: marketRows.results || [], marketSector, overrides,
-    companies: companyRows.results || [], funds: fundRows.results || [], countries };
+  const bySector = new Map<string, { count: number; groups: CompanyGroup[] }>();
+  for (const group of groups) {
+    // Two markets of this company can belong to the same tracked sector.
+    for (const name of new Set(group.markets.map((market) => marketSector.get(market)))) {
+      if (!name) continue;
+      const members = bySector.get(name) ?? { count: 0, groups: [] };
+      members.count += group.count;
+      members.groups.push(group);
+      bySector.set(name, members);
+    }
+  }
+  return { markets: marketRows.results || [], marketSector, overrides, bySector, funds: fundRows.results || [], countries };
 }
 
 async function indexData(env: Env, name: string | null, periods: string[]) {
@@ -116,7 +125,7 @@ async function indexData(env: Env, name: string | null, periods: string[]) {
 
 function inSector(data: Awaited<ReturnType<typeof directory>>, name: string) {
   const mapsHere = (markets: string[]) => markets.some((m) => data.marketSector.get(m) === name);
-  const companies = data.companies.filter((c) => mapsHere(mapCompanySector(c.sector, data.overrides).targets));
+  const companies = data.bySector.get(name) ?? { count: 0, groups: [] };
   const funds = data.funds.filter((f) => mapsHere(mapFundFocus(f.sector_focus, data.overrides).targets));
   return { companies, funds, mapsHere };
 }
@@ -128,7 +137,7 @@ researchSectors.get('/sectors', async (c) => {
     const [data, index] = await Promise.all([directory(c.env), indexData(c.env, null, periods)]);
     return c.json({ items: sectors.map((s) => {
       const members = inSector(data, s.name);
-      return { ...s, company_count: members.companies.length, fund_count: members.funds.length,
+      return { ...s, company_count: members.companies.count, fund_count: members.funds.length,
         dimensions: sectorSeries(index.indexes.filter((r) => r.sector === s.name), periods) };
     }), total: sectors.length });
   } catch { return c.json({ error: 'sector_unreadable', message: 'Unreadable', reason: 'The sector directory could not be read. Try again.' }, 503); }
@@ -149,10 +158,11 @@ researchSectors.get('/sectors/:slug', async (c) => {
     const counts = new Map<string, number>();
     const countryNames = new Map(data.countries.map((k) => [k.code, k.name]));
     const companyMarkets = new Map<string, number>();
-    for (const co of members.companies) {
-      const country = mapCompanyCountry(co.country, data.overrides).targets[0] ?? '';
-      counts.set(country, (counts.get(country) ?? 0) + 1);
-      for (const market of mapCompanySector(co.sector, data.overrides).targets) companyMarkets.set(market, (companyMarkets.get(market) ?? 0) + 1);
+    const page = await companyPage(c.env, members.companies.groups, 'sector');
+    for (const group of page.orderedGroups) {
+      const country = group.code ?? '';
+      counts.set(country, (counts.get(country) ?? 0) + group.count);
+      for (const market of group.markets) companyMarkets.set(market, (companyMarkets.get(market) ?? 0) + group.count);
     }
     const funds = members.funds.map(presentFund).sort((a, b) =>
       Number(b.size_currency !== null) - Number(a.size_currency !== null)
@@ -165,9 +175,10 @@ researchSectors.get('/sectors/:slug', async (c) => {
     });
     return c.json({ ...sector, dimensions: sectorSeries(index.indexes, periods),
       source_mix_basis: SOURCE_MIX_BASIS,
-      company_count: members.companies.length,
-      companies: members.companies.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 50).map((co) => ({ ...co,
-        country_code: mapCompanyCountry(co.country, data.overrides).targets[0] ?? null })),
+      company_count: members.companies.count,
+      companies: page.rows.map(({ uid, name, country, sector, founded_year, employee_count, as_of, source_url }) => ({
+        uid, name, country, sector, founded_year, employee_count, as_of, source_url,
+        country_code: mapCompanyCountry(country, data.overrides).targets[0] ?? null })),
       companies_by_country: [...counts].map(([code, count]) => ({ code: code || null, name: countryNames.get(code) ?? null, count }))
         .sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name))),
       fund_count: funds.length, funds: funds.slice(0, 50),

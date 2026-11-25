@@ -19,6 +19,7 @@
  */
 import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
+import { pilotReturn } from '../integrations/pilotReturn';
 import { revokeAndDisconnectGoogle } from './calendar';
 import { cartaAudience } from '../integrations/cartaScopes';
 import type { Context } from 'hono';
@@ -800,6 +801,7 @@ integrations.delete('/:uid', async (c) => {
       if (row.provider_key === 'tiktok') return c.json({ error: 'tiktok_revocation_failed' }, 503);
       if (row.provider_key === 'google_search_console') return c.json({ error: 'search_console_revocation_failed' }, 503);
       if (row.provider_key === 'facebook') return c.json({ error: 'facebook_revocation_failed' }, 503);
+      if (row.provider_key === 'quickbooks') return c.json({ error: 'quickbooks_revocation_failed', message: 'Intuit did not confirm the disconnection. Try again; the connection stays until it does.' }, 503);
       console.warn('[integrations] provider disconnect threw:', (e as Error).message);
     }
   } else {
@@ -1510,6 +1512,15 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // D2403: "Turn on publishing" asks X for the publish set; the provider reads it from the state, never the callback's query.
   if (provider === 'x') extra.x_publish = c.req.query('publish') === '1';
   if (provider === 'typeform') extra.typeform_region = c.req.query('region') === 'eu' ? 'eu' : 'us';
+  const pilot = pilotReturn(provider, c.req.query('return_to'), c.req.query('project_id'));
+  if (pilot) {
+    extra.pilot_provider = provider; extra.return_to = c.req.query('return_to'); extra.project_id = pilot.projectId;
+  }
+  // D5834: the venture a QuickBooks company is bound to; `connect` reads it from the state and checks the member can edit it.
+  if (provider === 'quickbooks') {
+    const qbProject = Number(c.req.query('project_id'));
+    if (Number.isSafeInteger(qbProject) && qbProject > 0) extra.quickbooks_project_id = qbProject;
+  }
   if (c.req.query('return_to') === 'build') {
     extra.return_to = 'build';
     // The venture rides in the state, not in per-origin storage: the callback is
@@ -1557,13 +1568,14 @@ integrations.get('/oauth/:provider/start', async (c) => {
  * surface an error fragment the page renders inline.
  */
 export function returnBase(extra: Record<string, unknown> | null | undefined): string {
-  return extra?.return_to === 'build' ? '/build/connect' : '/integrations';
+  return pilotReturn(extra?.pilot_provider, extra?.return_to, extra?.project_id)?.path
+    || (extra?.return_to === 'build' ? '/build/connect' : '/integrations');
 }
 
 /** The return's query: the outcome, then Build's venture when the sign-in started from Build (#1597). */
 export function returnQuery(extra: Record<string, unknown> | null | undefined, outcome: string): string {
   const id = Number(extra?.project_id);
-  const venture = extra?.return_to === 'build' && Number.isSafeInteger(id) && id > 0 ? `&project_id=${id}` : '';
+  const venture = (extra?.return_to === 'build' || !!pilotReturn(extra?.pilot_provider, extra?.return_to, extra?.project_id)) && Number.isSafeInteger(id) && id > 0 ? `&project_id=${id}` : '';
   return `${returnBase(extra)}?${outcome}${venture}`;
 }
 

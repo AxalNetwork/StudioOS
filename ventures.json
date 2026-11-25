@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "about": "Venture namespaces (D8078). Each venture's code lives in ventures/<slug>/ of this repository. Only the owner adds an entry, in a privileged PR, then runs node scripts/lib/workIntent.mjs --venture-labels. Fields: slug, name, company_id.",
+  "ventures": []
+}

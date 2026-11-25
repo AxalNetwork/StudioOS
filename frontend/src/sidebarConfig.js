@@ -80,15 +80,17 @@ export function hasInvestorTier(user, required) {
 // and is left unchanged.
 /**
  * D6029 (#6029, BD23) — Build's sub-pages in the sidebar: Overview · Plan ·
- * Progress, then the six modules. BD23 also draws Tools after Progress; Build ›
- * Tools is one page only once #5078 lands, so it is not listed yet (#6029
- * stays open for it). `end` rows light on their exact path only; the others
- * light on their subtree too. Old addresses are untouched.
+ * Progress · Tools, then the six modules. Tools is Operating systems › Tools
+ * (`/build/operating-systems#tools`), the one list of tools D5078 (#5078)
+ * settled on; its link keeps the venture query, and it lights on that section
+ * only. `end` rows light on their exact path only; the others light on their
+ * subtree too. Old addresses are untouched.
  */
 export const BUILD_SUBPAGES = Object.freeze([
   { to: '/build', label: 'Overview', end: true },
   { to: '/build/plan', label: 'Plan', end: true },
   { to: '/build/plan/progress', label: 'Progress', end: true },
+  { to: '/build/operating-systems', hash: '#tools', label: 'Tools', end: true, keepVenture: true },
   { heading: 'Modules' },
   { to: '/build/solution-design', label: 'Solution design' },
   { to: '/build/prototype-mvp', label: 'Prototype / MVP' },
@@ -388,7 +390,7 @@ export const SIDEBAR_GROUPS = {
       // D6029 (#6029, BD23): Build lists its own pages, so the sidebar is the one module switcher on desktop.
       { to: '/build', icon: Cog, label: 'Build',
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution',
-          ...BUILD_SUBPAGES.filter((c) => c.to && c.to !== '/build').map((c) => c.to)],
+          ...BUILD_SUBPAGES.filter((c) => c.to && !c.hash && c.to !== '/build').map((c) => c.to)],
         children: BUILD_SUBPAGES },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).

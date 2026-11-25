@@ -19,31 +19,35 @@
  * placed in a market or a country by rule or by hand override, never guessed.
  * What the crosswalk cannot place is counted as unmapped, not dropped silently.
  *
- * The directories are small (hundreds of companies, a few thousand funds), so
- * each request reads the columns it needs once and maps them here. Nothing is
- * written.
+ * D7713 counts companies by raw sector/country groups. Detail pages read member
+ * sort keys and fetch up to 50 company records. Fund and signal counts use their full sets.
  *
  * `supplied_count` is the market directory's own company count, supplied by
  * Axal and not verified; `company_count` is what the company directory in D1
  * holds for that market today. The two are labelled apart because they are
  * not the same claim.
  *
- * The market index series and source mix read live market-intelligence rows
- * only, through `services/market_intel/liveRows.ts` (D538, #1078). A stub row
- * or an index computed before D538 never reaches a response.
+ * The market index series reads live market-intelligence indexes only,
+ * through `services/market_intel/liveRows.ts` (D538, #1078). A stub row or an
+ * index computed before D538 never reaches a response. D7710 (#7710): each
+ * index point carries the window it covers (D7708); the all-time source mix
+ * is gone (no page read it).
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { readListedTotals, type ListedTotals } from '../services/listedCompanies';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
+import { companyGroups, companyPage, directoryNameOrder as byName, type CompanyGroup, type CompanyRow } from '../services/researchDirectoryReads';
 import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
-import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
-import { periodKey } from '../services/market_intel/scoring';
+import { distinctObservationsSql, liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON, retrievedAtSql } from '../services/market_intel/liveRows';
+import { periodKey, storedWindow, WINDOW_DAYS } from '../services/market_intel/scoring';
 import {
   focusTokens, listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector,
   mapFundFocus, mapFundHq, mapSignalTags, type Country, type Overrides,
 } from '../services/researchTaxonomy';
+
+export { byHeadcount } from '../services/researchDirectoryReads';
 
 const researchMarkets = new Hono<{ Bindings: Env }>();
 
@@ -51,7 +55,6 @@ const SUPPLIED_LABEL = 'Supplied by Axal for discovery; not independently verifi
 const MAX_LIMIT = 100;
 const LIST_CAP = 50;
 
-interface CompanyRow { uid: string; name: string; website: string; country: string | null; founded_year: number | null; sector: string | null }
 interface FundRow {
   uid: string; name: string; hq: string | null; sector_focus: string | null; fund_size_cents: number | null;
   fund_year: number | null; website: string | null; source_name: string; eif_flag: number; eifo_flag: number;
@@ -72,13 +75,6 @@ function intParam(v: string | undefined, fallback: number, min: number, max: num
 
 function oneOf<T extends string>(v: string | undefined, allowed: readonly T[], fallback: T): T {
   return (allowed as readonly string[]).includes(String(v)) ? (v as T) : fallback;
-}
-
-async function companies(env: Env): Promise<CompanyRow[]> {
-  const r = await env.DB.prepare(
-    `SELECT uid, name, website, country, founded_year, sector FROM research_company_directory`,
-  ).all<CompanyRow>();
-  return r.results || [];
 }
 
 async function funds(env: Env): Promise<FundRow[]> {
@@ -151,11 +147,10 @@ const fundDto = (f: FundRow, ov: Overrides) => {
   };
 };
 
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
 /** Largest euro size first; a fund with no size in a known currency follows, by name. */
 const bySize = (a: FundRow, b: FundRow) => (eurSizeCents(b) ?? -1) - (eurSizeCents(a) ?? -1) || byName(a, b);
 
-function bump(m: Map<string, number>, key: string) { m.set(key, (m.get(key) ?? 0) + 1); }
+function bump(m: Map<string, number>, key: string, count = 1) { m.set(key, (m.get(key) ?? 0) + count); }
 const countList = (m: Map<string, number>, keyName: string) =>
   [...m.entries()].map(([k, n]) => ({ [keyName]: k, count: n }))
     .sort((a, b) => (b.count as number) - (a.count as number) || String(a[keyName]).localeCompare(String(b[keyName])));
@@ -168,7 +163,10 @@ export const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 
 export const INDEX_MONTHS = 6;
 export const NO_SECTOR_REASON = 'This market has no market-intelligence sector yet';
 
-interface IndexRow { period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number }
+interface IndexRow {
+  period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number;
+  window_start?: string | null; window_end?: string | null;
+}
 
 /** The month before `period` ('YYYY-MM'). */
 function previousPeriod(period: string): string {
@@ -196,10 +194,13 @@ export function indexSeries(rows: IndexRow[], current: string, reason: string) {
       points: pts.map((p) => {
         const prev = byPeriod.get(previousPeriod(p.period_key));
         const change = p.delta_pct ?? (prev ? Math.round((p.value - prev.value) * 10) / 10 : null);
+        // D7710: the window the point covers (D7708), stored at compute time; never derived.
+        const w = storedWindow(p);
         return {
           period: p.period_key, value: p.value, change,
           change_basis: p.delta_pct != null ? 'delta_pct' : (prev ? 'previous_month' : null),
           sources: p.source_count, month_to_date: p.period_key === current,
+          window_start: w.window_start, window_end: w.window_end, window_reason: w.window_reason,
         };
       }),
     };
@@ -209,25 +210,17 @@ export function indexSeries(rows: IndexRow[], current: string, reason: string) {
 
 async function marketIndex(env: Env, sector: string | null) {
   if (!sector) {
-    return { sector: null, reason: NO_SECTOR_REASON, series: indexSeries([], '', NO_SECTOR_REASON), source_mix: [] };
+    return { sector: null, reason: NO_SECTOR_REASON, series: indexSeries([], '', NO_SECTOR_REASON) };
   }
-  const [idx, mix] = await Promise.all([
-    env.DB.prepare(
-      `SELECT period_key, dimension, value, delta_pct, source_count
-         FROM market_intel_indexes
-        WHERE sector = ? AND geo = 'global' AND ${liveIndexSql()}
-        ORDER BY period_key`,
-    ).bind(sector).all<IndexRow>(),
-    env.DB.prepare(
-      `SELECT source_key, COUNT(*) AS rows, MAX(ts) AS latest
-         FROM market_intel_rows
-        WHERE sector = ? AND ${liveRowSql()}
-        GROUP BY source_key ORDER BY rows DESC, source_key`,
-    ).bind(sector).all<{ source_key: string; rows: number; latest: string }>(),
-  ]);
+  const idx = await env.DB.prepare(
+    `SELECT period_key, dimension, value, delta_pct, source_count, window_start, window_end
+       FROM market_intel_indexes
+      WHERE sector = ? AND geo = 'global' AND ${liveIndexSql()}
+      ORDER BY period_key`,
+  ).bind(sector).all<IndexRow>();
   const series = indexSeries(idx.results || [], periodKey(), NO_LIVE_SOURCE_REASON);
   const recorded = Object.values(series).some((d: any) => d.status === 'recorded');
-  return { sector, reason: recorded ? null : NO_LIVE_SOURCE_REASON, series, source_mix: mix.results || [] };
+  return { sector, reason: recorded ? null : NO_LIVE_SOURCE_REASON, series };
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +245,14 @@ const MARKET_SORTS = ['name', 'company_count', 'supplied_count', 'newest_source'
 // null, reason }` — a market no source covers reads null with its reason,
 // never 0. No market size or growth is derived: no store records one.
 //
+// D7710 (#7710), owner answer A: `source_count`, `newest_source_at`, the fresh
+// band and filter, the coverage bands and the `newest_source` sort read only
+// evidence that NAMES the market. Inherited sector-level sources sit beside it
+// in `sources_by_kind.market_intel`, read over the index window (D7708: rows
+// retrieved in the 30 days before the read), each observation once.
+// `distinct_source_count` counts a source key in both sets once. Every newest
+// date names its basis (`reported`, `period_measured` or `retrieved`).
+//
 // D7171 (#7171): the coverage is read for EVERY market, not the page, so the
 // `country`, `fresh` and `src` filters, their counts per option and the total
 // cover the whole directory before it is paged. `sources_by_kind` splits the
@@ -262,14 +263,18 @@ const MARKET_SORTS = ['name', 'company_count', 'supplied_count', 'newest_source'
 
 export const NO_COMPANY_REASON = 'No company in the directory is placed in this market';
 export const NO_COUNTRY_REASON = 'No company in this market records a country the crosswalk can place';
-export const NO_SOURCE_REASON =
-  'No live source yet: no live market-intelligence row for its tracked sector and no evidence behind an active signal that names this market';
+export const NO_SOURCE_REASON = 'None named: no evidence behind an active signal names this market';
 export const NO_SOURCE_DATE_REASON = 'No source row for this market records a date';
+export const NO_DISTINCT_REASON =
+  'No source: no evidence names this market and no live market-intelligence row for its tracked sector in the index window';
+/** D7710: what a newest date measures. */
+export const DATE_BASES = ['reported', 'period_measured', 'retrieved'] as const;
+export type DateBasis = typeof DATE_BASES[number];
 export const NO_KIND_REASON = 'No source of this kind';
 /** At most this many sources are listed per market; `source_count` counts them all. */
 export const SOURCES_CAP = 20;
 
-/** D7171: the freshness bands of `?fresh=`, by the newest source of any kind. */
+/** D7171, D7710: the freshness bands of `?fresh=`, by the newest evidence that names the market. */
 export const FRESH_BANDS = ['30', '90', 'older', 'none'] as const;
 /** D7171: the source kinds of `?src=`: evidence naming the market, sector-level only, none. */
 export const SOURCE_KINDS = ['named', 'sector', 'none'] as const;
@@ -282,7 +287,7 @@ type Recorded<T> = { status: 'recorded'; value: T } | { status: 'not_recorded'; 
 const recorded = <T>(value: T): Recorded<T> => ({ status: 'recorded', value });
 const notRecorded = <T>(reason: string): Recorded<T> => ({ status: 'not_recorded', value: null, reason });
 
-interface MarketSource { kind: 'market_intel' | 'signal_evidence'; key: string; rows: number; newest: string | null }
+interface MarketSource { kind: 'market_intel' | 'signal_evidence'; key: string; rows: number; newest: string | null; basis: DateBasis | null }
 
 /** `ts` is ISO ('…T…Z'), `observed_at` is SQLite ('… …'); compared on one form. */
 const dateKey = (d: string | null) => String(d ?? '').replace(' ', 'T');
@@ -309,11 +314,13 @@ export function freshBand(newest: Recorded<string>, now: number): typeof FRESH_B
   return age <= 30 ? '30' : age <= STALE_DAYS ? '90' : 'older';
 }
 
-interface KindSummary { count: number; newest: Recorded<string> }
+interface KindSummary { count: number; newest: Recorded<string>; basis: DateBasis | null }
 interface Coverage {
   countries: Recorded<Array<{ code: string; count: number }>>;
   source_count: Recorded<number>;
   newest_source_at: Recorded<string>;
+  newest_source_basis: DateBasis | null;
+  distinct_source_count: Recorded<number>;
   sources_by_kind: { market_intel: KindSummary; signal_evidence: KindSummary };
   sources: MarketSource[];
 }
@@ -327,24 +334,47 @@ export function sourceKind(cov: Pick<Coverage, 'sources_by_kind'>): typeof SOURC
 const countryCodes = (cov: Pick<Coverage, 'countries'>) =>
   cov.countries.status === 'recorded' ? cov.countries.value.map((x) => x.code) : [];
 
+/**
+ * D7710: one kind's count and newest date. The newest date takes the strongest
+ * basis any source in the list has (the period measured over the retrieval
+ * date), so a figure fetched again never moves it when a period is recorded.
+ */
 function kindSummary(list: MarketSource[]): KindSummary {
-  const newest = list.reduce<string | null>((acc, s) => maxDate(acc, s.newest), null);
-  return { count: list.length, newest: newest ? recorded(newest) : notRecorded<string>(list.length ? NO_SOURCE_DATE_REASON : NO_KIND_REASON) };
+  const rank = (b: DateBasis | null) => (b == null ? -1 : DATE_BASES.length - DATE_BASES.indexOf(b));
+  const best = list.reduce<DateBasis | null>((acc, s) => (s.newest && rank(s.basis) > rank(acc) ? s.basis : acc), null);
+  const newest = list.filter((s) => s.basis === best).reduce<string | null>((acc, s) => maxDate(acc, s.newest), null);
+  return {
+    count: list.length,
+    newest: newest ? recorded(newest) : notRecorded<string>(list.length ? NO_SOURCE_DATE_REASON : NO_KIND_REASON),
+    basis: newest ? best : null,
+  };
 }
 
-/** The live market-intelligence sources of each tracked sector: one grouped query. */
-async function sectorSources(env: Env, sectors: string[]) {
+/** D7710: the index window's start (D7708: the `WINDOW_DAYS` days before `now`), as an ISO stamp. */
+export const windowStart = (now: number) => new Date(now - WINDOW_DAYS * 86_400_000).toISOString();
+
+/**
+ * The live market-intelligence sources of each tracked sector: one grouped
+ * query. D7710: over the index window by D7708's rule (retrieved in the
+ * `WINDOW_DAYS` days before the read), each observation once (D7707's
+ * identity). A source's newest date is the last day measured where its rows
+ * record one, else its newest retrieval date, and says which.
+ */
+async function sectorSources(env: Env, sectors: string[], now: number) {
   const miBySector = new Map<string, MarketSource[]>();
   if (!sectors.length) return miBySector;
   const r = await env.DB.prepare(
-    `SELECT sector, source_key, COUNT(*) AS rows, MAX(ts) AS newest
+    `SELECT sector, source_key, ${distinctObservationsSql()} AS rows,
+            MAX(observed_period_end) AS period_end, MAX(${retrievedAtSql()}) AS retrieved
        FROM market_intel_rows
-      WHERE sector IN (SELECT value FROM json_each(?)) AND ${liveRowSql()}
+      WHERE sector IN (SELECT value FROM json_each(?)) AND ${liveRowSql()} AND ${retrievedAtSql()} >= ?
       GROUP BY sector, source_key`,
-  ).bind(JSON.stringify(sectors)).all<{ sector: string; source_key: string; rows: number; newest: string | null }>();
+  ).bind(JSON.stringify(sectors), windowStart(now))
+    .all<{ sector: string; source_key: string; rows: number; period_end: string | null; retrieved: string | null }>();
   for (const row of r.results || []) {
     const list = miBySector.get(row.sector) ?? [];
-    list.push({ kind: 'market_intel', key: row.source_key, rows: Number(row.rows), newest: row.newest ?? null });
+    const basis: DateBasis | null = row.period_end ? 'period_measured' : (row.retrieved ? 'retrieved' : null);
+    list.push({ kind: 'market_intel', key: row.source_key, rows: Number(row.rows), newest: row.period_end ?? row.retrieved ?? null, basis });
     miBySector.set(row.sector, list);
   }
   return miBySector;
@@ -352,29 +382,15 @@ async function sectorSources(env: Env, sectors: string[]) {
 
 async function marketCoverage(
   env: Env,
-  markets: Array<{ slug: string; mi_sector: string | null }>,
-  cos: CompanyRow[],
-  ov: Overrides,
+  markets: Array<{ slug: string; mi_sector: string | null; company_count: number }>,
+  byCountry: Map<string, Map<string, number>>,
+  now: number,
 ) {
   const slugs = new Set(markets.map((m) => m.slug));
   const sectors = [...new Set(markets.map((m) => m.mi_sector).filter((s): s is string => !!s))];
 
-  // Countries: the companies already read, through the crosswalk.
-  const inMarket = new Map<string, number>();
-  const byCountry = new Map<string, Map<string, number>>();
-  for (const co of cos) {
-    const m = mapCompanySector(co.sector, ov).targets[0];
-    if (!m || !slugs.has(m)) continue;
-    bump(inMarket, m);
-    const code = mapCompanyCountry(co.country, ov).targets[0];
-    if (!code) continue;
-    const per = byCountry.get(m) ?? new Map<string, number>();
-    bump(per, code);
-    byCountry.set(m, per);
-  }
-
   // Live market-intelligence sources, passed as one bound JSON array.
-  const miBySector = await sectorSources(env, sectors);
+  const miBySector = await sectorSources(env, sectors, now);
 
   // Signal evidence: one grouped query over active signals, mapped by tags here.
   const ev = await env.DB.prepare(
@@ -394,28 +410,34 @@ async function marketCoverage(
         kind: 'signal_evidence', key: row.source_key,
         rows: (prev?.rows ?? 0) + Number(row.rows),
         newest: maxDate(prev?.newest ?? null, row.newest ?? null),
+        // `observed_at` is the date the source reports.
+        basis: 'reported',
       });
       evBySlug.set(slug, per);
     }
   }
 
-  const of = (m: { slug: string; mi_sector: string | null }): Coverage => {
+  const of = (m: { slug: string; mi_sector: string | null; company_count: number }): Coverage => {
     const per = byCountry.get(m.slug);
     const countries: Recorded<Array<{ code: string; count: number }>> = per && per.size
       ? recorded(countList(per, 'code') as Array<{ code: string; count: number }>)
-      : notRecorded((inMarket.get(m.slug) ?? 0) > 0 ? NO_COUNTRY_REASON : NO_COMPANY_REASON);
+      : notRecorded(m.company_count > 0 ? NO_COUNTRY_REASON : NO_COMPANY_REASON);
 
     const mi = m.mi_sector ? (miBySector.get(m.mi_sector) ?? []) : [];
     const named = [...(evBySlug.get(m.slug)?.values() ?? [])];
     const sources: MarketSource[] = [...mi, ...named]
       .sort((a, b) => dateKey(b.newest).localeCompare(dateKey(a.newest)) || a.kind.localeCompare(b.kind) || a.key.localeCompare(b.key));
-    const newest = sources.reduce<string | null>((acc, s) => maxDate(acc, s.newest), null);
+    // D7710: the headline reads evidence that names the market; inherited sources sit beside it.
+    const namedKind = kindSummary(named);
+    const distinct = new Set(sources.map((src) => src.key)).size;
     return {
       countries,
-      source_count: sources.length ? recorded(sources.length) : notRecorded<number>(NO_SOURCE_REASON),
-      newest_source_at: newest ? recorded(newest)
-        : notRecorded<string>(sources.length ? NO_SOURCE_DATE_REASON : NO_SOURCE_REASON),
-      sources_by_kind: { market_intel: kindSummary(mi), signal_evidence: kindSummary(named) },
+      source_count: named.length ? recorded(named.length) : notRecorded<number>(NO_SOURCE_REASON),
+      newest_source_at: namedKind.newest.status === 'recorded' ? namedKind.newest
+        : notRecorded<string>(named.length ? NO_SOURCE_DATE_REASON : NO_SOURCE_REASON),
+      newest_source_basis: namedKind.basis,
+      distinct_source_count: distinct ? recorded(distinct) : notRecorded<number>(NO_DISTINCT_REASON),
+      sources_by_kind: { market_intel: kindSummary(mi), signal_evidence: namedKind },
       sources: sources.slice(0, SOURCES_CAP),
     };
   };
@@ -515,7 +537,7 @@ export function coverageSummary(set: Filterable[], miBySector: Map<string, Marke
   const supplied_total = set.reduce((n, m) => n + (Number(m.supplied_count) || 0), 0);
   const by_sector = [...sectors.entries()].map(([sector, s]) => {
     const k = kindSummary(miBySector.get(sector) ?? []);
-    return { sector, markets: s.markets, sector_sources: k.count, newest_sector_source: k.newest, named_markets: s.named_markets };
+    return { sector, markets: s.markets, sector_sources: k.count, newest_sector_source: k.newest, newest_sector_basis: k.basis, named_markets: s.named_markets };
   }).sort((a, b) => b.markets - a.markets || a.sector.localeCompare(b.sector));
   return {
     markets: set.length,
@@ -557,20 +579,26 @@ researchMarkets.get('/markets', async (c) => {
     fresh: freshRaw as MarketFilters['fresh'], src: srcRaw as MarketFilters['src'],
   };
 
-  const [rows, sectors, ov, cos] = await Promise.all([
+  const [rows, sectors, { groups }] = await Promise.all([
     c.env.DB.prepare(
       `SELECT slug, name, company_count AS supplied_count, as_of FROM research_market_directory`,
     ).all<{ slug: string; name: string; supplied_count: number; as_of: string }>(),
     listMarketSectors(c.env),
-    loadOverrides(c.env),
-    companies(c.env),
+    companyGroups(c.env),
   ]);
   const sectorOf = new Map(sectors.map((s) => [s.market_slug, s]));
   const counts = new Map<string, number>();
   let unmapped = 0;
-  for (const co of cos) {
-    const m = mapCompanySector(co.sector, ov).targets[0];
-    if (m) bump(counts, m); else unmapped += 1;
+  const byCountry = new Map<string, Map<string, number>>();
+  for (const group of groups) {
+    const market = group.markets[0];
+    if (!market) { unmapped += group.count; continue; }
+    bump(counts, market, group.count);
+    if (group.code) {
+      const countries = byCountry.get(market) ?? new Map<string, number>();
+      bump(countries, group.code, group.count);
+      byCountry.set(market, countries);
+    }
   }
 
   const base = (rows.results || []).map((r) => ({
@@ -582,9 +610,9 @@ researchMarkets.get('/markets', async (c) => {
     supplied_label: SUPPLIED_LABEL,
     as_of: r.as_of,
   }));
-  const { of, miBySector } = await marketCoverage(c.env, base, cos, ov);
-  const all = base.map((m) => ({ ...m, ...of(m) }));
   const now = Date.now();
+  const { of, miBySector } = await marketCoverage(c.env, base, byCountry, now);
+  const all = base.map((m) => ({ ...m, ...of(m) }));
   const items = all.filter((m) => passes(m, filters, now));
 
   const sign = dir === 'asc' ? 1 : -1;
@@ -609,6 +637,8 @@ researchMarkets.get('/markets', async (c) => {
     facets: marketFacets(all, filters, now),
     summary: coverageSummary(items, miBySector, now),
     read_at: new Date(now).toISOString(),
+    // D7710: the window the sector-level sources were read over.
+    sector_window: { start: windowStart(now), end: new Date(now).toISOString(), days: WINDOW_DAYS },
     companies_unmapped: unmapped,
     supplied_label: SUPPLIED_LABEL,
   });
@@ -622,12 +652,11 @@ researchMarkets.get('/markets/:slug', async (c) => {
   ).bind(slug).first<{ slug: string; name: string; supplied_count: number; as_of: string }>();
   if (!market) return c.json({ detail: 'Not found' }, 404);
 
-  const [sector, ov, cos, fs, sigs, countries] = await Promise.all([
+  const [sector, { groups, overrides: ov }, fs, sigs, countries] = await Promise.all([
     c.env.DB.prepare(
       `SELECT mi_sector, method, note FROM research_market_sectors WHERE market_slug = ?`,
     ).bind(slug).first<{ mi_sector: string | null; method: string; note: string | null }>(),
-    loadOverrides(c.env),
-    companies(c.env),
+    companyGroups(c.env),
     funds(c.env),
     signals(c.env),
     listCountries(c.env),
@@ -635,12 +664,13 @@ researchMarkets.get('/markets/:slug', async (c) => {
   const countryName = new Map(countries.map((k) => [k.code, k]));
   const index = await marketIndex(c.env, sector?.mi_sector ?? null);
 
-  const inMarket = cos.filter((co) => mapCompanySector(co.sector, ov).targets.includes(slug)).sort(byName);
+  const inMarket = groups.filter((g) => g.markets.includes(slug));
+  const page = await companyPage(c.env, inMarket, 'market');
   const byCountry = new Map<string, number>();
   const labels = new Map<string, number>();
-  for (const co of inMarket) {
-    bump(byCountry, mapCompanyCountry(co.country, ov).targets[0] ?? '');
-    bump(labels, String(co.sector));
+  for (const group of page.orderedGroups) {
+    bump(byCountry, group.code ?? '', group.count);
+    bump(labels, String(group.sector), group.count);
   }
   const focused = fs.filter((f) => mapFundFocus(f.sector_focus, ov).targets.includes(slug)).sort(bySize);
   const tokens = new Map<string, number>();
@@ -655,8 +685,8 @@ researchMarkets.get('/markets/:slug', async (c) => {
     item: { ...market, supplied_label: SUPPLIED_LABEL },
     sector: sector ? { mi_sector: sector.mi_sector, method: sector.method, note: sector.note } : { mi_sector: null, method: null, note: null },
     index,
-    company_count: inMarket.length,
-    companies: inMarket.slice(0, LIST_CAP).map((co) => companyDto(co, ov)),
+    company_count: inMarket.reduce((n, g) => n + g.count, 0),
+    companies: page.rows.map((co) => companyDto(co, ov)),
     companies_by_country: countList(byCountry, 'code').map((r) => ({
       code: r.code || null,
       name: r.code ? (countryName.get(r.code as string)?.name ?? null) : null,
@@ -678,14 +708,13 @@ researchMarkets.get('/markets/:slug', async (c) => {
 
 const GEO_SORTS = ['name', 'company_count', 'fund_count'] as const;
 
-function countryCounts(cos: CompanyRow[], fs: FundRow[], ov: Overrides) {
+function countryCounts(groups: CompanyGroup[], fs: FundRow[], ov: Overrides) {
   const companyCounts = new Map<string, number>();
   const fundCounts = new Map<string, number>();
   let companiesUnmapped = 0;
   let fundsUnmapped = 0;
-  for (const co of cos) {
-    const code = mapCompanyCountry(co.country, ov).targets[0];
-    if (code) bump(companyCounts, code); else companiesUnmapped += 1;
+  for (const { code, count } of groups) {
+    if (code) bump(companyCounts, code, count); else companiesUnmapped += count;
   }
   for (const f of fs) {
     const codes = mapFundHq(f.hq, ov).targets;
@@ -705,8 +734,8 @@ researchMarkets.get('/geographies', async (c) => {
   const offset = intParam(c.req.query('offset'), 0, 0, 10_000);
   const withData = c.req.query('with_data') !== '0';
 
-  const [countries, ov, cos, fs] = await Promise.all([listCountries(c.env), loadOverrides(c.env), companies(c.env), funds(c.env)]);
-  const { companyCounts, fundCounts, companiesUnmapped, fundsUnmapped } = countryCounts(cos, fs, ov);
+  const [countries, { groups, overrides: ov }, fs] = await Promise.all([listCountries(c.env), companyGroups(c.env), funds(c.env)]);
+  const { companyCounts, fundCounts, companiesUnmapped, fundsUnmapped } = countryCounts(groups, fs, ov);
 
   const items = countries
     .filter((k: Country) => (!region || k.region === region) && (!q || k.name.toLowerCase().includes(q) || k.code.toLowerCase() === q))
@@ -722,26 +751,6 @@ researchMarkets.get('/geographies', async (c) => {
     funds_unmapped: fundsUnmapped,
   });
 });
-
-interface CompanyMetricRow extends CompanyRow {
-  employee_count: number | null; employee_as_of: string | null;
-  last_funding_amount: number | null; last_funding_currency: string | null;
-  last_funding_date: string | null; last_funding_type: string | null; as_of: string | null;
-}
-
-/** The directory with migration 375's headcount and last-round columns (D531). */
-async function companiesWithMetrics(env: Env): Promise<CompanyMetricRow[]> {
-  const r = await env.DB.prepare(
-    `SELECT uid, name, website, country, founded_year, sector, employee_count, employee_as_of,
-            last_funding_amount, last_funding_currency, last_funding_date, last_funding_type, as_of
-       FROM research_company_directory`,
-  ).all<CompanyMetricRow>();
-  return r.results || [];
-}
-
-/** Largest recorded headcount first; a company with none follows, by name. */
-export const byHeadcount = (a: CompanyMetricRow, b: CompanyMetricRow) =>
-  (b.employee_count ?? -1) - (a.employee_count ?? -1) || byName(a, b);
 
 /** Fund size bands, in euros (the only currency a size is recorded in). */
 export const SIZE_BANDS: ReadonlyArray<{ key: string; label: string; min: number; max: number | null }> = [
@@ -794,20 +803,21 @@ researchMarkets.get('/geographies/:code', async (c) => {
   ).bind(code).first<Country>();
   if (!country) return c.json({ detail: 'Not found' }, 404);
 
-  const [ov, cos, fs, sigs, markets] = await Promise.all([
-    loadOverrides(c.env), companiesWithMetrics(c.env), funds(c.env), signals(c.env),
+  const [{ groups, overrides: ov }, fs, sigs, markets] = await Promise.all([
+    companyGroups(c.env, true), funds(c.env), signals(c.env),
     c.env.DB.prepare(`SELECT slug, name FROM research_market_directory`).all<{ slug: string; name: string }>(),
   ]);
   const marketName = new Map((markets.results || []).map((m) => [m.slug, m.name]));
 
-  const here = cos.filter((co) => mapCompanyCountry(co.country, ov).targets[0] === code).sort(byHeadcount);
+  const here = groups.filter((g) => g.code === code);
+  const page = await companyPage(c.env, here, 'country');
   const bySector = new Map<string, number>();
   const byLabel = new Map<string, number>();
   let noLabel = 0;
-  for (const co of here) {
-    bump(bySector, mapCompanySector(co.sector, ov).targets[0] ?? '');
-    const label = String(co.sector ?? '').trim();
-    if (label) bump(byLabel, label); else noLabel += 1;
+  for (const group of page.orderedGroups) {
+    bump(bySector, group.markets[0] ?? '', group.count);
+    const label = String(group.sector ?? '').trim();
+    if (label) bump(byLabel, label, group.count); else noLabel += group.count;
   }
   const hqHere = fs.filter((f) => mapFundHq(f.hq, ov).targets.includes(code)).sort(bySize);
   // Signals that name the country come first; then those that name only its
@@ -819,13 +829,13 @@ researchMarkets.get('/geographies/:code', async (c) => {
 
   return c.json({
     item: country,
-    totals: { companies: cos.length, funds: fs.length, signals: sigs.length },
+    totals: { companies: groups.reduce((n, g) => n + g.count, 0), funds: fs.length, signals: sigs.length },
     as_of: {
-      companies: maxOf(cos.map((co) => co.as_of)),
+      companies: maxOf(groups.map((g) => g.newest)),
       funds: maxOf(fs.map((f) => f.as_of)),
       signals: maxOf(sigs.map((s) => s.updated_at)),
     },
-    company_count: here.length,
+    company_count: here.reduce((n, g) => n + g.count, 0),
     companies_by_market: countList(bySector, 'slug').map((r) => ({
       slug: r.slug || null,
       name: r.slug ? (marketName.get(r.slug as string) ?? null) : null,
@@ -833,7 +843,7 @@ researchMarkets.get('/geographies/:code', async (c) => {
     })),
     companies_by_label: countList(byLabel, 'label'),
     companies_without_label: noLabel,
-    companies: here.slice(0, LIST_CAP).map((co) => ({
+    companies: page.rows.map((co) => ({
       ...companyDto(co, ov),
       employee_count: co.employee_count ?? null,
       employee_as_of: co.employee_as_of ?? null,

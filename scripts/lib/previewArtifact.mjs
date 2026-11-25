@@ -43,6 +43,9 @@ export const ALLOWED_EXTENSIONS = Object.freeze([
   'html', 'js', 'mjs', 'css', 'map', 'json', 'webmanifest', 'txt', 'xml', 'md',
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'ico',
   'woff', 'woff2', 'ttf', 'otf',
+  // #8468: the program briefs (`frontend/public/program-briefs/*.pdf`, #7801, #7804, #7969) are part of every
+  // build, so a preview that refused them refused every pull request.
+  'pdf',
 ]);
 
 /**

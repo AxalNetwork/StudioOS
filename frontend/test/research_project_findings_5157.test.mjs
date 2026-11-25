@@ -87,6 +87,23 @@ test('the citation panel reads what was recorded; a removed source keeps its pas
   assert.match(citationPanel({ n: 3, availability: 'not_recorded', title: 'Old' }).note, /recorded before Ask kept the document/);
 });
 
+test('D7817: a source of an attached analysis is attached or attachment removed, never Source not recorded', () => {
+  const base = { n: 1, kind: 'analysis_source', document_uid: null, title: 'Acme pricing', passage: null, url: 'https://acme.example/pricing', retrieved_at: '2026-11-10T10:00:00Z' };
+  const attached = citationPanel({ ...base, availability: 'attached', state: 'attached', attachment_uid: 'att' });
+  // Mutation checked: drop the attached label → this reads Not recorded.
+  assert.deepEqual([attached.availability.label, attached.url, attached.retrievedAt, attached.openHref, attached.note], ['From an attached analysis', 'https://acme.example/pricing', '2026-11-10T10:00:00Z', null, null]);
+  const gone = citationPanel({ ...base, availability: 'attachment_removed', state: 'attachment_removed', attachment_uid: null });
+  // Mutation checked: drop the attachment_removed label → this reads Not recorded.
+  assert.equal(gone.availability.label, 'Attachment removed');
+  assert.match(gone.note, /detached from the project/);
+  assert.equal(gone.url, 'https://acme.example/pricing');
+  for (const p of [attached, gone]) assert.notEqual(p.availability.label, 'Source not recorded');
+  // An untitled attached source is named by its link.
+  assert.equal(citationPanel({ ...base, title: '', availability: 'attached' }).title, 'https://acme.example/pricing');
+  // A document citation gains no link fields.
+  assert.deepEqual([citationPanel(CITE_LIVE).url, citationPanel(CITE_LIVE).retrievedAt], [null, null]);
+});
+
 test('the form: a source fact needs its passage; a conclusion stands alone', () => {
   assert.ok(findingDraftErrors({ kind: 'source_fact', text: 'Fact' }).passage);
   assert.ok(findingDraftErrors({ kind: 'conclusion', text: '  ' }).text);

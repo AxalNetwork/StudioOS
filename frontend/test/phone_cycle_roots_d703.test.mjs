@@ -446,7 +446,7 @@ for (const cycle of Object.keys(READS)) {
         assert.ok(ids.includes('grow-attention') && !ids.includes('cycle-overview'));
       } else {
         // D6028 (#6028): Build's desktop overview is its own (BD1), mounted through `def.Overview`.
-        assert.ok(ids.includes(cycle === 'build' ? 'build-overview-v2' : 'cycle-overview'), 'the desktop overview');
+        assert.ok(ids.includes(cycle === 'build' ? 'build-overview-v2' : cycle === 'validate' ? 'validate-overview-v2' : 'cycle-overview'), 'the desktop overview');
         assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
       }
       assert.ok(!ids.includes('phone-root') && !ids.includes('phone-focus'), 'no root at 1024px');
