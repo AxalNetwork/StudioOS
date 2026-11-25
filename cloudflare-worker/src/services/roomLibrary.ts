@@ -33,6 +33,20 @@ export type RefRow = {
   r2_key: string; chunk_count: number | null; index_state: string;
 };
 
+/**
+ * D6913 part 3 (RS-15): how long each of an investor's live references stays reachable, by document id: the end of
+ * the grant the reference was added under (`until`, null when the founder set none). Only the caller's own references,
+ * and only live ones with an active grant; anything else has no entry, so it reads no access rather than a guessed one.
+ */
+export async function roomRefAccess(env: Env, userId: number): Promise<Map<number, { until: string | null }>> {
+  const rows = await env.DB.prepare(
+    `SELECT r.document_id, g.expires_at
+       FROM research_room_refs r JOIN data_room_grants g ON g.id = r.grant_id
+      WHERE r.owner_user_id = ? AND g.investor_user_id = r.owner_user_id AND r.lost_at IS NULL AND g.status = 'active'`,
+  ).bind(userId).all<{ document_id: number; expires_at: string | null }>().catch(() => ({ results: [] as any[] }));
+  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), { until: x.expires_at ?? null }]));
+}
+
 /** Whether the founder lets granted investors add this room's files to their Library. A room with no row is off. */
 export async function libraryAllowed(env: Env, projectId: number): Promise<boolean> {
   const row = await env.DB.prepare('SELECT allow_library FROM data_room_library_settings WHERE project_id = ?')
