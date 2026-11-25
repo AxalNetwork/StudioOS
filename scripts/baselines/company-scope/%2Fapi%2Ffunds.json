@@ -1,4 +1,7 @@
 {
+  "DELETE /api/funds/:id/lps/:lpId": {
+    "kind": "target"
+  },
   "DELETE /api/funds/:id/report-periods/:periodId": {
     "kind": "target"
   },
@@ -48,6 +51,9 @@
     "kind": "filter"
   },
   "PATCH /api/funds/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/funds/:id/lps/:lpId": {
     "kind": "target"
   },
   "POST /api/funds": {

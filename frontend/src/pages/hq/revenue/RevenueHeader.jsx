@@ -143,6 +143,9 @@ export function DataCoverageDrawer({ sources, focus, period, readAt, onClose, on
             <b className="text-[14px] text-axal-ink dark:text-gray-100">{s.name}</b>
             <span className="row-span-2 self-start"><CoverageMark state={s.state} /></span>
             <p className="text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">{s.reason}</p>
+            {s.metadata && <dl className="col-span-2 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3 gap-y-1 break-words text-[12.5px] text-axal-muted dark:text-gray-400">
+              {s.metadata.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd className="min-w-0 [overflow-wrap:anywhere]">{value}</dd></React.Fragment>)}
+            </dl>}
           </li>
         ))}
       </ul>

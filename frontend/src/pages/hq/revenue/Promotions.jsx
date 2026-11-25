@@ -2,10 +2,10 @@ import { PromotionReadback } from './PromotionReadback.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { Unreadable } from '../../../ui';
 import { currencyCode, parseMinor } from '../../../lib/money.js';
-import { StateMark, Section, When, Why, TABLE, TD, TH, NUM } from './RevenueStates.jsx';
+import { StateMark, Figure, Section, When, Why, TABLE, TD, TH, NUM } from './RevenueStates.jsx';
 import { STATEMENT_PERIOD_RE } from './StatementActions.jsx';
 import {
-  UNAVAILABLE, ceilingFacts, isReady, licencesWithoutCeiling, money, pendingState, periodLabel, promoReporting,
+  UNAVAILABLE, ceilingFacts, isReady, licencesWithoutCeiling, money, pendingState, periodLabel, promoReporting, promoMetricFacts,
 } from './revenueModel.js';
 
 /**
@@ -53,7 +53,7 @@ export const CEILING_ENFORCEMENT = Object.freeze([
   'If the branch holds no ceiling for the current quarter, discounts are allowed until HQ sets one. That is the owner\'s decision, not a fault, and "no ceiling" is neither 0 nor unlimited.',
   'If the branch holds a ceiling it cannot read, the discount is refused.',
   'Saving a ceiling stores it at HQ and pushes it to the branch; those are two facts, and the push can fail on its own. A ceiling the branch has not received is not enforced.',
-  'The branch counts what it gives. HQ does not receive that figure automatically: Issued and Remaining here are what the branch has reported to HQ, and they are Not recorded until it does.',
+  'The branch reports what it issues automatically. Issued and Remaining here are its dated report, and stay unknown until it arrives.',
 ]);
 
 /**
@@ -278,7 +278,9 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
             <tbody data-testid="hq-revenue-ceilings">
               {rows.map((x) => {
                 const facts = ceilingFacts(x, ceilings?.current_period);
-                const reporting = promoReporting(x, currentPeriod, nowMs);
+                const automatic = isReady(summary) && !!summary.metrics?.promo_issued_per_licence;
+                const report = automatic ? promoMetricFacts(summary, x, period) : null;
+                const reporting = report ? { state: report.issued.state, text: report.reportedAt ? `Reported ${report.reportedAt}` : undefined } : promoReporting(x, currentPeriod, nowMs);
                 return (
                   <tr key={`${x.licence_uid}:${x.period}`} data-testid={`hq-revenue-ceiling-state-${x.licence_uid}-${x.period}`}>
                     <td className={TD}><b>{x.brand_name || x.licence_ref || x.licence_uid}</b></td>
@@ -289,10 +291,10 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
                     <td className={TD}><PromotionReadback key={`${x.licence_uid}:${x.period}:${x.ceiling_cents}:${x.currency}:${x.updated_at}`} licenceUid={x.licence_uid} period={x.period} /></td>
                     {/* NULL ISSUED IS NOT ZERO ISSUED, AND GIVES NO REMAINING. HQ's copy is only what a branch reports. */}
                     <td className={`${TD} ${NUM} font-mono`}>
-                      {facts.issued.known ? money(x.issued_cents, x.currency) : <StateMark state="not_reported" />}
+                      {report ? <Figure figure={report.issued} /> : facts.issued.known ? money(x.issued_cents, x.currency) : <StateMark state="not_reported" />}
                     </td>
                     <td className={`${TD} ${NUM} font-mono`}>
-                      {facts.remaining.known ? money(x.remaining_cents, x.currency) : <StateMark state="not_recorded" />}
+                      {report ? <Figure figure={report.remaining} /> : facts.remaining.known ? money(x.remaining_cents, x.currency) : <StateMark state="not_recorded" />}
                     </td>
                     <td className={TD}><StateMark state={reporting.state} label={reporting.text} /></td>
                   </tr>

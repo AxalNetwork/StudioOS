@@ -1,0 +1,13 @@
+/* D6214: reporting controls extend the Portfolio frame's existing tokens. */
+.pf-reporting-settings { display: flex; flex-direction: column; gap: 16px; padding: 20px; box-sizing: border-box; color: var(--pf-ink); font-size: 13px; }
+.pf-reporting-settings label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.pf-reporting-settings input:not([type="checkbox"]), .pf-reporting-settings select, .pf-reporting-settings textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--pf-hair2); border-radius: 8px; background: var(--pf-card); color: var(--pf-ink); padding: 8px; font: inherit; }
+.pf-reporting-settings textarea { min-height: 100px; resize: none; }
+.pf-reporting-settings h3 { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
+.pf-reporting-settings h4 { font-weight: 700; }
+.pf-reporting-settings section { min-width: 0; overflow-wrap: anywhere; }
+.pf-reporting-settings [role="alert"] { color: var(--pf-neg); }
+@media (max-width: 640px) { .pf-reporting-settings input:not([type="checkbox"]), .pf-reporting-settings select, .pf-reporting-settings button { min-height: 44px; } }
+
+.pf-reporting-settings .pf-reporting-required { flex-direction: row; align-items: center; gap: 8px; }
+.pf-reporting-settings input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; }

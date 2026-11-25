@@ -12,8 +12,11 @@ import { ENGINE_OFF, HANDOFFS_EMPTY, dayWord, holderName, loopWords, stepDecisio
  * created. Depth is an indent (at most 3). A role nobody on the team holds
  * reads "No agent". A step carries no run or task uid, so there is no
  * "Open run" link. Refused loops are listed under the chains, in words.
+ * D8081 (#8081): each step says what its target was asked to be (planner,
+ * worker or reviewer); a read from before D8081 carries no role and says none.
  */
 const TONE = { Accepted: 'pos', Waiting: 'amb', Refused: 'mut' };
+const ROLE_WORD = { planner: 'planner', worker: 'worker', reviewer: 'reviewer' };
 
 function Who({ roleKey, team }) {
   const a = (team || []).find((x) => x?.role_key === roleKey && x?.status !== 'removed');
@@ -52,6 +55,7 @@ export default function HandoffTrail({ scope, id, team = [] }) {
               return (
                 <div key={s.uid} role="listitem" className="flex flex-wrap items-center gap-1.5 text-[13px] text-axal-ink dark:text-gray-100" style={{ paddingLeft: `${Math.min(3, Math.max(0, Number(s.depth) || 0)) * 20}px` }} data-testid="handoff-step">
                   <Who roleKey={s.from?.role_key} team={team} /><span aria-hidden="true">→</span><span className="sr-only">hands to</span><Who roleKey={s.to?.role_key} team={team} />
+                  {ROLE_WORD[s.hierarchy_role] ? <span className={MUTED} data-testid="handoff-role">as {ROLE_WORD[s.hierarchy_role]}</span> : null}
                   <span>: {s.title}</span>
                   <Chip tone={TONE[st]}>{st}</Chip>
                   <span className={MUTED}>{stepDecision(s)}</span>

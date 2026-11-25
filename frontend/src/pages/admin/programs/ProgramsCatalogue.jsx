@@ -88,7 +88,7 @@ function ProgramCard({ p, superAdmin, parts }) {
     <section className={`${CARD} flex min-w-0 flex-col gap-2.5 px-[18px] py-4`} data-testid={`programs-card-${p.key}`}>
       <span className={EYE}>{p.group}</span>
       {/* D6966 (PGS07): the name opens the program's presentation when it has one. */}
-      <h3 className={H2}><PresentationName programKey={p.key} name={p.name} /></h3>
+      <h3 className={H2}><PresentationName programKey={p.key} name={p.name} registryRow={p.row} /></h3>
       {p.purpose
         ? <p className={`m-0 ${SUB}`}>{p.purpose}</p>
         : <Unread word={NOT_RECORDED} reason={p.purposeReason} testId={`programs-card-${p.key}-purpose`} />}
@@ -104,7 +104,7 @@ function ProgramCard({ p, superAdmin, parts }) {
           : <Unread word={NOT_RECORDED} reason={p.whoReason} />)}
       </div>
       {figures}
-      {door ? <div className="mt-auto flex flex-wrap gap-2 pt-1">{manageDoor(door, p.key, p.name)}</div> : null}
+      {door ? <div className="mt-auto flex flex-wrap gap-2 pt-1">{manageDoor(door, p.key, p.name, undefined, p.row)}</div> : null}
       {foot ? <p className={`m-0 ${SUB}`} data-testid={`programs-card-${p.key}-foot`}>{foot}</p> : null}
     </section>
   );
@@ -126,7 +126,7 @@ function ProgramRow({ p, superAdmin, parts }) {
         <span className="flex flex-col gap-0.5">
           <span className="text-[13.5px] font-bold text-axal-ink dark:text-gray-100">
             {p.row && !programByKey(p.key) ? <span className="mr-1.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400">Custom</span> : null}
-            <PresentationName programKey={p.key} name={p.name} hint />
+            <PresentationName programKey={p.key} name={p.name} registryRow={p.row} hint />
           </span>
           {p.purpose ? <span className={SUB}>{p.purpose}</span> : <Unread word={NOT_RECORDED} reason={p.purposeReason} testId={`programs-card-${p.key}-purpose`} />}
           {superAdmin ? null : <NeedsPill needs={parts.needs} programKey={p.key} />}
@@ -144,7 +144,7 @@ function ProgramRow({ p, superAdmin, parts }) {
         {v.grants}
       </td>
       <td className={cell}>{parts.figures || <span className={SUB}>—</span>}{parts.foot ? <p className={`m-0 ${SUB}`} data-testid={`programs-card-${p.key}-foot`}>{parts.foot}</p> : null}</td>
-      <td className={`${cell} text-right`}>{manageDoor(parts.door, p.key, p.name)}</td>
+      <td className={`${cell} text-right`}>{manageDoor(parts.door, p.key, p.name, undefined, p.row)}</td>
     </tr>
   );
 }
@@ -156,12 +156,12 @@ function PhoneProgram({ p, superAdmin, parts }) {
     <li className="flex items-center justify-between gap-3 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-700" data-testid={`programs-card-${p.key}`}>
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100"><PresentationName programKey={p.key} name={p.name} /></span>
+          <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100"><PresentationName programKey={p.key} name={p.name} registryRow={p.row} /></span>
           <StatusPill status={p.status} testId={`programs-card-${p.key}-status`} />
         </span>
         <span className={SUB} data-testid={`programs-card-${p.key}-line`}>{phoneLine(dims)}</span>
       </span>
-      {manageDoor(parts.door, p.key, p.name, 'Manage')}
+      {manageDoor(parts.door, p.key, p.name, 'Manage', p.row)}
     </li>
   );
 }

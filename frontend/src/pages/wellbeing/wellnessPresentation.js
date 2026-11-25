@@ -18,7 +18,7 @@
  */
 
 /** Where the public way in lives today. The kit's `/programs` index is #6966's. */
-export const PROGRAMS_INDEX = { to: '/events', label: 'Programs & Events' };
+export const PROGRAMS_INDEX = { to: '/programs', label: 'all programs' };
 
 /** The key → page → PDF map entry (the kit's map, #6966, takes it over when it lands). */
 export const WELLNESS_PRESENTATION = Object.freeze({

@@ -25,7 +25,7 @@
  * as zero, as on time or as an empty inbox. A Worker `detail` never reaches
  * the page.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -34,6 +34,9 @@ import { titleCase } from '../../lib/absence';
 import { currencyFromLabel } from '../../lib/money';
 import { WorkerRail } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
+import PortfolioReportingSettings from '../portfolio/PortfolioReportingSettings.jsx';
+import { portfolioReportingSettingsApi } from '../../lib/api/portfolioReportingSettings.js';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -115,10 +118,11 @@ function ChaseCell({ chase, retry, testid }) {
 }
 
 /** PF-04 A: who owes what, for the period the Worker measured. */
-function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, view, onOpen, onChase, chasing, rules }) {
+function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, reportingSettings, view, onOpen, onChase, chasing, rules }) {
   const head = (
     <div className="pf-card-head">
       <h2 id="pf-inbox-title">Reporting obligations</h2>
+      {reads.compliance.value?.rules_basis==='firm_wide'&&<span className="pf-sm">Reporting uses firm-wide collection rules for this view.</span>}
       {inbox.state === 'ok' ? <span className="pf-sm">{inbox.period ? `${inbox.period} · ` : ''}{inbox.cadence ? `${inbox.cadence} cadence` : 'cadence not recorded'}{inbox.inProgress ? ' · period in progress' : ''}</span> : null}
     </div>
   );
@@ -171,7 +175,7 @@ function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, 
         role="investor"
         className="pf-toolbar"
         filters={investorZoneFilters('portfolio/updates', { value: filter, onChange: setFilter })}
-        actions={investorZoneActions('portfolio/updates', { handlers: { chaseOverdue }, view })}
+        actions={investorZoneActions('portfolio/updates', { handlers: { chaseOverdue, reportingSettings }, view })}
       />
       {body}
       <p className="pf-foot">A company has reported when a submitted founder update speaks for the period; a month inside the quarter counts for it. A report is due the reporting duty's own number of days after the period ends, else 30; Overdue counts the days past that, by the Worker's date (UTC). A chase notifies the founder and is logged; delivery is attempted, not guaranteed.</p>
@@ -333,6 +337,14 @@ export default function InvestorPortfolioUpdates() {
   const [filter, setFilter] = useState('period');
   const location = useLocation();
   const [open, setOpen] = useState(() => location.state?.founderAskReportKey ?? null);
+  const [settings,setSettings]=useState(false);
+  const [settingsNote,setSettingsNote]=useState('');
+  const [rulesRefresh,setRulesRefresh]=useState(0);
+  const [ruleBook,setRuleBook]=useState({id:'hq',name:'Firm-wide'});
+  const [bookRules,setBookRules]=useState({state:'loading'});
+  const ruleAttempt=useRef(0);
+  const {company}=useActiveCompany();
+  const companyId=company?.id;
   const [chasing, setChasing] = useState(false);
   const [chaseNote, setChaseNote] = useState('');
   const { reads, retry, reload } = usePortfolioReads(SOURCES);
@@ -349,9 +361,22 @@ export default function InvestorPortfolioUpdates() {
   const kpiSet = complianceUnavailable ? null : (reads.compliance.value?.kpi_set || []);
   // The cadence the SERVER answered with, not the one this page asked for.
   const cadence = reads.compliance.value?.cadence || 'quarterly';
+  const measuredPeriod = inbox.period;
+  const loadBookRules = useCallback(async()=>{
+    const own=++ruleAttempt.current;setBookRules({state:'loading'});
+    if(!measuredPeriod){setBookRules({state:'unreadable'});return;}
+    try{const value=await portfolioReportingSettingsApi.read(ruleBook.id,cadence,{period:measuredPeriod});if(!Array.isArray(value?.rules))throw new Error();if(own===ruleAttempt.current)setBookRules({state:'ok',value});}
+    catch{if(own===ruleAttempt.current)setBookRules({state:'unreadable'});}
+  },[ruleBook.id,cadence,measuredPeriod,companyId,rulesRefresh]);
+  useEffect(()=>{if(ruleBook.id!=='hq')loadBookRules();return()=>{ruleAttempt.current+=1;};},[ruleBook.id,loadBookRules]);
+  useEffect(()=>{setRuleBook({id:'hq',name:'Firm-wide'});setBookRules({state:'loading'});},[companyId]);
+  const selectedRules = ruleBook.id==='hq' ? kpiSet : bookRules.state==='ok' ? bookRules.value.rules : null;
+  const rulesLoading = reads.compliance.state==='loading'||(ruleBook.id!=='hq'&&bookRules.state==='loading');
+  const bookProjects = new Set((reads.compliance.value?.companies||[]).filter(co=>ruleBook.id==='hq'||co.fund_ids?.includes(Number(ruleBook.id))).map(co=>Number(co.project_id)));
+
   // Each company's latest stored update the rule set is read against; with the
   // update source unreadable there is no denominator at all.
-  const storedUpdates = reads.updates.state !== 'ok' ? null : rows.map((row) => row.update).filter(Boolean);
+  const storedUpdates = reads.updates.state !== 'ok' || reads.compliance.state !== 'ok' ? null : rows.filter(row=>bookProjects.has(Number(row.projectId))).map((row) => row.update).filter(Boolean);
   // `Rules` is a VIEW, not a row predicate: it swaps the body.
   const showingRules = filter === 'rules';
   // D6204: Overdue is the Worker's overdue set (past the due day, unreported), not every unreported company.
@@ -432,6 +457,7 @@ export default function InvestorPortfolioUpdates() {
       context={inbox.state === 'ok' && inbox.period ? `${inbox.period} · ${inbox.inProgress ? 'in progress' : 'last completed period'}` : null}
       tools={(
         <ZoneHeaderTools role="investor">
+          {(showingRules || inbox.state !== 'ok') && <button type="button" className="pf-btn" onClick={()=>setSettings(true)}>Reporting settings</button>}
           <button type="button" className="pf-icon-button" onClick={reload} aria-label="Refresh portfolio reports" data-testid="button-refresh-investor-reports"><RefreshCw size={15} aria-hidden="true" /></button>
         </ZoneHeaderTools>
       )}
@@ -440,6 +466,8 @@ export default function InvestorPortfolioUpdates() {
       ) : null}
       rail={<UpdatesRail rows={rows} reads={reads} />}
     >
+      {settings && <PortfolioReportingSettings onClose={book=>{setSettings(false);setFilter('rules');if(book)setRuleBook(book);}} onSaved={(note,book)=>{setSettings(false);setFilter('rules');setSettingsNote(note);if(book)setRuleBook(book);setRulesRefresh(n=>n+1);retry('compliance');}} />}
+      {settingsNote&&<p role="status">{settingsNote}</p>}
       {chaseNote ? <p className="pf-partial" role="status" data-testid="status-chase-note">{chaseNote}</p> : null}
       <section className="pf-tiles pf-tiles-4" aria-label="This period" data-testid="reports-tiles">
         <SummaryTile label="Received" value={inbox.state === 'ok' ? `${received} of ${rows.length}` : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? `for ${inbox.period || 'the period measured'}` : 'Reporting source'} />
@@ -451,8 +479,8 @@ export default function InvestorPortfolioUpdates() {
         <SummaryTile label="Source handling" value="Source-preserved" note="KPI values and narrative are shown as submitted" />
       </section>
       {showingRules
-        ? (reads.compliance.state === 'loading' ? <section className="pf-card"><Skeleton rows={3} /></section> : <RuleSet kpiSet={kpiSet} cadence={cadence} storedUpdates={storedUpdates} retry={retry} />)
-        : <Inbox inbox={inbox} reads={reads} retry={retry} visible={visible} filter={filter} setFilter={setFilter} chaseOverdue={chaseOverdue} view={view}
+        ? (rulesLoading ? <section className="pf-card"><Skeleton rows={3} /></section> : <RuleSet kpiSet={selectedRules} cadence={cadence} storedUpdates={storedUpdates} retry={ruleBook.id==='hq'?retry:loadBookRules} scopeName={ruleBook.name} period={measuredPeriod} />)
+        : <Inbox inbox={inbox} reads={reads} retry={retry} visible={visible} filter={filter} setFilter={setFilter} chaseOverdue={chaseOverdue} reportingSettings={()=>setSettings(true)} view={view}
           onOpen={(row) => setOpen(row.key)} onChase={chaseOne} chasing={chasing} rules={kpiSet || []} />}
       {/* D1061 (#2931): RPT9, what each company the investor signed into owes them under a document, with its own due dates. */}
       <PortfolioReports />
@@ -470,7 +498,7 @@ export default function InvestorPortfolioUpdates() {
         empty="What arrived measured against what was asked for: which required figures no stored update carries, and which arrived as a sentence rather than a number. Ambiguity is named, never resolved into a figure."
         nothingToDraft="No stored update is recorded against an accessible company, so there is nothing to read the rule set against."
       />
-      <section className="pf-card ip2-unavailable" aria-labelledby="pf-handling-title"><h2 id="pf-handling-title" className="pf-h2">How updates are handled</h2><strong>The Rules view shows the KPI set companies report against.</strong><p className="pf-foot">Narrative text is kept as submitted and is not converted into KPI figures. If a value is absent or written only in prose, this workspace names the gap instead of inferring a number.</p><p className="pf-foot">The reporting rules are read-only here. Changes to what companies report are handled through the authorised portfolio workflow.</p></section>
+      <section className="pf-card ip2-unavailable" aria-labelledby="pf-handling-title"><h2 id="pf-handling-title" className="pf-h2">How updates are handled</h2><strong>The Rules view shows the KPI set companies report against.</strong><p className="pf-foot">Narrative text is kept as submitted and is not converted into KPI figures. If a value is absent or written only in prose, this workspace names the gap instead of inferring a number.</p><p className="pf-foot">A fund’s GP can change its reporting settings from the toolbar. Earlier periods keep the rules in force then.</p></section>
       <p className="pf-boundary">Investor workspace · updates shown are restricted to this investor’s accessible portfolio.</p>
       {openRow ? <ReportDetail row={openRow} reads={reads} retry={retry} rules={kpiSet || []} cadence={cadence} onClose={() => setOpen(null)} /> : null}
     </PortfolioFrame>
@@ -494,7 +522,7 @@ export default function InvestorPortfolioUpdates() {
  * page — each company's latest, whatever period it speaks for — that carry a
  * value under the rule's key. A key present with an empty value is not carried.
  */
-function RuleSet({ kpiSet, cadence, storedUpdates, retry }) {
+function RuleSet({ kpiSet, cadence, storedUpdates, retry, scopeName = 'Firm-wide', period }) {
   const carried = (key) => (storedUpdates == null ? null : storedUpdates.filter((update) => {
     const value = update?.kpis?.[key];
     return value !== undefined && value !== null && String(value).trim() !== '';
@@ -503,12 +531,12 @@ function RuleSet({ kpiSet, cadence, storedUpdates, retry }) {
     <section className="pf-card pf-table-card" aria-labelledby="pf-rules-set-title" data-testid="ip2-rule-set">
       <div className="pf-card-head">
         <h2 id="pf-rules-set-title">KPI rule set</h2>
-        <span className="pf-sm">Firm-wide · read-only</span>
+        <span className="pf-sm">{scopeName} · read-only{period ? ` · ${period}` : ''}</span>
       </div>
       {kpiSet === null
         ? <div className="pf-pad" data-testid="ip2-rule-set-unreadable"><SourceFailure what="The rule set" claim="That is not a claim that companies are asked for nothing." onRetry={() => retry('compliance')} /></div>
         : kpiSet.length === 0
-          ? <p className="pf-note"><AlertCircle size={14} aria-hidden="true" /> No KPI is defined for the firm-wide set at the {cadence} cadence. Companies reporting on this schedule are held to no stored figure.</p>
+          ? <p className="pf-note"><AlertCircle size={14} aria-hidden="true" /> No KPI is defined for {scopeName} at the {cadence} cadence. Companies reporting on this schedule are held to no stored figure.</p>
           : (
             <>
               <div className="pf-table-wrap">
@@ -531,7 +559,7 @@ function RuleSet({ kpiSet, cadence, storedUpdates, retry }) {
                   </tbody>
                 </table>
               </div>
-              <p className="pf-foot pf-pad"><b>Which set this is.</b> The firm-wide rules collected at the {cadence} cadence — the one this page reads. Rules stored against another cadence are collected on that schedule and are not in this table. <em>Carried by</em> counts the stored updates on this page, each company&rsquo;s latest whatever period it speaks for, not compliance for the current period.</p>
+              <p className="pf-foot pf-pad"><b>Which set this is.</b> The rules for {scopeName} at the {cadence} cadence{period ? `, in force for ${period}` : ''} — the period this page reads. Rules stored against another cadence are collected on that schedule and are not in this table. <em>Carried by</em> counts the stored updates on this page, each company&rsquo;s latest whatever period it speaks for, not compliance for the current period.</p>
             </>
           )}
     </section>

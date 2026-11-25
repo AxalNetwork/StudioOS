@@ -34,7 +34,7 @@
  */
 import type { Env } from '../types';
 import {
-  WORK_GRAPH_BLOB_DEPS, blobKey, integrityEventStatement, isWorkGraphBlobSource, residencyAllowed, verifyBlob,
+  WORK_GRAPH_BLOB_DEPS, blobKey, parseBlobKey, integrityEventStatement, isWorkGraphBlobSource, residencyAllowed, verifyBlob,
 } from './workGraphBlobs';
 import { assertFence, leasesOn, type LeaseHolder, type LeaseUnit, type WriteCapability } from './workGraphLeases';
 import {
@@ -357,7 +357,7 @@ export async function createRevision(
   if (typeof input.mediaProfile !== 'string' || !input.mediaProfile || input.mediaProfile.length > 120) return m.refuse('malformed', [uid]);
   // WorkGraph-held bytes live under this asset's own tenant and company, at the key of this digest (part 3).
   if (isWorkGraphBlobSource(input.source)
-    && (input.source.id !== blobKey(asset.scope, input.digest) || input.source.revision !== input.digest)) {
+    && (input.source.id !== blobKey(asset.scope, input.digest, parseBlobKey(input.source.id)?.objectClass) || input.source.revision !== input.digest)) {
     return m.refuse('malformed', [uid, 'blob_key']);
   }
 
@@ -626,14 +626,16 @@ export async function advanceHead(
   // Part 3, step 2: integrity before release. WorkGraph-held bytes are re-read and checked against the digest;
   // bytes a domain holds (d1_record, git, esign, another R2 prefix) are that domain's to verify (D5579 §1).
   if (isWorkGraphBlobSource(version.source)) {
+    const mediaClass = parseBlobKey(version.source.id)?.objectClass;
+    if (mediaClass === 'rendition' || mediaClass === 'thumbnail') return refuseAudited('authority_violation', [rev.revision_uid, mediaClass], { reason: 'derived_media_not_source' });
     const residency = rev.residency ?? null;
     if (!residencyAllowed(residency, WORK_GRAPH_BLOB_DEPS.jurisdiction)) {
       return refuseAudited('residency_mismatch', [rev.revision_uid, String(residency), String(WORK_GRAPH_BLOB_DEPS.jurisdiction)], { residency, jurisdiction: WORK_GRAPH_BLOB_DEPS.jurisdiction });
     }
-    if (version.source.id !== blobKey(asset.scope, version.digest)) {
+    if (version.source.id !== blobKey(asset.scope, version.digest, parseBlobKey(version.source.id)?.objectClass)) {
       return refuseAudited('bytes_unverified', [rev.revision_uid, 'blob_key'], { cause: 'blob_key' });
     }
-    const v = await verifyBlob(env, asset.scope, version.digest, version.byteLength);
+    const v = await verifyBlob(env, asset.scope, version.digest, version.byteLength, undefined, parseBlobKey(version.source.id)?.objectClass);
     m.add({ r2ClassB: v.r2ClassB });
     if (!v.ok) return refuseAudited('bytes_unverified', [rev.revision_uid, v.code, v.detail], { cause: v.code, detail: v.detail, digest: version.digest });
   }

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import FormationEntry, { useCompanyFormation } from './FormationEntry';
 import { Link, useNavigate } from 'react-router-dom';
 import { Pill } from '../../../ui';
 import { teamsApi } from '../../../lib/api/teams';
@@ -117,6 +118,7 @@ export default function CompanyPage({
   const detail = useBlock(loadDetail, tick);
   const legal = useBlock(loadLegal, tick);
   const docs = useBlock(loadDocs, tick);
+  const formation = useCompanyFormation(uid, tick);
   const [dialog, setDialog] = useState(null);
   const navigate = useNavigate();
 
@@ -189,6 +191,7 @@ export default function CompanyPage({
         <div className="flex min-w-0 flex-col gap-4">
           <PCard title="Legal information" testId="company-legal"
             aside={legal.status === 'ready' && !locked ? <Link to={companyLegalPath(uid)} className={LINK} data-testid="company-legal-edit">Edit in Legal</Link> : null}>
+            <FormationEntry entry={locked ? { state: 'incorporated' } : formation} name={name} uid={uid} onRetry={reread} onSaved={() => { reread(); onChanged('The legal facts are saved.'); }} showRefusal />
             {legal.status === 'loading' && !legal.value ? <Reading />
               : !facts ? <Failed what="Legal information" onRetry={reread} testId="company-legal-unread" />
                 : (

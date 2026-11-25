@@ -197,12 +197,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // company, and notifies the founder. The notification type's settings row
     // is Session 4's to add.
     { label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue', primary: true },
-    // WAS 'no reminder rules are stored', which is true and describes a
-    // different object. The rules this desk actually has are the KPI
-    // definitions companies are held to, and they ARE stored — firm-wide,
-    // with no per-firm write path exposed. The Rules chip shows them; nothing
-    // edits them.
-    { label: 'Edit rules', unbuilt: 'the KPI set companies are held to is stored firm-wide and read-only here; no per-firm rule is kept for this book to edit' },
+    { label: 'Reporting settings', kind: 'handler', handler: 'reportingSettings' },
     { label: 'Export', kind: 'export' },
   ],
   // THE ONLY ROW IN THIS FILE WHOSE REASONS WERE ALL TRUE. Checked the same way

@@ -482,6 +482,8 @@ test('the route refuses a malformed body in the documented order', async () => {
   const db = fixture();
   const h = hypothesis(db, P, 'H1');
   const cases: [unknown, number, string][] = [
+    [{ for: 'venture' }, 400, 'decision must be proceed, pivot or stop'],
+    [{ decision: null, for: 'venture' }, 400, 'decision must be proceed, pivot or stop'],
     [{ decision: 'maybe', for: 'venture' }, 400, 'decision must be proceed, pivot or stop'],
     [{ decision: 'proceed', for: 'H1' }, 400, "for must be 'venture' or 'h-<id>'"],
     [{ decision: 'proceed', for: 'venture', evidence: Array.from({ length: 51 }, (_, i) => `k-${i}`) }, 400, 'A decision rests on at most 50 pieces of evidence.'],

@@ -471,6 +471,8 @@ export function fromWorkerSkill(c) {
       : null,
     // #5964: a writer's unpublished edits differ from the version shown (the compare page says they are not in it).
     draft_differs: !!c.draft && draftKey(c.draft) !== draftKey(c),
+    // #4538 (D4538 part 5): the writer's draft version, sent back as `expected_draft_hash` by the rebase; null for a reader.
+    draft_hash: typeof c.draft_hash === 'string' && /^[a-f0-9]{64}$/.test(c.draft_hash) ? c.draft_hash : null,
     // #5964: the role labels, read only by the compare page's Roles part (the tab itself never prints a role).
     role_labels: (Array.isArray(c.roles) ? c.roles : []).map((r) => (typeof r === 'string' ? r : r?.label || r?.key)).filter(Boolean),
   };
