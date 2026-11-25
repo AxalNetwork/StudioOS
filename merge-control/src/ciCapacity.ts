@@ -489,12 +489,9 @@ export class CiCapacity {
             this.store.save(request); // New generation revokes every older receipt.
           }
           if (!stopped && a.phase === 'reserved') {
-            let live = false;
-            try { live = await this.ports.parent(request.submission); } catch { continue; }
-            if (!live) { request.parentLive = false; this.store.save(request); continue; }
+            let to: 'hosted' | 'linux-x64' | 'hold' = 'hosted';
             if (waiting) {
               const at = this.now();
-              let to: 'hosted' | 'linux-x64' | 'hold' = 'hosted';
               const workers = request.shards.filter(s => s.name.startsWith('worker-')).map(activeAttempt);
               const external = workers.filter(x => x.profile === 'linux-x64' || x.profile === 'macos-arm64').length;
               // A Linux attempt must leave its own fence and a full hosted fallback inside the request deadline.
@@ -511,8 +508,14 @@ export class CiCapacity {
                 // unreadable runners give no reason to wait, so the shard goes to hosted now.
                 else if (at < request.acceptedAt + holdMs! && holds < pool.total) to = 'hold';
               }
+              // Decided before the parent is read again: a shard that keeps waiting sends nothing and costs no call.
               if (to === 'hold') { held++; holds++; continue; }
-              a = this.attempt(request, shard.name, to, shard.generation, at);
+            }
+            let live = false;
+            try { live = await this.ports.parent(request.submission); } catch { continue; }
+            if (!live) { request.parentLive = false; this.store.save(request); continue; }
+            if (waiting) {
+              a = this.attempt(request, shard.name, to as 'hosted' | 'linux-x64', shard.generation, this.now());
               shard.attempts[shard.attempts.length - 1] = a;
             }
             a.phase = 'dispatching';

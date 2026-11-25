@@ -1018,3 +1018,65 @@ test('#8626 per-candidate limits hold with a larger pool: two waiting shards at 
   assert.equal(sent(h, late).every(x => x.profile === 'hosted'), true);
   assert.equal(sent(h, late).length, 6);
 });
+
+test('#8626 twenty merge candidates: eight are routed, twelve are refused before any dispatch, and a finished one frees its place', async t => {
+  const f = fixture(t, { mergePickupHoldMs: HOLD, maxActiveRequests: 8 }), pool = linuxPool(f, [2, 3, 4, 5]);
+  const calls: Record<string, number> = {};
+  for (const name of Object.keys(f.ports) as (keyof CapacityPorts)[]) {
+    const port = f.ports[name] as (...args: unknown[]) => Promise<unknown>;
+    (f.ports as unknown as Record<string, unknown>)[name] = async (...args: unknown[]) => { calls[name] = (calls[name] ?? 0) + 1; return port(...args); };
+  }
+  const total = () => Object.values(calls).reduce((a, b) => a + b, 0);
+  const c = f.create(), all = Array.from({ length: 20 }, (_, i) => merge(i + 1));
+  const refused: string[] = [];
+  for (const s of all) {
+    f.state.now += 1000;
+    try { await c.submit(s); } catch (error) { refused.push(`${s.requestId.slice(-2)}:${(error as Error).message}`); }
+  }
+  // Candidates 9 to 20 are refused at admission. Nothing of theirs is stored or sent, so their caller runs them on hosted.
+  assert.deepEqual(refused, all.slice(8).map(s => `${s.requestId.slice(-2)}:capacity_active_bound`));
+  assert.equal(f.store.list().length, 8);
+  assert.equal(all.slice(8).every(s => c.status(s.requestId) === null), true);
+  await c.tick();
+  assert.equal(f.dispatched.some(x => all.slice(8).some(s => s.requestId === x.requestId)), false);
+  // Four runners: the two oldest take two each at admission; the next two keep two shards back; the rest go hosted whole.
+  const routed = all.slice(0, 8);
+  assert.deepEqual(routed.map(s => sent(f, s).filter(x => x.profile === 'linux-x64').length), [2, 2, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(routed.map(s => actives(f, s).filter(x => x.phase === 'reserved').length), [0, 0, 2, 2, 0, 0, 0, 0]);
+  assert.equal(f.dispatched.length, 44);
+  assert.equal(f.dispatched.filter(x => x.profile === 'hosted').length, 40);
+  // Steady state: every dispatched shard is running. One tick's calls for eight active candidates.
+  for (const s of routed) for (const x of actives(f, s)) if (x.childRunId !== null) started(f, x);
+  for (const r of pool.runners) r.busy = true;
+  await c.tick();
+  let before = total(); const perPort = { ...calls };
+  f.state.now += CI_CAPACITY_BUDGETS.reconcileMs; await c.tick();
+  const steady = total() - before;
+  const byPort = Object.fromEntries(Object.entries(calls).map(([k, v]) => [k, v - (perPort[k] ?? 0)]).filter(([, v]) => v));
+  assert.deepEqual(byPort, { parent: 8, prerequisites: 8, observe: 44, inventory: 1 });
+  assert.equal(steady, 61);
+  // A runner frees while candidates 3 and 4 wait: the oldest waiting shard takes it, on its own candidate's SHA.
+  const first = actives(f, routed[0]).find(x => x.profile === 'linux-x64')!;
+  passed(f, first); pool.runners[0].busy = false;
+  await c.tick();
+  const pickup = f.dispatched.at(-1)!;
+  assert.deepEqual([pickup.requestId, pickup.logicalShard, pickup.profile, pickup.sourceSha], [routed[2].requestId, 'worker-1-of-6', 'linux-x64', routed[2].sourceSha]);
+  // Candidate 5's merge group is removed: its running children are fenced and cancelled, and it stops counting once they have ended.
+  const gone = routed[4];
+  f.ports.parent = async s => s.requestId !== gone.requestId;
+  await c.tick();
+  assert.equal(c.status(gone.requestId)?.status, 'cancelled');
+  assert.equal(f.cancelled.filter(x => x.requestId === gone.requestId).length, 6);
+  await assert.rejects(c.submit(merge(21)), /capacity_active_bound/, 'its place is not free while its children may still be running');
+  for (const x of actives(f, gone)) f.outcomes.set(x.childRunId!, f.observation(x, { conclusion: 'cancelled', jobConclusion: 'cancelled', testStep: 'not_run', completedAt: f.state.now }));
+  await c.tick();
+  assert.equal(actives(f, gone).every(x => x.phase === 'cancelled'), true);
+  assert.deepEqual(await c.submit(merge(21)), { accepted: true, requestId: merge(21).requestId });
+  // Everything sent passes. Seven of the first eight and candidate 21 succeed; one result per shard each.
+  await finishAll(f, pool, c, 30);
+  const done = [...routed.filter(s => s !== gone), merge(21)];
+  assert.deepEqual(done.map(s => c.status(s.requestId)?.status), done.map(() => 'success'));
+  for (const s of done) assert.deepEqual(sent(f, s).map(x => x.logicalShard).sort(), [...s.shards].sort());
+  const linux = f.dispatched.filter(x => x.profile === 'linux-x64');
+  console.log(`#8626 exercise: 20 candidates offered; 8 admitted, 12 refused; ${f.dispatched.length} shards dispatched (${linux.length} Linux across ${new Set(linux.map(x => x.requestId)).size} candidates, ${f.dispatched.length - linux.length} hosted); steady tick with 8 active = ${steady} port calls ${JSON.stringify(byPort)}; total port calls ${total()}`);
+});
