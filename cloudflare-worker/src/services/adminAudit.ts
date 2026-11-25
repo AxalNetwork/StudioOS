@@ -119,6 +119,7 @@ export async function logAdminAction(
   adminEmail: string,
   action: string,
   details: Record<string, unknown>,
+  opts: { adminAuditAlreadyRecorded?: boolean } = {},
 ): Promise<void> {
   const payload = JSON.stringify(details ?? {});
 
@@ -134,6 +135,7 @@ export async function logAdminAction(
     console.warn('[adminAudit] activity_logs write failed', action, (e as Error).message);
   }
 
+  if (opts.adminAuditAlreadyRecorded) return;
   try {
     await ensureAdminAuditLogTable(env);
     await env.DB.prepare(

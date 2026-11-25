@@ -226,6 +226,24 @@ const EVENT =
   "INSERT INTO approval_events (lane, item_id, kind, actor_user_id, assignee_user_id) "
   + "SELECT ?, ?, 'assigned', ?, ? WHERE changes() > 0";
 
+/** Assignment mirror used by the Formation desk and by the shared inbox. */
+export function assignmentStatements(env: Env, lane: string, id: number, owner: number, admin: number) {
+  return [
+    env.DB.prepare(UPSERT).bind(lane, id, owner, admin, lane, id, owner),
+    env.DB.prepare(EVENT).bind(lane, id, admin, owner),
+  ];
+}
+
+/** Keep Formation's HQ ownership and its access boundary in the same transaction as the inbox. */
+export function formationOwnerStatements(env: Env, id: number, owner: number, admin: number) {
+  return [
+    env.DB.prepare("UPDATE formation_cases SET hq_owner_user_id = ?, updated_at = datetime('now') WHERE id = ? AND hq_owner_user_id IS NOT ?").bind(owner, id, owner),
+    env.DB.prepare(`INSERT INTO formation_case_events (case_id, actor_user_id, party, kind, visibility, detail_json)
+      SELECT id, ?, 'hq', 'hq_owner_assigned', 'hq_only', json_object('owner_user_id', ?, 'partner_id', partner_id)
+      FROM formation_cases WHERE id = ? AND changes() > 0`).bind(admin, owner, id),
+  ];
+}
+
 /**
  * Assign every item and append its event in one D1 transaction, or write none
  * of them. Each event immediately follows its conditional upsert and uses
@@ -312,17 +330,19 @@ export async function assignReviewers(
   try {
     const statements = [];
     for (const it of items) {
-      statements.push(
-        env.DB.prepare(UPSERT).bind(
-          it.lane, it.item_id, assigneeUserId, actorUserId,
-          it.lane, it.item_id, assigneeUserId,
-        ),
-        env.DB.prepare(EVENT).bind(it.lane, it.item_id, actorUserId, assigneeUserId),
-      );
+      if (it.lane === 'formation_cases') {
+        statements.push(env.DB.prepare(`SELECT CASE WHEN EXISTS (
+          SELECT 1 FROM formation_cases WHERE id = ? AND closed_at IS NULL AND waiting_on = 'hq'
+        ) AND EXISTS (SELECT 1 FROM users WHERE id = ? AND role = 'admin' AND is_active = 1)
+        THEN 1 ELSE abs(-9223372036854775808) END`).bind(it.item_id, assigneeUserId));
+        statements.push(...formationOwnerStatements(env, it.item_id, assigneeUserId, actorUserId));
+      }
+      statements.push(...assignmentStatements(env, it.lane, it.item_id, assigneeUserId, actorUserId));
     }
     const results = await env.DB.batch(statements);
     if (results.some((row) => 'success' in row && !row.success)) throw new Error('Assignment batch failed');
   } catch (e) {
+    if (/integer overflow/i.test(String(e))) return { ok: false, status: 409, code: 'case_moved', message: 'The formation case changed. Reload the board.' };
     console.error('[approval-assignments] could not write', (e as Error).message);
     return { ok: false, status: 503, code: 'assignments_unreadable', message: ASSIGNMENTS_UNREADABLE };
   }
