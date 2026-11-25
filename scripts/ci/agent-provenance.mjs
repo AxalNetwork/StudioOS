@@ -5,7 +5,7 @@
 // and agent-provenance.test.mjs holds this parser to it.
 //
 //   node scripts/ci/agent-provenance.mjs --base origin/main --head HEAD [--branch <name>]
-//        [--out provenance.json] [--source base|pr]
+//        [--out provenance.json] [--source base|pr] [--pr-merges <file>]
 //   node scripts/ci/agent-provenance.mjs --shadow --candidate <sha> [--previous <sha>] [--summary <file>]
 //
 // --shadow (D8517, #8517) is the production release's report: for each pull request merged between
@@ -14,12 +14,14 @@
 //
 // With --branch, a branch outside `agent/**` is skipped (verdict `skipped`, exit 0). Without
 // it, the range is always checked, which is how an agent checks its own commits locally.
+// --pr-merges names a file of commit shas, one per line, that GitHub wrote when it merged
+// another pull request into this branch (#8606); the workflow reads them from the API.
 // Exit 0 on pass or skip, 1 on fail, 2 on a usage or git error.
 //
 // The file is self-contained (node: built-ins only) because the workflow runs the copy on
 // the pull request's base commit, so a branch cannot edit the check that judges it.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 /** Before this instant (committer date), `Claude-Session` stands in for `Agent-Session`. */
@@ -62,12 +64,16 @@ export function parseTrailers(message) {
 
 /**
  * One commit's chain. `merge` is true for a commit with two or more parents; `cleanMerge` is
- * true when its combined diff is empty, i.e. it adds nothing neither parent had. Only a clean
- * merge is exempt: a merge that resolves or adds content is an authored change like any other.
+ * true when its combined diff is empty, i.e. it adds nothing neither parent had. A clean merge
+ * is exempt: a merge that resolves or adds content is an authored change like any other.
+ * `prMerge` is true when GitHub wrote the commit by merging another pull request into this
+ * branch (#8606). That pull request's own commits were checked on its own branch, so its
+ * merge is exempt too, whatever trailers GitHub's squash message carries.
  */
-export function checkCommit({ sha, parents = [], committedAt, message, cleanMerge = false }) {
+export function checkCommit({ sha, parents = [], committedAt, message, cleanMerge = false, prMerge = false }) {
   const merge = parents.length > 1;
   const row = { sha, merge, exempt: false, slot: null, task: null, run: null, session: null, sessionTrailer: null, problems: [] };
+  if (prMerge) return { ...row, exempt: true, prMerge: true };
   if (merge && cleanMerge) return { ...row, exempt: true };
   const trailers = parseTrailers(message);
   for (const [key, valid] of Object.entries(TRAILERS)) {
@@ -102,7 +108,7 @@ export const branchIssue = (branch) => /^agent\/[^/]+\/([1-9][0-9]*)-/.exec(bran
  * breaks its chain or the range names more than one slot or task (or a task other than the
  * branch's issue), `pass` otherwise. Shaped as provenance.json.
  */
-export function checkRange({ commits, branch = null, base = null, head = null, source = null }) {
+export function checkRange({ commits, branch = null, base = null, head = null, source = null, prMerges = new Set() }) {
   const doc = { version: 1, verdict: 'pass', branch, base, head, source, slot: null, task: null,
     runs: [], sessions: [], commits: [], problems: [] };
   if (branch !== null && !AGENT_BRANCH.test(branch)) {
@@ -112,7 +118,7 @@ export function checkRange({ commits, branch = null, base = null, head = null, s
   if (commits.length > MAX_COMMITS) {
     return { ...doc, verdict: 'fail', problems: [`the range adds more than ${MAX_COMMITS} commits`] };
   }
-  doc.commits = commits.map(checkCommit);
+  doc.commits = commits.map((c) => checkCommit({ ...c, prMerge: prMerges.has(c.sha) }));
   const chained = doc.commits.filter((c) => !c.exempt);
   const distinct = (k) => [...new Set(chained.map((c) => c[k]).filter(Boolean))];
   const slots = distinct('slot');
@@ -127,12 +133,20 @@ export function checkRange({ commits, branch = null, base = null, head = null, s
   if (issue && tasks.length === 1 && tasks[0] !== `#${issue}`) {
     doc.problems.push(`the branch names #${issue} but the commits name ${tasks[0]}`);
   }
-  if (chained.length === 0) doc.problems.push('every commit is a clean merge; no commit carries the chain');
+  if (chained.length === 0) doc.problems.push('every commit is a clean or pull-request merge; no commit carries the chain');
   if (doc.problems.length || doc.commits.some((c) => c.problems.length)) doc.verdict = 'fail';
   return doc;
 }
 
 const REV = /^(?!-)[A-Za-z0-9._/~^@{}-]{1,200}$/;
+
+/** The shas a --pr-merges file lists: one full lowercase sha per line, blank lines ignored. */
+export function readPrMerges(text) {
+  const shas = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const bad = shas.find((v) => !/^[0-9a-f]{40}$/.test(v));
+  if (bad !== undefined) throw new Error(`--pr-merges lists ${shown(bad)}, not a commit sha`);
+  return new Set(shas);
+}
 
 /** The commits `head` adds over `base`, oldest first, read from git. */
 export function readCommits(base, head, { cwd = process.cwd() } = {}) {
@@ -150,6 +164,7 @@ export function readCommits(base, head, { cwd = process.cwd() } = {}) {
 /** The lines the check prints. The last one is what the landing bot reads. */
 export function report(doc) {
   const lines = doc.commits.map((c) => {
+    if (c.prMerge) return `agent-provenance: ${c.sha.slice(0, 12)} pull request merged into this branch, exempt`;
     if (c.exempt) return `agent-provenance: ${c.sha.slice(0, 12)} clean merge, exempt`;
     if (c.problems.length) return `agent-provenance: ${c.sha.slice(0, 12)} FAIL ${c.problems.join('; ')}`;
     return `agent-provenance: ${c.sha.slice(0, 12)} ok slot=${c.slot} task=${c.task} run=${c.run} session=${c.sessionTrailer}`;
@@ -268,7 +283,7 @@ function args(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i];
-    if (!['--base', '--head', '--branch', '--out', '--source'].includes(key) || argv[i + 1] === undefined) {
+    if (!['--base', '--head', '--branch', '--out', '--source', '--pr-merges'].includes(key) || argv[i + 1] === undefined) {
       throw new Error(`unknown or incomplete argument ${shown(key)}`);
     }
     out[key.slice(2)] = argv[i + 1];
@@ -287,6 +302,15 @@ export function main(argv, { cwd = process.cwd(), log = console.log } = {}) {
     return 2;
   }
   const branch = opts.branch ?? null;
+  let prMerges = new Set();
+  if (opts['pr-merges']) {
+    try {
+      prMerges = readPrMerges(readFileSync(opts['pr-merges'], 'utf8'));
+    } catch (e) {
+      log(`agent-provenance: ${e.code === 'ENOENT' ? '--pr-merges file not found' : e.message}`);
+      return 2;
+    }
+  }
   let doc;
   if (branch !== null && !AGENT_BRANCH.test(branch)) {
     doc = checkRange({ commits: [], branch, base: opts.base, head: opts.head, source: opts.source ?? null });
@@ -300,7 +324,7 @@ export function main(argv, { cwd = process.cwd(), log = console.log } = {}) {
       log(`agent-provenance: git could not read the range (${shown(e.message.split('\n')[0])})`);
       return 2;
     }
-    doc = checkRange({ commits, branch, base: opts.base, head: headSha, source: opts.source ?? null });
+    doc = checkRange({ commits, branch, base: opts.base, head: headSha, source: opts.source ?? null, prMerges });
   }
   for (const line of report(doc)) log(line);
   if (opts.out) writeFileSync(opts.out, `${JSON.stringify(doc, null, 2)}\n`);
