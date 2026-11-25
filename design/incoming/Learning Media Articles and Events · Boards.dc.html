@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Media Articles and Events · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · #8670 · second pass after the 25 Nov production audit · prior umbrella #3726</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning media, articles and events — accurate empty states, a way back from the article reader, and event links that say where they go</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Learning catalogue card (/learning?tab=videos, webinars, articles, publications, events) inside the Axal VC founder shell, with no AI rail (D4478). Videos separate a library with nothing published, a search or filters that match nothing, and a read that failed: three explanations, three recoveries. Webinars keep Live now, Scheduled and Recording as three words with three glyphs. An article opened from Learning (How Global Partnerships Accelerate Scaling, observed) keeps its byline, reading time, cover and sections and gains “Back to Learning · Articles”, which restores the list; a direct visitor keeps the standalone reader. Events get Upcoming and Past in place, and the link to Programs &amp; Events names its destination. Formats empty in production are populated with labelled synthetic fixtures. States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark data or backend work; amber ⚑ tags mark owner decisions, option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026, 14:20 GMT · checked against main 7b0db10927 · [Maya Ruiz], [Northwind Labs], [Iris Chen] and every bracketed title, person and figure are fictional; the article and its byline and the course Evidence-based pitch narratives were observed on axal.vc on 25 Nov 2026</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Media Articles and Events Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LMA-00', 'Journey and routes', 'The paths through Videos, Webinars, Articles (from Learning and direct), Publications and Events, each step naming its route and its linked desktop and phone boards.', [W('LMA00')]],
+      ['LMA-01', 'Videos · three screens that differ', 'Nothing published (Browse courses), filters that match nothing (Clear all filters, Remove Topic with counts) and a failed read (Retry), then a populated library of synthetic fixtures with a long title wrapping, and the before-and-after comparison against production.', [F('LMA01', 'Library empty', 900), F('LMA01B', 'Filtered miss', 900), F('LMA01C', 'Failed load', 900), F('LMA01D', 'Populated · synthetic', 1180), C('LMA01E', 'Before and after', 1400, 430)]],
+      ['LMA-02', 'Webinars · live, scheduled, recorded', 'Upcoming and live, then past with recordings: Live now with Join now, Scheduled with Register, Registered, Full, Cancelled, a recording and a past webinar without one. Row variants and the two lists’ own empty, miss and failed states.', [F('LMA02', false, 1180), C('LMA02B', 'Row and list variants', 1400, 760)]],
+      ['LMA-03', 'Articles tab', 'The observed article and three synthetic rows with byline, date and reading time; each opens the reader carrying where it came from, and the page number lives in the address. Loading, none published, search miss and failed read.', [F('LMA03', false, 1040), C('LMA03B', 'List states', 1400, 300)]],
+      ['LMA-04', 'Article reader and return', 'How Global Partnerships Accelerate Scaling opened from Learning: Back to Learning · Articles at the top and the end, then recommended reading. The direct visitor’s standalone page. Return variants, and not found and could not be read with the way back.', [F('LMA04', 'Opened from Learning', 2300), F('LMA04B', 'Direct visitor', 1220), C('LMA04C', 'Return variants and reader errors', 1400, 600)]],
+      ['LMA-05', 'Publications', 'Two synthetic reports with section, date and the PDF Not recorded; the empty state now offers Read articles, plus search miss and failed read.', [F('LMA05', false, 860), C('LMA05B', 'Before and after', 1400, 330)]],
+      ['LMA-06', 'Events · upcoming, past and the other page', 'Upcoming and Past in the Events tab (past=1 is already served), no upcoming event with Show past events, the past list, and the link label compared against production.', [F('LMA06', 'Upcoming', 900), F('LMA06B', 'No upcoming event', 760), F('LMA06C', 'Past', 820), C('LMA06D', 'Label and destination', 1400, 340)]],
+      ['LMA-07', 'Phone 390 × 844', 'The same routes at 390: the three video screens, webinars, the articles list after returning, the reader from Learning with its return, events with Show past events, and publications empty.', [P('LMA07A', 'Videos · none'), P('LMA07B', 'Videos · no match'), P('LMA07C', 'Videos · unavailable'), C('LMA07D', 'Webinars', 390, 1050), P('LMA07E', 'Articles · returned'), C('LMA07F', 'Reader from Learning', 390, 1260), P('LMA07G', 'Events · none upcoming'), P('LMA07H', 'Publications · none')]],
+      ['LMA-08', 'Focus order, names and wrapping', 'Keyboard order on Videos and the reader, accessible names for the state components and cards, live regions, focus after return, and long titles and pills wrapping.', [C('LMA08', false, 1400, 500)]],
+      ['LMA-09', 'Engineering handoff', 'What main has with files, the frontend-only changes, ◇ items, ⚑ owner questions with option A drawn, the acceptance checklist mapped to boards, and coordination with #8288 and the sibling canvases.', [W('LMA09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

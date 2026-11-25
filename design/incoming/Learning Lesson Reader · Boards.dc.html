@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Lesson Reader · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · Lesson reader · #8665</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning lesson reader: typeset sections, a legible outline, one completion action, Previous and Next by name</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The lesson page (/learning/courses/:slug/:lesson) for a reading, drawn in the founder shell with Learning opened from the Account menu and the collapsed Eadwyn rail. It typesets the real sequence of the first reading of Evidence-based pitch narratives: Outcome, Attempt first, Worked explanation, Feedback and transfer, and Source, each with its own glyph, word and spacing, while staying h2 headings in one article. The outline keeps full titles, a status glyph with a word, Optional as a word and one note that lengths are not recorded. Position always names its denominator. There is one optional Mark complete, after the text; Previous and Next never mark anything. At 390 the outline is a keyboard-operable disclosure and the fixed bar holds Previous and Next only. States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark data or backend work; amber ⚑ tags mark owner decisions, option A drawn; dark annotation pills are not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · course, lesson 1 headings, exercise and exam titles observed on axal.vc on 25 Nov 2026; reading body text, bracketed titles, [Maya Ruiz] and [Northwind Labs] are fictional · states marked Synthetic were not observed</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="10">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Lesson Reader Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LRD-00', 'Journey, routes and the before state', 'The five steps shared by desktop and phone, with the board for each; what the audit saw on axal.vc and what these boards change.', [W('LRD00')]],
+      ['LRD-01', 'Desktop 1440 · lesson 1', '“Give every important claim a traceable basis” with the five sections typeset, the position with both denominators, Add to plan as the only header action, and the 340px outline. Mark complete appears once, after the text, followed by Previous and Next by name.', [F('LRD01', false, 1880), C('LRD01B', 'End of the lesson · one completion action, then Next', 1140, 665)]],
+      ['LRD-02', 'Desktop 1440 · after Next', 'Lesson 2 opened by Next. Lesson 1 is still Not completed in the outline and the required count stays 0 of 7.', [F('LRD02', false, 1190)]],
+      ['LRD-03', 'Component variants', 'Outline rows by status (current, completed, started, not completed) and by kind and requirement (optional, exercise, exam); the five section blocks; the completion control (idle, saving, completed, failed); navigation at the first, a middle and the last lesson; the phone bar.', [C('LRD03', false, 1400, 1250)]],
+      ['LRD-04', 'Phone 390 × 844', 'The top of lesson 1 with the outline toggle; the outline open with focus on the current lesson; the end of the reading with Mark complete focused above the fixed bar; lesson 2 after Next.', [P('LRD04', 'Lesson 1 · top'), P('LRD04B', 'Outline open'), P('LRD04C', 'End of reading · focus visible'), P('LRD04D', 'Lesson 2 after Next')]],
+      ['LRD-05', 'Loading, empty, error and retry', 'Loading, lesson text unavailable, course unavailable, no text yet, not available, saving failed, offline, no such lesson and a long course. Each keeps the outline and navigation it can still trust. Synthetic.', [C('LRD05', false, 1400, 980)]],
+      ['LRD-06', 'Focus order and accessible names', 'Desktop and phone focus order, the outline disclosure by keyboard (open, move, Escape, resume reading), headings and landmarks, and the fixed bar’s padding rules.', [W('LRD06')]],
+      ['LRD-07', 'Dark mode', 'Lesson 1 on desktop and the phone outline on the dark tokens.', [F('LRD07', false, 1880), P('LRD07B', 'Phone outline · dark')]],
+      ['LRD-08', 'Wrapping long titles', 'A long title in the 340px outline, the 390 outline, the h1 and the navigation. Titles wrap; nothing is truncated. Synthetic.', [C('LRD08', false, 1300, 395)]],
+      ['LRD-09', 'Handoff', 'What main has with files, frontend-only work, ◇ data and backend proposals, ⚑ owner questions with option A drawn, the acceptance checklist mapped to boards, and coordination with #8288 and the sibling canvases.', [W('LRD09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
