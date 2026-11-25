@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { derivedSummary, summarySource } from '../../../lib/derivedSummary.js';
-import { raiseToolRefusal } from '../../../lib/raiseErrors.js';
+import { raiseReadState, raiseToolRefusal } from '../../../lib/raiseErrors.js';
+import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships.js';
+import { overviewPart } from './capRelModel.js';
 import { Unreadable } from '../../../ui';
 import { useCommitments, useProspects } from './capRelHomeRead.js';
 import {
@@ -82,6 +84,7 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
   const commitments = home ? home.commitments : ownCommitments;
   const f = read.items ? overviewFigures(read.items, today) : null;
   const needs = f ? needsYou(f) : [];
+  const detail = useOverviewSources(projectId);
   const needsSummary = [read.status, commitments.status].includes('loading') ? null : derivedSummary(needs, [
     summarySource('prospects', read.status),
     summarySource('commitments', commitments.status),
@@ -176,6 +179,7 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
           ) : null}
         </section>
       </div>
+      <OverviewSources read={detail} search={search} />
       <div className="grid gap-3.5 lg:grid-cols-3">
         <section className={`${CARD} lg:col-span-3`} data-testid="caprel-ov-followups">
           <h3 className={H3}>Follow-ups</h3>
@@ -195,4 +199,60 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
       </div>
     </div>
   );
+}
+
+
+const EXTRA_PARTS = ['meetings', 'activity', 'fit', 'history'];
+function useOverviewSources(projectId) {
+  const [read, setRead] = useState({ projectId: null, parts: {} });
+  const reader = useRef(null);
+  useEffect(() => {
+    if (projectId == null) return undefined;
+    let alive = true;
+    const tickets = {};
+    const load = async (part) => {
+      const keys = part ? [part] : EXTRA_PARTS;
+      const issued = Object.fromEntries(keys.map((key) => [key, tickets[key] = (tickets[key] || 0) + 1]));
+      setRead((old) => ({ projectId, parts: { ...(old.projectId === projectId ? old.parts : {}), ...Object.fromEntries(keys.map((key) => [key, { state: 'loading' }])) } }));
+      const finish = (parts) => {
+        if (!alive) return;
+        const fresh = Object.fromEntries(keys.filter((key) => tickets[key] === issued[key]).map((key) => [key, parts[key]]));
+        setRead((old) => ({ projectId, parts: { ...old.parts, ...fresh } }));
+      };
+      try {
+        const data = await capitalRelationshipsApi.overview(projectId, part);
+        finish(Object.fromEntries(keys.map((key) => [key, overviewPart(key, data?.[key])])));
+      } catch (error) {
+        finish(Object.fromEntries(keys.map((key) => [key, { state: raiseReadState(error) === 'refused' ? 'refused' : 'unreadable', reason: 'This Overview source could not be read.' }])));
+      }
+    };
+    reader.current = { projectId, load };
+    void load();
+    return () => { alive = false; reader.current = null; };
+  }, [projectId]);
+  return {
+    parts: read.projectId === projectId ? read.parts : {},
+    reload: (key) => { if (reader.current?.projectId === projectId) void reader.current.load(key); },
+  };
+}
+
+function OverviewSources({ read, search }) {
+  const titles = { meetings: 'Next investor meetings', activity: 'Recent activity', fit: 'Fit across the pipeline', history: 'Against 30 days ago' };
+  const fitLabels = { fits: 'Fits', outside: 'Outside its focus', unclear: 'Unclear', not_recorded: 'Not recorded' };
+  return <div className="grid gap-3.5 lg:grid-cols-2">
+    {EXTRA_PARTS.map((key) => {
+      const part = read.parts[key] || { state: 'loading' };
+      return <section key={key} className={CARD} data-testid={`caprel-ov-${key}`} data-state={part.state}>
+        <h3 className={H3}>{titles[key]}</h3>
+        {part.state === 'loading' ? <p role="status" className={MUTED}>Reading…</p> : null}
+        {part.state === 'refused' ? <p role="status" className={MUTED}>{REFUSED_LINE}</p> : null}
+        {part.state === 'unreadable' ? <Unreadable what={titles[key]} claim={part.reason} onRetry={() => read.reload(key)} /> : null}
+        {part.state === 'not_recorded' ? <p className={MUTED}>Not recorded · {part.reason}</p> : null}
+        {part.state === 'ok' && key === 'fit' ? <><ul className="m-0 list-none p-0">{Object.entries(fitLabels).map(([value, label]) => <li key={value}>{label}: {part.counts[value]}</li>)}</ul><small className={MUTED}>{part.source}</small></> : null}
+        {part.state === 'ok' && key !== 'fit' ? part.items.length ? <ul className="m-0 list-none p-0">{part.items.map((item) => <li key={item.id} className="py-1 text-[12.5px]">
+          {key === 'meetings' ? <><Link className={LINK} to={`${HOME_PATH}/${item.prospect_id}${tabSearch(search)}`}>{item.name}</Link> · {item.kind} · <time dateTime={item.starts_at}>{item.starts_at}</time></> : <><time dateTime={item.at}>{item.at}</time> · {item.what}</>}
+        </li>)}</ul> : <p className={MUTED}>{key === 'meetings' ? 'No upcoming investor meetings recorded.' : 'No activity recorded.'}</p> : null}
+      </section>;
+    })}
+  </div>;
 }

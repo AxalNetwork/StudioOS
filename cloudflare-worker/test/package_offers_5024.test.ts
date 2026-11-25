@@ -164,7 +164,15 @@ test('override needs its own reason and review; unknown or unsafe prices are ref
 
 test('seeded HQ-only and unready items block the entire package, without silent grant exceptions', async (ctx) => {
   const f = fixture(ctx); await f.setup('none', 'optional', false);
-  const o = await f.offered();
+  const o = await f.create();
+  const blocked = await f.call('POST', `${BASE}/${o.uid}/offer`, { expected_revision: o.revision, reason: REASON });
+  assert.deepEqual([blocked.status, blocked.body.error], [409, 'package_delivery_conflict']);
+  assert.ok(blocked.body.conflicts.some((p: any) => p.program_key === 'influencer' && p.code === 'not_grantable'));
+  assert.deepEqual(f.all('SELECT state, revision FROM licence_package_offers WHERE uid = ?', o.uid).map((p) => [p.state, p.revision]), [['draft', 0]]);
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM licence_package_events WHERE action = 'offered'").n, 0);
+  // Previously issued offers still run the acceptance checks.
+  f.db.prepare("UPDATE licence_package_offers SET state = 'offered', revision = 1 WHERE uid = ?").run(o.uid);
+  o.revision = 1;
   const review = await f.review(o);
   assert.ok(review.conflicts.some((p: any) => p.program_key === 'influencer' && p.code === 'not_grantable'));
   assert.equal((await f.accept(o)).status, 409);
@@ -202,6 +210,7 @@ test('compatible existing grants are linked unchanged and outside programs remai
   }
   const existing = f.one('SELECT * FROM program_grants WHERE program_key = ?', CORE[0]);
   const outside = f.one("SELECT * FROM program_grants WHERE program_key = 'learning'");
+  f.db.prepare('UPDATE program_grant_defaults SET grantable = 0 WHERE program_key = ?').run(CORE[0]);
   const o = await f.offered(); const accepted = await f.accept(o);
   assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
   assert.equal(accepted.body.grants.find((g: any) => g.program_key === CORE[0]).action, 'retained');
@@ -216,10 +225,12 @@ test('conflicting grant terms, dates and states require explicit resolution; rev
   const granted = await f.call('POST', `/api/admin/program-grants/licences/${LIC}/${CORE[0]}`, { reason: REASON,
     terms: { starts_on: '2026-01-01', ends_on: '2028-01-01', reporting: 'quarterly', requires_signed_schedule: 0 } });
   assert.equal(granted.status, 201, JSON.stringify(granted.body));
-  const o = await f.offered({ program_terms: { [CORE[0]]: { reporting: 'monthly' } } });
+  const o = await f.create({ program_terms: { [CORE[0]]: { reporting: 'monthly' } } });
+  const offer = () => f.call('POST', `${BASE}/${o.uid}/offer`, { expected_revision: o.revision, reason: REASON });
   const before = f.one('SELECT * FROM program_grants');
   const r = await f.review(o);
   assert.ok(r.conflicts.some((p: any) => p.code === 'grant_terms_conflict'));
+  assert.ok((await offer()).body.conflicts.some((p: any) => p.code === 'grant_terms_conflict'));
   assert.equal((await f.accept(o)).status, 409);
   assert.deepEqual(f.one('SELECT * FROM program_grants'), before);
   f.db.prepare("UPDATE program_grants SET reporting = 'monthly', state = 'paused', terms_revision = terms_revision + 1 WHERE uid = ?").run(before.uid);
@@ -227,6 +238,9 @@ test('conflicting grant terms, dates and states require explicit resolution; rev
   f.db.prepare("UPDATE program_grants SET state = 'granted', ends_on = '2027-01-01', terms_revision = terms_revision + 1 WHERE uid = ?").run(before.uid);
   assert.ok((await f.review(o)).conflicts.some((p: any) => p.code === 'grant_dates_conflict'));
   f.db.prepare("UPDATE program_grants SET ends_on = '2028-01-01', terms_revision = terms_revision + 1 WHERE uid = ?").run(before.uid);
+  const issued = await offer();
+  assert.equal(issued.status, 200, JSON.stringify(issued.body));
+  o.revision = issued.body.offer.revision;
   const stale = await f.call('POST', `${BASE}/${o.uid}/accept`, { reason: REASON, expected_revision: o.revision, review_hash: r.review_hash, idempotency_key: 'old-review-5024' });
   assert.equal(stale.body.error, 'review_changed');
   assert.equal((await f.accept(o)).status, 200);
@@ -477,6 +491,24 @@ test('competing overlapping offers serialize; a losing acceptance has no partial
   assert.equal(f.one('SELECT state FROM licence_package_offers WHERE uid = ?', first.uid).state, 'offered');
 });
 
+test('a local grant disabled while issuing an offer leaves it in draft', async (ctx) => {
+  const f = fixture(ctx); await f.setup();
+  const o = await f.create();
+  const batch = f.env.DB.batch.bind(f.env.DB);
+  let once = true;
+  f.env.DB.batch = async (statements: any[]) => {
+    if (once) {
+      once = false;
+      f.db.prepare('UPDATE program_grant_defaults SET grantable = 0 WHERE program_key = ?').run(CORE[0]);
+    }
+    return batch(statements);
+  };
+  const res = await f.call('POST', `${BASE}/${o.uid}/offer`, { expected_revision: o.revision, reason: REASON });
+  assert.deepEqual([res.status, res.body.error], [409, 'changed_since_open']);
+  assert.equal(f.one('SELECT state FROM licence_package_offers WHERE uid = ?', o.uid).state, 'draft');
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM licence_package_events WHERE action = 'offered'").n, 0);
+});
+
 test('a simultaneous retry of the same accepted request gets the original receipt', async (ctx) => {
   const f = fixture(ctx); await f.setup(); const o = await f.offered(); const r = await f.review(o);
   const body = { expected_revision: 1, review_hash: r.review_hash, reason: REASON, idempotency_key: 'concurrent-same-key-5024' };
@@ -489,4 +521,100 @@ test('a simultaneous retry of the same accepted request gets the original receip
   assert.deepEqual([replay.status, replay.body.replayed], [200, true]);
   assert.equal(f.one('SELECT COUNT(*) AS n FROM program_grants').n, 3);
   assert.equal(f.one("SELECT COUNT(*) AS n FROM licence_package_events WHERE action = 'accepted'").n, 1);
+});
+
+
+const hqDelivery = { kind: 'hq_service' as const, description: 'HQ coordinates creator introductions for this studio.' };
+async function publishServiceVersion(f: ReturnType<typeof fixture>, localPrograms: string[], description = hqDelivery.description) {
+  const current = await activePackageDetail(f.env, 'core_network');
+  const service = { program_key: 'influencer', included_by_default: true, metadata: null, delivery: { ...hqDelivery, description } };
+  const items = [...current.items.filter((item) => localPrograms.includes(item.program_key)), service];
+  const draft = await draftNextVersion(f.env, 'core_network', { ...current, items }, 'user:1');
+  await publishVersion(f.env, 'core_network', draft.version, 'user:1');
+  return draft.version;
+}
+
+test('a service-only offer checks its own master, freezes HQ delivery and never grants a program even on retry', async (ctx) => {
+  const f = fixture(ctx);
+  await f.setup();
+  const version = await publishServiceVersion(f, []);
+  const policy = await f.call('POST', '/api/admin/licence-agreement-policies/package/core_network', {
+    strategy: 'package_master', legal_gate: 'required_before_grant', programs: [], reason: REASON,
+  });
+  assert.equal(policy.status, 201, JSON.stringify(policy.body));
+  const o = await f.offered();
+  const expected = [{ program_key: 'influencer', description: hqDelivery.description }];
+  assert.equal(o.package_version, version);
+  assert.deepEqual(o.programs.map((p: any) => p.delivery), [hqDelivery]);
+  assert.equal(o.recommendation.standalone_sum_cents, null);
+  assert.equal(o.recommendation.bundle_saving_cents, null);
+  assert.deepEqual((await f.call('GET', `${BASE}/${o.uid}`)).body.accepted_hq_services, []);
+  const waiting = await f.review(o);
+  assert.deepEqual(waiting.grants, []);
+  assert.deepEqual(waiting.hq_services, expected);
+  assert.ok(waiting.conflicts.some((p: any) => p.code === 'agreement_required_before_grant'));
+  assert.equal((await f.accept(o)).status, 409);
+  assert.equal(f.one('SELECT state FROM licence_package_offers WHERE uid = ?', o.uid).state, 'offered');
+  // A later version and its different commercial promise never reach this offer or its master.
+  await publishServiceVersion(f, [], 'HQ arranges office hours under the next version.');
+  f.db.prepare(`INSERT INTO legal_templates (slug, title, category, body_md, version, is_active, is_stub)
+    VALUES ('package_core_network_master', 'Core Network Master', 'compliance', ?, 1, 1, 0)`).run('{{package.programs}}');
+  const drafted = await f.call('POST', `/api/admin/licence-agreements/licences/${LIC}/drafts`, {
+    agreement_kind: 'package_master', package_key: 'core_network', package_offer_uid: o.uid, template_slug: 'package_core_network_master', reason: REASON,
+  });
+  assert.equal(drafted.status, 201, JSON.stringify(drafted.body));
+  assert.equal(drafted.body.agreement.body_md, `influencer (HQ service — ${hqDelivery.description})`);
+  assert.equal(drafted.body.agreement.package_version, version);
+  executedMaster(f, 'master-service-only', o.uid, version);
+  const ready = await f.review(o);
+  assert.deepEqual(ready.conflicts, []);
+  const request = { expected_revision: o.revision, review_hash: ready.review_hash, reason: REASON, idempotency_key: 'accepted-service-only-6960' };
+  const accepted = await f.call('POST', `${BASE}/${o.uid}/accept`, request);
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  assert.deepEqual(accepted.body.hq_services, expected);
+  assert.deepEqual(accepted.body.grants, []);
+  const retry = await f.call('POST', `${BASE}/${o.uid}/accept`, request);
+  assert.deepEqual([retry.status, retry.body.replayed, retry.body.hq_services, retry.body.grants], [200, true, expected, []]);
+  const reread = (await f.call('GET', `${BASE}/${o.uid}`)).body;
+  assert.deepEqual(reread.accepted_items, []);
+  assert.deepEqual(reread.accepted_hq_services, expected);
+  assert.deepEqual(reread.offer.acceptance.hq_services, expected);
+  assert.equal(reread.offer.acceptance.accepted_annual_fee_cents, o.recommended_annual_fee_cents);
+  assert.equal(f.one('SELECT COUNT(*) AS n FROM program_grants').n, 0);
+  assert.equal(f.one('SELECT COUNT(*) AS n FROM licence_package_items').n, 0);
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM licence_package_events WHERE action = 'accepted'").n, 1);
+  const held = await holdingsOf(f.env, LIC);
+  assert.equal(held.find((h) => h.scope_kind === 'package')?.package_offer_uid, o.uid);
+  assert.equal(requirementFor('influencer', held).basis, 'not_recorded');
+  assert.equal(requirementFor(CORE[0], held).basis, 'not_recorded');
+});
+
+test('a mixed package checks policy against local rights and stores only those rights as grants', async (ctx) => {
+  const f = fixture(ctx);
+  await f.setup();
+  await publishServiceVersion(f, [CORE[0]]);
+  const injected = await f.call('POST', BASE, { package_key: 'core_network', starts_on: '2026-11-13', ends_on: '2027-10-31',
+    program_terms: { influencer: { requires_signed_schedule: 0 } }, reason: REASON, idempotency_key: 'service-terms-6960' });
+  assert.deepEqual([injected.status, injected.body.error], [400, 'invalid_program_terms']);
+  const o = await f.offered();
+  const wrongPolicy = await f.call('POST', '/api/admin/licence-agreement-policies/package/core_network', {
+    strategy: 'none', programs: [CORE[0], 'influencer'], reason: REASON,
+  });
+  assert.equal(wrongPolicy.status, 201);
+  const invalid = await f.review(o);
+  assert.ok(invalid.conflicts.some((p: any) => p.code === 'package_policy_composition_conflict'));
+  assert.equal((await f.accept(o)).status, 409);
+  assert.equal(f.one('SELECT COUNT(*) AS n FROM program_grants').n, 0);
+  assert.equal((await f.call('POST', '/api/admin/licence-agreement-policies/package/core_network', {
+    strategy: 'none', programs: [CORE[0]], reason: REASON,
+  })).status, 201);
+  const accepted = await f.accept(o);
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  assert.deepEqual(accepted.body.grants.map((p: any) => p.program_key), [CORE[0]]);
+  assert.deepEqual(accepted.body.hq_services, [{ program_key: 'influencer', description: hqDelivery.description }]);
+  assert.deepEqual(f.all('SELECT program_key FROM program_grants').map((g) => g.program_key), [CORE[0]]);
+  assert.deepEqual(f.all('SELECT program_key FROM licence_package_items').map((p) => p.program_key), [CORE[0]]);
+  const held = await holdingsOf(f.env, LIC);
+  assert.equal(requirementFor(CORE[0], held).basis, 'package');
+  assert.equal(requirementFor('influencer', held).basis, 'not_recorded');
 });

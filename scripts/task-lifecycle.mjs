@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * #6326: the read side of the slot protocol for the `task-lifecycle` skill, GET
+ * only: `next` (the slot's oldest `state:ready` task and who holds its claim
+ * ref), `answers` (owner comments after the last STATUS on the slot's
+ * `needs-decision` / `state:blocked` issues, plus `S1:` relays), `claims` (the
+ * slot's claim refs as ok, renew, expired or release, with the `claim.mjs`
+ * command to run) and `status` (the STATUS block in its `text` fence plus the
+ * label change). Never claims, labels, comments, pushes or merges.
+ *
  * #6326: the read side of the slot protocol, for the `task-lifecycle` skill.
  * Reads GitHub only (GET); it never claims, labels, comments, pushes or merges.
  *

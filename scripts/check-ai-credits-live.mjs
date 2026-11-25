@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * D755 (#1987): read-only, after a deploy. Reads `GET
+ * /api/public/plans-and-packs` and judges its shape (every plan's allowance,
+ * packs at face value with at most a 10% bonus, no person named), and checks
+ * that `/plans-and-pricing` is the SPA shell. A surface not deployed yet warns;
+ * a wrong answer fails. It never signs in, buys or calls Stripe. A warning step
+ * in `post-deploy-smoke.yml`; the rules live in `lib/aiCreditsLive.mjs`.
+ *
  * D755 CR10 (#1987) — the read-only AI credits check after a deploy.
  *
  * It fetches, on each host:

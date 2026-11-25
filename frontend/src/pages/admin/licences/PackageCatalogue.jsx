@@ -1,6 +1,6 @@
 /**
  * D5896 (#5896, part 1 (a) of #5026) — HQ's Axal VC package catalogue at `/admin/licences/packages`, board L29 of
- * the Licences and Contracts v2 addendum. Read only: the catalogue table and one package's version history.
+ * the Licences and Contracts v2 addendum. The catalogue table and one package’s version history.
  *
  * Reads (`lib/api/licencePackages.js`, Super Admin on HQ):
  *   - the catalogue, every version (`?all=1`): one block state. A failed read is Unreadable with Try again and
@@ -25,13 +25,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { licencePackagesApi } from '../../../lib/api/licencePackages';
+import { programGrantsApi } from '../../../lib/api/programGrants';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
+import PackageItemDeliveryEditor from './PackageItemDeliveryEditor';
 import Lightbox from '../../../ui/Lightbox';
 import { useReasonDialog } from '../LicenceReasonDialog';
 import {
-  CATALOGUE_COLUMNS, NOT_RECORDED, PER_LICENCE_REASON, catalogueRows, historyRows, programList, rowCells,
+  CATALOGUE_COLUMNS, NOT_RECORDED, PER_LICENCE_REASON, catalogueRows, historyRows, localGrantLabel, rowCells,
 } from './packageCatalogueModel';
 import {
   ACTION_LABELS, NEW_PACKAGE, REASON_MAX_PACKAGES, REASON_MIN, formFrom, keyOptions, newestOf, publishConsequence,
@@ -156,13 +158,67 @@ function CatalogueTable({ rows, details, chosen, onChoose, busy, onAct }) {
   );
 }
 
+function VersionHistoryRow({ row, packageKey, defaults, rulesState, reload: versionReload }) {
+  const [read, reload] = useRead(() => licencePackagesApi.version(packageKey, row.number), [packageKey, row.number, versionReload]);
+  const [editing, setEditing] = useState(null);
+  const [notice, setNotice] = useState('');
+  const detail = read.data?.package;
+  const latest = detail?.status ? historyRows([detail])[0] : row;
+  const items = detail?.items;
+  const refresh = (message) => {
+    setEditing(null);
+    setNotice(message);
+    reload();
+  };
+
+  return (
+    <tr className="border-b border-gray-100 last:border-0 dark:border-gray-800" data-testid="package-history-row">
+      <td className={TD}><Cell word={row.version} mono /></td>
+      <td className={TD}><Pill word={latest.status} /></td>
+      <td className={`${TD} text-[12px]`}>
+        {Array.isArray(items) && items.length ? (
+          <ul className="m-0 list-none space-y-1 p-0">
+            {items.map((item) => {
+              const rule = Array.isArray(defaults) ? defaults.find((p) => p.program_key === item.program_key) : null;
+              const name = rule?.name || item.program_key;
+              const availability = Array.isArray(defaults) ? localGrantLabel(rule)
+                : rulesState === 'loading' ? 'Reading availability…' : 'Availability unreadable';
+              return <li key={item.program_key}>
+                <b>{name}</b>{' · '}
+                {item.delivery?.kind === 'hq_service'
+                  ? <>HQ service · {item.delivery.description}</>
+                  : <>Studio operation · {availability}</>}
+                {item.included_by_default === false ? ' · Optional' : ''}
+                {detail.status === 'draft' && rule?.readiness === 'hq' && (editing === item.program_key
+                  ? <PackageItemDeliveryEditor packageKey={packageKey} version={row.number} item={item} name={name}
+                      onCancel={() => setEditing(null)} onSaved={() => refresh(`Saved delivery for ${name}.`)} onReload={() => refresh('')} />
+                  : <button type="button" className="ml-2 font-semibold text-indigo-700 hover:underline disabled:opacity-50 dark:text-indigo-300"
+                      disabled={Boolean(editing)} aria-label={`Edit delivery for ${name}, ${row.version}`}
+                      onClick={() => { setNotice(''); setEditing(item.program_key); }}>Edit delivery</button>)}
+              </li>;
+            })}
+          </ul>
+        ) : read.state === 'error' || (read.state === 'ready' && !Array.isArray(items))
+          ? <Failed text="This version’s items could not be read." onRetry={reload} />
+          : <Cell word={read.state === 'loading' ? '…' : 'None'} />}
+        {notice && <p role="status" className={SUB}>{notice}</p>}
+      </td>
+      <td className={TD}><Cell word={latest.effective} /></td>
+      <td className={TD}><Cell word={latest.created} /></td>
+    </tr>
+  );
+}
+
 function VersionHistory({ packageKey, name, reload }) {
   const [read, retry] = useRead(() => licencePackagesApi.versions(packageKey), [packageKey, reload]);
   const versions = read.data?.versions || [];
-  const details = useDetails(versions, reload);
+  const [rules, retryRules] = useRead(() => programGrantsApi.defaults(), []);
+  const defaults = rules.data?.programs;
   return (
     <section className={`${CARD} flex flex-col gap-2`} data-testid="package-history">
       <h2 className={H2}>Version history · {name}</h2>
+      <p className={SUB}>HQ services list the work HQ provides. Studio operation requires a compatible existing grant or eligibility for a new grant.</p>
+      {rules.state === 'error' ? <Failed text="Current availability for new studio grants could not be read." onRetry={retryRules} testId="package-delivery-unreadable" /> : null}
       {read.state === 'error' ? <Failed text="The versions of this Axal VC package could not be read." onRetry={retry} testId="package-history-unreadable" />
         : read.state === 'loading' ? <p className={SUB}>Reading…</p>
           : (
@@ -170,19 +226,8 @@ function VersionHistory({ packageKey, name, reload }) {
               <table className="w-full border-collapse">
                 <thead><tr className="border-b border-gray-200 dark:border-gray-800">{['Version', 'Status', 'Programs', 'Effective', 'Created'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {historyRows(versions).map((r) => {
-                    const d = details[r.key];
-                    const programs = d?.state === 'ready' ? (programList(d.items) || 'None') : d?.state === 'error' ? 'Unreadable' : '…';
-                    return (
-                      <tr key={r.key} className="border-b border-gray-100 last:border-0 dark:border-gray-800" data-testid="package-history-row">
-                        <td className={TD}><Cell word={r.version} mono /></td>
-                        <td className={TD}><Pill word={r.status} /></td>
-                        <td className={`${TD} text-[12px]`}><Cell word={programs} mono={!absent(programs)} /></td>
-                        <td className={TD}><Cell word={r.effective} /></td>
-                        <td className={TD}><Cell word={r.created} /></td>
-                      </tr>
-                    );
-                  })}
+                  {historyRows(versions).map((row) => <VersionHistoryRow key={row.key} row={row} packageKey={packageKey}
+                    defaults={defaults} rulesState={rules.state} reload={reload} />)}
                 </tbody>
               </table>
             </div>

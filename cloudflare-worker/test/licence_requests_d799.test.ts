@@ -173,6 +173,48 @@ test('the response-time bands for the new kinds are measured against their own h
  * The HQ-tier lane                                                     *
  * ------------------------------------------------------------------ */
 
+test('studio program requests filter on the caller’s licence before the history limit on HQ and on a branch', async () => {
+  const db = hqDb();
+  const env = { DB: makeD1(db), JWT_SECRET };
+  const hq = appFor(licenceRequests, '/api/licence', env);
+  const branch = appFor(licenceRequests, '/api/licence', { ...env, BRANCH_CODE: 'fr' });
+  const hqInsert = db.prepare("INSERT INTO hq_escalations (uid, branch_code, kind, subject, subject_ref, detail, status) VALUES (?, 'hq', 'program_grant', ?, ?, ?, 'answered')");
+  const branchInsert = db.prepare("INSERT INTO branch_escalations (hq_uid, kind, subject, detail, status) VALUES (?, 'program_grant', ?, ?, 'answered')");
+  const learning = encodeRequestDetail({ program: 'learning' }, null);
+  hqInsert.run('studio-answer', 'Exact', 'lic_fr', learning);
+  branchInsert.run('branch-answer', 'Exact', learning);
+  hqInsert.run('other-answer', 'Other studio', 'lic_de', learning);
+  for (let i = 1; i <= 101; i++) {
+    const unrelated = i === 1 ? 'Legacy plain text' : encodeRequestDetail({ program: 'perks' }, null);
+    hqInsert.run(`h-${i}`, 'Other question', 'lic_fr', unrelated);
+    branchInsert.run(`b-${i}`, 'Other question', unrelated);
+  }
+  for (const call of [hq, branch]) {
+    const page = await call('/mine/requests');
+    assert.equal(page.body.complete, false);
+    assert.equal(page.body.items.length, 100);
+    assert.ok(!page.body.items.some((r: any) => r.subject === 'Exact'));
+    const found = await call('/mine/requests?program=learning');
+    assert.equal(found.status, 200);
+    assert.equal(found.body.complete, true);
+    assert.deepEqual(found.body.items.map((r: any) => [r.subject, r.request.program, r.status]), [['Exact', 'learning', 'answered']]);
+    assert.equal((await call('/mine/requests?program=unknown')).body.items.length, 0);
+  }
+  const legacy = (await branch('/mine/requests?program=learning')).body.items[0];
+  assert.equal(legacy.hq_decision, null, 'historical branch answers carry no inferred approval');
+  for (const decision of ['declined', 'answered']) {
+    const pushed = await applyEscalationAnswer({ ...env, BRANCH_CODE: 'fr' } as any, {
+      hq_uid: 'branch-answer', status: decision, answer: 'The recorded reason.', answered_by_name: 'HQ',
+      pushed_at: '2026-11-16T00:00:00Z', answered_at: '2026-11-16T00:00:00Z',
+    });
+    assert.equal(pushed.ok, true);
+    const row = (await branch('/mine/requests?program=learning')).body.items[0];
+    assert.equal(row.status, 'answered', 'existing branch status remains compatible');
+    assert.equal(row.hq_decision, decision);
+    assert.deepEqual(row.request, { program: 'learning' });
+  }
+});
+
 test('an HQ-tier Administrator raises each new kind, filed against their own licence', async () => {
   const db = hqDb();
   const call = appFor(licenceRequests, '/api/licence', { DB: makeD1(db), JWT_SECRET });

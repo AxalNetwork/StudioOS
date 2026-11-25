@@ -1,6 +1,6 @@
 /**
  * D6697 (#6697, H1 of #6680) — HQ's formation case reads: the queue with its
- * saved views, one case, and the filings board. Read only; writes are #6698.
+ * saved views, one case, and the filings board. D6698 adds the HQ case actions.
  *
  *   GET /api/admin/formation/cases                  the queue: `view` (VIEWS), `country`, `partner`, `route`,
  *                                                   `track`, `limit`, `offset`; legacy and v2 cases in one list,
@@ -17,9 +17,10 @@
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
-import { isSuperAdmin, requireHqAdmin } from '../auth';
+import { isSuperAdmin, requireHqAdmin, requireStepUp } from '../auth';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
+import { HQ_ACTIONS, writeHqCase } from '../services/formationHqActions';
 import { STAGES } from '../services/formationCase';
 import {
   QUEUE_READ_CAP, ROUTES, TRACKS, VIEWS, bandOf, daysSince, inView, partyClocks, queueRow,
@@ -101,7 +102,7 @@ cases.get('/:uid', async (c) => {
                     FROM formation_filings WHERE case_id = ? ORDER BY id`).bind(id).all<any>(),
       db.prepare(`SELECT uid, asked_by_party, asked_by_user_id, asked_of_party, asked_of_user_id, kind, title, due_on, state, created_at, closed_at
                     FROM formation_case_requests WHERE case_id = ? ORDER BY id`).bind(id).all<any>(),
-      db.prepare('SELECT id, at, party, kind, from_stage, to_stage, visibility, detail_json FROM formation_case_events WHERE case_id = ? ORDER BY id').bind(id).all<any>(),
+      db.prepare('SELECT id, at, actor_user_id, party, kind, from_stage, to_stage, visibility, detail_json FROM formation_case_events WHERE case_id = ? ORDER BY id').bind(id).all<any>(),
       db.prepare('SELECT uid, filing_id, document_id, class, visible_to, created_at FROM formation_case_documents WHERE case_id = ? ORDER BY id').bind(id).all<any>(),
       db.prepare('SELECT uid, case_revision, answers_json, prefill_json, created_at FROM formation_case_answers WHERE case_id = ? ORDER BY case_revision DESC LIMIT 1').bind(id).all<any>(),
       readWaiting(c.env, [id]),
@@ -160,6 +161,7 @@ cases.get('/:uid', async (c) => {
       },
       timeline: (ev.results || []).map((e: any) => {
         const out: Record<string, unknown> = { id: e.id, at: e.at, party: e.party, kind: e.kind, from_stage: e.from_stage, to_stage: e.to_stage, visibility: e.visibility };
+        if (full) out.actor_user_id = e.actor_user_id;
         if (full && e.detail_json) { try { out.detail = JSON.parse(e.detail_json); } catch { out.detail = null; } }
         return out;
       }),
@@ -173,6 +175,32 @@ cases.get('/:uid', async (c) => {
     });
   } catch (e) { return unreadable(c, e); }
 });
+
+// The closed list leaves future partner-offer and screening routes with their own gates.
+for (const action of HQ_ACTIONS) {
+  cases.post(`/:uid/${action}`, async (c) => {
+    const admin = await requireHqAdmin(c);
+    if (action === 'confirm-registration') await requireStepUp(c);
+    const uid = c.req.param('uid');
+    if (!UID.test(uid)) return c.json({ detail: 'Not found' }, 404);
+    const body = await c.req.json().catch(() => null);
+    if (!body || Array.isArray(body) || typeof body !== 'object') return refuse(c, 400, { code: 'invalid_body', message: 'Send a JSON object for this case action.' });
+    const result = await writeHqCase(c.env, admin, uid, action, body);
+    if (!result.ok) return refuse(c, result.status, { code: result.error, message: HQ_REFUSALS[result.error] ?? result.error.replaceAll('_', ' ') + '.' });
+    return c.json(result);
+  });
+}
+
+const HQ_REFUSALS: Record<string, string> = {
+  case_moved: 'This case changed. Reload it before trying again.',
+  case_owner_required: 'Only the assigned HQ owner or a Super Admin can act on this case.',
+  reason_required: 'Give a reason for this action.',
+  recorded_for_partner_required: 'Name the partner whose record you are entering.',
+  partner_not_assigned: 'That partner is not assigned to this case.',
+  founder_approval_required: 'The founder must approve the current filing pack first.',
+  registration_not_pending: 'This case has no partner registration awaiting confirmation.',
+  document_not_on_case: 'Choose a document belonging to this case.',
+};
 
 function safeJson(v: unknown) { try { return JSON.parse(String(v)); } catch { return null; } }
 

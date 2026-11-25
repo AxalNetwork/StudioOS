@@ -248,8 +248,14 @@ test('Settings and Availability are the shell\'s: HQ sets member access on learn
   const avail = await mounted('/admin/programs/learning/availability', worker(ADMIN), ADMIN);
   try {
     assert.match(avail.textOf('programs-generic-availability'), /can be offered to studios/);
-    assert.ok(avail.has('programs-generic-manage-grants'));
+    assert.ok(!avail.has('programs-generic-manage-grants'));
+    assert.ok(avail.has('studio-program-access'));
   } finally { await avail.close(); }
+  const hqAvailability = await mounted('/admin/programs/learning/availability', worker(SUPER), SUPER);
+  try {
+    assert.ok(hqAvailability.has('programs-generic-manage-grants'));
+    assert.ok(!hqAvailability.has('studio-program-access'));
+  } finally { await hqAvailability.close(); }
 
   const down = () => response({ error: 'down' }, 503);
   for (const url of ['/admin/programs/learning/settings', '/admin/programs/learning/availability']) {

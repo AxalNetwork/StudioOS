@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * #4568 R2-04: runtime `ALTER TABLE … ADD COLUMN` may not grow blind. A blind
+ * ALTER (tried, its error swallowed) of a column a migration already declares
+ * fails with `duplicate column name` on every fresh isolate against an
+ * up-to-date database. `runtime-ddl-baseline.json` records the blind ALTERs per
+ * file on 2026-11-07; a file may not exceed its entry, a new file may not ALTER
+ * blind, and an improved file must lower its entry. `--json` prints the
+ * inventory. Rules in `lib/runtimeDdl.mjs`.
+ *
  * #4568 R2-04 — runtime `ADD COLUMN` may not grow blind.
  *
  *   node scripts/check-runtime-ddl.mjs          # test:guards: the ratchet
@@ -16,6 +24,9 @@
  * record on 2026-11-07. A file may not exceed its entry, a file not in it may
  * not ALTER blind, and a file that improves must lower its entry. Reads files
  * and an in-memory copy of the migrated schema only.
+ *
+ * `runtime-ddl-baseline.json`: The blind runtime ADD COLUMN on record per file,
+ * for `check-runtime-ddl.mjs`. Only ever lowered.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

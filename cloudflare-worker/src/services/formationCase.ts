@@ -79,7 +79,30 @@ export function stageWaitingOn(stage: string): string | null {
 }
 
 export type Party = 'founder' | 'hq' | 'partner' | 'counsel' | 'registry' | 'system';
-export interface Actor { party: Party; userId?: number | null; email?: string | null }
+export interface Actor {
+  party: Party; userId?: number | null; email?: string | null;
+  /** D6698: the HQ route's snapshot and receipt, carried into the domain write's transaction. */
+  hqWrite?: {
+    guards: D1PreparedStatement[]; receipts: D1PreparedStatement[];
+    attribution: Record<string, unknown>;
+  };
+}
+
+/** D6698: a lost precondition rolls back the entire D1 batch, including later company/document writes. */
+export async function caseWriteBatch(env: Env, actor: Actor, statements: D1PreparedStatement[], changedIndex: number) {
+  const write = actor.hqWrite;
+  if (!write) return env.DB.batch(statements);
+  // As in D5375, SQLite's integer overflow aborts a transaction. A zero-row conditional
+  // write is a conflict too, even when another writer already reached the same destination.
+  const requireChange = env.DB.prepare('SELECT CASE WHEN changes() > 0 THEN 1 ELSE abs(-9223372036854775808) END');
+  const results = await env.DB.batch([
+    ...write.guards, ...statements.slice(0, changedIndex + 1), requireChange,
+    ...statements.slice(changedIndex + 1), ...write.receipts,
+  ]);
+  const original = results.slice(write.guards.length, write.guards.length + statements.length + 1);
+  original.splice(changedIndex + 1, 1);
+  return original;
+}
 
 export interface CaseRow {
   id: number; uid: string; user_id: number; project_id: number | null; company_id: number | null;
@@ -254,7 +277,7 @@ export async function transition(
     : (order ? EVENT_INSERT_WITH_ORDER : EVENT_INSERT_NO_ORDER);
   statements.push(env.DB.prepare(eventSql).bind(
     c.id, actor.userId ?? null, actor.party, c.stage, to, nextRevision, payload.visibility ?? 'hq_only',
-    JSON.stringify({ ...(payload.detail || {}), ...(packSeedToken ? { pack_seed_token: packSeedToken } : {}), incorporation_id: order?.id ?? null, status_from: order?.status ?? null, status_to: toStatus }),
+    JSON.stringify({ ...(payload.detail || {}), ...actor.hqWrite?.attribution, ...(packSeedToken ? { pack_seed_token: packSeedToken } : {}), incorporation_id: order?.id ?? null, status_from: order?.status ?? null, status_to: toStatus }),
     ...caseBinds, ...orderBinds, ...(filing ? [filing.id, filing.state] : []),
   ));
   const set = payload.orderSet || {};
@@ -275,10 +298,10 @@ export async function transition(
   if (packSeedToken) statements.push(...await registrationPackStatements(env, c.id, nextRevision, packSeedToken, typeof payload.orderSet?.filed_on === 'string' ? payload.orderSet.filed_on : null));
   if (c.track === 'v2' && (to === 'activating' || to === 'handed_off')) statements.push(handoffPackEvidenceStatement(env, c.id, to, nextRevision));
 
-  const results = await env.DB.batch(statements);
+  const results = await caseWriteBatch(env, actor, statements, caseIndex);
   if (!(Number(results[caseIndex]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'case_moved' };
 
-  if (actor.party === 'hq' && actor.userId && actor.email) {
+  if (!actor.hqWrite && actor.party === 'hq' && actor.userId && actor.email) {
     await logAdminAction(env, actor.userId, actor.email, 'formation_case_transition', {
       case_uid: c.uid, from: c.stage, to, revision: nextRevision, incorporation_id: order?.id ?? null,
     });

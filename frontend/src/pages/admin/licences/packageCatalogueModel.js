@@ -97,6 +97,7 @@ export function rowCells(v, detail) {
 export function historyRows(versions) {
   return [...(versions || [])].sort((a, b) => b.version - a.version).map((v) => ({
     key: `${v.package_key}:${v.version}`,
+    number: v.version,
     version: `v${v.version}`,
     status: statusWord(v.status),
     effective: effectiveWord(v),
@@ -104,7 +105,13 @@ export function historyRows(versions) {
   }));
 }
 
-/** A version's programs as listed, by key in the version's own order. */
-export function programList(items) {
-  return [...(items || [])].sort((a, b) => a.position - b.position).map((i) => i.program_key).join(', ');
+/** Current eligibility for a new local grant. An existing studio grant is reviewed separately on the offer. */
+export function localGrantLabel(rule) {
+  if (!rule) return 'Requires an existing studio grant';
+  if (rule.readiness === 'hq') return 'Run by HQ';
+  if (rule.readiness === 'notready') return 'Not ready for local operation';
+  if (rule.readiness === 'yes' && typeof rule.grantable === 'boolean') {
+    return rule.grantable ? 'Offered for local operation' : 'New studio grants disabled';
+  }
+  return 'Availability not recorded';
 }

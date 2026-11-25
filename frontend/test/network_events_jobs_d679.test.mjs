@@ -142,6 +142,7 @@ test('the Programs row is the Spin-Out Lab card alone, read from the cohort reco
   assert.ok(card.includes('Spin-Out Lab · December 2026'), 'the card names the open cohort as the record does');
   assert.ok(card.includes('Apply to December 2026'), 'the CTA names the open cohort');
   assert.ok(card.includes('href="/spinout-lab/apply"'), 'the CTA goes to the Lab application');
+  assert.ok(card.includes('href="/contact?topic=licence&amp;program=spinout-lab"'), 'a prospective operator can enquire about the same Lab');
   assert.ok(card.includes('<dt>Starts</dt><dd class="ax-mono">December 1, 2026</dd>'), 'the start is the record\'s');
   assert.ok(card.includes('<dt>Duration</dt><dd class="ax-mono">28 days</dd>'));
   assert.ok(card.includes('<dt>Places</dt><dd class="ax-mono">25</dd>'), 'the places are the record\'s');

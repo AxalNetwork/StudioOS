@@ -46,11 +46,17 @@ export function AuthProvider({ children }) {
   // window.location.search to '' before our effect ever sees the marker.
   // Stashing it here means the post-OAuth bootstrap below still fires even
   // after the guard has bounced us through /login.
+  //
+  // D8537 (#8537): the email link is the same shape. `/api/auth/magic/verify`
+  // sets the cookie server-side and 302s to `/dashboard?magic=ok` (or
+  // `/onboarding/chat?magic=ok` for a new account) with localStorage empty, so
+  // without the probe a fresh browser was sent from there to the sign-in page,
+  // signed in on the server but not in the tab, and the kept `?next=` never ran.
   const [postOAuthMarker] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.has('google') || params.has('google_signup');
+      return params.has('google') || params.has('google_signup') || params.get('magic') === 'ok';
     } catch { return false; }
   });
 

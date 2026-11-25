@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * A critical advisory in a production dependency — and, separately, a registry
+ * that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory
+ * endpoint went red exactly like a real CVE. The gate retries a transport
+ * failure, names the advisories on a real finding, and still fails when the
+ * database is unreachable rather than passing on a question it could not ask.
+ *
  * `npm audit` as a CI gate that can tell "you have a critical CVE" apart from
  * "the registry did not answer".
  *

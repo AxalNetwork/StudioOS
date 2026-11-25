@@ -1,3 +1,6 @@
+/**
+ * D6387: verify source constraints for known repair issues.
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';

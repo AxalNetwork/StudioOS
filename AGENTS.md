@@ -246,7 +246,10 @@ Other trailers, such as `Co-Authored-By`, may share the block. A commit
 dated before `2026-12-01T00:00:00Z` may give `Claude-Session` in place of
 `Agent-Session`. All commits of one pull request name one slot and one task,
 and on `agent/<agent>/<issue>-<slug>` the task is that issue. A merge commit
-needs no trailers only when it adds nothing of its own. The `provenance`
+needs no trailers only when it adds nothing of its own. A commit GitHub
+wrote by merging another pull request into the branch needs none either
+(#8606): the workflow asks GitHub which commits those are, and that pull
+request's own commits were checked on its own branch. The `provenance`
 check (`agent-provenance.yml`) applies this to every `agent/**` pull request.
 Check your own branch with
 `node scripts/ci/agent-provenance.mjs --base origin/main --head HEAD`.

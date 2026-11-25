@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Chart, ChartTable, Legend, usePhoneWidth } from '../../../ui';
 import { PROGRAMS, programGroups } from '../../../lib/programGrants';
 import { GrantLightbox } from './GrantDialogs';
@@ -94,11 +94,22 @@ export default function GridView({ grid, requests, reload, reloadGrid, reloadReq
   const [done, setDone] = useState('');
   const items = requests.status === 'ready' ? requests.data?.items || [] : [];
   const g = grid.status === 'ready' ? grid.data : null;
-  const rows = useMemo(() => (g ? gridRows(g, items) : []), [g, items]);
+  const [params] = useSearchParams();
+  const filter = params.get('program') || '';
+  // Custom programs appear in the grid read through their real studio grants.
+  // Only the built-in programs support creating a grant from grid defaults.
+  const selected = PROGRAMS.find((p) => p.key === filter);
+  const columns = useMemo(() => {
+    if (!filter) return PROGRAMS;
+    if (selected) return [selected];
+    return g?.licences?.some((l) => Object.hasOwn(l.grants || {}, filter))
+      ? [{ key: filter, name: filter, group: 'Custom', grant: 'custom' }] : [];
+  }, [g, filter, selected]);
+  const rows = useMemo(() => g ? gridRows(g, items, columns) : [], [g, items, columns]);
   const tiles = useMemo(() => (g ? tilesOf(g, requests, now) : null), [g, requests, now]);
   const holding = useMemo(() => (g ? holdingChart(holdingRows(g, items)) : null), [g, items]);
   const months = useMemo(() => (g ? monthsChart(g.series?.requests_by_month) : null), [g]);
-  const groups = programGroups();
+  const groups = programGroups(columns);
   const defaults = new Map((g?.programs || []).map((p) => [p.program_key, p]));
   const LABELS = ['Studios with a licence', 'Grants in force', 'Requests waiting', 'Ending in 90 days'];
 
@@ -119,10 +130,11 @@ export default function GridView({ grid, requests, reload, reloadGrid, reloadReq
           onRetry={g && !months ? reloadRequests : reloadGrid} />
       </div>
 
-      <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-labelledby="grants-h-grid" data-testid="grants-grid">
+      <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} id="grants-grid" aria-labelledby="grants-h-grid" data-testid="grants-grid">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="grants-h-grid" className={H2}>Grants by studio</h2>
-          {!phone ? <span className={SUB}>Scroll sideways · the studio column stays</span> : null}
+          <h2 id="grants-h-grid" className={H2}>{filter ? `Grants by studio · ${selected?.name || filter}` : 'Grants by studio'}</h2>
+          {filter ? <Link className="font-semibold text-axal-violet underline" to="/admin/licences/programs#grants-grid">Show all programs</Link> : null}
+          {!phone && !filter ? <span className={SUB}>Scroll sideways · the studio column stays</span> : null}
         </div>
         {grid.status === 'loading' && !g ? <><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></> : null}
         {grid.status === 'error' ? (
@@ -132,37 +144,40 @@ export default function GridView({ grid, requests, reload, reloadGrid, reloadReq
           </div>
         ) : null}
         {requests.status === 'error' && g ? <p className={`m-0 ${SUB}`} data-testid="grants-requests-unread">Requests could not be read, so a requested program shows as not granted here until they are.</p> : null}
-        {g && rows.length === 0 ? (
+        {g && !columns.length ? <p className={SUB}>There are no recorded studio grants for this program.</p> : null}
+        {g && columns.length > 0 && rows.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center" data-testid="grants-empty">
             <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">No studio holds a licence yet.</span>
             <span className={SUB}>Issue one in the ledger, then grant programs here.</span>
             <Link to="/admin/licences" className="font-bold text-axal-violet underline dark:text-violet-300">Open the ledger</Link>
           </div>
         ) : null}
-        {g && rows.length > 0 && phone ? (
+        {g && columns.length > 0 && rows.length > 0 && phone ? (
           <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="grants-phone-list">
             {rows.map((r) => (
               <li key={r.uid} className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid={`grants-card-${r.ref}`}>
                 <Link to={`/admin/licences/programs/studio/${encodeURIComponent(r.uid)}`} className="font-bold text-axal-violet dark:text-violet-300">{r.name}</Link>
                 <span className={`${MONO} ${SUB}`}>{r.ref} · {r.statusWord}</span>
                 <span className="flex flex-wrap gap-1.5">
-                  {r.cells.filter((c) => c.pill && c.program.grant === 'yes').map((c) => <Pill key={c.program.key} cell={{ ...c, pill: `${c.pill.split(' ')[0]} ${c.program.name}` }} />)}
-                  {!r.cells.some((c) => c.pill && c.program.grant === 'yes') ? <span className={SUB}>○ Nothing granted</span> : null}
+                  {filter ? <span className={SUB}>{r.cells[0].pill || r.cells[0].sub || 'No grant recorded'}</span> : <>
+                    {r.cells.filter((c) => c.pill && c.program.grant === 'yes').map((c) => <Pill key={c.program.key} cell={{ ...c, pill: `${c.pill.split(' ')[0]} ${c.program.name}` }} />)}
+                    {!r.cells.some((c) => c.pill && c.program.grant === 'yes') ? <span className={SUB}>○ Nothing granted</span> : null}
+                  </>}
                 </span>
               </li>
             ))}
           </ul>
         ) : null}
-        {g && rows.length > 0 && !phone ? (
+        {g && columns.length > 0 && rows.length > 0 && !phone ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1428px] border-collapse text-left text-[12px]">
+            <table className={`w-full ${filter ? '' : 'min-w-[1428px]'} border-collapse text-left text-[12px]`}>
               <thead>
                 <tr className={EYE}>
                   <th scope="col" rowSpan={2} className="sticky left-0 z-10 bg-white py-1.5 pr-3 font-bold dark:bg-gray-900">Studio</th>
                   {groups.map((x) => <th key={x.group} scope="colgroup" colSpan={x.span} className="border-l border-axal-hairline px-2 py-1.5 font-bold dark:border-gray-700">{x.group}</th>)}
                 </tr>
                 <tr className="text-[11.5px] text-axal-ink dark:text-gray-100">
-                  {PROGRAMS.map((p) => (
+                  {columns.map((p) => (
                     <th key={p.key} scope="col" className={`border-l border-axal-hairline px-2 py-1.5 font-bold dark:border-gray-700 ${p.grant === 'notready' ? 'text-axal-muted' : ''}`}>
                       {p.name}{p.note ? <span className={`block font-normal ${SUB}`}>{p.note}</span> : null}
                     </th>

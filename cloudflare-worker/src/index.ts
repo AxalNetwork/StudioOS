@@ -503,7 +503,7 @@ import orders from './routes/orders';
 // checkout reuse /api/catalog + /api/payments above).
 import products from './routes/products';
 import { Jobs } from './models/jobs';
-import { leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './util/cronHistory';
+import { CronTaskLog, leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './util/cronHistory';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
@@ -2162,8 +2162,13 @@ const studioos = {
       // over a sub-task that had failed. Each catch now names itself here, and
       // the row is `partial` with those names in `error`.
       const cronTaskFailures: string[] = [];
+      // D8533 (#8533): each task's outcome — done, skipped (ran and did
+      // nothing) or failed with its error class — kept in the row's
+      // `task_outcomes`, so a `completed` row shows which tasks did nothing.
+      const cronTasks = new CronTaskLog();
       const taskFailed = (task: string, ...detail: unknown[]) => {
         cronTaskFailures.push(task);
+        cronTasks.failed(task, ...detail);
         console.error('[cron] sub-task failed:', task, ...detail);
       };
 
@@ -2180,6 +2185,9 @@ const studioos = {
         if (r.processed || r.failed) {
           console.info(`[cron] drain processed=${r.processed} failed=${r.failed}`);
           cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
+          cronTasks.done('queue drain', `processed=${r.processed} failed=${r.failed} deferred=${r.deferred}`);
+        } else {
+          cronTasks.skipped('queue drain', r.deferred ? `deferred=${r.deferred}` : 'no pending job');
         }
         // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
         // DO IT. Two cadences below fetch from the open internet: the Founder
@@ -2208,9 +2216,12 @@ const studioos = {
           try {
             const { sendSubprocessorNotices } = await import('./services/subprocessorNotices');
             const r = await sendSubprocessorNotices(env, { now: now.getTime() });
-            if (r.sent || r.failed) console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
-          } catch {
-            taskFailed('subprocessor notices');
+            if (r.sent || r.failed) {
+              console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
+              cronTasks.done('subprocessor notices', `sent=${r.sent} failed=${r.failed}`);
+            } else cronTasks.skipped('subprocessor notices', r.unconfigured ? 'mail not configured' : 'no notice due');
+          } catch (e) {
+            taskFailed('subprocessor notices', e);
           }
         }
         // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
@@ -2741,6 +2752,16 @@ const studioos = {
             }
           } catch (e) { taskFailed('scheduled posts sweep', e); }
         }
+        // #8516 (D8516) — THE REPLAY OF A SIGNATURE'S EFFECTS. A completed
+        // envelope leaves a record per required effect (esign_effects); one
+        // that is pending or failed is retried here, EVERY MINUTE and on every
+        // deployment (a branch signs its own envelopes), until the attempt cap.
+        // Never throws past this.
+        try {
+          const { sweepEffects } = await import('./services/esignEffects');
+          const p = await sweepEffects(env, env.APP_URL || 'https://axal.vc');
+          if (p.due || p.at_cap) console.info(`[cron] esign effects due=${p.due} done=${p.done} failed=${p.failed} at_cap=${p.at_cap}`);
+        } catch (e) { taskFailed('esign effects sweep', e); }
         // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
         // `unknown`: not known whether it arrived. Never re-sent, never
         // `failed`. Every fifth minute, on every deployment (a founder's
@@ -3404,8 +3425,10 @@ const studioos = {
             const r = await writeDailySnapshot(env);
             if (r.written) {
               console.info(`[cron] analytics snapshot written for ${r.snapshot_date}`);
-            } else if (r.reason) {
-              console.error(`[cron] analytics snapshot skipped for ${r.snapshot_date}: ${r.reason}`);
+              cronTasks.done('analytics snapshot', String(r.snapshot_date));
+            } else {
+              if (r.reason) console.error(`[cron] analytics snapshot skipped for ${r.snapshot_date}: ${r.reason}`);
+              cronTasks.skipped('analytics snapshot', r.reason || 'already written');
             }
           } catch (e) {
             taskFailed('analytics snapshot', e);
@@ -3424,6 +3447,7 @@ const studioos = {
             startedAt: cronStartedAt,
             cronError,
             failedTasks: cronTaskFailures,
+            tasks: cronTasks.outcomes,
             summary: cronSummary,
           });
         } catch (dbErr) {

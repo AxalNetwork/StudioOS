@@ -1,15 +1,15 @@
 /** Immutable package offers and atomic grant/legal-policy acceptance for HQ (#5024). */
 import type { Env } from '../types';
-import { byUid } from './licenceLedgerCore';
+import { byUid, type LicenceRow } from './licenceLedgerCore';
 import { isIsoDay } from './licenceTerms';
 import { activePackageDetail, versionDetail, isPackageKey } from './licencePackagesStore';
 import { createRecommendation } from './packagePricing';
-import { packageDigest, offeredPrograms, packageGrantStatements, reviewPackageGrants, PackageGrantInputError, type OfferedProgram } from './packageOfferGrants';
+import { packageDigest, offeredPrograms, packageGrantGuard, packageGrantStatements, reviewPackageGrants, PackageGrantInputError, type OfferedProgram } from './packageOfferGrants';
 import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
 import { queuePushStatement, pushLicenceToBranch } from './licencePush';
 import { agreementsOfLicence } from './programAgreements';
 import { freezeHoldingStatements, holdingsOf, latestPolicy, programLegalStatus, replacementOnPackageMoveStatement, requirementFor,
-  syncLegalGate, type Holding, type Policy } from './agreementPolicies';
+  syncLegalGate, packageMasterExecuted, type Holding, type Policy } from './agreementPolicies';
 import { logAdminAction } from './adminAudit';
 
 export class PackageOfferError extends Error {
@@ -137,6 +137,11 @@ export async function createPackageOffer(env: Env, licenceUid: string, body: Rec
   return { offer: presentPackageOffer(await getPackageOffer(env, licenceUid, uid)), created: true };
 }
 
+function reviewDelivery(env: Env, offer: PackageOffer, licence: LicenceRow, today: string, stage: 'offer' | 'accept') {
+  return reviewPackageGrants(env, { offerUid: offer.uid, licenceId: licence.id, renewsOn: licence.renews_on,
+    startsOn: offer.starts_on, endsOn: offer.ends_on, currency: offer.currency, programs: JSON.parse(offer.composition_json), today, stage });
+}
+
 /** Explicit lifecycle decisions on unaccepted offers; accepted-term lifecycle belongs to #5025. */
 export async function changePackageOfferState(env: Env, licenceUid: string, uid: string, action: string, body: Record<string, any>, actorId: number) {
   fields(body, ['expected_revision', 'reason']);
@@ -150,12 +155,24 @@ export async function changePackageOfferState(env: Env, licenceUid: string, uid:
   const row = await getPackageOffer(env, licenceUid, uid);
   if (row.revision !== revision || !target.from.includes(row.state)) conflict('changed_since_open', 'This offer changed or cannot take that transition. Read it again.');
   const at = new Date().toISOString();
+  const deliveryGuards: D1PreparedStatement[] = [];
+  if (action === 'offer') {
+    const licence = await byUid(env, licenceUid);
+    if (!licence) throw new PackageOfferError(404, 'not_found', 'No licence has that id.');
+    const delivery = await reviewDelivery(env, row, licence, at.slice(0, 10), 'offer');
+    if (delivery.conflicts.length) {
+      conflict('package_delivery_conflict', 'Resolve the listed program grants or create an offer from a revised package version.', { conflicts: delivery.conflicts });
+    }
+    deliveryGuards.push(env.DB.prepare(`INSERT INTO decision_guard (decision_won)
+      VALUES (CASE WHEN EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND revision = ?) THEN 1 ELSE 0 END)`).bind(licence.id, licence.revision));
+    for (const plan of delivery.plans) deliveryGuards.push(packageGrantGuard(env, plan, licence.id));
+  }
   const run = await runDecision(env, [
     env.DB.prepare(`UPDATE licence_package_offers SET state = ?, revision = revision + 1, decided_by = ?, decided_at = ?
       WHERE uid = ? AND licence_uid = ? AND state = ? AND revision = ?`).bind(target.to, actorId, at, uid, licenceUid, row.state, revision),
-    decisionGuard(env), eventStatement(env, { uid, licenceUid, action: target.to, actorId, reason, at, detail: { from_state: row.state, revision: revision + 1 } }), clearGuard(env),
+    decisionGuard(env), ...deliveryGuards, eventStatement(env, { uid, licenceUid, action: target.to, actorId, reason, at, detail: { from_state: row.state, revision: revision + 1 } }), clearGuard(env),
   ]);
-  if (run.lost) conflict('changed_since_open', 'Another decision changed this offer. Nothing was written.');
+  if (run.lost) conflict('changed_since_open', 'The offer or its studio grant conditions changed. Review the offer again.');
   return presentPackageOffer(await getPackageOffer(env, licenceUid, uid));
 }
 
@@ -176,8 +193,10 @@ export async function reviewPackageOffer(env: Env, licenceUid: string, uid: stri
   const today = new Date().toISOString().slice(0, 10);
   const price = acceptancePrice(offer, body);
   const programs: OfferedProgram[] = JSON.parse(offer.composition_json);
-  const grants = await reviewPackageGrants(env, { offerUid: uid, licenceId: licence.id, renewsOn: licence.renews_on,
-    startsOn: offer.starts_on, endsOn: offer.ends_on, currency: offer.currency, programs, today });
+  const localPrograms = programs.filter((item) => !item.delivery);
+  const hqServices = programs.flatMap((item) => item.delivery?.kind === 'hq_service'
+    ? [{ program_key: item.program_key, description: item.delivery.description }] : []);
+  const grants = await reviewDelivery(env, offer, licence, today, 'accept');
   const conflicts = [...grants.conflicts];
   const issue = (code: string, message: string) => conflicts.push({ program_key: '', code, message });
   if (offer.state !== 'offered') issue('not_offered', 'Only an offered package can be accepted.');
@@ -189,7 +208,7 @@ export async function reviewPackageOffer(env: Env, licenceUid: string, uid: stri
   const [policy, held, agreements] = await Promise.all([latestPolicy(env, 'package', offer.package_key), holdingsOf(env, licenceUid), agreementsOfLicence(env, licenceUid)]);
   const priorPackage = held.find((h) => h.scope_kind === 'package');
   if (priorPackage && offer.starts_on > today) issue('scheduled_package_policy', 'A future package cannot replace a held package policy early. Use the scheduled lifecycle workflow.');
-  if (priorPackage && (priorPackage.policy.programs || []).some((key) => !programs.some((p) => p.program_key === key)
+  if (priorPackage && (priorPackage.policy.programs || []).some((key) => !localPrograms.some((p) => p.program_key === key)
       && grants.rows.some((g) => g.program_key === key && g.state === 'granted'))) {
     issue('package_move_requires_review', 'This move would remove a frozen package policy from an existing outside grant. Resolve its standalone legal terms through the lifecycle workflow first.');
   }
@@ -197,8 +216,15 @@ export async function reviewPackageOffer(env: Env, licenceUid: string, uid: stri
     { scopeKind: 'package', scopeKey: offer.package_key, policy, freeze: true },
   ];
   if (!policy) issue('package_policy_missing', 'Record the package agreement strategy and legal gate before accepting its offer.');
-  else if ([...(policy.programs || [])].sort().join('|') !== programs.map((p) => p.program_key).sort().join('|')) {
-    issue('package_policy_composition_conflict', 'The current package agreement policy must name exactly the offered programs, preserving standalone extras.');
+  else if ([...(policy.programs || [])].sort().join('|') !== localPrograms.map((p) => p.program_key).sort().join('|')) {
+    issue('package_policy_composition_conflict', 'The agreement policy must name exactly the programs the studio will operate. HQ services are described in the package agreement.');
+  }
+  if (hqServices.length && policy && policy.strategy !== 'package_master' && policy.strategy !== 'none') {
+    issue('hq_service_policy_required', 'Choose a package master or an explicit no-agreement policy for HQ services.');
+  }
+  if (hqServices.length && policy?.strategy === 'package_master' && policy.legal_gate === 'required_before_grant'
+      && !packageMasterExecuted(agreements, offer.package_key, uid, offer.package_version)) {
+    issue('agreement_required_before_grant', 'Execute the master agreement for this offer before accepting its HQ services.');
   }
   const prospective: Holding[] = held.filter((h) => h.scope_kind !== 'package');
   const holding = (p: Policy, origin: Holding['origin']): Holding => ({ uid: `review-${p.uid}`, licence_uid: licenceUid,
@@ -217,7 +243,7 @@ export async function reviewPackageOffer(env: Env, licenceUid: string, uid: stri
       if (status.missing.length) conflicts.push({ program_key: p.program_key, code: 'agreement_required_before_grant', message: `Execute the required agreement first: ${status.missing.join(', ')}.` });
     }
   }
-  const review = { offer: presentPackageOffer(offer), price, grants: grants.plans, conflicts,
+  const review = { offer: presentPackageOffer(offer), price, grants: grants.plans, hq_services: hqServices, conflicts,
     legal: policy ? { policy_uid: policy.uid, policy_version: policy.version, strategy: policy.strategy, legal_gate: policy.legal_gate } : null,
     branch_sync: 'Existing Program Grants licence copy; delivery is reported separately.', accepted_program_allocation: 'Not recorded; the package has its own price.' };
   const reviewHash = await packageDigest({ review, licence_revision: licence.revision, today,
@@ -242,7 +268,7 @@ export async function acceptPackageOffer(env: Env, licenceUid: string, uid: stri
   const at = new Date().toISOString();
   const receipt = { outcome: 'accepted', offer_uid: uid, licence_uid: licenceUid, package_uid: offer.package_uid,
     package_key: offer.package_key, package_version: offer.package_version, currency: offer.currency, ...review.price,
-    starts_on: offer.starts_on, ends_on: offer.ends_on, grants: review.grants, legal: review.legal,
+    starts_on: offer.starts_on, ends_on: offer.ends_on, grants: review.grants, hq_services: review.hq_services, legal: review.legal,
     actor_user_id: actor.id, reason, at, revision: expected + 1, replayed: false };
   const statements = [
     env.DB.prepare(`UPDATE licence_package_offers SET state = 'accepted', accepted_annual_fee_cents = ?, override_reason = ?,

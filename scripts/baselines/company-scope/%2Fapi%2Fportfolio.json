@@ -1,0 +1,20 @@
+{
+  "GET /api/portfolio/chases": {
+    "kind": "filter"
+  },
+  "GET /api/portfolio/coverage": {
+    "kind": "filter"
+  },
+  "GET /api/portfolio/health": {
+    "kind": "filter"
+  },
+  "GET /api/portfolio/health/:uid": {
+    "kind": "target"
+  },
+  "POST /api/portfolio/chase": {
+    "kind": "target"
+  },
+  "POST /api/portfolio/health/recompute/:uid": {
+    "kind": "target"
+  }
+}

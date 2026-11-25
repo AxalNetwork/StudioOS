@@ -141,6 +141,77 @@ export interface CronRunHistoryRecord {
   failedTasks?: string[];
   /** Per-branch summary fragments; joined with ` | ` (empty -> NULL). */
   summary: string[];
+  /**
+   * D8533: each task's outcome, as `CronTaskLog` recorded it. Written to
+   * `task_outcomes` as JSON; omitted or empty leaves the column out of the
+   * INSERT, so the row is written exactly as before D8533.
+   */
+  tasks?: CronTaskOutcome[];
+}
+
+/**
+ * D8533 (#8533) — WHAT EACH TASK INSIDE A TICK DID.
+ *
+ * A trigger's row says whether the tick ran (`completed`), and since D4703
+ * which tasks' own catches fired (`partial`). It could not say that a task ran
+ * and did nothing, so a `completed` row read as healthy over a queue drain that
+ * found nothing, or a snapshot that refused to write. Each task can now report
+ * one of three outcomes, kept in order in the row's `task_outcomes`:
+ *
+ *   done      it ran and did its work (`note` says how much, when it knows)
+ *   skipped   it ran and did nothing: nothing was due, or its own guard refused
+ *             (`note` says why)
+ *   failed    its catch fired; `error_class` is the error's name (`TypeError`,
+ *             `Error`), the code the call site passed (`calendar_copy_retry_failed`),
+ *             or `unclassified` when the site passed only free text or nothing
+ *
+ * A failed task still makes the row `partial` (D4703). A task that reports
+ * nothing appears only if it fails: the tasks that report done and skipped are
+ * named in D8533.md, and a task added to the list is one call at its site.
+ */
+export type CronTaskOutcomeKind = 'done' | 'skipped' | 'failed';
+export interface CronTaskOutcome {
+  task: string;
+  outcome: CronTaskOutcomeKind;
+  error_class?: string;
+  note?: string;
+}
+
+/** The most entries one row keeps; a tick reports well under this. */
+export const MAX_TASK_OUTCOMES = 100;
+const NOTE_MAX = 200;
+const CLASS_MAX = 60;
+const CODE = /^[A-Za-z_][\w.:-]*$/;
+
+/** The class of a task's failure, from what its catch passed `taskFailed`. */
+export function errorClass(detail: readonly unknown[]): string {
+  for (const d of detail) {
+    if (d instanceof Error) return (d.name || 'Error').slice(0, CLASS_MAX);
+    const name = d && typeof d === 'object' && 'message' in d ? (d as { name?: unknown }).name : undefined;
+    if (typeof name === 'string') return (name || 'Error').slice(0, CLASS_MAX);
+  }
+  for (const d of detail) {
+    if (typeof d === 'string' && d.length <= CLASS_MAX && CODE.test(d)) return d;
+  }
+  return 'unclassified';
+}
+
+/** The tick's task outcomes, in the order the tasks reported them. */
+export class CronTaskLog {
+  readonly outcomes: CronTaskOutcome[] = [];
+  private add(entry: CronTaskOutcome): void {
+    if (this.outcomes.length >= MAX_TASK_OUTCOMES) return;
+    if (entry.note !== undefined) entry.note = String(entry.note).slice(0, NOTE_MAX);
+    this.outcomes.push(entry);
+  }
+  done(task: string, note?: string): void { this.add(note ? { task, outcome: 'done', note } : { task, outcome: 'done' }); }
+  skipped(task: string, reason: string): void { this.add({ task, outcome: 'skipped', note: reason }); }
+  failed(task: string, ...detail: unknown[]): void { this.add({ task, outcome: 'failed', error_class: errorClass(detail) }); }
+}
+
+/** The `task_outcomes` column: the outcomes as JSON, or null when none were reported. */
+export function cronTaskOutcomesJson(tasks: readonly CronTaskOutcome[] | undefined): string | null {
+  return tasks && tasks.length ? JSON.stringify(tasks.slice(0, MAX_TASK_OUTCOMES)) : null;
 }
 
 /**
@@ -171,21 +242,33 @@ export async function writeCronRunHistory(
 ): Promise<void> {
   const clock = opts?.now ?? (() => new Date());
   const finishedAt = sqlStamp(clock().getTime());
+  const tasks = cronTaskOutcomesJson(rec.tasks);
+  // D8533: a task reported failed makes the row partial whether or not the
+  // caller also listed it in `failedTasks` (the scheduled handler lists it in both).
+  const failed = {
+    cronError: rec.cronError,
+    failedTasks: [...(rec.failedTasks || []), ...(rec.tasks || []).filter((t) => t.outcome === 'failed').map((t) => t.task)],
+  };
+  const binds = [
+    rec.triggerName,
+    rec.startedAt,
+    finishedAt,
+    cronRunStatus(failed),
+    rec.summary.join(' | ') || null,
+    cronRunError(failed),
+  ];
   await withD1Retry(
     () =>
-      env.DB.prepare(
-        `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-        .bind(
-          rec.triggerName,
-          rec.startedAt,
-          finishedAt,
-          cronRunStatus(rec),
-          rec.summary.join(' | ') || null,
-          cronRunError(rec),
-        )
-        .run(),
+      (tasks === null
+        ? env.DB.prepare(
+          `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(...binds)
+        : env.DB.prepare(
+          `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error, task_outcomes)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(...binds, tasks)
+      ).run(),
     { retries: opts?.retries, baseDelayMs: opts?.baseDelayMs },
   );
 }

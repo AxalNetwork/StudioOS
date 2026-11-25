@@ -102,7 +102,8 @@ export function parsePolicyInput(scopeKind: string, scopeKey: string, b: any): {
   let programs: string[] | null = null;
   let required: string[] | null = null;
   if (kind === 'package') {
-    if (!Array.isArray(b?.programs) || !b.programs.length) return { ok: false, error: 'A package lists the programs it includes.' };
+    if (!Array.isArray(b?.programs)) return { ok: false, error: 'List the programs the studio can operate under this package.' };
+    if (strategy === 'per_program' && !b.programs.length) return { ok: false, error: 'A per-program agreement strategy needs at least one studio-operated program.' };
     programs = [...new Set(b.programs.map(String))].sort() as string[];
     if (programs.some((p) => !PROGRAM_KEY.test(p))) return { ok: false, error: 'Each program is a program key.' };
     if (strategy === 'package_master') {
@@ -325,6 +326,12 @@ function executedFor(doc: RequiredDocument, rows: AgreementRow[]): AgreementRow 
   return rows.find((r) => r.slot_key === doc.slot_key && r.status === 'executed' && (doc.package_key === null || r.package_key === doc.package_key)
     && (doc.package_offer_uid == null || (r.package_offer_uid === doc.package_offer_uid && r.package_version === doc.package_version))) ?? null;
 }
+// The licence-scoped rows must contain an executed master for this exact commercial offer and version.
+export function packageMasterExecuted(rows: AgreementRow[], packageKey: string, offerUid: string, version: number): boolean {
+  return executedFor({ slot_key: 'package_master', kind: 'package_master', label: 'Package master agreement',
+    package_key: packageKey, package_offer_uid: offerUid, package_version: version }, rows) !== null;
+}
+
 function inFlightFor(doc: RequiredDocument, rows: AgreementRow[]): AgreementRow | null {
   return rows.find((r) => r.slot_key === doc.slot_key && IN_FLIGHT.includes(r.status) && (doc.package_key === null || r.package_key === doc.package_key)
     && (doc.package_offer_uid == null || (r.package_offer_uid === doc.package_offer_uid && r.package_version === doc.package_version))) ?? null;

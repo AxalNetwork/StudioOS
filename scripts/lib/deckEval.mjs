@@ -1,4 +1,11 @@
 /**
+ * D1518 (#3770): the deck harness's data and decisions: the golden briefs
+ * (records, never a prompt), rubric v0 (named, D1517's), the investor rubric
+ * (recorded, not gated), editing tasks v0, the competitor arms (waiting on
+ * decision F), the zero-edit verdict, the live-run refusal, and the readers of
+ * `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by
+ * `../eval-elements.mjs`.
+ *
  * D1518 (#3770, deck v2 A7) — one harness for the deck: the golden briefs,
  * rubric v0, the investor rubric (recorded, never gated), editing tasks v0,
  * the zero-edit acceptance arm and the benchmark arms. Pure data and pure

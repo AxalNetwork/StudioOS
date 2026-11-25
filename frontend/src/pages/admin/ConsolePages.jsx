@@ -21,6 +21,7 @@ import KycConsole from './consoles/KycConsole';
 import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
 import { BankAccountsPanel, BankAccountsRail } from './consoles/BankAccountsConsole';
+import StudioProgramAccess from './programs/StudioProgramAccess';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
@@ -246,6 +247,7 @@ export function ProductTestingHqPage() {
   );
   return (
     <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line={TESTING_LINE} tabs={tabs} more={more} actions={actions} testId="admin-platform-product-testing">
+      {view.tab === 'overview' ? <StudioProgramAccess programKey="product-testing" superAdmin /> : null}
       <ProductTestingTabBody view={view} reads={reads} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
     </ConsolePage>
   );

@@ -19,7 +19,7 @@ import { hqSource } from './approvalLaneRegistry';
 
 export type HqLaneKey =
   | 'testing_programs' | 'learning' | 'tickets' | 'payouts' | 'ai_runs'
-  | 'notices' | 'support' | 'proposals' | 'grants';
+  | 'notices' | 'support' | 'proposals' | 'grants' | 'formation_cases';
 
 /** An HQ lane: `scope: 'hq'`, so D1040's `sourcesFor` shows it to a Super Admin only. */
 export type HqApprovalSource = ApprovalSource & { key: HqLaneKey; scope: 'hq' };
@@ -174,6 +174,15 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + "FROM hq_escalations e WHERE e.status = 'open' "
       + "AND e.kind IN ('program_grant', 'program_terms_change', 'program_end') "
       + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
+  },
+  {
+    ...hqSource('formation_cases'),
+    countSql: "SELECT COUNT(*) AS n, MIN(datetime(w.at)) AS oldest FROM formation_cases c "
+      + "LEFT JOIN formation_case_waiting_log w ON w.id = (SELECT MAX(x.id) FROM formation_case_waiting_log x WHERE x.case_id = c.id) "
+      + "WHERE c.closed_at IS NULL AND c.waiting_on = 'hq'",
+    rowsSql: "SELECT c.id AS id, c.uid AS who, c.stage AS what, w.at AS created_at FROM formation_cases c "
+      + "LEFT JOIN formation_case_waiting_log w ON w.id = (SELECT MAX(x.id) FROM formation_case_waiting_log x WHERE x.case_id = c.id) "
+      + "WHERE c.closed_at IS NULL AND c.waiting_on = 'hq' ORDER BY w.at, c.id LIMIT ?",
   },
 ];
 

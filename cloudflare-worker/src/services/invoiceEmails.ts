@@ -25,9 +25,18 @@
  * Stripe retries the event later (the next attempt re-checks the ledger and
  * re-sends). Recording only on success means a crash before the send leaves no
  * stranded "claim" that would suppress a later retry.
+ *
+ * D8536 part 2 (#8536): the send is under the delivery contract. The log row is
+ * written first with `sent_at` empty (it suppresses nothing, `alreadySent`
+ * reads `sent_at`), and it names the recipient: the send reads the address
+ * from that row, under the reference `billing:invoice_receipt:<row id>:1`. A
+ * Stripe retry of the same event finds the same row and the same reference, so
+ * a receipt Gmail accepted, or one whose request left without an answer
+ * (`timed_out`), is answered from the ledger and never mailed twice. Only a
+ * `refused` send throws for Stripe to retry: nothing left, so a retry is safe.
  */
 import type { Env } from '../types';
-import { sendBrandedInvoiceEmail } from './email';
+import { sendBrandedInvoiceEmailBound } from './email';
 import { bindingKey } from '../util/schemaBootstrap';
 
 const SCHEMA_READY = new WeakMap<object, boolean>();
@@ -59,24 +68,52 @@ async function alreadySent(env: Env, dedupeKey: string): Promise<boolean> {
   return !!row;
 }
 
-// Record a confirmed send. This runs AFTER the email is already out, so a DB
-// failure here is deliberately swallowed, NOT thrown: throwing would make the
-// webhook return non-2xx → Stripe retries → a GUARANTEED double-send (the
-// retry finds no ledger row and re-sends). Swallowing instead accepts only the
-// far rarer "ledger write failed AND a future duplicate delivery arrives" case.
-// Do not "fix" this into a throw — that regresses to guaranteed double-send.
-async function recordSent(
-  env: Env, dedupeKey: string, kind: 'invoice' | 'charge',
-  stripeInvoiceId: string | null, recipient: string | null,
-): Promise<void> {
+// D8536 — the receipt's subject record, written before the send: one row per
+// invoice or charge (`dedupe_key` is unique), naming the recipient. A retry
+// finds the row an earlier attempt wrote. Null when the log cannot be written,
+// in which case nothing is sent (the webhook fails and Stripe retries).
+async function receiptRow(
+  env: Env, dedupeKey: string, kind: 'invoice' | 'charge', stripeInvoiceId: string | null, recipient: string,
+): Promise<number | null> {
   try {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO invoice_email_log (dedupe_key, kind, stripe_invoice_id, recipient, sent_at)
-       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+       VALUES (?, ?, ?, ?, NULL)`,
     ).bind(dedupeKey, kind, stripeInvoiceId, recipient).run();
+    const row = await env.DB.prepare('SELECT id FROM invoice_email_log WHERE dedupe_key = ?')
+      .bind(dedupeKey).first<{ id: number }>();
+    return row?.id ?? null;
   } catch (e) {
-    console.warn('[invoice-email] recordSent failed:', (e as Error).message);
+    console.warn('[invoice-email] receipt row failed:', (e as Error)?.name || 'Error');
+    return null;
   }
+}
+
+// Record a confirmed send. This runs AFTER the email is already out, so a DB
+// failure here is deliberately swallowed, NOT thrown. Since D8536 a retry would
+// not double-send anyway (the ledger answers it), but throwing would still make
+// Stripe retry an event whose receipt is already out.
+async function recordSent(env: Env, rowId: number): Promise<void> {
+  try {
+    await env.DB.prepare('UPDATE invoice_email_log SET sent_at = CURRENT_TIMESTAMP WHERE id = ?').bind(rowId).run();
+  } catch (e) {
+    console.warn('[invoice-email] recordSent failed:', (e as Error)?.name || 'Error');
+  }
+}
+
+/**
+ * Send one receipt under its reference. Accepted: recorded as sent. Timed out:
+ * it may have arrived, and the ledger will never send it again, so it is not
+ * thrown (a Stripe retry could do nothing but be answered from the ledger).
+ * Refused: thrown, so Stripe retries; nothing left, so the retry is safe.
+ */
+async function sendReceipt(
+  env: Env, rowId: number, label: string, opts: Parameters<typeof sendBrandedInvoiceEmailBound>[2],
+): Promise<void> {
+  const r = await sendBrandedInvoiceEmailBound(env, { flow: 'billing', subject: { kind: 'invoice_receipt', id: rowId }, attempt: 1 }, opts);
+  if (r.state === 'accepted') { await recordSent(env, rowId); return; }
+  if (r.state === 'timed_out') return;
+  throw new Error(`${label} receipt send failed: ${r.reason || 'unknown'}`);
 }
 
 // Download the Stripe invoice PDF bytes. The `invoice_pdf` URL carries its own
@@ -129,16 +166,13 @@ export async function handleInvoiceEvent(env: Env, inv: Record<string, unknown>)
   const pdfBytes = await fetchPdfBytes(str(inv.invoice_pdf).trim() || null);
   const description = deriveInvoiceDescription(inv);
 
-  const sent = await sendBrandedInvoiceEmail(env, {
-    to, name, amountCents, currency, description,
-    invoiceNumber, hostedInvoiceUrl, pdfBytes,
+  const rowId = await receiptRow(env, invoiceId, 'invoice', invoiceId, to);
+  if (!rowId) throw new Error('invoice receipt send failed: log_unavailable');
+  // Refused: non-2xx so Stripe retries the event; the retry finds the same row
+  // and the same reference, and sends (nothing left the first time).
+  await sendReceipt(env, rowId, 'invoice', {
+    name, amountCents, currency, description, invoiceNumber, hostedInvoiceUrl, pdfBytes,
   });
-  if (!sent.ok) {
-    // Surface as non-2xx so Stripe retries the event; the retry re-checks the
-    // ledger (no row yet) and re-sends. No partial state is written.
-    throw new Error(`invoice receipt send failed: ${sent.error || 'unknown'}`);
-  }
-  await recordSent(env, invoiceId, 'invoice', invoiceId, to);
 }
 
 /**
@@ -166,12 +200,9 @@ export async function handleChargeSucceeded(env: Env, charge: Record<string, unk
   // Non-invoice charges have no Stripe invoice PDF — link the Stripe receipt.
   const hostedInvoiceUrl = str(charge.receipt_url).trim() || null;
 
-  const sent = await sendBrandedInvoiceEmail(env, {
-    to, name, amountCents, currency, description,
-    invoiceNumber: null, hostedInvoiceUrl, pdfBytes: null,
+  const rowId = await receiptRow(env, chargeId, 'charge', null, to);
+  if (!rowId) throw new Error('charge receipt send failed: log_unavailable');
+  await sendReceipt(env, rowId, 'charge', {
+    name, amountCents, currency, description, invoiceNumber: null, hostedInvoiceUrl, pdfBytes: null,
   });
-  if (!sent.ok) {
-    throw new Error(`charge receipt send failed: ${sent.error || 'unknown'}`);
-  }
-  await recordSent(env, chargeId, 'charge', null, to);
 }

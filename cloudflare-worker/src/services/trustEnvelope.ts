@@ -26,7 +26,7 @@
  * throws `unfilled_fields` before anything is written.
  */
 import type { Env } from '../types';
-import { sendAgreementAssignedEmail } from './email';
+import { sendAgreementAssignedEmailBound, signingRef } from './email';
 import { sha256Hex } from './pdf';
 import { applyMergeFields, mergeTokensIn } from './mergeFields';
 
@@ -128,23 +128,30 @@ export async function createThreeWayNdaEnvelope(
     { user_id: 0, email: counterEmail, name: 'Axal Legal', role: 'axal' as const },
   ];
   const tokens: Record<string, string> = {};
+  const recipientIds: Record<string, number> = {};
   for (const s of signers) {
     const tok = genToken();
     tokens[s.role] = tok;
-    await env.DB.prepare(
+    const row = await env.DB.prepare(
       `INSERT INTO esign_recipients (envelope_id, user_id, recipient_email, recipient_name, signing_token, token_expires_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-    ).bind(envelopeId, s.user_id || null, s.email, s.name, tok, expiresAt).run();
+       VALUES (?, ?, ?, ?, ?, ?, 'pending') RETURNING id`,
+    ).bind(envelopeId, s.user_id || null, s.email, s.name, tok, expiresAt).first<{ id: number }>();
+    if (row?.id) recipientIds[s.role] = row.id;
   }
 
   // Fire-and-forget signer notifications. Failures are appended to the
   // envelope audit log but don't block the envelope creation.
   for (const s of signers) {
     const url = `${opts.appUrl}/esign/${tokens[s.role]}`;
+    // D8536 — to the address the recipients row names, under the reference of this token's first send.
+    const recipientId = recipientIds[s.role];
+    if (!recipientId) continue;
     try {
-      await sendAgreementAssignedEmail(env, s.email, s.name, tplTitle, url, 'Axal Trust Center');
-    } catch (e) {
-      console.error('[trust] 3-way email failed', s.role, e);
+      await sendAgreementAssignedEmailBound(env, await signingRef(recipientId, tokens[s.role], 'send'), {
+        recipientName: s.name, agreementLabel: tplTitle, signLink: url, adminName: 'Axal Trust Center',
+      });
+    } catch (e: any) {
+      console.error('[trust] 3-way email failed', s.role, e?.name || 'Error');
     }
   }
 

@@ -1,0 +1,32 @@
+{
+  "GET /api/integrations/:key": {
+    "kind": "target"
+  },
+  "GET /api/integrations/:uid/repositories": {
+    "kind": "target"
+  },
+  "GET /api/integrations/mercury/oauth/start": {
+    "kind": "filter"
+  },
+  "GET /api/integrations/oauth/:provider/start": {
+    "kind": "target"
+  },
+  "GET /api/integrations/suggestions": {
+    "kind": "filter"
+  },
+  "POST /api/integrations/:uid/push": {
+    "kind": "target"
+  },
+  "POST /api/integrations/:uid/sync": {
+    "kind": "target"
+  },
+  "POST /api/integrations/connect": {
+    "kind": "target"
+  },
+  "POST /api/integrations/requests": {
+    "kind": "target"
+  },
+  "PUT /api/integrations/:uid/repositories": {
+    "kind": "target"
+  }
+}

@@ -14,7 +14,14 @@ import { wellbeingReflectionsApi } from '../lib/api/wellbeingReflections';
 import { dayLabel, deviceTimezone, periodHref, periodState } from '../pages/wellbeing/reflectionsModel';
 
 // The editor loads when the popover opens on a day not yet saved, so the shell's first visit stays small.
-const ReflectionEditor = lazy(() => import('../pages/wellbeing/Reflections').then((m) => ({ default: m.ReflectionEditor })));
+let editorModule = null;
+/**
+ * Loads the popover's editor once. React.lazy and anything that needs the editor ready share this one promise:
+ * a test awaits it before opening the popover rather than counting event-loop turns (#8438).
+ */
+export const loadReflectionEditor = () => (editorModule ??= import('../pages/wellbeing/Reflections')
+  .then((m) => ({ default: m.ReflectionEditor })));
+const ReflectionEditor = lazy(loadReflectionEditor);
 
 function StateChip({ state, testid }) {
   const mark = state.kind === 'saved' ? '✓' : state.kind === 'unreadable' ? '?' : '○';

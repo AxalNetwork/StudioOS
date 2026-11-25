@@ -1,3 +1,7 @@
+/**
+ * D5621: standalone PR tier selection and exact-head full-run evidence
+ * validation.
+ */
 import { createHash } from 'node:crypto';
 
 const SHA = /^[0-9a-f]{40}$/;

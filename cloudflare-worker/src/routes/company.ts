@@ -1138,15 +1138,27 @@ async function listInvitations(env: Env, companyId: number): Promise<any[]> {
  * recovered — which is the property that makes the stored hash worth having.
  */
 async function issueInvitationEmail(
-  env: Env, company: Company, inviter: User, email: string, token: string,
+  env: Env, company: Company, inviter: User, tokenHash: string, token: string,
 ): Promise<boolean> {
   const base = String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
   const link = `${base}/company/invitations/accept?token=${encodeURIComponent(token)}`;
   try {
-    const { sendCompanyInvitationEmail } = await import('../services/email');
-    return await sendCompanyInvitationEmail(env, email, company.company_name, inviter.name || 'A teammate', link);
+    // D8536 (#8536): sent under the delivery contract. The reference is the
+    // invitation row and this issuance of its token (a resend mints a new
+    // token, so it is a new attempt); the address is the one the row names.
+    const inv = await env.DB.prepare(
+      `SELECT id FROM company_invitations WHERE token_hash = ?`,
+    ).bind(tokenHash).first<{ id: number }>();
+    if (!inv) return false;
+    const { sendCompanyInvitationEmailBound } = await import('../services/email');
+    const r = await sendCompanyInvitationEmailBound(env, {
+      flow: 'invitation',
+      subject: { kind: 'company_invitation', id: Number(inv.id) },
+      attempt: tokenHash.slice(0, 16),
+    }, { companyName: company.company_name, inviterName: inviter.name || 'A teammate', link });
+    return r.state === 'accepted';
   } catch (e) {
-    console.warn('[company] invitation email failed', { company_id: company.id }, e);
+    console.warn('[company] invitation email failed', { company_id: company.id }, (e as Error)?.name || 'Error');
     return false;
   }
 }
@@ -1197,7 +1209,7 @@ r.post('/company/:uid/invitations', async (c) => {
       throw e;
     }
 
-    const sent = await issueInvitationEmail(c.env, company, user, email, token);
+    const sent = await issueInvitationEmail(c.env, company, user, tokenHash, token);
     if (sent) {
       await c.env.DB.prepare(
         `UPDATE company_invitations SET email_sent = 1, updated_at = datetime('now') WHERE token_hash = ?`,
@@ -1252,13 +1264,19 @@ r.post('/company/:uid/invitations/:inviteUid/resend', async (c) => {
     // The clock restarts with the token: the old link stops working the moment
     // this row's hash changes, so leaving the old expiry would shorten an
     // invitation that was just re-sent.
-    await c.env.DB.prepare(
+    // D8528: guarded on the pending state read above, so an invitation accepted or
+    // revoked meanwhile is neither given a new token nor mailed again.
+    const reissued = await c.env.DB.prepare(
       `UPDATE company_invitations
           SET token_hash = ?, email_sent = 0, expires_at = datetime('now', '+14 days'),
               updated_at = datetime('now')
-        WHERE id = ?`,
+        WHERE id = ? AND status = 'pending'`,
     ).bind(tokenHash, inv.id).run();
-    const sent = await issueInvitationEmail(c.env, company, user, inv.email, token);
+    if (!reissued.meta?.changes) {
+      const now = await c.env.DB.prepare('SELECT status FROM company_invitations WHERE id = ?').bind(inv.id).first<{ status: string }>();
+      return c.json({ detail: 'That invitation is no longer pending', code: now?.status ?? 'not_found' }, 409);
+    }
+    const sent = await issueInvitationEmail(c.env, company, user, tokenHash, token);
     if (sent) {
       await c.env.DB.prepare(
         `UPDATE company_invitations SET email_sent = 1, updated_at = datetime('now') WHERE id = ?`,
@@ -1341,8 +1359,21 @@ r.post('/company/invitations/accept', async (c) => {
     if (company.archived_at) return c.json({ detail: 'That company is archived', code: 'archived' }, 410);
 
     const already = await getLink(c.env, company.id, user.id);
-    if (!already) {
-      await c.env.DB.batch([
+    // D8528: the answer is claimed first, guarded on what was read above (still
+    // pending, still this token), and the seat and its event are written only
+    // when the claim wins, in the same batch. A revoke, a resend or a second tab
+    // that got there first leaves the claim changing no row, and nothing is
+    // written. An invitation accepted by someone who was added directly in the
+    // meantime is still accepted: the outcome it asked for is the one that holds.
+    const outcome = await runDecision(c.env, [
+      c.env.DB.prepare(
+        `UPDATE company_invitations
+            SET status = 'accepted', accepted_by_user_id = ?, accepted_at = datetime('now'),
+                updated_at = datetime('now')
+          WHERE id = ? AND status = 'pending' AND token_hash = ?`,
+      ).bind(user.id, inv.id, inv.token_hash),
+      decisionGuard(c.env),
+      ...(already ? [] : [
         c.env.DB.prepare(
           `INSERT INTO user_company_links
              (uid, company_id, user_id, role_in_company, is_primary_admin, title, authority, created_at)
@@ -1350,16 +1381,15 @@ r.post('/company/invitations/accept', async (c) => {
         ).bind(newUid(), company.id, user.id, inv.role_in_company,
                inv.title, inv.authority, nowIso()),
         membershipEvent(c.env, { kind: 'join', companyId: company.id, actorUserId: user.id, targetUserId: user.id, after: { role_in_company: inv.role_in_company, is_primary_admin: false } }),
-      ]);
+      ]),
+      clearGuard(c.env),
+    ]);
+    if (outcome.lost) {
+      const now = await c.env.DB.prepare('SELECT status, token_hash FROM company_invitations WHERE id = ?').bind(inv.id).first<any>();
+      // A re-sent invitation answers to its new token only: the old one is not found, as before.
+      if (!now || now.token_hash !== inv.token_hash) return c.json({ detail: 'Invitation not found' }, 404);
+      return c.json({ detail: 'This invitation is no longer valid', code: now.status }, 410);
     }
-    // An invitation accepted by someone who was added directly in the meantime
-    // is still accepted — the outcome it asked for is the outcome that holds.
-    await c.env.DB.prepare(
-      `UPDATE company_invitations
-          SET status = 'accepted', accepted_by_user_id = ?, accepted_at = datetime('now'),
-              updated_at = datetime('now')
-        WHERE id = ?`,
-    ).bind(user.id, inv.id).run();
     return c.json({
       ok: true,
       company_uid: company.uid,

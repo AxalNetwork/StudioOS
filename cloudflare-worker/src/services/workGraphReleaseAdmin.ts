@@ -12,7 +12,9 @@
  * owner's answer A to D5585-p7 §3): every person of the scope who holds a grant there and is still linked to the
  * company. Being a Super Admin grants no release authority by itself: a Super Admin holds one only where one was
  * granted to them, like anyone else, so with no grant an approval counts for nobody and a takedown is refused
- * `no_authority` (and recorded). Tests may replace the resolver.
+ * `no_authority` (and recorded). Part 9 (D5585-p9) also resolves `revokedUserIds`: the scope's people whose account is
+ * revoked (`users.is_active = 0`): their approvals stop counting, and they cannot decide, attest or act. Tests may
+ * replace either.
  *
  * THE SCHEDULE. `scheduledReleaseDrain` runs from the existing every-minute cron (`index.ts` `scheduled()`, on minutes
  * where `% 5 === 2`), inside that tick's queue lease. Off, it returns null before touching D1. On, it runs ONE bounded
@@ -31,7 +33,7 @@ import { RELEASE_RETRACT_KIND } from './workGraphReleaseDelivery';
 import { drainReleaseEffects, releaseDeliveryEnabled, type ReleaseDrainResult } from './workGraphReleaseAdapters';
 import type { ReleaseDistributionChannels } from './workGraphReleaseDistribution';
 import type { DeliveryStatus } from './workGraphEffects';
-import { releaseAuthoritiesForScope } from './workGraphReleaseAuthorities';
+import { releaseAuthoritiesForScope, revokedReleaseUsers } from './workGraphReleaseAuthorities';
 
 /** The value of `WORK_GRAPH_RELEASE_ADMIN` that turns the routes on. Unset, or anything else, is off. */
 export const RELEASE_ADMIN_ON = 'on';
@@ -57,6 +59,12 @@ export const RELEASE_ADMIN_DEPS = {
    */
   authorities: (env: Pick<Env, 'DB'>, scope: Scope): Promise<ReadonlyMap<number, readonly string[]>> =>
     releaseAuthoritiesForScope(env, { tenantId: scope.tenantId, companyId: scope.companyId }),
+  /**
+   * The people of this scope whose account is revoked (`users.is_active = 0`), D5585-p9: their approvals stop counting,
+   * and they cannot decide, attest, publish or take down (`revoked_author`). Replaceable in tests.
+   */
+  revokedUsers: (env: Pick<Env, 'DB'>, scope: Scope): Promise<ReadonlySet<number>> =>
+    revokedReleaseUsers(env, { tenantId: scope.tenantId, companyId: scope.companyId }),
 };
 
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
@@ -68,9 +76,10 @@ export function scopeFrom(tenant: unknown, company: unknown): Scope | null {
   return posInt(t) && posInt(co) ? { tenantId: t, companyId: co, projectId: null } : null;
 }
 
-/** The context a Super Admin acts in: the named scope and the authorities resolved for it. */
+/** The context a Super Admin acts in: the named scope, the authorities resolved for it and its revoked people. */
 export async function releaseAdminContext(env: Pick<Env, 'DB'>, scope: Scope): Promise<ReleaseContext> {
-  return { scope, authorities: await RELEASE_ADMIN_DEPS.authorities(env, scope) };
+  const [authorities, revokedUserIds] = await Promise.all([RELEASE_ADMIN_DEPS.authorities(env, scope), RELEASE_ADMIN_DEPS.revokedUsers(env, scope)]);
+  return { scope, authorities, revokedUserIds };
 }
 
 export const listLimit = (v: unknown) => {

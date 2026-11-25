@@ -1,3 +1,6 @@
+// D6387: exact attempt dispatch, paginated reconciliation, checkpoints and the
+// trusted Actions job.
+//
 // D6387: exact delivery hints, paginated reconciliation and durable progress after a successful scan.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

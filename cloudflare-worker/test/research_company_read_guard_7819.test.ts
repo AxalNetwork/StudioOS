@@ -25,6 +25,8 @@ export const PENDING_READERS = [
   'services/validateWriters.ts',
 ].map((p) => `cloudflare-worker/src/${p}`);
 export const MAINTENANCE_WRITERS: string[] = [
+  // D7821: recompute code-first mappings, including held companies, without serving catalogue rows.
+  'cloudflare-worker/src/services/researchCompanyClassification.ts',
   // D7820 (#7820): an admin-only read (uid, name, source_name) for the review routes; it writes nothing to the table.
   'cloudflare-worker/src/services/researchCompanyReview.ts',
   // D7825 (#7825): the admin domain review sets or clears website_verified_at on the reviewed company only.

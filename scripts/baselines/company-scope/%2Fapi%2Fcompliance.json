@@ -1,0 +1,14 @@
+{
+  "DELETE /api/compliance/events/:id": {
+    "kind": "target"
+  },
+  "GET /api/compliance/events": {
+    "kind": "filter"
+  },
+  "PATCH /api/compliance/events/:id": {
+    "kind": "target"
+  },
+  "POST /api/compliance/events": {
+    "kind": "target"
+  }
+}

@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #6326: the `mutation-check` skill. `list` prints the test files the branch
+ * adds or changes and the command that runs each alone. `run --spec <json>`
+ * runs each test unmutated, applies each `{file, find, replace, test, expect?,
+ * equivalent?}` mutation alone, expects a failure, restores the file byte for
+ * byte (SHA-256 checked) and reruns every test. Ends with the fixed `N
+ * mutations, N caught, N equivalent (why)` line. Restores on error, Ctrl-C and
+ * exit; `restore` undoes a killed run from its backup outside the repository.
+ * Never commits, pushes or calls GitHub.
+ *
  * #6326: mutation-check the assertions a branch adds (AGENTS.md § House rules,
  * **Tests**: "Mutation-check every new assertion both ways"). Used by the
  * `mutation-check` skill (.claude/skills/mutation-check/SKILL.md).
