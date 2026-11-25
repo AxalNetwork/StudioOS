@@ -1,4 +1,10 @@
-/** D7255 (#7255): descriptor-bound local file access and private operator state, never shared temp names. */
+/**
+ * D7255: descriptor-bound regular file reads/edits and private, no-follow
+ * operator-state files; rejects symlinks and hard links before truncation.
+ *
+ * D7255 (#7255): descriptor-bound local file access and private operator state,
+ * never shared temp names.
+ */
 import { constants, closeSync, fchmodSync, fstatSync, ftruncateSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 
 const noFollow = () => {

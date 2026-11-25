@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard
+ * on #5600. D5973: also writes one classified row per merge-group candidate to
+ * `$CI_SCORECARD_ROWS`.
+ */
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BUDGET, LANDING_BUDGET, QUEUE_WORKFLOWS, botKind, candidateRows, evenlySpaced, greenAt, landingReport, mergeCommit, providerFromLog,

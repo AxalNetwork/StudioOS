@@ -1,4 +1,11 @@
 /**
+ * D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object
+ * keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s
+ * static imports and app registrations, `advisors.ts`'s method plus path
+ * registrations; dynamic imports unfrozen) and every name `../hub-freeze.json`
+ * does not list, each with its `HUBS.md` section. A set, not a count. Run by
+ * `frontend/test/hub_freeze_5615.test.mjs`.
+ *
  * The hub freeze (D5615, #5615): five files that still collect entries for the
  * whole product take no new ones.
  *
@@ -37,6 +44,11 @@
  *
  * It runs from `frontend/test/hub_freeze_5615.test.mjs`, under `npm run
  * test:frontend`, which names every unlisted entry and its `HUBS.md` section.
+ *
+ * `hub-freeze.json`: D5615: the sorted names each frozen hub held when the
+ * freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays
+ * listed; never add one to let an entry in
+ * (`documentation/architecture/HUBS.md`).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

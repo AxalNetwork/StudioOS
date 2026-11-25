@@ -1,5 +1,23 @@
 #!/usr/bin/env node
 /**
+ * A Worker comment claiming a Cloudflare Access perimeter that is not there.
+ * Task #33 took Access off `/api/admin/*`, `/api/monitoring/*` and
+ * `/api/infra/*` because it answered legitimate admins with a fail-closed 403,
+ * and seventeen comments in twelve route and middleware files went on
+ * describing it as live — "sits inside the existing `/api/admin/*` Cf-Access
+ * perimeter", "(in prod) pass the /api/admin/* Cloudflare Access perimeter" —
+ * so anyone reading a handler took its `requireAdmin` for the inner line of
+ * defence when it is the only one. The middleware's own header named three
+ * mounts that never existed; the only two left guard the KYC document routes.
+ * Every comment mentioning Access must be quoted by an entry in
+ * `access-comment-allowlist.json` — a file, a phrase, a reason, never a line
+ * number — and the gate fails on an entry whose phrase is no longer in a
+ * comment as well as on a mention no entry covers. Comments are found by a
+ * lexer that knows strings, template literals and regex literals, so
+ * `requireCfAccess()` on a code line or `'[cfAccess]'` in a log string is not a
+ * claim; a sentence wrapped over two comment lines is matched as one. The rule
+ * lives in `lib/accessComments.mjs`.
+ *
  * Every comment in the Worker that mentions Cloudflare Access must be one the
  * ledger vouches for.
  *

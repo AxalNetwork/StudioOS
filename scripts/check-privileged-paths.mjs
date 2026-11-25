@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/** D8067 (#8067): the privileged-path list (`merge-control/src/lib/classify.mjs` `PRIVILEGED_PATHS`) as the gates outside code read it. No flag prints the list and the ruleset's file-path condition for #8060 and #8082; `--json` prints that condition only; `--check` fails when `.github/CODEOWNERS` does not hold the generated block; `--write` rewrites it. */
 /**
  * D8067 (#8067): the privileged-path list as the gates outside code read it.
  *   node scripts/check-privileged-paths.mjs            prints the list and the ruleset's file-path condition (#8060, #8082)

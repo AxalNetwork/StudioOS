@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * #4566: writes one run's synthetic seed, cleanup or residual check as a SQL
+ * file for the owner to apply to the preview database. Refuses without an
+ * `isolated` preflight under a day old (`--local` is for a local SQLite copy
+ * only). Rules in `lib/agentSyntheticFixtures.mjs`.
+ *
  * #4566 — write the synthetic seed, cleanup or residual check for one run as
  * a SQL file (rules: `scripts/lib/agentSyntheticFixtures.mjs`).
  *

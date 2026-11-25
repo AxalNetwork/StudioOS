@@ -1,3 +1,5 @@
+# D4557: source guard mutations against isolated Worker copies and deny-network
+# image fixtures.
 """D4557: mutation journeys in an isolated source copy, never editing a live test tree."""
 import argparse
 from pathlib import Path
