@@ -58,7 +58,7 @@ function Evidence({ lines, label }) {
     {lines.map((e) => <li key={e.label} className="flex flex-wrap items-baseline gap-x-1.5 text-[12px]">
       {e.state === 'value'
         ? <><span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300"><span aria-hidden="true">● </span>on record</span>
-          <b className="font-semibold text-axal-ink dark:text-gray-100">{e.label}</b>{e.asOf ? <small className={MUTED}>as of {e.asOf}</small> : <small className={MUTED}>as-of not recorded</small>}</>
+          <b className="font-semibold text-axal-ink dark:text-gray-100">{e.label}</b>{e.asOf ? <small className={MUTED}>as of {e.asOf}</small> : <small className={MUTED}>as-of not recorded</small>}{e.source && <a href={e.source} target="_blank" rel="noopener noreferrer" className={LINK}>Source</a>}</>
         : e.state === 'unavailable'
           ? <><b className="font-semibold text-axal-ink dark:text-gray-100">{e.label}</b><DataState state="unavailable" what={e.label} claim={e.reason} /></>
           : <><b className="font-semibold text-axal-ink dark:text-gray-100">{e.label}</b><DataState state="not_recorded" reason={e.reason} /></>}
@@ -162,7 +162,7 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
       .catch(() => { if (live) setGeo({ code, state: 'unreadable', data: null }); });
     return () => { live = false; };
   }, [code, tries]);
-  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners, m.customers) : null;
+  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners, m.customers, m.indices) : null;
   const geoState = !code ? null : geo.code === code ? geo.state : 'loading';
 
   // The entry plan's rows carry the declared actions; the steps themselves come from `parts.market.steps`.
