@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TokenPnl, tokenMarginView } from '../src/pages/hq/RevenuePage.jsx';
+import { coverageSources } from '../src/pages/hq/revenue/revenueModel.js';
 import { codeOnly } from './_codeOnly.mjs';
 import { revenuePageSource } from './_revenuePage.mjs';
 
@@ -83,7 +84,8 @@ test('cost and margin fail apart: an unreadable ledger leaves the cost on screen
   assert.match(shown, /Model and inference cost \$3\.50/, 'the cost is kept');
   // D5039: a ledger that could not be read is Unavailable, which is not the same state as Not recorded.
   assert.match(shown, /AI margin Unavailable/);
-  assert.match(shown, /The AI holds and token ledger could not be read, so the margin is not shown\./);
+  assert.doesNotMatch(shown, /The AI holds and token ledger could not be read/);
+  assert.equal(coverageSources({ summary: { token_cost: t }, period: '2026-Q4' }).find((s) => s.key === 'ai_margin').reason, t.billed_reason);
   assert.doesNotMatch(shown, /Top-up revenue \$|Cost of that top-up use \$|Credits given \$|Included allowance used \$/, 'no part of an unreadable ledger is drawn');
 });
 
@@ -92,7 +94,8 @@ test('an unreadable usage log: nothing is drawn as a number, and the reason is t
   const v = tokenMarginView(t);
   assert.equal(v.state, 'unreadable');
   const shown = draw(t);
-  assert.match(shown, /The AI usage log could not be read\./);
+  assert.doesNotMatch(shown, /The AI usage log could not be read/);
+  assert.equal(coverageSources({ summary: { token_cost: t }, period: '2026-Q4' }).find((s) => s.key === 'ai_margin').reason, t.reason);
   assert.match(shown, /AI margin Unavailable/);
   assert.doesNotMatch(shown, /\$\d/, 'a dollar figure appeared with nothing behind it');
   for (const missing of [null, undefined, {}]) assert.equal(tokenMarginView(missing).state, 'unreadable');

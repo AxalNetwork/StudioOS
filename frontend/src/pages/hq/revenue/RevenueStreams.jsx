@@ -4,7 +4,7 @@ import {
 } from './RevenueStates.jsx';
 import {
   TREND_REASON, UNRECORDED_CURRENCY, finite, invoiceOnlyCurrencies, isReady, licenceStreamCells, moneyFigure, pendingState,
-  periodLabel, statementTotals, summaryTemporal, tokenMarginView,
+  periodLabel, subscriptionLines, licenceAiRows, countFigure, statementTotals, summaryTemporal, tokenMarginView,
 } from './revenueModel.js';
 
 /**
@@ -37,6 +37,7 @@ function LicenceCoverage({ cells, onWhy }) {
 }
 
 export function RevenueStreams({ stream = 'all', summary, periodStatements, period, onWhy }) {
+  const subscriptions = subscriptionLines(summary, period);
   const ready = isReady(summary);
   const fees = ready ? summary.licence_fees : null;
   const token = ready ? summary.token_cost : null;
@@ -158,14 +159,17 @@ export function RevenueStreams({ stream = 'all', summary, periodStatements, peri
               </tr>
             )}
 
-            <tr hidden={stream !== 'all' && stream !== 'subscriptions'}>
-              <td className={TD}><b>Subscriptions</b><small className="block text-[12.5px] text-axal-muted dark:text-gray-400">Stripe · per customer only</small></td>
-              <td className={`${TD} ${NUM}`}>{na}</td>
-              <td className={`${TD} ${NUM}`}>{ready ? nr : <Figure figure={pending} />}</td>
-              <td className={`${TD} ${NUM}`}>{ready ? nr : <Figure figure={pending} />}</td>
-              <td className={`${TD} ${NUM}`}>{na}</td><td className={`${TD} ${NUM}`}>{na}</td>
-              <td className={TD}><CoverageMark state={ready ? 'not_recorded' : pending.state} label={ready ? 'Missing ledger' : undefined} /> <Why source="subscriptions" onOpen={onWhy} /></td>
-            </tr>
+            {(subscriptions.rows.length ? subscriptions.rows : [{ currency: null, gross: { state: subscriptions.metric.state === 'recorded' ? 'not_recorded' : subscriptions.metric.state, text: null }, refunds: null, net: { state: subscriptions.metric.state === 'recorded' ? 'not_recorded' : subscriptions.metric.state, text: null } }]).map((r) => (
+              <tr key={r.currency || 'subscriptions'} hidden={stream !== 'all' && stream !== 'subscriptions'}>
+                <td className={TD}><b>Subscriptions{r.currency ? ` · ${r.currency}` : ''}</b><small className="block text-[12.5px] text-axal-muted dark:text-gray-400">Net receipts after refunds</small></td>
+                <td className={`${TD} ${NUM}`}>{na}</td><td className={`${TD} ${NUM}`}>{na}</td>
+                <td className={`${TD} ${NUM}`}><Figure figure={r.net} />
+                  {r.currency && <small className="mt-1 block text-[12.5px]">Gross <Figure figure={r.gross} /> · Refunds <Figure figure={r.refunds} /></small>}
+                </td>
+                <td className={`${TD} ${NUM}`}>{na}</td><td className={`${TD} ${NUM}`}>{na}</td>
+                <td className={TD}><CoverageMark label={ready && !summary.metrics?.subscription_revenue ? "Missing ledger" : undefined} state={subscriptions.metric.state === 'recorded' ? 'complete' : subscriptions.metric.state === 'incomplete' ? 'partial' : subscriptions.metric.state} /> <Why source="subscriptions" onOpen={onWhy} /></td>
+              </tr>
+            ))}
 
             <tr hidden={stream !== 'all' && stream !== 'tokens'}>
               <td className={TD}><b>AI / tokens</b><small className="block text-[12.5px] text-axal-muted dark:text-gray-400">USD</small></td>
@@ -228,7 +232,7 @@ export function AiEconomics({ token, period, onWhy }) {
         </span>
         <span className="flex flex-wrap items-center gap-1.5"><CoverageMark state={cov} label={cov === 'partial' ? 'Partial coverage' : undefined} /><When kind="period" period={period} /></span>
         <p className="text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">
-          {v.state === 'ok' ? 'Top-up revenue, less its share of the cost, less credits HQ gave.' : v.reason}
+          {v.state === 'ok' ? 'Top-up revenue, less its share of the cost, less credits HQ gave.' : 'See data coverage for this source.'}
           {' '}<Why source="ai_margin" onOpen={onWhy} label="Data coverage" />
         </p>
       </div>
@@ -255,10 +259,24 @@ export function AiEconomics({ token, period, onWhy }) {
 /** D5027's name for the block, kept so its tests and callers read one component. */
 export const TokenPnl = AiEconomics;
 
-export function AiEconomicsSection({ summary, period, onWhy }) {
+export function AiEconomicsSection({ summary, period, licenceUid, onWhy }) {
+  const ai = licenceAiRows(summary, period, licenceUid);
   const token = isReady(summary) ? summary.token_cost : null;
   return (
-    <Section id="revenue-ai" title="AI economics" when={<When kind="period" period={period} />} sub="USD · platform-wide; not attributed to a licence" testId="hq-revenue-ai-section">
+    <Section id="revenue-ai" title="AI economics" when={<When kind="period" period={period} />} sub="USD · per licence where recorded; platform totals kept separate" testId="hq-revenue-ai-section">
+      <div className="mb-4" data-testid="hq-revenue-ai-licences">
+        <h3 className="mb-2 text-[14px] font-bold">AI per licence <Why source={isReady(summary) && !summary.metrics?.ai_margin_per_licence ? "ai_margin" : "ai_licences"} onOpen={onWhy} /></h3>
+        {ai.rows.length ? <div className="relative overflow-x-auto"><table className={TABLE}>
+          <caption className="sr-only">AI billed, cost and margin by licence for {periodLabel(period)}</caption>
+          <thead><tr>{['Licence', 'Billed · USD', 'Cost · USD', 'Margin · USD'].map((h) => <th key={h} scope="col" className={TH}>{h}</th>)}</tr></thead>
+          <tbody>{ai.rows.map((r) => <tr key={r.licence_uid}><td className={TD}>{r.name}</td>{[r.billed, r.cost, r.margin].map((f, i) => <td key={i} className={`${TD} ${NUM}`}><Figure figure={f} /></td>)}</tr>)}</tbody>
+        </table></div> : <Figure figure={{ state: ai.metric.state === 'recorded' ? 'not_recorded' : ai.metric.state, text: null }} />}
+        <dl className="mt-2 flex flex-wrap gap-4 text-[12.5px]">
+          <div><dt>Unattributed runs</dt><dd><Figure figure={countFigure(ai.unattributed, { absent: ai.metric.state === 'unavailable' ? 'unavailable' : 'not_recorded' })} /></dd></div>
+          <div><dt>Pre-migration runs</dt><dd><Figure figure={countFigure(ai.preMigration, { absent: ai.metric.state === 'unavailable' ? 'unavailable' : 'not_recorded' })} /></dd></div>
+        </dl>
+      </div>
+      <h3 className="mb-2 text-[14px] font-bold">Platform AI economics · USD</h3>
       {isReady(summary)
         ? <TokenPnl token={token} period={period} onWhy={onWhy} />
         : <Figure figure={{ state: pendingState(summary), text: null }} />}
