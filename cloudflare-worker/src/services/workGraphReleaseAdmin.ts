@@ -125,19 +125,32 @@ export const listLimit = (v: unknown) => {
   return Number.isSafeInteger(n) && n > 0 ? Math.min(n, RELEASE_DRAIN_LIMITS.listMax) : RELEASE_DRAIN_LIMITS.listMax;
 };
 
+/**
+ * Part 11 (D5585-p11): a release line has no name of its own. It is a `composite` asset, and neither
+ * `work_graph_assets` nor `work_graph_release_lines` has a name or title column; a line is its uid, audience and
+ * project. Every read says so (`lineName: null`, `lineNameReason: 'not_recorded'`) rather than inventing one.
+ */
+export const LINE_NAME_NOT_RECORDED = { lineName: null, lineNameReason: 'not_recorded' } as const;
+
 export interface ReleaseLineItem {
   lineAssetUid: string; projectId: number | null; audience: string; createdByUserId: number; createdAt: string;
   headManifestUid: string | null; headSeq: number; manifests: number;
+  /** Part 11: always null, with its reason (`LINE_NAME_NOT_RECORDED`). */
+  lineName: null; lineNameReason: 'not_recorded';
+  /** Part 11: the name of the line's project, when it names one of this company's projects that is not deleted. */
+  projectName: string | null;
 }
 
 /** The release lines of one scope, newest first, each with the manifest its publication pointer names. */
 export async function listReleaseLines(env: Pick<Env, 'DB'>, scope: Scope, limit: number): Promise<{ lines: ReleaseLineItem[]; cost: Cost }> {
   const m = new Meter(env);
   const rows = await m.all<{ line_asset_uid: string; project_id: number | null; audience: string; created_by_user_id: number; created_at: string;
-    head_revision_uid: string | null; head_seq: number; manifests: number }>(env.DB.prepare(
+    head_revision_uid: string | null; head_seq: number; manifests: number; project_name: string | null }>(env.DB.prepare(
     `SELECT l.line_asset_uid, l.project_id, l.audience, l.created_by_user_id, l.created_at, a.head_revision_uid, a.head_seq,
-            (SELECT COUNT(*) FROM work_graph_release_manifests x WHERE x.line_asset_uid = l.line_asset_uid) AS manifests
+            (SELECT COUNT(*) FROM work_graph_release_manifests x WHERE x.line_asset_uid = l.line_asset_uid) AS manifests,
+            p.name AS project_name
        FROM work_graph_release_lines l JOIN work_graph_assets a ON a.asset_uid = l.line_asset_uid
+       LEFT JOIN projects p ON p.id = l.project_id AND p.company_id = l.company_id AND p.deleted_at IS NULL
       WHERE l.tenant_id = ? AND l.company_id = ?
       ORDER BY l.created_at DESC, l.line_asset_uid
       LIMIT ?`,
@@ -146,6 +159,7 @@ export async function listReleaseLines(env: Pick<Env, 'DB'>, scope: Scope, limit
     lines: rows.map((r) => ({
       lineAssetUid: r.line_asset_uid, projectId: r.project_id, audience: r.audience, createdByUserId: r.created_by_user_id,
       createdAt: r.created_at, headManifestUid: r.head_revision_uid, headSeq: Number(r.head_seq), manifests: Number(r.manifests),
+      ...LINE_NAME_NOT_RECORDED, projectName: r.project_name ?? null,
     })),
     cost: { ...m.cost },
   };

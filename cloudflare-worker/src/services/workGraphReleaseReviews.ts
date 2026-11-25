@@ -21,6 +21,7 @@ import type { Cost } from './workGraphRevisions';
 import { Meter, POLICY_PROFILES, takedownsCovering, type Audience, type ManifestBody, type ProfileName, type ReleaseContext } from './workGraphReleases';
 import { resolveReleaseAuthorities } from './workGraphReleaseAuthorities';
 import { RELEASE_ADMIN_DEPS } from './workGraphReleaseAdmin';
+import { releasePeople } from './workGraphReleaseDirectory';
 
 export const REVIEW_LIMITS = Object.freeze({
   /** Unpublished manifests one pending read considers at most, newest first. */
@@ -56,6 +57,8 @@ export function decidableProfiles(held: readonly string[]): ProfileName[] {
 
 export interface PendingItem {
   manifestUid: string; lineAssetUid: string; digest: string; audience: Audience;
+  /** Part 11: who cut the manifest (named in the answer's `people` only if linked to the company). */
+  authorUserId: number;
   /** The profiles of this manifest the person can decide and has no live decision on. */
   profiles: ProfileName[];
   /** For each of those profiles, the authorities the person holds that approve it. */
@@ -69,8 +72,8 @@ export async function pendingReleaseDecisions(
   const m = new Meter(env);
   const can = decidableProfiles(held);
   if (!can.length) return { pending: [], cost: { ...m.cost } };
-  const rows = await m.all<{ manifest_uid: string; line_asset_uid: string; manifest_digest: string; audience: Audience; body_json: string }>(env.DB.prepare(
-    `SELECT mf.manifest_uid, mf.line_asset_uid, mf.manifest_digest, mf.audience, mf.body_json
+  const rows = await m.all<{ manifest_uid: string; line_asset_uid: string; manifest_digest: string; audience: Audience; body_json: string; actor_user_id: number }>(env.DB.prepare(
+    `SELECT mf.manifest_uid, mf.line_asset_uid, mf.manifest_digest, mf.audience, mf.body_json, mf.actor_user_id
        FROM work_graph_release_manifests mf JOIN work_graph_assets a ON a.asset_uid = mf.line_asset_uid
       WHERE mf.tenant_id = ? AND mf.company_id = ? AND mf.actor_user_id <> ?
         AND a.head_revision_uid IS NOT mf.manifest_uid
@@ -96,7 +99,19 @@ export async function pendingReleaseDecisions(
     if ((await takedownsCovering(env, m, scope.tenantId, scope.companyId, r.manifest_uid)).length) continue;
     const authorities: PendingItem['authorities'] = {};
     for (const p of profiles) authorities[p] = POLICY_PROFILES[p].authorities.filter((a) => held.includes(a));
-    pending.push({ manifestUid: r.manifest_uid, lineAssetUid: r.line_asset_uid, digest: r.manifest_digest, audience: r.audience, profiles, authorities });
+    pending.push({
+      manifestUid: r.manifest_uid, lineAssetUid: r.line_asset_uid, digest: r.manifest_digest, audience: r.audience,
+      authorUserId: Number(r.actor_user_id), profiles, authorities,
+    });
   }
   return { pending, cost: { ...m.cost } };
+}
+
+/**
+ * Part 11 (D5585-p11): the names a reviewer may see beside the pending list's authors — only people linked to the
+ * reviewer's company, never an email (#3841); anyone else is null. One statement, none for an empty list.
+ */
+export async function pendingPeople(env: Pick<Env, 'DB'>, scope: Scope, items: readonly PendingItem[]) {
+  const m = new Meter(env);
+  return { people: await releasePeople(env, m, items.map((i) => i.authorUserId), { linkedTo: scope.companyId }), cost: m.cost };
 }

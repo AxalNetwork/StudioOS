@@ -7,7 +7,7 @@ No page or canvas is implemented here. Signed in, for people linked to the compa
 
 | Route | Purpose |
 | --- | --- |
-| `GET /pending?tenant_id&company_id` | The manifests awaiting the caller's decision: only profiles a release authority they hold can decide, ids and digests only |
+| `GET /pending?tenant_id&company_id` | The manifests awaiting the caller's decision: only profiles a release authority they hold can decide, ids and digests only; since part 11 (D5585-p11) each author's id, named only when linked to the company |
 | `POST /manifests/:manifest/decisions` | Record the caller's own approve, reject, request for changes or withdrawal, at the digest they reviewed (step-up) |
 | `POST /attestations` | Attest a component revision at its digest, under a release authority the requirement names (step-up) |
 

@@ -5,7 +5,9 @@
  * same switch as part 7's Super-Admin routes), every route refuses 404 `release_review_off` before it reads a session or
  * anything else in D1. Decision: `documentation/architecture/decisions/D5585-p10.md`.
  *
- *   GET  /pending?tenant_id&company_id[&limit]   the manifests awaiting this person's decision there (ids and digests)
+ *   GET  /pending?tenant_id&company_id[&limit]   the manifests awaiting this person's decision there (ids and digests),
+ *                                                and (part 11) `people`: the authors' names, only for people linked to the
+ *                                                company, never an email
  *   POST /manifests/:manifest/decisions   { tenant_id, company_id, digest, audience, profile, authority, decision,
  *                                           approval_ref?, citations?, disclosure_ref?, rights_ref?, idempotency_key }
  *                                         decision: approve | reject | request_changes | withdraw (their own)
@@ -44,7 +46,7 @@ import type { Scope } from '../services/workGraphContracts';
 import { Meter, REQUIREMENTS, REQUIREMENT_AUTHORITY, attestComponent, decideRelease, type Requirement } from '../services/workGraphReleases';
 import { companyUnderOtherTenant } from '../services/workGraphReleaseAuthorities';
 import { RELEASE_REFUSAL_SENTENCES, RELEASE_REFUSAL_STATUS, releaseAdminEnabled, scopeFrom } from '../services/workGraphReleaseAdmin';
-import { REVIEW_LIMITS, pendingReleaseDecisions, reviewerContext, type ReviewerContext } from '../services/workGraphReleaseReviews';
+import { REVIEW_LIMITS, pendingPeople, pendingReleaseDecisions, reviewerContext, type ReviewerContext } from '../services/workGraphReleaseReviews';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -107,7 +109,11 @@ r.get('/pending', async (c) => {
   const g = await gate(c.env, scope, Number(user.id));
   if (!g.ok) return refused(c, { code: g.code, ids: [String(scope.companyId)] });
   const out = await pendingReleaseDecisions(c.env, scope, Number(user.id), g.rc.held, listLimit(c.req.query('limit')));
-  return c.json({ ok: true, scope, authorities: g.rc.held, ...out });
+  const names = await pendingPeople(c.env, scope, out.pending);
+  return c.json({
+    ok: true, scope, authorities: g.rc.held, pending: out.pending, people: names.people,
+    cost: { d1Statements: out.cost.d1Statements + names.cost.d1Statements, d1Batches: out.cost.d1Batches + names.cost.d1Batches },
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
