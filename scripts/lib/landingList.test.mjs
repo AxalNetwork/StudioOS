@@ -176,3 +176,44 @@ test('the workflow step runs the list hourly after the overlap report with no ne
   assert.ok(source.indexOf('landing-list.mjs') > source.indexOf('scripts/pr-overlap.mjs'));
   assert.match(source, /cron: '31 \* \* \* \*'/);
 });
+
+// D8432 (#8432): a green PR whose merge with its base conflicts or breaks a workflow file is listed apart.
+test('a held PR is in neither queue list, and its reason is given; an unchecked one is listed as before', async () => {
+  const prs = [pr(1), pr(2), pr(3), pr(4)];
+  const fx = fixture({ prs, files: { 1: [f('documentation/a.md')], 2: [f('documentation/b.md')], 3: [f('cloudflare-worker/sql/migrations/1.sql')], 4: [f('documentation/d.md')] } });
+  const seen = [];
+  const skew = p => {
+    seen.push(p.number);
+    if (p.number === 2) return { status: 'breaks', problems: ['.github/workflows/codeql.yml:119:5 key permissions is given twice', 'a.yml:1:1 key `x` is given twice', 'b', 'c', 'd'] };
+    if (p.number === 3) return { status: 'conflict', problems: [] };
+    if (p.number === 4) throw new Error('git is not here');
+    return { status: 'clean', problems: [] };
+  };
+  const list = await collect({ api: fx.api, now: NOW, skew });
+  assert.deepEqual(seen.sort(), [1, 2, 3, 4], 'asked once for each green PR');
+  const by = Object.fromEntries(list.entries.map(e => [e.number, e.skew]));
+  assert.deepEqual(by[1], { status: 'clean', problems: [] });
+  assert.deepEqual(by[4], { status: 'not checked', problems: [] }, 'a check that throws did not run');
+  const body = render(list.entries, { generatedAt: 'now' });
+  const [queue, held] = body.split('### Do not queue: merge the base in first (2)');
+  assert.ok(held, body);
+  assert.match(queue, /### Owner lands: T2 and model-changed \(0\)/, 'the conflicting T2 PR is not in the owner list');
+  assert.match(queue, /### T0 \/ T1 \(2\)/);
+  assert.match(queue, /\[#1\]/); assert.match(queue, /\[#4\]/);
+  assert.doesNotMatch(queue, /\[#2\]|\[#3\]/);
+  assert.match(held, /1\. \[#3\]\(.*\) PR 3 — conflicts with the base\n/, 'landing order: the T2 PR first');
+  assert.match(held, /2\. \[#2\]\(.*\) PR 2 — the merge breaks \.github\/workflows\/codeql\.yml:119:5 key permissions is given twice; a\.yml:1:1 key &#96;x&#96; is given twice; b; and 2 more\n/, 'text from the PR is escaped and bounded');
+  assert.match(held, /This job never labels, merges or queues/);
+});
+
+test('with no check asked for, nothing is held and the body has no held section', async () => {
+  const fx = fixture({ prs: [pr(1)], files: { 1: [f('documentation/a.md')] } });
+  const list = await collect({ api: fx.api, now: NOW });
+  assert.deepEqual(list.entries[0].skew, { status: 'not checked', problems: [] });
+  assert.doesNotMatch(render(list.entries, { generatedAt: 'now' }), /Do not queue/);
+  const direct = await main([], { api: fx.api, log() {}, now: NOW });
+  assert.equal(direct.entries[0].skew.status, 'not checked', 'main() reads git only when the CLI entry passes the check');
+  const source = readFileSync(new URL('../landing-list.mjs', import.meta.url), 'utf8');
+  assert.match(source, /main\(undefined, \{ skew: skewFor \}\)/);
+  assert.match(source, /author, skew = null \} = \{\}\) \{/, 'and by default it reads no git');
+});
