@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { globSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { mergeTraces } from '../../scripts/ci/merge-test-deps.mjs';
+import { EXPECTED, mergeTraces } from '../../scripts/ci/merge-test-deps.mjs';
 
 const tracer = new URL('../../scripts/ci/test-tracer.mjs', import.meta.url);
 
@@ -176,4 +176,18 @@ test('the tracer observes modules off-thread, never with a synchronous registerH
   const source = readFileSync(fileURLToPath(tracer), 'utf8');
   assert.doesNotMatch(source.replace(/\/\/.*$/gm, ''), /registerHooks\s*\?*\.?\(/);
   assert.match(source, /modules\.register\(new URL\('\.\/test-tracer-hooks\.mjs'/);
+});
+
+test('the merger expects every test file the package scripts run under node --test', () => {
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const scripts = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts;
+  const globs = [...new Set(Object.values(scripts).flatMap((cmd) => [...cmd.matchAll(/--test '([^']+)'/g)].map((m) => m[1])))];
+  assert.ok(globs.length >= 5, `found ${globs.length} --test globs`);
+  const expected = new Set(globSync(EXPECTED, { cwd: root }));
+  for (const glob of globs) {
+    const files = globSync(glob, { cwd: root });
+    assert.ok(files.length > 0, `${glob} matches no file`);
+    const missing = files.filter((file) => !expected.has(file));
+    assert.deepEqual(missing, [], `${glob} is not in merge-test-deps EXPECTED`);
+  }
 });
