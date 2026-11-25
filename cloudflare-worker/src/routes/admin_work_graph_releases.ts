@@ -55,7 +55,7 @@ import {
 } from '../services/workGraphReleaseAuthorities';
 import {
   EFFECT_STATES, RELEASE_DRAIN_LIMITS, listLimit, listLineManifests, listReleaseDeliveries, listReleaseLines,
-  releaseAdminContext, releaseAdminEnabled, scopeFrom, summariseDrain,
+  RELEASE_REFUSAL_SENTENCES, RELEASE_REFUSAL_STATUS, releaseAdminContext, releaseAdminEnabled, scopeFrom, summariseDrain,
 } from '../services/workGraphReleaseAdmin';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -68,39 +68,8 @@ r.use('*', async (c, next) => {
   await next();
 });
 
-/** Our sentence for each refusal code the release services send. */
-const SENTENCES: Record<string, string> = {
-  malformed: 'The request is missing a field or has one in the wrong shape.',
-  not_found: 'No such release line or manifest.',
-  wrong_tenant: 'That release belongs to another tenant or company than the one this request names.',
-  unknown_reference: 'The request names a manifest, line or revision that does not belong to this release.',
-  stale_approval: 'The digest you reviewed is not this manifest’s digest any more. Reload the release and review it again.',
-  stale_revision: 'The line’s publication pointer has moved since you loaded it. Reload the line and try again.',
-  idempotency_conflict: 'This idempotency key was already used for a different request.',
-  composite_incompatible: 'A pinned piece stopped being its asset’s accepted head while the release was being published.',
-  audience_forbidden: 'A pinned piece may not be shown to this line’s audience.',
-  rebuild_required: 'A pinned piece is out of date and must be rebuilt before this release can go out.',
-  reapproval_required: 'A pinned piece changed and must be approved again before this release can go out.',
-  attestation_missing: 'A pinned piece lacks the evidence its policy profile requires.',
-  approval_required: 'A policy profile in this manifest has no live publish approval of this digest.',
-  changes_requested: 'A reviewer’s latest decision on this manifest asks for changes.',
-  no_authority: 'Nobody in this request holds the authority this act needs.',
-  effect_target: 'This release cannot be delivered to one of the targets named.',
-  queue_full: 'The tenant’s release outbox is full. Wait for the drain to catch up.',
-  taken_down: 'A takedown covers this release or one of its pieces, so it cannot go out again.',
-  not_published: 'Only a manifest this line has published can be re-pinned.',
-  is_head: 'That manifest is already what the line’s pointer names.',
-  tombstoned: 'A pinned piece was tombstoned and cannot be re-pinned.',
-  person_required: 'Only a person can do this.',
-  revoked_author: 'The person acting has been revoked.',
-  unpinned_component: 'A pinned piece no longer matches the digest the manifest records.',
-  unapproved_release: 'A pinned piece’s bytes were not approved by a person when they became its head.',
-  unknown_authority: 'That is not a release authority. Name one of the authorities the release policy uses.',
-  not_member: 'That person is not linked to this company, so they cannot hold its release authorities.',
-  already_held: 'That person already holds this release authority in this company.',
-  not_held: 'That person does not hold this release authority in this company, so there is nothing to revoke.',
-};
-const STATUS: Record<string, number> = { malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 };
+const SENTENCES = RELEASE_REFUSAL_SENTENCES;
+const STATUS = RELEASE_REFUSAL_STATUS;
 
 function refused(c: Context, x: { code: string; ids?: string[]; cost?: Cost; currentHead?: unknown; current?: unknown }) {
   return refuse(c, STATUS[x.code] ?? 409, {
