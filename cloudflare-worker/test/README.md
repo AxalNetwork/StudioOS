@@ -425,4 +425,7 @@ catalogue version only in the fixture.
 `research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
 | `formation_rules_6704.test.ts` | D6704: deterministic fixture comparisons, append-only suggestions/choices/memos, flag and structure gates. |
 
+- `research_fund_shortlist_7845.test.ts` — D7845 atomic shortlist, withholding, ownership and replay checks.
+| `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
+- `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
 `capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.

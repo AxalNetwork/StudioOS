@@ -1,0 +1,302 @@
+{
+  "scheme": "UK SIC",
+  "scheme_version": "2007",
+  "normalized_scheme": "UK SIC",
+  "normalized_version": "2007",
+  "source": "scripts/import-companies-house.mjs#SIC_SECTORS",
+  "reviewed_on": "2026-11-20",
+  "reviewer": "D7821: existing reviewed SIC_SECTORS table; titles from its activity comments",
+  "reason": "Preserve the existing reviewed code-to-market decision; normalized industry is the classification’s own code and activity title, never the Axal market label.",
+  "activities": [
+    {
+      "code": "01110",
+      "industry_code": "01110",
+      "industry_title": "Growing of cereals, leguminous crops and oil seeds"
+    },
+    {
+      "code": "01410",
+      "industry_code": "01410",
+      "industry_title": "Raising of dairy cattle"
+    },
+    {
+      "code": "01420",
+      "industry_code": "01420",
+      "industry_title": "Raising of other cattle and buffaloes"
+    },
+    {
+      "code": "10890",
+      "industry_code": "10890",
+      "industry_title": "Manufacture of other food products n.e.c."
+    },
+    {
+      "code": "11050",
+      "industry_code": "11050",
+      "industry_title": "Manufacture of beer"
+    },
+    {
+      "code": "11070",
+      "industry_code": "11070",
+      "industry_title": "Manufacture of soft drinks; mineral waters"
+    },
+    {
+      "code": "13100",
+      "industry_code": "13100",
+      "industry_title": "Preparation and spinning of textile fibres"
+    },
+    {
+      "code": "14190",
+      "industry_code": "14190",
+      "industry_title": "Manufacture of other wearing apparel and accessories"
+    },
+    {
+      "code": "20130",
+      "industry_code": "20130",
+      "industry_title": "Manufacture of other inorganic basic chemicals"
+    },
+    {
+      "code": "20200",
+      "industry_code": "20200",
+      "industry_title": "Manufacture of pesticides and other agrochemical products"
+    },
+    {
+      "code": "20420",
+      "industry_code": "20420",
+      "industry_title": "Manufacture of perfumes and toilet preparations"
+    },
+    {
+      "code": "21100",
+      "industry_code": "21100",
+      "industry_title": "Manufacture of basic pharmaceutical products"
+    },
+    {
+      "code": "21200",
+      "industry_code": "21200",
+      "industry_title": "Manufacture of pharmaceutical preparations"
+    },
+    {
+      "code": "25400",
+      "industry_code": "25400",
+      "industry_title": "Manufacture of weapons and ammunition"
+    },
+    {
+      "code": "26110",
+      "industry_code": "26110",
+      "industry_title": "Manufacture of electronic components"
+    },
+    {
+      "code": "26200",
+      "industry_code": "26200",
+      "industry_title": "Manufacture of computers and peripheral equipment"
+    },
+    {
+      "code": "26400",
+      "industry_code": "26400",
+      "industry_title": "Manufacture of consumer electronics"
+    },
+    {
+      "code": "29100",
+      "industry_code": "29100",
+      "industry_title": "Manufacture of motor vehicles"
+    },
+    {
+      "code": "30300",
+      "industry_code": "30300",
+      "industry_title": "Manufacture of air and spacecraft and related machinery"
+    },
+    {
+      "code": "30400",
+      "industry_code": "30400",
+      "industry_title": "Manufacture of military fighting vehicles"
+    },
+    {
+      "code": "30910",
+      "industry_code": "30910",
+      "industry_title": "Manufacture of motorcycles"
+    },
+    {
+      "code": "35110",
+      "industry_code": "35110",
+      "industry_title": "Production of electricity"
+    },
+    {
+      "code": "41201",
+      "industry_code": "41201",
+      "industry_title": "Construction of commercial buildings"
+    },
+    {
+      "code": "41202",
+      "industry_code": "41202",
+      "industry_title": "Construction of domestic buildings"
+    },
+    {
+      "code": "47110",
+      "industry_code": "47110",
+      "industry_title": "Retail sale in non-specialised stores with food, beverages or tobacco predominating"
+    },
+    {
+      "code": "47910",
+      "industry_code": "47910",
+      "industry_title": "Retail sale via mail order houses or via Internet"
+    },
+    {
+      "code": "49100",
+      "industry_code": "49100",
+      "industry_title": "Passenger rail transport, interurban"
+    },
+    {
+      "code": "50200",
+      "industry_code": "50200",
+      "industry_title": "Sea and coastal freight water transport"
+    },
+    {
+      "code": "51101",
+      "industry_code": "51101",
+      "industry_title": "Scheduled passenger air transport"
+    },
+    {
+      "code": "51102",
+      "industry_code": "51102",
+      "industry_title": "Non-scheduled passenger air transport"
+    },
+    {
+      "code": "55100",
+      "industry_code": "55100",
+      "industry_title": "Hotels and similar accommodation"
+    },
+    {
+      "code": "58110",
+      "industry_code": "58110",
+      "industry_title": "Book publishing"
+    },
+    {
+      "code": "58130",
+      "industry_code": "58130",
+      "industry_title": "Publishing of newspapers"
+    },
+    {
+      "code": "58210",
+      "industry_code": "58210",
+      "industry_title": "Publishing of computer games"
+    },
+    {
+      "code": "58290",
+      "industry_code": "58290",
+      "industry_title": "Other software publishing"
+    },
+    {
+      "code": "59111",
+      "industry_code": "59111",
+      "industry_title": "Motion picture production activities"
+    },
+    {
+      "code": "59113",
+      "industry_code": "59113",
+      "industry_title": "Television programme production activities"
+    },
+    {
+      "code": "59200",
+      "industry_code": "59200",
+      "industry_title": "Sound recording and music publishing activities"
+    },
+    {
+      "code": "60100",
+      "industry_code": "60100",
+      "industry_title": "Radio broadcasting"
+    },
+    {
+      "code": "60200",
+      "industry_code": "60200",
+      "industry_title": "Television programming and broadcasting activities"
+    },
+    {
+      "code": "61100",
+      "industry_code": "61100",
+      "industry_title": "Wired telecommunications activities"
+    },
+    {
+      "code": "61200",
+      "industry_code": "61200",
+      "industry_title": "Wireless telecommunications activities"
+    },
+    {
+      "code": "61900",
+      "industry_code": "61900",
+      "industry_title": "Other telecommunications activities"
+    },
+    {
+      "code": "62011",
+      "industry_code": "62011",
+      "industry_title": "Ready-made interactive leisure and entertainment software development"
+    },
+    {
+      "code": "62012",
+      "industry_code": "62012",
+      "industry_title": "Business and domestic software development"
+    },
+    {
+      "code": "63110",
+      "industry_code": "63110",
+      "industry_title": "Data processing, hosting and related activities"
+    },
+    {
+      "code": "64191",
+      "industry_code": "64191",
+      "industry_title": "Banks"
+    },
+    {
+      "code": "64192",
+      "industry_code": "64192",
+      "industry_title": "Building societies"
+    },
+    {
+      "code": "64999",
+      "industry_code": "64999",
+      "industry_title": "Financial intermediation not elsewhere classified"
+    },
+    {
+      "code": "66190",
+      "industry_code": "66190",
+      "industry_title": "Activities auxiliary to financial intermediation n.e.c."
+    },
+    {
+      "code": "69102",
+      "industry_code": "69102",
+      "industry_title": "Solicitors"
+    },
+    {
+      "code": "72110",
+      "industry_code": "72110",
+      "industry_title": "Research and experimental development on biotechnology"
+    },
+    {
+      "code": "73110",
+      "industry_code": "73110",
+      "industry_title": "Advertising agencies"
+    },
+    {
+      "code": "79110",
+      "industry_code": "79110",
+      "industry_title": "Travel agency activities"
+    },
+    {
+      "code": "85410",
+      "industry_code": "85410",
+      "industry_title": "Post-secondary non-tertiary education"
+    },
+    {
+      "code": "85421",
+      "industry_code": "85421",
+      "industry_title": "First-degree level higher education"
+    },
+    {
+      "code": "86101",
+      "industry_code": "86101",
+      "industry_title": "Hospital activities"
+    },
+    {
+      "code": "90010",
+      "industry_code": "90010",
+      "industry_title": "Performing arts"
+    }
+  ]
+}

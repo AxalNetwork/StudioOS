@@ -289,4 +289,5 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
+| `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |
 `capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.

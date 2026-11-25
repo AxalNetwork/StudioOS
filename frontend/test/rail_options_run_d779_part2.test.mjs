@@ -244,7 +244,7 @@ test('the competitor analysis runs on the press and writes only its own analysis
   for (const o of rows) assert.equal(ui.split(o.source.marker).length - 1, 1, `${o.key}: not one press`);
   // D7652: Refresh sources runs no model (D7176), so it is no row and its press names no option.
   assert.match(ui, /await api\.competitors\.refresh\(analysis\.id\);/);
-  assert.match(spa('pages/research/CompanyAnalysis.jsx'), /await api\.competitors\.refresh\(id\);/);
+  assert.match(spa('pages/research/CompanyAnalysis.jsx'), /await api\.competitors\.refresh\(analysis\.id\);/, 'D7814: Refresh targets the loaded analysis, not the URL');
   // Re-run keeps the member's hand-added competitors (and, D778 part 9, sends its press's option).
   assert.match(ui, /api\.competitors\.rerun\(analysis\.id, \{ inputs: analysis\.inputs \|\| inputs, keep_manual: true \}, railPressHeaders\(pressKey\.rerun\)\)/);
   const src = workerFile('routes/competitors.ts');
