@@ -361,3 +361,7 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # SAME_WRITE, a plain constant, so no later commit carries it. Scoped to the
 # one finding.
 4e9cfd8335c37678ad99e0f6e236abb6d2d6c508:frontend/test/company_suggested_filings_8259.test.mjs:generic-api-key:87
+# D8532 (#8532): not a secret. RFC 6238's published TOTP test seed, base32-encoded, in the release-window
+# probe's first commit; it signs one-time codes for a local fixture account only and was never a credential.
+# The next commit encodes the seed at run time, so no later commit carries the literal. Scoped to the one finding.
+27ff21365eea4c01f4b04ebe147358b6d817b58f:scripts/release-window-probe.mjs:generic-api-key:40
