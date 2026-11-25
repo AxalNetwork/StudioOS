@@ -92,3 +92,15 @@ export function exportFileName({ scope, zone, count, now = new Date() }) {
   const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `${[slug(scope), slug(zone), `${count}-rows`, stamp(now)].filter(Boolean).join('-')}.csv`;
 }
+
+/** D7811: opt-in spreadsheet-safe cell, matching the Worker's D6103 rule. */
+export function csvSafe(v) {
+  if (v == null) return '';
+  const s = String(v);
+  return csvCell(/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s) ? `'${s}` : s);
+}
+
+/** D7811: safe headers and cells; existing toCsv/downloadCsv/exportView stay opt-in callers. */
+export function toSafeCsv(header, rows) {
+  return [header, ...rows].map(cells => cells.map(csvSafe).join(',')).join('\r\n');
+}

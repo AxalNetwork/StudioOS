@@ -417,6 +417,7 @@ catalogue version only in the fixture.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+| `csv_safe_parity_7811.test.ts` | D7811: shared formula-safe CSV cases without changing legacy exports. |
 
 | `market_figure_writers_7705.test.ts` | D7705: real-SQLite create/answer actor history, zero preservation, refused-answer fallback, atomic rollback and literal/dynamic writer inventory. |
 | `research_comparison_members_7815.test.ts` | D7815: overlapping mounted add-member requests in all arrival orders preserve the live limit, distinct positions and duplicate response. |
