@@ -245,9 +245,63 @@ export async function liveMovedDeps(env: Env): Promise<MovedDeps> {
 }
 
 /**
+ * D8525: the step after a move is OWED, not lost. Before, `afterMove` caught
+ * any failure and the move had committed, so a retry answered 409 `unchanged`
+ * and the step never ran again. The move's batch now writes a pending row in
+ * `project_move_followups` (`followupStatement`); `runFollowup` runs the step
+ * and marks the row done only when it succeeded; the Worker tick retries the
+ * pending ones (`retryMoveFollowups`). Running it twice ends no run twice: a
+ * run is ended only while it is still `admitted` or `running`. A minimal
+ * record of its own until #8516's per-effect record lands.
+ */
+export function followupStatement(env: Pick<Env, 'DB'>, m: Move): D1PreparedStatement {
+  return env.DB.prepare(
+    'INSERT INTO project_move_followups (project_id, from_company_id, to_company_id, actor_user_id) VALUES (?, ?, ?, ?)',
+  ).bind(m.projectId, m.from, m.to, m.actorUserId);
+}
+
+type FollowupRow = { id: number; project_id: number; from_company_id: number | null; to_company_id: number | null; actor_user_id: number };
+
+/** Runs one owed step. True when it ran and the row is done; false leaves it pending, its attempt counted. Never throws. */
+export async function runFollowup(env: Env, id: number, deps?: MovedDeps): Promise<boolean> {
+  const row = await env.DB.prepare(
+    "SELECT id, project_id, from_company_id, to_company_id, actor_user_id FROM project_move_followups WHERE id = ? AND status = 'pending'",
+  ).bind(id).first<FollowupRow>();
+  if (!row) return false;
+  const move: Move = { projectId: Number(row.project_id), from: row.from_company_id == null ? null : Number(row.from_company_id), to: row.to_company_id == null ? null : Number(row.to_company_id), actorUserId: Number(row.actor_user_id) };
+  try {
+    await onProjectMoved(env, move, deps ?? await liveMovedDeps(env));
+  } catch (e) {
+    console.warn('[agents] after_move_failed', (e as Error)?.name);
+    try {
+      await env.DB.prepare(
+        "UPDATE project_move_followups SET attempts = attempts + 1, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'",
+      ).bind(String((e as Error)?.name ?? 'Error').slice(0, 100), id).run();
+    } catch { /* the row stays pending either way */ }
+    return false;
+  }
+  await env.DB.prepare(
+    "UPDATE project_move_followups SET status = 'done', attempts = attempts + 1, last_error = NULL, done_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'",
+  ).bind(id).run();
+  return true;
+}
+
+/** The tick's retry: the oldest pending steps, a bounded batch, each left at least `minAgeSeconds` for the move's own attempt. */
+export async function retryMoveFollowups(env: Env, now: Date, deps?: MovedDeps, { limit = 10, minAgeSeconds = 60 } = {}): Promise<{ done: number; failed: number }> {
+  const cutoff = new Date(now.getTime() - minAgeSeconds * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const rows = (await env.DB.prepare(
+    "SELECT id FROM project_move_followups WHERE status = 'pending' AND datetime(created_at) <= datetime(?) ORDER BY id LIMIT ?",
+  ).bind(cutoff, limit).all<{ id: number }>()).results ?? [];
+  let done = 0; let failed = 0;
+  for (const r of rows) (await runFollowup(env, Number(r.id), deps)) ? done++ : failed++;
+  return { done, failed };
+}
+
+/**
  * Called by every caller of `projectMoveStatements` once its batch has
  * committed (the move route, the filing), never before. Never throws: the
- * move has happened, and a run it misses still ends at its next step.
+ * move has happened, and a run it misses still ends at its next step. The
+ * move route runs its owed step through `runFollowup` instead (D8525).
  */
 export async function afterMove(env: Env, m: Move, deps?: MovedDeps): Promise<{ ended: number }> {
   try {
