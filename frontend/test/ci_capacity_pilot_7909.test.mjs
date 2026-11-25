@@ -315,7 +315,7 @@ const BASE_JOB_DIGESTS={
   "gate":'8dc0dedfdbe09d02',
   "selection-shadow":'41ac4055f5a3c941',
   "classify":'d594dedf4e520c73',
-  "visual":'1f9c9388b1772b0d',
+  "visual":'c6454cc3f58225a7', // #8537 (D8537): the public journey step.
   "drift":'d870bd539b8eced2',
   "og-tags":'e7c2cfaf81226e04',
   "dev-backend":'82b39cdcaa1e275a',
