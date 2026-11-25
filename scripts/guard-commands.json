@@ -150,6 +150,14 @@
     ]
   },
   {
+    "id": "stripe-idempotency",
+    "command": [
+      "node",
+      "scripts/build-stripe-inventory.mjs",
+      "--check"
+    ]
+  },
+  {
     "id": "check-regulated-wording",
     "command": [
       "node",

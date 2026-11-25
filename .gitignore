@@ -138,6 +138,7 @@ documentation/architecture/PAGE_INVENTORY.md
 # #4570: the authorization inventory is build output. `node scripts/build-auth-inventory.mjs`
 # writes it; CI keeps it in the `routing-docs` artifact; `--check` in test:guards checks the ledger.
 documentation/architecture/AUTH_INVENTORY.json
+documentation/architecture/STRIPE_IDEMPOTENCY_INVENTORY.json
 
 # D5612 (#5612): three generated modules are build output, never committed.
 # `node scripts/build-generated.mjs` writes them; every build, typecheck and
