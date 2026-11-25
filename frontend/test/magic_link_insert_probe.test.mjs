@@ -669,7 +669,7 @@ test('the template key the probe looks for is the one the endpoint sends', () =>
   assert.equal(TEMPLATE_KEY, 'auth_magic_link', 'the probe changed which template it looks for');
   assert.ok(read('cloudflare-worker/src/templates/email/registry.ts').includes('auth_magic_link: t({'),
     'auth_magic_link is no longer a registered template');
-  assert.ok(read('cloudflare-worker/src/routes/auth.ts').includes("sendEmail(c.env, 'auth_magic_link'"),
+  assert.ok(read('cloudflare-worker/src/routes/auth.ts').includes(": 'auth_magic_link', ref, { name, magic_url: magicUrl }"),
     '/magic/start no longer sends auth_magic_link — the probe is watching the wrong row');
   // And the key is a code constant, not an env override that could point the
   // probe at a template nothing sends.
