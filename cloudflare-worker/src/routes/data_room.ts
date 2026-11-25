@@ -221,6 +221,27 @@ export async function activeGrant(env: Env, projectId: number, userId: number): 
 }
 
 /**
+ * D8535 (#8535) — whether an investor's signed room link (audience `data_room:<projectUid>`, minted by the investor
+ * download or a deck's proof) may still open its object NOW, at `/api/files/dl/:token`. The link is a ticket for the
+ * gate as it stood when it was minted; this asks the gate again when it is opened: an active, unexpired grant for the
+ * link's user on the link's venture, a live file in that venture holding the link's object, the file's tier, expiry and
+ * the grant's folders (`tierAdmits`), and the NDA for a file behind it. Any `false` refuses the link.
+ */
+export async function dataRoomLinkOpen(env: Env, projectUid: string, userId: number | undefined, key: string): Promise<boolean> {
+  if (typeof userId !== 'number' || !Number.isSafeInteger(userId) || userId <= 0 || !projectUid || !key) return false;
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE uid = ?').bind(projectUid).first<{ id: number }>();
+  const grant = project ? await activeGrant(env, Number(project.id), userId) : null;
+  if (!project || !grant) return false;
+  const file = await env.DB.prepare(
+    `SELECT id, visibility, access_tier, access_expires_at, folder_id FROM data_room_files
+      WHERE project_id = ? AND r2_key = ?${await liveFiles(env.DB)} ORDER BY id LIMIT 1`,
+  ).bind(project.id, key).first<any>();
+  if (!file || !tierAdmits(file, await investorCommitted(env, Number(project.id), userId), Date.now(), await grantFolderScope(env, grant.id))) return false;
+  if (file.visibility === 'nda' && !(await projectNdaActive(env, Number(project.id), userId))) return false;
+  return true;
+}
+
+/**
  * The NDA belongs to the venture founder, independently of who shared it. D4631 part 2: the shared rule in
  * services/dealAccess.ts, the one the deal's sections and documents read, so every data-room gate (the listing,
  * a download, the founder's "who can open this" record, Research's held rooms, a round call's room) agrees.
