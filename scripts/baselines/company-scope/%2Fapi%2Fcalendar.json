@@ -1,0 +1,8 @@
+{
+  "GET /api/calendar/events": {
+    "kind": "filter"
+  },
+  "GET /api/calendar/item/:kind/:id": {
+    "kind": "target"
+  }
+}

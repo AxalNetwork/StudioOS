@@ -1,0 +1,5 @@
+{
+  "POST /api/dd/cases/:uid/ic": {
+    "kind": "target"
+  }
+}
