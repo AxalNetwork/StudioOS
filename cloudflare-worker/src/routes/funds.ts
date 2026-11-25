@@ -232,7 +232,10 @@ funds.get('/lp-portal', async (c) => {
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {
     const lpDists = distRows.filter((d: any) => d.fund_id === lp.fund_id);
-    const distSumDollars = lpDists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
+    // D8534: only a paid distribution counts. A pending row is the split the
+    // job computed, not money that reached the LP, so DPI and TVPI leave it out.
+    const distSumDollars = lpDists.filter((d: any) => d.status === 'paid')
+      .reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
     const invested = Number(lp.invested_amount || 0);
     const returns = Number(lp.returns || 0);
     // Nothing paid in, no multiple: null, not 0 (D372). A TVPI of 0.00× says
@@ -972,7 +975,9 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 
   // Same arithmetic as /lp-portal — kept identical on purpose so the GP's copy
   // of a statement and the LP's own copy can never disagree.
-  const distSumDollars = dists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
+  // D8534: paid distributions only, as on the LP's portal.
+  const distSumDollars = dists.filter((d: any) => d.status === 'paid')
+    .reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
   const invested = Number(lp.invested_amount || 0);
   const returns = Number(lp.returns || 0);
   // Null with nothing paid in, as the LP's own portal says (D372).
