@@ -98,6 +98,27 @@ function Block({ id, title, summary, phone, children, testid }) {
 }
 
 /**
+ * D8252 (#8252): an update line reads `Market updated: Regulation score 2 → 4; Decision Not decided → Enter by Ana`.
+ * The changes become a list under "Market updated by Ana"; a line written before values were kept has no
+ * `: ` list and reads as it always did. A piece without an arrow belongs to the value before it, except "and N more".
+ */
+export function historyLine(raw) {
+  const text = String(raw ?? '');
+  const m = /^Market updated: (.+)$/s.exec(text);
+  if (!m) return { text, changes: [] };
+  let body = m[1], actor = '';
+  const at = body.lastIndexOf(' by ');
+  if (at > 0 && !body.slice(at + 4).includes(' → ')) { actor = body.slice(at + 4); body = body.slice(0, at); }
+  const changes = [];
+  for (const piece of body.split('; ')) {
+    if (changes.length && !piece.includes(' → ') && !/^and \d+ more$/.test(piece)) changes[changes.length - 1] += `; ${piece}`;
+    else changes.push(piece);
+  }
+  if (changes.length === 1 && changes[0] === 'no field changed') return { text: `Market updated, no field changed${actor ? ` by ${actor}` : ''}`, changes: [] };
+  return { text: `Market updated${actor ? ` by ${actor}` : ''}`, changes };
+}
+
+/**
  * D8251 (#8251, GR-24): one Eadwyn proposal as a card. A score names its part, the proposed and the current score and
  * its sources; a plan lists its steps; a comparison is its text. Accept and Dismiss are there only for a writer.
  */
@@ -141,7 +162,7 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
       .catch(() => { if (live) setGeo({ code, state: 'unreadable', data: null }); });
     return () => { live = false; };
   }, [code, tries]);
-  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners, m.indices) : null;
+  const ev = geo.code === code && geo.state === 'ready' ? evidenceFor(geo.data, m.partners, m.customers, m.indices) : null;
   const geoState = !code ? null : geo.code === code ? geo.state : 'loading';
 
   // The entry plan's rows carry the declared actions; the steps themselves come from `parts.market.steps`.
@@ -273,11 +294,13 @@ export default function MarketRecord({ record, activity, onForm, onWrite, onShow
           {r.message && <p className="m-0 text-axal-ink/80 dark:text-gray-300">{r.message}</p>}</li>)}</ul>}
     </Block>
     <Block id="market-history" title="History" phone={phone} testid="market-history" summary={acts.length ? `Latest ${stamp(acts[0].b)}` : 'Nothing yet'}>
-      {acts.length ? <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{acts.map((a, i) => <li key={i} className="flex gap-2 text-[12.5px]">
-        <span className={`shrink-0 font-mono text-[11px] ${MUTED}`}>{stamp(a.b)}</span><span className="text-axal-ink dark:text-gray-200">{String(a.a ?? '')}</span></li>)}</ul>
+      {acts.length ? <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{acts.map((a, i) => { const line = historyLine(a.a); return <li key={i} className="flex gap-2 text-[12.5px]">
+        <span className={`shrink-0 font-mono text-[11px] ${MUTED}`}>{stamp(a.b)}</span>
+        <span className="text-axal-ink dark:text-gray-200">{line.text}{line.changes.length > 0 && <ul className="m-0 mt-0.5 flex list-none flex-col gap-0.5 p-0" data-testid="market-history-changes">
+          {line.changes.map((c) => <li key={c} className={MUTED}>{c}</li>)}</ul>}</span></li>; })}</ul>
         : <DataState state="none">Nothing recorded here yet.</DataState>}
       {acts.length < (record?.activity_total ?? 0) && onShowAll && <button type="button" onClick={onShowAll} className={`${SMALL_BTN} self-start`}>Load earlier</button>}
-      <p className={`m-0 text-[11.5px] ${MUTED}`}>Who and when, from the activity log.{decision ? ` Current decision: ${decision.label}${m.decided_on ? `, decided ${dayLabel(m.decided_on)}` : ''}.` : ' No decision recorded.'} What changed on each line is not recorded yet.</p>
+      <p className={`m-0 text-[11.5px] ${MUTED}`}>Who and when, from the activity log.{decision ? ` Current decision: ${decision.label}${m.decided_on ? `, decided ${dayLabel(m.decided_on)}` : ''}.` : ' No decision recorded.'} A line written before values were kept says only that the market was updated.</p>
     </Block>
   </>;
 

@@ -23,6 +23,7 @@
  * writes logged before the convention, read as written and never rewritten.
  */
 import { countryIndexLines } from '../ventureScoring/countryIndex';
+import { customerEvidence, taggedByCountry } from '../growMarketCustomers';
 import type { Env, User } from '../../types';
 import type { ProjectRef } from '../../routes/_founder_validate_helpers';
 import { canAccessProject } from '../projectAccess';
@@ -1002,6 +1003,7 @@ async function marketParts(rc: RecordContext, m: Any, rd: ReturnType<typeof read
     localisation_state: ticks ? 'ok' : 'unreadable',
     replies, replies_state: replies ? 'ok' : 'unreadable',
     indices: await countryIndexLines(rc.env, typeof m.geography_ref === 'string' ? m.geography_ref : null),
+    customers: customerEvidence(await taggedByCountry(rc.env, rc.projectId), m.geography_ref),
     proposals, proposals_state: proposals ? 'ok' : 'unreadable',
     partners, partners_state: partners ? 'ok' : 'unreadable',
   };

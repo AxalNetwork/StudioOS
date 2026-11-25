@@ -211,6 +211,17 @@ export function indexLines(name, read) {
 }
 
 /**
+ * D8253: the venture's own prospects and customers tagged with this market's country. Tagged rows only; none tagged
+ * is Not recorded, a failed read is Unavailable, and neither is ever a 0.
+ */
+export function customerLine(name, c) {
+  const label = `Prospects and customers tagged ${name}`;
+  if (c?.state === 'ok' && num(c.tagged) && c.tagged > 0) return { state: 'value', label: `${label}: ${c.tagged}`, asOf: null };
+  if (c?.state === 'unreadable') return { state: 'unavailable', label, reason: str(c.reason) || 'They could not be read.' };
+  return { state: 'not_recorded', label, reason: str(c?.reason) || 'No prospect or customer is tagged with a country yet.' };
+}
+
+/**
  * D8254: the venture's partners linked to this market. None linked is Not recorded, a failed read (null) is
  * Unavailable, and neither is a count of 0.
  */
@@ -226,7 +237,7 @@ export function partnerLine(name, partners) {
  * store does not hold (per-country demand, customers by country, partners covering the country, the
  * WGI and FATF indices) reads Not recorded with its reason, never a count.
  */
-export function evidenceFor(geo, partners = undefined, indices = null) {
+export function evidenceFor(geo, partners = undefined, customers = null, indices = null) {
   const name = str(geo?.item?.name) || 'this country';
   const signals = Array.isArray(geo?.signals) ? geo.signals : [];
   const asOf = geo?.as_of || {};
@@ -239,7 +250,7 @@ export function evidenceFor(geo, partners = undefined, indices = null) {
     demand: [
       v(`Signals naming ${name}: ${named}`, asOf.signals),
       nr('Per-country demand', str(geo?.demand?.reason) || 'Demand data is global only.'),
-      nr(`Customers or sign-ups from ${name}`, 'Customers and prospects carry no country yet.'),
+      customerLine(name, customers),
     ],
     regulation: [
       v(`Signals naming only ${str(geo?.item?.region) || 'its region'}: ${regional}`, asOf.signals),

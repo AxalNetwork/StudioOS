@@ -101,3 +101,20 @@ test('individual sheet refuses malformed detail and keeps advisor changes disabl
     assert.match(ui.text(),/read this venture’s prospects but not change them/);
   }finally{await ui?.unmount();globalThis.matchMedia=old;}
 });
+
+// D8253 (#8253). Mutation checked: the country save sending no `country` (fails); an untagged prospect shown as a code (fails).
+test('individual sheet shows the country or Not recorded, and a writer saves it for this venture',async()=>{
+  const old=globalThis.matchMedia;globalThis.matchMedia=q=>({matches:false,media:q,addEventListener(){},removeEventListener(){}});
+  let ui;const sent=[];
+  try{
+    const api={detail:async()=>({...row,consents:[],replies:[],tasks:[],country:'PT'}),country:async(uid,body)=>{sent.push([uid,body]);return{ok:true,country:body.country};}};
+    ui=await mountContracts(h(ProspectSheet,{uid:'contact-1',projectId:7,api,canWrite:true,onClose(){}}));
+    await ui.flush();assert.match(ui.text(),/Country\s*PT/);
+    await ui.click('Save country');await ui.flush();
+    assert.deepEqual(sent,[['contact-1',{project:7,country:'PT'}]]);
+    await ui.unmount();ui=null;
+    ui=await mountContracts(h(ProspectSheet,{uid:'contact-1',projectId:7,api:{detail:async()=>({...row,consents:[],replies:[],tasks:[]})},canWrite:false,onClose(){}}));
+    await ui.flush();assert.match(ui.text(),/Country\s*Not recorded/);
+    for(const node of ui.nodes().filter(n=>n.tagName==='BUTTON'&&n.childNodes.map(x=>x.textContent).join('')==='Save country'))assert.equal(ui.props(node).disabled,true);
+  }finally{await ui?.unmount();globalThis.matchMedia=old;}
+});
