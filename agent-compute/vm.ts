@@ -10,8 +10,12 @@ export type VmControl = {
   fetch(request: Request): Promise<Response>;
   destroy(): Promise<void>;
 };
+/** The old basic alias is not accepted by durable_object startup. Preserve its
+ * 1/4-vCPU, 1-GiB, 4-GB ceiling explicitly rather than increasing the profile. */
+export const PYTHON_COMPUTE_INSTANCE = Object.freeze({ vcpu: 0.25, memoryMib: 1024, diskMb: 4000 });
+export type ComputeInstance = typeof PYTHON_COMPUTE_INSTANCE | 'standard-1';
 export function createContainerVm(control: VmControl, profile: {
-  schedulingPolicy: string; instance: 'basic' | 'standard-1'; now(): number; pause?(signal: AbortSignal): Promise<void>;
+  schedulingPolicy: string; instance: ComputeInstance; now(): number; pause?(signal: AbortSignal): Promise<void>;
 }): ComputeVm {
   let digest: string | null = null, exited = false;
   const imageMatches = (image: string) => !!digest && (image === digest || image.endsWith('@' + digest));
@@ -20,12 +24,10 @@ export function createContainerVm(control: VmControl, profile: {
     start(expectedDigest: string) {
       if (!/^sha256:[a-f0-9]{64}$/.test(expectedDigest)) throw Error('compute_image_unverified');
       digest = expectedDigest;
-      if (profile.schedulingPolicy === 'default') control.start({ enableInternet: false });
-      else if (profile.schedulingPolicy === 'durable_object') {
-        const image = control.namedImage();
-        if (!image || !imageMatches(image)) throw Error('compute_image_unverified');
-        control.start({ image, instance: profile.instance, enableInternet: false });
-      } else throw Error('compute_scheduling_unconfirmed');
+      if (!(profile.schedulingPolicy === 'durable_object')) throw Error('compute_scheduling_unconfirmed');
+      const image = control.namedImage();
+      if (!image || !imageMatches(image)) throw Error('compute_image_unverified');
+      control.start({ image, instance: profile.instance, enableInternet: false });
       void control.monitor().then(() => { exited = true; }, () => { exited = true; });
     },
     async ready(signal) {

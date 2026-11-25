@@ -26,6 +26,7 @@ import { parseArchetypeSex } from '../archetypePresentation.ts';
 import { normalizeFitAnswer } from './banks/fitShared.ts';
 import { upsertUserSettings } from '../userSettings.ts';
 import { recordCapture } from '../partnerProfileReview';
+import { marketFigureStatement } from '../marketFigures';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -1204,9 +1205,27 @@ export async function routeAnswer(
       dbValue = Number.isFinite(n) ? n : value;
     }
     try {
-      await env.DB.prepare(
-        `UPDATE projects SET ${column} = ?, updated_at = datetime('now') WHERE id = ? AND founder_id = ?`,
-      ).bind(dbValue, ctx.project_id, ctx.founder_id).run();
+      if (column === 'som') {
+        // D7705: the answer shares PUT's numeric/funnel checks; refusal keeps the chat-note fallback.
+        const project = await env.DB.prepare('SELECT sam FROM projects WHERE id = ? AND founder_id = ?')
+          .bind(ctx.project_id, ctx.founder_id).first<{ sam: number | null }>();
+        if (!project || typeof dbValue !== 'number' || !Number.isFinite(dbValue) || dbValue < 0 ||
+            (project.sam != null && dbValue > Number(project.sam))) throw new Error('invalid_market_sizing');
+        await env.DB.batch([
+          env.DB.prepare(`UPDATE projects SET som = ?, updated_at = datetime('now') WHERE id = ? AND founder_id = ?`)
+            .bind(dbValue, ctx.project_id, ctx.founder_id),
+          marketFigureStatement(env, {
+            projectId: ctx.project_id, figure: 'som', value: dbValue, setBy: Number(user.id),
+            provenance: { method: 'typed', source: null, stated: false },
+            // Versions use server-generated UUIDs. Empty lookup means this typed answer names no version.
+            sizingVersionUid: '',
+          }),
+        ]);
+      } else {
+        await env.DB.prepare(
+          `UPDATE projects SET ${column} = ?, updated_at = datetime('now') WHERE id = ? AND founder_id = ?`,
+        ).bind(dbValue, ctx.project_id, ctx.founder_id).run();
+      }
       return {
         status: 'saved',
         saved_to: { table: 'projects', column, id: ctx.project_id, page_url: q.page_target || `/projects/${ctx.project_id}` },

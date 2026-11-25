@@ -46,7 +46,7 @@ test('the page states what it will not do', () => {
   // and it waits while the note has unsaved text.
   assert.match(band, /onAccepted=\{acceptedBrief\}/, 'the note on the page would be stale after Accept wrote it');
   assert.match(band, /acceptBlocked=\{acceptWaitReason\(noteDirty\)\}/, 'Accept would append the brief to a note with unsaved text');
-  assert.match(page, /const row = await api\.research\.fundGet\(target\);\s+setDrafts\(\(d\) => mergeDrafts\(d, fundRef\.current, row, \['note'\]\)\);/);
+  assert.match(page, /const row = await api\.research\.fundGet\(target\);\s+if \(!belongs\(\)\) return;\s+setDrafts\(\(d\) => mergeDrafts\(d, fundRef\.current, row, \['note'\]\)\);/);
   assert.doesNotMatch(page, /draftRestatement|Draft restates only what is on this page/);
   assert.doesNotMatch(page, /\/example\\.com\/i/,
     'a host check must parse the URL; a substring match treats example.com.evil as the sample host');

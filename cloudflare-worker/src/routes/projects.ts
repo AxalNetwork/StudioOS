@@ -641,7 +641,19 @@ async function createProjectHandler(c: any) {
     projectSlug = await generateSlug(c.env, 'project', name, createCompanyId ?? null);
   }
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, slug, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${projectSlug}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, slug, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${projectSlug}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam === 0 ? 0 : data.tam || null}, ${data.sam === 0 ? 0 : data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+
+  // D7705: a created venture records the figures actually stored, without client-supplied provenance.
+  let marketFigures: { recorded: MarketFigureKey[] } | { recorded: null; reason: string };
+  try {
+    marketFigures = { recorded: await recordMarketFigures(c.env, {
+      projectId: Number(project.id), before: {}, after: { tam: project.tam, sam: project.sam },
+      provenance: { method: 'typed', source: null, stated: false }, setBy: Number(user.id),
+    }) };
+  } catch (e) {
+    console.error('[projects:create] market_figures write failed', project.id, (e as Error).message);
+    marketFigures = { recorded: null, reason: 'The figures were saved; where they came from was not.' };
+  }
 
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, 'applied')`;
   await sql`INSERT INTO activity_logs (project_id, action, details) VALUES (${project.id}, 'project_created', ${`Project '${project.name}' submitted`})`;
@@ -677,7 +689,7 @@ async function createProjectHandler(c: any) {
     }
   } catch (e) { console.warn('[projects] crm project-create hook failed', e); }
 
-  return c.json(project, 201);
+  return c.json({ ...project, market_figures: marketFigures }, 201);
 }
 
 projects.post('/', createProjectHandler);
@@ -746,6 +758,18 @@ projects.post('/submit', async (c) => {
   }
 
   const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam ?? null}, ${data.sam ?? null}, ${data.cost_to_mvp ?? null}, ${data.funding_needed ?? null}, ${useOfFunds}) RETURNING *`;
+
+  // D7705: a created venture records the figures actually stored, without client-supplied provenance.
+  let marketFigures: { recorded: MarketFigureKey[] } | { recorded: null; reason: string };
+  try {
+    marketFigures = { recorded: await recordMarketFigures(c.env, {
+      projectId: Number(project.id), before: {}, after: { tam: project.tam, sam: project.sam },
+      provenance: { method: 'typed', source: null, stated: false }, setBy: Number(submitUser.id),
+    }) };
+  } catch (e) {
+    console.error('[projects:submit] market_figures write failed', project.id, (e as Error).message);
+    marketFigures = { recorded: null, reason: 'The figures were saved; where they came from was not.' };
+  }
 
   // Snapshot the scoring inputs so the nightly audit + admin queue can
   // reproduce the math, and so anomaly detection can compare to history.
@@ -821,6 +845,7 @@ projects.post('/submit', async (c) => {
   await sql.end();
   return c.json({
     project: { ...project, status: newStatus, stage: newStage },
+    market_figures: marketFigures,
     score: { ...result, integrity_hash: intakeHash, integrity_version: INTEGRITY_VERSION, requires_admin_review: intakeReview === 'flagged', anomaly_flags: intakeFlags },
     auto_decision: { status: newStatus, stage: newStage, tier: result.tier, tier_label: result.tier_label, requires_admin_review: intakeReview === 'flagged' },
   });

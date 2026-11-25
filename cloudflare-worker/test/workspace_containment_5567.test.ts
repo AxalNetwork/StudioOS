@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { CONTAINMENT_EVIDENCE_MAX_AGE_MS, CONTAINMENT_REASONS, CONTAINMENT_STEP, containmentEligibility, containmentRefusal,
   filterContainment, isContainmentEligible, jobEnvironmentClean, jobEnvironmentFindings, requiredSandbox,
   type ContainmentEvidence } from '../src/services/agents/workspaceContainment.ts';
-import { createContainerVm, type VmControl } from '../../agent-compute/vm.ts';
+import { createContainerVm, PYTHON_COMPUTE_INSTANCE, type ComputeInstance, type VmControl } from '../../agent-compute/vm.ts';
 import { specFixture } from './_workspace_fake_5565.ts';
 
 const NOW = 1_800_000_000_000;
@@ -165,12 +165,21 @@ test('the job environment scan flags cloud credentials and provider tokens by na
 });
 
 test('the real compute VM is started with Internet off and no environment, so no credential can ride along', async () => {
-  for (const policy of ['default', 'durable_object']) {
+  // D4557-p3 (#4557): default scheduling is retired, so it never starts a VM; durable_object starts it, on either profile.
+  const vmFor = (policy: string, instance: ComputeInstance) => {
     const starts: Record<string, unknown>[] = [], digest = 'sha256:' + 'a'.repeat(64);
     const control: VmControl = { start: options => { starts.push(options as Record<string, unknown>); },
       namedImage: () => 'registry.example/synthetic@' + digest, inspect: async () => ({ image: 'registry.example/synthetic@' + digest }),
       monitor: () => new Promise(() => {}), fetch: async () => Response.json({ ready: true }), destroy: async () => {} };
-    createContainerVm(control, { schedulingPolicy: policy, instance: 'basic', now: () => 0, pause: async () => {} }).start(digest);
+    return { starts, digest, vm: createContainerVm(control, { schedulingPolicy: policy, instance, now: () => 0, pause: async () => {} }) };
+  };
+  const retired = vmFor('default', PYTHON_COMPUTE_INSTANCE);
+  assert.throws(() => retired.vm.start(retired.digest), /scheduling_unconfirmed/);
+  assert.equal(retired.starts.length, 0, 'default scheduling starts nothing');
+  for (const instance of [PYTHON_COMPUTE_INSTANCE, 'standard-1'] as ComputeInstance[]) {
+    const policy = 'durable_object ' + JSON.stringify(instance);
+    const { starts, digest, vm } = vmFor('durable_object', instance);
+    vm.start(digest);
     assert.equal(starts.length, 1, policy);
     assert.equal(starts[0].enableInternet, false, policy);
     assert.equal('envVars' in starts[0], false, policy);

@@ -28,8 +28,8 @@ import { requireAuth } from '../auth';
 import { isProjectManager, ensureProjectMembershipSchema } from '../services/projectAccess';
 import { membershipEvent } from '../services/companyMembershipEvents';
 import { runDecision, decisionGuard, clearGuard } from '../services/decisionBatch';
-import { afterMove, sponsorsLeft } from '../services/agents/transfer';
-import { ownerUserId, projectMoveStatements } from '../services/projectMove';
+import { runFollowup, sponsorsLeft } from '../services/agents/transfer';
+import { isStale, ownerUserId, projectMoveStatements, renameGuard } from '../services/projectMove';
 import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
 import { refuse } from '../util/refusal';
 import { archivedById, archivedRefusal, companyWriteDenial, denialBody, isArchived, isSupportSession } from '../services/companyAccess';
@@ -70,8 +70,9 @@ r.post('/:id/move', async (c) => {
   if (to !== null && (!Number.isSafeInteger(to) || to <= 0)) return c.json({ detail: 'company_id must be a company id or null' }, 400);
   const from = g.project.company_id ?? null;
   if (to === from) return c.json({ detail: 'The venture is already there', code: 'unchanged' }, 409);
+  let owner: number | null = null;
   if (to !== null) {
-    const owner = await ownerUserId(c.env, g.project.founder_id);
+    owner = await ownerUserId(c.env, g.project.founder_id);
     if (owner == null) return c.json({ detail: 'This venture has no owner account to check the company against', code: 'no_owner' }, 409);
     const company = await c.env.DB.prepare('SELECT id, archived_at FROM company_profiles WHERE id = ?').bind(to).first<{ id: number; archived_at: string | null }>();
     // A company the owner does not belong to reads as not found, so the route confirms no company it does not name.
@@ -91,11 +92,30 @@ r.post('/:id/move', async (c) => {
     }
   }
   // D1415 Part 3: the one writer of `projects.company_id`, shared with the filing (`services/projectMove.ts`).
-  await c.env.DB.batch(projectMoveStatements(c.env, { projectId: g.project.id, from, to, actorUserId: user.id, slug }));
+  // D8525: the batch commits only if the venture is still where the checks above read it (`moveGuard`); else 409, nothing written.
+  let results: D1Result[];
+  try {
+    results = await c.env.DB.batch(projectMoveStatements(c.env, { projectId: g.project.id, from, to, owner, actorUserId: user.id, slug }));
+  } catch (e) {
+    if (isStale(e)) return conflict(c, g.project.id);
+    throw e;
+  }
   // #3850 (E6): only once the batch committed: in-flight runs end `scope_moved`, the boards and teams are told.
-  await afterMove(c.env, { projectId: g.project.id, from, to, actorUserId: user.id });
+  // D8525: the batch's last statement recorded the step as owed; a failure here leaves it for the tick.
+  await runFollowup(c.env, Number(results[results.length - 1]?.meta?.last_row_id));
   return c.json({ project_id: g.project.id, company_id: to, previous_company_id: from });
 });
+
+/** D8525: the venture changed between the route's read and its write. Nothing was written; the client rereads. */
+async function conflict(c: any, projectId: number) {
+  const now = await c.env.DB.prepare('SELECT company_id, slug FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(projectId).first();
+  return c.json({
+    detail: 'This venture changed while you were saving. Nothing was changed: reload it and try again.',
+    code: 'conflict',
+    project: now ? { id: projectId, company_id: now.company_id ?? null, slug: now.slug ?? null } : null,
+  }, 409);
+}
 
 /** The company a project sits in, for its path: uid and slug, or null for standalone. */
 const companyOfProject = (env: Env, companyId: number | null) => companyId == null
@@ -125,10 +145,13 @@ r.put('/:id/slug', async (c) => {
   if (holder != null && holder !== g.project.id) return taken();
   try {
     await c.env.DB.batch([
-      c.env.DB.prepare('UPDATE projects SET slug = ? WHERE id = ?').bind(s.slug, g.project.id),
+      // D8525: compare and set: still in the scope the check read, still with the slug it replaces.
+      renameGuard(c.env, g.project.id, scope, previous),
+      c.env.DB.prepare('UPDATE projects SET slug = ? WHERE id = ? AND company_id IS ? AND slug IS ?').bind(s.slug, g.project.id, scope, previous),
       ...(previous ? [retireSlug(c.env, 'project', previous, g.project.id, scope, user.id)] : []),
     ]);
   } catch (e) {
+    if (isStale(e)) return conflict(c, g.project.id);
     if (/UNIQUE constraint failed/i.test(String((e as Error)?.message))) return taken();
     throw e;
   }

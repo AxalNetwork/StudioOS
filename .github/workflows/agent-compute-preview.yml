@@ -55,34 +55,21 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
-      - name: Verify reviewed image provenance and render isolated default-policy config
+      - name: Verify reviewed image provenance and render isolated approved-policy config
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           IMAGE_REF: ${{ vars.COMPUTE_PREVIEW_IMAGE_REF }}
+          SOURCE_IMAGE_REF: ${{ vars.COMPUTE_PREVIEW_SOURCE_IMAGE_REF }}
           IMAGE_SIGNER_WORKFLOW: ${{ vars.COMPUTE_PREVIEW_IMAGE_SIGNER_WORKFLOW }}
           HOST_NAME: ${{ vars.COMPUTE_PREVIEW_HOST_NAME }}
           BROKER_NAME: ${{ vars.COMPUTE_PREVIEW_BROKER_NAME }}
-          DEFAULT_POLICY_REAFFIRMED: ${{ vars.COMPUTE_PREVIEW_DEFAULT_POLICY_REAFFIRMED }}
+          SCHEDULING_POLICY: ${{ vars.COMPUTE_PREVIEW_SCHEDULING_POLICY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-          assert os.environ['DEFAULT_POLICY_REAFFIRMED'] == 'true', 'D4554 immutable scheduling decision is required'
-          image = os.environ['IMAGE_REF']
-          assert re.fullmatch(r'ghcr\.io/axalnetwork/studioos-agent-compute@sha256:[a-f0-9]{64}', image)
-          assert re.fullmatch(r'AxalNetwork/StudioOS/\.github/workflows/[a-z0-9_-]+\.yml', os.environ['IMAGE_SIGNER_WORKFLOW'])
-          for name in ['HOST_NAME', 'BROKER_NAME']:
-              assert re.fullmatch(r'studioos-[a-z0-9-]*preview[a-z0-9-]*', os.environ[name]), 'Only separately named preview Workers are eligible'
-          config = Path('wrangler.agent-compute.toml').read_text()
-          assert 'scheduling_policy = "default"' in config and 'COMPUTE_ENABLED = "off"' in config
-          config = config.replace('studioos-agent-compute-preview', os.environ['HOST_NAME']).replace('service = "studioos-preview"', 'service = "' + os.environ['BROKER_NAME'] + '"')
-          config = config.replace('image = "./agent-compute/Dockerfile"', 'image = "' + image + '"')
-          config = config.replace('image_build_context = "./agent-compute"\n', '')
-          Path('wrangler.agent-compute.approved.toml').write_text(config)
-          PY
+          python3 scripts/render-agent-compute-preview.py --config wrangler.agent-compute.toml --output wrangler.agent-compute.approved.json
           printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          gh attestation verify "oci://$IMAGE_REF" --repo "$REPOSITORY" --signer-workflow "$IMAGE_SIGNER_WORKFLOW" --source-digest "$GITHUB_SHA"
+          gh attestation verify "oci://$SOURCE_IMAGE_REF" --repo "$REPOSITORY" --signer-workflow "$IMAGE_SIGNER_WORKFLOW" --source-digest "$GITHUB_SHA"
       - name: Install locked tools and package the disabled Worker
         run: |
           npm ci --prefix cloudflare-worker
@@ -93,7 +80,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.agent-compute.approved.toml --env preview
+        run: cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.agent-compute.approved.json --env preview
       - name: Clear preview registry credentials
         if: always()
         run: docker logout ghcr.io

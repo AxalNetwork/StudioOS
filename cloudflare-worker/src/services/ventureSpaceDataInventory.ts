@@ -320,6 +320,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['project_member_invitations', 'p', 'left'],
   ['project_members', 'p', 'left'],
   ['project_metrics', 'p', 'cleanup'],
+  ['project_move_followups', 'p', 'left'], // D8525: the move's owed follow-up step; no reference, nothing deletes it
   ['project_rituals', 'p', 'left'],
   ['publish_destinations', 'c', 'company'],
   ['publish_drafts', 'pc', 'cascade'],

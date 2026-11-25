@@ -554,6 +554,11 @@ async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeI
 /**
  * Reconcile a single envelope. Idempotent — safe to call from both the
  * Connect webhook and the cron poller.
+ *
+ * D8515: "nothing to do" returns (`updated: false`); "could not do it" throws.
+ * A provider read that is not OK, or a signed PDF that could not be pulled and
+ * stored, is a failure, so the webhook answers it with a retryable status and
+ * the poller counts it as an error, never as an envelope with no change.
  */
 async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: string): Promise<{ status: string; updated: boolean }> {
   // Tenant-scoped lookup — only reconcile envelopes that belong to this
@@ -574,7 +579,7 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
       ).bind(row.user_id, dsEnvelopeId).first<{ id: number; envelope_uuid: string; status: string }>();
   if (!local) return { status: 'unknown', updated: false };
   const res = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}`);
-  if (!res.ok) return { status: local.status, updated: false };
+  if (!res.ok) throw new Error(`docusign_envelope_read_failed: http ${res.status}`);
   const env2 = await res.json() as {
     status?: string;
     completedDateTime?: string;
@@ -624,7 +629,9 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
           `UPDATE esign_envelopes SET last_error = ? WHERE id = ?`,
         ).bind('docusign_pdf_pull_failed: signed PDF retrieval failed; will retry on next sweep', local.id).run();
       } catch {}
-      return { status: local.status, updated: false };
+      // D8515: the envelope is signed but its copy is not stored. That is a
+      // failure the sender must retry, not "no change".
+      throw new Error('docusign_pdf_pull_failed: signed PDF retrieval failed');
     }
 
     // Mirror the in-house flow's recipient-side bookkeeping so the audit
@@ -636,10 +643,15 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
       ).bind(local.id).run();
     } catch {}
   }
+  // D8515: each status write is conditional on the status this call read, so a
+  // webhook delivery and the poller racing on one envelope write the final
+  // status, its audit event and its completion steps once; the loser returns
+  // "no change".
   if (newStatus === 'completed' && signedKey) {
-    await env.DB.prepare(
-      `UPDATE esign_envelopes SET status = ?, signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?`,
-    ).bind(newStatus, signedKey, local.id).run();
+    const w = await env.DB.prepare(
+      `UPDATE esign_envelopes SET status = ?, signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ? AND status = ?`,
+    ).bind(newStatus, signedKey, local.id, local.status).run();
+    if (!w.meta?.changes) return { status: newStatus, updated: false };
     // A DocuSign-signed NDA has to satisfy its obligation too. This path is a
     // POLLER, not a webhook, and it does not share the in-house signing route's
     // completion block — so an obligation satisfier added only there would
@@ -678,15 +690,14 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
     // For terminal non-completed states (rejected/void), persist the
     // provider-supplied reason on the envelope row so the admin
     // Contracts UI can render it without trawling audit events.
-    if (stateReason && (newStatus === 'rejected' || newStatus === 'void')) {
-      await env.DB.prepare(
-        `UPDATE esign_envelopes SET status = ?, last_error = ? WHERE id = ?`,
-      ).bind(newStatus, stateReason, local.id).run();
-    } else {
-      await env.DB.prepare(
-        `UPDATE esign_envelopes SET status = ? WHERE id = ?`,
-      ).bind(newStatus, local.id).run();
-    }
+    const w = stateReason && (newStatus === 'rejected' || newStatus === 'void')
+      ? await env.DB.prepare(
+        `UPDATE esign_envelopes SET status = ?, last_error = ? WHERE id = ? AND status = ?`,
+      ).bind(newStatus, stateReason, local.id, local.status).run()
+      : await env.DB.prepare(
+        `UPDATE esign_envelopes SET status = ? WHERE id = ? AND status = ?`,
+      ).bind(newStatus, local.id, local.status).run();
+    if (!w.meta?.changes) return { status: newStatus, updated: false };
   }
   // Append-only audit event for the status transition.
   try {
@@ -748,29 +759,56 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
   // Replay protection. The signature check (verifyWebhook) confirms the
   // body's authenticity but not its freshness — a captured-and-replayed
   // payload would still pass. We dedupe on a SHA-256 of the raw body
-  // scoped to this integration row, with a 24-hour KV TTL. The reconcile
-  // path itself is idempotent, but rejecting replays early avoids
-  // re-issuing audit-log rows for the same event.
+  // scoped to this integration row. The reconcile path itself is
+  // idempotent, but rejecting replays early avoids re-issuing audit-log
+  // rows for the same event.
+  //
+  // D8515: a delivery is marked as seen only once its work is durable.
+  // Before the work the marker says `pending` for KV's 60-second minimum,
+  // so an identical delivery arriving meanwhile is told to retry (5xx) and
+  // does not reconcile a second time. On success it becomes `done` for 24
+  // hours, and a later identical body is a replay. On failure the marker is
+  // removed and the handler throws: the shared receiver logs `error` and
+  // answers 500, so DocuSign redelivers and the redelivery reconciles.
+  const kv = c.env.RATE_LIMITS;
+  let dedupeKey: string | null = null;
   try {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
     const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const dedupeKey = `docusign:webhook:${row.uid}:${hex}`;
-    const seen = await c.env.RATE_LIMITS.get(dedupeKey);
+    const key = `docusign:webhook:${row.uid}:${hex}`;
+    const seen = await kv.get(key);
+    if (seen === DELIVERY_PENDING) throw new DeliveryInProgress();
     if (seen) return { summary: `replay rejected (docusign_envelope=${dsEnvelopeId})` };
-    await c.env.RATE_LIMITS.put(dedupeKey, '1', { expirationTtl: 86400 });
-  } catch { /* KV unavailable — fall through to reconcile (still idempotent) */ }
-
-  try {
-    const r = await reconcileEnvelope(c.env, row, dsEnvelopeId);
-    return { summary: `reconciled docusign_envelope=${dsEnvelopeId} status=${r.status} updated=${r.updated}` };
+    await kv.put(key, DELIVERY_PENDING, { expirationTtl: DELIVERY_PENDING_TTL_S });
+    dedupeKey = key;
   } catch (e) {
+    if (e instanceof DeliveryInProgress) throw new Error('docusign_delivery_in_progress: retry later');
+    /* KV unavailable — fall through to reconcile (still idempotent) */
+  }
+
+  let r: { status: string; updated: boolean };
+  try {
+    r = await reconcileEnvelope(c.env, row, dsEnvelopeId);
+  } catch (e) {
+    if (dedupeKey) { try { await kv.delete(dedupeKey); } catch { /* the pending marker expires in 60 s */ } }
     // Avoid echoing upstream response bodies into logs — DocuSign error
     // payloads can carry recipient PII. Log only the error class.
     const msg = (e as Error).message || 'unknown';
     const cls = msg.split(':')[0]?.slice(0, 80) || 'reconcile_failed';
-    return { summary: `reconcile failed: ${cls}` };
+    throw new Error(`reconcile failed: ${cls}`);
   }
+  if (dedupeKey) {
+    try { await kv.put(dedupeKey, DELIVERY_DONE, { expirationTtl: DELIVERY_DONE_TTL_S }); } catch { /* reconcile is idempotent */ }
+  }
+  return { summary: `reconciled docusign_envelope=${dsEnvelopeId} status=${r.status} updated=${r.updated}` };
 }
+
+const DELIVERY_PENDING = 'pending';
+const DELIVERY_DONE = 'done';
+/** KV's minimum TTL; the longest a crashed delivery blocks its own retry. */
+const DELIVERY_PENDING_TTL_S = 60;
+const DELIVERY_DONE_TTL_S = 86400;
+class DeliveryInProgress extends Error {}
 
 function extractEnvelopeId(body: string): string | null {
   const trimmed = body.trim();

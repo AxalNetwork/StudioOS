@@ -221,10 +221,11 @@ test('afterMove never throws: a failing board or inbox leaves the runs ended', a
 });
 
 test('the callers run onProjectMoved only after their batch commits', () => {
-  // Mutation checked: afterMove moved above the batch in the move route turns this red.
+  // Mutation checked: the after-step moved above the batch in the move route turns this red.
+  // D8525: the move route runs it as the owed step its batch recorded (`runFollowup`), not through `afterMove`.
   const route = readFileSync(new URL('../src/routes/project_lifecycle.ts', import.meta.url), 'utf8');
   const batch = route.indexOf('await c.env.DB.batch(projectMoveStatements(');
-  assert.ok(batch > 0 && route.indexOf('await afterMove(') > batch);
+  assert.ok(batch > 0 && route.indexOf('await runFollowup(') > batch);
   const filing = readFileSync(new URL('../src/services/incorporationFiling.ts', import.meta.url), 'utf8');
   // D6686: the filing's batch runs inside the case transition (formationCase.ts), which returns after it commits.
   const fb = filing.indexOf("await transition(env, c.id, 'registered'");

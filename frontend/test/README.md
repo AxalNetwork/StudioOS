@@ -288,6 +288,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `csv_private_copies_7811.test.mjs` | D7811: file-keyed pending CSV copies and detection of new private escapers. |
 | `_csv_safe_7811.mjs` | D7811: one literal CSV case table shared with Worker tests. |
 
+| `research_changed_interfaces_7815.test.mjs` | D7815: actual project Compare retry/status recovery, tab results return and stale catalogue/dossier responses after route changes. |
 | `portfolio_reporting_settings_6214.test.mjs` | Reporting settings loading, partial reads, read-only defaults and GP save states. |
 | `revenue_metrics_5952.test.mjs` | D5952: quarterly ledger metric states, currency/period joins, per-licence receipts and AI, automatic promo report and coverage metadata; rendered components over synthetic envelopes. |
 | `fund_report_reader_6250.test.mjs` | Issued report prose, frozen figures, attribution, correction links, absence and Print. |
@@ -295,6 +296,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
+`company_attribution_7812.test.mjs` walks the canonical publisher reference across company table, responsive cards, profile and analysis subject attribution, including missing/unreviewed provenance and field-read failure.
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
 | `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |
 `capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.
