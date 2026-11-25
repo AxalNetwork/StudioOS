@@ -820,19 +820,20 @@ trust.post('/pairwise-ndas/:id/resend', async (c) => {
   const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   let sent = 0;
   try {
-    const { sendAgreementAssignedEmail } = await import('../services/email');
+    // D8536 — each to the address its recipients row names, under the reference
+    // of this hour's re-send of the same link: a retry within the hour is
+    // answered from the ledger instead of mailed again.
+    const { sendAgreementAssignedEmailBound, signingRef } = await import('../services/email');
     for (const r of pending) {
       try {
-        await sendAgreementAssignedEmail(
-          c.env,
-          r.recipient_email,
-          r.recipient_name || r.recipient_email,
-          '3-Way Mutual NDA — please sign',
-          `${appUrl}/esign/${r.signing_token}`,
-          'Axal Admin',
-        );
-        sent += 1;
-      } catch (e) { console.warn('[trust] resend email failed', r.recipient_email, (e as Error).message); }
+        const res = await sendAgreementAssignedEmailBound(c.env, await signingRef(Number(r.id), String(r.signing_token), 'resend'), {
+          recipientName: r.recipient_name || r.recipient_email,
+          agreementLabel: '3-Way Mutual NDA — please sign',
+          signLink: `${appUrl}/esign/${r.signing_token}`,
+          adminName: 'Axal Admin',
+        });
+        if (res.state === 'accepted') sent += 1;
+      } catch (e) { console.warn('[trust] resend email failed', (e as Error).name || 'Error'); }
     }
   } catch (e) { console.warn('[trust] email module unavailable', (e as Error).message); }
   await c.env.DB.prepare(

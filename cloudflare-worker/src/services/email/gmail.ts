@@ -62,6 +62,14 @@ export interface EmailAttachment {
   contentType: string;
   /** Raw attachment body (NOT pre-encoded). */
   content: string;
+  /** D8536 — a binary body (a PDF), base64-encoded as bytes. Takes the place of `content`. */
+  bytes?: Uint8Array;
+}
+
+function b64encodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return (btoa(binary).match(/.{1,76}/g) || ['']).join('\r\n');
 }
 
 /** A calendar meeting invite (.ics) to embed (Task #15). When present the ICS
@@ -194,7 +202,7 @@ export function buildRawMimeMessage(opts: RawEmailOpts): string {
         filename: safeFilename(opts.calendarInvite.filename || 'invite.ics'),
       }
     : null;
-  const attachments = (opts.attachments || []).filter((a) => a && a.content);
+  const attachments = (opts.attachments || []).filter((a) => a && (a.content || (a.bytes && a.bytes.length)));
 
   // Nothing to wrap → the legacy multipart/alternative envelope, unchanged.
   if (!cal && attachments.length === 0) {
@@ -231,7 +239,7 @@ export function buildRawMimeMessage(opts: RawEmailOpts): string {
       `Content-Transfer-Encoding: base64`,
       `Content-Disposition: attachment; filename="${safeFilename(att.filename)}"`,
       ``,
-      b64encode(att.content),
+      att.bytes && att.bytes.length ? b64encodeBytes(att.bytes) : b64encode(att.content),
       ``,
     );
   }

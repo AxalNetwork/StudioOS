@@ -46,7 +46,10 @@ import type { Env } from '../types';
 import { requireAuth, requireStepUp, requireSuperAdmin } from '../auth';
 import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCES, ENVELOPE_ABSENCES } from '../services/esignOriginators';
 import { esignEnvelopeScope } from '../services/tenancyScope';
-import { sendAgreementAssignedEmailResult, sendReleaseSignEmailResult, type EmailSendResult } from '../services/email';
+import {
+  sendAgreementAssignedEmailBound, sendReleaseSignEmailBound, asEmailSendResult, signingRef,
+  type EmailSendResult, type SendReference,
+} from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
 import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
 import { structureForPaper } from '../services/fundStructure';
@@ -342,18 +345,21 @@ export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
 // failed mail. Used by the first send, `/remind` and a signer's `/resend`.
 // ---------------------------------------------------------------------------
 export const RELEASE_ENVELOPE_DOC_TYPE = 'work_graph_release';
+
 export async function signingEmailFor(
   env: Env,
   e: { documentType: string | null | undefined; documentBody: string | null | undefined; title: string },
-  to: string, recipientName: string, signLink: string, senderName: string, linkExpiryDays = 7,
+  ref: SendReference, recipientName: string, signLink: string, senderName: string, linkExpiryDays = 7,
 ): Promise<EmailSendResult> {
   if (e.documentType === RELEASE_ENVELOPE_DOC_TYPE) {
     const { releaseSignFacts } = await import('../services/workGraphReleaseSigning');
     const facts = releaseSignFacts(e.documentBody ?? '');
     if (!facts) return { ok: false, reason: 'refused' };
-    return sendReleaseSignEmailResult(env, to, { recipientName, ...facts, signLink, linkExpiryDays });
+    return asEmailSendResult(await sendReleaseSignEmailBound(env, ref, { recipientName, ...facts, signLink, linkExpiryDays }));
   }
-  return sendAgreementAssignedEmailResult(env, to, recipientName, e.title, signLink, senderName, linkExpiryDays);
+  return asEmailSendResult(await sendAgreementAssignedEmailBound(env, ref, {
+    recipientName, agreementLabel: e.title, signLink, adminName: senderName, linkExpiryDays,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -773,9 +779,15 @@ export async function createAndSendEnvelope(
     meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
   });
 
-  const emailSent = (await signingEmailFor(
-    env, { documentType, documentBody: tpl.body, title: tpl.title }, opts.recipientEmail, opts.recipientName, signingUrl, opts.adminName,
-  )).ok;
+  // D8536 — the email goes to the address the recipients row names, under the
+  // reference of this token's first send.
+  const recipientRow = await env.DB.prepare(
+    `SELECT id FROM esign_recipients WHERE envelope_id = ? AND signing_token = ?`,
+  ).bind(envelopeId, token).first<{ id: number }>();
+  const emailSent = recipientRow ? (await signingEmailFor(
+    env, { documentType, documentBody: tpl.body, title: tpl.title },
+    await signingRef(recipientRow.id, token, 'send'), opts.recipientName, signingUrl, opts.adminName,
+  )).ok : false;
 
   await appendAudit(env, envelopeId, {
     ts: new Date().toISOString(),
@@ -1945,36 +1957,43 @@ esign.post('/:id{[0-9]+}/forward', async (c) => {
     }
   }
 
-  const { sendSignedPdfForwardedEmail } = await import('../services/email');
+  // D8536 part 2 — each forward is one send under the contract. Its log row is
+  // written first and names the address; the send reads it from there, under
+  // the reference `signature:esign_forward:<row id>:1`.
+  const { sendSignedPdfForwardedEmailBound } = await import('../services/email');
   const results: { email: string; ok: boolean; error?: string }[] = [];
 
   for (const email of recipients) {
-    const emailSent = await sendSignedPdfForwardedEmail(
-      c.env, email, envRow.document_title || 'Signed Document',
-      user.name || user.email || 'Axal StudioOS',
-      attachmentBytes,
-      { message: message || undefined, from: 'Axal VC Legal <legal@axal.vc>' },
-    );
-    results.push({ email, ok: emailSent.ok, error: emailSent.error });
-    const status = emailSent.ok ? 'sent' : 'failed';
-    await c.env.DB.prepare(
+    const logRow = await c.env.DB.prepare(
       `INSERT INTO esign_forward_log (envelope_id, forwarded_by, forwarded_to, include_audit_page, message, status, email_sent, error_message)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      id, user.id, email.toLowerCase(),
-      actuallyIncludedAudit ? 1 : 0,
-      message || null,
-      status,
-      emailSent.ok ? 1 : 0,
-      emailSent.error || null,
-    ).run();
+       VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL) RETURNING id`
+    ).bind(id, user.id, email.toLowerCase(), actuallyIncludedAudit ? 1 : 0, message || null).first<{ id: number }>();
+    const sent = logRow
+      ? await sendSignedPdfForwardedEmailBound(c.env, { flow: 'signature', subject: { kind: 'esign_forward', id: logRow.id }, attempt: 1 }, {
+          documentTitle: envRow.document_title || 'Signed Document',
+          senderName: user.name || user.email || 'Axal StudioOS',
+          pdfBytes: attachmentBytes,
+          message: message || undefined,
+          from: 'Axal VC Legal <legal@axal.vc>',
+        })
+      : null;
+    const ok = sent?.state === 'accepted';
+    // A send whose answer never came may have arrived: it is not reported as
+    // failed-and-retryable, and it is never sent again under this reference.
+    const error = ok ? undefined : sent?.state === 'timed_out' ? 'no_answer' : (sent?.reason || 'not_recorded');
+    results.push({ email, ok, error });
+    if (logRow) {
+      await c.env.DB.prepare(
+        `UPDATE esign_forward_log SET status = ?, email_sent = ?, error_message = ? WHERE id = ?`
+      ).bind(ok ? 'sent' : sent?.state === 'timed_out' ? 'timed_out' : 'failed', ok ? 1 : 0, error || null, logRow.id).run();
+    }
     await appendAudit(c.env, id, {
       ts: new Date().toISOString(),
       signer_id: user.id,
       signer_email: user.email,
       action: 'document_forwarded',
       ip: clientIp(c.req.raw),
-      meta: { forwarded_to: email, include_audit_page: actuallyIncludedAudit, ok: emailSent.ok },
+      meta: { forwarded_to: email, include_audit_page: actuallyIncludedAudit, ok },
     });
   }
 
@@ -2160,10 +2179,11 @@ export async function renewPartnerInvitationSigningLink(
         AND EXISTS (SELECT 1 FROM partner_invitations WHERE id = ? AND status NOT IN ('signed','revoked'))`,
   ).bind(token, expiresAt, recipient.id, envelope.id, invitationId).run();
   if (!changed.meta?.changes) return null;
-  const result = await sendAgreementAssignedEmailResult(
-    env, recipient.recipient_email, recipient.recipient_name || '', envelope.document_title || 'Agreement',
-    `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || 'Axal VC', 14,
-  );
+  // D8536 — a renewal mints a new token, so it is a new attempt of its own.
+  const result = asEmailSendResult(await sendAgreementAssignedEmailBound(env, await signingRef(recipient.id, token, 'renew'), {
+    recipientName: recipient.recipient_name || '', agreementLabel: envelope.document_title || 'Agreement',
+    signLink: `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, adminName: actor.name || 'Axal VC', linkExpiryDays: 14,
+  }));
   let previousLinkRestored = false;
   if (!result.ok) {
     // Keep the link already in the recipient's inbox usable after a failed
@@ -2235,7 +2255,7 @@ esign.post('/:id{[0-9]+}/remind', async (c) => {
     }
     const sent = (await signingEmailFor(
       c.env, { documentType: envRow.document_type, documentBody: envRow.document_body, title: envRow.document_title || 'Agreement' },
-      r.recipient_email, r.recipient_name || '', `${appUrl}/esign/${tokenValue}`, senderName,
+      await signingRef(Number(r.id), tokenValue, 'remind'), r.recipient_name || '', `${appUrl}/esign/${tokenValue}`, senderName,
     )).ok;
     results.push({ email: r.recipient_email, sent, link_renewed: lapsed, expires_at: expiresAt });
     await appendAudit(c.env, id, {
@@ -2331,7 +2351,7 @@ esign.post('/:id{[0-9]+}/resend', async (c) => {
     : null;
   const sent = (await signingEmailFor(
     c.env, { documentType: row.document_type, documentBody: row.document_body, title: row.document_title || 'Agreement' },
-    row.recipient_email, row.recipient_name || '', `${c.env.APP_URL || 'https://axal.vc'}/esign/${tokenValue}`, sender?.name || 'Axal VC',
+    await signingRef(Number(row.id), tokenValue, 'resend'), row.recipient_name || '', `${c.env.APP_URL || 'https://axal.vc'}/esign/${tokenValue}`, sender?.name || 'Axal VC',
   )).ok;
   await appendAudit(c.env, id, {
     ts: new Date().toISOString(),

@@ -9,7 +9,7 @@ import { extractMergeFields } from '../services/legalTemplateStore';
 import { isAutoMergeKey } from './esign';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
-import { sendAgreementAssignedEmail } from '../services/email';
+import { sendAgreementAssignedEmailBound, signingRef } from '../services/email';
 import { fanOut } from '../services/branches';
 import { usageFromContractRows, usageRowsFor } from '../services/contractTemplateUsage';
 import { agreementFilters, loadLicenceAgreementContexts, matchesAgreementFilters, type AgreementContext } from '../services/contractAgreementSources';
@@ -1697,14 +1697,14 @@ adminContracts.post('/:uid/resend', async (c) => {
     }
     const appUrl = (c.env as any).APP_URL || 'https://axal.vc';
     const signingUrl = `${appUrl}/esign/${token}`;
-    const emailSent = await sendAgreementAssignedEmail(
-      c.env,
-      rec.recipient_email,
-      rec.recipient_name || rec.recipient_email,
-      env.document_title,
-      signingUrl,
-      adminUser.name || adminUser.email,
-    );
+    // D8536 — to the address the recipients row names, under the reference of
+    // this hour's re-send of the link (a replaced link is a new issuance).
+    const emailSent = (await sendAgreementAssignedEmailBound(c.env, await signingRef(Number(rec.id), String(token), 'resend'), {
+      recipientName: rec.recipient_name || rec.recipient_email,
+      agreementLabel: env.document_title,
+      signLink: signingUrl,
+      adminName: adminUser.name || adminUser.email,
+    })).state === 'accepted';
     await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${JSON.stringify({ envelope_id: env.id, envelope_uuid: env.envelope_uuid, email_sent: emailSent })}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
     return c.json({ ok: true, email_sent: emailSent });
   } finally {

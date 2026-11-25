@@ -51,6 +51,36 @@ const SUBJECTS = {
     flow: 'invitation',
     sql: "SELECT email AS addr FROM company_invitations WHERE id = ? AND status = 'pending'",
   },
+  /**
+   * D8536 part 2 — a native e-sign recipient, while it still waits to sign.
+   * The attempt is the signing token's issuance plus the occasion
+   * (`signingAttempt` in routes/esign.ts), so a reminder is its own send and a
+   * retry of the same reminder reconciles.
+   */
+  esign_recipient: {
+    flow: 'signature',
+    sql: "SELECT recipient_email AS addr FROM esign_recipients WHERE id = ? AND status = 'pending'",
+  },
+  /** A signed PDF forwarded to a legal partner: the forward log row, written before the send, names the address. */
+  esign_forward: {
+    flow: 'signature',
+    sql: 'SELECT forwarded_to AS addr FROM esign_forward_log WHERE id = ?',
+  },
+  /** A Stripe receipt: the `invoice_email_log` row for one invoice or charge, written before the send. */
+  invoice_receipt: {
+    flow: 'billing',
+    sql: 'SELECT recipient AS addr FROM invoice_email_log WHERE id = ?',
+  },
+  /** A storefront order's confirmation: the buyer the order row names. */
+  order_receipt: {
+    flow: 'billing',
+    sql: 'SELECT u.email AS addr FROM orders o JOIN users u ON u.id = o.user_id WHERE o.order_ref = ?',
+  },
+  /** An operational alert to one admin: the `notifications` row written for that admin, while the admin is active. */
+  admin_alert: {
+    flow: 'alert',
+    sql: "SELECT u.email AS addr FROM notifications n JOIN users u ON u.id = n.user_id WHERE n.id = ? AND u.role = 'admin' AND u.is_active = 1",
+  },
 } as const satisfies Record<string, { flow: DeliveryFlow; sql: string }>;
 
 export type SubjectKind = keyof typeof SUBJECTS;
