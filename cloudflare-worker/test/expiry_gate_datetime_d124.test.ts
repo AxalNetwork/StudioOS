@@ -222,7 +222,7 @@ test('no access-control gate compares a bare timestamp column', () => {
     'routes/auth.ts': ['expires_at'],
     'routes/auth_passkey.ts': ['expires_at'],
     'routes/advisor_grants.ts': ['expires_at', 'g.expires_at'],
-    'routes/advisors_engagements.ts': ['g.expires_at'],
+    'services/advisorEngagements.ts': ['g.expires_at'],
     'routes/data_room.ts': ['expires_at', 'g.expires_at', 'n.valid_until'],
     'routes/research.ts': ['expires_at', 'g.expires_at', 'k.expires_at'],
     'routes/market_intel.ts': ['valid_until'],

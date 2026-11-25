@@ -20,34 +20,21 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleGrow from '../src/routes/cycle_grow.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { openSchema } from './_schema_once.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
-const BASELINE = readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const FOUNDER = 1; const COFOUNDER = 2; const ADVISOR = 3; const OTHER = 6;
 const PA = 7; const PB = 8;
 const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [COFOUNDER]: 'founder', [ADVISOR]: 'founder', [OTHER]: 'founder' };
 
-const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations);
-
 function fixture() {
-  const db = new DatabaseSync(':memory:');
-  db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(BASELINE);
-  for (const name of newer) db.exec(readFileSync(resolve(M, name), 'utf8'));
+  const db = openSchema({}, { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: false });
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Founder A', 'fa@example.test'), (20, 'Founder B', 'fb@example.test');`);
   const u = db.prepare('INSERT INTO users (id, email, name, role, founder_id) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder@example.test', 'Fay Founder', 'founder', 10);

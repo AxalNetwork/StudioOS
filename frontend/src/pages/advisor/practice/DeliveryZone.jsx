@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { EmailAction } from '../../email/emailParts';
@@ -143,19 +143,27 @@ export default function DeliveryZone() {
   // #4714 (D4714): the create form's engagement list is its own read. A
   // failed read says so beside the picker rather than offering only "No
   // engagement", which reads as "you have none".
-  const [engagementsRead, setEngagementsRead] = useState(true);
+  const [engagementsRead, setEngagementsRead] = useState(null);
+  const engagementEpoch = useRef(0);
+  const listEpoch = useRef(0);
   const [partial, setPartial] = useState(null);
   const loadEngagements = useCallback(async () => {
+    const epoch = ++engagementEpoch.current;
+    setEngagementsRead(null);
     try {
       const engs = await readEveryPage((page) => api.listMyAdvisorEngagements(page));
+      if (epoch !== engagementEpoch.current) return;
       setEngagements(engs?.items || []); setEngagementsRead(true);
-    } catch { setEngagements([]); setEngagementsRead(false); }
+    } catch { if (epoch === engagementEpoch.current) { setEngagements([]); setEngagementsRead(false); } }
   }, []);
   const load = useCallback(async () => {
+    const epoch = ++listEpoch.current;
+    loadEngagements();
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       // #4714 (D4714): every page; `totals` are the whole set's.
       const read = await readEveryPage((page) => api.listMyAdvisorDeliverables(page));
+      if (epoch !== listEpoch.current) return;
       const data = { items: read.items, totals: read.first?.totals || null };
       setPartial(partialLine(read));
       // THE PRIMARY LIST RENDERS AS SOON AS IT ARRIVES. Engagements, held
@@ -163,6 +171,7 @@ export default function DeliveryZone() {
       // on a skeleton (#4702). Engagements only feed the create form.
       setState({ loading: false, error: '', items: data?.items || [], totals: data?.totals || null });
     } catch (error) {
+      if (epoch !== listEpoch.current) return;
       setState({
         loading: false,
         error: zoneError(error, error?.message || 'The delivery record could not be read.', 'practice'),
@@ -170,9 +179,8 @@ export default function DeliveryZone() {
       });
       return;
     }
-    loadEngagements();
   }, [loadEngagements]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => { listEpoch.current++; engagementEpoch.current++; }; }, [load]);
   useEffect(() => { loadHeld(); }, [loadHeld]);
 
   const { items } = state;
@@ -347,16 +355,16 @@ export default function DeliveryZone() {
                   onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
               </Field>
               <Field label="Engagement" hint="A work product under a contract takes its client from it. Sending requires one whose client has an Axal account — nothing an unlinked client is sent can ever be recorded as opened.">
-                <select className={inputClass} value={draft.engagement_id}
+                <select className={inputClass} value={draft.engagement_id} disabled={engagementsRead == null} aria-busy={engagementsRead == null}
                   onChange={(e) => setDraft({ ...draft, engagement_id: e.target.value })}>
-                  <option value="">No engagement — type a client below</option>
+                  <option value="">{engagementsRead == null ? 'Reading engagements…' : 'No engagement — type a client below'}</option>
                   {engagements.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.client_name}{e.founder_user_id ? '' : ' (no account — cannot be sent)'}
                     </option>
                   ))}
                 </select>
-                {!engagementsRead && (
+                {engagementsRead === false && (
                   <div className="mt-1" role="alert" data-testid="delivery-engagements-unreadable">
                     <Unreadable onRetry={loadEngagements}>Your engagements could not be read, so none is offered here.</Unreadable>
                   </div>

@@ -82,6 +82,9 @@ Run every command from the repository root, on your issue's branch.
    ```
    `cloudflare-worker/test/brand_locks_d1572.test.ts` and
    `deck_media_d1545.test.ts` load the schema this way.
+   Do not replay the files yourself in a fixture: a Worker test file that
+   executes more than two chains' worth of whole migration files is stopped
+   (D8467, `cloudflare-worker/test/_schema_budget.mjs`).
    `cloudflare-worker/test/legal_template_research_schema_4591.test.mjs`
    builds it another way (`buildFresh` and `postCutoffMigrations` from
    `scripts/check-baseline-drift.mjs`, run with a plain `node --test`); read

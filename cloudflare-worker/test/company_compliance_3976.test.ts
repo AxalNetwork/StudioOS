@@ -23,34 +23,34 @@
  *      the company badge, and not to anyone else.
  *  10. No reply carries an email.
  *
- * In-memory SQLite: the baseline and every post-cutoff migration.
+ * In-memory SQLite: the baseline and every post-cutoff migration, built once per run and copied into each
+ * test's own database (`_schema_once.mjs`, #8446).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import companyCompliance from '../src/routes/company_compliance.ts';
 import companyRoutes from '../src/routes/company.ts';
 import { commentOn, companyOf, markDone, readyForReview } from '../src/services/compliance/companyTasks.ts';
 import { complianceDueEvents } from '../src/services/calendar/sourceReaders.ts';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const FILES = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
-  .sort((a, b) => migrationNumber(a) - migrationNumber(b) || a.localeCompare(b));
 // D4106: the migration is named by its UTC minute, so it sorts after every numbered file.
 const MCO = '202611021812_company_compliance_tasks.sql';
 const SECRET = 'synthetic-company-compliance-3976-'.repeat(3);
 // Users: 1 primary admin, 2 member, 3 HQ admin without a seat, 4 outsider, 5 HQ admin with a seat, 6 second member.
 const ADMIN = 1, MEMBER = 2, HQ = 3, OUTSIDER = 4, HQ_SEATED = 5, MEMBER2 = 6;
 
+// #8446: the baseline and the post-cutoff migrations up to `upTo`, built once per run for each bound (D4133)
+// and copied into this test's own handle. `below` takes every migration numbered below it, so `upTo + 1`.
 function db0(upTo = Infinity) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const n of FILES.filter((f) => migrationNumber(f) <= upTo)) db.exec(readFileSync(`${DIR}/${n}`, 'utf8'));
+  loadSchema(db, upTo === Infinity ? {} : { below: upTo + 1 });
   return db;
 }
 

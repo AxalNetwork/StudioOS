@@ -1,7 +1,8 @@
 /**
  * D1579 (#3826, deck builder v2 E6) — a card's status and assignee, through
  * the real mounted routes on SQLite (the baseline and every post-cutoff
- * migration; E6 adds none).
+ * migration; E6 adds none), built once per run (`_schema_once.mjs`, #8437)
+ * and loaded into a fresh database for each test.
  *
  *   1. `card.status` and `card.assignee` live in the version's card document:
  *      `sanitizeSlides` keeps them when sound and drops them when not,
@@ -27,10 +28,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckCardStatus from '../src/routes/deck_card_status.ts';
@@ -39,9 +39,6 @@ import { modelProblems } from '../src/services/decks/slideModel.ts';
 import { cardStates, filterCards, newAssignments, notDone } from '../src/services/decks/cardStatus.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1579-card-status-0123456789';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 
 // [id, role, founder_id, name]
 const FOUNDER = 3, COFOUNDER = 4, ADVISOR = 5, MEMBER_ADVISOR = 7, ADMIN = 1, OTHER = 9;
@@ -62,9 +59,8 @@ const TRACKED = [
 const UNTRACKED = [1, 2, 3].map((n) => ({ uid: `p${n}`, title: `Synthetic plain ${n}` }));
 
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  // #8437: the schema is built once per run (_schema_once.mjs); each test still loads its own fresh copy.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false }));
   const u = db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, subscription_tier) VALUES (?, ?, ?, ?, 1, ?, 'studio')");
   const ss = db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, ?, 'totp', datetime('now'))");
   for (const [id, role, founder, name] of PEOPLE) { u.run(id, role, name, `synthetic${id}@example.test`, founder); ss.run(id, `j-${id}`); }
