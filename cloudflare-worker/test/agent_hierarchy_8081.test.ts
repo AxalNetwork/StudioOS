@@ -194,7 +194,7 @@ test('budgets: what a child does not use returns to the parent when its task end
 
 test('budgets: a share too small refuses at Accept, with no task; with no cap anywhere the child has none either', async () => {
   // Mutation checked: the MIN_SHARE_TOKENS check removed → the child is created with a 750-token share;
-  // the parent's reserve() verdict ignored → the month-capped share is accepted.
+  // the parent's reserve() verdict ignored → the share of a run past its retries cap is accepted.
   const w = setup();
   try {
     w.task(800, CFO);
@@ -212,13 +212,15 @@ test('budgets: a share too small refuses at Accept, with no task; with no cap an
     w.task(820, CFO);
     const free = await accept(w, (await propose(w, CFO, 820, 'run-small-003', ask('general_counsel'))).handoff);
     assert.deepEqual([free.status, childTask(w, free).budget_tokens_cap], ['accepted', null]);
-    // D8071's reserve still speaks for the parent: its month is nearly spent, so the share is refused there.
+    // D8071's reserve still speaks for the parent: its agent allows no retries and the parent's run is one,
+    // so the share is refused there although the task's cap has room.
     w.task(830, CFO);
     w.db.prepare('UPDATE scope_tasks SET budget_tokens_cap = 12000 WHERE id = 830').run();
-    w.db.prepare('INSERT INTO agent_budgets (agent_id, tokens_cap) VALUES (?, 5000)').run(CFO);
-    w.db.prepare('INSERT INTO agent_budget_usage (agent_id, period_key, tokens_used) VALUES (?, ?, 4500)').run(CFO, new Date().toISOString().slice(0, 7));
-    const month = await accept(w, (await propose(w, CFO, 830, 'run-small-004', ask('general_counsel'))).handoff);
-    assert.deepEqual([month.status, month.refusal, month.created_task_id], ['refused', 'budget_exhausted', null]);
+    w.db.prepare('INSERT INTO agent_budgets (agent_id, retries_per_task_cap) VALUES (?, 0)').run(CFO);
+    const asked = await propose(w, CFO, 830, 'run-small-004', ask('general_counsel'));
+    assert.ok(row(w, "SELECT attempt FROM agent_task_runs WHERE uid = 'run-small-004'").attempt > 1, 'the parent run is a retry');
+    const retried = await accept(w, asked.handoff);
+    assert.deepEqual([retried.status, retried.refusal, retried.created_task_id], ['refused', 'budget_exhausted', null]);
     w.db.prepare('DELETE FROM agent_budgets WHERE agent_id = ?').run(CFO);
     // The after-check a second Accept would trip: a tree over its cap does not fit.
     w.db.prepare('UPDATE scope_tasks SET budget_tokens_cap = 5000 WHERE id = 810').run();
