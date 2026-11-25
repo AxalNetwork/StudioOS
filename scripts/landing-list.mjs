@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { makeApi } from './pr-overlap.mjs';
 import { MARKER, TITLE, checksFor, eligibility, entry, history, historyText, landingOrder, render, tierOf } from './lib/landingList.mjs';
 import { dedupe, isStale, requiredFromRules } from './lib/prRisk.mjs';
+import { skewFor } from './lib/queueSkew.mjs';
 
 const REF = /^(?!.*\.\.)[\w][\w./-]{0,199}$/;
 const SHA = /^[a-f0-9]{40}$/;
@@ -38,7 +39,7 @@ async function filesOf(api, number) {
 }
 
 /** The list: every open PR read, drafts and non-green heads counted out, the rest tiered and ordered. */
-export async function collect({ api, now = Date.now() } = {}) {
+export async function collect({ api, now = Date.now(), skew = null } = {}) {
   const excluded = {}; const notes = []; let partial = false; const listed = [];
   const out = reason => { excluded[reason] = (excluded[reason] ?? 0) + 1; };
   try {
@@ -75,6 +76,8 @@ export async function collect({ api, now = Date.now() } = {}) {
         const f = await filesOf(api, pr.number);
         pr.files = f.rows;
         if (f.capped) { notes.push(`#${pr.number}: file list capped at 3,000; tier is T2 at least`); partial = true; }
+        // D8432: read the merge with the base as data. A check that throws is a check that did not run.
+        if (skew) { try { pr.skew = skew(pr); } catch { pr.skew = { status: 'not checked', problems: [] }; } }
         listed.push(entry(pr, now));
       } catch (error) {
         if (error.partial) throw error;
@@ -119,7 +122,7 @@ export async function upsertSticky(api, body, { dryRun = false, author = 'github
   return 1;
 }
 
-export async function main(argv = process.argv.slice(2), { api, log = console.log, now = Date.now(), author } = {}) {
+export async function main(argv = process.argv.slice(2), { api, log = console.log, now = Date.now(), author, skew = null } = {}) {
   const allowed = a => a === '--sticky' || a === '--dry-run' || /^--history(?:=\d{1,4})?$/.test(a);
   if (argv.some(a => !allowed(a)) || (argv.includes('--dry-run') && !argv.includes('--sticky'))) {
     throw new Error('usage: landing-list.mjs [--history[=N]] | [--sticky [--dry-run]]');
@@ -133,7 +136,7 @@ export async function main(argv = process.argv.slice(2), { api, log = console.lo
     log(historyText(m.h, { requested: m.requested, partial: m.partial }));
     return m;
   }
-  const list = await collect({ api, now });
+  const list = await collect({ api, now, skew });
   const body = render(list.entries, { generatedAt: new Date(now).toISOString(), partial: list.partial, excluded: list.excluded, notes: list.notes });
   log(body);
   if (argv.includes('--sticky')) {
@@ -144,5 +147,6 @@ export async function main(argv = process.argv.slice(2), { api, log = console.lo
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => { console.log(`Landing list not produced: ${error.message}`); process.exitCode = /usage/.test(error.message) ? 1 : 0; });
+  // D8432: only the real run reads git; a caller that passes no `skew` gets a list with nothing held.
+  main(undefined, { skew: skewFor }).catch(error => { console.log(`Landing list not produced: ${error.message}`); process.exitCode = /usage/.test(error.message) ? 1 : 0; });
 }

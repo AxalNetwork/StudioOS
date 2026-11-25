@@ -19,10 +19,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
@@ -35,11 +34,9 @@ import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { GUARD_MODEL } from './_guard_stub.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { freshSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d1580-live-0123456789abc';
 const FOUNDER = 1; const OTHER = 2; const PID = 7; const DECK = 41;
 const FLUX = '@cf/deepgram/flux';
@@ -47,11 +44,7 @@ const NOVA = '@cf/deepgram/nova-3';
 
 function fixture(balance = 5_000_000) {
   __resetForTest();
-  const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  const db = freshSchema();
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Founder A', 'fa@example.test'), (20, 'Founder B', 'fb@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES (${FOUNDER}, 'founder@example.test', 'Fay Founder', 'founder', 10), (${OTHER}, 'other@example.test', 'Oz Other', 'founder', 20);
     INSERT INTO projects (id, name, founder_id) VALUES (${PID}, 'Kestrel Labs', 10);`);
