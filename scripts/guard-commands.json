@@ -193,6 +193,13 @@
     ]
   },
   {
+    "id": "check-ai-gateways",
+    "command": [
+      "node",
+      "scripts/check-ai-gateways.mjs"
+    ]
+  },
+  {
     "id": "check-scanner-ignore-parity",
     "command": [
       "node",
