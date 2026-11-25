@@ -32,11 +32,11 @@
  * documentation/architecture/DECISIONS.md: nothing in the current codebase
  * awards them, so re-seeding them would restore inert rows, not fix a bug.
  */
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -46,36 +46,44 @@ import {
 } from '../src/services/eventBadges.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchemaFile, schemaInputs } from './_schema_once.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const SQL_DIR = resolve(HERE, '../sql');
-const MIGRATIONS = resolve(SQL_DIR, 'migrations');
 const M292 = '292_restore_event_badges_seed.sql';
+const directory = mkdtempSync(join(tmpdir(), 'event-badges-d257-'));
+after(() => rmSync(directory, { recursive: true, force: true }));
+const variants = new Map<string, string>();
+const options = { enableDoubleQuotedStringLiterals: true, enableForeignKeyConstraints: true };
 
-const migrationNames = () =>
-  readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations);
-
-/**
- * A freshly provisioned database, exactly as `migrate-d1 --bootstrap` leaves
- * one: the baseline, then every migration ABOVE the cutoff. `skip` drops one
- * by filename so the same builder produces the before-half. Foreign keys are
- * explicitly turned ON — node:sqlite's default is asserted below rather than
- * assumed, since the whole defect is a foreign-key failure and a fixture that
- * silently ran without enforcement would prove nothing.
- */
-function freshDb(skip: string[] = []) {
-  const db = new DatabaseSync(':memory:', {
-    enableDoubleQuotedStringLiterals: true,
-    enableForeignKeyConstraints: true,
-  });
-  db.exec(readFileSync(resolve(SQL_DIR, 'schema_baseline.sql'), 'utf8'));
-  for (const name of migrationNames()) {
-    if (migrationNumber(name) <= BASELINE_CUTOFF || skip.includes(name)) continue;
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, name), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
+// Both sides run the same error-tolerant bootstrap, including every migration after 292.
+function buildVariant(path: string, skip: string[]) {
+  const db = new DatabaseSync(':memory:', options);
+  try {
+    const { baseline, migrations } = schemaInputs();
+    db.exec(baseline);
+    for (const { name, sql } of migrations) {
+      if (skip.includes(name)) continue;
+      for (const stmt of splitStatements(sql)) {
+        try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
+      }
     }
+    db.prepare('VACUUM INTO ?').run(path);
+  } finally {
+    db.close();
   }
+}
+
+function freshDb(skip: string[] = []) {
+  const key = [...skip].sort().join('\0');
+  let path = variants.get(key);
+  if (!path) {
+    path = join(directory, `variant-${variants.size}.sqlite`);
+    buildVariant(path, skip);
+    variants.set(key, path);
+  }
+  // Restore the snapshot before enabling constraints: tables may reference rows copied later.
+  const db = new DatabaseSync(':memory:', { ...options, enableForeignKeyConstraints: false });
+  loadSchemaFile(db, path);
+  db.exec('PRAGMA foreign_keys = ON');
   return db;
 }
 

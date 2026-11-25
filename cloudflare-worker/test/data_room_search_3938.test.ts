@@ -16,7 +16,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -31,20 +31,17 @@ import {
 import { USE_KINDS } from '../src/services/ai/modelUseCases.ts';
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-3938-dataroom-0123456789';
 const PID = 7;
 
 function fixture() {
-  const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  // #8437: the schema is built once per run (_schema_once.mjs) and copied into a fresh database for each test.
+  // Foreign keys are off only while the copy loads, then on, as the per-test build left them.
+  const db = loadSchema(new DatabaseSync(':memory:', { enableForeignKeyConstraints: false }));
+  db.exec('PRAGMA foreign_keys = ON;');
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Founder A', 'fa@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES (1, 'founder@example.test', 'Fay Founder', 'founder', 10), (2, 'inv@example.test', 'Ivy Investor', 'investor', NULL);
     INSERT INTO projects (id, uid, name, founder_id) VALUES (${PID}, 'proj-uid-7', 'Kestrel Labs', 10);`);
