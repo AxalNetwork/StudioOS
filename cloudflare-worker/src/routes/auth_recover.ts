@@ -66,7 +66,8 @@ import { recordSecurityEvent } from '../services/securityEvents';
 import { hasTotpConfigured } from '../services/authTotp';
 import { hasSmsConfigured, loadSms, markSmsUsed } from '../services/authSms';
 import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber } from '../services/gcip';
-import { send as sendEmail } from '../services/email/send';
+import { sendBound as sendEmailBound } from '../services/email/send';
+import type { SendReference } from '../services/email/deliveryContract';
 import { stripTrailingSlashes } from '../util/url';
 import { notify } from '../services/notify';
 import { withDeadline } from '../util/deadline';
@@ -178,6 +179,7 @@ async function notifyAllChannels(
   user: { id: number; email: string; name?: string | null },
   template: 'auth_recovery_started' | 'auth_recovery_resolved',
   vars: Record<string, unknown>,
+  occasion: string,
 ) {
   const ticketId = String(vars?.ticket_id ?? '-');
   const isResolved = template === 'auth_recovery_resolved';
@@ -202,12 +204,15 @@ async function notifyAllChannels(
   } catch (e) { console.error('[recover] notify fanout failed', e); }
   // Templated email body via sendEmail() in parallel for the Axal-branded
   // chrome (notify() ships a plain section block as a fallback).
+  //
+  // D8536 part 3: under the delivery contract (`recoveryNoticeRef`). The
+  // address is the account holder the ticket names, not the `user` argument.
   try {
-    await sendEmail(env, template, user.email, {
-      name: user.name || user.email,
-      ...vars,
-    }, { userId: user.id });
-  } catch (e) { console.error('[recover] templated email failed', e); }
+    const ref = recoveryNoticeRef(Number(vars?.ticket_id), template, occasion);
+    if (ref) {
+      await sendEmailBound(env, template, ref, { name: user.name || user.email, ...vars }, { userId: user.id });
+    }
+  } catch (e) { console.error('[recover] templated email failed', (e as Error)?.name || 'Error'); }
   // SMS heads-up: factor is verification-codes only on GCIP; record it.
   try {
     if (await hasSmsConfigured(env, user.id)) {
@@ -215,6 +220,21 @@ async function notifyAllChannels(
         'SMS fanout skipped — GCIP factor is verification-codes only');
     }
   } catch {}
+}
+
+/**
+ * D8536 part 3 — the send reference of one recovery notice. The subject is the
+ * ticket, whose account holder is the recipient. The attempt is the notice and
+ * the step that sent it: `started.open` when the ticket opens, then the status
+ * the transition wrote and, where the step counts people, how many
+ * (`started.awaiting_contacts.1`, `started.awaiting_admin_cosign.2`,
+ * `resolved.resolved`, `resolved.denied`); `claim.trusted` / `claim.admin` for
+ * the claim emails. Each step mails once; a retry of the same step reconciles.
+ */
+function recoveryNoticeRef(ticketId: number, template: 'auth_recovery_started' | 'auth_recovery_resolved', occasion: string): SendReference | null {
+  if (!Number.isSafeInteger(ticketId) || ticketId <= 0) return null;
+  const notice = template === 'auth_recovery_resolved' ? 'resolved' : 'started';
+  return { flow: 'alert', subject: { kind: 'recovery_notice', id: ticketId }, attempt: `${notice}.${occasion}`.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 80) };
 }
 
 async function createTicket(
@@ -276,10 +296,11 @@ async function transitionTicket(
   ).bind(...binds).run();
   if (notify) {
     try {
+      const count = notify.vars?.attestations ?? notify.vars?.co_signers;
       await notifyAllChannels(env, user, notify.template, {
         ticket_id: String(ticketId),
         ...(notify.vars || {}),
-      });
+      }, `${patch.status || 'progress'}${count == null ? '' : `.${count}`}`);
     } catch (e) { console.error('[recover] transition notify failed', e); }
   }
 }
@@ -535,7 +556,7 @@ recover.post('/sms/start', async (c) => {
     JSON.stringify({ user_id: user.id, email, ts: Date.now(), ticket_id: ticketId }),
     { expirationTtl: 600 },
   ), RATE_KV_DEADLINE_MS, 'stash-put');
-  await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
+  await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) }, 'open');
   return c.json({ session_info: r.sessionInfo, last4: sms_.last4, ticket_id: ticketId, lookup_token });
 });
 
@@ -624,11 +645,27 @@ recover.post('/email/start', async (c) => {
   const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
   const magicUrl = `${appUrl}/auth/recover/email?token=${raw}&ticket=${ticketId}`;
 
-  await sendEmail(c.env, 'auth_magic_link', user.email, {
-    name: user.name || user.email,
-    magic_url: magicUrl,
-  }, { userId: user.id });
-  await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
+  // D8536 part 3: under the delivery contract. The subject is this ticket
+  // (one ticket, one issuance of the link), whose account holder is the
+  // recipient while it is open. The bell is not mirrored: the person cannot
+  // sign in, and a row there would hold a usable link.
+  const sent = await sendEmailBound(c.env, 'auth_magic_link',
+    { flow: 'sign_in', subject: { kind: 'recovery_link', id: ticketId }, attempt: 1 },
+    { name: user.name || user.email, magic_url: magicUrl }, { userId: user.id, skipMirror: true });
+  // The replacement makes every earlier open link of this layer invalid, once
+  // the new one is on its way (not before: a refused send leaves the person
+  // the link they already have). /email/verify answers `invalid_or_used`.
+  if (sent.ok) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE auth_recovery_tickets SET status = 'superseded', updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ? AND layer = 'email_magic' AND status = 'open' AND id < ?`,
+      ).bind(user.id, ticketId).run();
+    } catch (e) {
+      console.error('[recover] earlier links not retired', (e as Error)?.name || 'Error');
+    }
+  }
+  await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) }, 'open');
   return c.json({ ok: true });
 });
 
@@ -706,13 +743,15 @@ recover.post('/trusted-contact/start', async (c) => {
       const attestUrl = `${appUrl}/auth/recover/attest?ticket=${ticketId}`;
       for (const ctc of contacts) {
         try {
-          await sendEmail(c.env, 'auth_recovery_started', ctc.contact_email, {
-            name: ctc.contact_email,
-            ticket_id: String(ticketId),
-          }, { userId: ctc.contact_user_id ?? undefined, ctaUrl: attestUrl });
-        } catch (e) { console.error('[recover] tc invite email failed', e); }
+          // D8536 part 3: the contact row names the address while it is active;
+          // the attempt is this ticket, so each ticket invites each contact once.
+          await sendEmailBound(c.env, 'auth_recovery_started',
+            { flow: 'alert', subject: { kind: 'recovery_contact', id: Number(ctc.id) }, attempt: `t${ticketId}` },
+            { name: ctc.contact_email, ticket_id: String(ticketId) },
+            { userId: ctc.contact_user_id ?? undefined, ctaUrl: attestUrl });
+        } catch (e) { console.error('[recover] tc invite email failed', (e as Error)?.name || 'Error'); }
       }
-      await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
+      await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) }, 'open');
     }
   }
   return c.json({ ok: true });
@@ -796,10 +835,13 @@ recover.post('/trusted-contact/attest', async (c) => {
 
     const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
     const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&trusted=1`;
-    await sendEmail(c.env, 'auth_recovery_resolved', (target as any).email, {
-      name: (target as any).name || (target as any).email,
-      ticket_id: String(ticketId),
-    }, { userId: (target as any).id, ctaUrl: claimUrl });
+    const claimRef = recoveryNoticeRef(ticketId, 'auth_recovery_resolved', 'trusted');
+    if (claimRef) {
+      await sendEmailBound(c.env, 'auth_recovery_resolved', { ...claimRef, attempt: 'claim.trusted' }, {
+        name: (target as any).name || (target as any).email,
+        ticket_id: String(ticketId),
+      }, { userId: (target as any).id, ctaUrl: claimUrl });
+    }
   }
 
   return c.json({ ok: true, attestations: atts.length, required: 2 });
@@ -958,11 +1000,14 @@ recover.post('/admin/cosign', async (c) => {
       const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
       const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&admin=1`;
       try {
-        await sendEmail(c.env, 'auth_recovery_resolved', (target as any).email, {
-          name: (target as any).name || (target as any).email,
-          ticket_id: String(ticketId),
-        }, { userId: (target as any).id, ctaUrl: claimUrl });
-      } catch (e) { console.error('[recover] admin cosign email failed', e); }
+        const claimRef = recoveryNoticeRef(ticketId, 'auth_recovery_resolved', 'admin');
+        if (claimRef) {
+          await sendEmailBound(c.env, 'auth_recovery_resolved', { ...claimRef, attempt: 'claim.admin' }, {
+            name: (target as any).name || (target as any).email,
+            ticket_id: String(ticketId),
+          }, { userId: (target as any).id, ctaUrl: claimUrl });
+        }
+      } catch (e) { console.error('[recover] admin cosign email failed', (e as Error)?.name || 'Error'); }
     }
     return c.json({ ok: true, co_signers: cosigners.length, required: 2, status: 'claim_emailed' });
   }

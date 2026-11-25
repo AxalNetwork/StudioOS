@@ -28,7 +28,8 @@
  */
 import type { Env } from '../types';
 import { encryptColumn } from './columnCipher';
-import { sendVerificationEmail } from './email';
+import { sendVerificationEmailBound } from './email';
+import { issuanceOf } from './email/deliveryContract';
 import { generateToken, hashToken } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 
@@ -116,10 +117,15 @@ export async function runTotpRemediation(env: Env): Promise<RemediationResult> {
         // request a new email from /forgot-password if this one bounces.
         const url = `${env.APP_URL || 'https://axal.vc'}/verify-email?token=${encodeURIComponent(verifyToken)}&purpose=totp_repair`;
         try {
-          const ok = await sendVerificationEmail(env, r.email, r.name || 'there', url);
-          if (ok) out.emailed++;
+          // D8536 part 3: under the delivery contract. The account names its
+          // own address while it holds this token, and the attempt is the
+          // token's issuance, so a retried sweep never mails it twice.
+          const sent = await sendVerificationEmailBound(env,
+            { flow: 'sign_in', subject: { kind: 'user_verification', id: r.id }, attempt: await issuanceOf(verifyToken) },
+            r.name || 'there', url);
+          if (sent.state === 'accepted') out.emailed++;
         } catch (e) {
-          console.warn(`[totpRemediation] email send failed user=${r.id}: ${(e as Error).message}`);
+          console.warn(`[totpRemediation] email send failed user=${r.id}: ${(e as Error)?.name || 'Error'}`);
         }
 
         try {

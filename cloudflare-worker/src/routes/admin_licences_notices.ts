@@ -145,8 +145,11 @@ r.post('/:uid/notices', async (c) => {
     // need is one sentence and the route back.
     let delivered = false;
     try {
-      const { send } = await import('../services/email/send');
-      const res = await send(c.env, 'compliance_notice_issued', target.email, {
+      // D8536 part 3: under the delivery contract. The subject is the notice
+      // row, so its addressee is the recipient, and a queue retry of this
+      // message reconciles instead of mailing the notice twice.
+      const { sendBound } = await import('../services/email/send');
+      const res = await sendBound(c.env, 'compliance_notice_issued', { flow: 'alert', subject: { kind: 'compliance_notice', id: uid }, attempt: 1 }, {
         name: target.name || target.email,
         subject,
         kind_label: KIND_LABELS[kind] ?? kind,

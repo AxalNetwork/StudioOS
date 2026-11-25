@@ -51,7 +51,106 @@ const SUBJECTS = {
     flow: 'invitation',
     sql: "SELECT email AS addr FROM company_invitations WHERE id = ? AND status = 'pending'",
   },
+  /**
+   * D8536 part 2 — a native e-sign recipient, while it still waits to sign.
+   * The attempt is the signing token's issuance plus the occasion
+   * (`signingAttempt` in routes/esign.ts), so a reminder is its own send and a
+   * retry of the same reminder reconciles.
+   */
+  esign_recipient: {
+    flow: 'signature',
+    sql: "SELECT recipient_email AS addr FROM esign_recipients WHERE id = ? AND status = 'pending'",
+  },
+  /** A signed PDF forwarded to a legal partner: the forward log row, written before the send, names the address. */
+  esign_forward: {
+    flow: 'signature',
+    sql: 'SELECT forwarded_to AS addr FROM esign_forward_log WHERE id = ?',
+  },
+  /** A Stripe receipt: the `invoice_email_log` row for one invoice or charge, written before the send. */
+  invoice_receipt: {
+    flow: 'billing',
+    sql: 'SELECT recipient AS addr FROM invoice_email_log WHERE id = ?',
+  },
+  /** A storefront order's confirmation: the buyer the order row names. */
+  order_receipt: {
+    flow: 'billing',
+    sql: 'SELECT u.email AS addr FROM orders o JOIN users u ON u.id = o.user_id WHERE o.order_ref = ?',
+  },
+  /** An operational alert to one admin: the `notifications` row written for that admin, while the admin is active. */
+  admin_alert: {
+    flow: 'alert',
+    sql: "SELECT u.email AS addr FROM notifications n JOIN users u ON u.id = n.user_id WHERE n.id = ? AND u.role = 'admin' AND u.is_active = 1",
+  },
+  /**
+   * D8536 part 3 — an account-recovery email link (layer 2d). One
+   * `auth_recovery_tickets` row is one issuance; the account holder is the
+   * recipient while the ticket is still open, so a retired or used link has none.
+   */
+  recovery_link: {
+    flow: 'sign_in',
+    sql: "SELECT u.email AS addr FROM auth_recovery_tickets t JOIN users u ON u.id = t.user_id WHERE t.id = ? AND t.layer = 'email_magic' AND t.status = 'open'",
+  },
+  /** A recovery notice to the account holder a ticket names. The attempt is the ticket's step (`recoveryNoticeRef`). */
+  recovery_notice: {
+    flow: 'alert',
+    sql: 'SELECT u.email AS addr FROM auth_recovery_tickets t JOIN users u ON u.id = t.user_id WHERE t.id = ?',
+  },
+  /** A recovery attest invite to one trusted contact, while the contact is active. The attempt is the ticket. */
+  recovery_contact: {
+    flow: 'alert',
+    sql: "SELECT contact_email AS addr FROM auth_trusted_contacts WHERE id = ? AND status = 'active'",
+  },
+  /** An account's email-verification link: the account's own address while it holds a token. The attempt is that token's issuance. */
+  user_verification: {
+    flow: 'sign_in',
+    sql: 'SELECT email AS addr FROM users WHERE id = ? AND verification_token IS NOT NULL',
+  },
+  /** An email change, the confirm side: the new address, while the request is neither confirmed nor revoked. */
+  email_change_confirm: {
+    flow: 'sign_in',
+    sql: 'SELECT new_email AS addr FROM email_change_requests WHERE id = ? AND confirmed_at IS NULL AND revoked_at IS NULL',
+  },
+  /** An email change, the revoke side: the old address, while the request is not revoked. */
+  email_change_revoke: {
+    flow: 'sign_in',
+    sql: 'SELECT old_email AS addr FROM email_change_requests WHERE id = ? AND revoked_at IS NULL',
+  },
+  /** A co-founder invitation, while it is neither accepted nor revoked. */
+  founder_invite: {
+    flow: 'invitation',
+    sql: 'SELECT invitee_email AS addr FROM founder_invites WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL',
+  },
+  /** An HQ move invitation on this branch (the id is its `uid`), while pending. The attempt is the token's issuance. */
+  branch_invitation: {
+    flow: 'invitation',
+    sql: "SELECT email AS addr FROM branch_invitations WHERE uid = ? AND status = 'pending'",
+  },
+  /** A partner invitation, while neither signed nor revoked. The attempt is its token's issuance and the occasion (`partnerInvitationRef`). */
+  partner_invitation: {
+    flow: 'invitation',
+    sql: "SELECT recipient_email AS addr FROM partner_invitations WHERE id = ? AND status NOT IN ('signed', 'revoked')",
+  },
+  /** The authenticator-added alert: the account the `totp_enrolled` activity row names. */
+  totp_enrolment: {
+    flow: 'alert',
+    sql: "SELECT u.email AS addr FROM activity_logs a JOIN users u ON u.id = a.user_id WHERE a.id = ? AND a.action = 'totp_enrolled'",
+  },
+  /** A compliance notice (the id is its `uid`): the addressee the `admin_notices` row names. */
+  compliance_notice: {
+    flow: 'alert',
+    sql: 'SELECT u.email AS addr FROM admin_notices n JOIN users u ON u.id = n.user_id WHERE n.uid = ?',
+  },
 } as const satisfies Record<string, { flow: DeliveryFlow; sql: string }>;
+
+/**
+ * D8536 part 3 — which issuance of a link this is: the first 16 hex characters
+ * of the SHA-256 of its token. A replaced token is a new issuance, so a new
+ * attempt; the ledger never holds the token itself.
+ */
+export async function issuanceOf(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest)).slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export type SubjectKind = keyof typeof SUBJECTS;
 
