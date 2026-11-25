@@ -47,6 +47,8 @@ import {
   AI_OFF_LINE, CHART_TOOLS, FIGURE_LINE, TEXT_TOOLS,
   blockRefusal, chartProposal, connectorCard, connectorGroups, connectorOf, costLine, syncLine, textBody, textProposal,
 } from '../src/pages/raise/pitch/deckAssistModel.js';
+import { DECK_ASK_OPTIONS } from '../src/pages/raise/pitch/deckV2Model.js';
+import { DERIVE_ASK_OPTIONS } from '../src/pages/raise/pitch/deriveModel.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
 const h = React.createElement;
@@ -214,8 +216,9 @@ test('Ask on a text area: "Generate into 1 area" shows its hold and the AIRail\'
   try {
     // D1604: the header Ask reads what waits once per deck option; a run and a decision each make it read again.
     const asks = () => m.named('proposals.list').length;
-    const perRead = asks();
-    assert.ok(perRead > 0, 'the header read what waits');
+    const perRead = DECK_ASK_OPTIONS.length + DERIVE_ASK_OPTIONS.length;
+    const initialReads = asks();
+    assert.ok(initialReads >= perRead, 'Ask read every deck option before interaction');
     await m.press(m.by('pitch-editor-block-b1'));
     assert.ok(!m.by('pitch-areas'), 'selected, the lightbox waits for the area\'s Ask');
     await m.press(m.by('pitch-editor-ask-area'));
@@ -230,7 +233,7 @@ test('Ask on a text area: "Generate into 1 area" shows its hold and the AIRail\'
     assert.deepEqual(m.named('prefs.page').map((c) => c.slice(1)), [['Founder · Raise · Pitch deck', 'deck:rewrite']]);
     assert.equal(m.named('assist.run').length, 0, 'reading the cost runs nothing');
     await m.press(m.by('pitch-areas-generate'));
-    assert.equal(asks(), 2 * perRead, 'a run left a proposal: the header reads again');
+    assert.equal(asks(), initialReads + perRead, 'a run left a proposal: the header reads again');
     const [, deckId, card, body, headers] = m.named('assist.run')[0];
     assert.equal(deckId, 31); assert.equal(card, 0);
     assert.deepEqual(body, { action: 'rewrite', block: { id: 'b1', kind: 'text' }, text: 'Synthetic customers love it' });
@@ -242,7 +245,7 @@ test('Ask on a text area: "Generate into 1 area" shows its hold and the AIRail\'
     assert.match(m.text(m.by('pitch-editor-save-state')), /Saved/, 'a proposal is not a change');
     await m.press(m.by('pitch-area-result-b1-accept'));
     assert.deepEqual(m.named('proposals.decide').map((c) => c.slice(1)), [['p1', 'accept']]);
-    assert.equal(asks(), 3 * perRead, 'decided: the header reads again');
+    assert.equal(asks(), initialReads + 2 * perRead, 'decided: the header reads again');
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic founders keep coming back/, 'Accept places it on the card');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
     await m.press(m.by('pitch-areas-close'));

@@ -122,13 +122,13 @@ test('studio and New deck render one crumb, the editor its deck bar; no nested f
       }
       assert.equal(m.container.childNodes.find(n=>n.nodeType===1)===m.by(id),true,id);
       assert.match(m.pr(m.by(id)).className,/^fwr-frame/);
-      assert.equal(m.pr(m.by(id))['data-rail'],'true');
-      assert.equal(nodes.filter(n=>m.pr(n)['data-testid']==='worker-rail-frame').length,1);
+      assert.equal(m.pr(m.by(id))['data-rail'],id==='pitch-editor'?'false':'true');
+      assert.equal(nodes.filter(n=>m.pr(n)['data-testid']==='worker-rail-frame').length,id==='pitch-editor'?0:1);
       // D1604: one header Ask, named "Ask Eadwyn" with the waiting proposal counted.
       const asks=nodes.filter(n=>/^Ask Eadwyn/.test(String(m.pr(n)['aria-label']||'')));
       assert.equal(asks.length,1,id);
       assert.equal(m.pr(asks[0])['aria-label'],'Ask Eadwyn, 1 waiting',id);
-      assert.ok(m.walk(m.by('pitch-header-ask')).includes(asks[0]),id);
+      assert.ok(m.walk(m.by(id==='pitch-editor'?'pitch-inspector-eadwyn':'pitch-header-ask')).includes(asks[0]),id);
       assert.doesNotMatch(m.text(m.container),/‹ Pitch deck studio|Get capital, stay legal/);
       assert.equal(nodes.some(n=>['founder-module-back','founder-workspace-raise','heading-founder-raise'].includes(m.pr(n)['data-testid'])),false);
       if(id==='pitch-editor') {
@@ -139,10 +139,11 @@ test('studio and New deck render one crumb, the editor its deck bar; no nested f
         const bar=m.by('pitch-deck-bar');
         assert.ok(m.walk(bar).includes(m.by('pitch-heading')));
         assert.ok(m.walk(bar).includes(m.by('deck-toolbar')));
-        assert.ok(m.walk(bar).includes(m.by('pitch-header-ask')));
+        assert.ok(!m.by('pitch-header-ask'), 'the editor Ask belongs to the inspector');
+        assert.ok(m.walk(m.by('pitch-inspector-eadwyn')).includes(m.by('pitch-editor-rail')));
         assert.ok(!m.by('pitch-editor-bar')&&!m.by('pitch-editor-panel'));
         const body=m.by('pitch-editor-body');
-        assert.match(m.pr(body).className,/lg:grid-cols-\[150px_minmax\(0,1fr\)\]/);
+        assert.match(m.pr(body).className,/lg:grid-cols-\[180px_minmax\(0,1fr\)_280px\]/);
         assert.ok(m.walk(body).includes(m.by('pitch-editor-cards'))&&m.walk(body).includes(m.by('pitch-editor-stage')));
       }
       if(id==='pitch-new') {
@@ -166,7 +167,7 @@ test('studio and New deck render one crumb, the editor its deck bar; no nested f
 });
 
 
-test('editor keeps the same frame, dock and moved notice when its deck finishes loading',async()=>{
+test('editor keeps its frame and moved notice while moving the loaded rail into the inspector',async()=>{
   let resolveDeck;
   const pending=new Promise(resolve=>{resolveDeck=resolve;});
   const m=await mount(PitchEditor,'/raise/pitch/edit?project_id=7&moved=pitch-workspace',{deckGet:()=>pending});
@@ -179,7 +180,9 @@ test('editor keeps the same frame, dock and moved notice when its deck finishes 
     await m.settle();
     assert.ok(m.by('deck-toolbar'));
     assert.equal(m.by('pitch-editor')===frame,true);
-    assert.equal(m.by('worker-rail-frame')===dock,true);
+    assert.ok(!m.by('worker-rail-frame'), 'the loading dock is removed');
+    assert.equal(m.walk(m.container).filter(n=>m.pr(n)['data-testid']==='pitch-editor-rail').length,1);
+    assert.ok(m.walk(m.by('pitch-inspector-eadwyn')).includes(m.by('pitch-editor-rail')));
     assert.equal(m.by('pitch-moved')===notice,true);
     assert.match(m.text(m.by('pitch-deck-bar')),/Synthetic venture · v3/);
   } finally {await m.close();}
