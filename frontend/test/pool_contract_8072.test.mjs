@@ -13,6 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { parse } from 'yaml';
 import {
   EXCEPTIONS, KINDS, checkWorkflows, commitDate, formatReport, jobEvents, narrowByIf, readWorkflows, runnerOf, secretReads,
 } from '../../scripts/ci/pool-contract.mjs';
@@ -226,6 +227,12 @@ test('the tree keeps the contract, with only the recorded exceptions, as of the 
   assert.ok(r.rows.length >= 40, `only ${r.rows.length} pull-request or deploy jobs read — the parser is not parsing`);
   // The CI workflow this task owns runs every pull-request job on a hosted label with a read-only token.
   for (const row of r.rows.filter((x) => ['ci.yml', 'codeql.yml', 'semgrep.yml', 'dependency-review.yml', 'landing-policy.yml'].includes(x.workflow))) {
+    // D8626: ci.yml › capacity-route is the queue's call to the pinned planner; the planner's one job is hosted.
+    if (row.workflow === 'ci.yml' && row.job === 'capacity-route') {
+      assert.equal(row.runner, 'reusable');
+      assert.equal(parse(readFileSync(new URL('../../.github/workflows/capacity-planner.yml', import.meta.url), 'utf8')).jobs.submit['runs-on'], 'ubuntu-latest');
+      continue;
+    }
     assert.match(row.runner, /^ubuntu-/, `${row.workflow} › ${row.job}`);
   }
 });
@@ -240,7 +247,7 @@ test('every exception names its owner, a reason and a date, and D8072 lists each
     for (const k of ex.allow) assert.ok(KINDS[k] || k.startsWith('write:'), k);
     assert.ok(d.includes(`\`${ex.workflow}\` › \`${ex.job}\``), `D8072 does not list ${ex.workflow} › ${ex.job}`);
   }
-  assert.equal(EXCEPTIONS.length, 10);
+  assert.equal(EXCEPTIONS.length, 11);
 });
 
 test('the command prints the table and exits 1 on a violation, 2 on a bad option', () => {

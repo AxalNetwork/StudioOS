@@ -1,4 +1,4 @@
-/** D7973: trusted reusable planner validates the exact plan then submits once and exits. */
+/** D7973: trusted reusable planner validates the exact plan then submits once and exits. D8626: and says whether it was accepted. */
 import { openSync, closeSync, fstatSync, readSync, constants, appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -35,12 +35,18 @@ export function plannerSubmission(env, mode='submit'){
 }
 export async function main(env=process.env,dependencies={}){
  if(env.CI_CAPACITY_ENABLED!=='true')return {accepted:false,reason:'capacity_disabled'};
+ // D8626: a merge-queue candidate is routed only under its own flag, never by CI_CAPACITY_ENABLED alone.
+ if(env.GITHUB_EVENT_NAME==='merge_group'&&env.CI_CAPACITY_QUEUE_ROUTING!=='true')return {accepted:false,reason:'queue_routing_disabled'};
  if(env.CAPACITY_MODE==='metadata'){
   const values=plannerSubmission(env,'metadata');
   if(env.GITHUB_OUTPUT)appendFileSync(env.GITHUB_OUTPUT,`artifact_id=${values.artifact_id}\n`);
   return values;
  }
  const {submission,plan}=plannerSubmission(env);
- return submitCapacity(submission,{enabled:true,plan,url:env.CI_CAPACITY_URL,audience:env.CI_CAPACITY_AUDIENCE,oidcToken:githubOidcToken(env),...dependencies});
+ const result=await submitCapacity(submission,{enabled:true,plan,url:env.CI_CAPACITY_URL,audience:env.CI_CAPACITY_AUDIENCE,oidcToken:githubOidcToken(env),...dependencies});
+ // D8626: the caller skips a Worker part only on this output. It is true only for this exact request; anything
+ // else (a refusal, a mismatched id, an error before this line) leaves it unset, and every part runs hosted.
+ if(env.GITHUB_OUTPUT&&result?.accepted===true&&result.requestId===submission.requestId)appendFileSync(env.GITHUB_OUTPUT,`accepted=true\nrequest_id=${submission.requestId}\n`);
+ return result;
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){try{const result=await main();console.log(JSON.stringify(result));}catch{console.error('capacity planner refused');process.exitCode=1;}}
