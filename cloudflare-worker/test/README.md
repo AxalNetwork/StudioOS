@@ -146,6 +146,7 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
 `workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart, concurrency and settlement identity (D5570 part 2).
+`swarm_audit_do_5586_p2.test.mjs` hosts the audited swarm admission in a real SQLite Durable Object with a real D1: request, settle and a venture snapshot round-trip, the audit copy survives a D1 failure and a restart (D5586 part 2).
 `_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
 
 ## Conventions

@@ -65,10 +65,12 @@ export type SwarmAudit = {
   seq: number; at: number; ticket_uid: string; tenant_id: number; company_id: number;
   action: SwarmAuditAction; outcome: 'applied' | 'queued' | 'refused'; code: string | null; charged_microusd?: number; measured?: boolean;
 };
-export type SwarmState = { tickets: Record<string, SwarmTicket>; next_sequence: number; last_now: number; audit: SwarmAudit[]; audit_seq: number; audit_dropped: number };
+export type SwarmState = { tickets: Record<string, SwarmTicket>; next_sequence: number; last_now: number; audit: SwarmAudit[]; audit_seq: number; audit_dropped: number;
+  /** Part 2 (D5586-p2): the last `seq` copied to D1's `swarm_admission_events`; absent until the first copy. */
+  audit_flushed_seq?: number };
 export type SwarmRefusal = WorkspaceRefusal & { reasons: string[] };
 export type SwarmResult<T> = { ok: true; value: T } | SwarmRefusal;
-/** Entries kept in state; older ones are counted in `audit_dropped`, never silently lost. Part 2 moves them to D1. */
+/** Entries kept in state; older ones are counted in `audit_dropped`, never silently lost. Part 2 copies them to D1 (`swarmAudit.ts`). */
 export const SWARM_AUDIT_MAX = 2000;
 const MODEL = /^[@A-Za-z0-9][A-Za-z0-9_.:/@-]{0,119}$/;
 const REGION = /^[a-z][a-z0-9-]{1,31}$/;
