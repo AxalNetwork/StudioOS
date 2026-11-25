@@ -302,6 +302,10 @@ export async function deliverNow(
     user_id: number | null; log_id: number | null;
   },
 ): Promise<boolean> {
+  // D8533: a delivery whose log row already reads `sent` went out; a redelivery
+  // of its message (a claim taken over after the isolate died, a replay) does
+  // not send it again. Unreadable reads as not sent.
+  if (payload.log_id && (await logStatus(env, payload.log_id)) === 'sent') return true;
   const creds = !!(env as any).GMAIL_CLIENT_ID && !!(env as any).GMAIL_CLIENT_SECRET && !!(env as any).GMAIL_REFRESH_TOKEN;
   if (!creds) {
     await markLog(env, payload.log_id, 'failed', 'gmail_creds_missing');
@@ -329,6 +333,31 @@ export async function deliverNow(
   } catch (e: any) {
     await markLog(env, payload.log_id, 'failed', e?.message || 'deliver_now_threw');
     return false;
+  }
+}
+
+async function logStatus(env: Env, logId: number): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare(`SELECT status FROM email_send_log WHERE id = ?`).bind(logId).first<{ status: string }>();
+    return row?.status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * D8533: the dead-letter consumer's mark for an `email_send` job that ran out
+ * of retries. The row reads `dlq` (keeping its last error) until a replay sends
+ * it; a row already `sent` is left alone. Best-effort: the mirror row is the
+ * record an admin replays from.
+ */
+export async function markEmailDeadLettered(env: Env, payload: { log_id?: unknown }): Promise<void> {
+  const logId = Number(payload?.log_id);
+  if (!Number.isSafeInteger(logId) || logId <= 0) return;
+  try {
+    await env.DB.prepare(`UPDATE email_send_log SET status = 'dlq' WHERE id = ? AND status <> 'sent'`).bind(logId).run();
+  } catch (e) {
+    console.warn('[email/send] dead-letter mark failed', e);
   }
 }
 
