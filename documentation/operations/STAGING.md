@@ -65,7 +65,7 @@ This compares what `[env.preview]` declares with production's
 | R2 | `PUBLICATIONS` | `studioos-publications` | `studioos-publications-preview` | Named, to create |
 | R2 | `COMPANY_LOGOS` | `studioos-company-logos` | `studioos-company-logos-preview` | Named, to create |
 | R2 | `BACKUPS` | `studioos-backups` | not declared | Not needed |
-| Durable Objects | 10 classes in this Worker (`PIPELINE_ROOM` … `WORK_GRAPH_LEASE`), tags `v1`–`v8` | in `studioos` | the same classes in `studioos-preview` | Created by the first deploy |
+| Durable Objects | 11 classes in this Worker (`PIPELINE_ROOM` … `WORKSPACE_ADMISSION`), tags `v1`–`v9` | in `studioos` | the same classes in `studioos-preview` | Created by the first deploy |
 | Durable Object | `MEETING_BOT_CONTAINER` | script `studioos-meeting-bot` | not declared | **Dropped by owner decision** (2026-11-18, D7147 part 2): staging binds no meeting-bot host while `MEETING_BOT = "off"`. |
 | Analytics Engine | `ANALYTICS` | `studioos_metrics` | `studioos_metrics_preview` | Created by the first write |
 | Workers AI | `AI` | account-wide | account-wide | Cannot be isolated. Stubbed (step 7). |

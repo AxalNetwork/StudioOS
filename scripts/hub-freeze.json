@@ -2509,6 +2509,7 @@
     "import ./durable-objects/onboarding-chat",
     "import ./durable-objects/pipeline-room",
     "import ./durable-objects/work-graph-lease",
+    "import ./durable-objects/workspace-admission",
     "import ./integrations/providers/beehiiv",
     "import ./integrations/providers/calendly",
     "import ./integrations/providers/carta",
