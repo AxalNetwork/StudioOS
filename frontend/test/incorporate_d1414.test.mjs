@@ -37,8 +37,8 @@ const JURISDICTIONS = { jurisdictions: [
   { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'Wyoming', est_cost_usd: [100, 600], time_to_form_days: [1, 7], fundraising_friendly: false, summary: 'A low-cost corporation in the US.', pros: ['Low yearly fees'], cons: ['Less case law'] },
 ] };
 const PROJECTS = { projects: [
-  { id: 2, name: '[Orbit Notes]', my_seat: 'owner', company_uid: null, company_name: null },
-  { id: 3, name: '[Ledgerline]', my_seat: 'owner', company_uid: 'nl', company_name: '[Northwind Labs]' },
+  { formation_state: 'not_incorporated', id: 2, name: '[Orbit Notes]', my_seat: 'owner', company_uid: null, company_name: null },
+  { formation_state: 'not_incorporated', id: 3, name: '[Ledgerline]', my_seat: 'owner', company_uid: 'nl', company_name: '[Northwind Labs]' },
   { id: 4, name: '[Someone else’s]', my_seat: 'cofounder', company_uid: null },
 ] };
 const QUOTE = { jurisdiction_id: 'us_de_ccorp', label: 'Delaware C-Corp', amount_cents: 94800, currency: 'usd', source: 'catalog',
@@ -93,6 +93,7 @@ async function mount(url = '/incorporate', { handle = worker() } = {}) {
     text: () => textOf(document.body),
     of: (id) => { const n = byId(id); assert.ok(n, `no ${id}`); return textOf(n); },
     has: (id) => Boolean(byId(id)), prop: (id, k) => props(byId(id))?.[k],
+    clickText: async label => { const n = walk(document.body).find(n => props(n)?.onClick && textOf(n).trim().endsWith(label)); assert.ok(n, `no button ${label}`); await act(async () => props(n).onClick({})); await settle(); },
     click: (id) => fire(id, 'onClick'), change: (id, v) => fire(id, 'onChange', { target: { value: v, checked: v } }),
     wait: async (ms) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)); }); await settle(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
@@ -100,6 +101,48 @@ async function mount(url = '/incorporate', { handle = worker() } = {}) {
 }
 
 // ---------------------------------------------------------------- the model
+
+test('D6688: the subject-less route starts at the board and Continue opens the chosen company', async () => {
+  const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', formation_state: 'not_incorporated' };
+  const v = await mount('/incorporate', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }) }) });
+  try {
+    assert.ok(v.has('incorporate-start'));
+    assert.equal(v.prop('incorporate-start-continue', 'disabled'), true);
+    await v.change('incorporate-subject-company:fixture_co', true);
+    assert.equal(v.prop('incorporate-start-continue', 'disabled'), false);
+    await v.click('incorporate-start-continue');
+    assert.match(v.of('incorporate-company-subject'), /Fixture company/);
+    assert.ok(!v.has('incorporate-pick'));
+  } finally { await v.close(); }
+});
+
+test('D6688: the company flow posts company_uid, never creates or orders a project', async () => {
+  const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', formation_state: 'not_incorporated' };
+  const v = await mount('/incorporate?company=fixture_co', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }) }) });
+  try {
+    assert.ok(!v.calls().includes('GET /api/account/projects'));
+    await v.click('incorporate-primary');
+    await v.click('incorporate-primary');
+    await v.wait(700);
+    await v.click('incorporate-primary');
+    await v.click('incorporate-primary');
+    await v.click('incorporate-primary');
+    const orders = v.writes().filter(x => x.call === 'POST /api/legal/incorporation/order');
+    assert.equal(orders.length, 1);
+    assert.equal(orders[0].body.company_uid, 'fixture_co');
+    assert.equal(Object.hasOwn(orders[0].body, 'project_id'), false);
+    assert.ok(!v.writes().some(x => x.call === 'POST /api/projects'));
+  } finally { await v.close(); }
+});
+
+test('D6688: a company already formed, in formation, unreadable or not administered cannot open the form', async () => {
+  for (const fields of [{ formation_state: 'incorporated' }, { formation_state: 'in_formation', formation_order_id: 45 }, { formation_state: 'unreadable' }, { formation_state: 'not_incorporated', my_role: 'Member' }]) {
+    const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', ...fields };
+    const v = await mount('/incorporate?company=fixture_co', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }) }) });
+    try { assert.ok(!v.has('incorporate-flow')); assert.equal(v.writes().length, 0); }
+    finally { await v.close(); }
+  }
+});
 
 test('six steps with Review, and the phone\'s line', () => {
   assert.deepEqual(STEPS.map((s) => s.label), ['Tell us your goals', 'Compare jurisdictions', 'Company details', 'Review', 'Pay & file', 'Done']);
@@ -244,7 +287,7 @@ test('mounted: one block failing is said alone (INC5d); the pick still draws', a
 });
 
 test('mounted: Start fresh posts the project first, standalone, and orders that project', async () => {
-  const v = await mount('/incorporate');
+  const v = await mount('/incorporate?new=1');
   try {
     await v.change('incorporate-fresh-radio', true);
     await v.change('incorporate-fresh-name', '[Fresh]');
@@ -282,4 +325,81 @@ test('house rules in the source: own projects only, no gate, the bank is Mercury
   assert.doesNotMatch(src, /\bFill\b/);
   assert.doesNotMatch(src, /FillFormTrigger|FillTrigger|Ask Eadwyn to fill/, 'no field trigger until #3706');
   assert.match(src, /import AskButton from '\.\.\/team\/AskButton\.jsx';/, 'Ask is the shared button, which draws nothing until its panel exists');
+});
+
+
+test('D6688: an owned prefilled project reports its formation state instead of a false ownership refusal', async () => {
+  for (const state of ['incorporated', 'in_formation', 'unreadable']) {
+    const fallback = worker();
+    const view = await mount('/incorporate?project=77', { handle: (url, init) => new URL(url, 'http://fixture').pathname === '/api/account/projects'
+      ? response({ projects: [{ id: 77, name: 'Owned project', my_seat: 'owner', formation_state: state, formation_order_id: state === 'in_formation' ? 81 : null }] }) : fallback(url, init) });
+    try {
+      assert.equal(view.has('incorporate-project-state'), true, state);
+      assert.equal(view.has('incorporate-not-yours'), false, state);
+      assert.equal(view.has('incorporate-flow'), false, state);
+      assert.match(view.text(), state === 'incorporated' ? /already incorporated/ : state === 'in_formation' ? /In formation/ : /Unavailable/);
+      if (state === 'in_formation') assert.equal(view.has('formation-order'), true);
+      assert.deepEqual(view.writes(), []);
+    } finally { await view.close(); }
+  }
+});
+
+
+test('D6688: retrying a failed fresh order reuses the project created by this flow', async () => {
+  let attempts = 0;
+  const view = await mount('/incorporate?new=1', { handle: worker({ 'POST /api/legal/incorporation/order': () => ++attempts === 1 ? response({ message: 'Fixture order failed' }, 503) : response({ dev: true, status: 'paid', incorporation_id: 31 }) }) });
+  try {
+    await view.change('incorporate-fresh-name', '[Fresh]');
+    await view.click('incorporate-primary'); await view.click('incorporate-primary');
+    await view.change('incorporate-company-name', '[Fresh Inc.]');
+    const deadline = performance.now() + 10000;
+    while (view.prop('incorporate-primary', 'disabled') && performance.now() < deadline) await view.wait(10);
+    await view.click('incorporate-primary'); await view.click('incorporate-primary');
+    await view.click('incorporate-primary'); await view.click('incorporate-primary');
+    const writes = view.writes();
+    assert.equal(writes.filter(w => w.call === 'POST /api/projects').length, 1);
+    const orders = writes.filter(w => w.call === 'POST /api/legal/incorporation/order');
+    assert.equal(orders.length, 2); assert.ok(orders.every(w => w.body.project_id === 77));
+  } finally { await view.close(); }
+});
+
+
+test('D6688: Retry preserves the start-board project selection', async () => {
+  let reads = 0;
+  const view = await mount('/incorporate', { handle: worker({ 'GET /api/account/companies': () => ++reads === 1 ? response({ message: 'Fixture list failed' }, 503) : response({ companies: [] }) }) });
+  try {
+    await view.change('incorporate-subject-project:2', true);
+    await view.clickText('Retry');
+    assert.equal(reads, 2);
+    assert.equal(view.prop('incorporate-subject-project:2', 'checked'), true);
+    assert.equal(view.prop('incorporate-start-continue', 'disabled'), false);
+  } finally { await view.close(); }
+});
+
+test('D6688: absent company access is Refused, a failed company read is Unavailable, and Retry rereads', async () => {
+  for (const failed of [false, true]) {
+    let reads = 0;
+    const view = await mount('/incorporate?company=fixture_co', { handle: worker({ 'GET /api/account/companies': () => { reads++; return failed ? response({ message: 'Fixture read failed' }, 503) : response({ companies: [] }); } }) });
+    try {
+      assert.match(view.text(), failed ? /Unavailable/ : /Refused/);
+      assert.equal(view.has('incorporate-flow'), false);
+      if (failed) { await view.clickText('Retry'); assert.equal(reads, 2); }
+      assert.deepEqual(view.writes(), []);
+    } finally { await view.close(); }
+  }
+});
+
+
+test('D6688: a legal-facts refusal never becomes an unavailable read or opens the editor', async () => {
+  const co = { uid: 'fixture_co', company_name: 'Fixture company', my_role: 'Admin', formation_state: 'not_incorporated' };
+  for (const [status, body, expected] of [[403, {}, 'Refused'], [404, {}, 'Refused'], [200, { can_edit: false }, 'Refused'], [200, { can_edit: true, archived: true }, 'Refused'], [503, {}, 'Unavailable'], [200, { can_edit: 1 }, 'Unavailable'], [200, { can_edit: true }, 'Edit legal facts']]) {
+    const view = await mount('/incorporate', { handle: worker({ 'GET /api/account/companies': () => response({ companies: [co] }), 'GET /api/company/fixture_co/legal': () => response(body, status) }) });
+    try {
+      await view.change('incorporate-subject-company:fixture_co', true);
+      await view.clickText('Already incorporated? Record its legal facts');
+      assert.match(view.text(), new RegExp(expected));
+      assert.equal(view.has('legal-sheet'), expected === 'Edit legal facts');
+      assert.deepEqual(view.writes(), []);
+    } finally { await view.close(); }
+  }
 });

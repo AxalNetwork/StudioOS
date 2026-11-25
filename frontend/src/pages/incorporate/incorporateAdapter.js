@@ -26,3 +26,25 @@ export function orderCompany(order) {
 
 /** The Ask panel on Incorporate's steps. */
 export const askPanel = () => unavailable('Ask opens when its panel is built.', '#3706');
+
+/** D6688: an order has exactly one subject. A new company still starts with a project. */
+export function orderSubject(companyUid, projectId) {
+  if (companyUid) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(companyUid)) throw new Error('Choose a recorded company.');
+    return { company_uid: companyUid };
+  }
+  if (!Number.isSafeInteger(Number(projectId)) || Number(projectId) < 1) throw new Error('Choose a recorded project.');
+  return { project_id: Number(projectId) };
+}
+
+export function startSubjects(companies, projects) {
+  const admin = row => !row.archived_at && (row.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(row.my_role));
+  const mine = (projects || []).filter(row => row.my_seat === 'owner' && row.company_id == null && !row.company_uid);
+  const managed = (companies || []).filter(admin);
+  return {
+    companies: managed.filter(row => row.formation_state === 'not_incorporated'),
+    projects: mine.filter(row => row.formation_state === 'not_incorporated'),
+    excluded: [...managed, ...mine].filter(row => ['in_formation', 'incorporated'].includes(row.formation_state)).length,
+    unreadable: [...managed, ...mine].some(row => !['not_incorporated', 'in_formation', 'incorporated'].includes(row.formation_state)),
+  };
+}

@@ -59,7 +59,7 @@ const KNOWN = [{ id: 7, uid: 'nl', company_name: '[Northwind Labs Inc.]', my_rol
 /** D1136: `GET /api/account/projects`, owned or seated. */
 const PROJECTS = { projects: [
   { id: 1, name: '[Atlas Pilot]', my_seat: 'owner', company_id: 7, company_uid: 'nl', company_name: '[Northwind Labs Inc.]', stage: 'mvp', member_count: ok(4) },
-  { id: 2, name: '[Lantern]', my_seat: 'owner', company_id: null, company_uid: null, company_name: null, stage: 'validation', member_count: ok(2) },
+  { formation_state: 'not_incorporated', id: 2, name: '[Lantern]', my_seat: 'owner', company_id: null, company_uid: null, company_name: null, stage: 'validation', member_count: ok(2) },
   { id: 3, name: '[Orbit Freight]', my_seat: 'cofounder', company_id: 99, company_uid: 'c99', company_name: 'Orbit Co', stage: 'mvp', member_count: gone() },
 ] };
 /** D1415 part 2: `GET /api/account/switcher`. */
@@ -245,7 +245,7 @@ test('the legal facts (PF2, PF8): masked tax ID, addresses in one line, officers
 
 // ---------------------------------------------------------------- PF1 mounted
 
-test('PF1 mounted: cards with their projects nested, addresses, standalone with Make it a company, seats; never GET /api/projects', async () => {
+test('PF1 mounted: cards with their projects nested, addresses, standalone with Convert this project into a company, seats; never GET /api/projects', async () => {
   const v = await mount('founder');
   try {
     assert.match(v.of('portfolio-companies-count'), /Companies · 2/);
@@ -438,7 +438,7 @@ test('PF2: the company page draws each block alone; Legal failing leaves Team an
   } finally { await v.close(); }
 });
 
-test('PF3: a standalone project offers Make it a company (Incorporate, prefilled) and Move; a linked one names its company', async () => {
+test('PF3: a standalone project offers Convert this project into a company (Incorporate, prefilled) and Move; a linked one names its company', async () => {
   let v = await mount('founder', { url: '/account/portfolio/projects/2' });
   try {
     assert.match(v.of('project-not-a-company'), /Not a company yet.*\[Lantern\] is a standalone project\. It is not a legal entity\./s);
