@@ -958,6 +958,12 @@ jobs:
       - name: Expertise axe and phone navigation (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/expertise_axe_7517.spec.js --retries=0 --trace off
+      # #7808 (D7808): the company switcher's accessible name (D7661) with no company, a failed read and a company,
+      # and an axe scan of the Worker rail with its Not recorded line (D7662), light and dark. Same docs/ and
+      # fixtures pattern as the step above; no axe rule is disabled and no trace is recorded.
+      - name: Switcher name and rail absent colour (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/switcher_rail_7808.spec.js --retries=0 --trace off
       # #8537 (D8537): the public journey at 1440 and 390 — Pricing to sign-up and back to the plan's checkout, a Grow
       # action through sign-in and back, a session that ended back in by the email link. The local Worker in
       # tests/e2e/_helpers.js serves the docs/ built above and keeps the sign-in links in an outbox; no email, no account.
