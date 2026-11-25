@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 /**
+ * A name a module binds and never uses — both `import { a } from '…'` and a
+ * destructured `const { a } = obj`. CodeQL reports these as alerts, so the
+ * choice is here or in a CI round trip; it raised three in one session before
+ * this existed. Deliberately narrow in both halves, because a false positive
+ * demands a change that breaks working code: named imports only (never default
+ * or namespace), and for destructuring `const` only — never a parameter list,
+ * and never a pattern with a rest element, since `const { password, ...safe } =
+ * user` names the field precisely to exclude it. Its own tests are the evidence
+ * it can fail, because **zero** destructured bindings in the repo are currently
+ * dead: `frontend/test/unused_imports_guard.test.mjs`.
+ *
  * check-unused-imports — a name a module binds and never uses.
  *
  * TWO SHAPES, one rule. `import { a } from '…'` where `a` is never used, and

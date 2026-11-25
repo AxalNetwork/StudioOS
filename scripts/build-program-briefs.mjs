@@ -26,6 +26,7 @@ import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { register, createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { loadProgramCatalog, pdfFileOf } from './lib/programCatalog.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -96,10 +97,19 @@ async function launch() {
 async function main() {
   const programs = (await loadProgramCatalog()).filter((p) => !only.length || only.includes(p.key));
   if (only.length && programs.length !== only.length) throw new Error(`no map entry for: ${only.filter((k) => !programs.some((p) => p.key === k)).join(', ')}`);
+  // D7121: the approved Wellness deck has its own diagram renderer and builder.
+  if (programs.some((p) => p.key === 'wellness')) {
+    const result = spawnSync(process.execPath, [join(ROOT, 'scripts/build-wellness-brief.mjs'),
+      ...(GRAY ? ['--gray'] : []), ...(OUT ? ['--out', resolve(OUT)] : []), ...(HTML_DIR ? ['--html', resolve(HTML_DIR)] : [])],
+    { cwd: ROOT, stdio: 'inherit' });
+    if (result.status !== 0) throw new Error('Wellness PDF build failed');
+  }
+  const standard = programs.filter((p) => p.key !== 'wellness');
+  if (!standard.length) return;
   const { deckHtml, DECK_CSS: CSS } = await import(pathToFileURL(join(ROOT, 'frontend/src/pages/programs/deck.js')).href);
   const browser = await launch();
   try {
-    for (const program of programs) {
+    for (const program of standard) {
       const content = (await import(pathToFileURL(join(ROOT, `frontend/src/pages/programs/content/${program.key}.js`)).href)).default;
       const body = deckHtml(program, content, { gray: GRAY })
         .replaceAll('{{MARK}}', MARK)

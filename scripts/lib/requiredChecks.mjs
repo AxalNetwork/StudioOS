@@ -1,3 +1,6 @@
+// #4107, D5973: main's required checks and the workflow that reports each, read
+// by `frontend/test/merge_queue_ci_4107.test.mjs` and `ciScorecard.mjs`.
+//
 // #4107, #5973: main's required checks — the owner's ruleset "main: required
 // checks" (2026-11-02, on #4107) — each named with the workflow whose job
 // reports it. One list, read by `frontend/test/merge_queue_ci_4107.test.mjs`

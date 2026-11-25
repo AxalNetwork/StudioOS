@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants
+ * --concurrency --faults --seed --out`): synthetic ventures through the
+ * D5565/D5567 contracts and a faultable in-process provider; deterministic per
+ * seed; writes a `local_mocked` JSON and Markdown report. No network,
+ * credentials or cloud.
+ *
  * D5573 (#5573) — the LOCAL MOCKED workspace validation run: synthetic tasks for synthetic ventures through the
  * D5565/D5567 contracts and an in-process fake provider with injectable faults. Deterministic for a seed. No network,
  * no credentials, no cloud or production call; the report's evidence class is always `local_mocked`.

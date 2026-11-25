@@ -178,9 +178,10 @@ function outFileFor(pathname) {
 async function main() {
   // D6966 (#6966): each program presentation's own page, from its map entry, after the registry's
   // routes (a program's page that is also a registry path keeps the program's title).
-  const routes = [...OG_ROUTES, ...(await programOgRoutes())];
-  // D6996 (#6996): each public Help Center guide's own page, after the registry's routes.
-  routes.push(...helpOgRoutes());
+  // One render per path, the later entry winning: a check of a path listed twice would otherwise compare the
+  // registry's render against the program's, which the write left on disk (#7121).
+  // D6996 (#6996): each public Help Center guide's own page, after the registry's and the programs' routes.
+  const routes = [...new Map([...OG_ROUTES, ...(await programOgRoutes()), ...helpOgRoutes()].map((r) => [r.path, r])).values()];
   const shellFile = path.join(OUT_DIR, 'index.html');
   if (!fs.existsSync(shellFile)) {
     console.error(

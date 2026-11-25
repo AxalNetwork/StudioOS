@@ -102,6 +102,25 @@ const Table = () => h(Suspense, { fallback: null }, h(Routes, null,
   h(Route, { path: '/admin/programs/perks', element: h('p', { 'data-testid': 'literal-perks' }, 'Perks page') }),
   adminProgramsGenericRoutes({ guard: (_roles, element) => element })));
 
+test('D7121: Wellness admin detail separates its public presentation from the personal workspace and honors the module gate', async () => {
+  for (const [key, studioOnly] of [['wellness', null], ['axal-wellness', null], ['wellness', 'lic-private']]) {
+    const handle = (url) => url === '/api/auth/me' ? response(ADMIN)
+      : url === '/api/admin/programs/' + key ? response({ ...DETAIL, approved_proposal: null,
+        program: { ...DETAIL.program, key, name: 'Wellness', modules: ['wellbeing'], studio_only: studioOnly } })
+        : never();
+    const view = await mounted('/admin/programs/' + key, h(Table), handle, ADMIN);
+    try {
+      assert.equal(view.has('programs-view-presentation'), studioOnly === null);
+      if (studioOnly === null) assert.equal(view.props('programs-view-presentation').href, '/programs/wellness');
+      assert.equal(view.has('programs-wellness-open'), studioOnly === null);
+      if (studioOnly === null) {
+        assert.equal(view.props('programs-wellness-open').href, '/wellbeing');
+        assert.equal(view.textOf('programs-wellness-open'), 'Open My Wellbeing');
+      }
+    } finally { await view.close(); }
+  }
+});
+
 test('the model: rows for the registry row and the approved spec, with the not-operational fields named', () => {
   assert.equal(genericKeyFrom('/admin/programs/operator-fellowship'), 'operator-fellowship');
   assert.equal(genericKeyFrom('/admin/programs/operator-fellowship/how-it-runs'), 'operator-fellowship');

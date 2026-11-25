@@ -13,11 +13,12 @@ concurrency:
   group: release-draft
   cancel-in-progress: true
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   draft:
+    permissions:
+      contents: write
     name: update the release draft
     runs-on: ubuntu-latest
     timeout-minutes: 20

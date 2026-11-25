@@ -1,3 +1,5 @@
+// D5663: explicit legacy webhook receipts, retries and uncertain delivery.
+//
 // D5663: the legacy single-channel webhook reports acknowledgement, retry or uncertainty explicitly.
 export function webhookDelivery({ url, fetchImpl = fetch }) {
   return async ({ text }) => {

@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 /**
+ * The other half of that rule — a name USED but never imported. `useState`
+ * shipped undefined to the apex once and took the public site down on first
+ * paint; a missing binding is a runtime error, so the bundle was clean and no
+ * test rendered the component. Since `lint:undef` below, this is
+ * coverage-redundant across `frontend/src`'s JS and JSX (verified by mutation);
+ * since `test:types:frontend` (#201, D96) it is redundant across the TS and TSX
+ * files too — a deleted `useState` import in `demo_day_app.tsx` was caught by
+ * BOTH, which is how that was established rather than assumed. **It now earns
+ * its place on its message alone**, which names the hook and the file in one
+ * line where `tsc` gives a TS2304 per call site. Kept for that; not for
+ * coverage.
+ *
  * check-react-hook-imports — a hook that is called must be imported.
  *
  * WHY THIS EXISTS, and it is not hypothetical. `PublicNav.jsx` gained a mobile

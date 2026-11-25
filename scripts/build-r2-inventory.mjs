@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-/** D6650: source-only R2 binding/prefix inventory and fail-closed classification guard; never contacts a bucket. */
+/**
+ * D6650: read-only typed R2 mutation inventory and classification/provenance
+ * guard; `--write` renders the generated, gitignored Markdown inventory beside
+ * the policy JSON.
+ *
+ * D6650: source-only R2 binding/prefix inventory and fail-closed classification
+ * guard; never contacts a bucket.
+ */
 import { API } from 'typescript/unstable/sync';
 import * as ts from 'typescript/unstable/ast';
 import {readdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';

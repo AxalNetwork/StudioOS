@@ -1,4 +1,10 @@
 /**
+ * #4571 R2-09: the one outcome a sign-in probe run is filed under
+ * (EDGE_CHALLENGED, APPLICATION_REFUSED, REFUSED_UNATTRIBUTED,
+ * APPLICATION_FAILED, ACCEPTED_NOT_VERIFIED, VERIFIED_END_TO_END). A skipped
+ * check is never a pass. Read by `../check-magic-link-insert.mjs` and
+ * `../check-magic-link-live.mjs`.
+ *
  * #4571 R2-09 — the one outcome a sign-in probe run is filed under.
  *
  * A probe that was turned away at the edge has tested nothing about sign-in.

@@ -1,0 +1,17 @@
+{
+  "POST /api/mark-requests": {
+    "kind": "target"
+  },
+  "POST /api/mark-requests/drafts/:uid/accept": {
+    "kind": "target"
+  },
+  "POST /api/mark-requests/drafts/:uid/discard": {
+    "kind": "target"
+  },
+  "POST /api/mark-requests/drafts/quote": {
+    "kind": "target"
+  },
+  "POST /api/mark-requests/drafts/run": {
+    "kind": "target"
+  }
+}

@@ -52,3 +52,17 @@ the picker by `cloudflare-worker/test/statement_actions_5039.test.ts`.
 - **A write that moves money is governed:** a reason, the revision read, a
   client idempotency key, the step-up, and an outcome that is never drawn as
   success unless the Worker said so. No `window.confirm`.
+
+## Recorded ledger metrics (D5952)
+
+The existing summary endpoint supplies quarterly `metrics`. `revenueMetric` checks
+the exact period, maps unreadable to Unavailable, and never substitutes a legacy
+figure after a failed metric read. Subscription net receipts, gross and refunds
+stay per currency. Subsidiary stream receipts stay separate from the statement's
+HQ claim. AI per licence follows Scope and counts unattributed/pre-migration runs;
+platform AI totals remain separate. Automatic promo reports supply dated Issued
+and Remaining only for the matching licence, period, currency and ceiling.
+The Data coverage drawer holds metric source, window, currencies, reconciliation,
+coverage and gap details. Existing canvas, tokens, controls and write flows remain
+the maintained visual and behavioral contract. Synthetic model/render tests:
+`frontend/test/revenue_metrics_5952.test.mjs`.

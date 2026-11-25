@@ -1,4 +1,8 @@
-/** D5501: admit only the exact main commit with all six trusted Actions checks. */
+/**
+ * D5501: require the exact main SHA and its six trusted Actions check results.
+ *
+ * D5501: admit only the exact main commit with all six trusted Actions checks.
+ */
 import { resolve } from 'node:path';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';

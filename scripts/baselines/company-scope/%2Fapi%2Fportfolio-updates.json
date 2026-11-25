@@ -1,0 +1,17 @@
+{
+  "GET /api/portfolio-updates": {
+    "kind": "filter"
+  },
+  "GET /api/portfolio-updates/:uid": {
+    "kind": "target"
+  },
+  "GET /api/portfolio-updates/:uid/asks": {
+    "kind": "target"
+  },
+  "GET /api/portfolio-updates/:uid/versions": {
+    "kind": "target"
+  },
+  "GET /api/portfolio-updates/latest": {
+    "kind": "filter"
+  }
+}

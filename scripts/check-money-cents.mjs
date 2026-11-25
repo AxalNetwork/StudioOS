@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ * Money parsed as a float.
+ *
  * Money is stored as an integer number of cents.
  *
  * Two rules, both narrow enough to be facts rather than opinions:

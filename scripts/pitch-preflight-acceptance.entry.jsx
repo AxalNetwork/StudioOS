@@ -1,3 +1,7 @@
+// #3661: the page `pitch-preflight-acceptance.mjs` opens: `usePreflight`,
+// `PreflightMeasure`, `PreflightPanel`, `FindingStrip`, `PreflightOverlay` and
+// `PreflightGate` on the defective deck. Reads and draws only.
+//
 // #3661 (D1370): the page the preflight acceptance run opens in a real browser
 // (`scripts/pitch-preflight-acceptance.mjs` bundles it). It is the product's own
 // code — `usePreflight`, `PreflightMeasure`, `PreflightPanel`, `FindingStrip`,

@@ -1,5 +1,10 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # the globals set here are read by the sourcing script
+# D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill)
+# and `restore-d1.sh` (the operator's restore): fetch, manifest check, the
+# independent copy's decryption, chunked import and row-count comparison. Never
+# run on its own.
+#
 # ---------------------------------------------------------------------------
 # scripts/dr-restore-lib.sh — D5337 (#5337)
 #
@@ -28,8 +33,22 @@
 #       into schema, data (parents first, foreign-key cycles broken at a
 #       nullable back-edge) and post chunks, and each is its own
 #       `wrangler d1 execute --remote --file`.
+#   dr_compare_tables DB MANIFEST BACKUP DIR
+#       D8531, BEFORE ANY COUNT: three table sets, by name and schema only —
+#       the manifest's tables, the tables the export creates and the restored
+#       database's sqlite_master (scripts/d1-backup-manifest.mjs tables). A
+#       table missing from the restore, or one the restore holds that the
+#       manifest does not list, exits 3 with FAIL_REASON=table_set_differs,
+#       each named with its kind. Engine-owned tables (sqlite_*, _cf_*) are
+#       never missing or extra.
 #   dr_compare_counts DB MANIFEST DIR
-#       every table's row count in DB against the manifest (D4558).
+#       every counted table's row count in DB against the manifest (D4558);
+#       a count that fails is `unreadable` (row_counts_unreadable, with
+#       wrangler's error codes), a different number `mismatched`
+#       (row_counts_differ). Statistics tables are never counted (D8531).
+#
+# D8531: TABLE_SET holds the outcome as JSON (missing, extra, unreadable,
+# mismatched: names only) for the caller's marker and summary.
 #
 # THE CONTRACT. The caller sets `set -euo pipefail`, defines `log`, sets
 # REPO_ROOT, and owns an EXIT trap that removes DIR. A function that fails
@@ -39,6 +58,13 @@
 # count, a size, a hash or a time; backup content and wrangler's own output
 # (which can quote a failing statement) are never printed.
 # ---------------------------------------------------------------------------
+
+TABLE_SET='{"missing":[],"extra":[],"unreadable":[],"mismatched":[]}'
+
+# Merge one outcome's names (a JSON array) into TABLE_SET.
+_dr_table_set() {
+  TABLE_SET=$(jq -c --arg k "$1" --argjson v "$2" '.[$k] = $v' <<< "${TABLE_SET}" 2>/dev/null || printf '%s' "${TABLE_SET}")
+}
 
 dr_fail() {
   local rc="$1" reason="$2"
@@ -137,6 +163,23 @@ dr_import_chunks() {
   log "restore ok: ${n} chunks imported"
 }
 
+dr_compare_tables() {
+  local db="$1" manifest="$2" backup="$3" dir="$4" query out rc=0
+  query=$(DR_MANIFEST_MJS="${REPO_ROOT}/scripts/d1-backup-manifest.mjs" node --input-type=module -e 'const m = await import(process.env.DR_MANIFEST_MJS); console.log(m.RESTORED_TABLES_SQL);')
+  if ! wrangler d1 execute "${db}" --remote --command "${query}" --json > "${dir}/restored-tables.json" 2>"${dir}/count.err"; then
+    dr_fail 3 table_set_unreadable "the restored database's table list could not be read (wrangler's error codes: $(dr_count_codes "${dir}"))"
+  fi
+  out=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" tables "${manifest}" "${backup}" "${dir}/restored-tables.json" --out "${dir}/table-set.json") || rc=$?
+  printf '%s\n' "${out}" | grep -v '^reason=' | while IFS= read -r line; do log "${line}"; done
+  if [[ -s "${dir}/table-set.json" ]]; then
+    _dr_table_set missing "$(jq -c '[.missing[] | "\(.name) (\(.kind))"]' "${dir}/table-set.json")"
+    _dr_table_set extra "$(jq -c '[.extra[] | "\(.name) (\(.kind))"]' "${dir}/table-set.json")"
+  fi
+  if [[ "${rc}" -ne 0 ]]; then
+    dr_fail 3 table_set_differs "the restored tables are not the manifest's: $(jq -r '[(.missing[] | "missing \(.name) (\(.kind))"), (.extra[] | "extra \(.name) (\(.kind))")] | join("; ")' "${dir}/table-set.json" 2>/dev/null || echo 'unreadable')"
+  fi
+}
+
 dr_compare_counts() {
   local db="$1" manifest="$2" dir="$3" sql compare codes batch=0 name one unreadable=()
   # Read 40 tables to a query. When a batch query fails, each of its tables is
@@ -165,10 +208,12 @@ dr_compare_counts() {
     done 5< <(dr_count_sql "one $(( batch - 1 ))" "${manifest}")
   done 4< "${dir}/counts.sql"
   if [[ ${#unreadable[@]} -gt 0 ]]; then
+    _dr_table_set unreadable "$(printf '%s\n' "${unreadable[@]}" | jq -R . | jq -sc .)"
     dr_fail 3 row_counts_unreadable "a row-count query failed for ${#unreadable[@]} table(s) in the manifest: ${unreadable[*]}"
   fi
   jq -s '.' "${dir}/counts.jsonl" > "${dir}/counts.json"
-  if ! compare=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" compare "${manifest}" "${dir}/counts.json"); then
+  if ! compare=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" compare "${manifest}" "${dir}/counts.json" --names-out "${dir}/mismatched.json"); then
+    _dr_table_set mismatched "$(jq -c . "${dir}/mismatched.json" 2>/dev/null || echo '[]')"
     dr_fail 3 row_counts_differ "${compare}"
   fi
   log "${compare}"
@@ -178,8 +223,10 @@ dr_compare_counts() {
 # tables. `one <i>`: batch i's tables, one `name<TAB>query` line each.
 dr_count_sql() {
   # shellcheck disable=SC2016 # JavaScript, not shell
-  node -e '
-    const m = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+  DR_MANIFEST_MJS="${REPO_ROOT}/scripts/d1-backup-manifest.mjs" node --input-type=module -e '
+    const { countedTables } = await import(process.env.DR_MANIFEST_MJS);
+    const fs = await import("node:fs");
+    const m = { tables: countedTables(JSON.parse(fs.readFileSync(process.argv[2], "utf8"))) };
     const [mode, index] = process.argv[1].split(" ");
     const q = (n) => `"${n.replace(/"/g, "\"\"")}"`;
     const lit = (n) => `${String.fromCharCode(39)}${n.replace(/\x27/g, "\x27\x27")}${String.fromCharCode(39)}`;
@@ -199,8 +246,11 @@ dr_count_codes() {
 
 # Map only complete scalar-batch results back to manifest table names. Never print backup rows.
 dr_count_rows() {
-  node -e '
-    const fs = require("fs"), m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  # shellcheck disable=SC2016 # JavaScript, not shell
+  DR_MANIFEST_MJS="${REPO_ROOT}/scripts/d1-backup-manifest.mjs" node --input-type=module -e '
+    const { countedTables } = await import(process.env.DR_MANIFEST_MJS);
+    const fs = await import("node:fs");
+    const m = { tables: countedTables(JSON.parse(fs.readFileSync(process.argv[1], "utf8"))) };
     const tables = m.tables.slice(Number(process.argv[2]) * 40, (Number(process.argv[2]) + 1) * 40);
     const result = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
     const rows = Array.isArray(result) ? result.flatMap(r => r.results ?? []) : [];
