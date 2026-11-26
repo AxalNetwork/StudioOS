@@ -136,9 +136,14 @@ jobs:
           # the run: shell — keeps these blocks injection-safe and consistent).
           BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
+          set -o pipefail
+          # D8754: wrangler prints a one-hour pre-signed link that downloads the whole export, and
+          # this repository's run logs are public. Every URL in its output is withheld; the file,
+          # its size and the manifest below are the record.
           wrangler d1 export "${TARGET_DB}" \
             --remote \
-            --output "${BACKUP_FILENAME}"
+            --output "${BACKUP_FILENAME}" 2>&1 \
+            | sed -E 's#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]]+#[URL withheld]#g'
           ls -lh "${BACKUP_FILENAME}"
 
       - name: Build the backup's manifest
