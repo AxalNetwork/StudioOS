@@ -222,6 +222,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['facebook_page_links', 'p', 'cascade'],
   ['facebook_proposals', 'p', 'cascade'],
   ['filing_reminder_deliveries', 'p', 'left'],
+  ['filing_reminder_event_deliveries', 'c', 'company'],
   ['financial_events', 'pc', 'left'],
   ['financial_models', 'p', 'cleanup'],
   ['financial_statement_pins', 'p', 'cascade'],
