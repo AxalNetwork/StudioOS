@@ -16,7 +16,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import router, { mount, REFUSAL_SENTENCES } from '../src/routes/research_source_imports.ts';
+import router, { mount, REFUSAL_SENTENCES, researchImportGate } from '../src/routes/research_source_imports.ts';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../src/auth.ts';
 import { AUDIT_ACTIONS, IMPORT_LIMITS } from '../src/services/researchSourceImports.ts';
 import { bodyJson, membershipDigest, sealRun, sha256Hex, type CellValue } from '../src/services/researchSourceRecords.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -178,6 +179,45 @@ test('1. it mounts itself at its own path; every route refuses signed out, a mem
   assert.equal(snapshot(f), before);
   // Reads pass with the elevation alone.
   assert.equal((await su(f, 'GET', '/runs', undefined, { bar: false })).status, 200);
+});
+
+test('1b. the exported gate composes into another router on this prefix and answers as the import routes do', async () => {
+  // #7746 imports `researchImportGate` rather than retyping it. A router built only from it, on the same prefix:
+  // signed out 401, member, plain admin and branch 403, support session 403 support_session_refused, a write with no
+  // fresh step-up 403, and the Super Admin passes with the user handed back.
+  // Mutations checked: the support-session check removed → the support caller reads 403 without the code; the check
+  // handed in skipped → the member reads 200. Equivalent: requireAuth dropped from the gate, since both checks sign in
+  // the caller first and still answer 401.
+  const composed = new Hono<any>();
+  composed.get('/probe', async (c) => {
+    const user = await researchImportGate(c, requireSuperAdmin);
+    return user instanceof Response ? user : c.json({ id: (user as any).id });
+  });
+  composed.post('/probe', async (c) => {
+    const user = await researchImportGate(c, requireSuperAdminWriteBar);
+    return user instanceof Response ? user : c.json({ id: (user as any).id });
+  });
+  const withComposed = (f: F) => {
+    const app = new Hono<any>();
+    app.route(`${BASE}/composed`, composed);
+    app.onError((err, c) => c.json({ detail: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
+    return { ...f, app };
+  };
+  const f = withComposed(fixture());
+  const branch = withComposed(fixture({ BRANCH_CODE: 'synthetic-branch' }));
+  for (const method of ['GET', 'POST']) {
+    const body = method === 'POST' ? {} : undefined;
+    assert.equal((await call(f, null, method, '/composed/probe', body)).status, 401, `${method} signed out`);
+    assert.equal((await call(f, MEMBER, method, '/composed/probe', body)).status, 403, `${method} member`);
+    assert.equal((await call(f, ADMIN, method, '/composed/probe', body)).status, 403, `${method} plain admin`);
+    assert.equal((await call(branch, SUPER, method, '/composed/probe', body)).status, 403, `${method} branch`);
+    const support = await call(f, 'support', method, '/composed/probe', body);
+    assert.deepEqual([support.status, support.body.error, support.body.message],
+      [403, 'support_session_refused', REFUSAL_SENTENCES.support_session_refused], `${method} support`);
+    assert.deepEqual(await su(f, method, '/composed/probe', body), { status: 200, body: { id: SUPER } }, `${method} super admin`);
+  }
+  assert.equal((await su(f, 'POST', '/composed/probe', {}, { bar: false })).status, 403, 'a write with no fresh step-up');
+  assert.deepEqual(await su(f, 'GET', '/composed/probe', undefined, { bar: false }), { status: 200, body: { id: SUPER } }, 'a read needs no step-up');
 });
 
 /* ----------------------------------------------------------- 2. preview */

@@ -7,6 +7,9 @@ name: GitHub alerts
 #   queue         the Actions queue backed up, so CI results arrive hours late
 #   queue-stalled every 15 min: one failure (test, guard, or job and step) in
 #                 merge-queue candidates of two queue chains (D5604, D7125)
+#   ops-schedules hourly: a scheduled D1 backup, magic-link probe or admin drift run
+#                 waiting on approval, missed, failing its credential check, or no
+#                 successful D1 backup in 26 hours (D8754)
 #   future-clock  nightly: the suites with the clock 7 days ahead, which finds a
 #                 date-bound test (D5052, D5039) before its date breaks main;
 #                 the report job writes the failing names to its own log and
@@ -31,7 +34,7 @@ on:
       check:
         description: 'Which check to run now'
         type: choice
-        options: [main-red, queue, queue-stalled, queue-deadline, future-clock, workflow-failures, file-backup]
+        options: [main-red, queue, queue-stalled, queue-deadline, future-clock, workflow-failures, file-backup, ops-schedules]
         default: queue
       attempts:
         description: 'Verified completion hint batch: JSON array of up to 20 [run_id, attempt] pairs'
@@ -61,11 +64,13 @@ jobs:
     concurrency:
       group: github-health-main-red
       queue: max
+    # pull-requests: read lets a new PR failure's owner slot come from the task its PR links (D6387 part 2).
     permissions:
       contents: read
       actions: read
       checks: read
       issues: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -383,6 +388,39 @@ jobs:
           FILE_RECOVERY_ENABLED: ${{ vars.FILE_RECOVERY_ENABLED }}
           FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_SECOND_COPY_ENABLED }}
           FILE_RECOVERY_HEARTBEAT_FILE: ${{ runner.temp }}/file-recovery-heartbeat.json
+
+  ops-schedules:
+    name: Scheduled production operations
+    # D8754: GitHub's own run records, no production credential and no environment.
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '7 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.check == 'ops-schedules'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-ops-schedules
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Reconcile one scheduled-operations episode
+        run: node scripts/github-alerts.mjs ops-schedules
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
 
   queue-deadline:
     name: Merge queue deadline warning

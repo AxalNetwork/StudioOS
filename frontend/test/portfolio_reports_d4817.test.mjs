@@ -368,3 +368,26 @@ test('founder asks distinguish populated, empty, refused and unavailable without
     } finally { await view.close(); }
   }
 });
+
+test('D6215: a capital ask on a round call points Promise support at the call; without one it opens Value-add; answered names nobody', async () => {
+  const view = await mount(worker({ '/api/portfolio-updates/u2/asks': json({ asks: [
+    { uid: 'cap', kind: 'capital', text: 'Funds that lead a seed extension', link_ref: 'call-9', link_reason: null, answered: false, support_state: null },
+    { uid: 'cap2', kind: 'capital', text: 'A bridge round', link_ref: null, link_reason: null, answered: false, support_state: null },
+    { uid: 'cust', kind: 'customer', text: 'A grocery buyer', link_ref: null, link_reason: null, answered: true, support_state: null },
+    { uid: 'mine', kind: 'hire', text: 'A VP Sales', link_ref: null, link_reason: null, answered: false, support_state: 'promised' },
+  ] }, 200) }));
+  try {
+    await view.click('button-open-report-2');
+    const text = view.text('report-founder-asks');
+    assert.match(view.text('report-ask-cap'), /Replies to this ask go to the round call\..*Promise support/);
+    assert.match(view.text('report-ask-cap2'), /No open round call is linked to this ask\..*Promise support/);
+    assert.match(view.text('report-ask-cust'), /Answered/);
+    assert.match(view.text('report-ask-mine'), /Your support · Promised.*View the entry/);
+    assert.doesNotMatch(view.text('report-ask-mine'), /Promise support/);
+    assert.ok(view.hrefs().includes('/round-calls/call-9'));
+    // The local nav carries one Value-add link; cap2 and cust promise there, and mine views its entry.
+    assert.equal(view.hrefs().filter((h) => h === '/portfolio/value-add').length, 4);
+    assert.doesNotMatch(text, /Answered by/);
+    assert.equal(view.reads('/api/portfolio-updates/u2/page'), 0);
+  } finally { await view.close(); }
+});

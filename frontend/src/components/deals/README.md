@@ -16,7 +16,7 @@ The Ops canvas's deal-room screens (`design/canvases/integrated/ops-data.js`:
 | `DealInvitationsTab.jsx` | The Invitations tab (admin). |
 | `DealTransfersTab.jsx` | The Transfers tab and "Record a transfer" (admin, partner). |
 | `DealReferencesTab.jsx` | The reference calls card on Diligence (admin, investor): Delete and Record consent confirmed through the shared Lightbox, the deal page's card styling and the canvas's consent and notes pills (D6182). |
-| `DealSyndicates.jsx` | The company's syndicates, and a syndicate's drawer with its confirmed close. |
+| `DealSyndicates.jsx` | The company's syndicates, and a syndicate's drawer with its confirmed close. Given a deal, also the open syndicates its invitation shows, counted and never named, with the DL13 join dialog (D6200). |
 
 ## Rules
 
