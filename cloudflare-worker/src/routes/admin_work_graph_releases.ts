@@ -14,6 +14,7 @@
  *   POST /manifests/:manifest/publish   { tenant_id, company_id, digest, expected_manifest_uid, effects: [{ target, ref }], idempotency_key }
  *   POST /manifests/:manifest/takedown  { tenant_id, company_id, digest, component?: { revision_uid, digest }, reason_code, evidence_ref, authority, idempotency_key }
  *   POST /lines/:line/repin             { tenant_id, company_id, target_manifest_uid, expected_manifest_uid, idempotency_key }
+ *   PUT  /lines/:line/name              part 16: { tenant_id, company_id, name, expected_seq, idempotency_key }   name or rename a line
  *   POST /drain                         { limit? }   one bounded drain of the release outbox (at most 25 effects)
  *   GET  /authorities?tenant_id&company_id[&user_id][&history=1]   part 8: who holds which release authority, and the history
  *   POST /authorities/grant             { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
@@ -23,8 +24,9 @@
  *   GET  /authorities/candidates?tenant_id&company_id   part 11: the company's linked people, what each holds, each key's seq
  *
  * NAMES (part 11, D5585-p11). Every read that returns user ids also returns `people`: `{ [userId]: { name } }`, the name
- * other members see (`effectiveDisplayName`), never an email. A line has no name of its own (`lineName: null`,
- * `lineNameReason: 'not_recorded'`). The manifest evaluation explains every live decision that does not count
+ * other members see (`effectiveDisplayName`), never an email. A line's name is the one a Super Admin gave it (part 16,
+ * D5585-p16), with the `lineNameSeq` a rename names; an unnamed line is `lineName: null`,
+ * `lineNameReason: 'not_recorded'`. The manifest evaluation explains every live decision that does not count
  * (`notCounted[]`, one reason each, from the same rule that counts).
  *
  * GATES. Reads: `requireSuperAdmin` (HQ only). Writes and the drain: `requireSuperAdminWriteBar` (a TOTP session, a
@@ -34,7 +36,8 @@
  *
  * STALE WRITES. A publish and a takedown carry the digest the Super Admin saw (`stale_approval` otherwise); a publish
  * carries the manifest it expects the pointer to name (the CAS refuses `stale_revision`); a re-pin carries the head it
- * saw (`stale_revision`, with the current head).
+ * saw (`stale_revision`, with the current head); a rename carries the name `seq` it saw (`stale_line_name`, with the
+ * current name).
  *
  * The drain delivers only while `WORK_GRAPH_RELEASE_DELIVERY` is `preview` (409 `release_delivery_off` otherwise).
  *
@@ -62,7 +65,7 @@ import {
   RELEASE_AUTHORITIES, grantReleaseAuthority, listReleaseAuthorityGrants, revokeReleaseAuthority,
 } from '../services/workGraphReleaseAuthorities';
 import {
-  EFFECT_STATES, LINE_NAME_NOT_RECORDED, RELEASE_DRAIN_LIMITS, listLimit, listLineManifests, listReleaseDeliveries, listReleaseLines,
+  EFFECT_STATES, RELEASE_DRAIN_LIMITS, listLimit, listLineManifests, listReleaseDeliveries, listReleaseLines,
   RELEASE_REFUSAL_SENTENCES, RELEASE_REFUSAL_STATUS, releaseAdminContext, releaseAdminEnabled, scopeFrom, summariseDrain,
 } from '../services/workGraphReleaseAdmin';
 import { companyUnderOtherTenant } from '../services/workGraphReleaseAuthorities';
@@ -70,6 +73,7 @@ import {
   RELEASE_DIRECTORY_LIMITS, listGrantCandidates, listReleaseScopes, releasePeople, releaseSwitches,
 } from '../services/workGraphReleaseDirectory';
 import type { ReleaseState } from '../services/workGraphReleases';
+import { UNNAMED, lineNameFields, lineNamesOf, setReleaseLineName } from '../services/workGraphReleaseLineNames';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -163,11 +167,14 @@ r.get('/lines/:line', async (c) => {
   const served = await servedRelease(c.env, ctx, line);
   if (!served.ok) return refused(c, served);
   const list = await listLineManifests(c.env, scope, line, listLimit(c.req.query('limit')));
-  const names = await named(c.env, [...releasePeopleIds(pub.release), ...list.manifests.map((x) => x.actorUserId)]);
+  const nm = new Meter(c.env);
+  const lineName = (await lineNamesOf(c.env, nm, scope, [line])).get(line) ?? UNNAMED;
+  const names = await named(c.env, [...releasePeopleIds(pub.release), ...list.manifests.map((x) => x.actorUserId), lineName.setByUserId]);
   return c.json({
-    ok: true, scope, lineAssetUid: line, ...LINE_NAME_NOT_RECORDED, headSeq: pub.headSeq, published: pub.release, served: served.served,
+    ok: true, scope, lineAssetUid: line, ...lineNameFields(lineName), lineNameSetBy: lineName.setByUserId, lineNameSetAt: lineName.setAt,
+    headSeq: pub.headSeq, published: pub.release, served: served.served,
     withheld: served.withheld, manifests: list.manifests, people: names.people,
-    cost: addCost(addCost(addCost(pub.cost, served.cost), list.cost), names.cost),
+    cost: addCost(addCost(addCost(addCost(pub.cost, served.cost), list.cost), names.cost), nm.cost),
   });
 });
 
@@ -269,6 +276,30 @@ r.post('/lines/:line/repin', async (c) => {
   if (!res.ok) { await out(res.code, { ids: res.ids.slice(0, 20) }); return refused(c, { ...(res as ReleaseRefusal), cost: total }); }
   await out('repinned', { manifest_uid: res.manifestUid, digest: res.digest, replayed: res.replayed });
   return c.json({ ...res, cost: total });
+});
+
+// Part 16 (D5585-p16): name or rename a release line, from the name `seq` the Super Admin saw. Each attempt, refused or
+// not, is an admin audit row; the store keeps every name the line has had.
+r.put('/lines/:line/name', async (c) => {
+  const user = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const scope = b && scopeFrom(b.tenant_id, b.company_id);
+  if (!b || !scope) return badScope(c);
+  const lineUid = c.req.param('line');
+  if (typeof b.name !== 'string' || !Number.isSafeInteger(b.expected_seq) || b.expected_seq < 0 || typeof b.idempotency_key !== 'string') {
+    return refuse(c, 400, { code: 'malformed', message: 'A rename names the new name, the name seq you saw (0 for an unnamed line), and an idempotency key.' });
+  }
+  const base = { tenant_id: scope.tenantId, company_id: scope.companyId, line_asset_uid: lineUid.slice(0, 80), expected_seq: b.expected_seq, idempotency_key: b.idempotency_key.slice(0, 160) };
+  const out = async (outcome: string, extra: Record<string, unknown> = {}) => audit(c, user, 'work_graph_release_line_name', { ...base, outcome, ...extra });
+  const res = await setReleaseLineName(c.env, {
+    scope, lineAssetUid: lineUid, name: b.name, expectedSeq: b.expected_seq, actorUserId: Number(user.id), idempotencyKey: b.idempotency_key,
+  });
+  if (!res.ok) {
+    await out(res.code, { ids: res.ids.slice(0, 20) });
+    return refused(c, { code: res.code, ids: res.ids, cost: res.cost, ...(res.current ? { current: res.current } : {}) });
+  }
+  await out('named', { name: res.name, seq: res.seq, replayed: res.replayed });
+  return c.json({ ok: true, scope, lineAssetUid: lineUid, lineName: res.name, lineNameSeq: res.seq, replayed: res.replayed, cost: res.cost });
 });
 
 r.post('/drain', async (c) => {

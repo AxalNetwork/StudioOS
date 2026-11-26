@@ -36,6 +36,7 @@ import type { ReleaseDistributionChannels } from './workGraphReleaseDistribution
 import type { DeliveryStatus } from './workGraphEffects';
 import { releaseAuthoritiesForScope, revokedReleaseUsers } from './workGraphReleaseAuthorities';
 import type { SwarmState } from './agents/swarmAdmission';
+import { UNNAMED, lineNameFields, lineNamesOf } from './workGraphReleaseLineNames';
 
 /** The value of `WORK_GRAPH_RELEASE_ADMIN` that turns the routes on. Unset, or anything else, is off. */
 export const RELEASE_ADMIN_ON = 'on';
@@ -77,8 +78,12 @@ export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Objec
   agent_review: 'Only a person can decide on a release.',
   self_approval: 'The author of a manifest cannot approve it.',
   approval_incomplete: 'This policy profile needs its approval to name the evidence, rights or disclosure it relied on.',
+  // Part 16 (D5585-p16): a line's name.
+  line_name_invalid: 'A line name is 1 to 120 characters of text, with no control or text-direction characters.',
+  stale_line_name: 'The line’s name has changed since you loaded it. Reload the line and rename it again.',
 });
-export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 });
+export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503,
+  line_name_invalid: 400 });
 
 export const RELEASE_DRAIN_LIMITS = Object.freeze({
   /** Effects one scheduled drain delivers at most. */
@@ -143,18 +148,17 @@ export const listLimit = (v: unknown) => {
   return Number.isSafeInteger(n) && n > 0 ? Math.min(n, RELEASE_DRAIN_LIMITS.listMax) : RELEASE_DRAIN_LIMITS.listMax;
 };
 
-/**
- * Part 11 (D5585-p11): a release line has no name of its own. It is a `composite` asset, and neither
- * `work_graph_assets` nor `work_graph_release_lines` has a name or title column; a line is its uid, audience and
- * project. Every read says so (`lineName: null`, `lineNameReason: 'not_recorded'`) rather than inventing one.
- */
-export const LINE_NAME_NOT_RECORDED = { lineName: null, lineNameReason: 'not_recorded' } as const;
+// Part 11 (D5585-p11): a release line had no name of its own, and every read said so (`lineName: null`,
+// `lineNameReason: 'not_recorded'`) rather than inventing one. Part 16 (D5585-p16) gives a line a name a Super Admin
+// sets (`workGraphReleaseLineNames.ts`, `lineNameFields`); an unnamed line still reads exactly so.
 
 export interface ReleaseLineItem {
   lineAssetUid: string; projectId: number | null; audience: string; createdByUserId: number; createdAt: string;
   headManifestUid: string | null; headSeq: number; manifests: number;
-  /** Part 11: always null, with its reason (`LINE_NAME_NOT_RECORDED`). */
-  lineName: null; lineNameReason: 'not_recorded';
+  /** Part 16: the name a Super Admin gave the line; null with `not_recorded` while it has none. */
+  lineName: string | null; lineNameReason: 'not_recorded' | null;
+  /** Part 16: the `seq` of that name, 0 when never named: what a rename names as `expected_seq`. */
+  lineNameSeq: number;
   /** Part 11: the name of the line's project, when it names one of this company's projects that is not deleted. */
   projectName: string | null;
 }
@@ -173,11 +177,12 @@ export async function listReleaseLines(env: Pick<Env, 'DB'>, scope: Scope, limit
       ORDER BY l.created_at DESC, l.line_asset_uid
       LIMIT ?`,
   ).bind(scope.tenantId, scope.companyId, limit));
+  const names = await lineNamesOf(env, m, scope, rows.map((r) => r.line_asset_uid));
   return {
     lines: rows.map((r) => ({
       lineAssetUid: r.line_asset_uid, projectId: r.project_id, audience: r.audience, createdByUserId: r.created_by_user_id,
       createdAt: r.created_at, headManifestUid: r.head_revision_uid, headSeq: Number(r.head_seq), manifests: Number(r.manifests),
-      ...LINE_NAME_NOT_RECORDED, projectName: r.project_name ?? null,
+      ...lineNameFields(names.get(r.line_asset_uid) ?? UNNAMED), projectName: r.project_name ?? null,
     })),
     cost: { ...m.cost },
   };
