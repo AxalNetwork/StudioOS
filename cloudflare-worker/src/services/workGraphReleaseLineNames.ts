@@ -16,7 +16,7 @@ import { Meter, hashOf, keyOk, outOfScope, readLine, scopeOf } from './workGraph
 export const RELEASE_LINE_NAME_LIMITS = Object.freeze({ nameMax: 120 });
 
 /** C0 and C1 controls, and the bidirectional embedding, override and isolate characters. */
-const FORBIDDEN = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/;
+const FORBIDDEN = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/;
 
 /** The name as stored: NFC, trimmed, inner whitespace made one space. Null when it is not a name this store keeps. */
 export function normaliseLineName(raw: unknown): string | null {

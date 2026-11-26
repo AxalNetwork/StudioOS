@@ -145,7 +145,7 @@ test('3. a name is text: whitespace made one space; empty, long, control and dir
   assert.equal(normaliseLineName('  Spring \n\t launch  '), 'Spring launch');
   assert.equal(normaliseLineName('Café'), 'Café', 'NFC');
   assert.equal(normaliseLineName('x'.repeat(RELEASE_LINE_NAME_LIMITS.nameMax)), 'x'.repeat(120));
-  for (const bad of ['', '   ', 'x'.repeat(121), 'a\u0000b', 'a\u0007b', 'a\u0085b', 'pay‮etuo', 'a⁦b', 7, null]) {
+  for (const bad of ['', '   ', 'x'.repeat(121), 'a\u0000b', 'a\u0007b', 'a\u0085b', 'pay\u202eetuo', 'a\u2066b', 7, null]) {
     assert.equal(normaliseLineName(bad as any), null, JSON.stringify(bad));
   }
   const w = fresh();
@@ -153,7 +153,7 @@ test('3. a name is text: whitespace made one space; empty, long, control and dir
   const line = await newLine(w, 'line-c');
   const ok = await rename(env, line, '  Spring   launch ', 0, 'v1');
   assert.equal(ok.body.lineName, 'Spring launch');
-  const bad = await rename(env, line, 'pay‮etuo', 1, 'v2');
+  const bad = await rename(env, line, 'pay\u202eetuo', 1, 'v2');
   assert.deepEqual([bad.status, bad.body.error, bad.body.message], [400, 'line_name_invalid', RELEASE_REFUSAL_SENTENCES.line_name_invalid]);
   for (const [key, over] of [['m1', { name: 7 }], ['m2', { expected_seq: -1 }], ['m3', { expected_seq: 1.5 }], ['m4', { expected_seq: '1' }], ['m5', { idempotency_key: 3 }]] as const) {
     const r = await call(env, 'PUT', `/lines/${line}/name`, { body: { ...IN, name: 'N', expected_seq: 1, idempotency_key: key, ...over } });
