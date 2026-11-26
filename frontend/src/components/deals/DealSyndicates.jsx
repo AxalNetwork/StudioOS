@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { dealSyndicatesApi } from '../../lib/api/dealSyndicates';
+import { parseMinor } from '../../lib/money';
 import { STATES, SYNDICATE_CLOSE_CONFIRM, SYNDICATE_FLOW, centsMoney, whenLine } from './dealRoomCopy';
 import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN, INPUT } from './DealRoomKit';
 import Sheet from '../../ui/Sheet.jsx';
@@ -129,7 +130,9 @@ export function syndicateLine(s) {
 export function pledgeCheck(text, minCents) {
   const raw = String(text ?? '').replace(/[$,\s]/g, '');
   if (!/^\d+(\.\d{1,2})?$/.test(raw)) return { error: 'Enter an amount in dollars, such as 25000.' };
-  const cents = Math.round(Number(raw) * 100);
+  const parsed = parseMinor(raw, 'USD');
+  if (!parsed.ok) return { error: 'Enter an amount in dollars, such as 25000.' };
+  const cents = parsed.minor;
   if (!Number.isSafeInteger(cents) || cents <= 0) return { error: 'Enter an amount above zero.' };
   if (Number(minCents) > 0 && cents < Number(minCents)) return { error: `The minimum for this syndicate is ${centsMoney(minCents)}. Nothing was recorded.` };
   return { cents };
