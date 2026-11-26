@@ -7,6 +7,11 @@
 //   node scripts/ci/agent-provenance.mjs --base origin/main --head HEAD [--branch <name>]
 //        [--out provenance.json] [--source base|pr] [--pr-merges <file>]
 //   node scripts/ci/agent-provenance.mjs --shadow --candidate <sha> [--previous <sha>] [--summary <file>]
+//   node scripts/ci/agent-provenance.mjs --bind --base <sha> --head <sha> --candidate <sha>
+//
+// --bind (D8692, #8692) is the merge queue's proof that the pull request head it is about to check
+// is the one the queue candidate was built from: the candidate's only parent is the merge group's
+// base and its tree is that base merged with the head. Exit 0 when bound, 1 when refused.
 //
 // --shadow (D8517, #8517) is the production release's report: for each pull request merged between
 // the last production deploy and the candidate, its slot, its task and whether this check passes on
@@ -20,7 +25,7 @@
 //
 // The file is self-contained (node: built-ins only) because the workflow runs the copy on
 // the pull request's base commit, so a branch cannot edit the check that judges it.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -279,6 +284,67 @@ export function shadowMain(argv, { cwd = process.cwd(), log = console.log, resol
   return 0;
 }
 
+// ---- D8692 (#8692): a merge-queue range is bound to the candidate it reports on ----------------
+
+const FULL_SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * Proves that `head` is the pull request head the merge queue built `candidate` from. The queue
+ * squashes (ruleset `merge_method: SQUASH`) and may stack an entry behind earlier candidates, so the
+ * candidate is one commit whose only parent is the merge group's `base` (main, or the candidate ahead
+ * of it) and whose tree is `base` merged with the head. Both must hold: the parent binds the base, the
+ * tree binds the head. Returns the problems found, none when the head is bound; throws on a git error.
+ */
+export function bindCandidate({ base, head, candidate, cwd = process.cwd() }) {
+  for (const [name, v] of [['--base', base], ['--head', head], ['--candidate', candidate]]) {
+    if (!FULL_SHA.test(v ?? '')) throw new Error(`${name} takes a full commit sha`);
+  }
+  const git = (...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  for (const sha of [base, head, candidate]) git('rev-parse', '--verify', '--quiet', `${sha}^{commit}`);
+  const problems = [];
+  const parents = git('log', '-1', '--format=%P', candidate).split(' ').filter(Boolean);
+  if (parents.length !== 1 || parents[0] !== base) {
+    problems.push(`candidate ${candidate} is not one commit on the merge group base ${base} (its parents: ${parents.join(', ') || 'none'})`);
+  }
+  const candidateTree = git('rev-parse', `${candidate}^{tree}`);
+  const merged = spawnSync('git', ['merge-tree', '--write-tree', base, head], { cwd, encoding: 'utf8' });
+  if (merged.status === 1) {
+    problems.push(`pull request head ${head} conflicts with base ${base}, so candidate ${candidate} was not built from it`);
+  } else if (merged.status !== 0) {
+    throw new Error(`git merge-tree failed (${String(merged.stderr || merged.error?.message || '').split('\n')[0]})`);
+  } else {
+    const tree = merged.stdout.split('\n')[0].trim();
+    if (tree !== candidateTree) {
+      problems.push(`pull request head ${head} is not the one candidate ${candidate} was built from: base ${base} merged with it gives tree ${tree}, the candidate's tree is ${candidateTree}`);
+    }
+  }
+  return { problems, tree: candidateTree };
+}
+
+/** `--bind --base <sha> --head <sha> --candidate <sha>`: exit 0 when bound, 1 when refused, 2 on a usage or git error. */
+export function bindMain(argv, { cwd = process.cwd(), log = console.log } = {}) {
+  const opts = {};
+  try {
+    for (let i = 1; i < argv.length; i += 2) {
+      const key = argv[i];
+      if (argv[0] !== '--bind' || !['--base', '--head', '--candidate'].includes(key) || argv[i + 1] === undefined) {
+        throw new Error(`unknown or incomplete argument ${shown(key)}`);
+      }
+      opts[key.slice(2)] = argv[i + 1];
+    }
+    const { problems, tree } = bindCandidate({ ...opts, cwd });
+    if (problems.length === 0) {
+      log(`agent-provenance: bound head=${opts.head} to candidate=${opts.candidate} over base=${opts.base} tree=${tree}`);
+      return 0;
+    }
+    for (const p of problems) log(`agent-provenance: REFUSED ${p}`);
+    return 1;
+  } catch (e) {
+    log(`agent-provenance: cannot bind the range (${shown(String(e.message).split('\n')[0])})`);
+    return 2;
+  }
+}
+
 function args(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i += 2) {
@@ -333,5 +399,5 @@ export function main(argv, { cwd = process.cwd(), log = console.log } = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const argv = process.argv.slice(2);
-  process.exitCode = argv[0] === '--shadow' ? shadowMain(argv) : main(argv);
+  process.exitCode = argv[0] === '--shadow' ? shadowMain(argv) : argv[0] === '--bind' ? bindMain(argv) : main(argv);
 }

@@ -46,6 +46,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           MG_BASE_SHA: ${{ github.event.merge_group.base_sha }}
           MG_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          MG_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -54,12 +55,14 @@ jobs:
           else
             # gh-readonly-queue/main/pr-<n>-<sha>: the queued PR's own commits, not the squash.
             [[ "$MG_HEAD_REF" =~ ^refs/heads/gh-readonly-queue/main/pr-([0-9]+)-[0-9a-f]{40}$ ]] || { echo "::error::unreadable merge group ref"; exit 1; }
+            # D8692: the head is the fetched one, bound to the candidate below; the API gives only the branch name.
             number="${BASH_REMATCH[1]}"; base="$MG_BASE_SHA"
             branch=$(gh api "repos/$REPO/pulls/$number" --jq .head.ref)
-            head=$(gh api "repos/$REPO/pulls/$number" --jq .head.sha)
           fi
-          [[ "$number" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ && "$head" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::unreadable pull request range"; exit 1; }
+          [[ "$number" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::unreadable pull request range"; exit 1; }
           git fetch --no-tags --quiet origin "refs/pull/$number/head"
+          if [[ "$EVENT" != pull_request ]]; then head=$(git rev-parse FETCH_HEAD); fi
+          [[ "$head" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::unreadable pull request range"; exit 1; }
           [[ "$(git rev-parse FETCH_HEAD)" == "$head" ]] || { echo "::error::the pull request head moved"; exit 1; }
           # The check that judges a branch is its base's copy; only the PR that adds it runs its own.
           if git cat-file -e "$base:scripts/ci/agent-provenance.mjs" 2>/dev/null; then
@@ -69,6 +72,15 @@ jobs:
           else
             cp scripts/ci/agent-provenance.mjs "$RUNNER_TEMP/agent-provenance.mjs"
             source=pr
+          fi
+          # D8692: the candidate's only parent is the base and its tree is the base merged with this head,
+          # or the job checks commits that are not in the candidate. A base copy from before #8692 lacks
+          # --bind, so the candidate's own copy proves it.
+          if [[ "$EVENT" != pull_request ]]; then
+            bind="$RUNNER_TEMP/agent-provenance.mjs"
+            grep -q -- "'--bind'" "$bind" || bind=scripts/ci/agent-provenance.mjs
+            node "$bind" --bind --base "$base" --head "$head" --candidate "$MG_HEAD_SHA" \
+              || { echo "::error::pull request head $head is not bound to merge group candidate $MG_HEAD_SHA"; exit 1; }
           fi
           {
             echo "base=$base"
