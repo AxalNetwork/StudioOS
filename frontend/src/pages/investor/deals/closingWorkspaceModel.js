@@ -17,6 +17,7 @@
  * says Unavailable (D5129) and never stands in as zero or as "nothing holds it".
  */
 import { NOT_RECORDED, text } from '../../../lib/absence.js';
+import { toMajorString } from '../../../lib/money.js';
 
 /** A read's three states. `ok(value)` carries any value (an object, a list, or null for "none applied"). */
 export const LOADING = Object.freeze({ state: 'loading' });
@@ -362,7 +363,7 @@ export function positionPrefill(closing, line) {
   return {
     project_id: closing.project_id,
     round_name: String(closing.round_label ?? '').trim().slice(0, 64),
-    invested_amount: currency === 'USD' && Number.isInteger(cents) && cents > 0 ? (cents / 100).toFixed(2) : '',
+    invested_amount: currency === 'USD' && Number.isInteger(cents) && cents > 0 ? (toMajorString(cents, 'USD') ?? '') : '',
     position_date: receivedOn(line) || '',
     closing_line_uid: String(line.uid),
     line_label: String(line.investor_name ?? '').trim() || null,

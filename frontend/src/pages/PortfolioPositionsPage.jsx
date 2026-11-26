@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { formatMinor } from '../lib/money';
 import Sheet from '../ui/Sheet.jsx';
 import WriteFlow from './portfolio/WriteFlow.jsx';
 import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
@@ -220,7 +221,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
           {fromLine && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-800 dark:text-violet-200 text-xs" data-testid="position-from-line">
               Recording the position for the closing line <strong>{fromLine.label || 'Not recorded'}</strong>
-              {fromLine.amount_cents != null && fromLine.currency ? <> · received {(fromLine.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {fromLine.currency}</> : null}.
+              {fromLine.amount_cents != null && fromLine.currency && formatMinor(fromLine.amount_cents, fromLine.currency) ? <> · received {formatMinor(fromLine.amount_cents, fromLine.currency)}</> : null}.
               {fromLine.currency && fromLine.currency !== 'USD' ? ' This form records dollars, so the amount is left for you to fill.' : ''} Saving links the position to this line.
             </div>
           )}
