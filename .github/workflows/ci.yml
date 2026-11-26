@@ -1049,6 +1049,12 @@ jobs:
       - name: Public journey (local Worker, fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/public_journey.spec.js --retries=0 --trace off
+      # #6250 (D6250-p2): the issued fund report printed — print media and Letter/A4 PDFs of a long report, light
+      # and dark, read back with pdfjs: only the document, black on white, nothing clipped, events and the figures
+      # column kept whole. Same docs/ and fixtures pattern as the steps above; no trace is recorded.
+      - name: Fund report print (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/report_print_6250.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

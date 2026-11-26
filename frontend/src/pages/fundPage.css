@@ -58,7 +58,11 @@
     min-height: 0 !important; max-height: none !important; margin: 0 !important; padding: 0 !important;
     overflow: visible !important; transform: none !important; contain: none !important; background: #fff !important;
   }
+  /* D6250-p2: a dark theme's colour scheme would paint the page margins dark when backgrounds print. */
+  html:has(.fd-report-reader) { color-scheme: light !important; }
   body .fd-report-reader { display: block; width: 100%; }
+  /* D6250-p2: the figures column is short; it prints whole on one page after the letter. */
+  body .fd-report-reader > aside { break-inside: avoid; }
   body .fd-report-reader .fd-card { background: #fff; color: #000; border: 0; box-shadow: none; }
   body .fd-report-reader .fd-card * { color: #000 !important; }
   .fd-report-event { break-inside: avoid; }
