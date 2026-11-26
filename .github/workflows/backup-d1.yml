@@ -47,7 +47,9 @@ env:
 
 jobs:
   backup:
-    environment: production-ops
+    # D8754: its own environment, main only, no reviewer, a token scoped to the export and the backup bucket.
+    environment: production-backup
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,7 +77,7 @@ jobs:
           if [[ ${#MISSING[@]} -gt 0 ]]; then
             echo "::error::Required secret(s) are missing or empty: ${MISSING[*]}"
             echo ""
-            echo "Set CLOUDFLARE_API_TOKEN in Settings → Environments → production-ops."
+            echo "Set CLOUDFLARE_API_TOKEN in Settings → Environments → production-backup."
             echo "Check that CLOUDFLARE_ACCOUNT_ID is available to the job."
             echo ""
             echo "Token permissions are listed in documentation/operations/PRODUCTION_CREDENTIALS.md."

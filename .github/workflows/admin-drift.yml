@@ -22,8 +22,9 @@ jobs:
     if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # D8754: read-only monitoring, no reviewer.
     environment:
-      name: production-ops
+      name: production-monitoring
       deployment: false
     permissions:
       contents: read

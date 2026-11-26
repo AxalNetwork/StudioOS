@@ -29,7 +29,7 @@ Monday (`.github/workflows/admin-drift.yml`).
   written as a count and a type, never a person.
 
 The check reads with a fine-grained, read-only token whose secret name is
-`ADMIN_DRIFT_READ_TOKEN` in the `production-ops` environment. #8063 has not
+`ADMIN_DRIFT_READ_TOKEN` in the `production-monitoring` environment (D8754). #8063 has not
 yet reported a credential name, so this name is the one D8082 proposes; the
 admin slot provisions it (repository **Administration: read**, **Environments:
 read**, **Secrets: read** and **Variables: read** for names only, organisation
@@ -110,7 +110,7 @@ variable names only; a value is never read.
 
 | Setting | Expected | Planned by the admin issue | Recorded by |
 | --- | --- | --- | --- |
-| `environments.names` | to be recorded | `preview`, `staging`, `production`, `production-ops`, `landing-bot` (plus `agent-compute-preview`, `scan-remediation` where they exist) | #8063 |
+| `environments.names` | to be recorded | `preview`, `staging`, `production`, `production-ops`, `production-backup`, `production-monitoring` (D8754), `landing-bot` (plus `agent-compute-preview`, `scan-remediation` where they exist) | #8063 |
 | `environment[preview].required_reviewers` | to be recorded | `0` | #8063 |
 | `environment[preview].secret_names` | to be recorded | `CLOUDFLARE_API_TOKEN` (#8064) | #8063 |
 | `environment[staging].required_reviewers` | to be recorded | `0` | #8063 |
@@ -130,8 +130,18 @@ variable names only; a value is never read.
 | `environment[production-ops].reviewer_types` | to be recorded | `User` (the owner) | #8063 |
 | `environment[production-ops].wait_timer` | to be recorded | `0` | #8063 |
 | `environment[production-ops].branch_policy` | to be recorded | `protected` | #8063 |
-| `environment[production-ops].secret_names` | to be recorded | the `production-ops` rows of `production-credential-inventory.json`, plus `ADMIN_DRIFT_READ_TOKEN` | #8063 |
+| `environment[production-ops].secret_names` | to be recorded | the `production-ops` rows of `production-credential-inventory.json` | #8063 |
 | `environment[production-ops].variable_names` | to be recorded | as recorded | #8063 |
+| `environment[production-backup].name_exact` | to be recorded | `true` | #8063 |
+| `environment[production-backup].required_reviewers` | to be recorded | `0` (D8754: scheduled jobs must not wait) | #8063 |
+| `environment[production-backup].branch_policy` | to be recorded | `main` only | #8063 |
+| `environment[production-backup].secret_names` | to be recorded | the `production-backup` rows of `production-credential-inventory.json` | #8063 |
+| `environment[production-backup].variable_names` | to be recorded | as recorded | #8063 |
+| `environment[production-monitoring].name_exact` | to be recorded | `true` | #8063 |
+| `environment[production-monitoring].required_reviewers` | to be recorded | `0` (D8754: scheduled jobs must not wait) | #8063 |
+| `environment[production-monitoring].branch_policy` | to be recorded | `main` only | #8063 |
+| `environment[production-monitoring].secret_names` | to be recorded | the `production-monitoring` rows of `production-credential-inventory.json` | #8063 |
+| `environment[production-monitoring].variable_names` | to be recorded | as recorded | #8063 |
 | `environment[landing-bot].secret_names` | to be recorded | the App key names from #8061 | #8061 |
 | `environment[landing-bot].branch_policy` | to be recorded | as recorded | #8063 |
 

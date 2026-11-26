@@ -15,7 +15,7 @@ name: magic-link insert probe
 # Free Bot Fight Mode challenged the public runner in incident #1008. The
 # private scheduled check exercises the Worker, its rate limits, D1 and mail
 # queue. The separate magic-link-probe.yml checks inbox arrival and sign-in.
-# CLOUDFLARE_API_TOKEN is supplied by the production-ops environment.
+# CLOUDFLARE_API_TOKEN (D1 read only) is supplied by the production-monitoring environment (D8754).
 
 on:
   workflow_dispatch:
@@ -44,7 +44,9 @@ permissions:
 
 jobs:
   probe:
-    environment: production-ops
+    # D8754: read-only monitoring, main only, no reviewer, a D1 read-only token.
+    environment: production-monitoring
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     name: magic-link insert
     runs-on: ubuntu-latest
     timeout-minutes: 10

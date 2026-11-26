@@ -20,6 +20,8 @@ The compute preview remains subject to its existing owner-gated setup. Before en
 | --- | --- |
 | `production` | `CLOUDFLARE_API_TOKEN`, `MERGE_CONTROL_CLOUDFLARE_API_TOKEN`, `MEETING_BOT_CLOUDFLARE_API_TOKEN`, `ARCHIVE_OBSERVER_CLOUDFLARE_API_TOKEN` |
 | `production-ops` | `CLOUDFLARE_API_TOKEN`, the `DR_COPY_*`, `FILE_RECOVERY_*`, `FILE_DR_COPY_*` and `FILE_DR_PREVIEW_*` keys, `BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, `WORKGRAPH_INGEST_TOKEN` |
+| `production-backup` (D8754) | `CLOUDFLARE_API_TOKEN` (D1 Write for export, R2 Write on `studioos-backups`), `CLOUDFLARE_ACCOUNT_ID`, `PAGER_WEBHOOK_URL`, the `DR_COPY_*` keys; variables `DR_SECOND_COPY_ENABLED`, `DR_AGE_RECIPIENT`, `DR_COPY_BUCKET`, `DR_COPY_ENDPOINT`, `DR_COPY_REGION` |
+| `production-monitoring` (D8754) | `CLOUDFLARE_API_TOKEN` (D1 Read only), `CLOUDFLARE_ACCOUNT_ID`, `MAGIC_PROBE_EMAIL`, `ADMIN_DRIFT_READ_TOKEN`, `FILE_RECOVERY_HEALTH_*`, `SLACK_GITHUB_WEBHOOK_URL` |
 | `preview` | `PR_PREVIEW_CLOUDFLARE_API_TOKEN` (Workers Scripts edit only, D7146). It stays under this name until the repository `CLOUDFLARE_API_TOKEN` is deleted, so a missing environment secret cannot fall back to the production token |
 
 The pull-request preview used to look up an environment named `pr-preview`, which was never created (#7424). It now looks up and enters `preview`. Its first run after merge fails, with a message, until `PR_PREVIEW_CLOUDFLARE_API_TOKEN` is added to `preview`.
@@ -44,18 +46,41 @@ The follow-up design requires an explicit change to secret selection or environm
 
 The existing compute-preview workflow requires a separate `agent-compute-preview` environment with independent review. Its job also reads the generic token name. Supply a preview-only token there before removing the repository fallback. Configure that environment and approval gate before enabling its deploy.
 
+## Scheduled jobs run without a reviewer (D8754)
+
+`production-ops` has a required reviewer, so a scheduled job there waits for a person. From 2026-11-22 the daily D1
+backup waited four days in a row. The scheduled backup and the read-only monitoring therefore have their own
+environments, `production-backup` and `production-monitoring`, both `main` only and with no reviewer. Each holds its
+own narrow token: the backup token cannot restore, rehearse or delete, and the monitoring token can only read D1.
+`production-ops` keeps its reviewer for every restore, drill and sensitive mutation.
+
+**Before the workflows move (admin slot, #8063 and #8064):**
+1. Create `production-backup` and `production-monitoring` with the exact names, deployment branches `main` only, no
+   required reviewer, and no admin bypass of the branch rule.
+2. Make two new Cloudflare tokens with the permissions in the table above, and store each as `CLOUDFLARE_API_TOKEN`
+   in its environment. Never copy the `production-ops` token.
+3. Copy the other secrets and variables named above into each environment.
+4. Record the result in `GITHUB_ADMIN_BASELINE.md`.
+
+An environment that is missing, or a secret that is absent from it, falls back to a repository secret of the same
+name, and the legacy repository `CLOUDFLARE_API_TOKEN` may still exist. So the workflow change merges only after
+step 3 is confirmed.
+
+**Rollback:** revert the workflow change. The four jobs return to `production-ops` and wait for its reviewer again.
+Then revoke the two new tokens.
+
 ## Inventory coverage
 
 The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because the overlap report writes a snapshot to production. It grants access to that ingest operation. Cloudflare management tokens, branch secrets and independent-backup credentials are recorded separately in `credentialPolicies`.
 
 | Workflow | Job | Triggers | Environment |
 | --- | --- | --- | --- |
-| `admin-drift.yml` | `check` | schedule, manual | `production-ops` |
+| `admin-drift.yml` | `check` | schedule, manual | `production-monitoring` |
 | `agent-compute-preview.yml` | `deploy_disabled_host` | manual | `agent-compute-preview` |
 | `agent-gateway-keys.yml` | `keys` | manual | `production-ops` |
 | `agent-stage-a.yml` | `stage-a` | manual | `production-ops` |
 | `archive-observer-deploy.yml` | `deploy` | main push, manual | `production` |
-| `backup-d1.yml` | `backup` | schedule, manual | `production-ops` |
+| `backup-d1.yml` | `backup` | schedule, manual | `production-backup` |
 | `branch-provision.yml` | `provision` | manual | `production-ops` |
 | `cloudflare-worker-deploy.yml` | `deploy` | main push, manual | `production` |
 | `cloudflare-worker-deploy.yml` | `schema-drift` | main push, manual | `production` |
@@ -64,7 +89,7 @@ The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because th
 | `dr-drill.yml` | `drill` | schedule, manual | `production-ops` |
 | `file-recovery.yml` | `snapshot` | schedule, manual | `production-ops` |
 | `gateway-live-check.yml` | `live-check` | manual | `production-ops` |
-| `magic-link-insert-probe.yml` | `probe` | schedule, manual | `production-ops` |
+| `magic-link-insert-probe.yml` | `probe` | schedule, manual | `production-monitoring` |
 | `meeting-bot-deploy.yml` | `deploy` | main push, manual | `production` |
 | `merge-control-deploy.yml` | `deploy` | main push, manual | `production` |
 | `pr-overlap.yml` | `report` | schedule, manual | `production-ops` |
