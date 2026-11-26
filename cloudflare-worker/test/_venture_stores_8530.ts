@@ -99,10 +99,18 @@ export function repairReferences(db: DatabaseSync): number {
 const OVERRIDES: Record<string, (which: 'A' | 'B') => Record<string, unknown>> = {
   user_company_links: (w) => (w === 'A' ? { role_in_company: 'Admin', is_primary_admin: 1 } : {}),
   work_graph_release_authority_events: () => ({ seq: 1 }), // its trigger takes only the next seq of a key
+  // D5585-p16: a line name is the next seq of a line of its own tenant and company (its two triggers).
+  work_graph_release_line_names: (w) => ({ seq: 1, tenant_id: 1, line_asset_uid: `s26-line-${w}` }),
   financial_events: () => ({ source: 's26-source' }), // its trigger needs a coverage row for the source
   build_plans: (w) => ({ scope: `s26-${w}` }), // one current plan per (project, scope)
 };
 const BEFORE: Record<string, (db: DatabaseSync) => void> = {
+  work_graph_release_line_names: (db) => {
+    for (const [w, company, project] of [['A', HOME, VENTURE], ['B', CONTROL_COMPANY, CONTROL]] as const) {
+      if (db.prepare('SELECT 1 FROM work_graph_release_lines WHERE line_asset_uid = ?').get(`s26-line-${w}`)) continue;
+      seedRow(db, 'work_graph_release_lines', { line_asset_uid: `s26-line-${w}`, tenant_id: 1, company_id: company, project_id: project, audience: 'internal' });
+    }
+  },
   financial_events: (db) => { if (!db.prepare("SELECT 1 FROM financial_event_coverage WHERE source = 's26-source'").get()) seedRow(db, 'financial_event_coverage', { source: 's26-source' }); },
 };
 

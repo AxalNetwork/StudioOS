@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Home and Catalogue · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · #8662 · production audit of 25 Nov 2026 · first of nine Learning canvases (#8662 to #8670)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning home — browse or resume above the fold, and come back to the exact list</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The signed-in Learning home (/learning) for a founder’s first and return visit. One primary action in the first screen: Resume lesson (the real next lesson from /api/learning/me) or Browse courses. The catalogue (nine format tabs, search, a labelled panel) comes before the overview, which moves to its own “Your learning” region beside it on desktop and to one disclosure on a phone. Selecting Courses puts the first result or a true empty state directly under the control. A course opened from a filtered list carries an explicit return that restores the tab, the query, the page, the scroll and focus. Author tools stay secondary. The application shell is kept (company switcher top-left, sidebar of held licences, Learning in the Account menu); Learning pages have no Eadwyn rail (D4478). States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark data or backend work; amber ⚑ tags mark owner questions with option A drawn; “Synthetic” marks states the audit did not see.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · Evidence-based pitch narratives is the observed production course; [Maya Ruiz], [Northwind Labs], [Iris Chen], every bracketed title and every figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Home and Catalogue Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LHM-00', 'Journey and routes', 'The “pitch” route from the home to the course and back, numbered for desktop and phone, the address contract (?tab=, &q=, &page=, the return) and the annotation key.', [W('LHM00')]],
+      ['LHM-01', 'Desktop entry · return and first visit', 'Header, one primary (Resume lesson, or Browse courses on a first visit), then the catalogue beside Your learning. The first results sit above the observed 879 px fold. Learning opens from the Account menu.', [F('LHM01', 'Return visit · Resume lesson', 940), F('LHM02', 'First visit · Browse courses', 940), F('LHM02B', 'Account menu → Learning', 900)]],
+      ['LHM-02', 'Courses and the “pitch” search', 'Courses selected by keyboard: focus, selection, panel label and ?tab= agree. Then “pitch”: one course, counted in the panel heading, at y≈419 (was 1,084).', [F('LHM03B', 'Courses selected · ArrowRight from All', 940), F('LHM03', 'Courses · “pitch” · 1 match', 940)]],
+      ['LHM-03', 'Course and the explicit return', 'The course opened from the result carries “Back to Courses · pitch”. Returning restores Courses, the query, the page and the scroll, and focus lands on the card that was opened. The course body is #8664’s.', [F('LHM04', 'Course opened from the result', 900), F('LHM05', 'Returned · restored and focused', 900)]],
+      ['LHM-04', 'Phone 390 × 844', 'One entry card, Your learning as one disclosure, the nine formats, results. Selecting Courses shrinks Continue to a row and the first course sits at y≈389 (was 1,346). The course and the way back.', [P('LHM08', 'Return visit · All'), P('LHM08B', 'First visit'), P('LHM09', 'Courses selected'), P('LHM09B', 'Courses · “pitch”'), P('LHM10', 'Course · return link first'), P('LHM10B', 'Returned · row focused')]],
+      ['LHM-05', 'States', 'Loading in the grid’s shape, zero results with Clear search, a true empty read, a read failure with Retry, one source unavailable on All, and a retry in flight. On the phone: zero results, Unavailable with Retry and loading, each directly under the control.', [C('LHM06', 'Desktop states', 1300, 1110), P('LHM11', 'Phone · zero results'), P('LHM11B', 'Phone · Unavailable · Retry'), P('LHM11C', 'Phone · loading')]],
+      ['LHM-06', 'Author tools and drafts', 'The Super Admin view observed on 25 Nov: four draft courses labelled Draft, and Learning studio, Programs and Write an article in one secondary Author tools menu. What a founder sees while every course is a draft (⚑ Q1).', [F('LHM07', 'Super Admin · Courses · Author tools open', 900), C('LHM07B', 'Founder while all courses are drafts', 1100, 430)]],
+      ['LHM-07', 'Mobile format selector', 'A: a 3×3 tab grid that shows all nine formats with 44 px targets and keeps one tablist (drawn). B: a listbox. C: the scrolling strip in production today. Keyboard maps for each.', [C('LHM12', false, 1300, 655)]],
+      ['LHM-08', 'Component variants', 'Catalogue card (default, in progress, completed, new, draft, long title, length not recorded, focus, phone row), the entry in four states, the return link in four cases and the desktop tab states.', [C('LHM13', false, 1300, 1150)]],
+      ['LHM-09', 'Focus order, names and wrapping', 'Seven focus stops with accessible names and behaviour; the four things that must agree (focus, selected tab, panel label, shareable URL); wrapping and width rules.', [C('LHM14', false, 1300, 725)]],
+      ['LHM-10', 'Before and after', 'Measured and approximate positions of the tabs and first results in production against these boards, desktop and phone.', [C('LHM15', false, 1300, 665)]],
+      ['LHM-11', 'Engineering handoff', 'What main has, frontend-only work, the one ◇ (#8288), owner questions with option A, the acceptance list mapped to boards, and coordination with #8288 and the sibling canvases.', [W('LHM16')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

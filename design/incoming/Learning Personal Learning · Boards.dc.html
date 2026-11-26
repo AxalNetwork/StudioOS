@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Personal Learning · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · #8668 · second pass after the 25 Nov production audit (umbrella #3726, release #8288)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · My learning — History, Plan and Programs as one personal workspace</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">My learning (/learning/me, /learning/plan, proposed /learning/my-programs, and /learning/programs for admins) for a signed-in member, reached from the Account menu inside the Axal VC shell. History shows one purposeful first-use card with a direct way to choose a course when every read succeeds and holds nothing; a failed read is shown as Unavailable beside what was read, never as inactivity. A returning learner sees the next lesson, scheduled study, submitted work and results only where the record has them. Plan rows say where each item comes from (a course, your own study block, a webinar, an exam) and what to do next; a course is chosen and scheduled without leaving the plan, and the standalone study-block dialog keeps its labels and returns focus on Escape. Programs keeps membership (added by HQ, or you joined) apart from self-enrolment (open to join), and HQ contact stays where the role needs it. States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark data or backend work; amber ⚑ tags mark owner choices drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · [Maya Ruiz] of [Northwind Labs], [Sam Okoye], [Iris Chen], the bracketed courses, programs, study blocks and every date and figure are fictional; “Evidence-based pitch narratives” and its exam “What can you substantiate?” are the course observed in production (shared catalogue with the sibling canvases)</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Personal Learning Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LPL-00', 'Journey, routes and vocabulary', 'The desktop and phone routes as numbered steps, the four tabs and the routes behind them, the annotation key and the state words.', [W('LPL00')]],
+      ['LPL-01', 'History · first use', 'Every read succeeded and holds nothing: one card, four courses open to you and Browse all courses. Before and after the 25 Nov production view.', [F('LPL01', false, 900), C('LPL01B', 'Before · after', 1400, 330)]],
+      ['LPL-02', 'History · partial read failure', 'Exam attempts could not be read: a Partial banner, the failed section in place with Try again, and no claim of inactivity. Loading, all unavailable, offline and unknown values, and the rule that picks which History appears.', [F('LPL02', 'Synthetic', 960), C('LPL02B', 'States and the rule', 1400, 660)]],
+      ['LPL-03', 'History · returning learner', 'Next lesson with its reason, courses in progress, submitted work, results with the pass mark, completed courses and videos, with scheduled study and programs beside them.', [F('LPL03', false, 1240)]],
+      ['LPL-04', 'Plan · returning', 'Upcoming and past 30 days; each row says where it comes from and its next action. Goals and the origin key.', [F('LPL04', false, 1240), C('LPL04B', 'Row variants', 1300, 1020)]],
+      ['LPL-05', 'Plan · empty and states', 'Nothing planned: Plan a course opens the list in place, Add a study block its own dialog. Loading, unreadable, picker unreadable, nothing of a kind, support session and offline.', [F('LPL05', false, 900), C('LPL05B', 'States', 1400, 440)]],
+      ['LPL-06', 'Choose a course, schedule it, back to the plan', 'Step 1 picks from courses open to you; step 2 schedules with the plan sheet’s fields; step 3 lands on the plan with the new rows marked and focused. The same dialog from a course page.', [F('LPL06A', 'Step 1 · choose', 900), F('LPL06B', 'Step 2 · schedule', 900), F('LPL06C', 'Step 3 · back on the plan', 1000), C('LPL06D', 'From the course page', 1300, 190)]],
+      ['LPL-07', 'Study block dialog', 'The standalone dialog with its focus order; field errors, a time that has passed, saving and refusal; Escape returns focus to Add a study block.', [F('LPL07', false, 960), C('LPL07B', 'Behaviour', 1400, 410)]],
+      ['LPL-08', 'Programs', 'Programs you are in, each marked Added by HQ or You joined, with progress counted over what you can open; Open to join with Join; HQ for invitations and leaving. States.', [F('LPL08', false, 1060), C('LPL08B', 'States', 1400, 560)]],
+      ['LPL-09', 'Assigned to you · admin', 'The admin’s read-only programs: nothing assigned with Ask HQ, as observed; the list; the Super Admin variant; unavailable and refused.', [F('LPL09', false, 900), C('LPL09B', 'Variants', 1400, 560)]],
+      ['LPL-10', 'Roles and eligibility', 'Which tabs and HQ contact each role gets, what progress may claim, and why the Certificates card is removed.', [C('LPL10', false, 1400, 560)]],
+      ['LPL-11', 'Components', 'Tabs, origin and membership labels, result chips, section states, long-title wrapping and the Next for you variants.', [C('LPL11', false, 1400, 760)]],
+      ['LPL-12', 'Phone 390 × 844', 'A first use, returning History, B empty plan, C choose and D schedule as bottom sheets, E back on the plan, F study block, G programs. 44 px targets, sticky primary.', [P('LPL12A', 'A · History first use'), P('LPL12B', 'History returning'), P('LPL12C', 'B · Plan empty'), P('LPL12D', 'C · choose'), P('LPL12E', 'D · schedule'), P('LPL12F', 'E · back on the plan'), P('LPL12G', 'F · study block'), P('LPL12H', 'G · programs')]],
+      ['LPL-13', 'Dark', 'Plan and History on the dark tokens.', [F('LPL13', 'Plan · dark', 1240), F('LPL13B', 'History · dark', 1240)]],
+      ['LPL-14', 'Accessibility', 'Focus order per tab and dialog, accessible names, status and error announcements, wrapping.', [W('LPL14')]],
+      ['LPL-15', 'Engineering handoff', 'Acceptance mapped to boards, what main has, ◇ data and backend, ⚑ owner questions, frontend-only work and coordination with #8288 and the sibling canvases.', [W('LPL15')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -93,6 +93,9 @@ created, so nothing has to be re-requested.
 
 `backup-d1.yml` runs `wrangler d1 export` daily and puts the file in R2 under
 `studioos-backups`, keyed per database, with a manifest beside it (§5, D4558).
+It runs in the `production-backup` environment, which has no reviewer, so it never waits for a person (D8754).
+The hourly `ops-schedules` alert opens when no successful backup started in 26 hours, a run waits on an
+approval, the schedule did not fire, or the run failed at its secret check.
 `scripts/restore-d1.sh` imports one into a database you name. Since D5337 it
 runs **the drill's own code** (`scripts/dr-restore-lib.sh`): the same manifest
 check, chunked import and row-count comparison, so a green drill (§5) is
@@ -350,8 +353,8 @@ nothing is copied.
      prefix or a rule the provider offers for it.
 3. **Make a write-only key** that can only put objects and read their metadata
    (`PutObject`, `HeadObject`) in that bucket. It must not be able to delete,
-   list or read object content. Store it in the `production-ops` environment secrets
-   `DR_COPY_ACCESS_KEY_ID` and `DR_COPY_SECRET_ACCESS_KEY`.
+   list or read object content. Store it in the `production-backup` environment secrets
+   `DR_COPY_ACCESS_KEY_ID` and `DR_COPY_SECRET_ACCESS_KEY` (D8754; the drill still reads its own keys in `production-ops`).
 4. **Make the owner's key, offline:** `age-keygen -o d1-recovery.key`.
    - Keep the file on two offline media in two places, never in the
      repository, a CI secret or the copy's bucket.

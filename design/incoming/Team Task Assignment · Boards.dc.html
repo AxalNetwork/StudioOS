@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Task Assignment · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Team · Company settings › Team · #8767 · from #3973, #3994, #7078</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Assigning work from a named agent on Team: what can run, what can only be drafted, and the review that closes it</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A company operator gives “Draft a first-pass runway analysis” to Orrin, the CFO agent, starting from the company Team (/account/companies/:uid/settings/team). The founder shell, Company settings tabs, Team tabs and the profile sheet stay as shipped. New: Assign a task on each agent row and on the profile; “Can Orrin take work now?”, which reads the engine, status, sponsor, cap and skill readiness instead of trusting “Active”; the Assign sheet; a Tasks tab for the company’s tasks (where the company Work URL from #3973 now lands); and the task sheet with Start run, the proposal, Request changes and Accept. The route is numbered ① to ⑦; ① ② also number the way back from My tasks. Runnable, configured-but-unavailable (agents on the roster, engine off), no eligible skill and read-only states are drawn at 1440 and 390, with loading, failed save, confirmed empty and Unavailable. States follow Platform States (D5129): every state has a word and a glyph. Grey dashed boxes are annotations; violet dashed ◇ tags mark Worker work; amber ⚑ tags mark owner picks, option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · [Atlas Orchard, Inc.], [Maya Ruiz], [Noah Brandt], [Priya Shah], [Iris Chen] and every figure (cash [$1,284,000], runway 12.0 months, runs $0.31 + $0.27) are bracketed and fictional; Orrin and Solen are main’s agent personas</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Team Task Assignment Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['TMA-A', '① ② From Team to the agent · desktop 1440', 'The company Team with two Active agents. ① Orrin’s name opens his profile; ② Assign a task is the profile’s primary. “Ready for work” is computed from the engine read, status, sponsor, cap and skill readiness, never from Active alone.', [F('TMA00', '① Team › People and agents · runnable', 900), F('TMA01', '② Orrin’s profile · Can Orrin take work now?', 960)]],
+      ['TMA-B', 'Configured but unavailable · desktop 1440', 'Agents are on the roster but the agent engine is off: who switches it on, what can be prepared now, what happens to a draft (⚑ Q2), and how this differs from a support ticket and a suggestion. Then the six reasons a run can’t start, each with who resolves it.', [F('TMA02', 'Engine off · Orrin can’t start work yet', 980), C('TMA02B', 'Six reasons · who resolves · what to do now', 1200, 500), F('TMA13', 'Prepare a draft task (this device)', 1200), F('TMA13B', 'Draft saved · not sent', 900)]],
+      ['TMA-C', 'No eligible skill and read-only · desktop 1440', 'Solen holds no skill that produces a runway brief: Save task waits, with Give it to Orrin instead, Give it to a person and Add a skill. An investor seat reads without Assign; a Super Admin preview has writes off.', [F('TMA03', 'No eligible skill · Solen', 1220), F('TMA04', 'Read only · investor seat', 900), F('TMA04B', 'Super Admin preview · writes off', 900)]],
+      ['TMA-D', '③ Assign a task · desktop 1440', 'Assignee, task, expected deliverable ◇, skill ◇, module, project, reviewer ◇ ⚑ Q3, due, task cap ◇ and notes, with what happens on save. A human-only assignment (seat refusals in the picker) and a failed save that keeps every answer.', [F('TMA10', '③ Assign to Orrin', 1240), F('TMA11', 'Human-only · to [Noah Brandt]', 1320), F('TMA12', 'Save failed · Try again', 1200)]],
+      ['TMA-E', '④ Team › Tasks · desktop 1440', 'A new tab on the company Team reading the company’s tasks; /account/companies/:uid/work redirects here (⚑ Q1 A). Populated, loading, confirmed empty, Unavailable with retry, and switched off with the device draft.', [F('TMA20', '④ Tasks · 3 open', 900), F('TMA20B', 'Loading', 760), F('TMA20C', 'Confirmed empty', 760), F('TMA20D', 'Unavailable · Try again', 760), F('TMA20E', 'Not switched on · 1 draft', 760)]],
+      ['TMA-F', '⑤ ⑥ ⑦ Saved draft to accepted · desktop 1440', 'The task with owner, reviewer, deliverable, cost and next action on every step: ⑤ Start run, the run, ⑥ Orrin’s proposal for review, ⑦ Request changes with a required comment, round 2, accepted.', [F('TMA21', '⑤ Saved · Start run', 1000), F('TMA22', 'Running', 1000), F('TMA23', '⑥ Proposal · waiting for review', 1120), F('TMA24', '⑦ Request changes', 1180), F('TMA24B', 'Sent back · Start round 2', 1120), F('TMA25', 'Accepted · Done', 1160)]],
+      ['TMA-G', 'The way back from My tasks · desktop 1440', '① A review named to Maya on Home › My tasks opens the task where it lives, filters kept in the address; ② Back to My tasks returns with the filters and focus on the row. And My tasks while tasks are off, today and proposed.', [F('TMA30', '① My tasks · review row', 640), F('TMA31', 'Task opened from My tasks', 1120), F('TMA31B', '② Back · filters and focus kept', 640), C('TMA32', 'My tasks while off · today and proposed', 1200, 310)]],
+      ['TMA-H', 'Phone 390', 'The same route at 390 with 44 px targets and a sticky action bar: Team ①, profile ②, engine off, no eligible skill, read only, Assign ③, saved ⑤, review ⑥, request changes ⑦, and a task opened from My tasks.', [P('TMA40', '① Team'), P('TMA40B', '② Orrin · ready'), P('TMA40C', 'Engine off'), P('TMA40D', 'No eligible skill'), P('TMA40E', 'Read only'), P('TMA40F', '③ Assign a task'), P('TMA40G', '⑤ Saved · Start run'), P('TMA40H', '⑥ Review'), P('TMA40I', '⑦ Request changes'), P('TMA40J', 'From My tasks · Back')]],
+      ['TMA-I', 'Dark · desktop 1440', 'TMA23 on the dark tokens: every state keeps its word, glyph and border.', [F('TMA50', false, 1120)]],
+      ['TMA-J', 'Labels, headings and keyboard order', 'The heading outline, keyboard focus order for each screen, exact labels and the literal announcements.', [W('TMA60')]],
+      ['TMA-K', 'Handoff', 'What main does today (files and routes), ◇ Worker work, ⚑ owner picks with option A drawn, frontend-only work, what is preserved, and each acceptance criterion mapped to its boards.', [W('TMAH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

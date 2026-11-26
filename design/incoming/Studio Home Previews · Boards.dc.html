@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Previews · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Studio Home · #8730 · Founder and Exploring previews · audit #8689</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Founder and Exploring interview areas, in an HQ-held role preview and as an actual member</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A founder wants to progress a venture; an Exploring visitor wants to know which role to apply for and whether any profiling is required. These boards draw the same two Studio screens as an HQ-held preview and as a member. In a preview everything is derived from the role on screen, never from the operator’s own account: questions show as labelled Examples from that role’s bank, answers and personal figures are withheld or Not applicable (never 0, never invented), every enabled link opens a page the previewed role can use, and Back to HQ stays in the bar at every width. Exploring gets one next step per state, including a visitor for whom profiling is inapplicable. The route HQ → Founder → Exploring → HQ is numbered 1 to 4 on desktop and phone. Platform States words and glyphs (D5129), Eadwyn as the one rail (#5130). Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner picks drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main f66e8faa25 · [Iris Chen], [Maya Ruiz], [Northwind Labs], [Theo Marsh], [Priya Nair], [Oskar Lind] and every figure (18 of 41 answered, 62%, 7 and 5 of 12 discovery questions) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="17">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home Previews Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['0', 'Overview and content rules', 'The route, the rules, and for each piece of the interview area what an HQ-held preview shows and what a member sees: example, withheld, Not applicable or their own.', [W('SPV00')]],
+      ['1', 'Step 1 · HQ picks Founder', 'Main’s Preview shell menu; the Founder and Exploring lines gain a second sentence saying what the preview shows.', [C('SPV05', false, 1440, 520)]],
+      ['2', 'Step 2 · Founder Studio in preview', 'The preview notice, the interview with the operator’s HQ conversation withheld, two founder questions as labelled Examples, no answers drawn, the composer off, Next up links to founder pages, and the six figures Not applicable in preview.', [F('SPV01', false, 1000)]],
+      ['2.1', 'Existing conversation, three ways', 'On main today (admin bank, Open Admin), the Founder preview proposed, and an actual founder’s thread.', [C('SPV03', false, 1400, 670)]],
+      ['F', 'Founder Studio · actual member', '[Maya Ruiz] on [Northwind Labs]: her thread, her next question, Next up, the six figures with Not recorded where the Lab records nothing.', [F('SPV02', false, 900)]],
+      ['3', 'Step 3 · Exploring in preview', 'The example state select (preview only), Founder track picked: one next step, an example discovery thread, Where things stand with the visitor’s count Not applicable in preview, and the lanes.', [F('SPV10', false, 1320)]],
+      ['X1', 'Exploring · no role chosen', '[Theo Marsh]: one step, tell Eadwyn which role; the role question with four answers; profiling Not applicable while exploring.', [F('SPV11', false, 760)]],
+      ['X2', 'Exploring · founder track', '[Priya Nair]: Apply to the Spin-Out Lab; Available now links only to pages an Exploring account can open; member-only pages listed without links.', [F('SPV12', false, 1000)]],
+      ['X3', 'Exploring · investor track', '[Oskar Lind]: Answer the investor discovery questions, 5 of 12; advisor and partner likewise.', [F('SPV13', false, 760)]],
+      ['X4', 'Exploring · one next step per state', 'Each state, what main records, the step with final copy, where it goes and whether an Exploring account can open it; then the links removed from the page and why.', [C('SPV31', false, 1400, 1056)]],
+      ['4', 'Step 4 · Back to HQ', 'Back to HQ from any page: focus returns to the Preview shell trigger and a polite status says the preview ended.', [C('SPV06', false, 1440, 420)]],
+      ['P', 'Phone route · 390', 'Steps 1 to 4 at 390 × 844: the preview sheet, the Founder first screen and further down, the Exploring example with the action as the sticky bar, and back in HQ. Back to HQ is a 44px button in the bar.', [P('SPV20', '1 · Pick the shell'), P('SPV21', '2 · Founder, first screen'), P('SPV22', '2 · Founder, further down'), P('SPV23', '3 · Exploring example'), P('SPV24', '4 · Back in HQ')]],
+      ['PM', 'Phone · actual members', 'Founder [Maya Ruiz], Exploring with no role chosen, Exploring on the founder track.', [P('SPV25', 'Founder'), C('SPV26', 'Exploring · no role chosen', 390, 1000), C('SPV27', 'Exploring · founder track', 390, 1060)]],
+      ['S', 'States', 'Loading, examples could not be read, progress could not be read (never 0), confirmed empty, Eadwyn unavailable, and a write refused in preview.', [C('SPV30', false, 1400, 652)]],
+      ['D', 'Dark', 'The Founder preview on the dark tokens; chips keep their glyphs and words.', [F('SPV32', false, 1000)]],
+      ['A11y', 'Headings and focus order', 'Heading structure, focus order for both screens, what is announced, and the shapes that carry each state.', [W('SPV40')]],
+      ['Handoff', 'Handoff', 'Checked on main with files, backend required (◇), owner picks drawn (⚑), frontend only, preserved, acceptance mapped to boards, and what is open.', [W('SPVH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

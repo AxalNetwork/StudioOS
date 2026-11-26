@@ -28,6 +28,8 @@
 import type { Env } from '../types';
 import { registrationPackStatements, handoffPackEvidenceStatement } from './formationPacks';
 import { ensureIncorporationsSchema } from './incorporations';
+import { screenFormationCase } from './formationScreening';
+import { personRequirements } from './formationPeople';
 import { logAdminAction } from './adminAudit';
 
 export const STAGES = [
@@ -258,6 +260,22 @@ export async function transition(
   for (const k of Object.keys(payload.orderSet || {})) if (!ORDER_FIELDS.has(k)) throw new Error(`transition: order field ${k} is not allowed`);
   for (const k of payload.orderNow || []) if (!ORDER_NOW_FIELDS.has(k)) throw new Error(`transition: order field ${k} is not allowed`);
 
+  if (c.track === 'v2' && ((c.stage === 'details' && to === 'quoted') || to === 'paid')) {
+    const requirements = await personRequirements(env, c.id);
+    if (!requirements.ownership_complete || requirements.needs.length)
+      return { ok: false, status: 409, error: 'formation_details_incomplete' };
+  }
+  if (c.track === 'v2' && (to === 'paid' || to === 'submitted')) {
+    try {
+      const check = await screenFormationCase(env, c.id, to === 'paid' ? 'payment' : 'submission', actor.userId ?? null, c.revision);
+      if (check.held) return { ok: false, status: 409, error: 'formation_review_required' };
+    } catch (e) {
+      if (e instanceof Error && ['formation_people_required','formation_case_moved','formation_case_unavailable'].includes(e.message))
+        return { ok: false, status: 409, error: e.message };
+      throw e;
+    }
+  }
+
   const order = await env.DB.prepare(
     `SELECT i.id, i.status FROM formation_case_orders o JOIN incorporations i ON i.id = o.incorporation_id
       WHERE o.case_id = ? ORDER BY o.id DESC LIMIT 1`,
@@ -298,7 +316,14 @@ export async function transition(
   if (packSeedToken) statements.push(...await registrationPackStatements(env, c.id, nextRevision, packSeedToken, typeof payload.orderSet?.filed_on === 'string' ? payload.orderSet.filed_on : null));
   if (c.track === 'v2' && (to === 'activating' || to === 'handed_off')) statements.push(handoffPackEvidenceStatement(env, c.id, to, nextRevision));
 
-  const results = await caseWriteBatch(env, actor, statements, caseIndex);
+  let results: D1Result[];
+  try {
+    results = await caseWriteBatch(env, actor, statements, caseIndex);
+  } catch (error) {
+    if (String(error).includes('formation_checkpoint_held'))
+      return { ok: false, status: 409, error: 'formation_review_required' };
+    throw error;
+  }
   if (!(Number(results[caseIndex]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'case_moved' };
 
   if (!actor.hqWrite && actor.party === 'hq' && actor.userId && actor.email) {

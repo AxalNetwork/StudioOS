@@ -213,17 +213,19 @@ function ReportAsks({ updateUid, row }) {
           <ul className="pf-required">
             {read.value.asks.map((ask) => {
               const [label, kind] = ASK_WORDS[ask.kind] || ['Support', 'other'];
+              // D6215 (owner, 2026-11-16): a capital ask on a round call is answered on the call.
+              const call = ask.kind === 'capital' && ask.link_ref ? `/round-calls/${encodeURIComponent(ask.link_ref)}` : null;
               return <li key={ask.uid} data-testid={`report-ask-${ask.uid}`}>
                 <div><strong>{label}</strong><p>{ask.text}</p>
-                  <p className="pf-muted">{ask.support_state ? `Your support · ${titleCase(ask.support_state)}` : ask.answered ? 'Answered' : 'No answer recorded'}</p>
-                  {ask.kind === 'capital' ? (ask.link_ref
-                    ? <Link className="pf-btn" to={`/round-calls/${encodeURIComponent(ask.link_ref)}`}>Open the round call</Link>
-                    : <p className="pf-muted">{ask.link_reason || 'No round call is available.'}</p>) : null}
+                  <p className="pf-muted">{call ? 'Replies to this ask go to the round call.' : ask.support_state ? `Your support · ${titleCase(ask.support_state)}` : ask.answered ? 'Answered' : 'No answer recorded'}</p>
+                  {ask.kind === 'capital' && !call ? <p className="pf-muted">{ask.link_reason || 'No open round call is linked to this ask.'}</p> : null}
                 </div>
-                {!ask.support_state && row.uid ? <Link className="pf-btn is-primary" to="/portfolio/value-add"
-                  state={{ founderAsk: { uid: ask.uid, kind, label, updateUid, text: ask.text, projectUid: row.uid, reportKey: row.key } }}>
-                  Promise support
-                </Link> : null}
+                {call ? <Link className="pf-btn is-primary" to={call} data-testid={`report-ask-call-${ask.uid}`}>Promise support</Link>
+                  : ask.support_state ? <Link className="pf-btn" to="/portfolio/value-add">View the entry</Link>
+                  : row.uid ? <Link className="pf-btn is-primary" to="/portfolio/value-add"
+                    state={{ founderAsk: { uid: ask.uid, kind, label, updateUid, text: ask.text, projectUid: row.uid, reportKey: row.key } }}>
+                    Promise support
+                  </Link> : null}
               </li>;
             })}
           </ul>
@@ -468,7 +470,10 @@ export default function InvestorPortfolioUpdates() {
     >
       {settings && <PortfolioReportingSettings onClose={book=>{setSettings(false);setFilter('rules');if(book)setRuleBook(book);}} onSaved={(note,book)=>{setSettings(false);setFilter('rules');setSettingsNote(note);if(book)setRuleBook(book);setRulesRefresh(n=>n+1);retry('compliance');}} />}
       {settingsNote&&<p role="status">{settingsNote}</p>}
-      {chaseNote ? <p className="pf-partial" role="status" data-testid="status-chase-note">{chaseNote}</p> : null}
+      {/* D4818 part 3: the live region is in the page before the chase is pressed, so its outcome is announced. */}
+      <div className="pf-live" role="status" data-testid="region-chase-note">
+        {chaseNote ? <p className="pf-partial" data-testid="status-chase-note">{chaseNote}</p> : null}
+      </div>
       <section className="pf-tiles pf-tiles-4" aria-label="This period" data-testid="reports-tiles">
         <SummaryTile label="Received" value={inbox.state === 'ok' ? `${received} of ${rows.length}` : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? `for ${inbox.period || 'the period measured'}` : 'Reporting source'} />
         <SummaryTile label="Not received" tone={inbox.state === 'ok' && rows.length - received > 0 ? 'late' : null} value={inbox.state === 'ok' ? String(rows.length - received) : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? (inbox.inProgress ? 'period still in progress' : 'period complete') : 'Reporting source'} />

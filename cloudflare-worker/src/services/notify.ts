@@ -244,6 +244,12 @@ async function sendEmail(env: Env, to: string, subject: string, body: string, ht
   }
 }
 
+/** Formation legal notices need the transport result before recording a sent time. */
+export async function sendFormationNoticeEmail(env: Env, to: string, body: string): Promise<boolean> {
+  const { sendNotificationEmail } = await import('./email');
+  return sendNotificationEmail(env, to, 'Axal formation privacy notice', body);
+}
+
 async function enqueueOutbox(env: Env, args: NotifyArgs, reason: 'digest' | 'quiet_hours'): Promise<void> {
   try {
     await env.DB.prepare(

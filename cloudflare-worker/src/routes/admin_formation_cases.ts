@@ -20,6 +20,7 @@ import type { Env, User } from '../types';
 import { isSuperAdmin, requireHqAdmin, requireStepUp } from '../auth';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
+import { decideScreening } from '../services/formationScreening';
 import { HQ_ACTIONS, writeHqCase } from '../services/formationHqActions';
 import { STAGES } from '../services/formationCase';
 import {
@@ -129,6 +130,12 @@ cases.get('/:uid', async (c) => {
         db.prepare('INSERT INTO formation_case_access_log (case_id, viewer_user_id, what) VALUES (?, ?, ?)').bind(id, Number(user.id), what)));
     }
 
+    // Only the assigned reviewer sees named-person matches. The preceding private-read
+    // audit must succeed before any screening evidence is returned.
+    const screenings = full ? await db.prepare(`SELECT s.id,p.name,s.person_revision,s.checkpoint,s.severity,
+      s.provider_lists,s.matches,s.screened_at,s.decided_at,s.decided_by,s.decision,s.hq_reason
+      FROM formation_case_screenings s JOIN formation_case_people p ON p.id=s.person_id
+      WHERE p.case_id=? ORDER BY s.id DESC`).bind(id).all() : null;
     const peopleRows = people.results || [];
     const age = daysSince(row.created_at, now);
     return c.json({
@@ -138,6 +145,7 @@ cases.get('/:uid', async (c) => {
         catalogue_version_id: row.catalogue_version_id, revision: row.revision, hold_reason: row.hold_reason,
       },
       access: full ? 'full' : 'counts',
+      ...(screenings ? { screenings: screenings.results } : {}),
       people: full
         ? peopleRows.map((p: any) => ({ role: p.role, user_id: Number(p.id), name: p.name ?? null, email: p.role === 'founder' ? (p.email ?? null) : null }))
         : { count: peopleRows.length },
@@ -188,6 +196,20 @@ for (const action of HQ_ACTIONS) {
     const result = await writeHqCase(c.env, admin, uid, action, body);
     if (!result.ok) return refuse(c, result.status, { code: result.error, message: HQ_REFUSALS[result.error] ?? result.error.replaceAll('_', ' ') + '.' });
     return c.json(result);
+  });
+}
+
+for (const decision of ['clear','decline'] as const) {
+  cases.post(`/:uid/screenings/:id/${decision}`, async c => {
+    const admin = await requireHqAdmin(c);
+    await requireStepUp(c);
+    const id = Number(c.req.param('id'));
+    const reason = (await c.req.json().catch(() => null))?.reason;
+    if (!Number.isSafeInteger(id) || id <= 0 || typeof reason !== 'string' || !reason.trim() || reason.length > 2000)
+      return refuse(c,400,{code:'invalid_screening_decision',message:'Choose a screening and give a reason.'});
+    if (!await decideScreening(c.env,c.req.param('uid'),id,admin.id,isSuperAdmin(admin),decision,reason.trim()))
+      return refuse(c,404,{code:'screening_unavailable',message:'This review is unavailable.'});
+    return c.json({decision});
   });
 }
 

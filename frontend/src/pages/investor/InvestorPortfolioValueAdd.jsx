@@ -29,7 +29,7 @@
  * Writes (Log support, the moves, Record meeting) report against the one entry
  * or form they touched, and leave the ledger's read standing.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -84,6 +84,19 @@ export default function InvestorPortfolioValueAdd() {
   const [confirming, setConfirming] = useState(null);
   // D4642: the amendment history of ONE entry, read on demand.
   const [history, setHistory] = useState(null);
+  // D4818 part 3: the control a move was asked from, so focus goes back to it
+  // (or, once the ledger is read again without it, to its entry's row) when
+  // the confirmation closes, instead of falling to the page.
+  const askedFrom = useRef(null);
+  useEffect(() => {
+    const from = askedFrom.current;
+    if (confirming || !from || ledger.state === 'loading') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return; // no DOM to manage (a stub)
+    askedFrom.current = null;
+    const again = document.querySelector(`[data-testid="${from.testid}"]`);
+    const target = again && !again.disabled ? again : document.querySelector(`[data-testid="row-va-commitment-${from.uid}"] a, [data-testid="row-va-commitment-${from.uid}"] button`);
+    if (target && (!document.activeElement || document.activeElement === document.body)) target.focus();
+  }, [confirming, ledger, busy]);
 
   const companies = ledger.state === 'ok' ? ledger.value.companies : [];
   const figures = useMemo(() => figuresOf(ledger), [ledger]);
@@ -159,6 +172,12 @@ export default function InvestorPortfolioValueAdd() {
       await fill.afterSave(created?.item?.id);
       reload();
     } catch (error) {
+      // D6215: a capital ask that lands on a round call is answered on the call.
+      if (error?.code === 'ask_on_round_call') {
+        setForm((current) => ({ ...current, invalid: null, callUid: error.data?.call_uid || null, failed: false,
+          error: 'This ask lands on a round call, so nothing was recorded here. Promise support on the call.' }));
+        return;
+      }
       // PFA08: the entries stay in the form, and the form says it did not save.
       setForm((current) => ({ ...current, invalid: null, error: `This did not save. Your entries are kept.${error?.message ? ` ${error.message}` : ''}`, failed: true }));
     } finally { setBusy(''); }
@@ -223,7 +242,10 @@ export default function InvestorPortfolioValueAdd() {
 
   const table = {
     filter, me, busy, history, confirming, noticeFor: notice?.entryUid || null,
-    onAsk: (row, next) => { setNotice(null); setConfirming({ uid: row.uid, next, error: '' }); },
+    onAsk: (row, next) => {
+      askedFrom.current = { uid: row.uid, testid: `button-va-${next === 'meeting' ? 'meeting' : MOVE_TESTID[next]}-${row.uid}` };
+      setNotice(null); setConfirming({ uid: row.uid, next, error: '' });
+    },
     onCancel: () => setConfirming(null),
     onConfirm: move,
     onHistory: openHistory,
@@ -254,12 +276,15 @@ export default function InvestorPortfolioValueAdd() {
         <Link className="pf-btn" to="/portfolio/updates" state={{ founderAskReportKey: promiseReceipt.reportKey }}>Back to the report</Link>
         <button className="pf-btn" type="button" onClick={() => setPromiseReceipt(null)}>View in Value-add</button>
       </section> : null}
-      {notice ? (
-        <div className={notice.kind === 'conflict' ? 'pf-partial va-notice' : 'pf-failure'} role="status" data-testid={`status-va-support-${notice.kind}`}>
-          <span>{notice.message}</span>
-          <button type="button" className="pf-link-button" onClick={() => { setNotice(null); reload(); }}>Reload the ledger</button>
-        </div>
-      ) : null}
+      {/* D4818 part 3: the live region is in the page before a move is confirmed, so its outcome is announced. */}
+      <div className="pf-live" role="status" data-testid="region-va-support-notice">
+        {notice ? (
+          <div className={notice.kind === 'conflict' ? 'pf-partial va-notice' : 'pf-failure'} data-testid={`status-va-support-${notice.kind}`}>
+            <span>{notice.message}</span>
+            <button type="button" className="pf-link-button" onClick={() => { setNotice(null); reload(); }}>Reload the ledger</button>
+          </div>
+        ) : null}
+      </div>
 
       <section className="pf-card va-figures-card" aria-labelledby="va-figures-title" data-testid="va-figures">
         <h2 id="va-figures-title" className="pf-sr">Support at a glance</h2>
@@ -680,6 +705,7 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
         <textarea id="va-outcome" rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" />
       </div>
       {form.error ? <p id="va-form-error" className="va-error" role="alert" data-testid="va-form-error">{form.error}</p> : null}
+      {form.callUid ? <Link className="pf-btn is-primary" to={`/round-calls/${encodeURIComponent(form.callUid)}`} data-testid="va-founder-ask-call">Open the round call</Link> : null}
       {form.ask_uid && form.confirmed ? <p role="status">Confirm this promise against the founder’s ask.</p> : null}
       <div className="pf-tools">
         <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : form.ask_uid ? (form.confirmed ? 'Confirm promise' : 'Review promise') : 'Record entry'}</button>

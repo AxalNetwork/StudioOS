@@ -28,6 +28,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
+import { formationScreeningFixture } from './_formation_screening_fixture.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import {
@@ -78,7 +79,7 @@ function fixture(opts: { track?: 'v2' | 'legacy_v1'; stage?: string; status?: st
   db.prepare(`INSERT INTO formation_cases (id, uid, user_id, intent, project_id, company_id, track, stage, waiting_on, revision)
       VALUES (1, 'fc_one', ?, 'convert_project', 1, ?, ?, ?, 'hq', 0)`).run(FOUNDER, companyId, track, stage);
   db.exec('INSERT INTO formation_case_orders (case_id, incorporation_id) VALUES (1, 7);');
-  const env: any = { DB: d1Over(db) };
+  const env: any = { TOKENS: formationScreeningFixture(db, 1), DB: d1Over(db) };
   return { db, env };
 }
 

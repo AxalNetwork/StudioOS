@@ -9,7 +9,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
-    environment: production-ops
+    # D8754 (owner, 2026-11-26): hourly advisory report, no reviewer. Its only secret is the application-only
+    # WorkGraph ingest token; it has no Cloudflare access.
+    environment: production-monitoring
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15

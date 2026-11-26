@@ -47,7 +47,9 @@ env:
 
 jobs:
   backup:
-    environment: production-ops
+    # D8754: its own environment, main only, no reviewer, a token scoped to the export and the backup bucket.
+    environment: production-backup
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,7 +77,7 @@ jobs:
           if [[ ${#MISSING[@]} -gt 0 ]]; then
             echo "::error::Required secret(s) are missing or empty: ${MISSING[*]}"
             echo ""
-            echo "Set CLOUDFLARE_API_TOKEN in Settings → Environments → production-ops."
+            echo "Set CLOUDFLARE_API_TOKEN in Settings → Environments → production-backup."
             echo "Check that CLOUDFLARE_ACCOUNT_ID is available to the job."
             echo ""
             echo "Token permissions are listed in documentation/operations/PRODUCTION_CREDENTIALS.md."
@@ -134,9 +136,14 @@ jobs:
           # the run: shell — keeps these blocks injection-safe and consistent).
           BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
+          set -o pipefail
+          # D8754: wrangler prints a one-hour pre-signed link that downloads the whole export, and
+          # this repository's run logs are public. Every URL in its output is withheld; the file,
+          # its size and the manifest below are the record.
           wrangler d1 export "${TARGET_DB}" \
             --remote \
-            --output "${BACKUP_FILENAME}"
+            --output "${BACKUP_FILENAME}" 2>&1 \
+            | sed -E 's#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]]+#[URL withheld]#g'
           ls -lh "${BACKUP_FILENAME}"
 
       - name: Build the backup's manifest

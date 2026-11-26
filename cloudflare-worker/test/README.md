@@ -68,6 +68,12 @@ schema. Another venture's founder, an advisor with no share or a share switched 
 advisor, an investor by venture id or off the deal, a disabled founder and no credentials are refused, with nothing of
 the venture named and no score, correction, sharing or log row changed; each rightful party then gets its read.
 
+`authz_partner_d4570.test.ts` (#4570, D4570 part 9) asks the 43 `/api/partner` ledger routes (delivery, offers and
+product testing) through the mounted routers on the full schema. Another firm's partner gets 404, a founder, investor
+or advisor 403, an account with no firm 400, no credentials or a disabled account 401, with nothing named and no row or
+file changed; the firm's own partner then passes every gate. An unknown consent-link token answers 404 and writes
+nothing. Its first test fails if a ledger route under `/api/partner` is missing from it.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.

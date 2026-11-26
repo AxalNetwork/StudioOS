@@ -2,7 +2,7 @@
   "repository": "AxalNetwork/StudioOS",
   "workflows": [
     {
-      "id": null,
+      "id": 426612384,
       "path": ".github/workflows/admin-drift.yml",
       "channel": "#axalvc-actions-admin-drift"
     },
@@ -17,12 +17,12 @@
       "channel": "#axalvc-actions-agent-compute-preview"
     },
     {
-      "id": null,
+      "id": 422630426,
       "path": ".github/workflows/agent-gateway-keys.yml",
       "channel": "#axalvc-actions-agent-gateway-keys"
     },
     {
-      "id": null,
+      "id": 426207572,
       "path": ".github/workflows/agent-provenance.yml",
       "channel": "#axalvc-actions-agent-provenance"
     },
@@ -57,7 +57,7 @@
       "channel": "#axalvc-actions-build-worker-contracts"
     },
     {
-      "id": null,
+      "id": 425956694,
       "path": ".github/workflows/capacity-planner.yml",
       "channel": "#axalvc-actions-capacity-planner"
     },
@@ -137,7 +137,7 @@
       "channel": "#axalvc-actions-dr-drill"
     },
     {
-      "id": null,
+      "id": 423075759,
       "path": ".github/workflows/file-recovery.yml",
       "channel": "#axalvc-actions-file-recovery"
     },
@@ -147,7 +147,7 @@
       "channel": "#axalvc-actions-form-lightbox-contracts"
     },
     {
-      "id": null,
+      "id": 418983646,
       "path": ".github/workflows/gateway-live-check.yml",
       "channel": "#axalvc-actions-gateway-live-check"
     },
@@ -162,52 +162,57 @@
       "channel": "#axalvc-actions-gitleaks"
     },
     {
+      "id": 425239875,
+      "path": ".github/workflows/included-compute-smoke.yml",
+      "channel": "#axalvc-actions-included-compute-smoke"
+    },
+    {
       "id": 374048125,
       "path": ".github/workflows/labels-sync.yml",
       "channel": "#axalvc-actions-labels-sync"
     },
     {
-      "id": null,
+      "id": 422161230,
       "path": ".github/workflows/landing-bot-conflict.yml",
       "channel": "#axalvc-actions-landing-bot-conflict"
     },
     {
-      "id": null,
+      "id": 422161232,
       "path": ".github/workflows/landing-bot-ejection.yml",
       "channel": "#axalvc-actions-landing-bot-ejection"
     },
     {
-      "id": null,
+      "id": 422161233,
       "path": ".github/workflows/landing-bot-keeper.yml",
       "channel": "#axalvc-actions-landing-bot-keeper"
     },
     {
-      "id": null,
+      "id": 423949374,
       "path": ".github/workflows/landing-bot-main-repair.yml",
       "channel": "#axalvc-actions-landing-bot-main-repair"
     },
     {
-      "id": null,
+      "id": 422161235,
       "path": ".github/workflows/landing-bot-model-round.yml",
       "channel": "#axalvc-actions-landing-bot-model-round"
     },
     {
-      "id": null,
+      "id": 422161236,
       "path": ".github/workflows/landing-bot-model.yml",
       "channel": "#axalvc-actions-landing-bot-model"
     },
     {
-      "id": null,
+      "id": 424608420,
       "path": ".github/workflows/landing-bot-refresh.yml",
       "channel": "#axalvc-actions-landing-bot-refresh"
     },
     {
-      "id": null,
+      "id": 426355699,
       "path": ".github/workflows/landing-conflict-indicator.yml",
       "channel": "#axalvc-actions-landing-conflict-indicator"
     },
     {
-      "id": null,
+      "id": 419862788,
       "path": ".github/workflows/landing-feeder.yml",
       "channel": "#axalvc-actions-landing-feeder"
     },
@@ -222,7 +227,17 @@
       "channel": "#axalvc-actions-lfs-budget"
     },
     {
-      "id": null,
+      "id": 425042814,
+      "path": ".github/workflows/linux-runner-smoke.yml",
+      "channel": "#axalvc-actions-linux-runner-smoke"
+    },
+    {
+      "id": 424921829,
+      "path": ".github/workflows/macbook-runner-smoke.yml",
+      "channel": "#axalvc-actions-macbook-runner-smoke"
+    },
+    {
+      "id": 425080623,
       "path": ".github/workflows/macbook-worker.yml",
       "channel": "#axalvc-actions-macbook-worker"
     },
@@ -267,12 +282,12 @@
       "channel": "#axalvc-actions-migration-immutability"
     },
     {
-      "id": null,
+      "id": 425336468,
       "path": ".github/workflows/ossf-scorecard.yml",
       "channel": "#axalvc-actions-ossf-scorecard"
     },
     {
-      "id": null,
+      "id": 426241397,
       "path": ".github/workflows/ownership.yml",
       "channel": "#axalvc-actions-ownership"
     },
@@ -292,7 +307,7 @@
       "channel": "#axalvc-actions-pr-preview"
     },
     {
-      "id": null,
+      "id": 422890505,
       "path": ".github/workflows/pr-preview-deploy.yml",
       "channel": "#axalvc-actions-pr-preview-deploy"
     },
@@ -337,7 +352,7 @@
       "channel": "#axalvc-actions-round-call-worker-contracts"
     },
     {
-      "id": null,
+      "id": 425906409,
       "path": ".github/workflows/included-compute-canary.yml",
       "channel": "#axalvc-actions-included-compute-canary"
     },
@@ -347,12 +362,17 @@
       "channel": "#axalvc-actions-runner-benchmark"
     },
     {
-      "id": null,
+      "id": 425161899,
       "path": ".github/workflows/runner-executor.yml",
       "channel": "#axalvc-actions-runner-executor"
     },
     {
-      "id": null,
+      "id": 419589999,
+      "path": ".github/workflows/s33-6055-linux-snapshots.yml",
+      "channel": "#axalvc-actions-s33-6055-linux-snapshots"
+    },
+    {
+      "id": 422158920,
       "path": ".github/workflows/scan-remediation.yml",
       "channel": "#axalvc-actions-scan-remediation"
     },
