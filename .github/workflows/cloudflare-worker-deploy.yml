@@ -221,6 +221,18 @@ jobs:
       - name: Check AI gateway and agent settings
         run: node scripts/check-ai-gateways.mjs
 
+      # D8508-p2 (#8508) — layer 2, live and read-only, with the release token
+      # (owner answer A, 2026-11-26): each gateway [env.production.vars] names
+      # exists, AGENT_AI_GATEWAY_TOKEN is bound to the Worker (by name), each
+      # account alias resolves. Stops only on "missing" on a switched-on route;
+      # a missing Advisor or deck gateway warns (owner answer A) and "could not
+      # be read" warns. Prints names and states only.
+      - name: Check AI gateways and the agents token on the account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/check-ai-gateways-live.mjs
+
       - name: Verify required production queues
         id: queues
         env:
