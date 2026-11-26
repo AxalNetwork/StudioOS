@@ -211,6 +211,116 @@ export function admitMedia(input: { kind: MediaKind; objectClass: ObjectClass; d
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// D5583 part 3: the same admission over an object that arrives in parts (multipart upload). Never more than one
+// part and 16 carried bytes in hand; the state between parts is a few numbers and those bytes, as hex.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Between parts: the format, PNG's next chunk offset and whether IEND was seen, and the last bytes of the previous part. */
+export interface StreamAdmissionState { f: string; next: number; ended: boolean; carry: string }
+export type StreamAdmission =
+  | { ok: true; format: MediaFormat; state: StreamAdmissionState }
+  | { ok: false; code: AdmissionCode; detail: string };
+
+const CARRY_BYTES = 16;
+const hexOf = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+const bytesOfHex = (h: string) => Uint8Array.from((h.match(/../g) ?? []).map((x) => parseInt(x, 16)));
+
+/**
+ * Before any byte: what the declared type and size allow. The declared type names the format; the first part must
+ * then sniff as it. Text formats (SVG, glTF JSON) are parsed whole, so they never take the multipart path.
+ */
+export function beginStreamAdmission(input: { kind: MediaKind; objectClass: ObjectClass; declaredMime: string; byteLength: number }): StreamAdmission {
+  if (!(OBJECT_CLASSES as readonly string[]).includes(input.objectClass)) return { ok: false, code: 'wrong_class', detail: String(input.objectClass) };
+  if (!Number.isSafeInteger(input.byteLength) || input.byteLength <= 0) return { ok: false, code: 'empty', detail: 'no bytes' };
+  if (input.byteLength > CLASS_MAX_BYTES[input.objectClass]) return { ok: false, code: 'oversized', detail: `${input.objectClass} over ${CLASS_MAX_BYTES[input.objectClass]} bytes` };
+  const mime = String(input.declaredMime).toLowerCase().split(';')[0].trim();
+  const f = MEDIA_FORMATS.find((x) => x.mime === mime);
+  if (!f) return { ok: false, code: 'unsupported_format', detail: `declared ${input.declaredMime}` };
+  if (!f.kinds.includes(input.kind)) return { ok: false, code: 'wrong_kind', detail: `${f.id} is not a ${input.kind} format` };
+  if (!f.classes.includes(input.objectClass)) return { ok: false, code: 'wrong_class', detail: `${f.id} is not admitted as a ${input.objectClass}` };
+  if (f.id === 'svg' || f.id === 'gltf') return { ok: false, code: 'oversized', detail: `${f.id} is parsed whole: at most ${TEXT_FORMAT_MAX_BYTES} bytes, buffered` };
+  return { ok: true, format: f, state: { f: f.id, next: 8, ended: false, carry: '' } };
+}
+
+/** JPEG's metadata walk on the first part: GPS found, clear, or segments that run past the part (refused, not guessed). */
+function jpegFirstPart(b: Uint8Array): 'gps' | 'clear' | 'beyond' {
+  let i = 2;
+  for (;;) {
+    if (i + 4 >= b.length) return 'beyond';
+    if (at(b, i) !== 0xff) return 'clear';
+    const marker = at(b, i + 1);
+    const len = (at(b, i + 2) << 8) | at(b, i + 3);
+    if (marker === 0xda || len < 2) return 'clear';
+    if (marker === 0xe1 && ascii(b, i + 4, 6) === 'Exif\0\0') {
+      if (i + 2 + len > b.length) return 'beyond';
+      const seg = b.subarray(i + 10, i + 2 + len);
+      for (let k = 0; k + 1 < seg.length; k += 1) {
+        if ((seg[k] === 0x88 && seg[k + 1] === 0x25) || (seg[k] === 0x25 && seg[k + 1] === 0x88)) return 'gps';
+      }
+    }
+    i += 2 + len;
+  }
+}
+
+/**
+ * Admit the next part, in order. `offset` is where it starts in the object and `total` the declared size. The first
+ * part checks the signature and the header structure `admitMedia` checks (IHDR, RIFF and glb lengths against the
+ * declared size, the AVIF ftyp box, JPEG's location metadata); every part continues PNG's chunk walk for `eXIf`;
+ * the last part checks the trailer (IEND, end-of-image, GIF trailer). A refusal is `admitMedia`'s code for the same rule.
+ */
+export function admitStreamPart(state: StreamAdmissionState, part: Uint8Array, at0: { offset: number; total: number; declaredMime: string }): StreamAdmission {
+  const f = MEDIA_FORMATS.find((x) => x.id === state?.f);
+  if (!f || !(part instanceof Uint8Array) || part.byteLength === 0) return { ok: false, code: 'corrupt', detail: 'part: no bytes or no format' };
+  const { offset, total } = at0;
+  if (offset === 0) {
+    const sniffed = sniffFormat(part);
+    if (!sniffed) return { ok: false, code: 'unsupported_format', detail: 'unrecognised signature' };
+    if (sniffed.id !== f.id) return { ok: false, code: 'mime_mismatch', detail: `declared ${at0.declaredMime}, bytes are ${sniffed.mime}` };
+    const head = ((): string | null => {
+      switch (f.id) {
+        case 'png': return ascii(part, 12, 4) === 'IHDR' ? null : 'png: no IHDR chunk';
+        case 'webp': return u32le(part, 4) + 8 === total ? null : 'webp: RIFF size does not match the file';
+        case 'glb':
+          if (u32le(part, 4) !== 2) return 'glb: not glTF 2';
+          return u32le(part, 8) === total ? null : 'glb: header length does not match the file';
+        case 'avif': return u32be(part, 0) >= 16 && u32be(part, 0) <= total ? null : 'avif: ftyp box does not fit the file';
+        default: return null;
+      }
+    })();
+    if (head) return { ok: false, code: 'corrupt', detail: head };
+    if (f.id === 'jpeg') {
+      const scan = jpegFirstPart(part);
+      if (scan === 'gps') return { ok: false, code: 'unsafe_metadata', detail: 'jpeg: EXIF location' };
+      if (scan === 'beyond') return { ok: false, code: 'unsafe_metadata', detail: 'jpeg: metadata segments run past the first part' };
+    }
+  }
+  const carry = bytesOfHex(state.carry);
+  const window = new Uint8Array(carry.byteLength + part.byteLength);
+  window.set(carry, 0); window.set(part, carry.byteLength);
+  const base = offset - carry.byteLength;
+  let next = state.next;
+  let ended = state.ended;
+  if (f.id === 'png') {
+    while (!ended && next >= base && next + 8 <= base + window.byteLength) {
+      const rel = next - base;
+      const len = u32be(window, rel);
+      const type = ascii(window, rel + 4, 4);
+      if (type === 'eXIf') return { ok: false, code: 'unsafe_metadata', detail: 'png: eXIf chunk' };
+      if (type === 'IEND' || len > total) { ended = true; break; }
+      next += 12 + len;
+    }
+  }
+  if (offset + part.byteLength === total) {
+    const n = window.byteLength;
+    const tail = f.id === 'png' ? (ascii(window, n - 8, 4) === 'IEND' ? null : 'png: does not end in IEND')
+      : f.id === 'jpeg' ? (at(window, n - 2) === 0xff && at(window, n - 1) === 0xd9 ? null : 'jpeg: no end-of-image marker')
+        : f.id === 'gif' ? (at(window, n - 1) === 0x3b ? null : 'gif: no trailer') : null;
+    if (tail) return { ok: false, code: 'corrupt', detail: tail };
+  }
+  return { ok: true, format: f, state: { f: f.id, next, ended, carry: hexOf(window.subarray(Math.max(0, window.byteLength - CARRY_BYTES))) } };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Provenance and rights.
 // ---------------------------------------------------------------------------------------------------------------
 
