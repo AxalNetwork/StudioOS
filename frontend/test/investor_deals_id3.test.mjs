@@ -286,12 +286,15 @@ test('the strip is DE07’s five tiles, and eligible voters are never counted fr
   assert.deepEqual(drawn, labels, 'the strip drifted from DE07');
   assert.match(stripSrc, /String\(open\)/, 'the Open conditions tile must count the open ones');
   // AND THE MEETING IS NOT A VOTING ENTITLEMENT. DE07 draws "6 eligible";
-  // since D6143 the count is the decision's own roster (`rosterLine`), Not
-  // recorded when none is set, and `ic_meeting_attendees` (an invitation
-  // list) is never counted as voters (D6144).
+  // since D6143 the decision card reads both figures from `rosterLine`.
+  // `ic_meeting_attendees` is an invitation list (D6144).
   assert.match(board, /6 eligible/, 'the board changed its eligible count');
-  assert.match(Z, /<dt>Eligible voters<\/dt><dd[^>]*>\{roster\.unreadable \? <Unavailable \/> : roster\.eligible === null \? <NotRecorded \/> : roster\.eligible\}<\/dd>/,
-    'eligible voters must come from the roster, Not recorded without one');
+  const cardAt = Z.indexOf('export function DecisionCard(');
+  assert.ok(cardAt >= 0, 'the decision card is gone');
+  const card = Z.slice(cardAt, Z.indexOf('\n}\n', cardAt));
+  assert.match(card, /rosterLine\(decision\)/, 'the card uses the decision roster');
+  assert.match(Z, /<DecisionCard\b[^>]*\buser\s*=\s*\{\s*user\s*\}/,
+    'the Commit route passes the signed-in user to the decision card');
   assert.equal((Z.match(/Eligible voters/g) || []).length, 1, 'eligible voters are drawn somewhere else too');
   assert.match(Z, /invited, not entitled to vote/);
   const room = handler("r.get('/commit-room'");
