@@ -461,3 +461,44 @@ test('founder asks require both a holding and a delivery; promises remain privat
   db.exec('DROP TABLE update_ask_replies');
   assert.equal((await read(MINE, 'sent-update')).status, 500);
 });
+
+test('D6215: a capital ask on a live round call sends Promise support to the call; without one it is a promise', async t => {
+  const db = freshDb();
+  t.after(() => db.close());
+  db.exec(`
+    ALTER TABLE users ADD COLUMN kyc_status TEXT;
+    UPDATE users SET kyc_status = 'approved' WHERE id = 41;
+    CREATE TABLE commitments (deal_id INTEGER, investor_user_id INTEGER, status TEXT, company_id INTEGER);
+    CREATE TABLE portfolio_updates (id INTEGER PRIMARY KEY, uid TEXT, project_id INTEGER, kind TEXT, sent_at TEXT);
+    CREATE TABLE update_recipients (update_id INTEGER, user_id INTEGER, audience TEXT, version_id INTEGER, delivery_state TEXT, opened_at TEXT);
+    CREATE TABLE update_asks (id INTEGER PRIMARY KEY, uid TEXT, update_id INTEGER, kind TEXT, text TEXT, link_ref TEXT);
+    CREATE TABLE update_ask_replies (ask_id INTEGER);
+    CREATE TABLE round_calls (id INTEGER PRIMARY KEY, uid TEXT, project_id INTEGER, state TEXT, target_close TEXT);
+    CREATE TABLE round_call_recipients (call_id INTEGER, investor_user_id INTEGER);
+    INSERT INTO commitments VALUES (71, 41, 'confirmed', NULL);
+    INSERT INTO portfolio_updates VALUES (1, 'sent-update', 7, 'update', '2026-11-15');
+    INSERT INTO update_recipients VALUES (1, 41, 'investor', 1, 'delivered', NULL);
+    INSERT INTO round_calls VALUES (1, 'call-live', 7, 'sent', '2099-01-01');
+    INSERT INTO round_call_recipients VALUES (1, 41);
+    INSERT INTO update_asks VALUES (1, 'ask-cap', 1, 'capital', 'Funds that lead a seed extension', 'call-live'),
+      (2, 'ask-cap-none', 1, 'capital', 'Funds for a bridge', NULL);
+  `);
+  const roundEnv = (on: boolean): any => ({ ...env(db), ...(on ? { ROUND_CALLS_ENABLED: 'true' } : {}) });
+  const jwt = await token(MINE, 'investor');
+  const promise = (askUid: string, on = true) => support.fetch(new Request('http://x/', {
+    method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ project_uid: 'p-alpha', ask_uid: askUid, kind: 'fundraising', summary: 'Funds that lead' }),
+  }), roundEnv(on));
+  const asks = await updates.fetch(new Request('http://x/sent-update/asks', { headers: { Authorization: `Bearer ${jwt}` } }), roundEnv(true));
+  assert.equal(asks.status, 200, await asks.clone().text());
+  assert.deepEqual((await asks.json() as any).asks.map((a: any) => [a.uid, a.link_ref]), [['ask-cap', 'call-live'], ['ask-cap-none', null]]);
+
+  const onCall = await promise('ask-cap');
+  assert.equal(onCall.status, 409, await onCall.clone().text());
+  assert.deepEqual(await onCall.json(), { error: 'ask_on_round_call', detail: 'This ask lands on a round call. Promise support on the call.', call_uid: 'call-live' });
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM portfolio_support_entries WHERE ask_uid = 'ask-cap'").get()?.n, 0);
+
+  // A capital ask with no open call, or with round calls off, stays a Value-add promise.
+  assert.equal((await promise('ask-cap-none')).status, 201);
+  assert.equal((await promise('ask-cap', false)).status, 201);
+});

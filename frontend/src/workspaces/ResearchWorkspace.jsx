@@ -239,15 +239,15 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'companies') {
       return (
         <Suspense fallback={<Loading />}>
+          {/* D7813: the page's scoped export (`companyDirectoryExport.js`),
+              built by the zone because the search, filters, sort and page
+              live there: "Export this page · N rows", ten columns with the
+              stored attribution. This line only passes it through, the same
+              for every licence. It used to write five columns of the loaded
+              rows with no record id, licence or date. */}
           <CompanyDirectoryZone
             role={role}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/companies', { view: {
-              scope: null,
-              zone: 'companies',
-              header: ['Company', 'Country', 'Founded', 'Website', 'Source'],
-              rows,
-              cells: (x) => [x.name, x.country, x.founded_year, x.website, x.source_name],
-            } })}
+            zoneActions={(scoped) => zoneActionsFor(role, 'research/companies', { view: { scoped } })}
           />
         </Suspense>
       );

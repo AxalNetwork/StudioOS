@@ -43,9 +43,21 @@ export type VenturePolicy = {
   render_budget_microusd: number | null;
   /** Bytes the venture may hold; null when unread. */
   storage_quota_bytes: number | null;
+  /**
+   * #5585 part 15 (D5585-p15): when true, a `video_render` or `brand_image` ticket needs a release `render` approval
+   * of the piece it builds on (`SwarmFacts.render_approval`), and its spend on that piece stays within the approval's
+   * ceiling. Absent or anything but true: not required, as before.
+   */
+  render_approval_required?: boolean;
 };
+/** The modalities a release render approval governs. */
+export const RENDER_APPROVAL_MODALITIES: readonly Modality[] = Object.freeze(['video_render', 'brand_image']);
+/** #5585 part 15: the release manifest whose `render` approval authorizes this render, and the most it may spend. */
+export type SwarmRenderApproval = { manifest_uid: string; ceiling_microusd: number };
 /** What the caller read just before asking. `undefined` head is "not read"; null is "the asset has no head yet". */
-export type SwarmFacts = { agent: 'active' | 'revoked' | 'unknown'; head_revision_uid: string | null | undefined; storage_used_bytes: number | null };
+export type SwarmFacts = { agent: 'active' | 'revoked' | 'unknown'; head_revision_uid: string | null | undefined; storage_used_bytes: number | null;
+  /** #5585 part 15: the release render approval for (asset, base); null is "none"; absent (undefined) is "not read". */
+  render_approval?: SwarmRenderApproval | null };
 export type SwarmRequest = {
   ticket_uid: string; tenant_id: number; company_id: number; team_id: number | null; agent_id: number;
   modality: Modality; provider: Provider; model: string; region: string;
@@ -58,6 +70,8 @@ export type SwarmTicket = SwarmRequest & {
   state: TicketState; sequence: number; enqueued_at: number; admitted_at: number | null; settled_at: number | null;
   reserve_held_microusd: number; reserve_basis: 'quote' | 'ceiling';
   charged_microusd: number | null; measured: boolean | null; wait_reason: string | null; end_code: string | null;
+  /** #5585 part 15: the release manifest whose render approval admitted this ticket; absent when none was required. */
+  render_manifest_uid?: string;
 };
 export type SwarmAuditAction = 'request' | 'promote' | 'settle' | 'withdraw' | 'revoke';
 /** One audit entry, written in the same transaction as the change it records, refusals included. */
@@ -91,6 +105,16 @@ const refuse = (code: string, status: WorkspaceRefusal['status'] = 409, reasons:
 export function budgetCommitted(sw: SwarmState, key: string): number {
   return Object.values(sw.tickets).filter(t => ventureKey(t) === key)
     .reduce((sum, t) => sum + (t.state === 'admitted' ? t.reserve_held_microusd : t.state === 'settled' ? t.charged_microusd ?? 0 : 0), 0);
+}
+/**
+ * #5585 part 15: what a venture has committed to rendering one piece in one modality: the reserves of its waiting and
+ * live tickets on that asset and base, and the charges of its settled ones. A waiting ticket counts here, unlike in
+ * the budget: it is already a claim on the approval.
+ */
+export function renderApprovalCommitted(sw: SwarmState, t: Pick<SwarmRequest, 'tenant_id' | 'company_id' | 'asset_uid' | 'base_revision_uid' | 'modality'>): number {
+  const key = ventureKey(t);
+  return Object.values(sw.tickets).filter(x => ventureKey(x) === key && x.asset_uid === t.asset_uid && x.base_revision_uid === t.base_revision_uid && x.modality === t.modality)
+    .reduce((sum, x) => sum + (x.state === 'waiting' || x.state === 'admitted' ? x.reserve_held_microusd : x.state === 'settled' ? x.charged_microusd ?? 0 : 0), 0);
 }
 /** Bytes a venture's live tickets will write. */
 export function storageReserved(sw: SwarmState, key: string): number {
@@ -187,6 +211,16 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
         if (facts.head_revision_uid !== req.base_revision_uid) return no('stale_revision');
         const unknown = req.reserve_microusd === 'unavailable';
         const reserve = unknown ? req.ceiling_microusd : req.reserve_microusd as number;
+        // #5585 part 15: a render needs its release approval, and stays within the approval's ceiling.
+        let renderManifest: string | undefined;
+        if (policy.render_approval_required === true && RENDER_APPROVAL_MODALITIES.includes(req.modality)) {
+          const ra = facts.render_approval;
+          if (ra === undefined) return no('render_approval_unverified', 503);
+          if (ra === null) return no('render_unapproved', 403);
+          if (!ra || typeof ra.manifest_uid !== 'string' || !ASSET.test(ra.manifest_uid) || !whole(ra.ceiling_microusd, 1)) return no('render_approval_unverified', 503);
+          if (renderApprovalCommitted(sw, req) + reserve > ra.ceiling_microusd) return no('render_over_approved');
+          renderManifest = ra.manifest_uid;
+        }
         const quota = quotaRefusal(sw, req, reserve, policy, facts.storage_used_bytes);
         if (quota) return no(quota.code, quota.status);
         const reasons = capacityReasons(sw, req, policy);
@@ -196,7 +230,7 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
         }
         const t: SwarmTicket = { ...req, state: 'waiting', sequence: sw.next_sequence++, enqueued_at: now, admitted_at: null, settled_at: null,
           reserve_held_microusd: reserve, reserve_basis: unknown ? 'ceiling' : 'quote', charged_microusd: null, measured: null,
-          wait_reason: reasons[0] ?? null, end_code: null };
+          wait_reason: reasons[0] ?? null, end_code: null, ...(renderManifest ? { render_manifest_uid: renderManifest } : {}) };
         if (!reasons.length) admit(t, now);
         sw.tickets[t.ticket_uid] = t;
         audit(sw, now, t, 'request', reasons.length ? 'queued' : 'applied', reasons[0] ?? null);

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { formatMinor } from '../lib/money';
 import Sheet from '../ui/Sheet.jsx';
 import WriteFlow from './portfolio/WriteFlow.jsx';
 import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
@@ -19,6 +20,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -26,6 +28,9 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [prefillName, setPrefillName] = useState('');
+  // D6889 part 2 (#7938): the closing line Record position came from. The saved
+  // position stores its uid as `closing_line_uid`, so the line then reads In Portfolio.
+  const [fromLine, setFromLine] = useState(null); // { uid, label, amount_cents, currency, return_to }
   const [form, setForm] = useState({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
   // D464 — the governed write path, offered where the book is read: a mark and
   // a distribution are admin writes (the routes refuse anyone else), and the
@@ -58,8 +63,14 @@ export default function PortfolioPositionsPage({ embedded = false }) {
       ...f,
       project_id: p.project_id != null ? String(p.project_id) : f.project_id,
       round_name: p.round_name || f.round_name,
+      invested_amount: p.invested_amount ? String(p.invested_amount) : f.invested_amount,
+      position_date: p.position_date ? String(p.position_date) : f.position_date,
     }));
     setPrefillName(p.startup_name || '');
+    setFromLine(p.closing_line_uid ? {
+      uid: String(p.closing_line_uid), label: p.line_label || null, amount_cents: p.amount_cents ?? null,
+      currency: p.currency || null, return_to: typeof p.return_to === 'string' && p.return_to.startsWith('/') ? p.return_to : null,
+    } : null);
     setCreating(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
@@ -126,9 +137,14 @@ export default function PortfolioPositionsPage({ embedded = false }) {
         invested_amount: form.invested_amount || undefined, shares: form.shares || undefined,
         price_per_share: form.price_per_share || undefined, ownership_pct: form.ownership_pct || undefined,
         position_date: form.position_date || undefined,
+        closing_line_uid: fromLine?.uid || undefined,
       });
       setCreating(false);
       setForm({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+      const back = fromLine?.return_to;
+      setFromLine(null);
+      // Back to the closing, where the line now reads In Portfolio.
+      if (back) { navigate(back); return; }
       load();
     } catch (e2) { setErr(e2.message || 'Failed to record'); }
     finally { setBusy(false); }
@@ -191,7 +207,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
         <div className="flex items-center gap-2">
           <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800" title="Refresh"><RefreshCw size={16} /></button>
           {isAdmin && (
-            <button onClick={() => setCreating((v) => !v)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm">
+            <button onClick={() => { if (creating) setFromLine(null); setCreating((v) => !v); }} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm">
               {creating ? <X size={14} /> : <Plus size={14} />} {creating ? 'Cancel' : 'Record Round'}
             </button>
           )}
@@ -202,6 +218,13 @@ export default function PortfolioPositionsPage({ embedded = false }) {
 
       {isAdmin && creating && (
         <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          {fromLine && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-800 dark:text-violet-200 text-xs" data-testid="position-from-line">
+              Recording the position for the closing line <strong>{fromLine.label || 'Not recorded'}</strong>
+              {fromLine.amount_cents != null && fromLine.currency && formatMinor(fromLine.amount_cents, fromLine.currency) ? <> · received {formatMinor(fromLine.amount_cents, fromLine.currency)}</> : null}.
+              {fromLine.currency && fromLine.currency !== 'USD' ? ' This form records dollars, so the amount is left for you to fill.' : ''} Saving links the position to this line.
+            </div>
+          )}
           {prefillName && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs">
               Prefilled from the IC decision for <strong>{prefillName}</strong>. Fill in the economics to record the position.
