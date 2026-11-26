@@ -78,6 +78,7 @@ test('the decision card explains a missing roster and keeps one row per recorded
   const unread = html(h(DecisionCard, { decision: { ...OPEN, roster: undefined } }));
   assert.match(unread, /<dt>Eligible voters<\/dt><dd[^>]*><span[^>]*>Unavailable<\/span><\/dd>/);
   assert.match(unread, /<dt>To vote<\/dt><dd[^>]*><span[^>]*>Unavailable<\/span><\/dd>/);
+  assert.doesNotMatch(unread, /No voting roster is set/);
   assert.match(out, /Partner.*Vote.*Rationale.*Recorded/s);
   assert.match(out, /7 Nov 2026, 10:12/);
   // An abstention with no reason reads Not recorded, not blank.
