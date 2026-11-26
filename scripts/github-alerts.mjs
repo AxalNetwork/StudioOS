@@ -9,6 +9,7 @@
  *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL;
  *                                                  failing test names to the job log and GITHUB_STEP_SUMMARY only (D7124)
  *   node scripts/github-alerts.mjs queue-stalled   (reads merge_group runs, their jobs and `ci-failure-id` annotations: checks: read, D7125)
+ *   node scripts/github-alerts.mjs ops-schedules   (reads the D1 backup, magic-link probe and admin drift runs: actions: read, D8754)
  *
  * Always: GITHUB_TOKEN (issues: write for the three alert kinds; actions: read
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
@@ -21,6 +22,7 @@ import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
 import { createHealthMonitor, runSource } from './health-alert-episodes.mjs';
 import { webhookDelivery } from './health-alert-transport.mjs';
 import { fileRecoveryHealth, latestFileSnapshotRun } from './lib/fileRecoveryHealth.mjs';
+import { WATCHED, opsScheduleHealth, workflowHealth } from './lib/opsScheduleHealth.mjs';
 import { futureClockReport } from './future-clock-report.mjs';
 import { breakDate, futureClockLogLines, futureClockSummary, withFutureClockRunLine } from './lib/futureClockNames.mjs';
 
@@ -133,6 +135,29 @@ async function main() {
       observation, latestRun, now: Date.now() });
     if (state.active === null) process.exitCode = 1;
     return apply('file-backup', state.active, { ...state, backupReason: state.reason, runUrl: safeGithubUrl(latestRun?.html_url) }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
+  }
+  if (mode === 'ops-schedules') {
+    // D8754: GitHub's run records only (actions: read). An unreadable listing is no observation, never a recovery.
+    const now = Date.now();
+    const results = [];
+    for (const spec of WATCHED) {
+      let runs = null, failedSteps = null;
+      try {
+        const listing = await gh(`/repos/${repo}/actions/workflows/${spec.workflow}/runs?branch=main&per_page=30`);
+        runs = Array.isArray(listing?.workflow_runs) ? listing.workflow_runs : null;
+        const finished = runs?.find(run => ['schedule', 'workflow_dispatch'].includes(run.event) && run.status === 'completed');
+        if (finished?.conclusion === 'failure') {
+          const jobs = await gh(`/repos/${repo}/actions/runs/${finished.id}/jobs?per_page=50`);
+          failedSteps = Array.isArray(jobs?.jobs) ? jobs.jobs.flatMap(j => (j.steps || []).filter(st => st.conclusion === 'failure').map(st => String(st.name))) : null;
+        }
+      } catch (error) { console.log(JSON.stringify({ event: 'ops_schedule_unreadable', workflow: spec.workflow, error: String(error.message) })); }
+      results.push(workflowHealth(spec, runs, failedSteps, now));
+    }
+    const state = opsScheduleHealth(results);
+    console.log(JSON.stringify({ event: 'ops_schedule_state', active: state.active, reasons: state.reasons, workflows: state.workflows, ageHours: state.ageHours }));
+    if (state.active === null) process.exitCode = 1;
+    return apply('ops-schedules', state.active, { opsReasons: state.reasons, opsWorkflows: state.workflows, ageHours: state.ageHours ?? undefined },
+      runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
   if (mode === 'queue-deadline') {
     const warnShare = parseDeadlineWarnShare(env.QUEUE_DEADLINE_WARN_SHARE);
