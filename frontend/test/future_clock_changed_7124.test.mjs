@@ -13,6 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -22,6 +23,7 @@ import {
   breakDate, futureClockLogLines, futureClockSummary, repoTestPath, safeTestName, tapFailures, withFutureClockRunLine,
 } from '../../scripts/lib/futureClockNames.mjs';
 import { verifiedFailures } from '../../scripts/future-clock-report.mjs';
+import { assessFutureClock } from '../../scripts/lib/futureClockEvidence.mjs';
 import { message } from '../../scripts/lib/githubAlerts.mjs';
 import { safeHealthFacts } from '../../scripts/health-alert-episodes.mjs';
 
@@ -258,6 +260,28 @@ test('the reporter lists failures from verified parts only, each with its part',
   assert.deepEqual(verifiedFailures(blobs, { discrepancies: ['artifact_corrupt:worker-1-of-6', 'missing:worker-3-of-6', 'unexpected_or_duplicate_artifact'] }), [
     { part: 'frontend-1-of-2', file: 'frontend/test/x.test.mjs', test: 'expired' },
   ]);
+});
+
+test('a part whose only doubt is tests_not_executed and that exited non-zero is named, because its failures are counted', () => {
+  // 2026-11-25 nightly 45604894738: failed:1 came from a part read as tests_not_executed, and the log named nothing.
+  // Mutations checked: the partial set folded back into the doubted set → no name; the exit-code test dropped → the
+  // exit-0 part is named.
+  const sha = 'a'.repeat(40), runId = '45604894738', expected = ['frontend-1-of-2', 'frontend-2-of-2', 'worker-1-of-6'];
+  const tapOf = (file) => `TAP version 13\nnot ok 1 - expired\n  ---\n  type: 'test'\n  location: '/w/${file}:3:1'\n  ...\nok 2 - not run here # SKIP\n1..2\n# tests 2\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 1\n# todo 0\n# duration_ms 10\n`;
+  const blob = (part, file, exitCode) => {
+    const tap = tapOf(file);
+    return { part, tap, manifest: { schema: 1, part, runId, attempt: 1, sha, days: 7, exitCode, bytes: Buffer.byteLength(tap), sha256: createHash('sha256').update(tap).digest('hex') } };
+  };
+  const blobs = [blob('frontend-1-of-2', 'frontend/test/z.test.mjs', 0), blob('frontend-2-of-2', 'frontend/test/x.test.mjs', 1)];
+  const jobs = expected.map(part => ({ name: `future clock (${part})`, status: 'completed', conclusion: 'success', steps: [{ name: 'Run the part 7 days ahead', status: 'completed', conclusion: 'success' }] }));
+  const evidence = assessFutureClock({ expected, blobs, jobs, runId, attempt: 1, sha });
+  assert.deepEqual(evidence.discrepancies, ['tests_not_executed:frontend-1-of-2', 'tests_not_executed:frontend-2-of-2', 'missing:worker-1-of-6']);
+  assert.equal(evidence.failed, 1, 'only the part that exited non-zero is counted');
+  const named = verifiedFailures(blobs, evidence);
+  assert.deepEqual(named, [{ part: 'frontend-2-of-2', file: 'frontend/test/x.test.mjs', test: 'expired' }]);
+  assert.equal(named.length, evidence.failed, 'the alert count and the names agree');
+  // A doubted part is still never named, whatever its exit code.
+  assert.deepEqual(verifiedFailures(blobs, { discrepancies: ['artifact_corrupt:frontend-2-of-2'] }).map(f => f.part), ['frontend-1-of-2']);
 });
 
 test('job log and step summary carry names and the reproduce command; the alert text carries the break date and no name', () => {

@@ -40,7 +40,8 @@ The rules for adding to this folder:
   is NULL is never landed again, by a resync or a backfill.
 - **Absence is not deletion.** Only `reconcileTypeformDeletions`, by two
   explicit id lookups an hour or more apart, marks a response
-  `provider_deleted`.
+  `provider_deleted`. One run is bounded (`reconcileLookupsPerRun`)
+  and keeps its place in `reconcile_after_id`; nothing here schedules it.
 - **The binding is the only selection.** No code here picks a form; a sync
   row the binding does not name is `not_selected` and never read.
 - **The checkpoint moves only after a whole page is written,** forward only,

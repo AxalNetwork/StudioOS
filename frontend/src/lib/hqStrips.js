@@ -50,6 +50,8 @@ export const HQ_STRIPS = {
     ['Storage', '/admin/platform/storage', 'Infrastructure'],
     // #3588: the meeting-bot runs and Diagnose Eadwyn AI had no strip link, only a card the owner could not find.
     ['Meeting bots', '/admin/platform/meeting-bots', 'Infrastructure'],
+    // D5580 part 5 (#5580): the WorkGraph, at the owner's route A outside /admin/platform.
+    ['WorkGraph', '/admin/workgraph/in-flight', 'Infrastructure'],
     // D938 (#2743): Payments, Bank accounts, Product testing and Promo codes left the Admin Console for Platform's own addresses.
     ['Payments', '/admin/platform/payments', 'Payments'],
     ['Bank accounts', '/admin/platform/bank-accounts', 'Payments'],

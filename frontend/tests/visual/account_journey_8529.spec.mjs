@@ -59,6 +59,16 @@ for (const width of [1440, 390]) {
     const A = await contextFor(browser, width, j.a);
     const B = await contextFor(browser, width);
     try {
+      // D8691 (#8691): both accounts finished onboarding, the Terms included. Reading the trust record seeds what an
+      // account owes, as the Account page's trust strip does at 1440px; after it neither account owes the Terms, so
+      // no page of the journey can be replaced by the terms screen, at either width, however long a page lives.
+      for (const who of [j.a, j.b]) {
+        const headers = { Authorization: `Bearer ${who.token}` };
+        expect((await request.get('/api/trust/me', { headers })).status(), 'the trust record reads').toBe(200);
+        const me = await (await request.get('/api/auth/me', { headers })).json();
+        expect(me.terms_acceptance_pending, `${who.user.email} owes no acceptance of the Terms`).toBe(false);
+      }
+
       // 1. A creates a company, a project inside it and a standalone project.
       const created = await asA(A.context, j, 'POST', '/api/company/create', { company_name: `Journey Company ${width}` });
       const company = created.company ?? created;
@@ -127,6 +137,7 @@ for (const width of [1440, 390]) {
       await asA(A.context, j, 'DELETE', `/api/projects/${soloId}/members/${j.b.user.id}`);
       await B.page.goto(`/projects/${soloId}/settings`);
       await expect(B.page.getByRole('alert')).toContainText('could not be read', { timeout: 60_000 });
+      await expect(B.page.getByTestId('project-settings-no-access'), 'a refusal, not a failed read').toHaveAttribute('data-no-access', 'true');
       await expect(B.page.getByTestId('project-settings-general')).toHaveCount(0);
     } finally { await A.context.close(); await B.context.close(); }
   });

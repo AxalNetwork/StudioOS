@@ -17,6 +17,9 @@
  *     binding, one row active at a time, history kept per form, and a
  *     stopped form proposes no review (D5829).
  *  4. A lost binding, a revoked grant, a refresh in progress and a backfill.
+ *  5. D5828 part 4: the deletion-reconcile trigger, behind the same gate
+ *     (the binding member only), asks Typeform by id, concludes a deletion
+ *     only on a second miss an hour later, and is on the activity log.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -70,6 +73,7 @@ function fakeTypeform() {
   const s = {
     items: { [FORM_A]: [response('RespA1', 30, 'chYes'), response('RespA2', 20, 'chNo'), response('RespA3', 10, 'chYes')], [FORM_B]: [response('RespB1', 5, 'chYes')] } as Record<string, any[]>,
     status: 0,
+    gone: new Set<string>(),
     calls: [] as Array<{ origin: string; path: string; query: URLSearchParams; auth: string }>,
   };
   const fetch = (async (input: any, init: any = {}) => {
@@ -83,7 +87,9 @@ function fakeTypeform() {
     const m = /^\/forms\/([A-Za-z0-9]+)(\/responses)?$/.exec(url.pathname);
     if (!m || !s.items[m[1]]) return Response.json({ code: 'FORM_NOT_FOUND' }, { status: 404 });
     if (!m[2]) return Response.json(formDef(m[1]));
-    let list = [...s.items[m[1]]].sort((a, b) => Date.parse(a.submitted_at) - Date.parse(b.submitted_at));
+    let list = [...s.items[m[1]]].filter((it) => !s.gone.has(it.response_id)).sort((a, b) => Date.parse(a.submitted_at) - Date.parse(b.submitted_at));
+    const ids = url.searchParams.get('included_response_ids');
+    if (ids) list = list.filter((it) => ids.split(',').includes(it.response_id));
     const since = url.searchParams.get('since');
     if (since) list = list.filter((it) => Date.parse(it.submitted_at) >= Date.parse(since));
     const after = url.searchParams.get('after');
@@ -290,4 +296,60 @@ test('4. a lost binding, a revoked grant, a refresh in progress and no recorded 
   assert.equal(busy.outcome, 'busy');
   assert.equal(w.syncs()[0].sync_state, state);
   assert.equal((w.db.prepare('SELECT lease_owner FROM typeform_form_syncs').get() as any).lease_owner, null, 'the lease is released');
+});
+
+test('5. D5828 part 4: the reconcile trigger has the sync gate unchanged, asks by id only, and concludes a deletion on the second miss an hour on', async () => {
+  const RECONCILE = `${SYNC}/reconcile`;
+  const dark = await world({ TYPEFORM_APP_APPROVED: '' });
+  const off = await dark.call(OWNER, 'POST', RECONCILE, { project: PROJECT });
+  assert.deepEqual([off.status, off.body.error], [503, 'typeform_unavailable']);
+
+  const w = await world();
+  assert.equal((await w.call(null, 'POST', RECONCILE, { project: PROJECT })).status, 401);
+  const cases: Array<[string, Promise<any>, number, string]> = [
+    ['stranger', w.call(STRANGER, 'POST', RECONCILE, { project: PROJECT }), 403, 'forbidden'],
+    ['reader', w.call(ADVISOR, 'POST', RECONCILE, { project: PROJECT }), 403, 'read_only'],
+    ['teammate whose connection does not hold the binding', w.call(TEAMMATE, 'POST', RECONCILE, { project: PROJECT }), 403, 'not_your_binding'],
+    ['support session', w.call(OWNER, 'POST', RECONCILE, { project: PROJECT }, { impersonated_by: 1 }), 403, 'support_session_refused'],
+    ['unbound venture', w.call(OWNER, 'POST', RECONCILE, { project: UNBOUND }), 409, 'not_bound'],
+    ['no venture', w.call(OWNER, 'POST', RECONCILE, {}), 400, 'project_required'],
+  ];
+  for (const [name, p, status, code] of cases) {
+    const r = await p;
+    assert.deepEqual([r.status, r.body?.error], [status, code], name);
+  }
+  w.db.exec("UPDATE typeform_form_bindings SET access_state = 'lost', lost_reason = 'form_deleted'");
+  assert.deepEqual([(await w.call(OWNER, 'POST', RECONCILE, { project: PROJECT })).body.error], ['binding_lost']);
+  w.db.exec("UPDATE typeform_form_bindings SET access_state = 'ok', lost_reason = NULL");
+  assert.equal(dark.tf.calls.length + w.tf.calls.length, 0, 'no refusal reached Typeform');
+  assert.deepEqual(w.syncs(), [], 'no refusal created a sync row');
+
+  await run(w);
+  w.tf.gone.add('RespA2');
+  const before = w.tf.calls.length;
+  const first = await w.call(OWNER, 'POST', RECONCILE, { project: PROJECT });
+  assert.equal(first.status, 200, first.text);
+  assert.deepEqual([first.body.outcome, first.body.result.checked, first.body.result.missing_once, first.body.result.provider_deleted], ['ok', 3, 1, 0]);
+  const lookups = w.tf.calls.slice(before);
+  assert.deepEqual(lookups.map((c) => [c.origin, c.path, c.query.get('included_response_ids'), c.query.get('since'), c.query.get('after')]),
+    [[ORIGIN.eu, `/forms/${FORM_A}/responses`, 'RespA1,RespA2,RespA3', null, null]], 'one lookup by id on the EU origin, never a page read');
+  assert.deepEqual([first.body.status.completed, first.body.status.provider_deleted, first.body.status.reconcile_in_progress], [3, 0, false], 'one miss deletes nothing');
+  assert.match(first.body.status.last_reconciled_at, /^\d{4}-\d{2}-\d{2}T/);
+
+  const soon = await w.call(OWNER, 'POST', RECONCILE, { project: PROJECT });
+  assert.deepEqual([soon.body.result.provider_deleted, soon.body.status.completed], [0, 3], 'a second miss within the hour concludes nothing');
+  assert.equal(w.db.prepare("SELECT 1 FROM activity_logs WHERE action = 'typeform_provider_deletions_reconciled'").get(), undefined);
+
+  const hourAgo = new Date(Date.now() - 2 * 3600_000).toISOString(); // clock-ok: relative
+  w.db.prepare("UPDATE typeform_responses SET upstream_missing_at = ? WHERE response_id = 'RespA2'").run(hourAgo);
+  const second = await w.call(OWNER, 'POST', RECONCILE, { project: PROJECT });
+  assert.deepEqual([second.body.outcome, second.body.result.provider_deleted, second.body.status.completed, second.body.status.provider_deleted], ['ok', 1, 2, 1]);
+  assert.equal((w.db.prepare("SELECT status FROM typeform_responses WHERE response_id = 'RespA2'").get() as any).status, 'provider_deleted');
+  assert.ok(w.db.prepare("SELECT 1 FROM activity_logs WHERE action = 'typeform_provider_deletions_reconciled' AND project_id = ?").get(PROJECT), 'the deletion is on the activity log');
+  // A resync does not bring the deleted response back, and the teammate still cannot run it.
+  assert.deepEqual([(await run(w)).body.status.completed], [2]);
+  assert.equal((await w.call(TEAMMATE, 'POST', RECONCILE, { project: PROJECT })).body.error, 'not_your_binding');
+
+  for (const r of [first, soon, second]) noLeak(r.text);
+  noLeak(w.logs.join('\n'));
 });

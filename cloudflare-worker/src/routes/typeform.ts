@@ -8,6 +8,7 @@
  *   POST   /api/typeform/form/check               { project } re-verify the binding's access now
  *   GET    /api/typeform/sync?project=            the bound form's import status (D5828 part 2)
  *   POST   /api/typeform/sync                     { project, backfill? } run one import of the bound form now
+ *   POST   /api/typeform/sync/reconcile           { project } run one bounded deletion-reconcile pass step (D5828 part 4)
  *
  * One form per venture, chosen explicitly, through one member's own `typeform`
  * connection switched on for the venture's company. A binding another member's
@@ -28,6 +29,12 @@
  * (`services/typeform/live.ts`). The answer carries the run's outcome, the
  * counts and the mapped fields that need remapping (their ids and status
  * only, D5828 part 3): never a token, a title, a respondent or an answer.
+ *
+ * RECONCILE (D5828 part 4, `decisions/D5828-p4.md`). The same gate as the
+ * import, unchanged: only the binding member. One call asks Typeform about a
+ * bounded slice of the held response ids by id and continues the pass where
+ * the last call stopped; a response is marked deleted only after two misses
+ * an hour apart (part 1). Nothing schedules it.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -42,7 +49,7 @@ import { TYPEFORM_KEY, typeformSession } from '../integrations/providers/typefor
 import {
   TypeformError, getTypeformForm, isFormId, listTypeformForms, type TypeformField,
 } from '../integrations/typeformOAuth';
-import { requestTypeformBackfill, syncTypeformForm, typeformFormStatus } from '../services/typeform/importer';
+import { reconcileTypeformDeletions, requestTypeformBackfill, syncTypeformForm, typeformFormStatus } from '../services/typeform/importer';
 import { followTypeformBinding, selectedTypeformSync } from '../services/typeform/selection';
 import { typeformImportDeps } from '../services/typeform/live';
 
@@ -320,6 +327,25 @@ r.post('/sync', handle(async (c, user) => {
   }
   const result = await syncTypeformForm(c.env, typeformImportDeps(c.env, row), { ...scope, formId: selected.formId });
   if (result.outcome !== 'ok' && result.outcome !== 'partly') console.warn('[typeform] import stopped', { outcome: result.outcome });
+  const status = await typeformFormStatus(c.env, scope, selected.formId);
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ok: true, project_id: venture.id, outcome: result.outcome, result, status });
+}));
+
+// ---------------------------------------------------------------------------
+// D5828 part 4 — the deletion-reconcile trigger
+// ---------------------------------------------------------------------------
+
+r.post('/sync/reconcile', handle(async (c, user) => {
+  const b = await body(c);
+  const { venture, row, mine, binding } = await syncOwner(c, user, b.project);
+  if (binding.access_state !== 'ok') throw new Refused(409, 'binding_lost');
+  const selected = await followTypeformBinding(c.env, venture.id);
+  if (!selected || selected.integrationId !== mine) throw new Refused(409, 'not_bound');
+  const scope = { integrationId: mine, projectId: venture.id };
+  const result = await reconcileTypeformDeletions(c.env, typeformImportDeps(c.env, row), { ...scope, formId: selected.formId });
+  if (result.outcome !== 'ok' && result.outcome !== 'partly') console.warn('[typeform] reconcile stopped', { outcome: result.outcome });
+  if (result.provider_deleted > 0) await logBinding(c.env, Number(user.id), 'typeform_provider_deletions_reconciled', venture.id);
   const status = await typeformFormStatus(c.env, scope, selected.formId);
   c.header('Cache-Control', 'no-store');
   return c.json({ ok: true, project_id: venture.id, outcome: result.outcome, result, status });
