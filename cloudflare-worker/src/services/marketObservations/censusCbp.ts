@@ -192,7 +192,9 @@ export async function ingestCensusCbp(env: Env, raw: unknown, cursor?: unknown):
       const archive = await providerArchive(fileUrl(params.year));
       let text: string;
       try {
-        const entry = await readZipEntry(archive.bytes, new RegExp(`^cbp${String(params.year).slice(2)}us\\.txt$`, 'i'), CBP_IMPORT_LIMITS.file_bytes);
+        // A literal pattern, then the year checked on the name: the national archive holds one `cbp<yy>us.txt`.
+        const entry = await readZipEntry(archive.bytes, /^cbp\d{2}us\.txt$/i, CBP_IMPORT_LIMITS.file_bytes);
+        if (entry.name.slice(3, 5) !== String(params.year).slice(2)) throw new ImportFailure('provider_payload');
         text = new TextDecoder('latin1').decode(entry.bytes);
       } catch (error) {
         if (error instanceof ZipReadError) throw new ImportFailure('provider_payload');
