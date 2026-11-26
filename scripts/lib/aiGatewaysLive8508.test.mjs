@@ -50,7 +50,7 @@ function account({ gateways = ['advisor-ongoing', 'providers-gw', 'agents'], sec
 
 const state = (r, kind, name) => r.items.find((i) => i.kind === kind && i.name === name)?.state;
 
-test('every item present: states only, nothing stops, undecided or unread', async () => {
+test('every item present: states only, nothing stops, warns or is unread', async () => {
   const plan = livePlan(toml(), 'env.production.vars');
   const { request, calls } = account();
   const r = await readLiveState(plan, { request });
@@ -59,13 +59,13 @@ test('every item present: states only, nothing stops, undecided or unread', asyn
     ['binding', TOKEN_BINDING, 'present'],
     ['alias', 'claude-primary', 'present'], ['alias', 'claude-2', 'present'], ['alias', 'openai-codex', 'present'],
   ]);
-  assert.deepEqual([r.stops, r.undecided, r.unread], [[], [], []]);
+  assert.deepEqual([r.stops, r.warnings, r.unread], [[], [], []]);
   // One read per gateway, one for the secret names, one page of provider configs: bounded and in order.
   assert.deepEqual(calls, ['ai-gateway/gateways/advisor-ongoing', 'ai-gateway/gateways/providers-gw', 'ai-gateway/gateways/agents',
     'workers/scripts/studioos/secrets', 'ai-gateway/gateways/agents/provider_configs?per_page=100&page=1']);
 });
 
-test('the 2026-11-25 audit shape: the Advisor gateway 404 is undecided, a missing token binding stops a switched-on engine', async () => {
+test('the 2026-11-25 audit shape: the Advisor gateway 404 warns, a missing token binding stops a switched-on engine', async () => {
   // Mutations checked: fallbackOnly dropped → the Advisor's 404 stops the release; the `on` test dropped → a
   // switched-off engine's missing binding stops it; `missing` for a secret list without the name read as present.
   const plan = livePlan(toml(), 'env.production.vars');
@@ -73,13 +73,13 @@ test('the 2026-11-25 audit shape: the Advisor gateway 404 is undecided, a missin
   assert.equal(state(r, 'gateway', 'advisor-ongoing'), STATES.missing);
   assert.equal(state(r, 'binding', TOKEN_BINDING), STATES.missing);
   assert.deepEqual(r.stops, [`binding ${TOKEN_BINDING}`]);
-  assert.deepEqual(r.undecided, ['gateway advisor-ongoing']);
+  assert.deepEqual(r.warnings, ['gateway advisor-ongoing']);
   assert.deepEqual(FALLBACK_ROUTES, ['advisor', 'deck']);
-  // The same states with the engine off: reported, nothing stops (only the Advisor stays undecided).
+  // The same states with the engine off: reported, nothing stops (only the Advisor warns).
   const off = await readLiveState(livePlan(toml({ AGENT_ENGINE: 'off' }), 'env.production.vars'),
     { request: account({ gateways: ['providers-gw'], secrets: [], configs: [] }).request });
   assert.deepEqual(off.stops, []);
-  assert.deepEqual(off.undecided, ['gateway advisor-ongoing']);
+  assert.deepEqual(off.warnings, ['gateway advisor-ongoing']);
   assert.ok(off.items.filter((i) => i.routes.includes('agents')).every((i) => i.on === false && i.state === STATES.missing));
   assert.match(liveSummaryLines(off).join('\n'), /gateway agents \(agents, switched off\): missing/);
 });
@@ -179,5 +179,80 @@ test('the verdict alone: missing on a shared fallback-and-on route stops, unread
     { kind: 'gateway', name: 'advisor-ongoing', routes: ['advisor'], on: true, state: STATES.missing },
     { kind: 'gateway', name: 'agents', routes: ['agents'], on: true, state: STATES.unread },
   ];
-  assert.deepEqual(liveVerdict(items), { stops: ['gateway shared'], undecided: ['gateway advisor-ongoing'], unread: ['gateway agents'] });
+  assert.deepEqual(liveVerdict(items), { stops: ['gateway shared'], warnings: ['gateway advisor-ongoing'], unread: ['gateway agents'] });
+});
+
+/* ---------------------------------------------- the release-preflight CLI, scripts/check-ai-gateways-live.mjs */
+
+const SRC = Object.fromEntries(['cloudflare-worker/src/services/ai/catalogue.ts', 'cloudflare-worker/src/services/aiProviders.ts', 'cloudflare-worker/src/services/agents/agentRun.ts']
+  .map((p) => [p, readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8')]));
+
+/** A fake fetch over `account()`'s answers, recording what it was asked. */
+function fakeFetch(acct) {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push({ url: String(url), init });
+    const prefix = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/`;
+    const a = await acct.request(String(url).slice(prefix.length));
+    return { status: a?.status ?? 500, json: async () => { if (typeof a?.body !== 'object' || a.body === null) throw new Error('not json'); return a.body; } };
+  };
+  return { fetchImpl, seen };
+}
+
+test('the CLI transport: one bounded GET under the account with the bearer token; no credential, no call', async () => {
+  const { cloudflareRequest } = await import('../check-ai-gateways-live.mjs');
+  const { fetchImpl, seen } = fakeFetch(account());
+  const req = cloudflareRequest({ account: ACCOUNT, token: ` ${TOKEN} `, fetchImpl });
+  assert.deepEqual(await req('ai-gateway/gateways/agents'), ok({ id: 'agents', cache_ttl: 0 }));
+  assert.equal(seen[0].url, `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai-gateway/gateways/agents`);
+  assert.deepEqual([seen[0].init.method, seen[0].init.headers.Authorization, seen[0].init.redirect], ['GET', `Bearer ${TOKEN}`, 'error']);
+  assert.ok(seen[0].init.signal instanceof AbortSignal);
+  // A body that is not JSON comes back as null, which the adapter reads as "could not be read".
+  const bad = cloudflareRequest({ account: ACCOUNT, token: TOKEN, fetchImpl: async () => ({ status: 200, json: async () => { throw new Error('html'); } }) });
+  assert.deepEqual(await bad('x'), { status: 200, body: null });
+  for (const creds of [{ account: ACCOUNT, token: '' }, { account: 'not-an-account', token: TOKEN }, { account: undefined, token: undefined }]) {
+    let called = false;
+    assert.equal(await cloudflareRequest({ ...creds, fetchImpl: async () => { called = true; } })('x'), null);
+    assert.equal(called, false);
+  }
+});
+
+test('the CLI on the audit shape: a missing token binding stops (exit 1), a missing Advisor gateway only warns, nothing leaks', async () => {
+  // Mutations checked: warnings annotated as errors → the Advisor line reads ::error; the exit status taken from
+  // warnings → exit 1 on a warning alone.
+  const { runLiveCheck } = await import('../check-ai-gateways-live.mjs');
+  const out = []; const notes = []; let summary = '';
+  const env = { CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN };
+  const { fetchImpl } = fakeFetch(account({ gateways: ['providers-gw', 'agents'], secrets: [] }));
+  const { status } = await runLiveCheck({ toml: toml(), src: SRC, env, fetchImpl, log: (s) => out.push(s), annotate: (s) => notes.push(s), summary: (t) => { summary += t; } });
+  assert.equal(status, 1);
+  assert.deepEqual(notes, [
+    `::error title=AI gateway (D8508)::binding ${TOKEN_BINDING} is missing on a switched-on route; the release stops`,
+    '::warning title=AI gateway (D8508)::gateway advisor-ongoing is missing; its route runs without a gateway (owner answer A, #8508)',
+  ]);
+  assert.match(summary, /\| gateway \| `advisor-ongoing` \| advisor \| on \| missing \|/);
+  assert.match(summary, /\*\*Stops the release:\*\* binding AGENT_AI_GATEWAY_TOKEN/);
+  const all = out.join('\n') + notes.join('\n') + summary;
+  for (const marker of [ACCOUNT, TOKEN, 'Bearer', 'api.cloudflare.com']) assert.ok(!all.includes(marker), marker);
+  // The Advisor alone missing: a warning, exit 0.
+  const warnOnly = await runLiveCheck({ toml: toml(), src: SRC, env, fetchImpl: fakeFetch(account({ gateways: ['providers-gw', 'agents'] })).fetchImpl, log: () => {}, annotate: () => {} });
+  assert.deepEqual([warnOnly.status, warnOnly.result.warnings], [0, ['gateway advisor-ongoing']]);
+});
+
+test('the CLI with a token that cannot read AI Gateway (403) or no credential at all: every item unread, a warning, exit 0', async () => {
+  const { runLiveCheck } = await import('../check-ai-gateways-live.mjs');
+  const denied = fakeFetch(account({ override: () => ({ status: 403, body: { success: false } }) }));
+  for (const [env, fetchImpl] of [[{ CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN }, denied.fetchImpl], [{}, async () => { throw new Error('must not be called'); }]]) {
+    const notes = [];
+    const { status, result } = await runLiveCheck({ toml: toml(), src: SRC, env, fetchImpl, log: () => {}, annotate: (s) => notes.push(s) });
+    assert.equal(status, 0);
+    assert.ok(result.items.every((i) => i.state === STATES.unread));
+    assert.equal(notes.length, 1);
+    assert.match(notes[0], /^::warning title=AI gateway \(D8508\)::could not be read: gateway advisor-ongoing/);
+  }
+  // On main's real wrangler.toml the engine is off, so even a missing agents gateway stops nothing.
+  const real = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
+  const nothing = await runLiveCheck({ toml: real, src: SRC, env: { CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN },
+    fetchImpl: fakeFetch(account({ gateways: [], secrets: [], configs: [] })).fetchImpl, log: () => {}, annotate: () => {} });
+  assert.deepEqual([nothing.status, nothing.result.stops, nothing.result.warnings], [0, [], ['gateway advisor-ongoing']]);
 });

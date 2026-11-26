@@ -10,12 +10,12 @@
  * States: `present`, `missing` (a 404, or a complete listing without the name), `could not be read` (401, 403,
  * 429, 5xx, a timeout, a network error, an answer that is not the expected JSON, or a listing longer than the
  * pages it reads). Only `missing` on a route that is switched on stops a release. The Advisor's and the deck's
- * gateways have a fallback, so a missing one is `undecided` until the owner answers A (warn) or B (stop) on #8508.
+ * gateways have a fallback: a missing one is a warning (owner answer A on #8508, 2026-11-26).
  *
  * Nothing here chooses a credential, calls the network or prints: `request(path)` is handed in and answers
  * `{ status, body }` for a path relative to the account. A result holds kinds, names from the table, states and
- * routes only: never a token, an account id, a path or an answer's text. No workflow calls this yet; wiring it
- * waits for the owner's choice of token and the Advisor answer (#8508).
+ * routes only: never a token, an account id, a path or an answer's text. `scripts/check-ai-gateways-live.mjs`
+ * drives it in the release preflight with the release token (owner answer A on #8508).
  */
 import { parseToml } from './branchConfig.mjs';
 
@@ -28,7 +28,7 @@ export const ALIAS_SLOTS = Object.freeze([
   { aliasVar: 'AGENT_CLAUDE_ALIAS_3', provider: 'anthropic' },
   { aliasVar: 'AGENT_OPENAI_ALIAS', provider: 'openai' },
 ]);
-/** Gateways whose route falls back without them: their missing state waits for the owner's A/B on #8508. */
+/** Gateways whose route falls back without them: missing is a warning, not a stop (owner answer A, #8508). */
 export const FALLBACK_ROUTES = Object.freeze(['advisor', 'deck']);
 export const TIMEOUT_MS = 10_000;
 export const MAX_PAGES = 5;
@@ -152,9 +152,9 @@ export async function readLiveState(plan, { request, timeoutMs = TIMEOUT_MS }) {
 }
 
 /**
- * What the states mean for a release. `stops`: missing on a route that is on and has no fallback. `undecided`:
- * missing on a fallback route (the Advisor's, the deck's), held for the owner's A/B on #8508; it neither passes nor
- * stops. `unread`: could not be read; reported, never a stop on its own.
+ * What the states mean for a release. `stops`: missing on a route that is on and has no fallback. `warnings`:
+ * missing on a fallback route (the Advisor's, the deck's), which then runs without its gateway (owner answer A on
+ * #8508). `unread`: could not be read; reported, never a stop on its own.
  */
 export function liveVerdict(items) {
   const label = (i) => `${i.kind} ${i.name}`;
@@ -162,7 +162,7 @@ export function liveVerdict(items) {
   const missing = items.filter((i) => i.state === STATES.missing);
   return {
     stops: missing.filter((i) => i.on && !fallbackOnly(i)).map(label),
-    undecided: missing.filter((i) => fallbackOnly(i)).map(label),
+    warnings: missing.filter((i) => fallbackOnly(i)).map(label),
     unread: items.filter((i) => i.state === STATES.unread).map(label),
   };
 }
@@ -171,7 +171,7 @@ export function liveVerdict(items) {
 export function liveSummaryLines(result) {
   const lines = result.items.map((i) => `${i.kind} ${i.name} (${i.routes.join(', ')}${i.on ? '' : ', switched off'}): ${i.state}`);
   if (result.stops.length) lines.push(`stops the release: ${result.stops.join(', ')}`);
-  if (result.undecided.length) lines.push(`undecided until the owner answers A or B on #8508: ${result.undecided.join(', ')}`);
+  if (result.warnings.length) lines.push(`missing, the route falls back without it (warning): ${result.warnings.join(', ')}`);
   if (result.unread.length) lines.push(`could not be read: ${result.unread.join(', ')}`);
   return lines;
 }

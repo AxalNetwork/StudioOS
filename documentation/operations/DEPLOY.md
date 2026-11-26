@@ -285,10 +285,31 @@ and fails, naming the file, the table and the key, when:
   `GATEWAY_TEXT_MODELS` or `AGENT_OPENAI_RATES`).
 
 It runs in `npm run test:guards` and as the release preflight step "Check AI
-gateway and agent settings". It reads files only: whether each gateway exists
-on the account and whether `AGENT_AI_GATEWAY_TOKEN` is bound is the live layer,
-which waits for the owner's decision on read access in #8508. To accept a new
-difference, add an `ALLOWED` entry with its reason in the same PR.
+gateway and agent settings". It reads files only. To accept a new difference,
+add an `ALLOWED` entry with its reason in the same PR.
+
+The next preflight step, "Check AI gateways and the agents token on the
+account" (`scripts/check-ai-gateways-live.mjs`, D8508-p2), is the live layer. It
+uses the release token, as the owner chose on #8508 (answer A), and makes
+read-only calls about `[env.production.vars]`:
+
+- does each AI Gateway the table names exist;
+- is `AGENT_AI_GATEWAY_TOKEN` bound to the Worker (checked by name only);
+- does each account alias resolve on the `agents` gateway.
+
+Each item is `present`, `missing` or `could not be read`. The release stops
+only when an item is `missing` on a route that is switched on:
+
+- the providers gateway, when `AI_PROVIDER_GATEWAY_OPENAI` is `on`;
+- the agents gateway, its token and its aliases, when `AGENT_ENGINE` is not
+  `off`.
+
+A missing Advisor or deck gateway only warns, because the route runs without
+it (owner answer A). `could not be read` also only warns. That is the state
+until the release token holds **AI Gateway Read** and **Workers Scripts Read**,
+which the owner grants in the Cloudflare dashboard. The step writes a table of
+states to the job summary. It never prints the token, the account id or what
+Cloudflare answered.
 
 ---
 
