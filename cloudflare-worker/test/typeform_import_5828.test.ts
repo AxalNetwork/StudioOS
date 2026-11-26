@@ -461,6 +461,59 @@ test('absence from a page deletes nothing; only two explicit lookups that miss a
   assert.equal((db.prepare("SELECT status, upstream_missing_at AS m FROM typeform_responses WHERE response_id = 'R02'").get() as any).m, null);
 });
 
+test('D5828 part 4: a reconcile run is bounded, keeps its place, reaches every held id once per pass, and resumes after a failure', async () => {
+  const { db, env } = world();
+  await mapDefault(env);
+  const fake = fakeTypeform({ items: HISTORY.map(item) });
+  await syncTypeformForm(env, deps(fake.fetch, T0), KEY);
+  const cursor = () => (db.prepare('SELECT reconcile_after_id AS c, last_reconciled_at AS l FROM typeform_form_syncs WHERE id = 1').get() as any);
+  const rowId = (rid: string) => Number((db.prepare('SELECT id FROM typeform_responses WHERE response_id = ?').get(rid) as any).id);
+  const asked = (from: number) => fake.state.calls.slice(from).map((u) => new URL(u).searchParams.get('included_response_ids')!.split(','));
+  // Two lookups of two ids per run: eleven held ids take three runs.
+  const small = (now: number, extra: Record<string, any> = {}) => deps(fake.fetch, now, { limits: { reconcileBatch: 2, reconcileLookupsPerRun: 2 }, ...extra });
+  fake.state.gone.add('R08');
+  let from = fake.state.calls.length;
+  const one = await reconcileTypeformDeletions(env, small(T0 + H), KEY);
+  assert.deepEqual([one.outcome, one.lookups, one.checked], ['partly', 2, 4]);
+  assert.deepEqual(asked(from), [['R01', 'R02'], ['R03', 'P01']]);
+  assert.deepEqual([cursor().c, cursor().l], [rowId('P01'), null], 'the cursor is where the run stopped; no pass has finished');
+  const mid = await typeformFormStatus(env, { integrationId: INTEGRATION, projectId: PROJECT }, FORM);
+  assert.deepEqual([mid!.reconcile_in_progress, mid!.last_reconciled_at], [true, null]);
+  from = fake.state.calls.length;
+  const two = await reconcileTypeformDeletions(env, small(T0 + H + 1), KEY);
+  assert.deepEqual([two.outcome, two.checked, two.missing_once], ['partly', 4, 0]);
+  assert.deepEqual(asked(from), [['R04', 'R05'], ['R06', 'R07']], 'the next run continues; it does not re-ask the first ids');
+  // The last run of the pass fails on its second lookup: the first lookup's place is kept.
+  from = fake.state.calls.length;
+  const failing = fakeTypeform({ items: HISTORY.map(item), faults: { 2: { status: 503 } } });
+  failing.state.gone.add('R08');
+  const failed = await reconcileTypeformDeletions(env, small(T0 + H + 2, { fetch: failing.fetch }), KEY);
+  assert.deepEqual([failed.outcome, failed.lookups, failed.missing_once], ['unreadable', 1, 1]);
+  assert.equal(cursor().c, rowId('R08'), 'the cursor moved only past the lookup whose writes resolved');
+  const three = await reconcileTypeformDeletions(env, small(T0 + H + 3), KEY);
+  assert.deepEqual([three.outcome, three.checked, three.missing_once], ['ok', 1, 0]);
+  assert.deepEqual(asked(from), [['R09']], 'the retry re-asks only what the failed run did not conclude');
+  assert.deepEqual([cursor().c, cursor().l], [null, new Date(T0 + H + 3).toISOString()], 'the pass finished: cursor cleared, time recorded');
+  // A new pass starts at the beginning; a second miss an hour on concludes the deletion.
+  from = fake.state.calls.length;
+  const runs = [];
+  for (let i = 0; i < 3; i += 1) runs.push(await reconcileTypeformDeletions(env, small(T0 + 3 * H + i), KEY));
+  assert.deepEqual(runs.map((r) => r.outcome), ['partly', 'partly', 'ok']);
+  assert.deepEqual(asked(from).flat(), ['R01', 'R02', 'R03', 'P01', 'R04', 'R05', 'R06', 'R07', 'P02', 'R08', 'R09'], 'every held id once per pass');
+  assert.equal(runs.reduce((n, r) => n + r.provider_deleted, 0), 1);
+  assert.equal((db.prepare("SELECT status FROM typeform_responses WHERE response_id = 'R08'").get() as any).status, 'provider_deleted');
+  // A run whose lease is taken over mid-pass (a stale lease, part 1) cannot move the cursor.
+  const stolen = async (url: string, init: any) => { db.prepare("UPDATE typeform_form_syncs SET lease_owner = 'another-run' WHERE id = 1").run(); return fake.fetch(url, init); };
+  await reconcileTypeformDeletions(env, small(T0 + 3 * H + 10, { fetch: stolen }), KEY);
+  assert.equal(cursor().c, null, 'only the run holding the lease moves the cursor');
+  db.prepare('UPDATE typeform_form_syncs SET lease_owner = NULL, lease_until = NULL WHERE id = 1').run();
+  // A pass after it skips the deleted id; the fixture can lower the bound but never raise it.
+  from = fake.state.calls.length;
+  const wide = await reconcileTypeformDeletions(env, deps(fake.fetch, T0 + 4 * H, { limits: { reconcileBatch: 1000, reconcileLookupsPerRun: 1000 } }), KEY);
+  assert.deepEqual([wide.outcome, wide.lookups, wide.checked], ['ok', 1, 10]);
+  assert.equal(new URL(fake.state.calls[from]).searchParams.get('page_size'), '25');
+});
+
 test('after throttling, a failed write, a late arrival and a resync the distinct completed count matches the fixture, and no identity reached storage or logs', async () => {
   const { db, env } = world();
   await mapDefault(env);

@@ -15,6 +15,8 @@
  *   8. The pure rule: what a render is, malformed swarm state, every reason distinct.
  *   9. The admin and reviewer context: swarm state is not read by default (no binding), so the routes behind
  *      WORK_GRAPH_RELEASE_ADMIN=on show `admission_unverified`; a resolver feeds the same evaluation.
+ *  10. Part 13 (D5585-p13): the default resolver reads the `WorkspaceAdmission` coordinator through
+ *      `swarmSnapshotFor`, for the scope's own venture; a coordinator that fails or refuses is `admission_unverified`.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/work_graph_release_renders_5585.test.ts
@@ -28,6 +30,7 @@ import {
 } from '../src/services/workGraphReleases.ts';
 import { RENDER_GAPS, renderAdmissionOf, renderModality, type RenderRevisionRow } from '../src/services/workGraphReleaseRenders.ts';
 import { RELEASE_ADMIN_DEPS, RELEASE_REFUSAL_SENTENCES, releaseAdminContext } from '../src/services/workGraphReleaseAdmin.ts';
+import { WORKSPACE_ADMISSION_OBJECT } from '../src/services/agents/workspaceAdmissionClient.ts';
 import { emptySwarmState, type SwarmState } from '../src/services/agents/swarmAdmission.ts';
 import {
   ALICE, BOB, CTX, SCOPE, attestAll, count, decision, hex, newLine, piece, publish, world, type Piece, type W,
@@ -125,7 +128,7 @@ test('1. admitted and settled within its reserve: approvable and publishable, wi
   assert.equal(byRole.website, null, 'code is not a render');
   for (const d of await approveAll(w, ctx, r.m, 'ok')) assert.ok(d.ok, JSON.stringify(d));
   // The separate render approval is tied to the same budgets, and records like any decision.
-  const render = await decideRelease(w.env, ctx, decision(r.m.manifestUid, r.m.digest, 'marketing', 'ok-render', { purpose: 'render' }));
+  const render = await decideRelease(w.env, ctx, decision(r.m.manifestUid, r.m.digest, 'marketing', 'ok-render', { purpose: 'render', renderCeilingMicrousd: 5_000_000 }));
   assert.ok(render.ok, JSON.stringify(render));
   const pub = await publish(w, r.line, r.m.manifestUid, null, 'pub-ok', ctx, [{ target: 'stream', ref: 'vid-campaign' }]);
   assert.ok(pub.ok, JSON.stringify(pub));
@@ -143,7 +146,7 @@ test('2. no swarm state passed: admission_unverified, refused at approval and at
   assert.deepEqual(!refused.ok && refused.ids, ids);
   assert.deepEqual([...ids].sort(), [r.m.manifestUid, r.video.asset, r.video.rev, 'admission_unverified', r.brand.asset, r.brand.rev, 'admission_unverified'].sort());
   for (const purpose of ['publish', 'render'] as const) {
-    const d = await decideRelease(w.env, CTX, decision(r.m.manifestUid, r.m.digest, 'code', `nv-${purpose}`, { purpose }));
+    const d = await decideRelease(w.env, CTX, decision(r.m.manifestUid, r.m.digest, 'code', `nv-${purpose}`, { purpose, ...(purpose === 'render' ? { renderCeilingMicrousd: 5_000_000 } : {}) }));
     assert.equal(!d.ok && d.code, 'render_unadmitted', purpose);
   }
   // Asking for changes is never blocked: only an approval needs the render admitted.
@@ -348,6 +351,56 @@ test('9. the admin context: swarm state is not read by default (no binding), and
     RELEASE_ADMIN_DEPS.renderAdmissions = async (_e, s) => { assert.deepEqual(s, scope); return snap; };
     const on = await releaseAdminContext(w.env, scope);
     assert.deepEqual(await gaps(w, on, r.m.manifestUid), []);
+  } finally {
+    Object.assign(RELEASE_ADMIN_DEPS, defaults);
+  }
+});
+
+/** A stand-in `WORKSPACE_ADMISSION` namespace: records each object name and request body, and answers `answer`. */
+function coordinator(answer: () => Response | Promise<Response>) {
+  const names: string[] = [], bodies: any[] = [];
+  const ns: any = {
+    idFromName: (n: string) => { names.push(n); return { name: n }; },
+    get: () => ({ fetch: async (_u: string, init: any) => { bodies.push(JSON.parse(init.body)); return answer(); } }),
+  };
+  return { ns, names, bodies };
+}
+
+test('10. part 13: the default resolver reads the coordinator for the scope\'s own venture; any failure is unverified', async () => {
+  const w = world();
+  const r = await renderRelease(w);
+  const scope = { tenantId: 7, companyId: 70, projectId: null };
+  const defaults = { ...RELEASE_ADMIN_DEPS };
+  RELEASE_ADMIN_DEPS.authorities = async () => CTX.authorities!;
+  RELEASE_ADMIN_DEPS.revokedUsers = async () => new Set<number>();
+  try {
+    const snap = await (await admittedSwarm(r)).swarm.snapshot();
+    const up = coordinator(() => Response.json({ ok: true, value: snap }));
+    const on = await releaseAdminContext({ ...w.env, WORKSPACE_ADMISSION: up.ns }, scope);
+    assert.deepEqual(on.renderAdmissions, snap);
+    assert.deepEqual(await gaps(w, on, r.m.manifestUid), []);
+    // One coordinator, asked only for this scope's venture, with the scope as the caller.
+    assert.deepEqual(up.names, [WORKSPACE_ADMISSION_OBJECT]);
+    assert.deepEqual(up.bodies, [{ op: 'swarm.snapshotFor', caller: { tenantId: 7, companyId: 70 }, args: [{ tenant_id: 7, company_id: 70 }] }]);
+
+    // Unreachable, unreadable, refusing or throwing: never admitted.
+    const failing = [
+      () => new Response('down', { status: 503 }),
+      () => Response.json({ nope: true }),
+      () => Response.json({ ok: false, code: 'wrong_tenant', message: 'no' }),
+      () => { throw new Error('stub lost'); },
+    ];
+    for (const answer of failing) {
+      const ctx = await releaseAdminContext({ ...w.env, WORKSPACE_ADMISSION: coordinator(answer).ns }, scope);
+      assert.equal(ctx.renderAdmissions, null);
+      assert.deepEqual((await gaps(w, ctx, r.m.manifestUid)).map((g) => g[1]), ['admission_unverified', 'admission_unverified']);
+    }
+    // A jurisdiction this Worker cannot use is refused before any stub, and is unverified too.
+    const bad = coordinator(() => Response.json({ ok: true, value: snap }));
+    bad.ns.jurisdiction = () => bad.ns;
+    const pinned = await releaseAdminContext({ ...w.env, WORKSPACE_ADMISSION: bad.ns, BRANCH_DO_JURISDICTION: 'mars' }, scope);
+    assert.equal(pinned.renderAdmissions, null);
+    assert.equal(bad.bodies.length, 0);
   } finally {
     Object.assign(RELEASE_ADMIN_DEPS, defaults);
   }

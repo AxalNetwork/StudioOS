@@ -37,9 +37,20 @@ export async function futureClockReport({ env, api }) {
   return { ...evidence, failures: verifiedFailures(blobs, evidence), startedAt: run.run_started_at || run.created_at || null };
 }
 
-/** D7124: the failing tests of the parts that verified (no discrepancy names them), each with its part; for the job log and summary only. */
+/**
+ * D7124: the failing tests of the parts that verified (no discrepancy names them), each with its part; for the job log
+ * and summary only. A part whose one discrepancy is `tests_not_executed` and whose manifest exited non-zero is kept
+ * too: `assessFutureClock` reaches that code only after the part's job, manifest and digest checked, and counts its
+ * failures in `failed` (`knownPartialFailures`), so the alert that count opens must be able to name them (#7124).
+ */
 export function verifiedFailures(blobs, evidence) {
-  const doubted = new Set(evidence.discrepancies.map(d => d.split(':').slice(1).join(':')).filter(Boolean));
-  return blobs.filter(b => b.part && b.part !== 'unexpected' && typeof b.tap === 'string' && !doubted.has(b.part))
+  const doubted = new Set(), partial = new Set();
+  for (const d of evidence.discrepancies) {
+    const [code, ...rest] = d.split(':');
+    const part = rest.join(':');
+    if (part) (code === 'tests_not_executed' ? partial : doubted).add(part);
+  }
+  const named = (b) => !doubted.has(b.part) && (!partial.has(b.part) || b.manifest?.exitCode > 0);
+  return blobs.filter(b => b.part && b.part !== 'unexpected' && typeof b.tap === 'string' && named(b))
     .flatMap(b => tapFailures(b.tap).map(f => ({ part: b.part, ...f })));
 }

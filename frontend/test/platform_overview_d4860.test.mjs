@@ -27,7 +27,7 @@ import test, { beforeEach } from 'node:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { waitUntil } from './_waitUntil.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { installAppDom, select } from './_appDom.mjs';
 import {
@@ -370,7 +370,10 @@ test('consoles are grouped by domain, routed, and Event syndication is Preview /
   const app = read('frontend/src/App.jsx');
   const routed = (to) => {
     const path = to.split('#')[0];
-    return app.includes(`path="${path}"`) || read('frontend/src/lib/hqStrips.js').includes(`'${path}'`);
+    // #4105: a new area's routes live in frontend/src/routes/*.jsx, collected by App.jsx's glob (D5580 part 5 links one).
+    const areaRoutes = readdirSync(new URL('../src/routes/', import.meta.url)).filter((f) => f.endsWith('.jsx'))
+      .some((f) => read(`frontend/src/routes/${f}`).includes(`path="${path}"`));
+    return app.includes(`path="${path}"`) || read('frontend/src/lib/hqStrips.js').includes(`'${path}'`) || areaRoutes;
   };
   for (const [group, links] of CONSOLE_GROUPS) {
     for (const [label, to] of links) assert.ok(routed(to), `${group} › ${label} links ${to}, which nothing routes`);

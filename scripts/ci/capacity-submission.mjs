@@ -63,8 +63,9 @@ export async function capacitySubmission(env=process.env,api){
   ||run.path!=='.github/workflows/ci.yml'||run.head_sha!==env.GITHUB_SHA||run.event!==(queue?'merge_group':'push')||run.head_branch!==(queue?ref[1]:'main')
   ||run.repository?.full_name!==REPOSITORY||run.head_repository?.full_name!==REPOSITORY
   ||run.repository?.id!==run.head_repository?.id)throw Error('capacity_submission_parent');
- // A push submits the plan its `plan` job uploaded. A queue candidate has no plan job (D7108 part 2): it submits the
- // equal-weight plan of its own checkout, the same bytes capacity-planner.mjs rebuilds from the candidate.
+ // A push submits the plan its `plan` job uploaded, which is the equal-weight plan of this commit (D8693): the bytes
+ // every hosted suite part writes and capacity-planner.mjs requires. A queue candidate has no plan job (D7108 part 2):
+ // it submits the equal-weight plan of its own checkout, the same bytes capacity-planner.mjs rebuilds from the candidate.
  const root=resolve(env.CAPACITY_SOURCE_ROOT??'.');
  const plan=queue?JSON.stringify(buildPlan(JSON.parse(plannerFile(resolve(root,'package.json'),256*1024)).scripts,{},root),null,2)+'\n'
   :plannerFile(env.CAPACITY_PLAN_FILE,8*1024*1024);

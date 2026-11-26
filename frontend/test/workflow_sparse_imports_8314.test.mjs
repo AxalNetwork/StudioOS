@@ -72,7 +72,7 @@ test('every script a sparse-checkout job runs finds each file it imports in that
 test('GitHub alerts: each job that runs github-alerts.mjs checks out merge-control/src/lib', () => {
   const jobs = sparseJobs(parse(readFileSync(resolve(ROOT, WORKFLOWS, 'github-alerts.yml'), 'utf8')));
   const running = jobs.filter((j) => j.scripts.includes('scripts/github-alerts.mjs'));
-  assert.deepEqual(running.map((j) => j.id).sort(), ['file-backup', 'future-clock', 'main-red', 'queue', 'queue-deadline', 'queue-stalled']);
+  assert.deepEqual(running.map((j) => j.id).sort(), ['file-backup', 'future-clock', 'main-red', 'ops-schedules', 'queue', 'queue-deadline', 'queue-stalled']);
   for (const j of running) assert.ok(j.sparse.includes('merge-control/src/lib'), j.id);
   assert.ok(importClosure('scripts/github-alerts.mjs').includes('merge-control/src/lib/classify.mjs'), 'the import this guards');
 });

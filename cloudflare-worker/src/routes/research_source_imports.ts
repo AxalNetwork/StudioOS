@@ -28,6 +28,8 @@ import {
 } from '../services/researchSourceImports';
 
 type C = Context<{ Bindings: Env }>;
+/** The context `researchImportGate` takes. */
+export type ResearchImportContext = C;
 const r = new Hono<{ Bindings: Env }>();
 
 /** Our sentence for each code this router sends. A code not listed reads the generic sentence. */
@@ -100,8 +102,15 @@ function refused(c: C, e: unknown): Response {
 
 const supportSession = async (c: C) => !!(await selectJwt(c))?.payload?.impersonated_by;
 
-/** Signed in, not a support session, then the gate handed in: `requireSuperAdmin` or `requireSuperAdminWriteBar`. */
-async function gate(c: C, check: (c: C) => Promise<User>): Promise<User | Response> {
+/**
+ * The Research imports gate, exported so a router on this prefix composes it rather than retyping it (#7746 imports
+ * it from `./research_source_imports`). Signed in, not a support session, then the check handed in:
+ * `requireSuperAdmin` for a read, `requireSuperAdminWriteBar` for a write. It answers the `User` when every check
+ * passes, otherwise the refusal `Response` to return as is: 401 signed out, 403 `support_session_refused` for a
+ * support session, and the check's own 403 (not a Super Admin, a branch deployment, no fresh step-up). Call it in the
+ * handler, `await researchImportGate(c, requireSuperAdmin)`, so the auth inventory reads the gate there.
+ */
+export async function researchImportGate(c: C, check: (c: C) => Promise<User>): Promise<User | Response> {
   try {
     await requireAuth(c);
     if (await supportSession(c)) return refuse(c, 403, { code: 'support_session_refused', message: REFUSAL_SENTENCES.support_session_refused });
@@ -126,7 +135,7 @@ const actorOf = (u: User) => Number((u as { id: number }).id);
 
 // Preview: writes nothing. A read, so `requireSuperAdmin`; POST because the ids and hashes travel in the body.
 r.post('/preview', async (c) => {
-  const user = await gate(c, requireSuperAdmin);
+  const user = await researchImportGate(c, requireSuperAdmin);
   if (user instanceof Response) return user;
   try {
     return c.json(await previewImport(c.env.DB, await jsonBody(c, IMPORT_LIMITS.MAX_PREVIEW_BYTES)));
@@ -134,13 +143,13 @@ r.post('/preview', async (c) => {
 });
 
 r.get('/runs', async (c) => {
-  const user = await gate(c, requireSuperAdmin);
+  const user = await researchImportGate(c, requireSuperAdmin);
   if (user instanceof Response) return user;
   try { return c.json(await listImportRuns(c.env.DB)); } catch (e) { return refused(c, e); }
 });
 
 r.get('/runs/:uid', async (c) => {
-  const user = await gate(c, requireSuperAdmin);
+  const user = await researchImportGate(c, requireSuperAdmin);
   if (user instanceof Response) return user;
   try {
     return c.json(await readImportRun(c.env.DB, c.req.param('uid'), Number(c.req.query('offset') ?? 0)));
@@ -148,7 +157,7 @@ r.get('/runs/:uid', async (c) => {
 });
 
 r.post('/runs', async (c) => {
-  const user = await gate(c, requireSuperAdminWriteBar);
+  const user = await researchImportGate(c, requireSuperAdminWriteBar);
   if (user instanceof Response) return user;
   try {
     await ensureAdminAuditLogTable(c.env);
@@ -158,7 +167,7 @@ r.post('/runs', async (c) => {
 });
 
 r.post('/runs/:uid/chunks', async (c) => {
-  const user = await gate(c, requireSuperAdminWriteBar);
+  const user = await researchImportGate(c, requireSuperAdminWriteBar);
   if (user instanceof Response) return user;
   try {
     return c.json(await sendChunk(c.env.DB, c.env, c.req.param('uid'), await c.req.text(), new Date()));
@@ -166,7 +175,7 @@ r.post('/runs/:uid/chunks', async (c) => {
 });
 
 r.post('/runs/:uid/seal', async (c) => {
-  const user = await gate(c, requireSuperAdminWriteBar);
+  const user = await researchImportGate(c, requireSuperAdminWriteBar);
   if (user instanceof Response) return user;
   try {
     await ensureAdminAuditLogTable(c.env);
@@ -175,7 +184,7 @@ r.post('/runs/:uid/seal', async (c) => {
 });
 
 r.post('/runs/:uid/reconcile', async (c) => {
-  const user = await gate(c, requireSuperAdminWriteBar);
+  const user = await researchImportGate(c, requireSuperAdminWriteBar);
   if (user instanceof Response) return user;
   try {
     await ensureAdminAuditLogTable(c.env);
@@ -184,7 +193,7 @@ r.post('/runs/:uid/reconcile', async (c) => {
 });
 
 r.post('/removals', async (c) => {
-  const user = await gate(c, requireSuperAdminWriteBar);
+  const user = await researchImportGate(c, requireSuperAdminWriteBar);
   if (user instanceof Response) return user;
   try {
     await ensureAdminAuditLogTable(c.env);

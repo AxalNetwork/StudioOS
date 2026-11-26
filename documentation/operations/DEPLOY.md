@@ -285,10 +285,31 @@ and fails, naming the file, the table and the key, when:
   `GATEWAY_TEXT_MODELS` or `AGENT_OPENAI_RATES`).
 
 It runs in `npm run test:guards` and as the release preflight step "Check AI
-gateway and agent settings". It reads files only: whether each gateway exists
-on the account and whether `AGENT_AI_GATEWAY_TOKEN` is bound is the live layer,
-which waits for the owner's decision on read access in #8508. To accept a new
-difference, add an `ALLOWED` entry with its reason in the same PR.
+gateway and agent settings". It reads files only. To accept a new difference,
+add an `ALLOWED` entry with its reason in the same PR.
+
+The next preflight step, "Check AI gateways and the agents token on the
+account" (`scripts/check-ai-gateways-live.mjs`, D8508-p2), is the live layer. It
+uses the release token, as the owner chose on #8508 (answer A), and makes
+read-only calls about `[env.production.vars]`:
+
+- does each AI Gateway the table names exist;
+- is `AGENT_AI_GATEWAY_TOKEN` bound to the Worker (checked by name only);
+- does each account alias resolve on the `agents` gateway.
+
+Each item is `present`, `missing` or `could not be read`. The release stops
+only when an item is `missing` on a route that is switched on:
+
+- the providers gateway, when `AI_PROVIDER_GATEWAY_OPENAI` is `on`;
+- the agents gateway, its token and its aliases, when `AGENT_ENGINE` is not
+  `off`.
+
+A missing Advisor or deck gateway only warns, because the route runs without
+it (owner answer A). `could not be read` also only warns. That is the state
+until the release token holds **AI Gateway Read** and **Workers Scripts Read**,
+which the owner grants in the Cloudflare dashboard. The step writes a table of
+states to the job summary. It never prints the token, the account id or what
+Cloudflare answered.
 
 ---
 
@@ -326,8 +347,47 @@ Object migration, no binding removed), **`auto-additive`** (every pending
 statement only adds a table, view, non-unique index or nullable/defaulted
 column, or touches only a table the same release creates) or **`manual`**
 (anything else, each reason with its file and line; anything it cannot read is
-manual). It is report-only: today the operator still decides, and a `manual`
+manual). The class itself changes nothing in the release, and a `manual`
 release needs the compatibility check above before any rollback.
+
+**Automatic rollback (D7152) is off by default.** The repository variable
+`RELEASE_ROLLBACK_MODE` selects it; unset (or any other value) is off and the
+`rollback` job of `cloudflare-worker-deploy.yml` is skipped. When it is
+`report` or `act`, that job runs after `spa-smoke` under the
+`studioos-production-release` lock and the `production` environment:
+
+- If `spa-smoke` passed, or did not finish, nothing is decided. If it failed,
+  the job runs the same smoke once more. A failure followed by a pass is
+  flaky and never rolls back.
+- Two failures on a release classed `manual` (or whose class is unreadable)
+  never roll back: the job summary and an error annotation carry the class's
+  reasons and the fix-forward line — check compatibility as above, or land a
+  fix or a revert on `main`.
+- Two failures on `auto` or `auto-additive`, while the live version is still
+  the one this release published: `report` logs "would roll back to
+  `<version>`" (the version D7151 recorded) and changes nothing; `act` runs
+  `wrangler rollback <version>` and re-runs the smoke against the restored
+  version. If the rollback or that verification fails, the job pages (it
+  fails, red) and takes no further automatic action: the fault is not the
+  release.
+- One automatic rollback per release. An `act` rollback uploads the artifact
+  `release-rolled-back-<sha>`; the deploy step "Hold a commit automatic
+  rollback took off production" (act only) then refuses to publish that
+  commit again unless the dispatch sets `republish_rolled_back`, and a second
+  failing run of it pages instead of rolling back. The next `main` commit
+  releases normally and carries the same change unless a revert or fix has
+  landed.
+- After an `act` rollback the restored build becomes generation 0 of the
+  retention ledger with a fresh `deployedAt`, saved as a newer `spa-assets-`
+  cache entry, so the next deploy treats it as the last good deploy (§2.1);
+  the rolled-back build stays in the ledger, so tabs opened while it served
+  still find their chunks.
+
+Every decision is in the job summary and in `rollback-decision.json` (artifact
+`release-rollback-<sha>-<attempt>`): the commit, the class, the version
+published, the version restored or that would be, and the smoke rows that
+failed. The owner sets `report` first, and moves to `act` only after reading
+the report-only decisions of at least ten releases (#7152).
 
 ### 3.1 The window between the two writes is rehearsed on the pull request (D8532)
 

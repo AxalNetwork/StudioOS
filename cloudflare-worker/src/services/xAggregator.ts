@@ -17,6 +17,7 @@
 import type { Env } from '../types';
 import { splitIntoThread, tweetLength } from './xClient';
 import { liveIndexSql } from './market_intel/liveRows';
+import { hiddenDealIds, hiddenJson } from './dealPreparation';
 
 const K_MIN = 5;
 
@@ -43,6 +44,27 @@ async function safeCount(env: Env, sql: string, ...binds: unknown[]): Promise<Co
   } catch (e) {
     return { ok: false, reason: (e as Error)?.message || 'read failed' };
   }
+}
+
+/**
+ * D5454 (#5454, R4) — the investor brief counts deals the way discovery shows them: a deal the preparation guard
+ * hides from discovery (a never-released or unknown preparation, a withdrawn or archived release) is not a "new deal
+ * in pipeline". Legacy deals (no preparation, or an unreleased `legacy_attach`, owner answer Q1=A) and published
+ * releases still count. A database without the preparation table hides nothing, as the guard decides; any other
+ * guard failure makes the figure unreadable instead of counting an unfiltered population.
+ */
+async function discoverableNewDeals(env: Env, periodStart: string, periodEnd: string): Promise<Count> {
+  let hidden: string;
+  try {
+    hidden = hiddenJson(await hiddenDealIds(env, 'discovery'));
+  } catch (e) {
+    return { ok: false, reason: (e as Error)?.message || 'preparation guard unreadable' };
+  }
+  return safeCount(
+    env,
+    `SELECT COUNT(*) AS n FROM deals d WHERE ${WINDOW} AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`,
+    periodStart, periodEnd, hidden,
+  );
 }
 
 /**
@@ -178,9 +200,7 @@ async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
 }
 
 async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
-  const newDeals = await safeCount(
-    env, `SELECT COUNT(*) AS n FROM deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
-  );
+  const newDeals = await discoverableNewDeals(env, w.periodStart, w.periodEnd);
   const sectors = await safeTopSectors(env, w.periodStart, w.periodEnd);
   const hasMI = await safeHasMIChart(env, w.periodStart);
   const tags = [...AUDIENCE_HASHTAGS.investors, ...sectors];
